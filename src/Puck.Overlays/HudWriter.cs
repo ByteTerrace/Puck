@@ -41,6 +41,10 @@ public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
     private OverlayHudFrame m_frame;
     private bool m_hasFrame;
 
+    // The seat whose player-scope panel is being emitted, which its bindings resolve for; -1 while a world-scope panel
+    // is.
+    private int m_seat = -1;
+
     /// <summary>Initializes a new instance of the <see cref="HudWriter"/> class.</summary>
     /// <param name="source">The HUD structure source.</param>
     /// <param name="bindings">The live binding resolver.</param>
@@ -83,6 +87,7 @@ public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
 
             if (m_bindings.TryResolve(
                 binding: segment.Text,
+                seat: m_seat,
                 fraction: out _,
                 text: out var resolved
             )) {
@@ -222,6 +227,7 @@ public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
             m_bindings.TryResolve(
             binding: binding,
             fraction: out var resolved,
+            seat: m_seat,
             text: out var text
         )
         ) {
@@ -371,6 +377,7 @@ public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
 
         var panel = seat.Panel;
 
+        m_seat = seat.Seat;
         EmitPanelInto(
             builder: builder,
             originX: vx,
@@ -379,6 +386,7 @@ public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
             spanH: vh,
             spanW: vw
         );
+        m_seat = -1;
 
         builder.EndClip();
     }
@@ -392,6 +400,7 @@ public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
             m_bindings.TryResolve(
             binding: binding,
             fraction: out _,
+            seat: m_seat,
             text: out var resolved
         )
         ) {

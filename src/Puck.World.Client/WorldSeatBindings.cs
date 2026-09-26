@@ -69,12 +69,17 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     private readonly BindingProfileDocument?[] m_profileBindings;
     // Per seat: the identity's owned world, whose binding bar the seat presents before the world's.
     private readonly WorldDefinition?[] m_profileWorlds;
+    // Per seat: the selected identity, whose player-scope HUD panel's reads the seat registers.
+    private readonly WorldIdentity?[] m_profiles;
     // Per seat: the composed binding document the seat's pages, contexts and wheels were last compiled from.
     private readonly BindingProfileDocument[] m_composed;
     private readonly IReadOnlyList<BindingContextDefinition>[] m_seatContexts;
     // Per seat: the reads its composition makes (WorldPresentationManifest.SeatBindings), the mirror they are registered
     // on under the seat's context lease, and that mirror's install they were compiled at.
     private readonly WorldPresentationBinding[][] m_seatReads;
+    // Per seat: the HUD panel the registered reads were compiled from, so an identity whose panel is replaced registers
+    // again.
+    private readonly WorldHudPanel?[] m_seatReadsHud;
     private readonly int[] m_seatReadsInstalls;
     private readonly WorldStateMirror?[] m_seatReadsMirror;
     private readonly PagedInputBindings[] m_seats;
@@ -289,15 +294,19 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         return signature;
     }
     // Registers the reads the seat's own composition makes on the mirror its route reads through, under the seat's
-    // context lease, so its contexts, wheels and bar read slots registered and read at a tick boundary rather than
-    // first on a frame. Compiled again only when the composition, the route's mirror, its installed document or the
-    // controlled body moved; an unchanged set is not registered again.
+    // context lease, so its contexts, wheels, bar and player-scope HUD panel read slots registered and read at a tick
+    // boundary rather than first on a frame. Compiled again only when the composition, the route's mirror, its installed
+    // document, the controlled body or the identity's HUD panel moved; an unchanged set is not registered again.
     private void RegisterSeatReads(int slot) {
         var reads = m_contextReads[slot];
 
         if (reads.Mirror is not { } mirror) {
             return;
         }
+
+        var hud = m_profiles[slot]?.Hud;
+
+        m_seatReadsHud[slot] = hud;
 
         var seat = WorldPresentationManifest.SeatBindings(
             bar: WorldBindingBarAuthoring.Resolve(
@@ -307,7 +316,8 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
             ),
             bindings: m_composed[slot],
             bodyIndex: reads.BodyIndex,
-            definition: m_definitions[slot]
+            definition: m_definitions[slot],
+            hud: hud
         );
         var previous = m_seatReadsMirror[slot];
 
@@ -1300,6 +1310,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
             return;
         }
 
+        m_profiles[slot] = profile;
         m_profileBindings[slot] = profile?.Bindings;
         m_profileWorlds[slot] = profile?.Document;
         RecomposeSeat(slot: slot);
@@ -1404,7 +1415,11 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
             objB: m_seatReadsMirror[slot]
         ) ||
             (state.Installs != m_seatReadsInstalls[slot]) ||
-            (entityIndex != m_stateEntityIndices[slot])
+            (entityIndex != m_stateEntityIndices[slot]) ||
+            !ReferenceEquals(
+                objA: m_profiles[slot]?.Hud,
+                objB: m_seatReadsHud[slot]
+            )
         ) {
             RegisterSeatReads(slot: slot);
         }
@@ -1708,8 +1723,10 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         ArgumentNullException.ThrowIfNull(argument: definition);
         m_profileBindings = new BindingProfileDocument?[SeatCount];
         m_profileWorlds = new WorldDefinition?[SeatCount];
+        m_profiles = new WorldIdentity?[SeatCount];
         m_composed = new BindingProfileDocument[SeatCount];
         m_seatReads = new WorldPresentationBinding[SeatCount][];
+        m_seatReadsHud = new WorldHudPanel?[SeatCount];
         m_seatReadsInstalls = new int[SeatCount];
         m_seatReadsMirror = new WorldStateMirror?[SeatCount];
         m_sessionRebinds = new BindingProfileDocument?[SeatCount];

@@ -44,11 +44,12 @@ internal sealed class WorldHudCommandModule(WorldServer server, IHudBindingResol
             // A validated document element's placeholders are already proven against the closed vocabulary and the
             // document's own state section (WorldDefinitionValidator), so this walk resolves unconditionally — the
             // same trust a render-frame's own template resolve extends.
-            valueText = $" template='{template}' resolved='{ResolveTemplateEcho(template: template)}'";
+            valueText = $" template='{template}' resolved='{ResolveTemplateEcho(seat: slot, template: template)}'";
         } else if (
             (element.Binding is { Length: > 0 } binding) &&
             bindings.TryResolve(
             binding: binding,
+            seat: slot,
             fraction: out var fraction,
             text: out var text
         )
@@ -234,13 +235,13 @@ internal sealed class WorldHudCommandModule(WorldServer server, IHudBindingResol
             }
         }
 
-        return new CommandResult(Output: $"[world.hud.template: '{ResolveSegments(segments: segments)}']");
+        return new CommandResult(Output: $"[world.hud.template: '{ResolveSegments(seat: -1, segments: segments)}']");
     }
     // The ONE substitution walk this module owns: every placeholder resolves through the SAME IHudBindingResolver
     // the renderer emits with, so an echo and the screen cannot disagree about a value. Callers decide what a
     // failed resolve MEANS — world.hud.template refuses ahead of this walk, world.hud's echo trusts a document
     // template already proven at validation — so an unresolvable placeholder simply contributes nothing here.
-    private string ResolveSegments(IReadOnlyList<HudTemplateSegment> segments) {
+    private string ResolveSegments(IReadOnlyList<HudTemplateSegment> segments, int seat) {
         var resolved = new System.Text.StringBuilder();
 
         foreach (var segment in segments) {
@@ -252,6 +253,7 @@ internal sealed class WorldHudCommandModule(WorldServer server, IHudBindingResol
 
             if (bindings.TryResolve(
                 binding: segment.Text,
+                seat: seat,
                 fraction: out _,
                 text: out var value
             )) {
@@ -265,13 +267,13 @@ internal sealed class WorldHudCommandModule(WorldServer server, IHudBindingResol
     // ALREADY-PARSED runs by WorldHudFeed, so this echo and the screen agree by construction rather than by two
     // scanners being kept in step. A validated document template always parses; showing the raw text if one somehow
     // does not beats inventing a reading of it.
-    private string ResolveTemplateEcho(string template) {
+    private string ResolveTemplateEcho(string template, int seat) {
         return (HudTemplate.TryParse(
             error: out _,
             segments: out var segments,
             template: template
         )
-            ? ResolveSegments(segments: segments)
+            ? ResolveSegments(seat: seat, segments: segments)
             : template
         );
     }
