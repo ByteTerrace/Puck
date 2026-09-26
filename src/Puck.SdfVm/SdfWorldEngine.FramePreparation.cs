@@ -6,11 +6,11 @@ using Puck.SignedDistance;
 namespace Puck.SdfVm;
 
 public sealed partial class SdfWorldEngine {
-    // (Re)bind the MaxScreenSurfaces screen-source bindings (Stage 1 only) in every view's set this frame renders — a
-    // slot with no host-supplied source this frame duplicates the DEDICATED ShaderReadOnly filler (m_screenSourceFiller;
-    // a combined-image-sampler binding requires that layout). The shader never samples an unbound slot (params.screenMask gates it), so the filler's content never reaches a pixel. Each
-    // is a SCALAR binding, not one array (see ScreenSourceBindingIndices), so each is written at arrayElement 0; the
-    // change-detected rebind means an idle scene (no sources bound) only writes descriptors that actually changed.
+    // (Re)bind the MaxScreenSurfaces screen-source images in every view's set this frame renders — a slot with no
+    // host-supplied source this frame duplicates the DEDICATED ShaderReadOnly filler (m_screenSourceFiller; a sampled
+    // image binding requires that layout). The shader never samples an unbound slot (the world block's screenMask gates
+    // it), so the filler's content never reaches a pixel. Each is a member of its own (ScreenSourceBindings), written at
+    // arrayElement 0, and all share the set's one nearest sampler; the change-detected rebind means an idle scene (no sources bound) only writes descriptors that actually changed.
     //
     // THE HANDLE-IDENTITY RULE: a change-detected skip is sound ONLY for a view this engine's own lifetime covers. A
     // HOST-SUPPLIED handle (a screen source, a child's storage image) names an object the host may destroy and replace
@@ -47,12 +47,11 @@ public sealed partial class SdfWorldEngine {
                 continue;
             }
 
-            m_bindings.WriteCombinedImageSampler(
+            m_bindings.WriteSampledImage(
                 arrayElement: 0,
-                binding: ScreenSourceBindingIndices[((int)element)],
+                binding: ScreenSourceBindings[((int)element)],
                 descriptorSetHandle: viewsSet,
-                imageViewHandle: view,
-                samplerHandle: m_screenSampler
+                imageViewHandle: view
             );
             boundViews[element] = view;
         }
@@ -66,12 +65,11 @@ public sealed partial class SdfWorldEngine {
         );
 
         if (glyphView != m_boundGlyphAtlasViews[glyphIndex]) {
-            m_bindings.WriteCombinedImageSampler(
+            m_bindings.WriteSampledImage(
                 arrayElement: 0,
-                binding: GlyphAtlasBindingIndex,
+                binding: GlyphAtlasBinding,
                 descriptorSetHandle: viewsSet,
-                imageViewHandle: glyphView,
-                samplerHandle: m_screenSampler
+                imageViewHandle: glyphView
             );
             m_boundGlyphAtlasViews[glyphIndex] = glyphView;
         }
@@ -581,13 +579,9 @@ public sealed partial class SdfWorldEngine {
         );
         StageMeshRegion(draws: frame.MeshDraws);
 
-        // WorldParams { uint2 imageExtent; uint2 tileGrid; uint viewportCount; uint screenMask; uint instanceMaskWordCount; uint sampleIndex; uint viewBase; }.
-        var pushWords = MemoryMarshal.Cast<byte, uint>(span: m_pushConstant.AsSpan());
-
-        pushWords[0] = m_width; pushWords[1] = m_height; pushWords[2] = m_tileGridX; pushWords[3] = m_tileGridY; pushWords[4] = viewportCount; pushWords[5] = m_screenSourceMask; pushWords[6] = ((uint)m_liveInstanceMaskWordCount);
         // The deterministic tick clock star twinkle reads (cloud motion is baked into the environment rows). It rides
-        // the push and is folded into ComputeFrameSignature via m_pushConstant, so the cadence gate never skips a frame
-        // whose tick moved; a sky with no visible twinkle pushes 0, leaving a static frame skippable.
+        // the world block and is folded into ComputeFrameSignature with it, so the cadence gate never skips a frame whose
+        // tick moved; a sky with no visible twinkle writes 0, leaving a static frame skippable.
         var environment = frame.Environment;
         var twinkles = (
             (environment.StarBrightness > 0f) &&
@@ -596,15 +590,27 @@ public sealed partial class SdfWorldEngine {
             (environment.TwinkleDepth > 0f)
         );
 
-        pushWords[7] = (twinkles
-            ? frame.SampleIndex
-            : 0u
+        PackWorldBlock(
+            sampleIndex: (twinkles
+                ? frame.SampleIndex
+                : 0u),
+            viewportCount: viewportCount
         );
-
         DecideCadenceSkip(
             frame: frame,
             viewportCount: viewportCount
         );
+
+        // A skipped frame binds no set, so it sends no block: the regions keep what each slot holds, and the next rendered
+        // frame sends its slot what it owes.
+        if (!m_skipThisFrame) {
+            // PrepareFrame has counted this frame, so the frames prepared before it are one fewer.
+            WriteFrameBlock(
+                frame: (m_ringFrame - 1UL),
+                slot: m_currentSlot
+            );
+            WriteViewBlocks(viewportCount: viewportCount);
+        }
         return viewportCount;
     }
     private void ValidateInstanceGridCapacity(ReadOnlySpan<uint> words) {

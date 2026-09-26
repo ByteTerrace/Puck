@@ -137,7 +137,9 @@ public sealed record RenderGraphPackagePort(
 /// <param name="Stages">The deployed stages of a post-process package, which samples its one input image in a fullscreen
 /// draw into its one output and which <see cref="PostProcessPackage"/> serves, or <see langword="null"/> for any other
 /// package. A world's <c>views.post</c> rows name post-process packages alone.</param>
-public sealed record RenderGraphPackage(string Id, IReadOnlyList<RenderGraphPackagePort> Inputs, IReadOnlyList<RenderGraphPackagePort> Outputs, IReadOnlyList<ShaderInterfaceMember> Members, string Summary, IReadOnlyDictionary<string, ShaderConfigField>? Config = null, RenderGraphPackageStages? Stages = null) {
+/// <param name="PushesIndex">Whether the package's pipelines push one 4-byte index, which its interface declares
+/// (<see cref="ShaderInterface.PushesIndex"/>) and its shaders read as <c>pushedIndex.index</c>.</param>
+public sealed record RenderGraphPackage(string Id, IReadOnlyList<RenderGraphPackagePort> Inputs, IReadOnlyList<RenderGraphPackagePort> Outputs, IReadOnlyList<ShaderInterfaceMember> Members, string Summary, IReadOnlyDictionary<string, ShaderConfigField>? Config = null, RenderGraphPackageStages? Stages = null, bool PushesIndex = false) {
     /// <summary>Gets whether the package is a post-process package: one with <see cref="Stages"/>.</summary>
     public bool IsPostProcess => (Stages is not null);
 }

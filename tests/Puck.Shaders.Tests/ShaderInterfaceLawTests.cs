@@ -171,6 +171,192 @@ public sealed class ShaderInterfaceLawTests {
         Refused(members: [new ShaderInterfaceMember(Group: ShaderInterfaceGroup.Pass, Kind: ShaderInterfaceMemberKind.StorageImage, Name: "o", Type: ShaderValueType.Float4)], name: "unformatted");
     }
     [Fact]
+    public void A_buffers_element_is_optional_and_never_three_components() {
+        var typed = ShaderInterfaceMember.ReadOnlyBuffer(
+            element: ShaderValueType.Float2,
+            group: ShaderInterfaceGroup.Pass,
+            name: "points"
+        );
+
+        Assert.Equal(
+            actual: typed.Type,
+            expected: ShaderValueType.Float2
+        );
+        Assert.Null(@object: ShaderInterfaceMember.ReadWriteBuffer(group: ShaderInterfaceGroup.Pass, name: "raw").Type);
+
+        foreach (var element in ((ShaderValueType[])[ShaderValueType.Float3, ShaderValueType.Uint3, ShaderValueType.Int3])) {
+            foreach (var member in ((ShaderInterfaceMember[])[
+                ShaderInterfaceMember.ReadOnlyBuffer(element: element, group: ShaderInterfaceGroup.Pass, name: "points"),
+                ShaderInterfaceMember.ReadWriteBuffer(element: element, group: ShaderInterfaceGroup.Pass, name: "points"),
+            ])) {
+                Assert.Contains(
+                    actualString: Assert.Throws<InvalidDataException>(testCode: () => new ShaderInterface(
+                        members: [member],
+                        name: "three"
+                    )).Message,
+                    expectedSubstring: $"member 'points': a buffer's element cannot be the three-component {element.Spelling()}"
+                );
+            }
+        }
+    }
+    [Fact]
+    public void An_interface_pushes_its_frame_block_or_an_index_never_both() {
+        Assert.Contains(
+            actualString: Assert.Throws<InvalidDataException>(testCode: () => new ShaderInterface(
+                members: ShaderFrameInterface.FrameGroupMembers,
+                name: "both",
+                pushConstants: ShaderInterfaceGroup.Frame,
+                pushesIndex: true
+            )).Message,
+            expectedSubstring: "Shader interface 'both' pushes both its Frame block and an index"
+        );
+        Assert.Contains(
+            actualString: Assert.Throws<InvalidDataException>(testCode: () => new ShaderInterface(
+                members: [ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.Pass, name: ShaderInterface.PushedIndexVariableName)],
+                name: "shadowed",
+                pushesIndex: true
+            )).Message,
+            expectedSubstring: "declares 'pushedIndex', which its generated pushed index declares"
+        );
+    }
+    [Fact]
+    public void The_pushed_index_and_typed_buffers_round_trip_and_version_the_hash() {
+        var original = ShaderInterfaceSpike.TypedBuffers;
+        var json = original.ToJson();
+        var parsed = ShaderInterface.Parse(json: json);
+        var unpushed = new ShaderInterface(
+            members: original.Members,
+            name: original.Name
+        );
+
+        Assert.True(condition: parsed.PushesIndex);
+        Assert.Equal(
+            actual: parsed.Members,
+            expected: original.Members
+        );
+        Assert.Equal(
+            actual: parsed.ToJson(),
+            expected: json
+        );
+        Assert.EndsWith(
+            actualString: json,
+            expectedEndString: ",\"pushesIndex\":true}"
+        );
+        Assert.Contains(
+            actualString: json,
+            expectedSubstring: "{\"name\":\"wide\",\"group\":\"Pass\",\"kind\":\"ReadOnlyBuffer\",\"type\":\"float4\"}"
+        );
+        Assert.DoesNotContain(
+            actualString: unpushed.ToJson(),
+            expectedSubstring: "pushesIndex"
+        );
+        Assert.NotEqual(
+            actual: unpushed.Hash,
+            expected: original.Hash
+        );
+    }
+    [Fact]
+    public void Each_backends_view_carries_its_buffer_strides_and_its_pushed_index() {
+        var layout = ShaderInterfaceSpike.TypedBuffers.Layout();
+
+        static IEnumerable<(string Name, uint Set, uint Binding, bool Pushed, uint Stride)> Describe(IReadOnlyList<ShaderInterfaceBinding> bindings) =>
+            bindings.Select(selector: static binding => (binding.Name, binding.Set, binding.Binding, binding.Pushed, binding.ElementStride));
+
+        Assert.Equal(
+            actual: Describe(bindings: layout.Bindings),
+            expected: [
+                ("frameGroup", 0u, 0u, false, 0u),
+                ("pushedIndex", 0u, 0u, true, 0u),
+                ("narrow", 3u, 0u, false, 4u),
+                ("wide", 3u, 1u, false, 16u),
+                ("raw", 3u, 2u, false, ShaderInterfaceLayout.SpirvRawBufferStride),
+                ("output", 3u, 3u, false, 8u),
+                ("rawOutput", 3u, 4u, false, ShaderInterfaceLayout.SpirvRawBufferStride),
+            ]
+        );
+        Assert.Equal(
+            actual: Describe(bindings: layout.DxilBindings),
+            expected: [
+                ("frameGroup", 0u, 0u, false, 0u),
+                ("narrow", 3u, 0u, false, 4u),
+                ("wide", 3u, 1u, false, 16u),
+                ("raw", 3u, 2u, false, ShaderInterfaceLayout.DxilRawBufferStride),
+                ("output", 3u, 3u, false, 8u),
+                ("rawOutput", 3u, 4u, false, ShaderInterfaceLayout.DxilRawBufferStride),
+                ("pushedIndex", GpuPipelineLayoutDescription.PushIndexSpace, 0u, false, 0u),
+            ]
+        );
+        Assert.Equal(
+            actual: layout.DxilBindings[^1].Members,
+            expected: [Member(name: "index", offset: 0, type: ShaderValueType.Uint)]
+        );
+        Assert.Null(@object: layout.Mismatch(reflected: layout.Bindings));
+        Assert.Null(@object: layout.Mismatch(reflected: layout.DxilBindings));
+    }
+    [Fact]
+    public void A_pushed_frame_block_and_a_pushed_index_are_told_apart() {
+        var indexLayout = ShaderInterfaceSpike.TypedBuffers.Layout();
+        var frameLayout = new ShaderInterface(
+            members: ShaderFrameInterface.FrameGroupMembers,
+            name: "echo",
+            pushConstants: ShaderInterfaceGroup.Frame
+        ).Layout();
+        var pushedIndex = indexLayout.Bindings.Where(predicate: static binding => binding.Pushed).ToArray();
+        var pushedFrame = frameLayout.Bindings.Where(predicate: static binding => binding.Pushed).ToArray();
+
+        Assert.Null(@object: frameLayout.Mismatch(reflected: pushedFrame));
+        Assert.Null(@object: indexLayout.Mismatch(reflected: pushedIndex));
+        Assert.StartsWith(
+            actualString: frameLayout.Mismatch(reflected: pushedIndex),
+            expectedStartString: "the module reads pushedIndex set 0 binding 0 pushed ConstantBuffer [index@0:uint];"
+        );
+        Assert.StartsWith(
+            actualString: indexLayout.Mismatch(reflected: pushedFrame),
+            expectedStartString: "the module reads frameGroup set 0 binding 0 pushed ConstantBuffer ["
+        );
+    }
+    [Fact]
+    public void The_generated_include_declares_typed_and_raw_buffers_and_the_pushed_index() {
+        var shaderInterface = ShaderInterfaceSpike.TypedBuffers;
+
+        Assert.Equal(
+            actual: ShaderInterfaceHlsl.Generate(shaderInterface: shaderInterface),
+            expected: $$"""
+                // Generated from shader interface 'typed-buffers' ({{shaderInterface.Hash}}). Regenerate it from the interface; never edit it.
+                #ifndef PUCK_SHADER_INTERFACE_TYPED_BUFFERS
+                #define PUCK_SHADER_INTERFACE_TYPED_BUFFERS
+
+                // The Frame group: descriptor set 0, register space 0.
+                struct TypedBuffersFrame {
+                    [[vk::offset(0)]] uint tick;
+                    [[vk::offset(4)]] uint _pad4;
+                    [[vk::offset(8)]] uint2 extent;
+                };
+                [[vk::binding(0, 0)]] ConstantBuffer<TypedBuffersFrame> frameGroup : register(b0, space0);
+
+                // The Pass group: descriptor set 3, register space 3.
+                [[vk::binding(0, 3)]] StructuredBuffer<uint> narrow : register(t0, space3);
+                [[vk::binding(1, 3)]] StructuredBuffer<float4> wide : register(t1, space3);
+                [[vk::binding(2, 3)]] ByteAddressBuffer raw : register(t2, space3);
+                [[vk::binding(3, 3)]] RWStructuredBuffer<uint2> output : register(u3, space3);
+                [[vk::binding(4, 3)]] RWByteAddressBuffer rawOutput : register(u4, space3);
+
+                // The pushed index: Vulkan push constants at offset 0, Direct3D 12 root constants at register b0, space 4.
+                struct TypedBuffersPushedIndex {
+                    [[vk::offset(0)]] uint index;
+                };
+                [[vk::push_constant]] ConstantBuffer<TypedBuffersPushedIndex> pushedIndex : register(b0, space4);
+
+                #endif // PUCK_SHADER_INTERFACE_TYPED_BUFFERS
+
+                """.ReplaceLineEndings(replacementText: "\n")
+        );
+        Assert.Equal(
+            actual: ShaderInterface.PushedIndexTypeName(interfaceName: "sdf-bricks"),
+            expected: "SdfBricksPushedIndex"
+        );
+    }
+    [Fact]
     public void The_generated_include_is_the_pinned_text_for_its_interface() {
         var shaderInterface = ShaderInterfaceSpike.Pixelate;
 

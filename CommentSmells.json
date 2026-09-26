@@ -49,7 +49,7 @@
         "src/Puck.SdfVm/SdfWorldEngine.BrickBake.cs": 1,
         "src/Puck.SdfVm/SdfWorldEngine.FramePreparation.cs": 9,
         "src/Puck.SdfVm/SdfWorldEngine.ScreenContent.cs": 1,
-        "src/Puck.SdfVm/SdfWorldEngine.cs": 16,
+        "src/Puck.SdfVm/SdfWorldEngine.cs": 9,
         "src/Puck.SdfVm/Views/ViewStack.cs": 1,
         "src/Puck.Shaders/ShaderPipelineRenderNode.Tracker.cs": 2,
         "src/Puck.Shaders/ShaderPipelineRenderNode.Work.cs": 1,

@@ -16,9 +16,11 @@ public enum ShaderInterfaceMemberKind {
     SampledImage,
     /// <summary>A two-dimensional image loaded and stored by coordinate.</summary>
     StorageImage,
-    /// <summary>A raw buffer read by byte address (<c>ByteAddressBuffer</c>).</summary>
+    /// <summary>A buffer a pass reads: a <c>StructuredBuffer&lt;T&gt;</c> of the member's element type, or, with no
+    /// element type, a raw buffer read by byte address (<c>ByteAddressBuffer</c>).</summary>
     ReadOnlyBuffer,
-    /// <summary>A raw buffer read and written by byte address (<c>RWByteAddressBuffer</c>).</summary>
+    /// <summary>A buffer a pass reads and writes: a <c>RWStructuredBuffer&lt;T&gt;</c> of the member's element type, or,
+    /// with no element type, a raw buffer read and written by byte address (<c>RWByteAddressBuffer</c>).</summary>
     ReadWriteBuffer,
     /// <summary>A sampler.</summary>
     Sampler,

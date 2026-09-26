@@ -24,15 +24,13 @@
 // beam does.
 #define SDF_DYNAMIC_TRANSFORMS
 #define SDF_FRAME_INSTANCE_GRID
-#define SDF_FRAME_INSTANCE_GRID_REGISTER t3
 #include "sdf-world.hlsli"
 
-// The per-tile instance mask (binding 7): a FLAT uint buffer, params.instanceMaskWordCount (the host-pushed live
-// program width) elements per (viewport, tile) entry. Entry `t`'s mask is words
+// The per-tile instance mask, written through sdfInstanceMasksRW: a FLAT uint buffer, passGroup.instanceMaskWordCount
+// (the host-written live program width) elements per (viewport, tile) entry. Entry `t`'s mask is words
 // [pushedWordCount*t .. pushedWordCount*(t+1)) (word w = instances 32w..32w+31, worldInstanceMaskBase), same
 // (viewport, tile) indexing as the cull buffer (worldTileIndex). Written here EXCLUSIVELY (one invocation owns one
-// tile's words), read by the beam's cone march (t3) and Stage 1 (t13) — the SAME buffer.
-[[vk::binding(7, 0)]] RWStructuredBuffer<uint> instanceMasks : register(u0);
+// tile's words), read by the beam's cone march and Stage 1 through sdfInstanceMasks — the SAME buffer.
 
 // Writes one bit per non-empty primary mask word directly after the primary run. mapCore consumes this hierarchy to
 // jump over sparse 32-instance blocks; the primary bits remain the exact, authoritative candidate set.
@@ -48,10 +46,10 @@ void writeInstanceMaskSummary(uint maskBase, uint maskWordCount) {
 
         [loop]
         for (uint word = firstWord; (word < endWord); word++) {
-            bits |= ((instanceMasks[maskBase + word] != 0u) ? (1u << (word - firstWord)) : 0u);
+            bits |= ((sdfInstanceMasksRW[maskBase + word] != 0u) ? (1u << (word - firstWord)) : 0u);
         }
 
-        instanceMasks[summaryBase + summary] = bits;
+        sdfInstanceMasksRW[summaryBase + summary] = bits;
     }
 }
 
@@ -84,7 +82,7 @@ void collectInstanceGridMask(SdfInstanceGridHeader grid, uint instanceOffset, ui
         float4 bound = sdfInstanceBoundAt(instanceOffset, index);
 
         if (sdfInstancePassesTileCone(bound, rayOrigin, centerDirection, chord, inverseAperture)) {
-            instanceMasks[maskBase + (index >> 5u)] |= (1u << (index & 31u));
+            sdfInstanceMasksRW[maskBase + (index >> 5u)] |= (1u << (index & 31u));
         }
     }
 
@@ -175,7 +173,7 @@ void collectInstanceGridMask(SdfInstanceGridHeader grid, uint instanceOffset, ui
                             float4 bound = sdfInstanceBoundAt(instanceOffset, index);
 
                             if (sdfInstancePassesTileCone(bound, rayOrigin, centerDirection, chord, inverseAperture)) {
-                                instanceMasks[maskBase + (index >> 5u)] |= (1u << (index & 31u));
+                                sdfInstanceMasksRW[maskBase + (index >> 5u)] |= (1u << (index & 31u));
                             }
                         }
                     }
@@ -196,17 +194,17 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     uint viewIndex = worldViewOf(id.z);
 
     if (
-        (viewIndex >= params.viewportCount) ||
-        (id.x >= params.tileGrid.x) ||
-        (id.y >= params.tileGrid.y)
+        (viewIndex >= passGroup.viewportCount) ||
+        (id.x >= passGroup.tileGrid.x) ||
+        (id.y >= passGroup.tileGrid.y)
     ) {
         return;
     }
 
-    uint tileIndex = worldTileIndex(viewIndex, id.xy, params.tileGrid);
-    uint maskWordCount = params.instanceMaskWordCount;
+    uint tileIndex = worldTileIndex(viewIndex, id.xy, passGroup.tileGrid);
+    uint maskWordCount = passGroup.instanceMaskWordCount;
     uint maskBase = worldInstanceMaskBase(tileIndex);
-    ViewportData view = viewports[viewIndex];
+    ViewportData view = worldViewport(viewIndex);
     // The tile cone, built from the same inputs the beam uses — bitwise the same cone (a pure function of the
     // viewport row + tile coords; regionSizePx is the view's render extent, worldViewDims, as in the beam and Stage 1).
     float2 regionSizePx = float2(worldViewDims(view));
@@ -217,7 +215,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     if ((tileMinPx.x >= regionSizePx.x) || (tileMinPx.y >= regionSizePx.y)) {
         [loop]
         for (uint word = 0u; (word < maskWordCount); word++) {
-            instanceMasks[maskBase + word] = 0u;
+            sdfInstanceMasksRW[maskBase + word] = 0u;
         }
 
         writeInstanceMaskSummary(maskBase, maskWordCount);
@@ -242,7 +240,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         // place — this thread exclusively owns them (see collectInstanceGridMask's no-scratch-array rationale).
         [loop]
         for (uint word = 0u; (word < maskWordCount); word++) {
-            instanceMasks[maskBase + word] = 0u;
+            sdfInstanceMasksRW[maskBase + word] = 0u;
         }
 
         collectInstanceGridMask(grid, instanceOffset, maskBase, view.position.xyz, cone.centerDirection, cone.chord, cone.inverseAperture);
@@ -251,7 +249,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         // pre-grid path, testing every instance per mask word. Byte-identical to the grid path's mask by construction.
         [loop]
         for (uint word = 0u; (word < maskWordCount); word++) {
-            instanceMasks[maskBase + word] = collectInstanceMaskWord(instanceOffset, word, instanceCount, view.position.xyz, cone.centerDirection, cone.chord, cone.inverseAperture);
+            sdfInstanceMasksRW[maskBase + word] = collectInstanceMaskWord(instanceOffset, word, instanceCount, view.position.xyz, cone.centerDirection, cone.chord, cone.inverseAperture);
         }
     }
 

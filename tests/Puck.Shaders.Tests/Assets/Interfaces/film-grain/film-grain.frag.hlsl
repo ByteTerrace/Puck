@@ -4,7 +4,7 @@
 // The frame group carries the deterministic tick and the extent, the pass group the parameters, the source image and
 // its sampler. The grain frame is the tick divided by the flicker period in ticks, and tint scales the grain per
 // channel, so a white tint and a period matching the shipped pass's quantization grain identically.
-#include "sdf-vm.hlsli"
+#include "sdf-hash.hlsli"
 #include "film-grain.interface.hlsli"
 
 float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {

@@ -164,10 +164,12 @@ public sealed class ShaderPipelineParameterLayout {
     /// <param name="config">The package's config schema, or <see langword="null"/> when it takes none.</param>
     /// <param name="members">The pass-group members the package's shaders read beside its extent and config: values
     /// its recorder writes into the pass block each frame, and the resources it binds.</param>
+    /// <param name="pushesIndex">Whether the package's pipelines push one 4-byte index
+    /// (<see cref="RenderGraphPackage.PushesIndex"/>).</param>
     /// <returns>The layout.</returns>
     /// <exception cref="InvalidDataException">The package id spells no interface name, the schema is invalid, or a
     /// member or config field's name is not an identifier or repeats another's.</exception>
-    public static ShaderPipelineParameterLayout ForPackage(string package, IReadOnlyDictionary<string, ShaderConfigField>? config, IReadOnlyList<ShaderInterfaceMember> members) {
+    public static ShaderPipelineParameterLayout ForPackage(string package, IReadOnlyDictionary<string, ShaderConfigField>? config, IReadOnlyList<ShaderInterfaceMember> members, bool pushesIndex = false) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: package);
         ShaderConfigBinding.ValidateSchema(
             ownerName: package,
@@ -181,7 +183,8 @@ public sealed class ShaderPipelineParameterLayout {
             members: members,
             interfaceName: string.Concat(values: package.Select(selector: static character => ((char.IsAsciiLetterLower(c: character) || char.IsAsciiDigit(c: character))
                 ? character
-                : '-')))
+                : '-'))),
+            pushesIndex: pushesIndex
         );
     }
     /// <summary>Resolves a document pass's frame data from its declaration: the interface its source names
@@ -222,11 +225,12 @@ public sealed class ShaderPipelineParameterLayout {
     /// <param name="config">The config schema, or <see langword="null"/> when there is none.</param>
     /// <param name="members">The pass-group members after the config: block values, then or among them the resources the
     /// pass binds.</param>
+    /// <param name="pushesIndex">Whether the pass's pipeline pushes one 4-byte index.</param>
     /// <returns>The layout.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="members"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidDataException"><paramref name="interfaceName"/> is not an interface name, the schema is
     /// invalid, a member is outside the pass group, or a name is not an identifier or repeats another's.</exception>
-    public static ShaderPipelineParameterLayout Grouped(string interfaceName, IReadOnlyDictionary<string, ShaderConfigField>? config, IReadOnlyList<ShaderInterfaceMember> members) {
+    public static ShaderPipelineParameterLayout Grouped(string interfaceName, IReadOnlyDictionary<string, ShaderConfigField>? config, IReadOnlyList<ShaderInterfaceMember> members, bool pushesIndex = false) {
         ShaderConfigBinding.ValidateSchema(
             ownerName: interfaceName,
             schema: config
@@ -237,7 +241,8 @@ public sealed class ShaderPipelineParameterLayout {
             shaderInterface: ShaderFrameInterface.ForPass(
                 config: config,
                 name: interfaceName,
-                ports: members
+                ports: members,
+                pushesIndex: pushesIndex
             )
         );
     }

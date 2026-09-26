@@ -12,8 +12,9 @@ internal sealed record GeneratedInclude(string Path, Func<string> Generate);
 /// <summary><c>puck shaders generate</c>: writes every HLSL include the C# model owns, each regenerated from the live
 /// types, or under <c>--check</c> regenerates them in memory and compares, the drift shape <c>puck schema --check</c>
 /// and <c>puck registry --check</c> share. The includes are <c>sdf-isa.hlsli</c> and every generated shader
-/// interface (<see cref="ShaderInterfaceHlsl"/>) an engine package declares with pass-group members, found by its
-/// interface's file name. A checked-in
+/// interface (<see cref="ShaderInterfaceHlsl"/>) the model declares, in one list: each engine package's with pass-group
+/// members, found by its interface's file name, and the SDF engine kernels' (<see cref="SdfWorldInterfaces.Includes"/>)
+/// at the paths they name. A checked-in
 /// <c>*.interface.hlsli</c> no generator owns, and a package whose include cannot be found, fail both modes by name.
 /// Exit 0 wrote or matched, 1 check found drift or an include is unowned or missing, 2 missing repository
 /// root.</summary>
@@ -33,34 +34,45 @@ internal static class GenerateCommand {
         var owned = new SortedDictionary<string, GeneratedInclude>(comparer: StringComparer.Ordinal);
         var interfaceFiles = files.Where(predicate: static file => file.EndsWith(comparisonType: StringComparison.Ordinal, value: InterfaceSuffix)).ToArray();
 
-        void Own(string path, ShaderInterface shaderInterface) {
-            owned[path] = new GeneratedInclude(
-                Generate: () => ShaderInterfaceHlsl.Generate(shaderInterface: shaderInterface),
-                Path: path
-            );
+        // Every interface the model declares, in one list: each engine package's with pass-group members, found by its
+        // include's file name, and the SDF engine kernels' (SdfWorldInterfaces), at the paths they name.
+        IEnumerable<(string Owner, ShaderInterface Interface, string? Path)> Declared() {
+            foreach (var package in packages.Packages.Where(predicate: static package => (package.Members.Count > 0))) {
+                yield return (package.Id, ShaderPipelineParameterLayout.ForPackage(
+                    config: package.Config,
+                    members: package.Members,
+                    package: package.Id,
+                    pushesIndex: package.PushesIndex
+                ).Interface, null);
+            }
+            foreach (var (path, shaderInterface) in SdfWorldInterfaces.Includes) {
+                yield return (shaderInterface.Name, shaderInterface, path);
+            }
         }
 
-        foreach (var package in packages.Packages.Where(predicate: static package => (package.Members.Count > 0))) {
-            var shaderInterface = ShaderPipelineParameterLayout.ForPackage(
-                config: package.Config,
-                members: package.Members,
-                package: package.Id
-            ).Interface;
+        foreach (var (owner, shaderInterface, path) in Declared()) {
             var fileName = ShaderFrameInterface.IncludeFileName(interfaceName: shaderInterface.Name);
-            var found = interfaceFiles.Where(predicate: file => file.EndsWith(comparisonType: StringComparison.Ordinal, value: ("/" + fileName))).ToArray();
+            var found = ((path is null)
+                ? interfaceFiles.Where(predicate: file => file.EndsWith(comparisonType: StringComparison.Ordinal, value: ("/" + fileName))).ToArray()
+                : [path]);
 
+            // A fixed path is always owned, and a missing file there is drift the check reports; a package's include is found
+            // by its name, once.
             if (found.Length != 1) {
                 problems.Add(item: ((found.Length == 0)
-                    ? $"package '{package.Id}' declares an interface, but no {fileName} is checked in; write it with `puck shaders interface <directory> --package {package.Id} --write`"
-                    : $"package '{package.Id}' declares an interface, and {found.Length} files are named {fileName}: {string.Join(separator: ", ", values: found)}"));
+                    ? $"package '{owner}' declares an interface, but no {fileName} is checked in; write it with `puck shaders interface <directory> --package {owner} --write`"
+                    : $"package '{owner}' declares an interface, and {found.Length} files are named {fileName}: {string.Join(separator: ", ", values: found)}"));
 
                 continue;
             }
 
-            Own(path: found[0], shaderInterface: shaderInterface);
+            owned[found[0]] = new GeneratedInclude(
+                Generate: () => ShaderInterfaceHlsl.Generate(shaderInterface: shaderInterface),
+                Path: found[0]
+            );
         }
         foreach (var file in interfaceFiles.Where(predicate: file => !owned.ContainsKey(key: file))) {
-            problems.Add(item: $"{file} is named as a generated interface, but no engine package owns it");
+            problems.Add(item: $"{file} is named as a generated interface, but no engine package or engine kernel owns it");
         }
 
         return [new GeneratedInclude(Generate: SdfIsaHlsl.Generate, Path: $"src/Puck.SdfVm/Assets/Shaders/Sdf/{SdfIsaHlsl.FileName}"), .. owned.Values];
@@ -121,10 +133,12 @@ internal static class GenerateCommand {
         with. A kernel build reads the checked-in file, so a C# change to the instruction set is
         regenerated here and rebuilt.
 
-        Every generated shader interface (<name>.interface.hlsli) an engine package declares with
-        pass-group members (such as overlay, place and sdf.film-grain) is owned too, found by its
-        file name. A checked-in interface include no package owns, or a package whose include is
-        missing, fails by name.
+        Every generated shader interface (<name>.interface.hlsli) the model declares is owned too,
+        in one list: an engine package's with pass-group members (such as overlay, place and
+        sdf.film-grain), found by its file name, and the SDF engine kernels' (sdf-world and
+        sdf-brick-bake, declared by Puck.SdfVm.SdfWorldInterfaces) at their fixed paths. A
+        checked-in interface include no package or engine kernel owns, or a declared interface
+        whose include is missing, fails by name.
         """,
         name: "generate",
         run: Run

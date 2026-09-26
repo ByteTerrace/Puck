@@ -929,16 +929,15 @@ It deletes the SDF engine's composite, and it has landed.
 
 - 10a: each view renders through its own dispatch set. `Record` records sky,
   mask, beam, cull-args, primary, surface, ambient and views once per view, one
-  deep in Z, and the set's push names its view (`WorldParams.viewBase`, word 8
-  of a 36-byte push). `viewportCount` stays every view of the frame, so the
+  deep in Z, and the view's views set names its view (the world block's
+  `viewBase`). `viewportCount` stays every view of the frame, so the
   per-view buffer strides do not move. `sdf-cull-args` reduces its own view's
   tiles, so each view's hit and views dispatches cover only that view's
   surviving tiles. The buffer hazards between one set and the next are the
   frame buffer plan's, recorded by `RecordBufferBarriers` as for any pass
-  order. `SdfWorldEngineWorkLawTests` pins the 36-byte push and two views'
-  doubled dispatch sets.
+  order. `SdfWorldEngineWorkLawTests` pins two views' doubled dispatch sets.
 - 10b: each view writes its own output image, and the composite is gone. The
-  sky and views kernels write one bound `output` (binding 4, u0), and a view's
+  sky and views kernels write one bound `output`, and a view's
   viewport row carries its render extent, read through `worldViewDims`. A
   view's output is sized to the extent the render graph schedules for it, or
   before that to `SdfWorldEngine.DefaultViewExtent` (its rect at its render
@@ -2066,13 +2065,9 @@ Phase 3, the groups, follows phase 2:
 12. Done: `ShaderRegisterBindingLawTests` holds every shader the build compiles
     to a register number equal to its binding and a space equal to its set. It
     also holds the pipeline sources the World's package store is built from.
-    It also holds the graph's package-library kernels. It names each declaration
-    that breaks the rule: the SDF engine's, which P7b-19 and P7b-20 remove. The
-    list may only shrink. Direct3D 12 numbers a compute pipeline's registers at
-    its binding numbers unless the description declares
-    `GpuRegisterNumbering.PackedByClass`, which only the SDF engine does (the
-    region copy numbers at its bindings since P7b-17); P7b-20 deletes that numbering with the engine's last
-    packed register.
+    It also holds the graph's package-library kernels, with no exception.
+    Direct3D 12 numbers every compute pipeline's registers at its binding
+    numbers.
 13. Done: the GPU-free group contract. `GpuBindingKind`
     (`src/Puck.Abstractions/Gpu/Bindings`) is the one closed set of binding
     kinds. The pass interface's readers and layout use it, and
@@ -2099,11 +2094,9 @@ Phase 3, the groups, follows phase 2:
     `VulkanGroupLayoutsLawTests` and `GpuGroupLayoutTableLawTests` hold the
     planners and the spike's interfaces to the same tables. The combined image
     sampler that `GpuComputeBindingKind` still states is not in the closed
-    set, so its users, and the 2 sources still declaring
-    `vk::combinedImageSampler` (the SDF engine's `sdf-vm.hlsli` and
-    `sdf-world.hlsli`), move to a separate image and sampler with 14b's
-    sampler tables, and the enum is deleted there; the overlay and film grain
-    moved with step 18, which deleted `ShaderSetManifestBindingKind`.
+    set, and no source declares `vk::combinedImageSampler`: every pass reads a
+    separate image and sampler through 14b's sampler tables, and 14b-7 deletes
+    the enum.
 14. Direct3D 12 keeps one shader-visible heap per device, and a pool is a range
     of it (14a). Both backends then realize several groups, with sampler
     tables and one 4-byte push range (14b), the riskiest step, which lands as
@@ -2315,12 +2308,11 @@ Phase 3, the groups, follows phase 2:
       its pass group; `FullscreenPassNode` was
       deleted with P11b commit 6. Canaries: 21, the 14b-1 set with the
       overlay's three audio canaries.
-    - 14b-6, the SDF engine, last: `sdf-world.hlsli`'s thirty-two screen
-      sources (bindings 12 to 43), the glyph atlas in `sdf-vm.hlsli`
-      (binding 44), and the engine's binding lists in
-      `SdfWorldEngine.Pipelines.cs`. Canaries: 20 mapped, the 14b-5 set
-      without `sdf-decode-sign-refusal`, plus `sdf-visibility-fresh`, which
-      the index has not recorded yet. The package library's `place.comp.hlsl`,
+    - 14b-6, done with step 20: the SDF engine. Its thirty-two screen sources
+      and its glyph atlas are sampled images of the `sdf-world` interface,
+      read through its one nearest `screenSampler`, and the engine's binding
+      lists are gone. Canaries: the 32 `puck affected` maps the change to,
+      `sdf-visibility-fresh` and `world-counters` among them. The package library's `place.comp.hlsl`,
       which took the SDF-side kernel's place, is a package pass and moved
       onto groups with the other package passes in step 18.
     - 14b-7, the deletions: `GpuComputeBindingKind`, whose `GpuComputeBinding`
@@ -2447,8 +2439,19 @@ Phase 3, the groups, follows phase 2:
     `GpuDeviceMemoryWorkLawTests` (the aperture role counts),
     `SdfFrameBufferPlanLawTests` and `SdfPassPlanLawTests` (the plan without the
     tables).
-20. The SDF engine moves onto groups, its push blocks and hand-set binding
-    constants included. It follows P4-1, which rewrites the same kernels.
+20. Done: the SDF engine is on groups. Its kernels read
+    `sdf-world.interface.hlsli` and `sdf-brick-bake.interface.hlsli`,
+    generated from `SdfWorldInterfaces` and owned by `puck shaders generate`,
+    and the engine creates every pipeline from its interface's layout and
+    binds by member name. Every per-view dispatch binds the ring slot's frame
+    set and its view's views set, whose block holds the world values,
+    `viewBase` among them; the baker binds one set per brick slot and pushes
+    its slice ordinal as the pipeline's one index. No kernel declares a
+    binding, a register or a push block by hand, `GpuRegisterNumbering` is
+    deleted, and `ShaderRegisterBindingLawTests` holds every shader with no
+    exception. A buffer member names its element type, so the kernels keep
+    their structured loads, and a buffer one pass writes and a later pass
+    reads is a read-write member and a read-only member over the one buffer.
 21. The owning guides and the `rendering` skill describe the result.
 22. In progress: the P7 deletions no earlier step owns. Done: Vulkan has one
     pipeline factory, `VulkanGpuPipelineFactory`, which creates graphics
@@ -2992,7 +2995,7 @@ except step 8.
    export (a Direct3D 12 image a Direct3D 11 probe reads) signals the same
    shared fence in the other direction, replacing the drain in
    `ViewExportRing`. It needs a probe canary, which does not exist.
-8. Consumer-chosen filtering and no slot limit. Waits on P7b-14b-6 and P7b-20.
+8. Consumer-chosen filtering and no slot limit, which P7b-14b-6 and P7b-20 unblock.
    Screens read a separate image and sampler, each screen row chooses nearest
    or linear, and the 32 fixed slots give way to the engine's group arrays.
    Until then every screen samples through the one nearest sampler the glyph
@@ -3481,9 +3484,8 @@ independent of placed-surface support, and shared GPU and World files have one
 owner at a time.
 
 **Contracts.** P7's memory profile and residency selector have landed, and P7b
-is under way: steps 1 to 13, 14a, 14b-1 to 14b-5 and 15 to 19 have landed, and
-step 22 is in progress. What remains is the SDF engine's groups (14b-6 and
-step 20, which also follows P4-1), 14b-7's deletions, and step 21. P8 is
+is under way: steps 1 to 13, 14a, 14b-1 to 14b-6 and 15 to 20 have landed, and
+step 22 is in progress. What remains is 14b-7's deletions and step 21. P8 is
 complete but for a GPU run of its echo of every shipped interface family, and its frame
 group
 became a descriptor set when step 15 put pipelines on groups. P7 and P8 do not

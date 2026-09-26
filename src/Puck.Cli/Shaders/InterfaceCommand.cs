@@ -85,7 +85,8 @@ internal static class InterfaceCommand {
                     : [(ShaderPipelineParameterLayout.ForPackage(
                         config: declared.Config,
                         members: declared.Members,
-                        package: declared.Id
+                        package: declared.Id,
+                        pushesIndex: declared.PushesIndex
                     ).Interface, path)]);
             } catch (Exception exception) when ((exception is InvalidDataException or System.Text.Json.JsonException or ShaderPipelineCompilationException or IOException)) {
                 return CliExit.Refuse(

@@ -21,7 +21,6 @@ public sealed partial class ShaderPipelineRenderNode {
     private const GpuStage RegionReaders = GpuStage.ComputeShader | GpuStage.FragmentShader;
 
     private readonly Dictionary<string, GpuRegion> m_externalRegions = new(comparer: StringComparer.Ordinal);
-    private readonly List<IGpuBuffer> m_copiedRegions = [];
 
     // The device's region-copy pipeline, leased by the build of the first graph with a staged region, and each slot's
     // command pool the frame's copies are recorded in; all held until a device loss or disposal.
@@ -34,6 +33,9 @@ public sealed partial class ShaderPipelineRenderNode {
     private GpuRegionCopyPool? m_regionCopies;
     private GpuRegionCopyPool? m_regionCopiesOwner;
     private int m_nextRegionShare;
+    // The frame's owed copies, recorded through the device the copy pools belong to, and the slot they are recorded for.
+    private GpuRegionCopyRecording? m_copyRecording;
+    private int m_copySlot;
 
     private Dictionary<string, int> m_portShares = new(comparer: StringComparer.Ordinal);
 
@@ -289,9 +291,16 @@ public sealed partial class ShaderPipelineRenderNode {
         part: pass
     );
     // Flushes every region's share of the slot, now that the frame's passes have written theirs, and records each owed
-    // staged copy in the graph's copy command buffer for the slot, which goes ahead of the frame's passes.
+    // staged copy in the graph's copy command buffer for the slot, which goes ahead of the frame's passes: the recording
+    // begins that buffer at the first owed copy, behind the barrier ordering the earlier submissions' reads of every
+    // staged destination before the copies write them.
     private void RecordRegionCopies(List<nint> commands, int slot) {
-        var command = ((nint)0);
+        m_copySlot = slot;
+        m_copyRecording ??= new GpuRegionCopyRecording(
+            begin: BeginRegionCopies,
+            readers: RegionReaders,
+            recorder: m_gpu.Recorder
+        );
 
         foreach (var pass in m_passes) {
             if (pass.Regions is not { } regions) {
@@ -299,79 +308,44 @@ public sealed partial class ShaderPipelineRenderNode {
             }
 
             foreach (var region in regions) {
-                RecordRegionCopy(
-                    command: ref command,
+                m_copyRecording.Record(
                     region: region,
                     slot: slot
                 );
             }
         }
         foreach (var region in m_externalRegions.Values) {
-            RecordRegionCopy(
-                command: ref command,
+            m_copyRecording.Record(
                 region: region,
                 slot: slot
             );
         }
 
+        var command = m_copyRecording.Finish();
+
         if (command == 0) {
             return;
         }
 
-        var recorder = m_gpu.Recorder;
-
-        foreach (var buffer in m_copiedRegions) {
-            recorder.TransitionBuffer(
-                bufferHandle: buffer.BufferHandle,
-                commandBufferHandle: command,
-                destinationAccessMask: GpuAccess.ShaderRead,
-                destinationStageMask: RegionReaders,
-                sourceAccessMask: GpuAccess.ShaderWrite,
-                sourceStageMask: GpuStage.ComputeShader
-            );
-        }
-
-        m_copiedRegions.Clear();
-        recorder.EndDebugGroup(commandBufferHandle: command);
-        recorder.EndCommandBuffer(commandBufferHandle: command);
+        m_gpu.Recorder.EndDebugGroup(commandBufferHandle: command);
+        m_gpu.Recorder.EndCommandBuffer(commandBufferHandle: command);
         commands.Insert(
             index: 0,
             item: command
         );
     }
-    // Flushes one region's share of the slot and records its copy when it owes one, beginning the frame's copy command
-    // buffer, behind the barrier that orders the earlier submissions' reads of every staged destination before the
-    // copies write them, at the first.
-    private void RecordRegionCopy(GpuRegion region, int slot, ref nint command) {
-        region.Flush(slot: slot);
-
-        if (!region.OwesCopy) {
-            return;
-        }
-
+    // Begins the slot's copy command buffer, at the frame's first owed copy.
+    private nint BeginRegionCopies() {
+        var command = (m_copyPools ?? throw new InvalidOperationException(message: $"Instance '{m_descriptor.Name}' holds a staged region but no copy command pool."))[m_copySlot].CommandBufferHandle;
         var recorder = m_gpu.Recorder;
 
-        if (command == 0) {
-            command = (m_copyPools ?? throw new InvalidOperationException(message: $"Instance '{m_descriptor.Name}' holds a staged region but no copy command pool."))[slot].CommandBufferHandle;
-            recorder.BeginCommandBuffer(commandBufferHandle: command);
-            recorder.BeginDebugGroup(
-                commandBufferHandle: command,
-                label: "region copies"
-            );
-            recorder.MemoryBarrier(
-                commandBufferHandle: command,
-                destinationAccessMask: GpuAccess.ShaderWrite,
-                destinationStageMask: GpuStage.ComputeShader,
-                sourceAccessMask: GpuAccess.ShaderRead,
-                sourceStageMask: RegionReaders
-            );
-        }
-
-        region.RecordCopy(
-            commandBuffer: command,
-            slot: slot
+        recorder.BeginCommandBuffer(commandBufferHandle: command);
+        recorder.BeginDebugGroup(
+            commandBufferHandle: command,
+            label: "region copies"
         );
-        m_copiedRegions.Add(item: region.Buffer(slot: slot));
+
+        return command;
     }
     // Releases the copy command pools and gives up the node's lease on the region-copy pipeline, once every region that
     // copies with it is disposed and no submission that recorded a copy is in flight.
@@ -381,6 +355,7 @@ public sealed partial class ShaderPipelineRenderNode {
         }
 
         m_copyPools = null;
+        m_copyRecording = null;
         m_regionCopy?.Release();
         m_regionCopy = null;
         m_copyPipeline = null;

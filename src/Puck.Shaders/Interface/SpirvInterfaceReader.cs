@@ -9,10 +9,14 @@ namespace Puck.Shaders;
 /// from the module's own decorations: <c>DescriptorSet</c> and <c>Binding</c> on each variable, <c>Offset</c> on each
 /// constant block member, and the <c>OpName</c> and <c>OpMemberName</c> debug names DXC emits. A variable in the
 /// <c>PushConstant</c> storage class carries no set or binding and is reported as a pushed
-/// <see cref="GpuBindingKind.ConstantBuffer"/> block (<see cref="ShaderInterfaceBinding.Pushed"/>) at set 0, binding 0. Pure C#, no GPU and no native tool; it
-/// follows the Khronos SPIR-V specification's instruction encoding and nothing else.
+/// <see cref="GpuBindingKind.ConstantBuffer"/> block (<see cref="ShaderInterfaceBinding.Pushed"/>) at set 0, binding 0,
+/// whether it is a pushed frame block or a pushed index. A buffer's element stride
+/// (<see cref="ShaderInterfaceBinding.ElementStride"/>) is the <c>ArrayStride</c> of the runtime array its block ends in.
+/// Pure C#, no GPU and no native tool; it follows the Khronos SPIR-V specification's instruction encoding and nothing
+/// else.
 /// </summary>
 public static class SpirvInterfaceReader {
+    private const uint DecorationArrayStride = 6;
     private const uint DecorationBinding = 33;
     private const uint DecorationBlock = 2;
     private const uint DecorationBufferBlock = 3;
@@ -43,6 +47,7 @@ public static class SpirvInterfaceReader {
     private const uint StorageClassUniform = 2;
 
     private sealed class Module {
+        public Dictionary<uint, uint> ArrayStrides { get; } = [];
         public Dictionary<uint, uint> Bindings { get; } = [];
         public HashSet<uint> Blocks { get; } = [];
         public HashSet<uint> BufferBlocks { get; } = [];
@@ -56,8 +61,9 @@ public static class SpirvInterfaceReader {
         public List<(uint Id, uint PointerType, uint StorageClass)> Variables { get; } = [];
     }
 
-    /// <summary>Reads every variable that carries a descriptor set, and the push-constant block, ordered by set and then
-    /// binding.</summary>
+    /// <summary>Reads every variable that carries a descriptor set, and the push-constant block, ordered by set, then
+    /// binding, then a bound block before a pushed one at the same place
+    /// (<see cref="ShaderInterfaceLayout.Ordered"/>).</summary>
     /// <param name="module">The SPIR-V module's bytes, little-endian words.</param>
     /// <returns>The bindings.</returns>
     /// <exception cref="InvalidDataException">The bytes are not a SPIR-V module, an instruction overruns the module, or a
@@ -117,6 +123,12 @@ public static class SpirvInterfaceReader {
 
             bindings.Add(item: new ShaderInterfaceBinding(
                 Binding: parsed.Bindings.GetValueOrDefault(key: id),
+                ElementStride: ((kind is GpuBindingKind.ReadOnlyBuffer or GpuBindingKind.ReadWriteBuffer)
+                    ? ElementStride(
+                        module: parsed,
+                        structId: pointee
+                    )
+                    : 0),
                 Kind: kind,
                 Members: ((kind == GpuBindingKind.ConstantBuffer)
                     ? BlockMembers(
@@ -130,11 +142,7 @@ public static class SpirvInterfaceReader {
             ));
         }
 
-        bindings.Sort(comparison: static (a, b) => ((a.Set != b.Set)
-            ? a.Set.CompareTo(value: b.Set)
-            : a.Binding.CompareTo(value: b.Binding)));
-
-        return bindings.AsReadOnly();
+        return ShaderInterfaceLayout.Ordered(bindings: bindings);
     }
 
     private static IReadOnlyList<ShaderInterfaceBlockMember> BlockMembers(Module module, uint structId) {
@@ -166,6 +174,22 @@ public static class SpirvInterfaceReader {
         result.Sort(comparison: static (a, b) => a.Offset.CompareTo(value: b.Offset));
 
         return result.AsReadOnly();
+    }
+    // A buffer's block ends in the runtime array of its elements; its ArrayStride is the element stride. A byte-address
+    // buffer is a runtime array of uint, so it reports that array's stride too.
+    private static uint ElementStride(Module module, uint structId) {
+        var members = module.Types[structId].Operands;
+
+        return (
+            (members.Length != 0) &&
+            module.Types.TryGetValue(
+                key: members[^1],
+                value: out var last
+            ) &&
+            (last.Kind == OpTypeRuntimeArray)
+        )
+            ? module.ArrayStrides.GetValueOrDefault(key: members[^1])
+            : 0;
     }
     private static GpuBindingKind Kind(Module module, uint typeId, uint storageClass, string name) {
         var (kind, operands) = module.Types[typeId];
@@ -281,6 +305,9 @@ public static class SpirvInterfaceReader {
                 break;
             case DecorationBufferBlock:
                 _ = module.BufferBlocks.Add(item: target);
+                break;
+            case DecorationArrayStride:
+                module.ArrayStrides[target] = operands[2];
                 break;
             case DecorationBinding:
                 module.Bindings[target] = operands[2];

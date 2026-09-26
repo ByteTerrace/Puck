@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using Puck.Abstractions.Gpu;
 
 namespace Puck.SdfVm;
@@ -52,20 +53,11 @@ public sealed partial class SdfWorldEngine {
                 commandBufferHandle: commandBuffer,
                 pipelineHandle: m_beamPipeline.Handle
             );
-            recorder.BindDescriptorSet(
-                bindPoint: GpuBindPoint.Compute,
-                commandBufferHandle: commandBuffer,
-                descriptorSetHandle: m_beamSets[0],
-                group: 0,
-                pipelineLayoutHandle: m_beamPipeline.LayoutHandle
-            );
-            recorder.PushConstants(
-                bindPoint: GpuBindPoint.Compute,
-                commandBufferHandle: commandBuffer,
-                data: m_pushConstant,
-                offset: 0,
-                pipelineLayoutHandle: m_beamPipeline.LayoutHandle,
-                stageFlags: GpuShaderStage.Compute
+            BindWorldGroups(
+                commandBuffer: commandBuffer,
+                frameSet: m_frameSets[0],
+                pipeline: m_beamPipeline,
+                viewsSet: m_viewsSets[0][0]
             );
             recorder.Dispatch(
                 commandBufferHandle: commandBuffer,
@@ -86,20 +78,11 @@ public sealed partial class SdfWorldEngine {
             commandBufferHandle: commandBuffer,
             pipelineHandle: viewsPipeline.Handle
         );
-        recorder.BindDescriptorSet(
-            bindPoint: GpuBindPoint.Compute,
-            commandBufferHandle: commandBuffer,
-            descriptorSetHandle: m_viewsSets[0][0],
-            group: 0,
-            pipelineLayoutHandle: viewsPipeline.LayoutHandle
-        );
-        recorder.PushConstants(
-            bindPoint: GpuBindPoint.Compute,
-            commandBufferHandle: commandBuffer,
-            data: m_pushConstant,
-            offset: 0,
-            pipelineLayoutHandle: viewsPipeline.LayoutHandle,
-            stageFlags: GpuShaderStage.Compute
+        BindWorldGroups(
+            commandBuffer: commandBuffer,
+            frameSet: m_frameSets[0],
+            pipeline: viewsPipeline,
+            viewsSet: m_viewsSets[0][0]
         );
         recorder.Dispatch(
             commandBufferHandle: commandBuffer,
@@ -155,108 +138,112 @@ public sealed partial class SdfWorldEngine {
 
         m_bindings.WriteStorageImage(
             arrayElement: 0,
-            binding: ViewOutputBindingIndex,
+            binding: OutputBinding,
             descriptorSetHandle: viewsSet,
             imageViewHandle: reportImage.ImageViewHandle
         );
         m_boundOutputViews[0][0] = 0;
 
-        for (var element = 0; (element < ScreenSourceBindingIndices.Length); element++) {
-            m_bindings.WriteCombinedImageSampler(
+        foreach (var binding in ScreenSourceBindings) {
+            m_bindings.WriteSampledImage(
                 arrayElement: 0,
-                binding: ScreenSourceBindingIndices[element],
+                binding: binding,
                 descriptorSetHandle: viewsSet,
-                imageViewHandle: sampledImage.ImageViewHandle,
-                samplerHandle: m_screenSampler
+                imageViewHandle: sampledImage.ImageViewHandle
             );
         }
 
-        m_bindings.WriteCombinedImageSampler(
+        m_bindings.WriteSampledImage(
             arrayElement: 0,
-            binding: GlyphAtlasBindingIndex,
+            binding: GlyphAtlasBinding,
             descriptorSetHandle: viewsSet,
-            imageViewHandle: sampledImage.ImageViewHandle,
-            samplerHandle: m_screenSampler
+            imageViewHandle: sampledImage.ImageViewHandle
         );
-        _ = BitConverter.TryWriteBytes(
-            destination: m_pushConstant.AsSpan(
-                length: sizeof(uint),
-                start: (7 * sizeof(uint))
-            ),
+        // The report request rides view 0's world block in ring slot 0, beside a frame block. The regions keep what each
+        // slot holds, so the next frame that renders view 0 in that slot sends its own block over this one.
+        Span<byte> block = stackalloc byte[m_viewBlocks[0].ByteCount];
+
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            destination: block[SampleIndexOffset..],
             value: SdfShaderSetVerification.ReportRequest
         );
+        _ = m_viewBlocks[0].Write(
+            bytes: block,
+            offset: 0
+        );
+        m_viewBlocks[0].Flush(slot: 0);
+        WriteFrameBlock(
+            frame: 0UL,
+            slot: 0
+        );
 
-        try {
-            var report = DispatchIsaReport(
-                initializeImages: true,
-                readback: readback,
-                reportImage: reportImage,
-                sampledImage: sampledImage,
-                viewsPipeline: m_viewsPipeline
-            );
+        var report = DispatchIsaReport(
+            initializeImages: true,
+            readback: readback,
+            reportImage: reportImage,
+            sampledImage: sampledImage,
+            viewsPipeline: m_viewsPipeline
+        );
 
-            SdfShaderSetVerification.ValidateReport(
-                report: report.Span,
-                viewsVariant: "full views"
-            );
+        SdfShaderSetVerification.ValidateReport(
+            report: report.Span,
+            viewsVariant: "full views"
+        );
 
-            report = DispatchIsaReport(
-                initializeImages: false,
-                readback: readback,
-                reportImage: reportImage,
-                sampledImage: sampledImage,
-                viewsPipeline: m_viewsCorePipeline
-            );
-            SdfShaderSetVerification.ValidateReport(
-                report: report.Span,
-                viewsVariant: "core views"
-            );
-            report = DispatchIsaReport(
-                initializeImages: false,
-                readback: readback,
-                reportImage: reportImage,
-                sampledImage: sampledImage,
-                viewsPipeline: m_viewsFoldsPipeline
-            );
-            SdfShaderSetVerification.ValidateReport(
-                report: report.Span,
-                viewsVariant: "fold views"
-            );
-            report = DispatchIsaReport(
-                initializeImages: false,
-                readback: readback,
-                reportImage: reportImage,
-                sampledImage: sampledImage,
-                viewsPipeline: m_primaryPipeline
-            );
-            SdfShaderSetVerification.ValidateReport(
-                report: report.Span,
-                viewsVariant: "primary traversal"
-            );
-            report = DispatchIsaReport(
-                initializeImages: false,
-                readback: readback,
-                reportImage: reportImage,
-                sampledImage: sampledImage,
-                viewsPipeline: m_surfacePipeline
-            );
-            SdfShaderSetVerification.ValidateReport(
-                report: report.Span,
-                viewsVariant: "surface evaluation"
-            );
-            report = DispatchIsaReport(
-                initializeImages: false,
-                readback: readback,
-                reportImage: reportImage,
-                sampledImage: sampledImage,
-                viewsPipeline: m_ambientPipeline
-            );
-            SdfShaderSetVerification.ValidateReport(
-                report: report.Span,
-                viewsVariant: "ambient occlusion"
-            );
-        } finally {
-            Array.Clear(array: m_pushConstant);
-        }
+        report = DispatchIsaReport(
+            initializeImages: false,
+            readback: readback,
+            reportImage: reportImage,
+            sampledImage: sampledImage,
+            viewsPipeline: m_viewsCorePipeline
+        );
+        SdfShaderSetVerification.ValidateReport(
+            report: report.Span,
+            viewsVariant: "core views"
+        );
+        report = DispatchIsaReport(
+            initializeImages: false,
+            readback: readback,
+            reportImage: reportImage,
+            sampledImage: sampledImage,
+            viewsPipeline: m_viewsFoldsPipeline
+        );
+        SdfShaderSetVerification.ValidateReport(
+            report: report.Span,
+            viewsVariant: "fold views"
+        );
+        report = DispatchIsaReport(
+            initializeImages: false,
+            readback: readback,
+            reportImage: reportImage,
+            sampledImage: sampledImage,
+            viewsPipeline: m_primaryPipeline
+        );
+        SdfShaderSetVerification.ValidateReport(
+            report: report.Span,
+            viewsVariant: "primary traversal"
+        );
+        report = DispatchIsaReport(
+            initializeImages: false,
+            readback: readback,
+            reportImage: reportImage,
+            sampledImage: sampledImage,
+            viewsPipeline: m_surfacePipeline
+        );
+        SdfShaderSetVerification.ValidateReport(
+            report: report.Span,
+            viewsVariant: "surface evaluation"
+        );
+        report = DispatchIsaReport(
+            initializeImages: false,
+            readback: readback,
+            reportImage: reportImage,
+            sampledImage: sampledImage,
+            viewsPipeline: m_ambientPipeline
+        );
+        SdfShaderSetVerification.ValidateReport(
+            report: report.Span,
+            viewsVariant: "ambient occlusion"
+        );
     }
 }

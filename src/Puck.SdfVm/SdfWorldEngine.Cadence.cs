@@ -66,7 +66,7 @@ public sealed partial class SdfWorldEngine {
         );
 
         hash.Add(values: revisions);
-        hash.Add(values: m_pushConstant);
+        hash.Add(values: m_worldBlock);
         AddViewportsExcludingTime(
             hash: ref hash,
             viewportScratch: m_viewportScratch
@@ -92,8 +92,9 @@ public sealed partial class SdfWorldEngine {
     // (the sky pass reads only m_viewportScratch + m_screenLightScratch, both already covered below):
     //   - m_programRevision  : the uploaded program (words, live instance-mask width, kernel variant, reseeded
     //                          screen-surface table, invariant instance grid) — bumped by UploadProgram.
-    //   - m_pushConstant     : the pass push — width/height/tileGrid (constant), viewportCount,
-    //                          screenSourceMask (bound-slot bitmask), liveInstanceMaskWordCount.
+    //   - m_worldBlock       : the world values every view's block shares — width/height/tileGrid (constant),
+    //                          viewportCount, screenSourceMask (bound-slot bitmask), liveInstanceMaskWordCount and the
+    //                          twinkle tick; each view's own extent and index follow from these and the viewports.
     //   - m_viewportScratch  : per-view camera basis + fov/aspect, render extent, debug view mode, the off-axis
     //                          offset, and the frame's far distance — excluding each row's presentation-time lane (PackViewports'
     //                          position.w; byte offset 12 of each 96-byte ViewportData row). Time free-runs every

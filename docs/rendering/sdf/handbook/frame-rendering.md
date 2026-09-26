@@ -199,7 +199,10 @@ brick is copied whole.
 
 Every staged copy records `region-copy.comp`, the one region-copy pipeline each
 device has, which `Puck.Shaders` ships and every owner leases from the
-pass-pipeline cache (`GpuRegionCopyPass`).
+pass-pipeline cache (`GpuRegionCopyPass`). An owner records a frame's owed copies through
+`GpuRegionCopyRecording`: a barrier ordering the earlier reads of every staged
+destination before the first copy, then the copies, then one transition per
+copied buffer for its readers.
 
 A still frame therefore writes only the time word of each viewport row, because
 each row carries the frame's presentation time. When a sky's clouds drift, a

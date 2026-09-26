@@ -6,7 +6,8 @@
 #include "sdf-tile.hlsli"
 #include "sdf-vm.hlsli"
 
-// The viewport table — cameras + regions — as DATA (binding 2). sdf-vm.hlsli binds the scene program at binding 1.
+// The viewport table — cameras + regions — as DATA: six float4 rows per view in the viewports buffer, read through
+// worldViewport.
 struct ViewportData {
     float4 position;    // xyz = world position, w = time (seconds)
     float4 right;       // xyz = right basis,   w = tan(fov / 2)
@@ -22,7 +23,18 @@ struct ViewportData {
     // KEEP IN SYNC with SdfWorldEngine.PackViewports (the 96-byte row).
     float4 lens;
 };
-[[vk::binding(2, 0)]] StructuredBuffer<ViewportData> viewports : register(t1);
+static const uint WorldViewportRows = 6u;
+ViewportData worldViewport(uint view) {
+    uint row = (view * WorldViewportRows);
+    ViewportData data;
+    data.position = viewports[row];
+    data.right = viewports[(row + 1u)];
+    data.up = viewports[(row + 2u)];
+    data.forward = viewports[(row + 3u)];
+    data.extent = viewports[(row + 4u)];
+    data.lens = viewports[(row + 5u)];
+    return data;
+}
 
 // The frame's FAR DISTANCE — the depth at which every camera march ends: the fine march's far exit (renderView), the
 // beam's cone proofs (entry, the gap search, the F1 far bound) and the "nothing proven" sentinel every tile plane
@@ -39,31 +51,24 @@ uint2 worldViewDims(ViewportData view) {
     return max((uint2)view.extent.xy, uint2(1u, 1u));
 }
 
-struct WorldParams {
-    uint2 imageExtent;   // the engine extent in pixels: the largest a view renders, the per-view visibility record stride
-    uint2 tileGrid;      // tiles per viewport (row, column) — the cull buffer's per-viewport stride
-    uint viewportCount;  // every view this frame renders; the per-view buffer strides, whichever view one set renders
-    uint screenMask;     // bit s set => screen source slot s is bound this frame (Stage 1 only; unused elsewhere)
-    uint instanceMaskWordCount; // the LIVE uploaded program's derived per-tile mask width (SdfProgram.InstanceMaskWordCount), pushed per frame
-    // The deterministic tick clock star twinkle reads; cloud motion is baked into the environment rows. Stage 1 only.
-    // KEEP IN SYNC with SdfFrame.SampleIndex.
-    uint sampleIndex;
-    // The view this dispatch set renders. Each view renders through its own set of dispatches, one deep in Z, so a
-    // kernel's view is worldViewOf(id.z). KEEP IN SYNC with SdfWorldEngine.ViewBaseWord.
-    uint viewBase;
-};
-[[vk::push_constant]] ConstantBuffer<WorldParams> params;
+// The world values (imageExtent, tileGrid, viewportCount, screenMask, instanceMaskWordCount, sampleIndex and the view
+// the set renders, viewBase) are the views set's block, passGroup, written per view by SdfWorldEngine.WriteViewBlocks:
+// imageExtent is the engine extent, the largest a view renders and the per-view visibility record stride; tileGrid the
+// tiles per viewport, the cull buffer's per-viewport stride; viewportCount every view the frame renders; screenMask the
+// bound screen sources (the views passes only); instanceMaskWordCount the live program's per-tile mask width;
+// sampleIndex the deterministic tick clock star twinkle reads. Each view renders through its own set of dispatches, one
+// deep in Z, so a kernel's view is worldViewOf(id.z).
 
 // The view a dispatch-set invocation renders.
 uint worldViewOf(uint z) {
-    return (params.viewBase + z);
+    return (passGroup.viewBase + z);
 }
 
 #if defined(SDF_PRIMARY_PASS) || defined(SDF_PRIMARY_READ)
 // The per-pixel visibility record the hit passes write and views shades (sdf-visibility.hlsli owns its layout).
 #include "sdf-visibility.hlsli"
 uint worldVisibilityRecord(uint2 pixel, uint viewIndex) {
-    return sdfVisibilityRecord(pixel, viewIndex, params.imageExtent);
+    return sdfVisibilityRecord(pixel, viewIndex, passGroup.imageExtent);
 }
 #endif
 #ifdef SDF_PRIMARY_READ
@@ -78,9 +83,9 @@ bool worldVisibilityCurrent(uint2 pixel) {
 #endif
 
 uint worldInstanceMaskBase(uint tileIndex) {
-    uint summaryWords = ((params.instanceMaskWordCount + 31u) >> 5u);
+    uint summaryWords = ((passGroup.instanceMaskWordCount + 31u) >> 5u);
 
-    return ((params.instanceMaskWordCount + summaryWords) * tileIndex);
+    return ((passGroup.instanceMaskWordCount + summaryWords) * tileIndex);
 }
 // The tile cull buffer's plane layout (four-bound teleport, Larsson "The Gunk", + the F1 far bound). Plane 0 = the
 // march-start lower bound (the classic beam output; sdf-cull-args + the compositor read ONLY this plane, so their
@@ -92,7 +97,7 @@ uint worldInstanceMaskBase(uint tileIndex) {
 // (k * stride + tileIndex). KEEP IN SYNC with SdfWorldEngine.TilePlaneCount.
 static const uint WorldTilePlaneCount = 4u;
 uint worldTilePlaneStride() {
-    return (params.tileGrid.x * params.tileGrid.y * params.viewportCount);
+    return (passGroup.tileGrid.x * passGroup.tileGrid.y * passGroup.viewportCount);
 }
 // Plane 0 (march-start) needs no stride multiply — this accessor exists only for symmetry with the three below (see
 // the layout comment above: sdf-cull-args and the compositor deliberately read plane 0 directly, unaffected by any
@@ -153,95 +158,30 @@ struct ScreenSurfaceData {
     float4 up;      // xyz = unit world-space V axis (V=0 at top), w = half-height
     float4 origin;  // xyz = world-space front-face center, w = unused (pad)
 };
-[[vk::binding(10, 0)]] StructuredBuffer<ScreenSurfaceData> screenSurfaces : register(t4);
+static const uint WorldScreenSurfaceRows = 3u;
+ScreenSurfaceData worldScreenSurface(uint screenIndex) {
+    uint row = (screenIndex * WorldScreenSurfaceRows);
+    ScreenSurfaceData data;
+    data.right = screenSurfaces[row];
+    data.up = screenSurfaces[(row + 1u)];
+    data.origin = screenSurfaces[(row + 2u)];
+    return data;
+}
 // The screenSurfaces[] / sdfDecalCells[] / screenSourceN entry count — the width every screen index is bounded
 // against before it indexes one. KEEP IN SYNC with SdfProgramBuilder.MaxScreenSurfaces.
 static const uint SdfScreenSurfaceCount = 32u;
-// The screen source images (nearest-filtered, so emulator pixels stay crisp) — one per screen index (0..31),
-// THIRTY-TWO separate combined-image-sampler bindings (12..43; DXC's vk::combinedImageSampler does not support an ARRAY
-// texture, only a scalar one, so a true single Vulkan combined-image-sampler array isn't expressible in this HLSL — see
-// the C# side for the derived binding indices). Each Texture2D+SamplerState pair shares one binding (fusing into ONE
-// Vulkan combined-image-sampler descriptor) and needs its OWN sampler register (s0..s31) — DXC rejects two distinct
-// sampler declarations aliased onto one register — so Direct3D 12 bakes in THIRTY-TWO static samplers, one per
-// SampledImage binding, ALL with the identical requested filter (NEAREST): logically one shared sampler, materialized
-// as thirty-two registers because the shading language has no array-of-combined-image-sampler here. Direct3D 12 assigns
-// t#/s# registers in the C# binding-array order (DirectXGpuPipelineFactory), so these register(tN)/register(sN)
-// annotations must mirror SdfWorldEngine's viewsBindings order exactly — currently t5..t36 / s0..s31. Slots with no
-// source bound this frame (params.screenMask bit clear) duplicate a valid filler view; the shader never samples an
-// unbound slot (screenSourceBound gates it), so the filler's content never reaches the image. (params.screenMask is a
-// single uint, so exactly 32 screen bits fit — raising past 32 needs a second mask word.)
-[[vk::combinedImageSampler]] [[vk::binding(12, 0)]] Texture2D<float4> screenSource0 : register(t5);
-[[vk::combinedImageSampler]] [[vk::binding(12, 0)]] SamplerState screenSampler0 : register(s0);
-[[vk::combinedImageSampler]] [[vk::binding(13, 0)]] Texture2D<float4> screenSource1 : register(t6);
-[[vk::combinedImageSampler]] [[vk::binding(13, 0)]] SamplerState screenSampler1 : register(s1);
-[[vk::combinedImageSampler]] [[vk::binding(14, 0)]] Texture2D<float4> screenSource2 : register(t7);
-[[vk::combinedImageSampler]] [[vk::binding(14, 0)]] SamplerState screenSampler2 : register(s2);
-[[vk::combinedImageSampler]] [[vk::binding(15, 0)]] Texture2D<float4> screenSource3 : register(t8);
-[[vk::combinedImageSampler]] [[vk::binding(15, 0)]] SamplerState screenSampler3 : register(s3);
-[[vk::combinedImageSampler]] [[vk::binding(16, 0)]] Texture2D<float4> screenSource4 : register(t9);
-[[vk::combinedImageSampler]] [[vk::binding(16, 0)]] SamplerState screenSampler4 : register(s4);
-[[vk::combinedImageSampler]] [[vk::binding(17, 0)]] Texture2D<float4> screenSource5 : register(t10);
-[[vk::combinedImageSampler]] [[vk::binding(17, 0)]] SamplerState screenSampler5 : register(s5);
-[[vk::combinedImageSampler]] [[vk::binding(18, 0)]] Texture2D<float4> screenSource6 : register(t11);
-[[vk::combinedImageSampler]] [[vk::binding(18, 0)]] SamplerState screenSampler6 : register(s6);
-[[vk::combinedImageSampler]] [[vk::binding(19, 0)]] Texture2D<float4> screenSource7 : register(t12);
-[[vk::combinedImageSampler]] [[vk::binding(19, 0)]] SamplerState screenSampler7 : register(s7);
-[[vk::combinedImageSampler]] [[vk::binding(20, 0)]] Texture2D<float4> screenSource8 : register(t13);
-[[vk::combinedImageSampler]] [[vk::binding(20, 0)]] SamplerState screenSampler8 : register(s8);
-[[vk::combinedImageSampler]] [[vk::binding(21, 0)]] Texture2D<float4> screenSource9 : register(t14);
-[[vk::combinedImageSampler]] [[vk::binding(21, 0)]] SamplerState screenSampler9 : register(s9);
-[[vk::combinedImageSampler]] [[vk::binding(22, 0)]] Texture2D<float4> screenSource10 : register(t15);
-[[vk::combinedImageSampler]] [[vk::binding(22, 0)]] SamplerState screenSampler10 : register(s10);
-[[vk::combinedImageSampler]] [[vk::binding(23, 0)]] Texture2D<float4> screenSource11 : register(t16);
-[[vk::combinedImageSampler]] [[vk::binding(23, 0)]] SamplerState screenSampler11 : register(s11);
-[[vk::combinedImageSampler]] [[vk::binding(24, 0)]] Texture2D<float4> screenSource12 : register(t17);
-[[vk::combinedImageSampler]] [[vk::binding(24, 0)]] SamplerState screenSampler12 : register(s12);
-[[vk::combinedImageSampler]] [[vk::binding(25, 0)]] Texture2D<float4> screenSource13 : register(t18);
-[[vk::combinedImageSampler]] [[vk::binding(25, 0)]] SamplerState screenSampler13 : register(s13);
-[[vk::combinedImageSampler]] [[vk::binding(26, 0)]] Texture2D<float4> screenSource14 : register(t19);
-[[vk::combinedImageSampler]] [[vk::binding(26, 0)]] SamplerState screenSampler14 : register(s14);
-[[vk::combinedImageSampler]] [[vk::binding(27, 0)]] Texture2D<float4> screenSource15 : register(t20);
-[[vk::combinedImageSampler]] [[vk::binding(27, 0)]] SamplerState screenSampler15 : register(s15);
-[[vk::combinedImageSampler]] [[vk::binding(28, 0)]] Texture2D<float4> screenSource16 : register(t21);
-[[vk::combinedImageSampler]] [[vk::binding(28, 0)]] SamplerState screenSampler16 : register(s16);
-[[vk::combinedImageSampler]] [[vk::binding(29, 0)]] Texture2D<float4> screenSource17 : register(t22);
-[[vk::combinedImageSampler]] [[vk::binding(29, 0)]] SamplerState screenSampler17 : register(s17);
-[[vk::combinedImageSampler]] [[vk::binding(30, 0)]] Texture2D<float4> screenSource18 : register(t23);
-[[vk::combinedImageSampler]] [[vk::binding(30, 0)]] SamplerState screenSampler18 : register(s18);
-[[vk::combinedImageSampler]] [[vk::binding(31, 0)]] Texture2D<float4> screenSource19 : register(t24);
-[[vk::combinedImageSampler]] [[vk::binding(31, 0)]] SamplerState screenSampler19 : register(s19);
-[[vk::combinedImageSampler]] [[vk::binding(32, 0)]] Texture2D<float4> screenSource20 : register(t25);
-[[vk::combinedImageSampler]] [[vk::binding(32, 0)]] SamplerState screenSampler20 : register(s20);
-[[vk::combinedImageSampler]] [[vk::binding(33, 0)]] Texture2D<float4> screenSource21 : register(t26);
-[[vk::combinedImageSampler]] [[vk::binding(33, 0)]] SamplerState screenSampler21 : register(s21);
-[[vk::combinedImageSampler]] [[vk::binding(34, 0)]] Texture2D<float4> screenSource22 : register(t27);
-[[vk::combinedImageSampler]] [[vk::binding(34, 0)]] SamplerState screenSampler22 : register(s22);
-[[vk::combinedImageSampler]] [[vk::binding(35, 0)]] Texture2D<float4> screenSource23 : register(t28);
-[[vk::combinedImageSampler]] [[vk::binding(35, 0)]] SamplerState screenSampler23 : register(s23);
-[[vk::combinedImageSampler]] [[vk::binding(36, 0)]] Texture2D<float4> screenSource24 : register(t29);
-[[vk::combinedImageSampler]] [[vk::binding(36, 0)]] SamplerState screenSampler24 : register(s24);
-[[vk::combinedImageSampler]] [[vk::binding(37, 0)]] Texture2D<float4> screenSource25 : register(t30);
-[[vk::combinedImageSampler]] [[vk::binding(37, 0)]] SamplerState screenSampler25 : register(s25);
-[[vk::combinedImageSampler]] [[vk::binding(38, 0)]] Texture2D<float4> screenSource26 : register(t31);
-[[vk::combinedImageSampler]] [[vk::binding(38, 0)]] SamplerState screenSampler26 : register(s26);
-[[vk::combinedImageSampler]] [[vk::binding(39, 0)]] Texture2D<float4> screenSource27 : register(t32);
-[[vk::combinedImageSampler]] [[vk::binding(39, 0)]] SamplerState screenSampler27 : register(s27);
-[[vk::combinedImageSampler]] [[vk::binding(40, 0)]] Texture2D<float4> screenSource28 : register(t33);
-[[vk::combinedImageSampler]] [[vk::binding(40, 0)]] SamplerState screenSampler28 : register(s28);
-[[vk::combinedImageSampler]] [[vk::binding(41, 0)]] Texture2D<float4> screenSource29 : register(t34);
-[[vk::combinedImageSampler]] [[vk::binding(41, 0)]] SamplerState screenSampler29 : register(s29);
-[[vk::combinedImageSampler]] [[vk::binding(42, 0)]] Texture2D<float4> screenSource30 : register(t35);
-[[vk::combinedImageSampler]] [[vk::binding(42, 0)]] SamplerState screenSampler30 : register(s30);
-[[vk::combinedImageSampler]] [[vk::binding(43, 0)]] Texture2D<float4> screenSource31 : register(t36);
-[[vk::combinedImageSampler]] [[vk::binding(43, 0)]] SamplerState screenSampler31 : register(s31);
-// Per-frame screen LIGHT records (binding 11, register t38 — the LAST SRV in the views set): entries 0..31 carry each
+// The screen source images — one sampled image per screen index (screenSource0..screenSource31), all read through the
+// views set's one nearest screenSampler, so emulator pixels stay crisp. Slots with no source bound this frame
+// (passGroup.screenMask bit clear) hold a valid filler view; the shader never samples an unbound slot (screenSourceBound
+// gates it), so the filler's content never reaches the image. (screenMask is a single uint, so exactly 32 screen bits
+// fit — raising past 32 needs a second mask word.)
+// Per-frame screen LIGHT records (sdfScreenLights): entries 0..31 carry each
 // screen's emitted light (rgb = the framebuffer's average color this frame, a = intensity gain), entry 32 is the
 // ENVIRONMENT (x = ambient scale, y = sun scale — dim the room so the glow dominates; z/w = the SLICE debug view's
 // plane selector: z = axis (0 camera-locked, 1/2/3 world X/Y/Z), w = the axis plane's signed offset — see
 // SdfFrame.DebugSliceAxis; read only by debug view mode 7). A light's geometry
 // (position/orientation/extent) is the SAME screenSurfaces[i] entry above — a screen is an area emitter, so it needs
 // only its color here. KEEP IN SYNC with SdfWorldEngine's screen-light buffer packing.
-[[vk::binding(11, 0)]] StructuredBuffer<float4> sdfScreenLights : register(t38);
 static const uint SdfScreenLightEnv = SdfScreenSurfaceCount;
 
 // Grid-lock overlay rows (grid-locking §4a): FOUR float4 rows AFTER the env entry (env stays at 32 — load-bearing as
@@ -313,8 +253,7 @@ static const float3 CrtGrillePhase = float3(0.0, 2.0943951023931953, 4.188790204
 // single-channel coverage-SDF, sampled with a coverage threshold + a screen-projected AA half-width derived
 // ANALYTICALLY from the hit's pixel footprint (NO fwidth — deterministic, from the same pixelFootprint*traveled the
 // coverage-AA epilogue uses). KEEP IN SYNC with SdfWorldEngine's decal-buffer packing (SetDecalDescriptor/SetDecals)
-// and SdfProgram. LAYOUT (one uint4 StructuredBuffer, APPENDED LAST in the views set — Vulkan binding 45, Direct3D 12
-// register t40, after the glyph atlas t39): the first SdfDecalDescriptorCount (== SdfWorldEngine.MaxScreenSurfaces)
+// and SdfProgram. LAYOUT (sdfDecalCells, one uint4 per entry): the first SdfDecalDescriptorCount (== SdfWorldEngine.MaxScreenSurfaces)
 // entries are the PER-SCREEN descriptors, then the shared CELL region.
 //   descriptor[screenIndex] = (gridCols, gridRows, cellBase, asuint(distanceRange)); gridCols == 0 => that screen has
 //                             NO decal this frame (the image/procedural path applies) — an all-zero buffer is inert, so
@@ -322,7 +261,6 @@ static const float3 CrtGrillePhase = float3(0.0, 2.0943951023931953, 4.188790204
 //   cell[i]                 = (packedUvTopLeft, packedUvBottomRight [unorm2x16, sdfGlyphUnpackUv], fgRgba8, bgRgba8);
 //                             a BLANK cell packs uvTopLeft == uvBottomRight (a real glyph never has zero UV extent).
 #if defined(SDF_GLYPH_ATLAS)
-[[vk::binding(45, 0)]] StructuredBuffer<uint4> sdfDecalCells : register(t40);
 static const uint SdfDecalDescriptorCount = 32u; // == SdfWorldEngine.MaxScreenSurfaces (the per-screen descriptor band)
 // Minimum AA half-width in encoded-coverage units. This keeps a 1:1 glyph edge from collapsing to a hard one-bit step.
 static const float DecalMinAa = 0.03125;
@@ -371,58 +309,56 @@ float3 sdfSampleGlyphDecal(uint4 descriptor, float2 uv, float halfWidth, float f
 #endif
 
 // Bounded emissive volumes (Puck.SignedDistance.SdfVolume — a participating medium, never a distance-field shape):
-// one uint4-free, 11-float4-per-volume table, APPENDED LAST in the views set — binding 48, Direct3D 12 register t43
-// (after the frame instance grid t42). Stage 1 is the only kernel that shades, so it is the only one that binds it.
+// sdfVolumes, an 11-float4-per-volume table. Stage 1 is the only kernel that shades, so it is the only one that reads it.
 // Decoded and integrated by shade-volumes.hlsli in renderView and the sky prepass. KEEP IN SYNC with
 // SdfWorldEngine.PackVolumes / SdfProgramBuilder.MaxVolumes.
-[[vk::binding(48, 0)]] StructuredBuffer<float4> sdfVolumes : register(t43);
 static const uint SdfVolumeCount = 64u;
 #include "shade-volumes.hlsli"
 
 bool screenSourceBound(uint screenIndex) {
-    return (0u != (params.screenMask & (1u << screenIndex)));
+    return (0u != (passGroup.screenMask & (1u << screenIndex)));
 }
 // One past the highest bound screen slot (0 when screenMask is 0) — firstbithigh(0) is undefined, so that case is
 // guarded explicitly rather than relied on to return -1.
 uint screenLightLoopBound() {
-    return ((0u == params.screenMask) ? 0u : (firstbithigh(params.screenMask) + 1u));
+    return ((0u == passGroup.screenMask) ? 0u : (firstbithigh(passGroup.screenMask) + 1u));
 }
 float4 sampleScreenSource(uint screenIndex, float2 uv) {
     // Every screenSamplerN carries the SAME filter (NEAREST) — the thirty-two-way split is purely to give DXC one
     // sampler symbol per register; there is exactly one LOGICAL sampler behavior on either backend.
     switch (screenIndex) {
-        case 0:  return screenSource0.SampleLevel(screenSampler0, uv, 0);
-        case 1:  return screenSource1.SampleLevel(screenSampler1, uv, 0);
-        case 2:  return screenSource2.SampleLevel(screenSampler2, uv, 0);
-        case 3:  return screenSource3.SampleLevel(screenSampler3, uv, 0);
-        case 4:  return screenSource4.SampleLevel(screenSampler4, uv, 0);
-        case 5:  return screenSource5.SampleLevel(screenSampler5, uv, 0);
-        case 6:  return screenSource6.SampleLevel(screenSampler6, uv, 0);
-        case 7:  return screenSource7.SampleLevel(screenSampler7, uv, 0);
-        case 8:  return screenSource8.SampleLevel(screenSampler8, uv, 0);
-        case 9:  return screenSource9.SampleLevel(screenSampler9, uv, 0);
-        case 10: return screenSource10.SampleLevel(screenSampler10, uv, 0);
-        case 11: return screenSource11.SampleLevel(screenSampler11, uv, 0);
-        case 12: return screenSource12.SampleLevel(screenSampler12, uv, 0);
-        case 13: return screenSource13.SampleLevel(screenSampler13, uv, 0);
-        case 14: return screenSource14.SampleLevel(screenSampler14, uv, 0);
-        case 15: return screenSource15.SampleLevel(screenSampler15, uv, 0);
-        case 16: return screenSource16.SampleLevel(screenSampler16, uv, 0);
-        case 17: return screenSource17.SampleLevel(screenSampler17, uv, 0);
-        case 18: return screenSource18.SampleLevel(screenSampler18, uv, 0);
-        case 19: return screenSource19.SampleLevel(screenSampler19, uv, 0);
-        case 20: return screenSource20.SampleLevel(screenSampler20, uv, 0);
-        case 21: return screenSource21.SampleLevel(screenSampler21, uv, 0);
-        case 22: return screenSource22.SampleLevel(screenSampler22, uv, 0);
-        case 23: return screenSource23.SampleLevel(screenSampler23, uv, 0);
-        case 24: return screenSource24.SampleLevel(screenSampler24, uv, 0);
-        case 25: return screenSource25.SampleLevel(screenSampler25, uv, 0);
-        case 26: return screenSource26.SampleLevel(screenSampler26, uv, 0);
-        case 27: return screenSource27.SampleLevel(screenSampler27, uv, 0);
-        case 28: return screenSource28.SampleLevel(screenSampler28, uv, 0);
-        case 29: return screenSource29.SampleLevel(screenSampler29, uv, 0);
-        case 30: return screenSource30.SampleLevel(screenSampler30, uv, 0);
-        default: return screenSource31.SampleLevel(screenSampler31, uv, 0);
+        case 0:  return screenSource0.SampleLevel(screenSampler, uv, 0);
+        case 1:  return screenSource1.SampleLevel(screenSampler, uv, 0);
+        case 2:  return screenSource2.SampleLevel(screenSampler, uv, 0);
+        case 3:  return screenSource3.SampleLevel(screenSampler, uv, 0);
+        case 4:  return screenSource4.SampleLevel(screenSampler, uv, 0);
+        case 5:  return screenSource5.SampleLevel(screenSampler, uv, 0);
+        case 6:  return screenSource6.SampleLevel(screenSampler, uv, 0);
+        case 7:  return screenSource7.SampleLevel(screenSampler, uv, 0);
+        case 8:  return screenSource8.SampleLevel(screenSampler, uv, 0);
+        case 9:  return screenSource9.SampleLevel(screenSampler, uv, 0);
+        case 10: return screenSource10.SampleLevel(screenSampler, uv, 0);
+        case 11: return screenSource11.SampleLevel(screenSampler, uv, 0);
+        case 12: return screenSource12.SampleLevel(screenSampler, uv, 0);
+        case 13: return screenSource13.SampleLevel(screenSampler, uv, 0);
+        case 14: return screenSource14.SampleLevel(screenSampler, uv, 0);
+        case 15: return screenSource15.SampleLevel(screenSampler, uv, 0);
+        case 16: return screenSource16.SampleLevel(screenSampler, uv, 0);
+        case 17: return screenSource17.SampleLevel(screenSampler, uv, 0);
+        case 18: return screenSource18.SampleLevel(screenSampler, uv, 0);
+        case 19: return screenSource19.SampleLevel(screenSampler, uv, 0);
+        case 20: return screenSource20.SampleLevel(screenSampler, uv, 0);
+        case 21: return screenSource21.SampleLevel(screenSampler, uv, 0);
+        case 22: return screenSource22.SampleLevel(screenSampler, uv, 0);
+        case 23: return screenSource23.SampleLevel(screenSampler, uv, 0);
+        case 24: return screenSource24.SampleLevel(screenSampler, uv, 0);
+        case 25: return screenSource25.SampleLevel(screenSampler, uv, 0);
+        case 26: return screenSource26.SampleLevel(screenSampler, uv, 0);
+        case 27: return screenSource27.SampleLevel(screenSampler, uv, 0);
+        case 28: return screenSource28.SampleLevel(screenSampler, uv, 0);
+        case 29: return screenSource29.SampleLevel(screenSampler, uv, 0);
+        case 30: return screenSource30.SampleLevel(screenSampler, uv, 0);
+        default: return screenSource31.SampleLevel(screenSampler, uv, 0);
     }
 }
 // For a screen-instance material id (> SDF_SCREEN_MATERIAL, from SdfProgramBuilder's screen-surface ScreenSlab
@@ -449,7 +385,7 @@ bool sampleScreenSurface(int material, float3 hitPoint, float3 rayDirection, flo
         return false;
     }
 
-    ScreenSurfaceData surface = screenSurfaces[screenIndex];
+    ScreenSurfaceData surface = worldScreenSurface(screenIndex);
     float3 local = (hitPoint - surface.origin.xyz);
     float2 uv = float2(
         (0.5 + (0.5 * (dot(local, surface.right.xyz) / surface.right.w))),
@@ -1131,7 +1067,7 @@ float3 skyColor(float3 direction) {
     // Stars read only above the local horizon — a night sky under the ground plane is never visible to the camera
     // and would otherwise tile through geometry for nothing.
     if (direction.y > 0.0) {
-        color += sdfStarField(direction, worldSkyStarDensity(), worldSkyStarBrightness(), worldSkyStarSeed(), worldSkyStarTwinkleShare(), worldSkyStarTwinkleDepth(), worldSkyStarTwinklePeriodTicks(), params.sampleIndex);
+        color += sdfStarField(direction, worldSkyStarDensity(), worldSkyStarBrightness(), worldSkyStarSeed(), worldSkyStarTwinkleShare(), worldSkyStarTwinkleDepth(), worldSkyStarTwinklePeriodTicks(), passGroup.sampleIndex);
     }
 
     // Clouds sit over everything above them — the gradient, the sun disc and the stars — by their own coverage mask.
@@ -2443,7 +2379,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
                             continue;
                         }
 
-                        ScreenSurfaceData lightSurface = screenSurfaces[lightIndex];
+                        ScreenSurfaceData lightSurface = worldScreenSurface(lightIndex);
                         float3 screenNormal = normalize(cross(lightSurface.right.xyz, lightSurface.up.xyz));
                         float3 toLight = (lightSurface.origin.xyz - surfacePoint);
                         float distanceSquared = max(dot(toLight, toLight), ScreenLightMinDistanceSquared);
@@ -2732,7 +2668,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
             uint keptInstances = 0u;
 
             [loop]
-            for (uint maskWord = 0u; (maskWord < params.instanceMaskWordCount); maskWord++) {
+            for (uint maskWord = 0u; (maskWord < passGroup.instanceMaskWordCount); maskWord++) {
                 keptInstances += countbits(sdfInstanceMaskWord(instanceMaskBase, maskWord, liveInstances));
             }
 

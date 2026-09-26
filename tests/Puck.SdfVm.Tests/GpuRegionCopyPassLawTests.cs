@@ -100,11 +100,7 @@ public sealed class GpuRegionCopyPassLawTests {
                     bytes: bytes,
                     offset: random.Next(maxValue: (region.ByteCount - bytes.Length))
                 );
-                region.Flush(slot: slot);
-                region.RecordCopy(
-                    commandBuffer: 2,
-                    slot: slot
-                );
+                Copy(gpu: gpu, region: region, slot: slot);
                 Assert.Equal(
                     expected: region.Contents.ToArray(),
                     actual: gpu.Memory(bufferHandle: region.Buffer(slot: slot).BufferHandle)[..region.ByteCount]
@@ -121,6 +117,20 @@ public sealed class GpuRegionCopyPassLawTests {
         secondLease.Release();
     }
 
+    // Records one region's owed copy for a slot as its owner does: through the owed-copy recording, into command buffer 2.
+    private static void Copy(UploadModelGpu gpu, GpuRegion region, int slot) {
+        var recording = new GpuRegionCopyRecording(
+            begin: static () => 2,
+            readers: GpuStage.ComputeShader,
+            recorder: gpu.Services.Recorder
+        );
+
+        recording.Record(
+            region: region,
+            slot: slot
+        );
+        _ = recording.Finish();
+    }
     private static long Read(WorkKind kind, IWorkCounterSource source) {
         Assert.True(condition: source.TryRead(kind: kind, value: out var value));
 

@@ -518,9 +518,11 @@ These are one-line cautions; the owning pages hold the derivations.
   own and the copy pool, and no region the frame thread creates or grows takes
   a descriptor range; a new region takes a slice of that pool too. Change a table only through its
   region's `Write`, which owes each run of words that differs; a direct buffer
-  write is lost or overwritten. The upload pass flushes the slot's share, records
-  each staged copy, then one buffer transition per copied buffer; the region
-  tables are not in `SdfFrameBufferPlan`. What it writes and records follows the
+  write is lost or overwritten. The upload pass records the slot's owed copies
+  through `GpuRegionCopyRecording`, the one routine the engine and the node
+  share: each region flushed, the first owed copy behind a barrier ordering the
+  earlier reads of every staged destination, then one buffer transition per
+  copied buffer; the region tables are not in `SdfFrameBufferPlan`. What it writes and records follows the
   device's policy, so `upload` is per-backend-deterministic
   (`SdfWorldEngine.PassClasses`, a per-pass class `GpuWorkLedger.Configure`
   carries into `world.counters --json`, which `puck counters` loosens its counts
@@ -586,9 +588,10 @@ These are one-line cautions; the owning pages hold the derivations.
   reserving every staged package region's and port's sets in `DescriptorPools`
   (`stagedRegions`, admitted with the graph, owned by its first pass), moves a
   bound port to each later graph's share (`GpuRegion.MoveCopySets`), and records
-  every owed copy in one command buffer ahead of the frame's passes, behind a
-  memory barrier and followed by a buffer barrier per copied buffer to the compute
-  and fragment stages. Every region counts in the node's account
+  every owed copy through the same `GpuRegionCopyRecording` in one command buffer
+  ahead of the frame's passes, its barriers reaching the compute and fragment
+  stages; the upload model (`tests/Shared/UploadModelGpu.cs`) refuses a copy
+  recorded with no barrier ordering the earlier compute reads before it. Every region counts in the node's account
   (`GpuRegion.BytesOf`, `RegionBytes`, a replaced graph's `LiveBytes`) and in
   `world.budget`'s live rows. A new host upload is a region, never a hand-written
   buffer, and a new host-written port is a host buffer port. On Direct3D 12 a buffer the fragment stage
@@ -824,7 +827,14 @@ group's ordinal is its set and register space, a register number equals the
 Vulkan binding, and block offsets are explicit `vk::offset`s with named `uint`
 padding that Direct3D 12 needs to land on them; a pushed group
 (`ShaderInterface.PushConstants`, the frame group only) keeps those offsets as
-push constants at `register(b0, space0)`. Change a rule in `ShaderInterfaceLayout`
+push constants at `register(b0, space0)`. An interface that binds its groups
+may instead push one index (`ShaderInterface.PushesIndex`, read as
+`pushedIndex.index` at `b0` in space 4), never both. A buffer member with an
+element type is a structured buffer (never a three-component element), and
+every buffer binding carries the stride each bytecode reflects
+(`ShaderInterfaceBinding.ElementStride`; a raw buffer is 4 in SPIR-V and 0 in
+DXIL), so `Mismatch` holds a module to `Bindings` or `DxilBindings` as a whole.
+Change a rule in `ShaderInterfaceLayout`
 and `ShaderInterfaceSpikeTests` hold both bytecode readers to it; never add a
 register remap. `ShaderRegisterBindingLawTests` holds every shader the build
 compiles to the register rule, with a shrink-only list of the declarations that
