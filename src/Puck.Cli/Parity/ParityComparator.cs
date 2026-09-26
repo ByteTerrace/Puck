@@ -150,6 +150,15 @@ internal static class ParityComparator {
                 Detail: $"left {leftCapture.StateHash} right {rightCapture.StateHash}"
             )));
 
+        if (stationContract.Reference is { } reference) {
+            verdicts.Add(item: CompareReference(
+                left: leftImage,
+                reference: reference,
+                right: rightImage,
+                tick: tick
+            ));
+        }
+
         if (
             (leftImage.Width != rightImage.Width) ||
             (leftImage.Height != rightImage.Height)
@@ -206,6 +215,57 @@ internal static class ParityComparator {
             Tick: tick,
             Verdicts: verdicts
         );
+    }
+    /// <summary>Holds both sides to the station's exact reference image: every byte of every pixel must match, so a
+    /// pass reading a wrong config value or binding fails even when both backends make the same mistake.</summary>
+    private static ParityCaptureVerdict CompareReference(PngImage left, PngImage right, ParityBindingReference reference, ulong tick) {
+        var expected = reference.Render(tick: tick);
+        var failures = new List<string>();
+
+        foreach (var (side, image) in (ReadOnlySpan<(string, PngImage)>)[("vulkan", left), ("directx", right)]) {
+            if (
+                (image.Width != reference.Width) ||
+                (image.Height != reference.Height)
+            ) {
+                failures.Add(item: $"{side} extent {image.Width}x{image.Height} is not the reference's {reference.Width}x{reference.Height}");
+
+                continue;
+            }
+
+            var mismatches = 0;
+            var first = -1;
+
+            for (var index = 0; (index < expected.Length); index++) {
+                if (image.RgbaPixels[index] != expected[index]) {
+                    if (first < 0) {
+                        first = index;
+                    }
+
+                    mismatches++;
+                }
+            }
+
+            if (first >= 0) {
+                var pixel = (first / 4);
+
+                failures.Add(item: $"{side} differs in {mismatches} bytes, first at ({(pixel % (int)reference.Width)},{(pixel / (int)reference.Width)}) channel {(first % 4)}: {image.RgbaPixels[first]} vs {expected[first]}");
+            }
+        }
+
+        return ((failures.Count == 0)
+            ? new ParityCaptureVerdict(
+                Detail: $"both sides equal the reference ({reference.Width}x{reference.Height})",
+                Name: "REFERENCE-OK",
+                Passed: true
+            )
+            : new ParityCaptureVerdict(
+                Detail: string.Join(
+                    separator: "; ",
+                    values: failures
+                ),
+                Name: "REFERENCE-FAILED",
+                Passed: false
+            ));
     }
     private static ParityCaptureOutcome GateFailure(string station, ulong tick, string reason) =>
         new(

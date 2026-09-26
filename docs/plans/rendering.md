@@ -302,7 +302,8 @@ through DXC:
 The same build showed that a group holding a sampler needs a second table on
 Direct3D 12, because a descriptor table cannot mix samplers with other views.
 The gate's GPU half has passed: the two-group layout runs on Direct3D 12 and
-Vulkan inside the parity contract as the `binding` parity station (P7b step 16).
+Vulkan inside the parity contract as the `binding` parity station (P7b step 16),
+whose frames equal a CPU reference image exactly.
 The capability report has been read too: each backend fills
 `IGpuDeviceContext.Capabilities` (`GpuDeviceCapabilities`) at device creation,
 `world.counters gpu` prints it on a `capabilities` line and in its JSON, and the
@@ -2197,7 +2198,9 @@ Phase 3, the groups, follows phase 2:
     layout and captured as its own instance): a compute pass and a fullscreen
     pass reading a frame group and a pass group, with config, a formatted load, a
     storage image and a pass-group sampler table, match on Direct3D 12 and Vulkan
-    exactly, well inside `parity.contract.json`. `puck parity` now runs each leg
+    exactly. Every pass works in whole 255ths, so each capture must also equal
+    the CPU reference `ParityBindingReference` computes from the graph's config
+    and the world's step rate. `puck parity` now runs each leg
     until just past the world's last scheduled capture.
 17. Done: the region-copy kernel leaves the SDF engine for `Puck.Shaders`
     (`Assets/Shaders/Residency/region-copy.comp.hlsl`), each register at its
