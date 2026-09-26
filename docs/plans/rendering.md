@@ -491,8 +491,7 @@ layout is one flat set with hand-assigned register numbers documented in
 banner comments.
 
 P7's adapter memory profile, residency selector, consumer migration and binding
-groups have landed, apart from the SDF engine's groups (P7b step 20) and the
-deletions P7b step 22 owns. `IGpuDeviceContext`
+groups have landed. `IGpuDeviceContext`
 reports a `GpuMemoryProfile` beside its identity, filled at device creation
 from `D3D12_FEATURE_DATA_ARCHITECTURE`, `DXGI_ADAPTER_DESC1` and options 16's
 GPU upload heap support on Direct3D 12, and from the device type and
@@ -2454,14 +2453,19 @@ Phase 3, the groups, follows phase 2:
     their structured loads, and a buffer one pass writes and a later pass
     reads is a read-write member and a read-only member over the one buffer.
 21. The owning guides and the `rendering` skill describe the result.
-22. In progress: the P7 deletions no earlier step owns. Done: Vulkan has one
+22. Done: the P7 deletions no earlier step owns. Vulkan has one
     pipeline factory, `VulkanGpuPipelineFactory`, which creates graphics
     pipelines through `IVulkanGraphicsPipelineApi` itself. Both swapchain
     compositors bind one group, `SurfaceBlitLayout` (the source at `t0` and its
     sampler at `s1`, space 3), and lease their blit from the device's
-    `GpuPassPipelineCache` for a render pass in the swapchain's format
-    (`VulkanGpuFormats.FromVkFormat` on Vulkan), opaque and with the neutral
-    dynamic viewport the presenter's recorder sets; the Direct3D 12 compositor's
+    `GpuPassPipelineCache` for a render pass in the swapchain's format, opaque
+    and with the neutral dynamic viewport the presenter's recorder sets. A
+    Vulkan swapchain is created only in a `GpuPixelFormat`
+    (`VulkanSwapchain.Format`): `VulkanSwapchainFactory.SelectSurfaceFormat`
+    chooses from `SwapchainFormats` (8-bit unsigned normalized, 8-bit sRGB,
+    10-bit, half float, all mapped by both backends) in its own order, and a
+    surface offering none of them refuses swapchain creation by name, never a
+    frame. The Direct3D 12 compositor's
     hand-built root signature and pipeline state and `VulkanGpuRenderPass.Borrow`
     are deleted. The Direct3D 12 compositor keeps a one-SRV and a one-sampler
     shader-visible heap until P16, and `DirectXDrawCommand` names the group, both
@@ -2480,7 +2484,10 @@ Phase 3, the groups, follows phase 2:
     copy pool per graph reserving every staged region's sets in
     `DescriptorPools`, moves a bound port to each later graph's share
     (`GpuRegion.MoveCopySets`), and records every owed copy with its barriers in
-    one command buffer ahead of the frame's passes; recorders record no barrier.
+    one command buffer ahead of the frame's passes; recorders record no barrier,
+    and a host buffer port's copied buffer is handed to its readers by their
+    planned barriers, so a buffer transitions in one command list of a
+    submission, as Direct3D 12 carries its state from list to list.
     Every region counts in the node's account (`GpuRegion.BytesOf`,
     `RegionBytes`) and in `world.budget`'s live rows. On Direct3D 12 a buffer
     the fragment stage reads is in `ALL_SHADER_RESOURCE`. Laws:
@@ -2489,10 +2496,16 @@ Phase 3, the groups, follows phase 2:
     `RenderGraphRuntimeLawTests.AStagedSourceRegionReachesItsConversionByteExact`
     (one pool stated and created for the port, its region bytes and budget
     row), `GpuResidencyLawTests` (`BytesOf` per policy, a staged region moved
-    across pools) and `DirectXBufferStatesLawTests`. Remaining: a device law
-    that runs a node pass over a region staged by explicit choice on Vulkan
-    hardware and on Direct3D 12 hardware and WARP and reads it back byte-exact,
-    since a device with an aperture rings by default.
+    across pools), `DirectXBufferStatesLawTests`, `VulkanSwapchainFormatLawTests`
+    and `DirectXGpuFormatsLawTests` (every swapchain format mapped and chosen, a
+    surface of unnamed formats refused), and `StagedRegionDeviceLawTests`, which
+    hands the runtime its device's own memory profile with no host-visible
+    device-local bytes, so a source's region stages, and reads the conversion
+    back byte-exact against the CPU reference on Vulkan hardware, Direct3D 12
+    hardware with the debug layer and WARP;
+    `RenderGraphRuntimeLawTests.AStagedRegionsCopyAndItsReadersAgreeOnItsStateInSubmissionOrder`
+    replays a submission's buffer states as Direct3D 12 carries them from the copy
+    list to the pass lists recorded before it.
 **Decisions.** Root parameter indices are dense, and the push index sits at
 `b0` in space 4, outside every group's space. The spike's frame group is the
 generated frame block, the only generated include, and previous-frame inputs
@@ -3560,8 +3573,8 @@ independent of placed-surface support, and shared GPU and World files have one
 owner at a time.
 
 **Contracts.** P7's memory profile and residency selector have landed, and P7b
-is under way: steps 1 to 13, 14a, 14b-1 to 14b-7 and 15 to 20 have landed, and
-step 22 is in progress. What remains is step 21. P8 is
+is under way: steps 1 to 13, 14a, 14b-1 to 14b-7, 15 to 20 and 22 have
+landed. What remains is step 21. P8 is
 complete but for a GPU run of its echo of every shipped interface family, and its frame
 group
 became a descriptor set when step 15 put pipelines on groups. P7 and P8 do not

@@ -5,7 +5,6 @@ using Puck.Assets;
 using Puck.Vulkan.Bindings;
 using Puck.Vulkan.Interfaces;
 using Puck.Vulkan.Interop;
-using Puck.Vulkan.Messages;
 
 namespace Puck.Vulkan.Presentation;
 
@@ -198,9 +197,8 @@ public sealed class VulkanRenderer(
             throw new InvalidOperationException(message: "The selected Vulkan device does not support presenting to the window surface.");
         }
 
-        // Map the neutral presentation preferences to Vulkan: the present mode to a VkPresentModeKHR, and the
-        // surface format to whichever supported (format, color-space) pair matches the desired VkFormat. Both are
-        // passed as preferences — the factory falls back (mailbox/immediate/FIFO; formats[0]) when unsupported.
+        // Both are preferences: the factory falls back (mailbox/immediate/FIFO; the first swapchain format offered) when
+        // the surface does not support them.
         var preferredPresentMode = presentationOptions.PresentMode switch {
             PresentMode.Vsync => ((uint?)VulkanPresentMode.Fifo),
             PresentMode.Mailbox => VulkanPresentMode.Mailbox,
@@ -208,29 +206,16 @@ public sealed class VulkanRenderer(
             PresentMode.Adaptive => VulkanPresentMode.FifoRelaxed,
             _ => null,
         };
-        var desiredVkFormat = presentationOptions.SurfaceFormat switch {
-            SurfaceFormat.R8G8B8A8Unorm => ((uint?)VulkanFormat.R8G8B8A8Unorm),
-            SurfaceFormat.B8G8R8A8Unorm => VulkanFormat.B8G8R8A8Unorm,
-            _ => null,
-        };
-        VulkanSurfaceFormat? preferredSurfaceFormat = null;
-
-        if (desiredVkFormat is uint vkFormat) {
-            foreach (var format in supportDetails.SurfaceFormats) {
-                if (format.Format == vkFormat) {
-                    preferredSurfaceFormat = format;
-
-                    break;
-                }
-            }
-        }
+        var preferredFormat = ((presentationOptions.SurfaceFormat == SurfaceFormat.Unknown)
+            ? ((GpuPixelFormat?)null)
+            : GpuPixelFormats.FromSurfaceFormat(format: presentationOptions.SurfaceFormat));
 
         m_swapchain = swapchainFactory.Create(
             desiredHeight: height,
             desiredWidth: width,
             logicalDevice: device,
+            preferredFormat: preferredFormat,
             preferredPresentMode: preferredPresentMode,
-            preferredSurfaceFormat: preferredSurfaceFormat,
             supportDetails: supportDetails,
             surface: m_surface!
         );

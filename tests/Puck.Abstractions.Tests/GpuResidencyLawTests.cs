@@ -36,11 +36,13 @@ public sealed class GpuResidencyLawTests {
         );
 
         recording.Record(
+            handsToReaders: true,
             region: region,
             slot: slot
         );
         _ = recording.Finish();
     }
+
     private static GpuMemoryProfile CoherentUnified => GpuMemoryProfile.FromVulkan(
         deviceType: IntegratedDevice,
         memoryHeaps: [(4UL * GiB), HeapDeviceLocal, (8UL * GiB), 0UL],
@@ -334,13 +336,13 @@ public sealed class GpuResidencyLawTests {
 
         Copy(gpu: gpu, region: region, slot: 0);
         gpu.ResetTallies();
-        recording.Record(region: region, slot: 1);
+        recording.Record(handsToReaders: true, region: region, slot: 1);
         Assert.Equal(expected: 0, actual: recording.Finish());
         Assert.Equal(expected: (0, 0), actual: (begun, gpu.UploadCopies));
 
         _ = region.Write(bytes: [1, 2, 3, 4], offset: 16);
-        recording.Record(region: region, slot: 1);
-        recording.Record(region: region, slot: 1);
+        recording.Record(handsToReaders: true, region: region, slot: 1);
+        recording.Record(handsToReaders: true, region: region, slot: 1);
         Assert.Equal(expected: 7, actual: recording.Finish());
         Assert.Equal(expected: (1, 1), actual: (begun, gpu.UploadCopies));
         Assert.Equal(expected: region.Contents.ToArray(), actual: gpu.Memory(bufferHandle: region.Buffer(slot: 1).BufferHandle));
@@ -630,6 +632,7 @@ public sealed class GpuResidencyLawTests {
             recorder: gpu.Services.Recorder,
             slotCount: 2
         );
+
         Copy(gpu: gpu, region: region, slot: 0);
         gpu.ResetTallies();
 

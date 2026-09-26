@@ -19,7 +19,8 @@
     <ItemGroup>
         <!-- The neutral group layouts the backends' planners and the spike's interfaces are held to. -->
         <Compile Include="..\Shared\GpuGroupLayoutTables.cs" Link="GpuGroupLayoutTables.cs" />
-        <!-- The software device API the device laws run on. -->
+        <!-- The software device API and the devices the device laws run on. -->
         <Compile Include="..\Shared\WarpDeviceApi.cs" Link="WarpDeviceApi.cs" />
+        <Compile Include="..\Shared\DirectXTestDevices.cs" Link="DirectXTestDevices.cs" />
     </ItemGroup>
 </Project>

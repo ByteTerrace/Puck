@@ -135,22 +135,20 @@ public sealed class VulkanGpuRenderPass : IGpuRenderPass {
         Store: GpuAttachmentStore.Store
     )]);
     /// <summary>Builds the native request for a swapchain's render pass: <see cref="RequestOf"/> over
-    /// <see cref="PresentDescription"/>, in the swapchain's own <c>VkFormat</c> and ending in <c>PRESENT_SRC_KHR</c>.
-    /// Its attachments and dependencies are a described render pass's, so a pipeline created for
-    /// <see cref="PresentDescription"/> in the swapchain's format is compatible with it: only a final layout
-    /// differs.</summary>
+    /// <see cref="PresentDescription"/> in the swapchain's format, ending in <c>PRESENT_SRC_KHR</c>. Its attachments and
+    /// dependencies are a described render pass's, so a pipeline created for <see cref="PresentDescription"/> in the
+    /// swapchain's format is compatible with it: only a final layout differs.</summary>
     /// <param name="device">The device's command table.</param>
-    /// <param name="swapchainFormat">The swapchain's image format, as a <c>VkFormat</c> value.</param>
+    /// <param name="format">The swapchain's image format.</param>
     /// <returns>The request.</returns>
-    public static VulkanRenderPassCreateRequest PresentRequestOf(VulkanDeviceCommands device, uint swapchainFormat) {
+    public static VulkanRenderPassCreateRequest PresentRequestOf(VulkanDeviceCommands device, GpuPixelFormat format) {
         var request = RequestOf(
-            description: PresentDescription(format: GpuPixelFormat.B8G8R8A8Unorm),
+            description: PresentDescription(format: format),
             device: device
         );
         var color = request.ColorAttachments[0];
 
         color.FinalLayout = VulkanImageLayout.PresentSourceKhr;
-        color.Format = swapchainFormat;
 
         return (request with {
             ColorAttachments = [color],

@@ -7,8 +7,9 @@ namespace Puck.Vulkan.Factories;
 /// <summary>
 /// The default <see cref="IVulkanSwapchainFactory"/>: it clamps the requested extent to the surface's
 /// range and creates an owning <see cref="VulkanSwapchain"/>. Format, present mode, and image usage may be
-/// requested by the caller; absent a (supported) preference it picks the surface's first format, prefers
-/// the mailbox then immediate then FIFO present mode, and uses color-attachment plus transfer-source usage.
+/// requested by the caller; the format is always one of <see cref="SwapchainFormats"/> (<see cref="SelectSurfaceFormat"/>),
+/// absent a supported preference it prefers the mailbox then immediate then FIFO present mode, and it uses
+/// color-attachment plus transfer-source usage.
 /// </summary>
 public sealed class VulkanSwapchainFactory : IVulkanSwapchainFactory {
     private const uint ColorAttachmentImageUsage = 0x00000010;
@@ -105,17 +106,72 @@ public sealed class VulkanSwapchainFactory : IVulkanSwapchainFactory {
 
         return presentModes[0];
     }
-    private static VulkanSurfaceFormat SelectSurfaceFormat(IReadOnlyList<VulkanSurfaceFormat> surfaceFormats, VulkanSurfaceFormat? preferredSurfaceFormat) {
-        if (
-            preferredSurfaceFormat.HasValue &&
-            surfaceFormats.Contains(value: preferredSurfaceFormat.Value)
-        ) {
-            return preferredSurfaceFormat.Value;
+    private static bool TryFind(IReadOnlyList<VulkanSurfaceFormat> surfaceFormats, GpuPixelFormat format, out VulkanSurfaceFormat surfaceFormat) {
+        var vkFormat = VulkanGpuFormats.ToVkFormat(gpuPixelFormat: format);
+
+        foreach (var offered in surfaceFormats) {
+            if (offered.Format == vkFormat) {
+                surfaceFormat = offered;
+
+                return true;
+            }
         }
 
-        return surfaceFormats[0];
+        surfaceFormat = default;
+
+        return false;
     }
 
+    /// <summary>Gets the formats a swapchain may be created in, in the order <see cref="SelectSurfaceFormat"/> prefers
+    /// them when the caller's preference is not offered: 8-bit unsigned normalized, then 8-bit sRGB, then 10-bit, then
+    /// half float. Every member is a <see cref="GpuPixelFormat"/> both backends map, so the swapchain's format is always
+    /// one a render pass and a pipeline can be described in.</summary>
+    public static IReadOnlyList<GpuPixelFormat> SwapchainFormats { get; } = [
+        GpuPixelFormat.B8G8R8A8Unorm,
+        GpuPixelFormat.R8G8B8A8Unorm,
+        GpuPixelFormat.B8G8R8A8Srgb,
+        GpuPixelFormat.R8G8B8A8Srgb,
+        GpuPixelFormat.R10G10B10A2Unorm,
+        GpuPixelFormat.R16G16B16A16Float,
+    ];
+
+    /// <summary>Selects the format a swapchain is created in: the preferred format when the surface offers it and it is
+    /// one of <see cref="SwapchainFormats"/>, otherwise the first of <see cref="SwapchainFormats"/> the surface offers.
+    /// A surface's own order never decides, and a format <see cref="GpuPixelFormat"/> does not name is never
+    /// chosen.</summary>
+    /// <param name="surfaceFormats">The format and color-space pairs the surface offers.</param>
+    /// <param name="preferredFormat">The caller's preferred format, or <see langword="null"/> for none.</param>
+    /// <returns>The offered pair the swapchain is created with, and the neutral format it is in.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="surfaceFormats"/> is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">The surface offers none of <see cref="SwapchainFormats"/>; the message
+    /// names the <c>VkFormat</c> values it offers.</exception>
+    public static (VulkanSurfaceFormat Surface, GpuPixelFormat Format) SelectSurfaceFormat(IReadOnlyList<VulkanSurfaceFormat> surfaceFormats, GpuPixelFormat? preferredFormat) {
+        ArgumentNullException.ThrowIfNull(argument: surfaceFormats);
+
+        if (
+            (preferredFormat is { } preferred) &&
+            SwapchainFormats.Contains(value: preferred) &&
+            TryFind(
+                format: preferred,
+                surfaceFormat: out var preferredSurface,
+                surfaceFormats: surfaceFormats
+            )
+        ) {
+            return (preferredSurface, preferred);
+        }
+
+        foreach (var format in SwapchainFormats) {
+            if (TryFind(
+                format: format,
+                surfaceFormat: out var surface,
+                surfaceFormats: surfaceFormats
+            )) {
+                return (surface, format);
+            }
+        }
+
+        throw new NotSupportedException(message: $"The surface offers no swapchain format Puck names (VkFormat {string.Join(separator: ", ", values: surfaceFormats.Select(selector: static offered => offered.Format))}); a swapchain needs one of {string.Join(separator: ", ", values: SwapchainFormats)}.");
+    }
     /// <inheritdoc/>
     public VulkanSwapchain Create(
         VulkanLogicalDevice logicalDevice,
@@ -124,7 +180,7 @@ public sealed class VulkanSwapchainFactory : IVulkanSwapchainFactory {
         uint desiredWidth,
         uint desiredHeight,
         uint? preferredPresentMode = null,
-        VulkanSurfaceFormat? preferredSurfaceFormat = null,
+        GpuPixelFormat? preferredFormat = null,
         uint? imageUsage = null
     ) {
         ArgumentNullException.ThrowIfNull(argument: logicalDevice);
@@ -133,6 +189,11 @@ public sealed class VulkanSwapchainFactory : IVulkanSwapchainFactory {
         if (!supportDetails.IsComplete) {
             throw new InvalidOperationException(message: "Cannot create a Vulkan swapchain without complete swapchain support details.");
         }
+
+        var (surfaceFormat, format) = SelectSurfaceFormat(
+            preferredFormat: preferredFormat,
+            surfaceFormats: supportDetails.SurfaceFormats
+        );
 
         var (width, height) = ResolveExtent(
             capabilities: supportDetails.Capabilities,
@@ -149,10 +210,6 @@ public sealed class VulkanSwapchainFactory : IVulkanSwapchainFactory {
         var sharingMode = ((queueFamilyIndices.Count == 1)
             ? ExclusiveSharingMode
             : ConcurrentSharingMode
-        );
-        var surfaceFormat = SelectSurfaceFormat(
-            preferredSurfaceFormat: preferredSurfaceFormat,
-            surfaceFormats: supportDetails.SurfaceFormats
         );
         var request = new VulkanSwapchainCreateRequest(
             CompositeAlpha: compositeAlpha,
@@ -185,7 +242,7 @@ public sealed class VulkanSwapchainFactory : IVulkanSwapchainFactory {
             device: logicalDevice.Commands,
             imageExtentHeight: height,
             imageExtentWidth: width,
-            imageFormat: surfaceFormat.Format,
+            format: format,
             swapchainApi: m_swapchainApi,
             swapchainHandle: swapchainHandle
         );

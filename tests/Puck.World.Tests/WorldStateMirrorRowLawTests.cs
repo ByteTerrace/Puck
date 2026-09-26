@@ -209,7 +209,11 @@ public sealed class WorldStateMirrorRowLawTests {
                     recorder: gpu.Services.Recorder
                 );
 
-                recording.Record(region: region, slot: (frame % Slots));
+                recording.Record(
+                    handsToReaders: true,
+                    region: region,
+                    slot: (frame % Slots)
+                );
                 _ = recording.Finish();
 
                 var read = gpu.Memory(bufferHandle: region.Buffer(slot: (frame % Slots)).BufferHandle)[..byteCount];

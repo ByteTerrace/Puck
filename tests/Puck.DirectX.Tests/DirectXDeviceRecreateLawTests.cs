@@ -1,6 +1,7 @@
 using System.Runtime.Versioning;
 
 using Puck.Abstractions.Gpu;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.DirectX.Tests;
@@ -16,7 +17,7 @@ public sealed class DirectXDeviceRecreateLawTests {
 
     [Fact]
     public void AReinitializationThatFailsInDirect3DIsALossTheNextRecreateRetries() {
-        using var context = WarpDevices.Context();
+        using var context = DirectXTestDevices.Warp();
         var calls = 0;
 
         var loss = Assert.Throws<DeviceLostException>(testCode: () => context.Recreate(reinitialize: () => {
@@ -48,7 +49,7 @@ public sealed class DirectXDeviceRecreateLawTests {
     }
     [Fact]
     public void AnyOtherReinitializationFailureEndsTheRecovery() {
-        using var context = WarpDevices.Context();
+        using var context = DirectXTestDevices.Warp();
 
         _ = Assert.Throws<InvalidOperationException>(testCode: () => context.Recreate(reinitialize: static () => throw new InvalidOperationException(message: "not a Direct3D 12 failure")));
     }

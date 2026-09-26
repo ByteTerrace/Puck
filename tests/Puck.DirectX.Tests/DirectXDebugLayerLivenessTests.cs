@@ -1,5 +1,6 @@
 using System.Runtime.Versioning;
 using Puck.Abstractions.Gpu;
+using Puck.Testing;
 using Puck.DirectX.Interop;
 using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.Graphics.Dxgi.Common;

@@ -1,6 +1,7 @@
 using System.Runtime.Versioning;
 
 using Puck.Abstractions.Gpu;
+using Puck.Testing;
 using Puck.DirectX.Interop;
 using Xunit;
 
@@ -19,7 +20,7 @@ public sealed class DirectXDeviceTeardownMemoryLawTests {
     [Fact]
     public void ADisposeHoldingACountedAllocationNamesItAndStillReleasesTheDevice() {
         var memory = new GpuDeviceMemoryWork(backend: "directx");
-        var context = WarpDevices.Context(memory: memory);
+        var context = DirectXTestDevices.Warp(memory: memory);
         var device = context.Device.Handle;
         var heapBytes = checked((long)(context.DescriptorHeaps.ViewHeapBytes + context.DescriptorHeaps.SamplerHeapBytes));
         var leaked = new DirectXGpuBufferFactory(deviceContext: context).CreateDeviceLocal(
@@ -49,7 +50,7 @@ public sealed class DirectXDeviceTeardownMemoryLawTests {
     [Fact]
     public void ARecreateHoldingACountedAllocationNamesItAndCreatesNoDevice() {
         var memory = new GpuDeviceMemoryWork(backend: "directx");
-        var context = WarpDevices.Context(memory: memory);
+        var context = DirectXTestDevices.Warp(memory: memory);
         var leaked = new DirectXGpuBufferFactory(deviceContext: context).CreateDeviceLocal(
             name: default,
             sizeBytes: LeakedBytes,
@@ -72,7 +73,7 @@ public sealed class DirectXDeviceTeardownMemoryLawTests {
     [Fact]
     public void ATeardownAfterEveryOwnerReleasedRefusesNothing() {
         var memory = new GpuDeviceMemoryWork(backend: "directx");
-        var context = WarpDevices.Context(memory: memory);
+        var context = DirectXTestDevices.Warp(memory: memory);
 
         new DirectXGpuBufferFactory(deviceContext: context).CreateDeviceLocal(
             name: default,
