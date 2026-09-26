@@ -21,10 +21,10 @@ change you were asked to make is stale; correct it in the same change.
 ## What is and isn't DSL-authored today
 
 A document's own `schema:` field selects its vocabulary — never the filename.
-Every tracked `.puck` file is spelled as a bare `*.puck`; the two shipped
+Every tracked `.puck` file is spelled as a bare `*.puck`; the shipped
 cartridges additionally carry `.cgb.` in their name as an author convention,
-not a parser rule. `.puck` authors both shipped CGB cartridges
-(`tetromino.cgb.puck`, `hgb-mirror.cgb.puck`, each gated byte-for-byte against
+not a parser rule. `.puck` authors every shipped CGB cartridge
+(`tetromino.cgb.puck`, `hgb-mirror.cgb.puck`, `light-gun.cgb.puck`, each gated byte-for-byte against
 its committed `.cartridge.json` twin — see below), the worlds under
 `src/Puck.World/Assets/worlds/` (avatars, games, tools, `moth-courtyard.puck`),
 the asset packages under `worlds/`, and the `Puck.World.Transpiler` test

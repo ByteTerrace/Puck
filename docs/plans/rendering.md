@@ -1092,8 +1092,14 @@ as `gun=`. The laws are the Humble battery's `light-gun` stage and
 white and a black half and publishes what it senses: a lit aim reads light in
 the running program, a dark aim, a miss, no ray and no application read dark,
 and a recorded tape of pointer intents replays to the same machine state and
-state hash. No canary drives it: `puck.cartridge.v1` has no light read, so no
-authored cartridge a headless World boots can see the gun.
+state hash. An authored cartridge reads the gun through the `puck.cartridge.v1`
+operand `$light`, 1 while the Color machine's infrared receiver sees light; the
+advanced target has no receiver and refuses it, and its Color weight is measured
+by `puck cartridge-cost`'s `light-condition` shape (`CartridgeLightTests`). The
+`light-gun` canary boots `light-gun.cgb.puck` headless on a `Simulation` screen,
+types the seat's ray each tick, and reads the cartridge's published light bit
+through a memory binding: 1 aimed at the lit half, 0 at the dark half, and never
+1 when aimed dark throughout.
 
 Panes publish their mappings from the live renderer (P13b-1's pane half, P13b-3's
 host half and P13b-6). `WorldFramePresenter.PrepareGraph` ends with
@@ -3533,17 +3539,17 @@ Each commit is marked with what it waits on; only step 5 waits on P7b's groups.
      the wire and the tape bit for bit and an absent one costs one byte; a
      three-tick burst gives three snapshots, each carrying the ray; and
      `Locate` answers what the cursor's own mapping answered.
-   - A machine reads the pointer as a light gun, landed:
+   - A machine reads the pointer as a light gun:
      `MachinePadState.Pointer` carries the aim through the one pad path,
      `WorldEngagement.Aim` maps the applied body's ray through the row's
      normalized mapping, and the Humble brick's `LightGunComponent` puts the
-     aimed LCD pixel's brightness on the infrared receive line. Laws: the
-     `light-gun` Post stage and `LightGunLawTests` (a lit aim changes the
-     running program's state, a dark aim, a miss, no ray and no application
-     read dark, and a tape replays to the same machine state and hash).
-     Remaining: a `puck.cartridge.v1` light read, with its measured cost
-     weight, so an authored cartridge can see the gun and a headless canary
-     can drive one.
+     aimed LCD pixel's brightness on the infrared receive line. An authored
+     cartridge reads it through the `puck.cartridge.v1` operand `$light`
+     (cgb only, with a measured cost weight). Laws: the `light-gun` Post
+     stage, `LightGunLawTests` (a lit aim changes the running program's
+     state, a dark aim, a miss, no ray and no application read dark, and a
+     tape replays to the same machine state and hash), `CartridgeLightTests`,
+     and the headless `light-gun` canary.
 3. The presentation destination. The CPU half has landed: the World host
    publishes its panes to its `SourcePanePicker` every frame, from the
    placements `place` draws, and the drawn cursor's feed (`WorldCursorFeed`)

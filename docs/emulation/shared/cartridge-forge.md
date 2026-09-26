@@ -134,6 +134,7 @@ A value is an `ExpressionProgram`—the engine's own expression, spelled infix:
 "minimum(hp, damage)"
 "lives > 0 ? speed : 0"
 "$key:right:held"
+"$light"
 ```
 
 `CartridgeExpressions.Reads` is the admitted subset: the arithmetic and bitwise
@@ -151,7 +152,10 @@ at or beyond the array's length reads zero and discards a write, which keeps eve
 access total rather than trapping. A button reads through `$key:<button>:<mode>`,
 yielding 1 while it satisfies the mode—so input composes under `any` and `not`
 like any other operand rather than being a condition kind conjunction alone can
-reach.
+reach. The light sensor reads through `$light`, yielding 1 while the machine's
+infrared receiver sees light—a light gun aimed at a pixel the picture shows at
+least half bright, or a linked machine's lamp—and 0 otherwise. Only the `cgb`
+target has a receiver, so validation refuses the read on `agb`.
 
 A write destination names its state and, for an element, the index it is keyed by:
 `{"state":"score"}` or `{"state":"field","key":"cursor"}`. A key is a bare number,

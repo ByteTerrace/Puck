@@ -238,8 +238,12 @@ mapping, cached per row, and leaves the gun off for no ray, a miss, the bezel or
 a non-`Simulation` screen. So the gun reaches a machine only while the seat holds
 an application onto the screen (mirrored is enough), and its trigger is a kit
 `pad` button. The Humble brick puts the aimed pixel's brightness on its infrared
-receive line (`LightGunComponent`); the advanced brick ignores the pointer. The
-`rendering` skill owns the mapping itself.
+receive line (`LightGunComponent`); the advanced brick ignores the pointer. An
+authored cartridge reads it through the `$light` operand (`rom-forge`), and the
+headless `light-gun` canary is the stdin recipe: `body.engage` the screen, then
+type `source.pointer.origin`/`direction` again every tick — a typed ray carries
+one tick — and read the cartridge's published byte through a memory binding
+after each tick's `world.wait 1`. The `rendering` skill owns the mapping itself.
 
 ## `Dissolve` — three outcomes, no repair
 
