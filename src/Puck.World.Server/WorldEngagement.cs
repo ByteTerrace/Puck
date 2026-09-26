@@ -70,9 +70,10 @@ public sealed class WorldEngagement {
     // the live definition's row and kept only while that definition still holds the very same row object, so a live
     // edit (world.row.set, a reload) replaces the row and the next read compiles the new one, once. A screen's entry is
     // its authored reach mask and pad-kit name (what Compose stamps and FoldTick reads) and its light gun's mapping
-    // (what FoldTick aims through); a kit's is its compiled pad map (channel ordinal -> pad element, or null when unmapped). A kit that declares no pad, like a screen naming no
-    // kit, reads the engine's baked default table; a null Kit on a body target never reaches a pad at all (pure
-    // passthrough). Channels are boot-fixed, so the channel table is compiled once.
+    // (what FoldTick aims through); a kit's is its compiled pad map (channel ordinal -> pad element, or null when
+    // unmapped). A kit that declares no pad, like a screen naming no kit, reads the engine's baked default table; a null
+    // Kit on a body target never reaches a pad at all (pure passthrough). Channels are boot-fixed, so the channel table
+    // is compiled once.
     private readonly Dictionary<int, (WorldScreen Row, ScreenPolicy Policy)> m_screenPolicies = new();
     private readonly Dictionary<string, (WorldKit Row, WorldPadElement?[] Pad)> m_kitPads = new(comparer: StringComparer.Ordinal);
     // The live definition's screen and kit rows by index and name (IndexRows), for the section objects they were read from.
@@ -570,6 +571,7 @@ public sealed class WorldEngagement {
         mapping: PolicyOf(screenIndex: screenIndex)?.Aim,
         ray: ray
     );
+
     // Maps a pointer ray through a screen's light-gun mapping (ScreenPolicy.Aim); off for no mapping, no ray, or a hit
     // off the source.
     private static MachinePointer AimThrough(SourceMapping? mapping, SourceRay? ray) {
@@ -590,6 +592,7 @@ public sealed class WorldEngagement {
             : MachinePointer.Off
         );
     }
+
     /// <summary>Returns the read-only twin of <see cref="Dissolve"/>: computes the identical outcome without
     /// mutating anything. The client submits <see cref="WorldCommand.DissolveControl"/> for the actual
     /// (server-authoritative) mutation regardless of what this reports — the command's own apply re-derives the same
