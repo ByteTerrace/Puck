@@ -590,9 +590,13 @@ every split-screen seat (commits 6, 9 and 10 below) and every camera and
 session a screen shows (commit 13) run through the graph runtime. Commits 11
 and 12, the
 per-device pass-pipeline cache and the live schedule's extents and prices in
-`world.budget`, have landed. Only commits 13 and 14 remain: P11b moves the
-screens onto graph instances fed by the scheduler, runs the parity and
-counted-GPU checks, and makes the rest of the deletions P11 lists. These
+`world.budget`, have landed, and so has commit 13, which moved the screens onto
+graph instances fed by the scheduler and deleted `ViewStack`,
+`OffscreenRenderBudget`, `SdfWorldEngine.MaxViewports` and the procedural test
+card. Only commit 14 remains: the final sweep runs P11's parity and
+counted-GPU checks, makes the rest of the deletions P11 lists, and has the
+owning guides and the `rendering` skill describe the result.
+These
 P11b items have landed: the first-class package pass kind in
 `ShaderPipelineCompiler`, a steady-state schedule that allocates nothing, a
 document pass kind with no package member, so package work enters the
@@ -975,7 +979,7 @@ It deletes the SDF engine's composite, and it has landed.
   `split-seats` canary also captures a letterboxed layout it selects through
   `view.override`.
 
-P11b's last four commits are these; 11 and 12 have landed:
+P11b's last four commits are these; 11, 12 and 13 have landed:
 
 11. The per-device pass-pipeline cache, landed. `GpuPassPipelineCache`
     (`src/Puck.Shaders/Pipeline`) is one composition singleton whose entries
@@ -1121,7 +1125,11 @@ the row's mapping against a one-by-one source, for the rule operand
 hit on every `Simulation` screen. On a windowed host `WorldPointerRayCapture`
 casts the OS pointer through its seat's published camera with
 `SourceRay.Through` and holds the two commands on the seat's lane with
-`InputRouter.Sustain`, so every tick of a frame carries the ray. The laws are
+`InputRouter.Sustain`, so every tick of a frame carries the ray. A typed
+`source.pointer.origin` or `source.pointer.direction` line is held the same
+way until it is typed again or `source.pointer.clear` ends the ray, and a
+vacated seat's held values end with its occupancy
+(`IInputSlotResolver.SlotVacated`). The laws are
 `IntentRayWireLawTests`, `PointerWorldRuleFactLawTests`,
 `WorldSeatViewportsLocateLawTests` and `SourcePointerCommandLawTests`.
 
@@ -1148,9 +1156,9 @@ operand `$light`, 1 while the Color machine's infrared receiver sees light; the
 advanced target has no receiver and refuses it, and its Color weight is measured
 by `puck cartridge-cost`'s `light-condition` shape (`CartridgeLightTests`). The
 `light-gun` canary boots `light-gun.cgb.puck` headless on a `Simulation` screen,
-types the seat's ray each tick, and reads the cartridge's published light bit
-through a memory binding: 1 aimed at the lit half, 0 at the dark half, and never
-1 when aimed dark throughout.
+types the seat's ray once per aim, and reads the cartridge's published light
+bit through a memory binding: 1 aimed at the lit half, 0 at the dark half, the
+gun off once the ray is cleared, and never 1 when aimed dark throughout.
 
 Panes publish their mappings from the live renderer (P13b-1's pane half, P13b-3's
 host half and P13b-6). `WorldFramePresenter.PrepareGraph` ends with
@@ -1251,20 +1259,22 @@ previous frame, and a chain of different views lags one frame per hop.
 
 `Surface` already distinguishes CPU pixels, a shared handle, and a same-device
 image, but a surface carries only the two 8-bit RGBA formats, the SDF engine's
-internal targets are `R8G8B8A8Unorm`, and no HDR color space is selected
-anywhere. The tonemap is an ACES fit applied at the end of the SDF view pass.
+internal targets are `R8G8B8A8Unorm`. Both swapchains choose a display output
+through `DisplayOutput.TrySelect` and take an HDR one only when it is requested
+and the display reports it, but nothing requests one, so every swapchain
+presents SDR (P16's parts that need no float working target). The tonemap is an ACES fit applied at the end of the SDF view pass.
 There is no jitter, motion vector, or history in the SDF kernels; render scale
 is a bilinear-to-Catmull-Rom upsample in the graph's `place` pass.
 
 P12's source contract, producer registration and conversion passes have
-landed, and so have P12b's steps 1 to 4 and 6: sources are graph instances,
+landed, and so have P12b's steps 1 to 6: sources are graph instances,
 feeds are external producers whose every screen image is a lease, uploaded
 sources write regions that a planned conversion pass reads, devices
-synchronize through a shared fence, and a machine's output is an uploaded
-source held to its exact verdict. The capture gate over the graph (step 5),
-probe outputs and view exports as sources (step 7), consumer-chosen filtering
-with no slot limit (step 8) and the check's list with its deletions (step 9)
-remain. The camera and probe GPU tiers, and
+synchronize through a shared fence, a capture frame renders every tainted
+instance it reads again, and a machine's output is an uploaded source held to
+its exact verdict. Probe outputs and view exports as sources (step 7),
+consumer-chosen filtering with no slot limit (step 8) and the check's list
+(step 9) remain. The camera and probe GPU tiers, and
 desktop capture on a Direct3D 12 host, share their images without a copy, as
 simultaneous-access Direct3D 12 textures that a Vulkan host imports. A camera
 or capture producer signals the consumer's Direct3D 12 shared fence after each
@@ -3108,8 +3118,9 @@ into `puck.render.graph.v1`, a pipeline being a graph a world names; the
 `SdfEngineNode`'s child map and `RegisterChild` are gone. The hand-composed `IRenderNode` tree
 and its `Children` wiring in `WorldBootComposition` give way to graph
 instances. The SDF composite kernel `sdf-world-composite.comp` and its push
-block are gone; P11b commit 13 deletes the `MaxViewports` limit and `ViewStack`
-itself, not only its budget. The
+block are gone, and P11b commit 13 deleted the `MaxViewports` limit, `ViewStack`
+itself rather than only its budget, `OffscreenRenderBudget` and the procedural
+test card. The
 unified overlay is a package the graph names, and `UnifiedOverlayNode`, its
 hand-built node wiring, is deleted.
 
@@ -3199,9 +3210,9 @@ schema or planner change.
 **P12b, the rest of the package.** P12b moves the source contract into the
 graph. A producer, machine or probe source a screen shows, its row's or a live
 bind's, is a source instance the live set runs, and `SdfEngineNode` binds the
-image the runtime hands it for each through `ISdfScreenSources`; a view and a
-session are still images the binder hands the node itself. Four facts shape
-the order:
+image the runtime hands it for each through `ISdfScreenSources`; since
+P11b-13 a view and a session are `sdf.world` instances the screen reads the
+same way. Four facts shaped the order:
 
 - `sdf.world` is an external producer, which takes image reads (step 2), so a
   screen inside the SDF frame reads a source instance through a graph edge
@@ -3494,12 +3505,12 @@ except step 8.
    or linear, and the 32 fixed slots give way to the engine's group arrays.
    Until then every screen samples through the one nearest sampler the glyph
    atlas shares.
-9. The check's list and the deletions, last. Every `WorldScreenSource` arm
+9. The check's list, last. Every `WorldScreenSource` arm
    (`none`, `machine`, the four shipped producer ids, `view`, `session`,
    `text` and `probe`) is listed with the producer or instance that reproduces
-   it and the check that holds it, and then `ScreenSlot.AcquireFrame`'s
-   per-kind resolution is deleted. The `view` and `session` arms are rendered
-   view instances (P11b-13). A law registers a third,
+   it and the check that holds it. The per-kind resolution this step was to
+   delete, `ScreenSlot.AcquireFrame`, went with P11b-13, which made the `view`
+   and `session` arms rendered view instances. A law registers a third,
    fake producer with no schema or planner change. Linux producers and POSIX
    file-descriptor import stay open.
 
@@ -3588,7 +3599,9 @@ Each commit is marked with what it waits on; only step 5 waits on P7b's groups.
      `WorldFederationCodec.WireKey` `PUCKFED3`. No tape is checked in.
    - `PlayerCommandModule` registers `source.pointer.origin` and
      `source.pointer.direction` as Axis3D seat verbs, the seat keeps them for
-     the tick, and `SeatController.HeldIntent` folds them into the intent.
+     the tick, and `SeatController.HeldIntent` folds them into the intent. A
+     typed line holds its half through `InputRouter.Sustain` until it is typed
+     again or `source.pointer.clear` ends the ray.
    - The server keeps each body's tick ray on its composed intent and maps it in
      the tick, in fixed point, from document data only: a `$pointer:` read
      compiles the screen row's `WorldScreenMappings.Normalized` mapping and runs
@@ -3666,12 +3679,17 @@ Each commit is marked with what it waits on; only step 5 waits on P7b's groups.
    - A source whose pane is no longer published is revoked before the next
      event routes, and closing a source revokes it: its window hears the
      release of every key and button it holds, and focus returns to the game.
+     The grant outlives an unpublished pane: it ends only on the verb's
+     `close`, or when the instance stops, its capture reopens onto another
+     window, or a published pane gives its name a different source, so the
+     same instance's republished pane takes input again.
    - Laws: `SourcePassthroughRouterLawTests` (a focused source's pointer and
      keys reach a fake window at the mapped client point, the chord returns
      focus and is consumed while a source holds it, its Escape reaches the game
      while none does, a document-declared source never focuses, releases follow
      presses, a source whose pane is withdrawn stops taking keys and is
-     released), `WorldViewPaneMappingLawTests.APaneTheLocalUserOpenedTakesThePassthroughDestination`
+     released), `WorldViewPaneMappingLawTests.APaneTheLocalUserOpenedTakesThePassthroughDestination`,
+     `WorldViewPaneMappingLawTests.AGrantHoldsAcrossAFrameItsPaneIsNotPublishedAndAnExplicitCloseEndsIt`
      and `Win32PassthroughWindowTests` (a hidden Puck window reads the pointer
      events back at their client points; a recording window reads a key's
      message sequence, Alt's system messages, each modifier side, and a drag
@@ -3992,7 +4010,10 @@ place:
   set; a CPU surface reaches the blit through the device's `IGpuSurfaceUpload`,
   which holds no descriptor. `DirectXDescriptorHeaps.Create` makes only CPU-only
   heaps, and `DirectXGpuBindings.ShaderVisibleHeapsCreated` counts the
-  device's pair, two per device (`DirectXShaderVisibleHeapsLawTests`).
+  device's pair, two per device (`DirectXShaderVisibleHeapsLawTests`). A
+  steady upload reuses its texture's image view and allocates nothing, and
+  replaces the view only when a new extent, format or level count rebuilds the
+  texture (`DirectXSurfaceUploadLawTests`).
 - HDR swapchain selection. `DisplayOutput`, a `GpuPixelFormat` and a
   `DisplayColorSpace` (`Srgb`, `Hdr10`, `ScRgb`), is the one description of
   what a swapchain presents, `DisplayOutput.TrySelect` the one choice, and
@@ -4102,14 +4123,15 @@ rebuild.
 
 **The frame graph and nesting.** P11's CPU half has landed, and so have the
 P11b items its implementation status lists, the main view through the graph
-runtime among them. The rest of P11b is commits 13 and 14, which wait on
-nothing: P7b's groups have landed for every pass, and commit 13, the screens,
-follows P12b-2, which has landed. P12's source contract, producers and
-conversion passes have landed, and so have P12b's steps 1 to 4 and 6. Of the
-rest, steps 5 and 7 can land now, step 8 can too since P7b-14b-6 and P7b-20
-have landed, and step 9 comes last, its `view` and `session` arms going with
-P11b-13's deletion of `ViewStack`. P13b's live mappings (step 1), simulation
-destination (step 2), host passthrough (step 4) and live hit walk (step 6)
+runtime among them, and commit 13, the screens as graph instances, which
+deleted `ViewStack`, `MaxViewports` and the test card. The rest of P11b is
+commit 14, the final sweep, which waits on nothing. P12's source contract,
+producers and conversion passes have landed, and so have P12b's steps 1 to 6,
+the capture gate over the graph among them. Of the rest, step 7 can land now,
+step 8 can too since P7b-14b-6 and P7b-20 have landed, and step 9 comes last;
+its `view` and `session` arms already went with P11b-13. P13b's live mappings
+(step 1), simulation destination (step 2, with the light gun that authored
+cartridges read through `$light`), host passthrough (step 4) and live hit walk (step 6)
 have landed, with step 3's CPU half; step 5, the GPU drawing from the
 mapping, waited only on P7b-20 and can land now, and GPU picking follows P4.
 P14 follows P4, P7b, P8, P11b and P12b, because the engine's composition and
@@ -4134,9 +4156,9 @@ the runtime and delivery programme owns. P10 binds the pass members of
 and a bound member and an overridden member compose by the rule
 [the decisions register](../decisions/rendering.md) states.
 
-The SDF engine's groups (P7b-20), P12b-2 and P4-2c have landed, so the longest
-remaining chain runs P11b-13 and P14-2, then P14-5, P14-6, P14-7 to P14-11 and
-P14-13, and ends with P15. P16 follows P14-10's float working targets, and
+The SDF engine's groups (P7b-20), P12b-2, P4-2c and P11b-13 have landed, so the
+longest remaining chain runs P14-2, which is in progress, then P14-5, P14-6,
+P14-7 to P14-11 and P14-13, and ends with P15. P16 follows P14-10's float working targets, and
 drawing a bake (P17) comes before P6's choice between a bake and the field.
 
 ## Deferred to the end
