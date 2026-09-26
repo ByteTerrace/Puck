@@ -417,7 +417,10 @@ and a layout change places panes one frame later. The row's optional camera
 supplies shader camera inputs, and `timeScale` seeds its presentation clock.
 A row also takes a refresh divisor or rate and inputs bound to other rows'
 outputs, with `views.graphBudget` as the scheduler's pass-pixel ceiling, and
-`world.budget` prices each row by planning its source. `views.shaderToolchain`
+`world.budget` prices each row by planning its source, then reads back what the
+render graph runtime scheduled for every instance in its latest frame: rendered
+or not, its extent, frame divisor, passes and pass-pixels, and the passes,
+dispatches and draws its newest completed submission counted. `views.shaderToolchain`
 optionally selects the directory holding `dxc`. `pipeline.sentinels <name> on`
 writes each frame-block word's echo sentinel in place of the frame values and
 config, which an [echo pass](../../docs/reference/shaders.md#pass-interfaces)

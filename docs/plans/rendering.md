@@ -521,7 +521,7 @@ and every split-screen seat run through the graph runtime (commits 6, 9 and 10
 below), but `ViewStack` still renders every screen. P11b moves the screens onto graph instances fed by the scheduler,
 puts the live schedule's extents and prices in `world.budget`, runs the parity
 and counted-GPU checks, and makes the rest of the deletions P11 lists (commits
-11 to 14 below). These
+11, 13 and 14 below). These
 P11b items have landed: the first-class package pass kind in
 `ShaderPipelineCompiler`, a steady-state schedule that allocates nothing, a
 document pass kind with no package member, so package work enters the
@@ -918,13 +918,20 @@ It deletes the SDF engine's composite, and it has landed.
   `split-seats` canary also captures a letterboxed layout it selects through
   `view.override`.
 
-P11b's remaining work is four commits:
+P11b's last four commits are these; 12 has landed:
 
 11. The per-device pass-pipeline cache: the graph's pass pipelines built once a
     device, off the frame thread, and shared by every node that installs the
     same pass.
-12. The live budget: `world.budget` prints the live schedule's extents and
-    prices for every instance.
+12. The live budget, landed: `world.budget` ends with what the runtime's latest
+    schedule decided for every instance (`RenderGraphLiveBudget`, reading
+    `RenderGraphRuntime.Latest`): rendered, waiting, deferred or unread; its
+    extent, a graph instance's quantized footprint or a source's negotiated
+    extent; its frame divisor; its passes and the pass-pixels it spent; and the
+    executed passes, dispatches and draws its newest completed submission
+    counted. Every figure is a count, and a steady read allocates nothing.
+    `RenderGraphRuntimeLawTests.LiveBudget` holds a pane at divisor 2 and a
+    static source across frames.
 13. Screens onto graph instances, after P12b-2: each screen reads a graph
     instance the scheduler feeds, and `ViewStack`, `OffscreenRenderBudget`, the
     procedural test card, `SdfWorldEngine.MaxViewports` and the hand-composed
@@ -3274,7 +3281,7 @@ read simulation state, so they do not wait on the state rebuild.
 
 **The frame graph and nesting.** P11's CPU half has landed, and so have the
 P11b items its implementation status lists, the main view through the graph
-runtime among them. The rest of P11b, commits 11 to 14, waits on nothing from
+runtime among them. The rest of P11b, commits 11, 13 and 14, waits on nothing from
 P7b, whose groups have landed for everything but the SDF engine; commit 13, the
 screens, follows P12b-2. P12's
 source contract, producers and conversion passes have landed; P12b, the graph
