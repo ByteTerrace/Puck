@@ -65,7 +65,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 resource.Spec.IsExternal ||
                 (resource.Spec.Kind == ShaderPipelineResourceKind.Buffer)
             ) {
-                return (IReadOnlyList<IGpuImage>)[];
+                return ((IReadOnlyList<IGpuImage>)[]);
             }
 
             return ((carried.TryGetValue(

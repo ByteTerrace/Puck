@@ -387,7 +387,6 @@ public sealed class PostProcessPackageLawTests {
             expected: 0L
         );
     }
-
     /// <summary>Every creation a post pass's install makes, failed in turn through <see cref="GpuCreationFaults"/>, is
     /// refused by name without escaping a produced frame, releases exactly what was created before it, and the same graph
     /// swapped in again installs and publishes. The recorder's framebuffers are among the creations, made at install.</summary>
