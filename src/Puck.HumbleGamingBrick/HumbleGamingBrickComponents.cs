@@ -106,6 +106,12 @@ public static class HumbleGamingBrickComponents {
         services.AddScoped<ITiltSensor>(implementationFactory: static provider => provider.GetRequiredService<TiltSensorComponent>());
         services.AddScoped<ISnapshotable>(implementationFactory: static provider => provider.GetRequiredService<TiltSensorComponent>());
 
+        // The light gun on the infrared receive line: aimed off the screen by default, so a machine no host aims reads
+        // exactly its lone-hardware light. Its held aim is machine state, like the tilt reading above.
+        services.TryAddScoped<LightGunComponent>();
+        services.AddScoped<ILightGun>(implementationFactory: static provider => provider.GetRequiredService<LightGunComponent>());
+        services.AddScoped<ISnapshotable>(implementationFactory: static provider => provider.GetRequiredService<LightGunComponent>());
+
         services.TryAddScoped(implementationFactory: static provider => {
             var cartridge = Cartridge.Load(
                 rom: (provider.GetRequiredService<MachineConfiguration>().CartridgeRom

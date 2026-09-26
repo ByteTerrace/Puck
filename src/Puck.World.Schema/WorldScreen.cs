@@ -343,7 +343,8 @@ public enum WorldPadElement : byte {
 /// screen wears, or <see langword="null"/> for the engine's default pad map. The named kit must carry a pad map —
 /// refused by name otherwise. Omitted from the wire when null.</param>
 /// <param name="Input">Where a pointer hit on the screen's source goes: <c>Presentation</c> for hover and highlight, or
-/// <c>Simulation</c> for a pointer ray mapped in fixed point from this row, such as a light gun
+/// <c>Simulation</c> for a pointer ray mapped in fixed point from this row, which a <c>$pointer:</c> rule read sees and
+/// which aims the screen machine's light gun for a seat applied to the screen
 /// (<see cref="WorldScreenMappings"/>). <c>Passthrough</c> is refused by name: host passthrough exists only for a source
 /// the local user opened on their own machine, and a world document can never create one or send it input.
 /// <see langword="null"/> (the default) is <c>Presentation</c>. Omitted from the wire when null.</param>
