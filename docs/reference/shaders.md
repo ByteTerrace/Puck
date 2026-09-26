@@ -797,6 +797,25 @@ a device from it, on the thread pool, and every owner leases that pipeline
 rather than creating its own: the SDF engine records every region's copy with
 it, its brick staging into the brick pool included. The cache counts what it creates under `gpu.region-copy`.
 
+A shader pipeline instance owns every host-written region its graph reads. A
+package states the regions its recorder writes
+(`IRenderGraphPackageFactory.Regions`; the overlay's one storage buffer), and the
+instance creates them at install under the policy `GpuResidency.Select` picks
+with a reader in flight, hands them to the recorder in
+`RenderGraphPackageGroups.Regions`, and, when any stages, states and admits one
+reserved copy pool per such pass (`ShaderPipelineRenderNode.DescriptorPools`'
+`regionCopies`) and takes the device's copy pipeline in the candidate's build,
+off the frame thread (`GpuRegionCopyPipelineLease.Take`). A host buffer port's
+region is created by `ShaderPipelineRenderNode.BindRegion` at the port's declared
+size under the same choice; a staged one leases the pipeline on its first bind,
+returns no region until the pipeline is built, and admits its own copy pool.
+After a frame's passes have recorded, the instance flushes every region's share
+of the slot and records each owed copy in one command buffer submitted ahead of
+the frame's passes: a memory barrier ordering earlier submissions' reads before
+the copies' writes, the copies, then a buffer barrier per copied buffer to the
+compute and fragment stages. A recorder only writes a region's contents and binds
+its slot's `GpuRegion.Buffer`; it records no copy and no barrier.
+
 ## Probe kinds (`puck.probe.manifest.v1`)
 
 An probe kind is data the same way a shader set is: one `<id>.puck.probe.json`

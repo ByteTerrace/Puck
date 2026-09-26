@@ -188,7 +188,14 @@ GPU upload heaps, a region's ring lives in them
 ordinary `UPLOAD`-heap buffer.
 
 A device that will not answer the architecture query reports the default
-profile, which selects the staged copy. What the profile is for, and how a
+profile, which selects the staged copy.
+
+A staged region's copy writes its destination as a UAV, and the buffer barrier
+after it moves the buffer into the state its readers need.
+`DirectXBufferStates.RequiredState` reads the barrier's stages: a shader read by
+the fragment stage needs `ALL_SHADER_RESOURCE` (`NON_PIXEL_SHADER_RESOURCE |
+PIXEL_SHADER_RESOURCE`), which covers a compute read too, and a compute-only
+read keeps `NON_PIXEL_SHADER_RESOURCE`. What the profile is for, and how a
 policy is chosen from it, is described under
 [the Vulkan memory profile](vulkan.md#memory-profile).
 
@@ -221,14 +228,15 @@ device up and releases them when the context releases it, on `Recreate` and
   node checks a candidate at install and a float preview when it is selected;
   an SDF engine's construction checks through `SdfWorldEngine.CheckAdmission`
   before it allocates, so its holder records the refusal like any other failed
-  engine build and tries again only when the build's inputs change; the unified
-  overlay checks its one pool before it creates its resources, and refuses them
-  under its resource refusal like any other failed creation. A candidate that
+  engine build and tries again only when the build's inputs change; a
+  pipeline candidate's statement includes the region-copy pool of each package
+  pass whose regions stage, and a staged host buffer port admits its own copy
+  pool when it binds. A candidate that
   does not fit is refused by name, and whatever is installed
   keeps presenting. Heap space is a build input for that refusal alone: the
   heap's `GpuDescriptorHeapBudget.ReleaseRevision`, read through
   `IGpuBindings.HeapReleaseRevision`, moves whenever a pool's ranges are
-  returned, and a holder or the overlay refused by the heap tries once more
+  returned, and a holder or a pipeline candidate refused by the heap tries once more
   when it has moved.
 - **A group's samplers are descriptors.** A pipeline created from a
   `GpuPipelineLayoutDescription` binds through the root signature
