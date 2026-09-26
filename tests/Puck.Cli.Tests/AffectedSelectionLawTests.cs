@@ -165,6 +165,24 @@ public sealed class AffectedSelectionLawTests {
 
         Assert.Equal(actual: plan.Suites, expected: ["Cli.Tests"]);
     }
+    // The printed plan names what --run does with each line: a test line is a source for puck test, and the catalog line
+    // names the compile check that runs over it, so the catalog, which holds no test worlds, never reads as a test target.
+    [Fact]
+    public void ThePrintedPlanNamesTheCatalogCheckBesideTheCatalog() {
+        var plan = Select(changed: ["src/World/Assets/worlds/tested.puck"]);
+        var text = new StringWriter();
+
+        AffectedCommand.Describe(
+            into: text,
+            plan: plan
+        );
+
+        var lines = text.ToString().Split(options: StringSplitOptions.RemoveEmptyEntries, separator: Environment.NewLine);
+
+        Assert.Contains(collection: lines, expected: "test src/World/Assets/worlds/tested.puck");
+        Assert.Contains(collection: lines, expected: $"catalog {AffectedCommand.ShippedCatalog} (puck compile --tree {AffectedCommand.ShippedTree} --check)");
+        Assert.DoesNotContain(collection: lines, filter: static line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: $"test {AffectedCommand.ShippedCatalog}"));
+    }
 
     private sealed class PlanComparer : IEqualityComparer<AffectedPlan> {
         public bool Equals(AffectedPlan? x, AffectedPlan? y) =>
