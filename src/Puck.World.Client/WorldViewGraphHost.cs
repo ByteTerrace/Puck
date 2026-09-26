@@ -45,6 +45,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
         internal BackgroundBuild<CompileOutcome> Compilation { get; } = new();
 
+        // The graph the runtime was last given for the instance, its inputs as they were bound then.
+        internal RenderGraphRuntimeGraph? Installed { get; set; }
         internal int PendingSteps { get; set; }
         internal Exception? ReportedSwapError { get; set; }
 
@@ -714,6 +716,23 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                 : graph))];
         }
 
+        // A row whose inputs moved rebinds its installed graph to them in this same reconfiguration, whether or not its
+        // source moved too: the set's reads follow the inputs, so the bindings it has may name a producer the instance no
+        // longer reads. The runtime rebinds a kept pipeline without building it again.
+        graphs = [.. graphs.Select(selector: (graph, index) => (((graph is null) &&
+            m_entries.TryGetValue(
+                key: set.Instances[index].Name,
+                value: out var entry
+            ) &&
+            (entry.Installed is { } installed) &&
+            (WorldDefinitionRows.FindGraph(
+                graphs: views.Graphs,
+                name: entry.Name
+            ) is { } row) &&
+            !installed.Inputs.SequenceEqual(second: InputsOf(row: row)))
+            ? (installed with { Inputs = InputsOf(row: row) })
+            : graph))];
+
         if (!runtime.TryReconfigure(
             graphs: graphs,
             refusal: out var refusal,
@@ -729,6 +748,19 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         }
 
         m_synthesized = synthesized;
+
+        for (var index = 0; (index < graphs.Count); index++) {
+            if (
+                (graphs[index] is { } rebound) &&
+                m_entries.TryGetValue(
+                    key: set.Instances[index].Name,
+                    value: out var entry
+                ) &&
+                (entry.Installed is not null)
+            ) {
+                entry.Installed = rebound;
+            }
+        }
 
         var rows = (views.Graphs ?? []);
         var desiredNames = new HashSet<string>(comparer: StringComparer.Ordinal);
@@ -798,14 +830,13 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             return false;
         }
 
+        var graph = new RenderGraphRuntimeGraph(
+            Inputs: InputsOf(row: row),
+            Pipeline: pipeline
+        );
+
         if (!runtime.TryInstall(
-            graph: new RenderGraphRuntimeGraph(
-                Inputs: [.. (row.Inputs ?? []).Select(selector: static input => new RenderGraphRuntimeInput(
-                    Producer: input.Instance,
-                    Version: input.Resource
-                ))],
-                Pipeline: pipeline
-            ),
+            graph: graph,
             instance: name,
             refusal: out var refusal
         )) {
@@ -814,10 +845,15 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             return false;
         }
 
+        m_entries[name].Installed = graph;
         reason = string.Empty;
 
         return true;
     }
+    private static RenderGraphRuntimeInput[] InputsOf(WorldViewGraph row) => [.. (row.Inputs ?? []).Select(selector: static input => new RenderGraphRuntimeInput(
+        Producer: input.Instance,
+        Version: input.Resource
+    ))];
     // The passes a row's instance is priced at: its compiled graph's, or one before it has compiled.
     private int PassesOf(WorldViewGraph row) => ((m_entries.TryGetValue(
         key: row.Name,
