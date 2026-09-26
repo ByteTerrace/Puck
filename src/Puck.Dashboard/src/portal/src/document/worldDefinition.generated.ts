@@ -10890,7 +10890,7 @@ export type WorldViewGraph = {
    */
   source?: string | null;
   /**
-   * The engine package whose producer renders the instance, such as sdf.world, or null for a row that names a Source. A package instance reads no input and takes no time scale, output or override.
+   * The engine package whose producer renders the instance, such as sdf.world, or an uploaded producer's source package, source.<producer id>, opened from Settings and converted once a frame at most however many instances read it, or null for a row that names a Source. A package instance reads no input and takes no time scale, output or override.
    */
   package?: string | null;
   /**
@@ -10917,6 +10917,12 @@ export type WorldViewGraph = {
    * This instance's parameter overrides, keyed by pass name; each value is that pass's config object keyed by field. A field absent here keeps the default the shared source declares, so two instances of one source differ only in what they override. The source's config schema binds them when a boot, a world.load or world.reload, a commit, or an upsert names them (the server reads the source, and refuses a value by name), and again when a graph installs (the host binds them into its passes). null overrides nothing.
    */
   overrides?: {
+    [k: string]: unknown;
+  } | null;
+  /**
+   * A source package row's producer settings, which its producer opens the image with and its shape validates, as a screen's producer source's settings are, or null for the producer's defaults. Only a row naming a source package (source.<producer id>) takes settings.
+   */
+  settings?: {
     [k: string]: unknown;
   } | null;
 };

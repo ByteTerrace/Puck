@@ -16,6 +16,9 @@ public sealed class ShadersGenerateLawTests {
     private const string OverlayPath = "src/Puck.Overlays/Assets/Shaders/overlay.interface.hlsli";
     private const string PlacePath = "src/Puck.Shaders/Assets/Shaders/Graph/place.interface.hlsli";
 
+    // Each conversion package's interface include, beside its kernel.
+    private static (string Path, string Text)[] SourceIncludes => [.. RenderGraphPackageCatalog.SourceConversions.Select(selector: static id => ($"src/Puck.Shaders/Assets/Shaders/Sources/{id}.interface.hlsli", InterfaceOf(id: id)))];
+
     private static string InterfaceOf(string id) {
         Assert.True(condition: RenderGraphPackageCatalog.Engine.TryGet(id: id, package: out var package));
 
@@ -52,22 +55,24 @@ public sealed class ShadersGenerateLawTests {
 
     [Fact]
     public void ATreeWhoseIncludesMatchPasses() {
-        var (exitCode, error) = Check(
+        var (exitCode, error) = Check([
             (IsaPath, SdfIsaHlsl.Generate()),
             (OverlayPath, InterfaceOf(id: RenderGraphPackageCatalog.Overlay)),
-            (PlacePath, InterfaceOf(id: RenderGraphPackageCatalog.Place))
-        );
+            (PlacePath, InterfaceOf(id: RenderGraphPackageCatalog.Place)),
+            .. SourceIncludes
+        ]);
 
         Assert.Equal(actual: exitCode, expected: 0);
         Assert.Empty(collection: error.Trim());
     }
     [Fact]
     public void ADriftedPackageIncludeFailsByName() {
-        var (exitCode, error) = Check(
+        var (exitCode, error) = Check([
             (IsaPath, SdfIsaHlsl.Generate()),
             (OverlayPath, InterfaceOf(id: RenderGraphPackageCatalog.Overlay).Replace(comparisonType: StringComparison.Ordinal, newValue: "staleSampler", oldValue: "linearSampler")),
-            (PlacePath, InterfaceOf(id: RenderGraphPackageCatalog.Place))
-        );
+            (PlacePath, InterfaceOf(id: RenderGraphPackageCatalog.Place)),
+            .. SourceIncludes
+        ]);
 
         Assert.Equal(actual: exitCode, expected: 1);
         Assert.Contains(actualString: error, expectedSubstring: OverlayPath);
@@ -111,7 +116,7 @@ public sealed class ShadersGenerateLawTests {
         Assert.Empty(collection: problems);
         Assert.Equal(
             actual: includes.Select(selector: static include => include.Path),
-            expected: [IsaPath, OverlayPath, "src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-film-grain.interface.hlsli", PlacePath]
+            expected: [IsaPath, OverlayPath, "src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-film-grain.interface.hlsli", PlacePath, .. SourceIncludes.Select(selector: static include => include.Path)]
         );
     }
 }

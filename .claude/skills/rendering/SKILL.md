@@ -250,7 +250,18 @@ These are one-line cautions; the owning pages hold the derivations.
   identity, never the producer id. An external image (camera, capture,
   probe output) is resolved through the binder's `WorldCaptureGate`, never
   directly: a new path that samples one without the gate leaks it into
-  captures. An uploaded source's region layout and the conversion kernels are a
+  captures. An uploaded producer registers an upload for its source package
+  (`RenderGraphPackageRecorders.RegisterSource`), never an external producer:
+  the runtime renders the instance through a node running the one-pass graph
+  its descriptor names (`RenderGraphRuntime.Sources.cs`), the region bound as
+  the node's host buffer port (`ShaderPipelineRenderNode.BindRegion`, a ring
+  `GpuRegion` the node owns and flushes per slot after its fence) and the
+  conversion a catalog package per shipped kernel (`SourceConversionPackage`,
+  its interface generated beside the kernel). The runtime declares the
+  upload's cadence and extent to the scheduler itself. A new uploaded producer
+  writes its planes in `IWorldUploadFeed.TryWrite`; screens still read the
+  binder's `CpuSurfaceSource` uploads until P12b-2 connects them. An uploaded
+  source's region layout and the conversion kernels are a
   sync pair ([references/sync-pairs.md](references/sync-pairs.md#image-sources));
   a change to either moves `ImageSourceConversionLawTests`, the
   `source-conversion` canary and `SourceConversionCanaryFixtureTests` together.
@@ -1098,7 +1109,7 @@ dotnet test tests/Puck.World.Tests -c Release --filter "FullyQualifiedName~World
 puck parity                                                 # parity world, offscreen, Vulkan then Direct3D 12
 puck canary sdf-decode-sign-refusal                         # puck.sdf.v1 decode sign refusals, offscreen on both backends
 puck canary world-counters                                  # world.counters gpu counted work, offscreen on both backends
-puck canary source-conversion                               # the shipped palette and NV12 conversion kernels against their CPU reference, offscreen on both backends
+puck canary source-conversion uploaded-sources              # the four shipped conversion kernels against their CPU reference; uploaded source instances converted and shown in panes, offscreen on both backends
 puck counters                                               # counters workload on both backends; deterministic counts must agree
 puck qualify artifacts/world                                # a published package against the release profile; --list boots nothing
 puck canary pipeline-feedback pipeline-ink pipeline-edit pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override pipeline-package pipeline-budget pipeline-churn pipeline-fault pipeline-geometry pipeline-echo no-device-compile    # shader pipelines offscreen on both backends

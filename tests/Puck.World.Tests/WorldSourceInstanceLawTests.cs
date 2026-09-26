@@ -16,8 +16,9 @@ namespace Puck.World.Tests;
 /// instance of <c>source.&lt;producer id&gt;</c> that carries its settings and is named by its content, so screens showing
 /// equal sources read one instance however its settings are spelled, removing or reordering screens keeps every other
 /// source's name and producer, and no name is ever given to other content; the instance's handle is its identity. Each
-/// registered producer registers one external-producer factory under its source package, which opens the instance's feed
-/// from the instance's settings and refuses by name a feed that disagrees with its registration. The typed arms' producer
+/// registered producer registers one factory under its source package, an upload for an uploaded producer and an external
+/// producer for any other, which opens the instance's feed from the instance's settings and refuses by name a feed that
+/// disagrees with its registration. The typed arms' producer
 /// ids are closed to document producers.
 /// </summary>
 public sealed class WorldSourceInstanceLawTests {
@@ -30,8 +31,8 @@ public sealed class WorldSourceInstanceLawTests {
             Width: width
         )
     );
-    // Each instance's producer in a runtime, by instance name.
-    private static Dictionary<string, IRenderGraphExternalProducer> ProducersByName(RenderGraphRuntime runtime, WorldSourceInstances sources) => sources.Instances.Select(selector: (instance, index) => (instance.Name, Producer: runtime.Producer(instance: index)!)).ToDictionary(
+    // Each instance's upload in a runtime, by instance name.
+    private static Dictionary<string, IRenderGraphSourceUpload> ProducersByName(RenderGraphRuntime runtime, WorldSourceInstances sources) => sources.Instances.Select(selector: (instance, index) => (instance.Name, Producer: runtime.Source(instance: index)!)).ToDictionary(
         comparer: StringComparer.Ordinal,
         elementSelector: static entry => entry.Producer,
         keySelector: static entry => entry.Name
@@ -49,19 +50,16 @@ public sealed class WorldSourceInstanceLawTests {
             set: set
         ), userMessage: refusal?.Message);
     }
-    // A runtime over the test-pattern producer's source instances, and every opening its factory made.
-    private static (RenderGraphRuntime Runtime, List<WorldImageSourceOpening> Openings) Run(WorldSourceInstances sources) {
+    // A runtime over the test-pattern producer's source instances, and every feed its factory opened.
+    private static (RenderGraphRuntime Runtime, List<IWorldImageFeed> Openings) Run(WorldSourceInstances sources) {
         var producers = new WorldImageProducers();
         var packages = new RenderGraphPackageRecorders();
-        var openings = new List<WorldImageSourceOpening>();
+        var pattern = new Counting(inner: new WorldTestPatternProducer());
 
-        producers.Register(producer: new WorldTestPatternProducer());
+        producers.Register(producer: pattern);
+        SourceConversionPackage.RegisterAll(packages: packages);
         producers.RegisterPackages(
-            adapt: opening => {
-                openings.Add(item: opening);
-
-                return new OpenedSource(opening: opening);
-            },
+            adapt: null,
             packages: packages
         );
         Assert.True(condition: RenderGraphInstanceSet.TryCreate(
@@ -80,7 +78,7 @@ public sealed class WorldSourceInstanceLawTests {
             set: set
         ), userMessage: refusal?.Message);
 
-        return (runtime, openings);
+        return (runtime, pattern.Opened);
     }
     // A test-pattern source whose settings are spelled as the given JSON object, members in its order.
     private static WorldScreenSource.Producer Spelled(string json) {
@@ -157,10 +155,12 @@ public sealed class WorldSourceInstanceLawTests {
 
         producers.Register(producer: new WorldTestPatternProducer());
         producers.Register(producer: new WorldQrProducer());
+        producers.Register(producer: new Imported());
 
         var packages = new RenderGraphPackageRecorders();
         var openings = new List<WorldImageSourceOpening>();
 
+        SourceConversionPackage.RegisterAll(packages: packages);
         producers.RegisterPackages(
             adapt: opening => {
                 openings.Add(item: opening);
@@ -170,7 +170,9 @@ public sealed class WorldSourceInstanceLawTests {
             packages: packages
         );
 
-        Assert.Equal(expected: ["source.qr", "source.testPattern"], actual: packages.ProducerIds);
+        // The uploaded producers register uploads, which the runtime converts; the imported one is adapted.
+        Assert.Equal(expected: ["source.qr", "source.testPattern"], actual: packages.SourceIds);
+        Assert.Equal(expected: ["source.capture"], actual: packages.ProducerIds);
 
         var sources = WorldSourceInstances.Of(shown: [Pattern(width: 96), Pattern(width: 96)]);
 
@@ -192,15 +194,16 @@ public sealed class WorldSourceInstanceLawTests {
 
         using (runtime) {
             // One factory call for the one instance both screens read, opened from its settings.
-            var opening = Assert.Single(collection: openings);
+            var opening = Assert.IsType<WorldImageSourceUpload>(@object: runtime.Source(instance: 0)).Opening;
 
+            Assert.Empty(collection: openings);
             Assert.Equal(expected: (set.Instances[0].Name, "source.testPattern"), actual: (opening.Context.Instance, opening.Context.Package));
             Assert.Null(@object: opening.Fault);
             Assert.Equal(
                 expected: (WorldImageProducerSettings.TestPatternId, 96U, 6U),
                 actual: (opening.Feed!.Descriptor.Producer, opening.Feed.Descriptor.Width, opening.Feed.Descriptor.Height)
             );
-            Assert.Same(expected: opening.Feed, actual: ((OpenedSource)runtime.Producer(instance: 0)!).Opening.Feed);
+            Assert.Null(@object: runtime.Producer(instance: 0));
         }
     }
     [Fact]
@@ -211,14 +214,10 @@ public sealed class WorldSourceInstanceLawTests {
         producers.Register(producer: disagreeing);
 
         var packages = new RenderGraphPackageRecorders();
-        WorldImageSourceOpening? opened = null;
 
+        SourceConversionPackage.RegisterAll(packages: packages);
         producers.RegisterPackages(
-            adapt: opening => {
-                opened = opening;
-
-                return new OpenedSource(opening: opening);
-            },
+            adapt: null,
             packages: packages
         );
 
@@ -239,10 +238,12 @@ public sealed class WorldSourceInstanceLawTests {
         ), userMessage: refusal?.Message);
 
         using (runtime) {
-            Assert.Null(@object: opened!.Value.Feed);
+            var opened = Assert.IsType<WorldImageSourceUpload>(@object: runtime.Source(instance: 0)).Opening;
+
+            Assert.Null(@object: opened.Feed);
             Assert.True(condition: disagreeing.Opened!.Disposed);
-            Assert.Contains(actualString: opened.Value.Fault, comparisonType: StringComparison.Ordinal, expectedSubstring: "image producer 'testPattern' opened a feed declaring producer 'testPattern' with Deterministic over Imported, but it is registered as Deterministic over Uploaded");
-            Assert.EndsWith(actualString: runtime.UnservedCaptureReason, expectedEndString: opened.Value.Fault);
+            Assert.Contains(actualString: opened.Fault, comparisonType: StringComparison.Ordinal, expectedSubstring: "image producer 'testPattern' opened a feed declaring producer 'testPattern' with Deterministic over Imported, but it is registered as Deterministic over Uploaded");
+            Assert.EndsWith(actualString: runtime.UnservedCaptureReason, expectedEndString: opened.Fault);
         }
     }
     [Fact]
@@ -373,6 +374,40 @@ public sealed class WorldSourceInstanceLawTests {
         public void RequestCapture(FrameCaptureRequest request) => _ = request.TryFail(error: new InvalidOperationException(message: "the test source serves no capture"));
         public bool TryAcquireOutput(out RenderGraphExternalOutput output) {
             output = default;
+
+            return false;
+        }
+    }
+    // The test pattern's producer, counting every feed it opens.
+    private sealed class Counting(IWorldImageProducer inner) : IWorldImageProducer {
+        public ImageContentClass Content => inner.Content;
+        public string Id => inner.Id;
+        public List<IWorldImageFeed> Opened { get; } = [];
+        public ImageSourceTransport Transport => inner.Transport;
+
+        public bool TryOpen(WorldScreenSource.Producer source, out IWorldImageFeed? feed, out string? fault) {
+            var opened = inner.TryOpen(
+                fault: out fault,
+                feed: out feed,
+                source: source
+            );
+
+            if (feed is not null) {
+                Opened.Add(item: feed);
+            }
+
+            return opened;
+        }
+    }
+    // An imported producer under the capture shape, which a host adapts to an external producer.
+    private sealed class Imported : IWorldImageProducer {
+        public ImageContentClass Content => ImageContentClass.External;
+        public string Id => WorldImageProducerSettings.CaptureId;
+        public ImageSourceTransport Transport => ImageSourceTransport.Imported;
+
+        public bool TryOpen(WorldScreenSource.Producer source, out IWorldImageFeed? feed, out string? fault) {
+            feed = null;
+            fault = "the imported test producer opens nothing";
 
             return false;
         }

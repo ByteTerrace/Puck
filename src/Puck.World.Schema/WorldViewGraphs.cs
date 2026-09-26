@@ -46,7 +46,7 @@ public static class WorldViewGraphs {
         );
     }
     /// <summary>Returns the rows as render-graph instances, in row order: a row naming a package is that package's
-    /// external producer, and any other row renders its graph. Several inputs bound to one producer are one read, a
+    /// external instance, carrying a source package's settings, and any other row renders its graph. Several inputs bound to one producer are one read, a
     /// previous-frame read only when every one of them is.</summary>
     /// <param name="graphs">The rows.</param>
     /// <param name="passes">The passes one render of a row's graph records.</param>
@@ -75,7 +75,8 @@ public static class WorldViewGraphs {
                         PreviousFrame: group.All(predicate: static input => input.PreviousFrame),
                         Producer: group.Key
                     ))],
-                Refresh: RefreshOf(graph: graph)
+                Refresh: RefreshOf(graph: graph),
+                Settings: graph.Settings
             );
         }
 

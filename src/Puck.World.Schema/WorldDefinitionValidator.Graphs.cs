@@ -6,7 +6,7 @@ namespace Puck.World;
 public static partial class WorldDefinitionValidator {
     // The views.graphs section: each row's shape, then the rows as one instance set, so a loop of same-frame reads is
     // refused by the scheduler's own rule, naming every instance in it. Returns the rows' names.
-    private static HashSet<string> ValidateGraphs(WorldViewDefaults views, HashSet<string> cameras, List<string> errors) {
+    private static HashSet<string> ValidateGraphs(WorldViewDefaults views, HashSet<string> cameras, WorldDefinition definition, List<string> errors) {
         var graphs = (views.Graphs ?? []);
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
         var shapeErrors = errors.Count;
@@ -54,6 +54,45 @@ public static partial class WorldDefinitionValidator {
                 ) {
                     errors.Add(item: $"{path}: package instance '{graph.Name}' takes no timeScale, output or overrides.");
                 }
+                // A source package names a producer by id and opens it from the row's settings, as a screen's producer
+                // source does.
+                if (graph.Package.StartsWith(
+                    comparisonType: StringComparison.Ordinal,
+                    value: RenderGraphInstance.SourcePackagePrefix
+                )) {
+                    var producer = graph.Package[RenderGraphInstance.SourcePackagePrefix.Length..];
+
+                    WorldImageProducerVocabulary.Validate(
+                        definition: definition,
+                        errors: errors,
+                        path: path,
+                        source: new WorldScreenSource.Producer(
+                            Id: producer,
+                            Settings: graph.Settings
+                        )
+                    );
+
+                    // A row's source renders in the host's graph runtime, which converts an uploaded producer's region;
+                    // an imported producer's image reaches only a screen.
+                    if (
+                        WorldImageProducerVocabulary.TryGet(
+                            id: producer,
+                            shape: out var shape
+                        ) &&
+                        (shape.Transport != Puck.Abstractions.Sources.ImageSourceTransport.Uploaded)
+                    ) {
+                        errors.Add(item: $"{path}.package '{graph.Package}' names the {shape.Transport} producer '{producer}'; a views.graphs row renders only an uploaded producer's source.");
+                    }
+                }
+            }
+            if (
+                (graph.Settings is not null) &&
+                !(graph.Package?.StartsWith(
+                    comparisonType: StringComparison.Ordinal,
+                    value: RenderGraphInstance.SourcePackagePrefix
+                ) ?? false)
+            ) {
+                errors.Add(item: $"{path}.settings: only a source package row ('{RenderGraphInstance.SourcePackagePrefix}<producer id>') takes settings.");
             }
 
             ValidateInstanceValues(

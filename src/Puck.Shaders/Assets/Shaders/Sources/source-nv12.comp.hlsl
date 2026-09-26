@@ -3,10 +3,10 @@
 // Plane 0 of the region is the Y rows and plane 1 the half-height rows of interleaved Cb, Cr pairs. Chroma is read at
 // the co-sited sample with no filtering, converted under the header's matrix and range, and clamped by the RGBA8 store.
 
+// The generated interface declares the frame group and the pass group: the extent, the region read at binding 1 and the
+// image written at binding 2.
+#include "source-nv12.interface.hlsli"
 #include "image-source.hlsli"
-
-[[vk::binding(1, 3)]] ByteAddressBuffer region : register(t1, space3);
-[[vk::binding(2, 3)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> image : register(u2, space3);
 
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {

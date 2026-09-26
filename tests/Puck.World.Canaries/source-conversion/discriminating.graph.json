@@ -13,6 +13,16 @@
       "sizeBytes": 1568
     },
     {
+      "name": "rgba-region",
+      "kind": "Buffer",
+      "sizeBytes": 4128
+    },
+    {
+      "name": "transfer-region",
+      "kind": "Buffer",
+      "sizeBytes": 4128
+    },
+    {
       "name": "palette",
       "kind": "Image",
       "format": "R8G8B8A8Unorm",
@@ -23,6 +33,18 @@
       "kind": "Image",
       "format": "R8G8B8A8Unorm",
       "dimensions": { "mode": "Absolute", "width": 32, "height": 32 }
+    },
+    {
+      "name": "rgba",
+      "kind": "Image",
+      "format": "R8G8B8A8Unorm",
+      "dimensions": { "mode": "Absolute", "width": 32, "height": 32 }
+    },
+    {
+      "name": "transfer",
+      "kind": "Image",
+      "format": "R16G16B16A16Float",
+      "dimensions": { "mode": "Absolute", "width": 32, "height": 32 }
     }
   ],
   "passes": [
@@ -31,7 +53,7 @@
       "source": "seed-discriminating.hlsl",
       "entryPoint": "main",
       "kind": "Compute",
-      "outputs": [ { "name": "palette-region" }, { "name": "nv12-region" } ]
+      "outputs": [ { "name": "palette-region" }, { "name": "nv12-region" }, { "name": "rgba-region" }, { "name": "transfer-region" } ]
     },
     {
       "name": "convert-palette",
@@ -48,7 +70,23 @@
       "kind": "Compute",
       "inputs": [ { "name": "nv12-region", "as": "region" } ],
       "outputs": [ { "name": "nv12", "as": "image" } ]
+    },
+    {
+      "name": "convert-rgba",
+      "source": "../../../src/Puck.Shaders/Assets/Shaders/Sources/source-rgba.comp.hlsl",
+      "entryPoint": "CSMain",
+      "kind": "Compute",
+      "inputs": [ { "name": "rgba-region", "as": "region" } ],
+      "outputs": [ { "name": "rgba", "as": "image" } ]
+    },
+    {
+      "name": "convert-transfer",
+      "source": "../../../src/Puck.Shaders/Assets/Shaders/Sources/source-transfer.comp.hlsl",
+      "entryPoint": "CSMain",
+      "kind": "Compute",
+      "inputs": [ { "name": "transfer-region", "as": "region" } ],
+      "outputs": [ { "name": "transfer", "as": "image" } ]
     }
   ],
-  "outputs": ["palette", "nv12"]
+  "outputs": ["palette", "nv12", "rgba", "transfer"]
 }
