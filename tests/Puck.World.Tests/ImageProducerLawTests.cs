@@ -476,7 +476,7 @@ public sealed class ImageProducerLawTests {
         public void Dispose() => Disposed = true;
         public nint Handle() => DesktopHandle;
         public void NotifyDeviceLost() { }
-        public void Publish(ulong tick, IGpuDeviceContext deviceContext) { }
+        public void Publish(in FrameContext context) { }
     }
     // The third producer's shape reads its settings without the world serializer's shipped shapes: it names the one
     // member it declares and refuses any other by name.

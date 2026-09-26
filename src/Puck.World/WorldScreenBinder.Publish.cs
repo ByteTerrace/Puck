@@ -83,9 +83,12 @@ internal sealed partial class WorldScreenBinder {
     /// producer, machine or probe source a screen shows is a source instance the runtime publishes at its cadence when it
     /// renders the instance. It ends by publishing every screen's mapping (<see cref="Mappings"/>) at the extents its
     /// images now have.</summary>
-    /// <param name="deviceContext">The live GPU device context to upload on, through its services.</param>
-    public void Publish(IGpuDeviceContext deviceContext) {
-        if (m_disposed) {
+    /// <param name="context">The host's frame context, whose host resolves the live GPU device.</param>
+    public void Publish(in FrameContext context) {
+        if (
+            m_disposed ||
+            !context.Host.TryResolveCapability<IGpuDeviceContext>(capability: out var deviceContext)
+        ) {
             return;
         }
 
@@ -112,10 +115,13 @@ internal sealed partial class WorldScreenBinder {
 
         // The shared webcam owns one producer cadence and skips uploads when its asynchronous frame version has not
         // advanced. Window captures below each own an independent deadline from their declaration.
-        EnsureFills(deviceContext: deviceContext);
-        CaptureCamera(deviceContext: deviceContext);
+        EnsureFills(context: in context);
+        CaptureCamera(
+            context: in context,
+            deviceContext: deviceContext
+        );
         ServiceProbeFeeds(deviceContext: deviceContext);
-        PublishFrameCaptures(deviceContext: deviceContext);
+        PublishFrameCaptures(context: in context);
 
         Mappings.Publish(images: this);
     }

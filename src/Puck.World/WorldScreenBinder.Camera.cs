@@ -6,6 +6,7 @@ using System.Runtime.Versioning;
 using System.Text;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
+using Puck.Abstractions.Sources;
 using Puck.Commands;
 using Puck.DirectX;
 using Puck.DirectX.Apis;
@@ -13,7 +14,6 @@ using Puck.DirectX.Interop;
 using Puck.Platform;
 using Puck.Platform.Probes;
 using Puck.Hosting;
-using Puck.SdfVm.Views;
 using Puck.World.Client;
 
 namespace Puck.World;
@@ -180,7 +180,7 @@ internal sealed partial class WorldScreenBinder {
     // Services the device table, then every known device's lifecycle and every one of its declared feeds. Opens run
     // on the thread pool (a Media Foundation open can block for seconds proving a graph live); the render thread only
     // adopts a finished open.
-    private void CaptureCamera(IGpuDeviceContext deviceContext) {
+    private void CaptureCamera(in FrameContext context, IGpuDeviceContext deviceContext) {
         ServiceCameraDevices();
         ReconcileCameraDemand();
 
@@ -203,8 +203,8 @@ internal sealed partial class WorldScreenBinder {
 
             foreach (var feed in device.Feeds) {
                 ServiceCameraFeed(
+                    context: in context,
                     device: device,
-                    deviceContext: deviceContext,
                     feed: feed
                 );
             }
@@ -897,7 +897,7 @@ internal sealed partial class WorldScreenBinder {
             return false;
         }
     }
-    private void ServiceCameraFeed(CameraDevice device, CameraFeed feed, IGpuDeviceContext deviceContext) {
+    private void ServiceCameraFeed(CameraDevice device, CameraFeed feed, in FrameContext context) {
         if (feed.SharedStream is { } shared) {
             // The platform publishes completed slots on its own thread and the screen samples the latest one directly;
             // no CPU pixels ever exist on this tier, so Light stays dark.
@@ -949,8 +949,9 @@ internal sealed partial class WorldScreenBinder {
             surface: in surface
         );
 
-        _ = feed.Surface.Publish(
-            deviceContext: deviceContext,
+        _ = TryConvert(
+            context: in context,
+            pixels: feed.Pixels,
             surface: in panelSurface
         );
         feed.StarvedPulls = 0;
@@ -1148,13 +1149,10 @@ internal sealed partial class WorldScreenBinder {
             return existing;
         }
 
-        var feed = new CameraFeed(
+        var feed = NewCameraFeed(
             profile: profile,
-            sensor: sensor,
-            surface: new CpuSurfaceSource()
-        ) {
-            Fault = "camera opening",
-        };
+            sensor: sensor
+        );
 
         m_cameraFeeds[key] = feed;
         device.Feeds.Add(item: feed);
@@ -1247,7 +1245,7 @@ internal sealed partial class WorldScreenBinder {
             device.SharedRefused = false;
 
             foreach (var feed in device.Feeds) {
-                feed.Surface.NotifyDeviceLost();
+                feed.Pixels.OnDeviceLost();
                 feed.LastFrameVersion = -1L;
                 feed.Rearm();
             }
@@ -1268,7 +1266,7 @@ internal sealed partial class WorldScreenBinder {
     }
     // The platform session owns its negotiated format and may ignore the preferred extent. A diegetic panel should not
     // upload a megapixel-scale frame it cannot display, so fit CPU pixels into the declaration's envelope before the
-    // synchronous GPU upload. The buffer is retained by the feed and reused; no steady-state allocation.
+    // conversion. The buffer is retained by the feed and reused; no steady-state allocation.
     private static Surface FitPanelSurface(in Surface surface, CameraFeed feed) {
         if (
             !surface.IsCpuPixels ||
@@ -1316,6 +1314,18 @@ internal sealed partial class WorldScreenBinder {
             format: surface.Format
         );
     }
+    // The one construction of a sensor's shared feed, opening, whose CPU tier converts through its own conversion.
+    private static CameraFeed NewCameraFeed(WorldFeedProfile profile, WorldCameraSensor sensor) => new(
+        pixels: new ConvertedPixels(
+            content: ImageContentClass.External,
+            name: $"camera:{sensor}",
+            producer: WorldImageProducerSettings.CameraId
+        ),
+        profile: profile,
+        sensor: sensor
+    ) {
+        Fault = "camera opening",
+    };
     private static string CameraAbsenceFault(WorldCameraSensor sensor) => ((WorldCameraSensor.Infrared == sensor)
         ? "no infrared camera present"
         : "no camera device present"
@@ -1416,9 +1426,9 @@ internal sealed partial class WorldScreenBinder {
     }
     private readonly record struct CameraOpenResult(ICameraGraph<ICameraSharedStream>? Shared, ICameraGraph<ICameraPixelStream>? Pixels, WorldCameraSensor[] Dropped);
     // One sensor's shared feed: its stream on whichever tier the device opened, the render resources that tier needs
-    // (shared rings and the Vulkan host's importers, or the CPU upload surface), and live/fault/glow state. The handle
+    // (shared rings and the Vulkan host's importers, or the CPU tier's conversion), and live/fault/glow state. The handle
     // is 0 (unbound) until the first frame lands and whenever the feed is not live.
-    private sealed class CameraFeed(WorldFeedProfile profile, WorldCameraSensor sensor, CpuSurfaceSource surface) : IDisposable {
+    private sealed class CameraFeed(WorldFeedProfile profile, WorldCameraSensor sensor, ConvertedPixels pixels) : IDisposable {
         private readonly PullCadence m_cadence = new(rateHz: profile.RefreshRateHz);
 
         public long LastFrameVersion { get; set; } = -1L;
@@ -1426,12 +1436,10 @@ internal sealed partial class WorldScreenBinder {
         public uint OutputWidth { get; } = checked((uint)profile.Width);
         public WorldFeedProfile Profile { get; } = profile;
         public WorldCameraSensor Sensor { get; } = sensor;
-        public CpuSurfaceSource Surface { get; } = surface;
+        // The CPU tier's pixels, converted into the image a frame samples.
+        public ConvertedPixels Pixels { get; } = pixels;
 
-        private int m_outstandingCpuFrames;
-        private Action<int>? m_releaseCpuFrame;
         private bool m_retired;
-        private bool m_surfaceDisposed;
 
         public string? Fault { get; set; }
         public SharedTargetRing? GpuTargets { get; set; }
@@ -1442,26 +1450,6 @@ internal sealed partial class WorldScreenBinder {
         public ICameraSharedStream? SharedStream { get; private set; }
         public int StarvedPulls { get; set; }
         public ICameraStream? Stream => (((ICameraStream?)SharedStream) ?? PixelStream);
-
-        private void DisposeSurface() {
-            if (m_surfaceDisposed) {
-                return;
-            }
-
-            m_surfaceDisposed = true;
-            Surface.Dispose();
-        }
-        private void ReleaseCpuFrame(int token) {
-            _ = token;
-            --m_outstandingCpuFrames;
-
-            if (
-                m_retired &&
-                (0 == m_outstandingCpuFrames)
-            ) {
-                DisposeSurface();
-            }
-        }
 
         public GpuImageLease AcquireFrame() {
             if (
@@ -1480,19 +1468,7 @@ internal sealed partial class WorldScreenBinder {
                 );
             }
 
-            var handle = Surface.CurrentHandle;
-
-            if (0 == handle) {
-                return 0;
-            }
-
-            m_releaseCpuFrame ??= ReleaseCpuFrame;
-            ++m_outstandingCpuFrames;
-
-            return new GpuImageLease(
-                ImageViewHandle: handle,
-                Release: m_releaseCpuFrame
-            );
+            return Pixels.Acquire();
         }
         public void Attach(ICameraStream stream) {
             SharedStream = (stream as ICameraSharedStream);
@@ -1520,10 +1496,7 @@ internal sealed partial class WorldScreenBinder {
 
             m_retired = true;
             ReleaseGpuTargets();
-
-            if (0 == m_outstandingCpuFrames) {
-                DisposeSurface();
-            }
+            Pixels.Retire();
         }
         public nint Handle() {
             if (!Live) {
@@ -1537,7 +1510,7 @@ internal sealed partial class WorldScreenBinder {
                 return targets.Handle(slot: slot);
             }
 
-            return Surface.CurrentHandle;
+            return Pixels.Handle;
         }
         public void Rearm() => m_cadence.Rearm();
         // Retires the shared ring. Its resources are destroyed immediately when no submitted frame samples them, or

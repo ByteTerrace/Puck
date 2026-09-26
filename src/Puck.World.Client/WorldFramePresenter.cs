@@ -1,6 +1,5 @@
 using System.Numerics;
 using Puck.Abstractions.Cameras;
-using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.Maths;
@@ -1148,9 +1147,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     /// layout change places its views and panes one frame later.</summary>
     /// <param name="context">The host's frame context.</param>
     public void PrepareGraph(in FrameContext context) {
-        if (context.Host.TryResolveCapability<IGpuDeviceContext>(capability: out var device)) {
-            m_binder.Publish(deviceContext: device);
-        }
+        m_binder.Publish(context: in context);
 
         if (m_graphs is not { } graphs) {
             return;

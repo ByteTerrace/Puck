@@ -1190,13 +1190,14 @@ linear light. `ImageSourceConversion` is their CPU reference, and the
 test pattern and the QR code convert through graph regions: each writes a
 region that an uploaded source instance's one-pass graph converts in the
 render-graph runtime, which a pane, a `captures` row or a screen showing the
-source reads. The emulators still publish through
+source reads. The capture and camera CPU tiers and the capture fills convert
+through the same one-pass graph on a node of their own
+(`RenderGraphRuntime.CreateConverter`, `RenderGraphSourceConverter`), since
+their tier is chosen per device at run time and the HUD reads them outside the
+set, and hand out counted leases. The emulators still publish through
 `IMachineVideoOutput`'s own `IGpuSurfaceUpload`, from the machine source
-instance's producer, and the capture and camera CPU tiers and the fills through
-`CpuSurfaceSource`. Only the camera's CPU tier hands the screen a counted
-lease; the others and the machine outputs hand it a bare handle. Each waits
-for P12b to record its region flush and conversion dispatch as a graph source
-node. Desktop capture runs through `Win32GraphicsCaptureFeed` and cameras
+instance's producer, and hand the screen a bare handle; P12b-6 moves them onto
+a region. Desktop capture runs through `Win32GraphicsCaptureFeed` and cameras
 through Media Foundation (`Win32MediaFoundationCameraService`). Linux registers
 null capture services, and there is no POSIX file-descriptor import or
 external semaphore.
@@ -2979,11 +2980,8 @@ except step 8.
    `WorldSourceInstanceLawTests`: removing or reordering screens keeps every
    remaining source's name and producer; no name is reused for other
    content; equal settings in another member order or number spelling read
-   one instance. What is still open moves to step 2: no screen reads a source
-   instance yet, so the live set does not install them.
-2. Feeds are external producers, and every screen image is a lease. Can land
-   now; it edits `SdfEngineNode`, so it lands before or after P7b-20, not
-   beside it. An `IWorldImageFeed` adapts to `IRenderGraphExternalProducer`:
+   one instance. Step 2 installs them in the live set.
+2. Feeds are external producers, and every screen image is a lease. Landed. An `IWorldImageFeed` adapts to `IRenderGraphExternalProducer`:
    `Produce` publishes the feed at its cadence, and `TryAcquireOutput` returns
    `WorldCaptureGate.Resolve`'s lease, so the gate sits at the one place a
    source's image is acquired. External producers take image reads: the runtime
@@ -3094,7 +3092,17 @@ except step 8.
       `SdfEngineNodeLeaseLawTests.AnOffscreenViewSamplesTheLeaseTheNodeHoldsForAScreensSource`.
    7. The capture and camera CPU tiers go through `source-rgba`, each capture
       fill is a static source, and `CpuSurfaceSource`'s screen role goes with
-      its last caller.
+      its last caller. Landed: the conversion an uploaded source instance
+      renders through is a `RenderGraphSourceConverter` the runtime makes for CPU
+      pixels outside the set (`RenderGraphRuntime.CreateConverter`, sharing the
+      instance's region binding), since a camera's tier is chosen per device at
+      run time and the HUD reads a camera or a capture outside the set. The
+      binder's `ConvertedPixels` converts a camera's or a capture's CPU tier,
+      and each capture fill once as a static 1x1 source, hands the image out
+      under a counted lease, and disposes a converter a new extent replaced, or
+      its owner retired, after the last lease. `CpuSurfaceSource` is deleted,
+      and publishing takes the frame context. Law:
+      `RenderGraphRuntimeLawTests.AConverterConvertsPixelsOutsideTheSetThroughItsDescriptorsConversion`.
 3. Uploaded sources write regions, and conversions are planned passes. The
    source-graph side has landed. An uploaded producer registers an upload for
    its source package (`RenderGraphPackageRecorders.RegisterSource`, through
@@ -3121,10 +3129,9 @@ except step 8.
    source instance before composition and shows it and a QR code in panes.
    The conversion packages bind the frame and pass groups as every package
    does. The node records a staged region's copy (P7b-22). A screen showing a
-   test pattern or a QR code samples the instance's converted output. Still
-   open (step 2): the capture and camera CPU tiers and the capture fills move
-   onto `source-rgba` and static sources, and `CpuSurfaceSource`'s screen role
-   goes with its last caller.
+   test pattern or a QR code samples the instance's converted output, and the
+   capture and camera CPU tiers and the capture fills convert through the same
+   graph on converters of their own (step 2).
 4. Fences across devices. Landed. The consumer creates a
    `D3D12_FENCE_FLAG_SHARED` fence beside the shared targets it provisions
    (`DirectXGpuSurfaceExportFactory.CreateExportableFence`, an
@@ -3690,9 +3697,9 @@ read simulation state, so they do not wait on the state rebuild.
 P11b items its implementation status lists, the main view through the graph
 runtime among them. The rest of P11b, commits 13 and 14, waits on nothing from
 P7b, whose groups have landed for every pass; commit 13, the screens, follows
-P12b-2. P12's
-source contract, producers and conversion passes have landed; P12b, the graph
-wiring, follows P11b, and P13b follows P12b and P11b. P14 follows P4, P7b, P8,
+P12b-2, which has landed. P12's
+source contract, producers and conversion passes have landed, and so has P12b-2;
+the rest of P12b, the graph wiring, follows P11b, and P13b follows P12b and P11b. P14 follows P4, P7b, P8,
 P11b and P12b, because the engine's composition and screens need somewhere to
 go before it moves; its capability matrix (P14-1), generated instruction-set
 declarations (P14-3) and the planner's vocabulary with multi-basis counts
@@ -3712,8 +3719,8 @@ P7's residency policies and P9's mirror as well as P5-1 and P8's interface,
 which have landed. It also follows P11b's graph wiring, because the rows it
 binds are `views.graphs` rows.
 
-The SDF engine's groups (P7b-20) have landed, so the longest remaining chain now
-runs P12b-2, P11b-13, P14-5, then P14-6 (which P4-2c joins), P14-7 to P14-13,
+The SDF engine's groups (P7b-20) and P12b-2 have landed, so the longest remaining
+chain now runs P11b-13, P14-5, then P14-6 (which P4-2c joins), P14-7 to P14-13,
 and ends with P15. P16 follows P14-10's float working targets, and drawing a
 bake (P17) comes before P6's choice between a bake and the field.
 

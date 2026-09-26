@@ -1,4 +1,3 @@
-using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Sources;
 using Puck.Commands;
 using Puck.Hosting;
@@ -448,13 +447,10 @@ internal sealed partial class WorldScreenBinder {
                     continue;
                 }
 
-                var replacement = new CameraFeed(
+                var replacement = NewCameraFeed(
                     profile: requested,
-                    sensor: feed.Sensor,
-                    surface: new CpuSurfaceSource()
-                ) {
-                    Fault = "camera opening",
-                };
+                    sensor: feed.Sensor
+                );
 
                 feed.Dispose();
                 device.Feeds[index] = replacement;
@@ -566,11 +562,11 @@ internal sealed partial class WorldScreenBinder {
     };
     // Standalone captures ride the same per-frame pull cadence a slot-owned capture does, from Publish (below), and
     // the same device-lost/dispose sweeps every other feed this binder owns gets.
-    private void PublishFrameCaptures(IGpuDeviceContext deviceContext) {
+    private void PublishFrameCaptures(in FrameContext context) {
         foreach (var feed in m_frameCaptures.Values) {
             if (feed.ShouldPull()) {
                 CaptureWindow(
-                    deviceContext: deviceContext,
+                    context: in context,
                     feed: feed
                 );
             }

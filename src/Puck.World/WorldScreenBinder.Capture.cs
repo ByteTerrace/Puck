@@ -8,7 +8,6 @@ using Puck.DirectX;
 using Puck.DirectX.Interop;
 using Puck.Hosting;
 using Puck.Platform;
-using Puck.SdfVm.Views;
 using Puck.World.Client;
 
 namespace Puck.World;
@@ -128,8 +127,8 @@ internal sealed partial class WorldScreenBinder {
     // disposed before the binder resolves a replacement target (a returning window with the same title, or a reconnected
     // monitor); reacquisition is World policy rather than a compatibility path in the platform feed. On the D3D12 GPU
     // transport the platform copies GPU-side into shared textures the screen samples directly — the CPU surface is never
-    // published, only its divided-cadence readback frames feed the room glow.
-    private void CaptureWindow(CaptureFeed feed, IGpuDeviceContext deviceContext) {
+    // converted, only its divided-cadence readback frames feed the room glow.
+    private void CaptureWindow(CaptureFeed feed, in FrameContext context) {
         if (!feed.TryEnsureSource(adapterLuid: AdapterLuidForOpen())) {
             feed.Live = false;
             feed.Fault = $"{feed.Label} is unavailable";
@@ -142,6 +141,7 @@ internal sealed partial class WorldScreenBinder {
         if (
             feed.GpuRoute &&
             m_exportsSurfaces &&
+            context.Host.TryResolveCapability<IGpuDeviceContext>(capability: out var deviceContext) &&
             OperatingSystem.IsWindowsVersionAtLeast(
             major: 10,
             minor: 0,
@@ -173,8 +173,9 @@ internal sealed partial class WorldScreenBinder {
         }
 
         if (feed.Source!.TryCapture(surface: out var surface)) {
-            _ = feed.Surface.Publish(
-                deviceContext: deviceContext,
+            _ = TryConvert(
+                context: in context,
+                pixels: feed.Pixels,
                 surface: in surface
             );
             feed.Live = true;
@@ -268,7 +269,11 @@ internal sealed partial class WorldScreenBinder {
             service: m_windowCapture,
             profile: profile,
             source: source,
-            surface: new CpuSurfaceSource(),
+            pixels: new ConvertedPixels(
+                content: ImageContentClass.External,
+                name: $"capture:{((monitorIndex is { } monitor) ? $"monitor {monitor}" : title)}",
+                producer: WorldImageProducerSettings.CaptureId
+            ),
             gpuRoute: m_hostsOnDirectX,
             monitorIndex: monitorIndex
         ) {
@@ -532,7 +537,7 @@ internal sealed partial class WorldScreenBinder {
         INativeImageCaptureService service,
         WorldFeedProfile profile,
         INativeImageCaptureFeed? source,
-        CpuSurfaceSource surface,
+        ConvertedPixels pixels,
         bool gpuRoute = false,
         int? monitorIndex = null
     ) : IDisposable {
@@ -553,31 +558,36 @@ internal sealed partial class WorldScreenBinder {
         public int? MonitorIndex { get; } = monitorIndex;
         public WorldFeedProfile Profile { get; } = profile;
         public INativeImageCaptureFeed? Source { get; private set; } = source;
-        public CpuSurfaceSource Surface { get; } = surface;
+        // The CPU route's pixels, converted into the image a frame samples.
+        public ConvertedPixels Pixels { get; } = pixels;
         public string Title { get; } = title;
         // Whether this feed rides the D3D12 GPU transport (the platform copies GPU-side into GpuTargets and a frame acquires
-        // their latest slot), rather than the CPU-pixel Surface. Fixed at construction by the host backend.
+        // their latest slot), rather than the converted CPU Pixels. Fixed at construction by the host backend.
         public bool GpuRoute { get; } = gpuRoute;
 
         private PullCadence Cadence { get; } = new(rateHz: profile.RefreshRateHz);
 
         // Acquires the image a frame samples: on the GPU route, the latest published copy's slot, held against the
         // platform's next writes until the lease retires and carrying the shared-fence value its submission waits for;
-        // otherwise the CPU surface.
+        // otherwise the converted CPU pixels, held until the frame retires.
         public GpuImageLease AcquireFrame() {
+            if (!Live) {
+                return 0;
+            }
+
             if (GpuRoute) {
-                return ((Live && (GpuTargets is { } ring) && ring.TryAcquire(frame: out var frame))
+                return (((GpuTargets is { } ring) && ring.TryAcquire(frame: out var frame))
                     ? frame
                     : 0);
             }
 
-            return Handle();
+            return Pixels.Acquire();
         }
         public void Dispose() {
             ReleaseGpuTargets();
             Source?.Dispose();
             Source = null;
-            Surface.Dispose();
+            Pixels.Retire();
         }
         public nint Handle() {
             if (GpuRoute) {
@@ -589,12 +599,12 @@ internal sealed partial class WorldScreenBinder {
             }
 
             return (Live
-                ? Surface.CurrentHandle
+                ? Pixels.Handle
                 : 0
             );
         }
         public void NotifyDeviceLost() {
-            Surface.NotifyDeviceLost();
+            Pixels.OnDeviceLost();
             ReleaseGpuTargets();
             Cadence.Rearm();
         }

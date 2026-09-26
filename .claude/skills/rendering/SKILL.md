@@ -305,7 +305,12 @@ These are one-line cautions; the owning pages hold the derivations.
   its interface generated beside the kernel). The runtime declares the
   upload's cadence and extent to the scheduler itself. A new uploaded producer
   writes its planes in `IWorldUploadFeed.TryWrite`, which a screen showing the
-  source samples as the instance's converted output. An uploaded
+  source samples as the instance's converted output. CPU pixels a producer
+  holds outside the set (a camera's or a capture's CPU tier, a capture fill)
+  convert through the same one-pass graph on a converter of their own
+  (`RenderGraphRuntime.CreateConverter`, `RenderGraphSourceConverter`, which
+  shares the instance's region binding; the binder's `ConvertedPixels`), handed
+  out under a counted lease; never upload a sampled image by hand. An uploaded
   source's region layout and the conversion kernels are a
   sync pair ([references/sync-pairs.md](references/sync-pairs.md#image-sources));
   a change to either moves `ImageSourceConversionLawTests`, the

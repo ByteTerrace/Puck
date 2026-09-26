@@ -12,8 +12,7 @@ namespace Puck.World.Client;
 /// which makes <see cref="TryAcquireOutput"/> the one place a source's image is acquired. A filled source hands out its
 /// fill and never acquires the feed. The image arrives from another thread or device as an image view alone, so the
 /// output's <see cref="RenderGraphExternalOutput.Image"/> is empty and its lease carries the view: an external producer
-/// samples it, and the runtime refuses a graph instance that binds it
-/// (<c>RenderGraphRuntimeRefusalCode.InputSource</c>). Every member runs on the thread that produces frames.
+/// samples it, and a graph instance reading it draws a stand-in. Every member runs on the thread that produces frames.
 /// </summary>
 public sealed class WorldImageFeedProducer : IRenderGraphSourceProducer, IGpuWorkSource {
     private readonly Func<uint, GpuImageLease> m_fill;
@@ -70,22 +69,14 @@ public sealed class WorldImageFeedProducer : IRenderGraphSourceProducer, IGpuWor
     /// <inheritdoc/>
     public void OnDeviceLost() => Feed?.NotifyDeviceLost();
     /// <inheritdoc/>
-    /// <remarks>Publishes the feed on the frame's device, at the frame's completed tick, and reports whether it has an
-    /// image. The extent is the one the feed declared, so the arguments are not read.</remarks>
+    /// <remarks>Publishes the feed for the frame and reports whether it has an image. The extent is the one the feed
+    /// declared, so the arguments are not read.</remarks>
     public bool Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
-        if (
-            (Feed is not { } feed) ||
-            !context.Host.TryResolveCapability<IGpuDeviceContext>(capability: out var device)
-        ) {
+        if (Feed is not { } feed) {
             return false;
         }
 
-        feed.Publish(
-            deviceContext: device,
-            tick: ((context.StepTicks == 0UL)
-                ? 0UL
-                : (context.ElapsedTicks / context.StepTicks))
-        );
+        feed.Publish(context: in context);
 
         return (feed.Handle() != 0);
     }

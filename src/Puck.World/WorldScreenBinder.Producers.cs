@@ -1,9 +1,6 @@
 using System.Numerics;
-using Puck.Abstractions.Gpu;
-using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Sources;
 using Puck.Hosting;
-using Puck.SdfVm.Views;
 using Puck.World.Client;
 
 namespace Puck.World;
@@ -25,15 +22,16 @@ internal sealed partial class WorldScreenBinder {
 
         return false;
     }
-    // Ensures the fill image of every external source a screen shows is uploaded while the gate fills, so a filled
-    // source never samples an unset handle; a device loss drops the uploads and the next filled frame re-uploads them.
-    private void EnsureFills(IGpuDeviceContext deviceContext) {
+    // Ensures the fill image of every external source a screen shows exists while the gate fills, so a filled source never
+    // samples an unset handle: each fill is a static source, its one pixel converted once through source-rgba and again
+    // only after a device loss drops it.
+    private void EnsureFills(in FrameContext context) {
         if (!m_captureGate.Filling) {
             return;
         }
 
         EnsureFill(
-            deviceContext: deviceContext,
+            context: in context,
             rgba: ImageSourceDescriptor.DefaultCaptureFill
         );
 
@@ -43,40 +41,50 @@ internal sealed partial class WorldScreenBinder {
                 (FeedOf(instance: instance) is { Descriptor.FillsCaptures: true } source)
             ) {
                 EnsureFill(
-                    deviceContext: deviceContext,
+                    context: in context,
                     rgba: source.Descriptor.CaptureFill
                 );
             }
         }
     }
-    private void EnsureFill(IGpuDeviceContext deviceContext, uint rgba) {
+    private void EnsureFill(in FrameContext context, uint rgba) {
         if (!m_fills.TryGetValue(
             key: rgba,
-            value: out var surface
+            value: out var fill
         )) {
-            surface = new CpuSurfaceSource();
-            m_fills[rgba] = surface;
+            fill = new ConvertedPixels(
+                content: ImageContentClass.Presentation,
+                name: $"fill:{rgba:x8}",
+                producer: "fill"
+            );
+            m_fills[rgba] = fill;
         }
 
-        if (surface.CurrentHandle != 0) {
+        if (
+            (fill.Handle != 0) ||
+            (Runtime is not { } runtime)
+        ) {
             return;
         }
 
-        _ = surface.Publish(
-            deviceContext: deviceContext,
-            format: SurfaceFormat.R8G8B8A8Unorm,
+        ReadOnlySpan<byte> pixel = [((byte)rgba), ((byte)(rgba >> 8)), ((byte)(rgba >> 16)), ((byte)(rgba >> 24))];
+
+        _ = fill.TryConvert(
+            context: in context,
+            format: ImagePixelFormat.R8G8B8A8Unorm,
             height: 1U,
-            pixels: new[] { ((byte)rgba), ((byte)(rgba >> 8)), ((byte)(rgba >> 16)), ((byte)(rgba >> 24)) },
+            planes: pixel,
+            runtime: runtime,
             width: 1U
         );
     }
-    // The fill image of a packed RGBA8 color, or 0 (the procedural no-signal card, which shows no external pixels
-    // either) before EnsureFills has uploaded it.
+    // The fill image of a packed RGBA8 color, held until the frame that samples it retires, or 0 (the procedural no-signal
+    // card, which shows no external pixels either) before EnsureFills has converted it.
     private GpuImageLease FillImage(uint rgba) => (m_fills.TryGetValue(
         key: rgba,
-        value: out var surface
+        value: out var fill
     )
-        ? surface.CurrentHandle
+        ? fill.Acquire()
         : 0
     );
     private Vector3 ResolveLight(IWorldImageFeed feed) => (m_captureGate.Fills(content: feed.Descriptor.Content)
@@ -162,7 +170,7 @@ internal sealed partial class WorldScreenBinder {
             sensor: Sensor
         );
         public void NotifyDeviceLost() { }
-        public void Publish(ulong tick, IGpuDeviceContext deviceContext) { }
+        public void Publish(in FrameContext context) { }
     }
     // The desktop-capture producer: a window keyed by title or a whole monitor keyed by index, opened through the one
     // capture open ladder (TryCreateCaptureFeed), which retains a pending feed for a target not yet present. A capture a
@@ -245,10 +253,10 @@ internal sealed partial class WorldScreenBinder {
         public void Dispose() => Feed.Dispose();
         public nint Handle() => Feed.Handle();
         public void NotifyDeviceLost() => Feed.NotifyDeviceLost();
-        public void Publish(ulong tick, IGpuDeviceContext deviceContext) {
+        public void Publish(in FrameContext context) {
             if (Feed.ShouldPull()) {
                 m_binder.CaptureWindow(
-                    deviceContext: deviceContext,
+                    context: in context,
                     feed: Feed
                 );
             }

@@ -34,10 +34,9 @@ public interface IWorldImportFeed : IWorldImageFeed {
     nint Handle();
     /// <summary>Drops every device-owned resource after a device loss; the next <see cref="Publish"/> recreates them.</summary>
     void NotifyDeviceLost();
-    /// <summary>Publishes the feed's current image for this produced frame, uploading only what its cadence owes.</summary>
-    /// <param name="tick">The world's completed-step ordinal.</param>
-    /// <param name="deviceContext">The live GPU device context, whose services upload the image.</param>
-    void Publish(ulong tick, IGpuDeviceContext deviceContext);
+    /// <summary>Publishes the feed's current image for this produced frame, converting only what its cadence owes.</summary>
+    /// <param name="context">The host's frame context, whose host resolves the live GPU device.</param>
+    void Publish(in FrameContext context);
 }
 /// <summary>An uploaded feed: one whose producer writes CPU pixels, which a source instance's graph reads as a region
 /// (<see cref="IRenderGraphSourceUpload"/>) and converts through the pass its descriptor names.</summary>

@@ -83,11 +83,11 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     private readonly Func<WorldOverlayFacts> m_facts;
     // Keeps external images out of captures; see WorldCaptureGate.
     private readonly WorldCaptureGate m_captureGate;
-    // One uploaded 1x1 image per capture-fill color a filled external source resolves to, and the one delegate the gate
-    // resolves fills through (cached so a resolve allocates nothing).
+    // The one delegate the gate resolves fills through (cached so a resolve allocates nothing), and one static converted
+    // 1x1 image per capture-fill color a filled external source resolves to.
     private readonly Func<uint, GpuImageLease> m_fillImage;
 
-    private readonly Dictionary<uint, CpuSurfaceSource> m_fills = new();
+    private readonly Dictionary<uint, ConvertedPixels> m_fills = new();
     // The producers every producer source opens through: the four the engine ships, then any the host registers.
     private readonly WorldImageProducers m_producers = new();
 
@@ -483,7 +483,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         }
 
         foreach (var fill in m_fills.Values) {
-            fill.Dispose();
+            fill.Retire();
         }
 
         m_fills.Clear();
@@ -509,7 +509,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         RetireMachineOutputs();
 
         foreach (var fill in m_fills.Values) {
-            fill.NotifyDeviceLost();
+            fill.OnDeviceLost();
         }
 
         CameraDeviceLost();
