@@ -856,8 +856,11 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         camera = default;
 
         WorldCamera? found = null;
+        var cameras = m_client.Definition.Cameras;
 
-        foreach (var row in m_client.Definition.Cameras) {
+        for (var index = 0; (index < cameras.Count); index++) {
+            var row = cameras[index];
+
             if (string.Equals(
                 a: row.Name,
                 b: name,
@@ -1158,7 +1161,11 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         graphs.Present(frame: in presented);
         graphs.WriteParameters(mirror: m_client.StateMirror);
 
-        foreach (var composed in m_composer.Slots) {
+        var slots = m_composer.Slots;
+
+        for (var index = 0; (index < slots.Count); index++) {
+            var composed = slots[index];
+
             panesCover |= (
                 (composed.Instance is not null) &&
                 (composed.Region == new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f))
@@ -1172,7 +1179,8 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             views: m_views
         );
 
-        foreach (var composed in m_composer.Slots) {
+        for (var index = 0; (index < slots.Count); index++) {
+            var composed = slots[index];
             var region = composed.Region;
 
             if (

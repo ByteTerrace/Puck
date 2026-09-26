@@ -696,7 +696,8 @@ layout; the `pipeline-echo` canary runs one on both backends with
 `pipeline.sentinels` on, and an echo expecting two members' sentinels swapped
 fails it. The `interface-echo` canary runs one echo per shipped interface
 family the same way: the ink simulation, visualize and finish passes (finish's
-blocks are also the Moth's), the package canary's tint, the film grain set
+blocks, the extent alone, are also the Moth's and the `source-*` conversion
+packages'), the package canary's tint, the film grain set
 (whose blocks are also the `post.sdf-film-grain` package's), and the `place`
 and `overlay` packages. Each echo document declares its target's blocks, and
 its perturbed twin expects its last member's first word to hold the next
