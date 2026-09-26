@@ -104,11 +104,18 @@ public sealed partial class ShaderPipelineRenderNode {
         public PortBinding[]? PortBindings;
         // The graph's frame region, on the pass that created it; null on every other pass.
         public GpuRegion? FrameRegion;
+        // The regions a package pass's package states, which the node flushes and copies (ShaderPipelineRenderNode.Regions.cs),
+        // and the copy sets reserved for the staged ones; null for a pass that states none.
+        public GpuRegion[]? Regions;
+        public GpuRegionCopyPool? RegionCopySets;
 
         public bool Grouped => (PortBindings is not null);
 
         // Why a package pass's outputs cannot stand for its inputs when it draws nothing, or null when they can.
         public string? PackageAliasRefusal;
+        // The pass's pipeline, leased from the node's pass-pipeline cache and released last, and the pipeline and render
+        // pass it holds; a package pass leases through its own recorder instead.
+        public GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? Pipeline;
         public IGpuComputePipeline? Compute;
         public IGpuCommandPool[]? Draw;
         public IGpuFramebuffer[]? Framebuffers;
@@ -118,10 +125,8 @@ public sealed partial class ShaderPipelineRenderNode {
         // holds, so disposing the graph's passes destroys it once.
         public nint DescriptorPool;
         public IGpuCommandPool[]? Pre;
-        public IGpuShaderModule? Primary;
         public IGpuRenderPass? RenderPass;
         public nint[]? Samplers;
-        public IGpuShaderModule? Secondary;
         public nint[]? Sets;
         public IGpuBuffer? GeometryBuffer;
         public IRenderGraphPackageRecorder? Package;
@@ -133,17 +138,12 @@ public sealed partial class ShaderPipelineRenderNode {
         public void Dispose(GpuDeviceServices gpu, IGpuDeviceContext device) {
             Package?.Dispose();
             Package = null;
-            Compute?.Dispose();
             GeometryBuffer?.Dispose();
             if (Framebuffers is not null) {
                 foreach (var framebuffer in Framebuffers) {
                     framebuffer?.Dispose();
                 }
             }
-            Graphics?.Dispose();
-            RenderPass?.Dispose();
-            Primary?.Dispose();
-            Secondary?.Dispose();
             if (Draw is not null) {
                 foreach (var pool in Draw) {
                     pool?.Dispose();
@@ -159,6 +159,15 @@ public sealed partial class ShaderPipelineRenderNode {
                     pool?.Dispose();
                 }
             }
+            if (Regions is not null) {
+                foreach (var region in Regions) {
+                    region?.Dispose();
+                }
+
+                Regions = null;
+            }
+            RegionCopySets?.Dispose();
+            RegionCopySets = null;
             PassRegion?.Dispose();
             PassRegion = null;
             FrameRegion?.Dispose();
@@ -174,6 +183,11 @@ public sealed partial class ShaderPipelineRenderNode {
                     }
                 }
             }
+            Compute = null;
+            Graphics = null;
+            RenderPass = null;
+            Pipeline?.Release();
+            Pipeline = null;
         }
     }
 }

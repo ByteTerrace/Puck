@@ -232,8 +232,8 @@ instead of ports: a package's catalog entry (`RenderGraphPackage.Members`) lists
 the values its recorder writes into the pass block each frame and the resources
 it binds, and a set's manifest lists its `bindings`. Nothing is pushed.
 
-Image formats are validated against `GpuPixelFormat`, and an image declares a
-color format. A graphics pass draws into its color output at that output's
+Image formats are validated against `GpuPixelFormat`, and an image declares an
+uncompressed color format; the block-compressed formats are only ever sampled. A graphics pass draws into its color output at that output's
 declared format. A compute pass writes its
 storage images through `[[vk::image_format(...)]]` declarations matching each
 image's format. Planner defaults admit the Vulkan portable minimums: a pass
@@ -792,10 +792,31 @@ takes no push constants: the staging buffer leads with a header (the word
 count, the run count, where the block starts and the destination word the
 block's word 0 lands at) and a run table.
 `GpuRegion` (`Puck.Abstractions`) owns its ABI and pipeline description
-(`GpuRegion.CopyPipeline`). `GpuRegionCopyPipelineCache` creates one pipeline
-a device from it, on the thread pool, and every owner leases that pipeline
-rather than creating its own: the SDF engine records every region's copy with
-it, its brick staging into the brick pool included. The cache counts what it creates under `gpu.region-copy`.
+(`GpuRegion.CopyPipeline`). `GpuRegionCopyPass` makes it one entry a device of
+the [pass-pipeline cache](#the-pass-pipeline-cache), built on the thread pool,
+and every owner leases that pipeline rather than creating its own: the SDF
+engine records every region's copy with it, its brick staging into the brick
+pool included. It is counted under `gpu.pass-pipelines` with every other pass
+pipeline.
+
+A shader pipeline instance owns every host-written region its graph reads. A
+package states the regions its recorder writes
+(`IRenderGraphPackageFactory.Regions`; the overlay's one storage buffer), and the
+instance creates them at install under the policy `GpuResidency.Select` picks
+with a reader in flight, hands them to the recorder in
+`RenderGraphPackageGroups.Regions`, and, when any stages, states and admits one
+reserved copy pool per such pass (`ShaderPipelineRenderNode.DescriptorPools`'
+`regionCopies`) and takes the device's copy pipeline in the candidate's build,
+off the frame thread (`GpuBuildLease.Wait` on its `GpuRegionCopyPass` entry). A host buffer port's
+region is created by `ShaderPipelineRenderNode.BindRegion` at the port's declared
+size under the same choice; a staged one leases the pipeline on its first bind,
+returns no region until the pipeline is built, and admits its own copy pool.
+After a frame's passes have recorded, the instance flushes every region's share
+of the slot and records each owed copy in one command buffer submitted ahead of
+the frame's passes: a memory barrier ordering earlier submissions' reads before
+the copies' writes, the copies, then a buffer barrier per copied buffer to the
+compute and fragment stages. A recorder only writes a region's contents and binds
+its slot's `GpuRegion.Buffer`; it records no copy and no barrier.
 
 ## Probe kinds (`puck.probe.manifest.v1`)
 
@@ -1263,14 +1284,53 @@ graphics pass records its barriers in one command buffer before its render
 pass; the render pass leaves its attachments in their attachment layouts, and publication moves
 the selected output into the node's output layout. A float or external output
 is published through a float preview, which draws it into an RGBA8 target. The
-preview belongs to the graph: the candidate build creates its modules, targets
-and pipelines for the selected output, and the install allocates its
-descriptors and command pools. Selecting a different output of an installed
+preview belongs to the graph: the candidate build leases its pipeline from the
+[pass-pipeline cache](#the-pass-pipeline-cache) and creates its targets for the
+selected output, and the install allocates its descriptors and command pools. Selecting a different output of an installed
 graph builds the new preview on the thread pool; the previous selection stays
 published until the frame that takes the finished build, and the old preview
 then retires. A steady-state frame therefore creates no GPU objects and allocates no
 managed memory. World supplies inputs and routes
 named instances to layout slots; it does not compile individual passes itself.
+
+### The pass-pipeline cache
+
+A node never creates a pass pipeline of its own. Every pipeline a graph
+installs comes from the composition's `GpuPassPipelineCache`, which holds one
+entry per device and `GpuPassPipelineKey`: a document pass's compute pipeline
+and its shader module, or its graphics pipeline, its two shader modules and the
+render pass it is created for; the float preview's; and each package pass's
+(`place`, every `post.<id>`, `overlay` and each uploaded source's conversion),
+which the package leases through
+`RenderGraphPackageRecorderContext.Pipelines`. The staged residency policy's
+[region copy](#the-region-copy) is an entry too.
+
+A key's content key hashes the stages' bytecode together with a canonical
+encoding of everything the pipeline is created from: the description's name,
+its bindings or frequency groups, vertex input and depth test, and, for a
+graphics pass, each render-pass attachment's format, load, store and final
+layout. Two passes with equal keys are one pipeline; a changed kernel, layout,
+attachment format or depth test is another. The objects an entry creates are
+named `gpu.pass-pipelines/<name>/<content key>`, from the key alone, whichever
+holder built them.
+
+The candidate build takes a lease on each pass's entry on the thread pool and
+waits for it there. The first lease on a key builds the entry through
+`BackgroundBuild`, and every later lease joins it, so a second instance of a
+graph, a reinstall of the same graph, and the root's place passes create
+nothing. The installed pass holds its lease and releases it last when its graph
+retires, after its framebuffers and sets, so a reload of a changed shader makes
+a new entry while the replaced graph keeps the old one until its submissions
+complete; the last release disposes the entry. The last release of an entry
+whose build is still in the driver cancels it and waits only for that
+creation. Every holder releases on device loss, which empties that device's
+entries, so the rebuild after a loss creates afresh.
+
+The cache counts the shader modules, render passes and pipelines it creates
+under its own `gpu.pass-pipelines` source in `world.counters`, and a node's
+`work lifetime` line counts none of them. The mechanism is
+`Puck.Hosting.GpuBuildCache<TKey, T>`, which the SDF engine's pipeline sets
+(`SdfWorldPipelineCache`, `gpu.sdf-pipelines`) use as well.
 
 ### Memory budget
 

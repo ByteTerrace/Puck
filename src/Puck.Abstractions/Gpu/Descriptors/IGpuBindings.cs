@@ -63,7 +63,8 @@ public interface IGpuBindings {
     /// <param name="name">The pool's debug name, from its creator's identity (<see cref="GpuObjectName"/>); the default value names nothing.</param>
     /// <returns>The native descriptor pool handle.</returns>
     nint CreatePool(in GpuDescriptorPoolSizes sizes, in GpuObjectName name);
-    /// <summary>Creates a sampler with the given filter and clamp-to-edge addressing. On Direct3D 12 a pipeline created
+    /// <summary>Creates a sampler with the given filter, clamp-to-edge addressing, point selection between mip levels and
+    /// no level-of-detail clamp, so an explicit level reaches every level the bound view covers. On Direct3D 12 a pipeline created
     /// without a layout description reads its samplers as static samplers in its root signature, so this returns a
     /// non-zero sentinel and the filter is applied by the compute pipeline's static sampler instead.</summary>
     /// <param name="filter">The min/mag filter.</param>

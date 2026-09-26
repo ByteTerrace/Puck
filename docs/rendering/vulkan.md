@@ -201,15 +201,19 @@ instance without `vkDestroySurfaceKHR`, so a surface that exists can always be d
 The neutral `TransitionBuffer` records a `VkBufferMemoryBarrier` over the whole buffer with
 the declared access and stage scopes; `MemoryBarrier` records a global `VkMemoryBarrier`.
 
-Both pipeline APIs create and destroy their layouts through `VulkanPipelineLayouts`: an
-optional descriptor set layout over the pipeline's bindings, and a pipeline layout over
-that set and an optional push-constant range. A failed creation leaves neither alive. A
-pipeline described with a `GpuPipelineLayoutDescription` takes the layout
+Layouts are created and destroyed through `VulkanPipelineLayouts`. The compute pipeline API
+creates its own for a pipeline described by bindings: an optional descriptor set layout
+over the pipeline's bindings, and a pipeline layout over that set and an optional
+push-constant range; a failed creation leaves neither alive. A pipeline described with a
+`GpuPipelineLayoutDescription`, which every graphics pipeline is, takes the layout
 `VulkanPipelineLayouts.Create` makes from `VulkanGroupLayouts.Plan` instead: one set layout
 per planned set number, empty where no group sits, each binding with the pipeline's stage
 flags, and a pipeline layout over every set layout in set order and the planned push range.
 `VulkanGpuPipelineFactory` creates it before the pipeline and hands it to the pipeline API,
-which neither creates nor destroys a layout it is handed, and the pipeline owns it.
+which neither creates nor destroys a layout it is handed, and the pipeline owns it. The
+graphics pipeline API takes only a handed layout (`VulkanGraphicsPipelineCreateRequest`
+requires `PipelineLayoutHandle`), and its viewport and scissor are always dynamic state the
+drawing command buffer sets.
 
 A `VkDescriptorSet` handle cannot say which group it belongs to, so the logical device's
 `VulkanDescriptorSetGroups` (`VulkanLogicalDevice.SetGroups`) records it. A grouped pipeline
@@ -345,7 +349,12 @@ per-frame ring otherwise, which is every per-frame owner's case. Any other regio
 reports no host-visible device-local memory, is staged and copied by a compute
 dispatch. `GpuRegion` writes a region under whichever policy was chosen, over
 the neutral buffer, descriptor and recorder interfaces, so both backends share
-it. Direct3D 12 fills the same profile from its own queries; see
+it. A shader pipeline instance owns every region its graph writes from the host,
+a package's (the overlay's buffer) and a host buffer port's (an uploaded source's),
+and records their staged copies in one command buffer ahead of its frame's passes,
+behind a memory barrier ordering earlier reads before the copies and followed by a
+buffer barrier per copied buffer (see
+[the region copy](../reference/shaders.md#the-region-copy)). Direct3D 12 fills the same profile from its own queries; see
 [its memory profile](directx.md#memory-profile). `pipeline.inspect` prints the
 profile and the policy chosen for a pipeline instance's parameter bytes.
 

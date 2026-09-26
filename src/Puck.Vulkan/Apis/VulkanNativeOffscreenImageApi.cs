@@ -43,6 +43,10 @@ public unsafe sealed class VulkanNativeOffscreenImageApi : IVulkanOffscreenImage
             value: request.Height,
             paramName: nameof(request)
         );
+        ArgumentOutOfRangeException.ThrowIfZero(
+            value: request.MipLevels,
+            paramName: nameof(request)
+        );
     }
 
     /// <inheritdoc/>
@@ -65,7 +69,7 @@ public unsafe sealed class VulkanNativeOffscreenImageApi : IVulkanOffscreenImage
                 Format = request.Format,
                 ImageType = ImageType2D,
                 InitialLayout = ImageLayoutUndefined,
-                MipLevels = 1,
+                MipLevels = request.MipLevels,
                 SType = StructureTypeImageCreateInfo,
                 Samples = SampleCount1Bit,
                 SharingMode = SharingModeExclusive,

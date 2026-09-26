@@ -349,6 +349,7 @@ public sealed partial class PipelineOverrideLawTests : IDisposable {
             );
             using var instances = FakeGraphInstances.Attach(
                 create: static name => new ShaderPipelineRenderNode(
+                    pipelines: new GpuPassPipelineCache(),
                     deviceContext: new RefusingGpuDevice(),
                     height: 4,
                     hostsOnDirectX: false,

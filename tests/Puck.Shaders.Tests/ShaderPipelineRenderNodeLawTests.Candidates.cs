@@ -12,6 +12,9 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
     // The float preview: two shader modules, a render pass, a graphics pipeline and one descriptor pool, and per slot an
     // image, a framebuffer, a sampler and the pre-barrier, draw and post-barrier command pools.
     private const int PreviewCreations = (5 + (6 * ((int)InFlight)));
+    // The float preview's pass pipeline: its two shader modules, render pass and graphics pipeline, a pass-pipeline cache
+    // entry keyed by the deployed preview bytecode, which every graph's preview on the node shares.
+    private const int PreviewPipelineCreations = 4;
     // The feedback graph's own objects, as the replacement law counts them.
     private const int GraphCreations = (((((3 * ((int)InFlight)) + (2 * (2 + (2 * ((int)InFlight))))) + (4 + (4 * ((int)InFlight)))) + (4 * ((int)InFlight))) + 1);
 
@@ -57,15 +60,20 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             _ = SwapAndProduce(
                 gpu: measured,
                 node: probe,
-                pipeline: Feedback(historyFormat: "R32G32B32A32Float")
+                pipeline: Feedback(
+                    historyFormat: "R32G32B32A32Float",
+                    revision: 1
+                )
             );
             Assert.Null(@object: probe.LastSwapError);
             candidateCreations = (measured.CreationCount - before);
         }
 
+        // The candidate's changed shaders make its graph's pass pipelines new cache entries, while its preview joins the
+        // installed preview's pipeline and creates only its targets, framebuffers, samplers, pools and descriptor pool.
         Assert.Equal(
             actual: candidateCreations,
-            expected: (GraphCreations + PreviewCreations)
+            expected: (GraphCreations + (PreviewCreations - PreviewPipelineCreations))
         );
 
         for (var failAt = 1; (failAt <= candidateCreations); failAt++) {
@@ -83,7 +91,10 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             var afterRefusal = SwapAndProduce(
                 gpu: gpu,
                 node: node,
-                pipeline: Feedback(historyFormat: "R32G32B32A32Float")
+                pipeline: Feedback(
+                    historyFormat: "R32G32B32A32Float",
+                    revision: 1
+                )
             );
             var candidate = gpu.CreatedObjects.Skip(count: installed.Length).ToArray();
 
@@ -145,11 +156,15 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         );
 
         gpu.Recording = true;
-        // A 16x16 history changes the preview's extent, so the replacement needs a preview of its own.
-        node.Swap(pipeline: Feedback(historyDimensions: ShaderPipelineDimensions.Absolute(
-            height: (Extent / 2),
-            width: (Extent / 2)
-        )));
+        // A 16x16 history changes the preview's extent, so the replacement needs a preview of its own, which joins the
+        // installed preview's pipeline; its changed shaders make its graph's pass pipelines new cache entries.
+        node.Swap(pipeline: Feedback(
+            historyDimensions: ShaderPipelineDimensions.Absolute(
+                height: (Extent / 2),
+                width: (Extent / 2)
+            ),
+            revision: 1
+        ));
         _ = node.ProduceBuildStart(gpu: gpu);
         Produce(
             frames: (1 + WarmFrames),
@@ -172,7 +187,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         ));
 
         Assert.Equal(
-            expected: (GraphCreations + PreviewCreations),
+            expected: (GraphCreations + (PreviewCreations - PreviewPipelineCreations)),
             actual: gpu.Events.Count(predicate: static entry => entry.StartsWith(
                 comparisonType: StringComparison.Ordinal,
                 value: "create "

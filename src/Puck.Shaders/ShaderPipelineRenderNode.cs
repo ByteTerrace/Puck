@@ -25,6 +25,7 @@ public readonly record struct ShaderPipelineExternalImage(
 public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarget {
     private readonly NodeDescriptor m_descriptor;
     private readonly IGpuDeviceContext m_device;
+    private readonly GpuPassPipelineCache m_pipelines;
     private readonly bool m_directX;
     private readonly GpuDeviceServices m_gpu;
     private readonly uint m_inFlight;
@@ -80,12 +81,15 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
     private readonly List<nint> m_commands = [];
 
     /// <summary>Creates an initially empty node that records through <paramref name="deviceContext"/>'s services. The
-    /// first valid <see cref="Swap"/> installs a graph. A graph's package passes are recorded by
-    /// <paramref name="packages"/>' recorders, one per pass, created when the graph installs and disposed with it; a
-    /// node without recorders refuses a graph that has any.</summary>
-    public ShaderPipelineRenderNode(string name, IGpuDeviceContext deviceContext, bool hostsOnDirectX, uint width, uint height, uint inFlightFrames = 3, GpuImageLayout outputLayout = GpuImageLayout.General, RenderGraphPackageRecorders? packages = null) {
+    /// first valid <see cref="Swap"/> installs a graph. Every pass pipeline the node installs, its package passes' and
+    /// float preview's included, is leased from <paramref name="pipelines"/>, which counts what it creates; the node's
+    /// own ledger counts none of it. A graph's package passes are recorded by <paramref name="packages"/>' recorders, one
+    /// per pass, created when the graph installs and disposed with it; a node without recorders refuses a graph that has
+    /// any.</summary>
+    public ShaderPipelineRenderNode(string name, IGpuDeviceContext deviceContext, GpuPassPipelineCache pipelines, bool hostsOnDirectX, uint width, uint height, uint inFlightFrames = 3, GpuImageLayout outputLayout = GpuImageLayout.General, RenderGraphPackageRecorders? packages = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(deviceContext);
+        ArgumentNullException.ThrowIfNull(pipelines);
         ArgumentOutOfRangeException.ThrowIfZero(width);
         ArgumentOutOfRangeException.ThrowIfZero(height);
         ArgumentOutOfRangeException.ThrowIfZero(inFlightFrames);
@@ -102,6 +106,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             services: deviceContext.Services
         );
         m_device = deviceContext;
+        m_pipelines = pipelines;
         m_directX = hostsOnDirectX;
         m_inFlight = inFlightFrames;
         if (outputLayout is not GpuImageLayout.General and not GpuImageLayout.ShaderReadOnly) {
@@ -122,10 +127,11 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         m_requestedHeight = height;
     }
     /// <summary>Creates a node with an already compiled candidate.</summary>
-    public ShaderPipelineRenderNode(CompiledShaderPipeline pipeline, IGpuDeviceContext deviceContext, bool hostsOnDirectX, uint width, uint height, uint inFlightFrames = 3, GpuImageLayout outputLayout = GpuImageLayout.General)
+    public ShaderPipelineRenderNode(CompiledShaderPipeline pipeline, IGpuDeviceContext deviceContext, GpuPassPipelineCache pipelines, bool hostsOnDirectX, uint width, uint height, uint inFlightFrames = 3, GpuImageLayout outputLayout = GpuImageLayout.General)
         : this(
         pipeline.Plan.Definition.Name,
         deviceContext,
+        pipelines,
         hostsOnDirectX,
         width,
         height,
@@ -241,11 +247,11 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
 
         var objects = built.TakePass(index: planned.Index);
 
-        runtime.Compute = objects.Compute;
-        runtime.Graphics = objects.Graphics;
-        runtime.Primary = objects.Primary;
-        runtime.RenderPass = objects.RenderPass;
-        runtime.Secondary = objects.Secondary;
+        runtime.Pipeline = objects.Pipeline;
+        objects.Pipeline = null;
+        runtime.Compute = runtime.Pipeline?.Current!.Compute;
+        runtime.Graphics = runtime.Pipeline?.Current!.Graphics;
+        runtime.RenderPass = runtime.Pipeline?.Current!.RenderPass;
 
         if (declaration is null or { Kind: ShaderPipelineDocumentPassKind.Compute }) {
             runtime.Pools = new IGpuCommandPool[m_inFlight];
@@ -311,6 +317,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                 pass: runtime
             );
             InstallPackage(
+                copyPipeline: built.CopyPipeline,
                 descriptorPool: descriptorPool,
                 objects: objects,
                 outputImages: PackageOutputImages(
@@ -581,6 +588,9 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                     part: "final"
                 ));
             }
+            if (built.RegionCopies.Length > 0) {
+                EnsureCopyPools();
+            }
             m_preview = preview;
             m_initializationPending = true;
             m_ready = true;
@@ -732,7 +742,8 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                 pools: DescriptorPools(
                     inFlight: m_inFlight,
                     plan: next.Plan,
-                    preview: key.Preview.HasValue
+                    preview: key.Preview.HasValue,
+                    regionCopies: built.RegionCopies
                 ),
                 refusal: out var refusal
             )
@@ -839,6 +850,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
 
             return;
         }
+        AdoptRegionCopy(built: built);
         // The graph installed with the desired selection's preview, so no separate preview is wanted; a preview build
         // still running for it is disposed when it is taken.
         m_previewRequest = null;
@@ -1209,6 +1221,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         RetireAllLeases();
         RetireBindingHolds();
         ReleaseRegions();
+        ReleaseRegionCopy();
         // The published images were the released graph's or held from one, so nothing stays published.
         m_lastSurface = default;
         m_previousSurface = default;
@@ -1269,11 +1282,13 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         }
         throw new InvalidDataException(message: $"External image '{name}' is not bound.");
     }
-    private void ValidateExternalBinding(string name, ShaderPipelineResourceKind kind) {
+    // The candidate graph's declaration of a named external resource of the kind, or null when no graph is queued or
+    // installed.
+    private ShaderPipelineResource? ValidateExternalBinding(string name, ShaderPipelineResourceKind kind) {
         var plan = (m_pending?.Plan ?? m_pipeline?.Plan);
 
         if (plan is null) {
-            return;
+            return null;
         }
         // An indexed loop, not a predicate or an interface enumerator: a graph instance binds its inputs on every frame,
         // and either would allocate.
@@ -1291,7 +1306,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                 resource.Declaration.IsExternal &&
                 (resource.Declaration.Kind == kind)
             ) {
-                return;
+                return resource.Declaration;
             }
         }
 
@@ -1363,7 +1378,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         );
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(buffer);
-        ValidateExternalBinding(
+        _ = ValidateExternalBinding(
             kind: ShaderPipelineResourceKind.Buffer,
             name: name
         );
@@ -1380,7 +1395,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentOutOfRangeException.ThrowIfZero(image.ImageHandle);
         ArgumentOutOfRangeException.ThrowIfZero(image.ImageViewHandle);
-        ValidateExternalBinding(
+        _ = ValidateExternalBinding(
             kind: ShaderPipelineResourceKind.Image,
             name: name
         );
@@ -1492,7 +1507,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
 
         slot.Fence!.Wait();
         slot.Leases.RetireAll();
-        FlushRegions(slot: slotIndex);
+        BindRegionBuffers(slot: slotIndex);
         HoldLeases();
         var commands = m_commands;
 
@@ -1500,6 +1515,10 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         RecordPasses(
             commands: commands,
             context: context,
+            slot: slotIndex
+        );
+        RecordRegionCopies(
+            commands: commands,
             slot: slotIndex
         );
         if (NeedsPreview(spec: selectedResource.Spec)) {

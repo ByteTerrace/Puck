@@ -127,7 +127,16 @@ internal sealed class UploadModelGpu :
     public void WaitIdle() { }
 
     IGpuComputePipeline IGpuPipelineFactory.Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description, in GpuObjectName name) {
-        var pipeline = new Handles(handle: NextHandle(), layout: NextHandle(), setLayout: NextHandle());
+        // A pipeline created from groups carries a set layout per group ordinal, as a backend's does.
+        var groups = new nint[((description.Layout is { Groups.Count: > 0 } layout)
+            ? (layout.Groups.Max(selector: static group => ((int)group.Ordinal)) + 1)
+            : 0)];
+
+        for (var index = 0; (index < groups.Length); index++) {
+            groups[index] = NextHandle();
+        }
+
+        var pipeline = new Handles(handle: NextHandle(), layout: NextHandle(), setLayout: NextHandle(), groups: groups);
 
         if (m_uploadModules.ContainsKey(key: computeShaderModule.Handle)) {
             _ = m_uploadPipelines.TryAdd(
@@ -253,9 +262,9 @@ internal sealed class UploadModelGpu :
     );
 
     // A shader module or pipeline: its own handle, plus the layout handles a pipeline carries.
-    private sealed class Handles(nint handle, nint layout, nint setLayout) : IGpuComputePipeline, IGpuShaderModule {
+    private sealed class Handles(nint handle, nint layout, nint setLayout, nint[]? groups = null) : IGpuComputePipeline, IGpuShaderModule {
         public nint DescriptorSetLayoutHandle => setLayout;
-        public IReadOnlyList<nint> GroupLayoutHandles => [];
+        public IReadOnlyList<nint> GroupLayoutHandles => (groups ?? []);
         public nint Handle => handle;
         public nint LayoutHandle => layout;
 

@@ -7,7 +7,8 @@ namespace Puck.Vulkan;
 
 /// <summary>
 /// The native implementation of <see cref="IVulkanGraphicsPipelineApi"/>, marshaling to the graphics-pipeline entry
-/// point resolved from the Vulkan loader, with its layouts made by <see cref="VulkanPipelineLayouts"/>.
+/// point resolved from the Vulkan loader, with the pipeline layout its caller made through
+/// <see cref="VulkanPipelineLayouts"/>.
 /// </summary>
 public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipelineApi {
     private const uint False = 0;
@@ -57,49 +58,21 @@ public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipe
             paramName: nameof(request)
         );
 
-        if (
-            (request.FixedViewport is { } extent) &&
-            ((0 == extent.Width) || (0 == extent.Height))
-        ) {
-            throw new ArgumentOutOfRangeException(
-                message: "A fixed Vulkan graphics-pipeline viewport must be larger than zero in both directions.",
-                paramName: nameof(request)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: request.PipelineLayoutHandle,
+            handleDescription: "pipeline-layout",
+            paramName: nameof(request)
+        );
     }
 
     /// <inheritdoc/>
     public VkResult CreateGraphicsPipeline(
         VulkanGraphicsPipelineCreateRequest request,
-        out nint descriptorSetLayoutHandle,
-        out nint pipelineLayoutHandle,
         out nint pipelineHandle
     ) {
         ValidateRequest(request: request);
 
         pipelineHandle = 0;
-
-        // A layout the caller created stays the caller's, so a failed creation destroys only what it made here.
-        var ownsLayout = (0 == request.PipelineLayoutHandle);
-
-        if (ownsLayout) {
-            var layoutResult = VulkanPipelineLayouts.Create(
-                allocator: m_allocator,
-                bindings: request.DescriptorBindings,
-                descriptorSetLayoutHandle: out descriptorSetLayoutHandle,
-                device: request.Device,
-                pipelineLayoutHandle: out pipelineLayoutHandle,
-                pushConstantSize: request.PushConstantSize,
-                pushConstantStageFlags: request.PushConstantStageFlags
-            );
-
-            if (!layoutResult.IsSuccess()) {
-                return layoutResult;
-            }
-        } else {
-            descriptorSetLayoutHandle = 0;
-            pipelineLayoutHandle = request.PipelineLayoutHandle;
-        }
 
         var vertexBindings = (request.VertexBindings ?? []);
         var vertexAttributes = (request.VertexAttributes ?? []);
@@ -158,35 +131,14 @@ public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipe
                 SType = StructureTypePipelineInputAssemblyStateCreateInfo,
                 Topology = request.Topology,
             };
-            // One viewport and one scissor. A fixed pair covers the request's extent from the origin; a dynamic pair
-            // leaves both pointers null, which the dynamic state makes legal.
-            var fixedExtent = request.FixedViewport.GetValueOrDefault();
-            var viewport = new VkViewport(
-                height: fixedExtent.Height,
-                maxDepth: 1f,
-                minDepth: 0f,
-                width: fixedExtent.Width,
-                x: 0f,
-                y: 0f
-            );
-            var scissor = new VkRect2D(
-                extent: fixedExtent,
-                offset: new VkOffset2D(
-                    x: 0,
-                    y: 0
-                )
-            );
+            // One viewport and one scissor, both dynamic state the drawing command buffer sets, so neither pointer is
+            // given.
             var viewportState = new VkPipelineViewportStateCreateInfo {
-                PScissors = ((request.FixedViewport is null)
-                    ? 0
-                    : ((nint)(&scissor))),
-                PViewports = ((request.FixedViewport is null)
-                    ? 0
-                    : ((nint)(&viewport))),
                 SType = StructureTypePipelineViewportStateCreateInfo,
                 ScissorCount = 1,
                 ViewportCount = 1,
-            }; var dynamicState = new VkPipelineDynamicStateCreateInfo {
+            };
+            var dynamicState = new VkPipelineDynamicStateCreateInfo {
                 DynamicStateCount = ((uint)dynamicStates.Count),
                 PDynamicStates = dynamicStatesPointer,
                 SType = StructureTypePipelineDynamicStateCreateInfo,
@@ -213,7 +165,7 @@ public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipe
             var pipelineCreateInfo = new VkGraphicsPipelineCreateInfo {
                 BasePipelineHandle = 0,
                 BasePipelineIndex = -1,
-                Layout = pipelineLayoutHandle,
+                Layout = request.PipelineLayoutHandle,
                 PColorBlendState = ((nint)(&colorBlendState)),
                 PDepthStencilState = (request.DepthStencil.HasValue
                     ? ((nint)(&depthStencilState))
@@ -253,16 +205,6 @@ public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipe
             m_allocator.Free(ptr: colorBlendAttachmentsPointer);
 
             if (!result.IsSuccess()) {
-                if (ownsLayout) {
-                    VulkanPipelineLayouts.Destroy(
-                        descriptorSetLayoutHandle: descriptorSetLayoutHandle,
-                        device: request.Device,
-                        pipelineLayoutHandle: pipelineLayoutHandle
-                    );
-                }
-
-                descriptorSetLayoutHandle = 0;
-                pipelineLayoutHandle = 0;
                 pipelineHandle = 0;
             }
         }

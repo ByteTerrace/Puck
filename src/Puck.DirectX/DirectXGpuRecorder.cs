@@ -351,10 +351,16 @@ public sealed unsafe class DirectXGpuRecorder(DirectXDeviceContext deviceContext
         // starts from the state the declared prior access promoted it to (DirectXBufferStates); an upload-heap
         // buffer's registered GENERIC_READ replaces that for the buffer's whole life.
         var barrier = state.BufferStates.Plan(
-            after: DirectXBufferStates.RequiredState(access: destinationAccessMask),
+            after: DirectXBufferStates.RequiredState(
+                access: destinationAccessMask,
+                stages: destinationStageMask
+            ),
             bufferHandle: bufferHandle,
             firstState: DirectXResourceStates.Get(
-                fallback: DirectXBufferStates.RequiredState(access: sourceAccessMask),
+                fallback: DirectXBufferStates.RequiredState(
+                    access: sourceAccessMask,
+                    stages: sourceStageMask
+                ),
                 resource: bufferHandle
             )
         );

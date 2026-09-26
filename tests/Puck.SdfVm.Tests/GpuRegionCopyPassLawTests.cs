@@ -1,5 +1,6 @@
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
+using Puck.Hosting;
 using Puck.Shaders;
 using Puck.Testing;
 using Xunit;
@@ -7,38 +8,39 @@ using Xunit;
 namespace Puck.SdfVm.Tests;
 
 /// <summary>
-/// Laws for <see cref="GpuRegionCopyPipelineCache"/> over <see cref="UploadModelGpu"/>, which runs the region-copy
-/// kernel's copies: leases on one device share one pipeline, created once and counted once in the cache's ledger, and
-/// another device has its own; the last release disposes it and a later lease builds anew; and two regions copying
-/// through the one leased pipeline read their contents byte-exact under every residency policy.
+/// Laws for <see cref="GpuRegionCopyPass"/> over <see cref="UploadModelGpu"/>, which runs the region-copy kernel's
+/// copies: leases on one device share one pass pipeline, created once and counted once in the pass-pipeline cache's
+/// ledger, and another device has its own; the last release disposes it and a later lease builds anew; and two regions
+/// copying through the one leased pipeline read their contents byte-exact under every residency policy.
 /// </summary>
-public sealed class GpuRegionCopyPipelineCacheLawTests {
+public sealed class GpuRegionCopyPassLawTests {
     [Fact]
     public void LeasesOnOneDeviceShareOnePipelineCreatedOnce() {
         var gpu = new UploadModelGpu(reportVersion: 0);
         var other = new UploadModelGpu(reportVersion: 0);
-        var cache = new GpuRegionCopyPipelineCache(kernel: new byte[] { UploadModelGpu.RegionCopyBytecode });
-        var first = cache.Acquire(device: gpu);
-        var second = cache.Acquire(device: gpu);
-        var elsewhere = cache.Acquire(device: other);
+        var cache = new GpuPassPipelineCache();
+        var pass = new GpuRegionCopyPass(kernel: new byte[] { UploadModelGpu.RegionCopyBytecode }, pipelines: cache);
+        var first = pass.Acquire(device: gpu);
+        var second = pass.Acquire(device: gpu);
+        var elsewhere = pass.Acquire(device: other);
         var pipeline = Ready(lease: first);
 
         Assert.Same(expected: pipeline, actual: Ready(lease: second));
         Assert.NotSame(expected: pipeline, actual: Ready(lease: elsewhere));
-        Assert.Equal(expected: 2, actual: cache.LeasedDevices);
+        Assert.Equal(expected: 2, actual: cache.SharedPipelines);
         Assert.Equal(expected: (2L, 2L), actual: (Read(kind: GpuWork.PipelinesCreated, source: cache.Work), Read(kind: GpuWork.ShaderModulesCreated, source: cache.Work)));
 
         first.Release();
         first.Release();
         Assert.Null(@object: first.Current);
-        Assert.Same(expected: pipeline, actual: second.Poll());
+        Assert.Same(expected: pipeline, actual: second.Poll()!.Compute);
         _ = Assert.Throws<ObjectDisposedException>(testCode: () => first.Poll());
 
         second.Release();
         elsewhere.Release();
-        Assert.Equal(expected: 0, actual: cache.LeasedDevices);
+        Assert.Equal(expected: 0, actual: cache.SharedPipelines);
 
-        var later = cache.Acquire(device: gpu);
+        var later = pass.Acquire(device: gpu);
 
         Assert.NotSame(expected: pipeline, actual: Ready(lease: later));
         Assert.Equal(expected: 3L, actual: Read(kind: GpuWork.PipelinesCreated, source: cache.Work));
@@ -51,9 +53,10 @@ public sealed class GpuRegionCopyPipelineCacheLawTests {
     public void TwoRegionsCopyingThroughTheLeasedPipelineReadTheirContentsExactly(GpuResidencyPolicy policy) {
         const int Slots = 3;
         var gpu = new UploadModelGpu(reportVersion: 0);
-        var cache = new GpuRegionCopyPipelineCache(kernel: new byte[] { UploadModelGpu.RegionCopyBytecode });
-        var firstLease = cache.Acquire(device: gpu);
-        var secondLease = cache.Acquire(device: gpu);
+        var cache = new GpuPassPipelineCache();
+        var pass = new GpuRegionCopyPass(kernel: new byte[] { UploadModelGpu.RegionCopyBytecode }, pipelines: cache);
+        var firstLease = pass.Acquire(device: gpu);
+        var secondLease = pass.Acquire(device: gpu);
         var random = new Random(Seed: 11);
 
         using var first = Region(byteCount: 4096, gpu: gpu, pipeline: Ready(lease: firstLease), policy: policy, slots: Slots);
@@ -98,17 +101,17 @@ public sealed class GpuRegionCopyPipelineCacheLawTests {
     }
     // Polls until the lease's pipeline has built on the thread pool. The bound is liveness for a build over a fake
     // device.
-    private static GpuRegionCopyPipeline Ready(GpuRegionCopyPipelineLease lease) {
-        GpuRegionCopyPipeline? pipeline = null;
+    private static IGpuComputePipeline Ready(GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> lease) {
+        GpuPassPipeline? pipeline = null;
 
         Assert.True(condition: SpinWait.SpinUntil(
             condition: () => ((pipeline = lease.Poll()) is not null),
             timeout: TimeSpan.FromSeconds(value: 30)
         ));
 
-        return pipeline!;
+        return pipeline!.Compute!;
     }
-    private static GpuRegion Region(UploadModelGpu gpu, GpuRegionCopyPipeline pipeline, GpuResidencyPolicy policy, int byteCount, int slots) =>
+    private static GpuRegion Region(UploadModelGpu gpu, IGpuComputePipeline pipeline, GpuResidencyPolicy policy, int byteCount, int slots) =>
         new(
             bindings: gpu.Services.Bindings,
             buffers: gpu.Services.BufferFactory,

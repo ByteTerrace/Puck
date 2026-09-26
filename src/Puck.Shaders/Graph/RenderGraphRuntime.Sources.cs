@@ -107,7 +107,7 @@ public sealed partial class RenderGraphRuntime {
     // Opens an uploaded source instance's upload and makes its graph and its node, which renders nothing when the upload
     // refused or no conversion reads what it declares. The node takes the graph once every graph of the set binds
     // (Install).
-    private static (SourceGraph Source, ShaderPipelineRenderNode Node) CreateSource(RenderGraphInstance instance, RenderGraphPackageRecorders packages, IGpuDeviceContext deviceContext, bool hostsOnDirectX, uint inFlightFrames) {
+    private static (SourceGraph Source, ShaderPipelineRenderNode Node) CreateSource(RenderGraphInstance instance, RenderGraphPackageRecorders packages, GpuPassPipelineCache pipelines, IGpuDeviceContext deviceContext, bool hostsOnDirectX, uint inFlightFrames) {
         var upload = packages.CreateSource(context: new RenderGraphExternalProducerContext(
             Device: deviceContext,
             HostsOnDirectX: hostsOnDirectX,
@@ -133,7 +133,8 @@ public sealed partial class RenderGraphRuntime {
                 hostsOnDirectX: hostsOnDirectX,
                 inFlightFrames: inFlightFrames,
                 name: instance.Name,
-                packages: packages
+                packages: packages,
+                pipelines: pipelines
             );
 
             return (new SourceGraph(
@@ -168,8 +169,6 @@ public sealed partial class RenderGraphRuntime {
         if (
             !node.IsReady ||
             !source.TryWrite(
-                device: m_device,
-                inFlightFrames: m_inFlightFrames,
                 node: node,
                 tick: tick
             )
@@ -280,49 +279,29 @@ public sealed partial class RenderGraphRuntime {
         public void Dispose() => Upload.Dispose();
         // The node lost its device objects, the region among them.
         public void OnDeviceLost() => m_region = null;
-        // Writes the upload's image for a render into the region, binding a new region to the node first when it has
-        // none, and returns whether the region holds an image to convert.
-        public bool TryWrite(long tick, ShaderPipelineRenderNode node, IGpuDeviceContext device, uint inFlightFrames) {
+        // Writes the upload's image for a render into the region, having the node bind a new region first when it has
+        // none, and returns whether the region holds an image to convert: never while the node cannot bind one yet, as a
+        // staged region cannot until its graph installs with the device's region-copy pipeline.
+        public bool TryWrite(long tick, ShaderPipelineRenderNode node) {
             if (Graph is null) {
                 return false;
             }
 
             if (m_region is null) {
-                var region = new GpuRegion(
-                    bindings: device.Services.Bindings,
-                    buffers: device.Services.BufferFactory,
-                    byteCount: ImageSourceUploadLayout.ByteCount(header: in header),
-                    copyPipeline: null,
-                    memory: GpuResidency.RingMemory(profile: device.MemoryProfile),
-                    name: new GpuObjectName(
-                        owner: name,
-                        part: RenderGraphPackageCatalog.SourceRegion
-                    ),
-                    policy: GpuResidencyPolicy.Ring,
-                    recorder: device.Services.Recorder,
-                    slotCount: ((int)inFlightFrames)
-                );
-                Span<byte> head = stackalloc byte[ImageSourceUploadLayout.HeaderBytes];
-
-                try {
-                    ImageSourceUploadLayout.Write(
-                        header: in header,
-                        region: head
-                    );
-                    _ = region.Write(
-                        bytes: head,
-                        offset: 0
-                    );
-                    node.BindRegion(
-                        name: RenderGraphPackageCatalog.SourceRegion,
-                        region: region
-                    );
-                } catch {
-                    region.Dispose();
-
-                    throw;
+                if (node.BindRegion(name: RenderGraphPackageCatalog.SourceRegion) is not { } region) {
+                    return false;
                 }
 
+                Span<byte> head = stackalloc byte[ImageSourceUploadLayout.HeaderBytes];
+
+                ImageSourceUploadLayout.Write(
+                    header: in header,
+                    region: head
+                );
+                _ = region.Write(
+                    bytes: head,
+                    offset: 0
+                );
                 m_region = region;
             }
 

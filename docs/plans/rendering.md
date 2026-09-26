@@ -488,8 +488,10 @@ words. `pipeline.inspect` ends with the profile and the policy chosen for the
 instance's parameter bytes. Every host upload of the SDF engine is a region
 (P7b-19): its program words, per-frame tables and mesh draws each under the
 policy the selector chooses with the frame ring's reader in flight, and its
-brick staging a staged region whose destination is the brick pool. The
-overlay's host-written buffer still uploads by hand until P7b step 22. A ring's
+brick staging a staged region whose destination is the brick pool. A shader
+pipeline instance owns every host-written region its graph reads, a package's
+(the overlay's buffer) and a host buffer port's (an uploaded source's), and
+records their staged copies ahead of its frame's passes (P7b-22). A ring's
 buffers live
 where `GpuResidency.RingMemory` says: in the device-local aperture
 (`IGpuBufferFactory.CreateHostVisibleDeviceLocal`, counted under
@@ -944,11 +946,41 @@ It deletes the SDF engine's composite, and it has landed.
   `split-seats` canary also captures a letterboxed layout it selects through
   `view.override`.
 
-P11b's last four commits are these; 12 has landed:
+P11b's last four commits are these; 11 and 12 have landed:
 
-11. The per-device pass-pipeline cache: the graph's pass pipelines built once a
-    device, off the frame thread, and shared by every node that installs the
-    same pass.
+11. The per-device pass-pipeline cache, landed. `GpuPassPipelineCache`
+    (`src/Puck.Shaders/Pipeline`) is one composition singleton whose entries
+    are keyed by device and `GpuPassPipelineKey`: the content key
+    `GpuPipelineCacheStore.ContentKeyOf` hashes from the stages' bytecode and a
+    canonical encoding of the pipeline description (its name, bindings or
+    groups, vertex input and depth test) and, for a graphics pass, the render
+    pass it is created for (each attachment's format, load, store and final
+    layout). Every pass pipeline a `ShaderPipelineRenderNode` installs comes
+    from it: each document pass's compute or graphics pipeline with its shader
+    modules and render pass, the float preview's, and each package pass's
+    (`place`, `post.<id>`, `overlay` and the source conversions of
+    `SourceConversionPackage`) through
+    `RenderGraphPackageRecorderContext.Pipelines`. Each device's region-copy
+    pipeline is an entry too (`GpuRegionCopyPass`). A candidate's build leases
+    its passes on the thread pool and waits for them there
+    (`GpuBuildLease.Wait`), so a pass another node or an earlier install
+    already leases is a hit that creates nothing: the root's place passes share
+    one pipeline, and a second instance of a graph or a reinstall of the same
+    graph creates none. The runtime pass holds its lease and releases it last
+    when its graph retires, so a reload of a changed shader makes a new entry
+    while the replaced graph keeps the old one until its submissions complete.
+    Every holder releases on device loss, which empties the device's entries,
+    so the rebuild creates afresh. The cache counts what it creates under
+    `gpu.pass-pipelines`, and a node's `work lifetime` line counts no pipeline
+    or shader module. The one mechanism under it is
+    `Puck.Hosting.GpuBuildCache<TKey, T>`: a lease per holder, the entry's
+    build through `BackgroundBuild`, and a last release that waits out only the
+    creation in the driver. `SdfWorldPipelineCache` is an instance of it keyed
+    by `SdfWorldPipelineKey`; P14-8 makes each SDF pipeline an entry of the
+    pass-pipeline cache itself. `GpuBuildCacheLawTests`,
+    `GpuPassPipelineCacheLawTests`, `GpuRegionCopyPassLawTests` and the build
+    laws of `ShaderPipelineRenderNodeLawTests` pin the hits, the sharing, the
+    device loss and the retirement of a reloaded pass.
 12. The live budget, landed: `world.budget` ends with what the runtime's latest
     schedule decided for every instance (`RenderGraphLiveBudget`, reading
     `RenderGraphRuntime.Latest`): rendered, waiting, deferred or unread; its
@@ -1123,7 +1155,8 @@ A hit maps back to a source's pixels only through P13's CPU model; no live
 consumer feeds it a world-surface hit yet. The GPU bakes
 settled carves into 128-cubed bricks (`SdfWorldEngine.BrickBake.cs`).
 
-P17's CPU half has landed; its GPU half is open. `SdfBaker`
+P17's CPU half and the device half of its sampling check have landed; drawing a
+bake is open. `SdfBaker`
 (`src/Puck.SignedDistance/Baking`) bakes a program through `SdfFieldEvaluator`
 into an indexed mesh, five surface textures and an octahedral impostor
 ([prototype bakes](../rendering/sdf/handbook/bricks-and-baking.md#prototype-bakes)).
@@ -1149,17 +1182,34 @@ the same bytes on every machine: the baker reads the field in fixed point,
 writes floats only from correctly rounded scalar arithmetic, and encodes sRGB
 against exact thresholds.
 
+Both backends put a bake's textures on the GPU as they are stored.
+`GpuPixelFormat` names BC4, BC5, BC6H and BC7, sampled only, and the one image
+upload (`IGpuSurfaceUpload.Upload`) takes every level of a chain, returns a
+view over all of them, and refuses by name a device that cannot sample the
+format: a Vulkan device created without `textureCompressionBC`, or a Direct3D 12
+device whose format support lacks two-dimensional sampling. The samplers select
+levels by point with no level-of-detail clamp on both backends.
+`BakeSamplingDeviceLawTests` uploads the BC7, BC5 and BC6H textures of
+`tests/Puck.SignedDistance.Tests/Fixtures/bake-sampling.json` with every level
+and samples each probe texel at its level on Vulkan, Direct3D 12 hardware and
+WARP, holding each to the CPU decoder under the fixture's tolerance;
+`BakeSamplingFixtureLawTests` holds the fixture's GPU-free half. BC7 albedo is
+uploaded without sRGB decode: the drawing path chooses its sRGB view.
+
 P17 still owes:
 
 - drawing a bake, which needs P4's shared visibility, and choosing per
-  placement between a bake and the field by P6's measured cost;
-- the device half of the bake sampling check: uploading the BC7, BC5 and BC6H
-  textures of `tests/Puck.SignedDistance.Tests/Fixtures/bake-sampling.json` with
-  every level and sampling each probe texel on both backends, which needs a GPU
-  image of a block-compressed format with mip levels; `BakeSamplingFixtureLawTests`
-  holds the fixture's GPU-free half;
+  placement between a bake and the field by P6's measured cost; the draw also
+  decides how an sRGB bake is read (a `Bc7UnormSrgb` view or a decode in the
+  shader);
 - the parity world shipping its bakes, and the check that a missing bake draws
-  through its field and then switches.
+  through its field and then switches;
+- the pixel-format fold. The block-compressed `GpuPixelFormat` members carry the
+  baker's `TextureFormat` names, and the fold makes them one vocabulary: it
+  replaces `GpuPixelFormats.UnitBytes` and `LevelByteLength` with the codecs'
+  own block sizes, the name-for-name parse in `BakeSamplingDeviceLawTests`, the
+  per-format switches in `ShaderPipelineRenderNode.Budget` and
+  `ShaderInterface.StorageFormatSpelling`, and `GpuPixelFormats.FromSurfaceFormat`.
 
 The SDF engine's frame data is written by hand in three places: an `SdfFrame`
 field, a numbered row in the packed buffer, and an HLSL accessor.
@@ -1445,7 +1495,8 @@ pipeline, no wait times out, and every leg captures all three images.
 
 A `ShaderPipelineRenderNode` candidate's shader modules and pipelines, with the
 render passes its graphics pipelines are created for and the float preview's,
-build on the thread pool through `BackgroundBuild`, starting at the
+are leased from the pass-pipeline cache on the thread pool through
+`BackgroundBuild`, starting at the
 node's next produced frame. Meanwhile the frame thread keeps presenting the
 installed graph, and when it takes the build it allocates the candidate's
 resources and installs it without draining the device; the replaced graph is
@@ -2263,9 +2314,9 @@ Phase 3, the groups, follows phase 2:
     binding number, so `ShaderRegisterBindingLawTests` no longer names it.
     `GpuRegion.CopyPipeline` is its one description; step 19 moves its push
     words into the staging buffer.
-    `GpuRegionCopyPipelineCache` creates one pipeline a device on the thread
-    pool (`BackgroundBuild`), counted under `gpu.region-copy`, and owners lease
-    it: `SdfWorldPipelineSource` takes a lease beside its set's, and an SDF
+    The composition's pass-pipeline cache holds one copy pipeline a device
+    (`GpuRegionCopyPass`), built on the thread pool and counted under
+    `gpu.pass-pipelines`, and owners lease it: `SdfWorldPipelineSource` takes a lease beside its set's, and an SDF
     engine takes the pipeline at construction, records its table upload with it
     exactly as before, and never owns it. The engine's pipeline set loses its
     frame-upload pipeline. The engine also creates the mesh region: a
@@ -2281,7 +2332,7 @@ Phase 3, the groups, follows phase 2:
     sets the region and every replacement of it write, so no frame takes a
     descriptor range. `world.budget`'s mesh
     line reads the region's allocated bytes. Laws:
-    `GpuRegionCopyPipelineCacheLawTests` (one pipeline a device, created and
+    `GpuRegionCopyPassLawTests` (one pipeline a device, created and
     counted once, shared by two leases and a new one after the last release;
     two regions copying through it byte-exact under every policy),
     `SdfWorldPipelineCacheLawTests` (two engine nodes record with the device's
@@ -2365,16 +2416,28 @@ Phase 3, the groups, follows phase 2:
     neutral dynamic viewport the presenter's recorder sets. A graphics
     description states its groups alone: `GpuGraphicsPipelineDescription.Layout`
     is required, and its `TextureSamplerCount`, `EnableStorageBuffer` and push
-    range are deleted with both backends' non-layout graphics paths. The
-    Direct3D 12 surface compositor has no second factory contract to fold; it
-    builds its root signature and pipeline state by hand. Remaining: the
-    overlay's host-written buffer uploads through a `GpuRegion` rather than by
-    hand, which under the staged policy needs the region-copy pipeline leased
-    at the package's build, a copy pool the node states and admits, the copy
-    and its two buffer transitions inside the package recording, and a
-    pixel-shader read state for a buffer on Direct3D 12; and
-    `VulkanGraphicsPipelineCreateRequest`'s fixed viewport, descriptor bindings
-    and push range, which no caller sets any more, leave the native API.
+    range are deleted with both backends' non-layout graphics paths, and
+    `VulkanGraphicsPipelineCreateRequest` takes its caller's layout and a
+    dynamic viewport alone (its fixed viewport, descriptor bindings, push range
+    and the native API's owned-layout branch are deleted). The overlay's
+    host-written buffer is a `GpuRegion` through one node mechanism: a package
+    states its regions (`IRenderGraphPackageFactory.Regions`), and
+    `ShaderPipelineRenderNode` creates them under `GpuResidency.Select`, takes
+    the region-copy pipeline in the candidate's build, states and admits a
+    reserved copy pool per staged pass in `DescriptorPools`, and records every
+    owed copy with its barriers in one command buffer ahead of the frame's
+    passes; recorders record no barrier. `BindRegion`'s host buffer ports go
+    through the same mechanism, so a staged uploaded source is no longer
+    refused. On Direct3D 12 a buffer the fragment stage reads is in
+    `ALL_SHADER_RESOURCE`. Laws: `OverlayPackageLawTests` (a steady drawn frame
+    uploads nothing under a ring or staged; the staged copy pool stated and
+    copies recorded), `RenderGraphRuntimeLawTests.AStagedSourceRegionReachesItsConversionByteExact`
+    and `DirectXBufferStatesLawTests`. Remaining: the Direct3D 12 surface
+    compositor's hand-built root signature and pipeline state move onto
+    `IGpuPipelineFactory`, as Vulkan's blit did, with its surface-blit shader on
+    the group registers; its shader-visible heaps stay until P16.
+    `VulkanGpuRenderPass.Borrow` keeps its stated format until P17's pixel-format
+    fold gives it the swapchain's.
 
 **Decisions.** Root parameter indices are dense, and the push index sits at
 `b0` in space 4, outside every group's space. The spike's frame group is the
@@ -3166,7 +3229,10 @@ instances. `sdf-vm.hlsli` splits into a generated `isa/` and `field/`, and
    silent on the RTX 2060, with Vulkan validation repeated on the RTX 4070.
 7. `SdfFrame` and `SdfEnvironment` join the generated frame block as members of
    the block pipeline passes already read.
-8. The SDF pipelines build through the graph's pipeline cache.
+8. The SDF pipelines build through the graph's pipeline cache
+   (`GpuPassPipelineCache`): each kernel variant an entry keyed like any pass,
+   so `SdfWorldPipelineCache`, today its own `GpuBuildCache` instance, and its
+   `gpu.sdf-pipelines` ledger are deleted.
 9. The engine's cadence becomes the scheduler's.
 10. Float working targets and the display pass, with parity re-recorded.
 11. Staged shading.
@@ -3366,7 +3432,7 @@ read simulation state, so they do not wait on the state rebuild.
 
 **The frame graph and nesting.** P11's CPU half has landed, and so have the
 P11b items its implementation status lists, the main view through the graph
-runtime among them. The rest of P11b, commits 11, 13 and 14, waits on nothing from
+runtime among them. The rest of P11b, commits 13 and 14, waits on nothing from
 P7b, whose groups have landed for everything but the SDF engine; commit 13, the
 screens, follows P12b-2. P12's
 source contract, producers and conversion passes have landed; P12b, the graph
@@ -3377,7 +3443,8 @@ declarations (P14-3) and the planner's vocabulary with multi-basis counts
 (P14-4) needed none of them and have landed. P4-2's mesh
 work follows P4-1 and P7b's services. P15 and P16 both follow P14: P15 also needs P4, and P16, the smallest package
 in this group, needs P14's float working targets. P17's CPU half, the bakes and
-their texture codecs, has landed; drawing a bake follows P4 and choosing
+their texture codecs, has landed, and so has their block-compressed upload and
+sampling check on both backends; drawing a bake follows P4 and choosing
 between a bake and the field follows P6.
 
 **Bound state.** P9's CPU half and its frame-group half, which fills the

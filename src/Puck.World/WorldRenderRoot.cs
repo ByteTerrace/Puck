@@ -89,7 +89,7 @@ internal static class WorldRenderRoot {
                 ViewportCapacity = WorldRootGraph.ViewsOf(views: definition.Views),
             }
         );
-        var packages = new RenderGraphPackageRecorders();
+        var packages = new RenderGraphPackageRecorders(regionCopy: sp.GetRequiredService<GpuRegionCopyPass>());
 
         // The world's external instances are its views: the first is the engine node, which renders them all, and each
         // later one the node's producer for that view. The runtime owns the engine node from here on.
@@ -134,6 +134,7 @@ internal static class WorldRenderRoot {
             graphs: graphs,
             hostsOnDirectX: hostSettings.HostsOnDirectX,
             packages: packages,
+            pipelines: sp.GetRequiredService<GpuPassPipelineCache>(),
             refusal: out var refusal,
             root: rootName,
             runtime: out var runtime,

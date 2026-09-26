@@ -71,8 +71,8 @@ float4 sampleFrameSlot(uint slot, float2 uv) {
 
 // The pass block's per-frame values (passGroup):
 // counts: panelCount, elementCount, atlasCellW, atlasCellH (texels)
-// sdf:    distanceRange (texels), outlineBand (encoded units), panelBase (word index), elementBase (word index)
 // misc:   textBase (word index), atlasBase (word index), clipBase (word index), glyphCount (this boot's atlas total)
+// sdf:    distanceRange (texels), outlineBand (encoded units), panelBase (word index), elementBase (word index)
 
 // Words per record. KEEP IN SYNC with OverlayFrameBuilder.PanelWords / ElementWords.
 #define PANEL_WORDS 12u

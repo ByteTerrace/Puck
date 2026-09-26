@@ -47,5 +47,8 @@
         <Compile Include="..\Shared\GpuGroupLayoutTables.cs" Link="GpuGroupLayoutTables.cs" />
         <!-- The package decorator the post and overlay laws observe a recording through. -->
         <Compile Include="..\Shared\ObservedPackageFactory.cs" Link="ObservedPackageFactory.cs" />
+        <!-- The memory model a staged source region's copy runs on, and the fake it wraps. -->
+        <Compile Include="..\Shared\FakeGpuDevice.cs" Link="FakeGpuDevice.cs" />
+        <Compile Include="..\Shared\UploadModelGpu.cs" Link="UploadModelGpu.cs" />
     </ItemGroup>
 </Project>

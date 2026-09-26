@@ -60,7 +60,7 @@ public sealed class SdfWorldEngineObjectNameLawTests {
                 WorkLedger: ledger
             ),
             pipelines: pipelines,
-            regionCopy: regionCopy,
+            regionCopy: regionCopy.Compute!,
             width: Extent
         );
 
@@ -74,7 +74,7 @@ public sealed class SdfWorldEngineObjectNameLawTests {
 
         Assert.NotEmpty(collection: names);
         Assert.All(
-            action: static name => Assert.True(condition: (name.Contains(comparisonType: StringComparison.Ordinal, value: " sdf.world/") || name.Contains(comparisonType: StringComparison.Ordinal, value: " gpu.region-copy/")), userMessage: name),
+            action: static name => Assert.True(condition: (name.Contains(comparisonType: StringComparison.Ordinal, value: " sdf.world/") || name.Contains(comparisonType: StringComparison.Ordinal, value: " gpu.pass-pipelines/")), userMessage: name),
             collection: names
         );
         Assert.Contains(collection: names, expected: "Buffer sdf.world/tiles");

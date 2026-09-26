@@ -139,14 +139,17 @@ public sealed partial class ShaderPipelineRenderNode {
         var gpu = m_gpu;
         var directX = m_directX;
         var inFlight = m_inFlight;
+        var pipelines = m_pipelines;
 
         m_previewBuilding = request;
         var owner = m_descriptor.Name;
 
-        m_previewBuild.Start(build: _ => PreviewObjects.Create(
+        m_previewBuild.Start(build: token => PreviewObjects.Create(
+            cancellationToken: token,
             device: device,
             owner: owner,
             gpu: gpu,
+            pipelines: pipelines,
             directX: directX,
             height: request.Height,
             inFlight: inFlight,
@@ -221,10 +224,11 @@ public sealed partial class ShaderPipelineRenderNode {
     // A selection whose float preview is building: the output it selects and the preview's extent.
     private sealed record PreviewRequest(string Name, uint Width, uint Height);
     /// <summary>
-    /// The float preview's pipeline and module set: its two shader modules, read from the deployed preview bytecode, the
-    /// render pass it draws in and the graphics pipeline created for it, and per frame slot the RGBA8 image it draws into
-    /// with the framebuffer that binds it. An install builds it on the thread pool with the rest of the candidate. Each
-    /// object is stored as soon as it exists, so a failure partway disposes exactly what was created.
+    /// The float preview's pipeline and targets: its lease on the pass-pipeline cache's entry for the deployed preview
+    /// bytecode (two shader modules, the render pass it draws in and the graphics pipeline created for it), and per frame
+    /// slot the RGBA8 image it draws into with the framebuffer that binds it. An install builds it on the thread pool with
+    /// the rest of the candidate. Each object is stored as soon as it exists, so a failure partway releases exactly what
+    /// was taken.
     /// </summary>
     private sealed class PreviewObjects : IDisposable {
         // The usages of a preview image: drawn into, then published and sampled downstream, in General as a storage image.
@@ -238,18 +242,16 @@ public sealed partial class ShaderPipelineRenderNode {
             Targets = new IGpuImage[inFlight];
         }
 
-        public IGpuShaderModule? Fragment { get; private set; }
         // The owning instance's name, which every preview object's debug name starts with.
         public string Owner { get; }
         public IGpuFramebuffer[] Framebuffers { get; }
         public uint Height { get; }
-        public IGpuPipeline? Pipeline { get; private set; }
-        public IGpuRenderPass? RenderPass { get; private set; }
+        public GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? Lease { get; private set; }
+        public IGpuPipeline? Pipeline => Lease?.Current?.Graphics;
         public IGpuImage[] Targets { get; }
-        public IGpuShaderModule? Vertex { get; private set; }
         public uint Width { get; }
 
-        public static PreviewObjects Create(GpuDeviceServices gpu, IGpuDeviceContext device, bool directX, uint width, uint height, uint inFlight, string owner) {
+        public static PreviewObjects Create(GpuDeviceServices gpu, IGpuDeviceContext device, GpuPassPipelineCache pipelines, bool directX, uint width, uint height, uint inFlight, string owner, CancellationToken cancellationToken) {
             var objects = new PreviewObjects(
                 height: height,
                 inFlight: inFlight,
@@ -268,14 +270,6 @@ public sealed partial class ShaderPipelineRenderNode {
             );
 
             try {
-                objects.Vertex = gpu.ShaderModuleFactory.Create(
-                    GpuShaderStage.Vertex,
-                    File.ReadAllBytes(path: ((root + ".vert") + extension))
-                );
-                objects.Fragment = gpu.ShaderModuleFactory.Create(
-                    GpuShaderStage.Fragment,
-                    File.ReadAllBytes(path: ((root + ".frag") + extension))
-                );
                 var description = new GpuGraphicsPipelineDescription(
                     "pipeline-float-preview",
                     new GpuVertexInputLayout(
@@ -285,28 +279,22 @@ public sealed partial class ShaderPipelineRenderNode {
                     Layout: PreviewLayout
                 );
 
-                objects.RenderPass = gpu.RenderPassFactory.Create(
-                    description: new GpuRenderPassDescription(Colors: [new GpuColorAttachment(
-                        FinalLayout: GpuImageLayout.ShaderReadOnly,
-                        Format: GpuPixelFormat.R8G8B8A8Unorm,
-                        Load: GpuAttachmentLoad.Clear,
-                        Store: GpuAttachmentStore.Store
-                    )]),
-                    name: new GpuObjectName(
-                        owner: owner,
-                        part: "preview"
+                objects.Lease = pipelines.Acquire(
+                    device: device,
+                    key: GpuPassPipelineKey.OfGraphics(
+                        description: description,
+                        fragment: File.ReadAllBytes(path: ((root + ".frag") + extension)),
+                        renderPass: new GpuRenderPassDescription(Colors: [new GpuColorAttachment(
+                            FinalLayout: GpuImageLayout.ShaderReadOnly,
+                            Format: GpuPixelFormat.R8G8B8A8Unorm,
+                            Load: GpuAttachmentLoad.Clear,
+                            Store: GpuAttachmentStore.Store
+                        )]),
+                        vertex: File.ReadAllBytes(path: ((root + ".vert") + extension))
                     )
                 );
-                objects.Pipeline = gpu.PipelineFactory.Create(
-                    objects.RenderPass,
-                    objects.Vertex,
-                    objects.Fragment,
-                    description,
-                    name: new GpuObjectName(
-                        owner: owner,
-                        part: "preview"
-                    )
-                );
+
+                var renderPass = objects.Lease.Wait(cancellationToken: cancellationToken).RenderPass!;
 
                 for (var i = 0; (i < inFlight); i++) {
                     objects.Targets[i] = gpu.ImageFactory.Create(
@@ -321,7 +309,7 @@ public sealed partial class ShaderPipelineRenderNode {
                         width: width
                     );
                     objects.Framebuffers[i] = gpu.RenderPassFactory.CreateFramebuffer(
-                        objects.RenderPass,
+                        renderPass,
                         [objects.Targets[i]],
                         null
                     );
@@ -336,11 +324,9 @@ public sealed partial class ShaderPipelineRenderNode {
         }
         public void Dispose() {
             foreach (var framebuffer in Framebuffers) { framebuffer?.Dispose(); }
-            Pipeline?.Dispose();
-            RenderPass?.Dispose();
-            Vertex?.Dispose();
-            Fragment?.Dispose();
             foreach (var target in Targets) { target?.Dispose(); }
+            Lease?.Release();
+            Lease = null;
         }
     }
     /// <summary>

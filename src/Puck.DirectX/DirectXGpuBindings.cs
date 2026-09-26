@@ -173,8 +173,8 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
     private static D3D12_CPU_DESCRIPTOR_HANDLE ViewSlot(DirectXDescriptorSet set, uint binding, uint arrayElement) => new() {
         ptr = (set.CpuBase + ((nuint)((set.SlotByBinding[binding] + arrayElement) * set.DescriptorSize))),
     };
-    // A two-dimensional texture's shader resource view: the one view a combined image sampler and a sampled image both
-    // read.
+    // A two-dimensional texture's shader resource view over every mip level the texture has: the one view a combined
+    // image sampler and a sampled image both read.
     private void CreateTextureView(D3D12_CPU_DESCRIPTOR_HANDLE destination, nint imageViewHandle) {
         var device = ((ID3D12Device*)deviceContext.Device.Handle);
         var imageView = ImageViewOf(imageViewHandle: imageViewHandle);
@@ -185,7 +185,8 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
         };
 
         srvDesc.Anonymous.Texture2D = new D3D12_TEX2D_SRV {
-            MipLevels = 1,
+            // All the levels from MostDetailedMip down (the SRV's -1).
+            MipLevels = uint.MaxValue,
             MostDetailedMip = 0,
             PlaneSlice = 0,
             ResourceMinLODClamp = 0f,
@@ -320,7 +321,7 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
             ComparisonFunc = D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_NEVER,
             Filter = ((samplerHandle == NearestSampler)
                 ? D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_POINT
-                : D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_LINEAR),
+                : D3D12_FILTER.D3D12_FILTER_MIN_MAG_LINEAR_MIP_POINT),
             MaxAnisotropy = 1,
             MaxLOD = float.MaxValue,
             MinLOD = 0f,

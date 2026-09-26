@@ -737,6 +737,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
     private static RenderGraphRuntimeRefusal Refusal(FakePipelineGpu gpu, Recorders recorders, RenderGraphInstanceSet set, string root, params RenderGraphRuntimeGraph[] graphs) {
         Assert.False(condition: RenderGraphRuntime.TryCreate(
+            pipelines: new GpuPassPipelineCache(),
             deviceContext: gpu,
             graphs: graphs,
             hostsOnDirectX: false,

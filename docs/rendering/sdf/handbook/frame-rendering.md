@@ -198,8 +198,8 @@ destination is the pool itself. Since the carve bake also writes the pool, each
 brick is copied whole.
 
 Every staged copy records `region-copy.comp`, the one region-copy pipeline each
-device has, which `Puck.Shaders` ships and every owner leases
-(`GpuRegionCopyPipelineCache`).
+device has, which `Puck.Shaders` ships and every owner leases from the
+pass-pipeline cache (`GpuRegionCopyPass`).
 
 A still frame therefore writes only the time word of each viewport row, because
 each row carries the frame's presentation time. When a sky's clouds drift, a
