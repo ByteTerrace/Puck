@@ -46,6 +46,10 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     // seat-join cue site) resolves its body index through it — one resolution point, so a possession anchor swap
     // moves every derivation together.
     private readonly WorldPerceptionAnchor m_anchor;
+
+    // The query field's static placements' palettes, reused across rebuilds (WorldPlacementStamper.EmitStatic).
+    private readonly WorldStaticPalettes m_queryPalettes = new();
+
     private readonly WorldStampPool m_animator;
     // The audio director: its emitter derivation reconciles at the delivery boundary (AFTER the screen binder —
     // the chiasmus ordering, speakers consume screen slots) and its snapshot publishes at the end of every dress.
@@ -466,7 +470,8 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
                 definition: definition,
                 creations: definition.Creations,
                 placements: [.. definition.Placements.Where(predicate: static placement => (placement.Solid is not null))],
-                colors: m_queryColors
+                colors: m_queryColors,
+                palettes: m_queryPalettes
             );
 
             var facets = WorldPrototypeFacets.Derive(

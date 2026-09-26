@@ -37,12 +37,12 @@ internal sealed partial class WorldScreenBinder {
         ));
     }
 
-    // A CPU tier's pixels — a camera's or a desktop capture's, or a capture fill — converted through the image source
-    // conversion their format names (RenderGraphRuntime.CreateConverter) into the image a frame samples. A frame acquires
-    // the image under a counted lease, so a converter the pixels' new extent or format replaced, or one retired with its
-    // owner, is disposed only once no submitted frame samples it; a replaced converter's image is shown until its
-    // replacement has converted.
-    private sealed class ConvertedPixels {
+    // A CPU tier's pixels — a camera's or a desktop capture's, or a capture fill (WorldCaptureFills) — converted through the
+    // image source conversion their format names (RenderGraphRuntime.CreateConverter) into the image a frame samples. A
+    // frame acquires the image under a counted lease, so a converter the pixels' new extent or format replaced, or one
+    // retired with its owner, is disposed only once no submitted frame samples it; a replaced converter's image is shown
+    // until its replacement has converted.
+    internal sealed class ConvertedPixels {
         private readonly ImageContentClass m_content;
         private readonly string m_name;
         private readonly string m_producer;

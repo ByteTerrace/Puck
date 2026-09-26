@@ -1184,7 +1184,12 @@ compares a read-back against.
 camera, a desktop capture or a probe's output, resolves through
 `WorldCaptureGate`. While the gate fills, the image resolves to its declared
 capture fill (`ImageSourceDescriptor.CaptureFill`, opaque `#202020` by
-default), a 1×1 upload, and the producer's frame is never acquired. The gate
+default), and the producer's frame is never acquired. A fill is a 1×1 image
+converted through `source-rgba` (`WorldCaptureFills`). Its converter builds
+off the frame thread, so a fill first converted on the frame a capture is
+armed for would have no image on that frame; each fill therefore converts as
+soon as a screen shows or a HUD frame names an external source, before any
+capture is armed. The gate
 covers screen slots, jumbotron renders of those screens, and HUD `Frame`
 elements. An offscreen host, which serves scheduled captures and `puck parity`,
 fills every frame. A windowed host fills from the frame a `world.screenshot`

@@ -50,6 +50,10 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // possession anchor swap moves the crowd bound with the seat's perceived body. The always-cast/footstep gates
     // below stay keyed on the raw body index band instead — see their own comments for why.
     private readonly WorldPerceptionAnchor m_anchor;
+
+    // The static placements' palettes, reused across rebuilds (WorldPlacementStamper.EmitStatic).
+    private readonly WorldStaticPalettes m_palettes = new();
+
     private readonly WorldStampPool m_animator;
     private readonly IWorldAudioCueSink m_audio;
     private readonly int m_authoringHeadroomPlacements;
@@ -222,7 +226,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 tintFor: null,
                 volumes: m_staticVolumes,
                 meshDraws: meshDraws,
-                colors: m_bakedColors
+                colors: m_bakedColors,
+                palettes: m_palettes
             );
             m_staticMeshDraws = meshDraws;
         }

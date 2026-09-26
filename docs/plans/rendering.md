@@ -1220,7 +1220,7 @@ through the same one-pass graph on a node of their own
 their tier is chosen per device at run time and the HUD reads them outside the
 set, and hand out counted leases. A fill converts as soon as a screen shows or
 a HUD frame names an external source, because a converter's graph builds off
-the frame thread; a camera source's descriptor states the extent its seat's
+the frame thread (`WorldCaptureFills`, held by `WorldCaptureFillLawTests`); a camera source's descriptor states the extent its seat's
 sensor delivers, requested until the device negotiates one. The emulators still publish through
 `IMachineVideoOutput`'s own `IGpuSurfaceUpload`, from the machine source
 instance's producer, and hand the screen a bare handle; P12b-6 moves them onto
@@ -3243,8 +3243,14 @@ except step 8.
       and each capture fill once as a static 1x1 source, hands the image out
       under a counted lease, and disposes a converter a new extent replaced, or
       its owner retired, after the last lease. `CpuSurfaceSource` is deleted,
-      and publishing takes the frame context. Law:
-      `RenderGraphRuntimeLawTests.AConverterConvertsPixelsOutsideTheSetThroughItsDescriptorsConversion`.
+      and publishing takes the frame context. A capture fill
+      (`WorldCaptureFills`) converts whenever a screen shows or a HUD frame
+      names an external source, not only while the gate fills, since a
+      converter's graph builds off the frame thread and a fill first converted
+      on the arming frame has no image on that frame. Laws:
+      `RenderGraphRuntimeLawTests.AConverterConvertsPixelsOutsideTheSetThroughItsDescriptorsConversion`,
+      `WorldCaptureFillLawTests.AScreenShowingAnExternalSourceHasItsFillConvertedBeforeTheCaptureIsArmed`
+      and `WorldCaptureFillLawTests.AFillFirstConvertedOnTheArmingFrameHasNoImageUntilALaterFrame`.
 3. Uploaded sources write regions, and conversions are planned passes. The
    source-graph side has landed. An uploaded producer registers an upload for
    its source package (`RenderGraphPackageRecorders.RegisterSource`, through

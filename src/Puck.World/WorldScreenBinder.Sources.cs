@@ -296,7 +296,7 @@ internal sealed partial class WorldScreenBinder : ISdfScreenSources {
             }
 
             var lease = (binder.FillsExternal
-                ? binder.FillImage(rgba: ImageSourceDescriptor.DefaultCaptureFill)
+                ? binder.m_fills.Acquire(rgba: ImageSourceDescriptor.DefaultCaptureFill)
                 : feed.AcquireFrame());
 
             if (lease.ImageViewHandle == 0) {
