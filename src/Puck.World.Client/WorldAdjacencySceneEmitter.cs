@@ -96,6 +96,10 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     // compares against this to decide whether a rebuild is owed, without ever emitting from inside WriteRevision
     // itself (emission belongs to Emit alone).
     private readonly Dictionary<string, (int Definition, int Snapshot)> m_polledRevisions = new(comparer: StringComparer.Ordinal);
+    // Each neighbour's bound colors, read through the neighbour's own state mirror as the local build reads the client's
+    // (WorldBakedColors), so a state-cell write that moves a bound color rebuilds the border as it would a local
+    // placement. Kept per adjacency while the neighbour's mirror is the same object.
+    private readonly Dictionary<string, (WorldStateMirror Mirror, WorldBakedColors Colors)> m_neighbourColors = new(comparer: StringComparer.Ordinal);
     // A band whose delivered body count has already crossed MaxEntitiesPerBand, so the truncation is stated once per
     // border rather than once per program rebuild.
     private readonly HashSet<string> m_truncationNarrated = new(comparer: StringComparer.Ordinal);
@@ -162,6 +166,29 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     // A plain indexed copy of the first `count` entries — the ONLY place EmitCurrent allocates a fresh
     // m_emittedProjections array, reached only when a live edit authors more adjacency projections than this
     // composition reserved at boot.
+    // The bound colors a projection's neighbour bakes, over that neighbour's followed state mirror.
+    private WorldBakedColors ColorsOf(WorldAdjacencyProjection projection) {
+        var mirror = projection.Neighbour.FollowState();
+
+        if (
+            m_neighbourColors.TryGetValue(
+                key: projection.Name,
+                value: out var held
+            ) &&
+            ReferenceEquals(
+                objA: held.Mirror,
+                objB: mirror
+            )
+        ) {
+            return held.Colors;
+        }
+
+        var colors = new WorldBakedColors(mirror: mirror);
+
+        m_neighbourColors[projection.Name] = (mirror, colors);
+
+        return colors;
+    }
     private static WorldAdjacencyProjection[] CopyProjections(IReadOnlyList<WorldAdjacencyProjection> source, int count) {
         var copy = new WorldAdjacencyProjection[count];
 
@@ -423,11 +450,15 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
             }
 
             if (mappedCount > 0) {
+                var colors = ColorsOf(projection: projection);
+
+                colors.Begin();
                 // Adjacency delivery currently carries the neighbouring document, not its hash-pinned font asset
                 // bytes. Emit its ordinary geometry but omit creation text until federation owns asset transport and
                 // the local renderer can merge remote catalogs into its one glyph binding.
                 WorldPlacementStamper.EmitStatic(
                     builder: builder,
+                    colors: colors,
                     definition: neighbour.Definition,
                     creations: neighbour.Definition.Creations,
                     placements: new ArraySegment<WorldPlacement>(
@@ -600,6 +631,11 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                 m_polledRevisions[projection.Name] = polled;
                 m_neighbourRevision++;
             }
+            // A bound color the border baked moving in the neighbour's state mirror rebuilds it, as the local scene
+            // emitter's baked-color component does for its own placements.
+            if (ColorsOf(projection: projection).TryTakeMove()) {
+                m_neighbourRevision++;
+            }
         }
 
         m_missingAdjacencies.Clear();
@@ -610,6 +646,8 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
             }
         }
         foreach (var missing in m_missingAdjacencies) {
+            _ = m_neighbourColors.Remove(key: missing);
+
             if (m_polledRevisions[missing] != default) {
                 m_polledRevisions[missing] = default;
                 m_neighbourRevision++;
