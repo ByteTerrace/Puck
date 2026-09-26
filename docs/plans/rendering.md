@@ -375,7 +375,7 @@ where P8's check asks for every shipped package's. The worlds under the
 repository's `worlds/` tree, the genesis card among them, are not part of the
 game's build, so their source rows compile where DXC is present. Only the
 `default` variant is built, which is all P8 closes with.
-P9's CPU half and its frame-group half have landed. Every presentation
+P9 has landed. Every presentation
 read of state goes through one state mirror, `WorldStateMirror` in
 `Puck.World.Protocol`: a flat table of slots, each a row ordinal, a key, a
 target flag, and a conversion. When the mirror installs a document it
@@ -387,7 +387,12 @@ program operands, markers, render lighting, sky and environment colors, the
 theme), and a render cycle's position row. The manifest finds a surface by the
 type that carries it, walking the generated model shape, so a section that gains
 a bindable member needs no new walker; re-installing a document whose manifest
-the mirror already holds registers nothing and allocates nothing. Its per-body
+the mirror already holds registers nothing and allocates nothing, and installing
+another document retires every slot only the previous document's manifest
+registered and no holder reads, while a binding both documents record keeps its
+slot's index. `WorldStateMirror.Generation` moves whenever the set of registered
+bindings changes, so a consumer that keeps a lookup's answer looks it up again.
+Its per-body
 half is a list of templates — the population scale row, a look's pose
 references and lane operands, a creation driver's state signal and gate tokens,
 an effector's gate tokens and state target — each keeping its `$body` key as
@@ -397,12 +402,29 @@ authored, and each also recorded under the document object that carries it
 body's lease acquires those templates when the body arrives
 (`WorldStateLease.Arrive`, from the stamp registration and the scene emitter's
 body-scale read), so the body's first frame reads slots the mirror already holds
-and read at the tick boundary, and arriving again allocates nothing. The
-consumers still register their own slots on first read and find the manifest's
-slot already there: the HUD resolver, camera rigs, markers, render colors, the
-theme, the binding bar, overlay predicates, the radial wheel and the binding
-bar's icon row; the wheel and the icon row both read a keyed cell through
-`WorldStateCells`, which keeps each slot it registered. A read made on behalf of a body or a seat acquires its slot through a
+and read at the tick boundary, and arriving again allocates nothing. Its per-seat
+half is what a seat composes rather than any one document authors:
+`WorldPresentationManifest.SeatBindings` compiles, from the seat's composed
+binding document (the world's overlays, the identity's layer and the session's
+rebinds) and its binding bar (`WorldBindingBarAuthoring.Resolve`, the identity's
+before the routed world's), every state-backed binding context family's row,
+keyed by the seat's body when the row is keyed, every radial wheel's label and
+icon cells keyed by sector id and the hub key, the bar's icon cell keyed by every
+page entry's id or action (`BindingPageEntryDefinition.KeyOf`), and the bar's
+layout and model cells. `WorldSeatBindings` registers that set on the mirror the
+seat's route reads through (`WorldStateMirror.Register`, under the seat's context
+lease) whenever the composition, the route, the installed document or the
+controlled body moves, and withdraws it from a mirror the seat leaves, so a bar a
+player profile authors is registered like the world's. The binding bar follows
+the seat's route like its pages and wheels: its policy and its cells come from the
+routed world and mirror. Consumers only look a registered slot up
+(`WorldStateMirror.SlotOf`, by binding or by token, whose parse the mirror keeps
+while the slot is looked up afresh), which registers, reads and allocates
+nothing: the HUD resolver, camera rigs, markers, render colors, the theme, the
+render cycle, the binding bar, overlay predicates, the radial wheel and the
+bar's icon row, the last two through `WorldStateCells`. A lookup of a binding
+nothing registered answers -1, which reads nothing, so after an install every
+consumer's first frame reads no cell and adds no slot. A read made on behalf of a body or a seat acquires its slot through a
 `WorldStateLease`, and releases it when the body leaves, the seat's route or
 controlled body changes, or the mirror installs a document: a look's lanes, gait
 drivers and their gates, pose frames, effectors, body scale, and a seat's
@@ -427,7 +449,7 @@ follow it run on that thread: `WorldSeatAuthorityRouter.RouteChanged` fires only
 from `DeliverRouteChanges`, which `WorldHostStep` calls at its fixed points, so
 the mirror keeps its one-thread, no-lock design. The theme and the radial
 wheel's rings (`WorldWheelRings`) re-resolve only when a slot one of their own
-cells reads changes. The capture
+cells reads changes or the mirror's registered bindings do. The capture
 scheduler reads a camera `select` key through a mirror over the server's
 document at the armed tick. `WorldFramePresenter.CaptureFrame` applies the
 frame's interpolation fraction before the program build and the transform
@@ -2462,21 +2484,20 @@ compares work proportional to k, failing on today's per-frame repack;
 allocation laws over the refresh and the apply at 64 repetitions after warm-up;
 the shipped-world state baselines unmoved and the `rim-drop` and
 `traveller-kit` canaries green; the parity contract re-recorded in the same
-change when the eased default moves a station's pixels.
+change when the eased default moves a station's pixels; a law that after an
+install every consumer's first frame over the flagship world reads no cell and
+adds no slot, since a consumer only looks up what the manifest and the seats
+registered; and a law that a document swap retires what only the previous
+manifest registered, keeps the index of what both register, never answers a
+lookup with a retired slot, and allocates nothing once warm.
 
-**Open:** the consumers reading the manifest's pre-registered slots through a
-lookup that registers nothing, rather than registering on first read, which P10's
-tier law needs and which waits on the manifest recording every read; the reads
-the manifest does not yet record — a seat's binding contexts,
-whose row comes from a family resolved at run time, the radial wheel's and the
-icon row's keyed cells, whose keys are action names, and a binding bar a player
-profile authors rather than the world; retiring a manifest slot a later document
-no longer binds; and the materials a program bakes at build, which join the
-mirror when the field lattice becomes a region kind. The
+P9 is complete. The materials a program bakes at build join the mirror with
+P10, when the field lattice becomes a region kind. The
 `WorldStateMirrorLawTests`, `WorldPresentationManifestLawTests`,
-`WorldStateReadRoutingLawTests`, `SeatRouteDeliveryLawTests`,
-`WorldWheelRingsLawTests`, `WorldSceneMovedTransformsLawTests` and
-`WorldPresentedFrameLawTests` laws cover what has landed.
+`WorldPresentationLookupLawTests`, `WorldStateReadRoutingLawTests`,
+`SeatRouteDeliveryLawTests`, `WorldWheelRingsLawTests`,
+`WorldStateCellsLawTests`, `WorldSceneMovedTransformsLawTests` and
+`WorldPresentedFrameLawTests` laws cover it.
 
 ### P10 — Bound rows reach a pass
 
@@ -3342,8 +3363,8 @@ in this group, needs P14's float working targets. P17's CPU half, the bakes and
 their texture codecs, has landed; drawing a bake follows P4 and choosing
 between a bake and the field follows P6.
 
-**Bound state.** P9's CPU half and its frame-group half, which fills the
-frame group P8 declares, have landed. It is written against the state interface of
+**Bound state.** P9, which also fills the frame group P8 declares, has
+landed. It is written against the state interface of
 [the presentation view](runtime-and-delivery.md#the-presentation-view), which
 the runtime and delivery programme owns. P10 is last in this group: a bound
 member and an overridden member have to compose by a stated rule, so it needs
