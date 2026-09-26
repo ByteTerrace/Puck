@@ -27,8 +27,8 @@ public enum WorldScreenProjection : byte {
 /// <summary>An offscreen session render's requested pixel resolution — <c>[width, height]</c> on the wire, the same
 /// two-element-array convention <see cref="Puck.Assets.Documents.Vector3JsonConverter"/> establishes for a coordinate
 /// triple. Null (the
-/// default absent value on <see cref="WorldScreenSource.Session"/>) keeps <c>Puck.SdfVm.Views.WorldSessionView</c>'s
-/// existing fixed panel size, so a session facet authored before this member existed renders byte-identically.</summary>
+/// default absent value on <see cref="WorldScreenSource.Session"/>) renders the default 160x144 panel
+/// (<c>Puck.World.Client.WorldViewInstances.DefaultSessionWidth</c> x <c>DefaultSessionHeight</c>).</summary>
 /// <param name="Width">The render width in pixels.</param>
 /// <param name="Height">The render height in pixels.</param>
 [JsonConverter(typeof(WorldScreenResolutionJsonConverter))]

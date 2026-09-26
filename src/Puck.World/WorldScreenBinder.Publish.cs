@@ -1,38 +1,37 @@
 using Puck.Abstractions.Gpu;
 using Puck.Hosting;
 using Puck.SdfVm;
-using Puck.SdfVm.Views;
-using Puck.SignedDistance;
 
 namespace Puck.World;
 
 internal sealed partial class WorldScreenBinder {
-    /// <summary>Stands up the offscreen view pool backing every declared View (jumbotron) screen — called once by the
-    /// render factory after the frame source has probed the render envelope (the worst-case program/instance/transform
-    /// capacities every offscreen view render must fit). Registers one persistent <see cref="SdfCameraView"/> per
-    /// referenced camera, posed by either its declared <see cref="FixedRig"/> or an avatar-anchored
-    /// <see cref="FirstPersonRig"/>, and records each view's
-    /// self-reference screen set (a screen wired to view V binds 0 inside V's own render — no feedback compounding).
-    /// A no-op when the world declares no View screen (no pool is created, so a plain world pays nothing).</summary>
-    /// <param name="pipelines">The composition's pipeline cache every offscreen camera view this binder later
-    /// constructs leases its engine's pipeline set from — resolved once at the composition root and stashed here
-    /// unchanged (see <see cref="RegisterCameraView"/>, this binder's one construction site).</param>
-    /// <param name="hostsOnDirectX">Whether the host backend is Direct3D 12 (selects the offscreen kernel bytecode).</param>
+    /// <summary>Configures the views the world renders beside its own — called once by the render factory after the frame
+    /// source has probed the render envelope (the worst-case program, instance and transform capacities every view's
+    /// engine must fit). Registers one camera view per camera a screen names and one session view per session screen, each
+    /// an <c>sdf.world</c> instance the render graph runs (<see cref="TryViewProducer"/>).</summary>
+    /// <param name="pipelines">The composition's pipeline cache every view's engine leases its pipeline set from.</param>
+    /// <param name="hostsOnDirectX">Whether the host backend is Direct3D 12 (selects the kernel bytecode).</param>
     /// <param name="programWordCapacity">The main engine's probed program-word floor.</param>
     /// <param name="instanceCapacity">The main engine's probed instance floor.</param>
     /// <param name="dynamicTransformCapacity">The main engine's dynamic-transform slot count.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="pipelines"/> is <see langword="null"/>.</exception>
-    public void ConfigureViews(SdfWorldPipelineCache pipelines, bool hostsOnDirectX, int programWordCapacity, int instanceCapacity, int dynamicTransformCapacity) {
+    /// <param name="host">The world's frame source, whose glyph atlas, screen decals and moving screens a camera view
+    /// shares.</param>
+    /// <param name="displayWidth">The display's width, in pixels, which a view's declared extent is a fraction of.</param>
+    /// <param name="displayHeight">The display's height, in pixels.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="pipelines"/> or <paramref name="host"/> is
+    /// <see langword="null"/>.</exception>
+    public void ConfigureViews(SdfWorldPipelineCache pipelines, bool hostsOnDirectX, int programWordCapacity, int instanceCapacity, int dynamicTransformCapacity, ISdfFrameSource host, int displayWidth, int displayHeight) {
         ArgumentNullException.ThrowIfNull(argument: pipelines);
+        ArgumentNullException.ThrowIfNull(argument: host);
 
         m_viewPipelines = pipelines;
         m_viewHostsOnDirectX = hostsOnDirectX;
         m_viewProgramWordCapacity = programWordCapacity;
         m_viewInstanceCapacity = instanceCapacity;
         m_viewDynamicTransformCapacity = dynamicTransformCapacity;
-
-        // The screen indices wired to each referenced camera name (a name shared by two jumbotrons self-references both).
-        var wiredByName = new Dictionary<string, HashSet<int>>(comparer: StringComparer.Ordinal);
+        m_viewHostSource = host;
+        m_viewDisplayWidth = displayWidth;
+        m_viewDisplayHeight = displayHeight;
 
         foreach (var slot in m_slots.Values) {
             if (
@@ -43,46 +42,27 @@ internal sealed partial class WorldScreenBinder {
                     camera: camera,
                     seat: DefaultViewSeat
                 );
-                view.Stack = m_viewStack;
-                _ = (wiredByName.TryGetValue(
-                    key: view.Name,
-                    value: out var indices
-                )
-                    ? indices
-                    : (wiredByName[view.Name] = new HashSet<int>())).Add(item: slot.Index);
             }
         }
 
-        if (m_viewStack is { } stack) {
-            foreach (var (name, indices) in wiredByName) {
-                stack.SetWiredScreens(
-                    name: name,
-                    screenIndices: indices
-                );
-            }
-        }
-
-        // Every session-sourced slot resolved (headless-safe, at boot or a live reconcile) but not yet GPU-registered
-        // — completes the offscreen WorldSessionView registration now that the render envelope is known, exactly as
-        // a declared View camera's SdfCameraView completes here rather than at construction.
+        // Every session-sourced slot resolved (headless-safe, at boot or a live reconcile) but not yet registered completes
+        // its view now that the render envelope is known.
         foreach (var slot in m_slots.Values) {
-            if (
-                (slot.Session is { } feed) &&
-                (feed.View is null)
-            ) {
-                RegisterSessionView(
-                    index: slot.Index,
-                    feed: feed
-                );
+            if (slot.Session is { FrameSource: null } feed) {
+                RegisterSessionView(feed: feed);
             }
         }
+
+        ReconcileViews();
     }
     /// <summary>Publishes the screens' content for this produced frame, before the render graph schedules it: it advances
     /// the capture gate first, so every source this frame resolves sees the same answer, uploads the fills a filled
     /// external source resolves to, and services the shared camera feeds, the probe outputs and the HUD's captures. A
     /// producer, machine or probe source a screen shows is a source instance the runtime publishes at its cadence when it
-    /// renders the instance. It ends by publishing every screen's mapping (<see cref="Mappings"/>) at the extents its
-    /// images now have.</summary>
+    /// renders the instance, and a view is an instance too. It fits every window session's camera to the local eye, and on
+    /// the first frame the gate fills while a screen shows external content it composes the views again, so every view
+    /// renders over the fills before a capture reads it. It ends by publishing every screen's mapping
+    /// (<see cref="Mappings"/>) at the extents its images now have.</summary>
     /// <param name="context">The host's frame context, whose host resolves the live GPU device; a frame with no device publishes
     /// nothing.</param>
     public void Publish(in FrameContext context) {
@@ -124,71 +104,26 @@ internal sealed partial class WorldScreenBinder {
         );
         ServiceProbeFeeds(deviceContext: deviceContext);
         PublishFrameCaptures(context: in context);
+        UpdateWindowCameras();
 
-        Mappings.Publish(images: this);
-    }
-    /// <summary>Renders this frame's jumbotron views against the live device — called from the frame source's
-    /// <see cref="ISdfFrameSource.RenderViews"/> seam after the engine node has bound the screens reading source instances
-    /// and before it binds the rest, so a View screen binds this frame's offscreen render. Each view's
-    /// own render sees every other screen surface as the room shows it (a jumbotron films the lit test pattern / booted
-    /// machine beside it) and its own face as unbound (the self-reference rule). A no-op with no view pool.</summary>
-    /// <param name="context">This frame's host frame context (resolves the offscreen device).</param>
-    /// <param name="program">This frame's composed world program (the same instance the main engine renders).</param>
-    /// <param name="revision">The program's revision counter — each offscreen engine re-uploads only when it advances.</param>
-    /// <param name="transforms">This frame's packed dynamic transforms, identical to the main engine's.</param>
-    /// <param name="time">The frame's content clock (seconds) — the views render the same animated world the room does.</param>
-    /// <param name="authoritativeTick">The latest authoritative simulation tick available to presentation.</param>
-    /// <param name="hostFrame">The frame the room is rendering this frame. Offscreen content derives its own
-    /// submission from this rather than building one beside it, so every per-frame lever reaches a jumbotron by
-    /// construction (see <c>SdfCameraView.Resolve</c>).</param>
-    public void RenderViews(in FrameContext context, SdfProgram program, int revision, DynamicTransform[] transforms, float time, ulong authoritativeTick, SdfFrame hostFrame) {
-        if (
-            m_disposed ||
-            (m_viewStack is not { } stack)
-        ) {
-            return;
-        }
-
-        m_viewTransforms = transforms;
-
-        // The first frame the capture gate fills renders the views again when an external source is bound, so no view
-        // shows an image it rendered from that source before the gate began filling. A host that fills every frame
-        // never rendered one unfilled, so its cadence is untouched.
+        // A view refreshing at a divisor may hold an image it rendered from an external source before the gate began
+        // filling; composing the views again restarts their scheduling, so each renders over the fills this frame. A host
+        // that fills every frame never rendered one unfilled, so its cadence is untouched.
         if (
             m_captureGate.Filling &&
             !m_viewsRenderedFilling &&
             BindsExternal()
         ) {
-            m_viewRefreshCountdown = 0;
+            ReconcileViews(force: true);
         }
 
-        if (m_viewRefreshCountdown > 0) {
-            m_viewRefreshCountdown--;
-
-            return;
-        }
-
-        m_viewRefreshCountdown = (m_viewRefreshDivisor - 1);
         m_viewsRenderedFilling = m_captureGate.Filling;
 
-        UpdateWindowCameras();
-
-        stack.RenderFrame(context: new ViewRenderContext(
-            Host: context,
-            HostFrame: hostFrame,
-            Program: program,
-            ProgramRevision: revision,
-            Time: time,
-            AuthoritativeTick: authoritativeTick,
-            // What each screen surface binds INSIDE a jumbotron's render: the same handle the room shows, a source
-            // instance's image under the lease the engine node holds (the ViewStack zeroes the view's own wired screens
-            // per the self-reference rule, so this need not).
-            ResolveScreenSource: CurrentHandle
-        ));
+        Mappings.Publish(images: this);
     }
-    /// <summary>Sets the deterministic jumbotron refresh divisor. One renders every produced frame; larger values keep
-    /// the last resolved image between refreshes, using <see cref="ViewStack"/>'s existing persistent-handle contract.</summary>
-    /// <param name="divisor">Produced frames per offscreen refresh, from 1 through 8.</param>
+    /// <summary>Sets the deterministic refresh divisor of every camera view and every session view but a window's. One
+    /// renders every produced frame; larger values keep the last image between refreshes.</summary>
+    /// <param name="divisor">Produced frames per refresh, from 1 through 8.</param>
     public void SetViewRefreshDivisor(int divisor) {
         ArgumentOutOfRangeException.ThrowIfLessThan(
             value: divisor,
@@ -200,6 +135,6 @@ internal sealed partial class WorldScreenBinder {
         );
 
         m_viewRefreshDivisor = divisor;
-        m_viewRefreshCountdown = 0;
+        ReconcileViews();
     }
 }

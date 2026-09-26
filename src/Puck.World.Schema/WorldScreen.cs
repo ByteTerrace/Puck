@@ -127,8 +127,8 @@ public abstract record WorldScreenSource {
     /// a top-level <c>screens</c> row or magazine entry carries no face to pair with, so <c>window</c> is refused there
     /// unconditionally.</param>
     /// <param name="Resolution">The offscreen target's <c>[width, height]</c> in pixels, or <see langword="null"/> for
-    /// the engine default (<c>Puck.SdfVm.Views.WorldSessionView.DefaultWidth</c> x <c>DefaultHeight</c> — today's
-    /// 160x144 panel, unchanged for an unauthored facet). Each axis is validated within
+    /// the default 160x144 panel (<c>Puck.World.Client.WorldViewInstances.DefaultSessionWidth</c> x
+    /// <c>DefaultSessionHeight</c>). Each axis is validated within
     /// <c>1..WorldDefinitionValidator.MaxSurfaceDimension</c>. Omitted from the wire when null.</param>
     public sealed record Session(
         string Destination,

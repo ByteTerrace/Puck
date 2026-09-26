@@ -580,9 +580,9 @@ The display counts as covered only when one shown rect covers it whole, a lone
 full-display view or a full-display pane, and then the unshown pass stands for
 the world and dispatches nothing.
 
-Screens still render through `ViewStack`; moving them onto graph instances is
-the rest of P11b in
-[the rendering programme](../plans/rendering.md#p11--the-frame-graph-document-and-nested-views).
+Every screen reads a graph instance: a source instance, or a camera or session
+view, each an external `sdf.world` instance the scheduler feeds like any other
+([motion and views](../rendering/sdf/handbook/motion-and-views.md#views-are-render-graph-instances)).
 
 ## Pass interfaces
 

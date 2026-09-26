@@ -31,27 +31,20 @@ internal sealed partial class WorldScreenBinder {
         instance: instance,
         output: output
     );
-    /// <summary>Returns the current same-device image-view handle bound to a screen index, or 0 when the index is unbound, not
-    /// declared, or nothing has been published yet — the live state <c>world.screens</c> reports, and what an offscreen
-    /// view binds for the screen. A screen reading a source instance reports the image the engine node bound for it
-    /// in its latest frame.</summary>
+    /// <summary>Returns the same-device image-view handle the engine node bound to a screen index in its latest frame, or 0
+    /// when the index is unbound, not declared, or nothing has been produced yet — the live state <c>world.screens</c>
+    /// reports.</summary>
     /// <param name="index">The engine screen-surface index.</param>
     /// <returns>The bound handle, or 0.</returns>
-    public nint CurrentHandle(int index) {
-        if (!m_slots.TryGetValue(
-            key: index,
-            value: out var slot
-        )) {
-            return 0;
-        }
-
-        return ((ReadOf(screen: index) is null)
-            ? slot.Handle()
-            : (((index < SdfWorldEngine.MaxScreenSurfaces) && (m_renderProbe?.Node is { } node))
-                ? node.BoundScreenSource(screen: index)
-                : 0)
-        );
-    }
+    public nint CurrentHandle(int index) => ((
+        m_slots.ContainsKey(key: index) &&
+        (index >= 0) &&
+        (index < SdfWorldEngine.MaxScreenSurfaces) &&
+        (m_renderProbe?.Node is { } node)
+    )
+        ? node.BoundScreenSource(screen: index)
+        : 0
+    );
     /// <summary>Returns how the image a screen shows crosses from its producer's device to the render device: through the
     /// shared fence the producer signals and the render device's submission waits for, or by the producer's CPU wait
     /// and why. Only a camera on its GPU tier and a capture on its GPU route cross devices.</summary>

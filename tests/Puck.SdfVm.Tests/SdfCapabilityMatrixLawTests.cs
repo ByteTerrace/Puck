@@ -90,6 +90,7 @@ public sealed class SdfCapabilityMatrixLawTests {
             Members: [
                 "SdfWorldEngine.SubmitFrame", "SdfWorldEngine.RenderFrame", "SdfWorldEngine.ReadPixels", "SdfWorldEngine.FrameRingSize",
                 "SdfEngineNode.ProduceFrame", "SdfEngineNode.Descriptor", "SdfFrame.Time", "SdfWorldEngine.FrameValues",
+                "SdfEngineNode.HostFrame",
             ]
         ),
         new(
@@ -263,7 +264,8 @@ public sealed class SdfCapabilityMatrixLawTests {
             Members: [
                 "SdfWorldEngine.OutputImageHandle", "SdfWorldEngine.OutputImageViewHandle", "SdfWorldEngine.OutputLayout", "SdfWorldEngine.ExportSharedHandle",
                 "SdfWorldEngine.OutputWidth", "SdfWorldEngine.OutputHeight",
-                "SdfWorldEngineOptions.CreateOutputImage",
+                "SdfWorldEngineOptions.CreateOutputImage", "SdfEngineNode.CreateOutputImage", "SdfEngineNode.ExportSharedHandle",
+                "SdfEngineNode.ExportGeneration", "SdfEngineNode.OutputWidth", "SdfEngineNode.OutputHeight",
             ]
         ),
         new(

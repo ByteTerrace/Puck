@@ -1183,14 +1183,13 @@ camera, a desktop capture or a probe's output, resolves through
 `WorldCaptureGate`. While the gate fills, the image resolves to its declared
 capture fill (`ImageSourceDescriptor.CaptureFill`, opaque `#202020` by
 default), a 1×1 upload, and the producer's frame is never acquired. The gate
-covers screen slots, jumbotron renders of those screens, and HUD `Frame`
+covers screen slots, camera views filming those screens, and HUD `Frame`
 elements. An offscreen host, which serves scheduled captures and `puck parity`,
 fills every frame. A windowed host fills from the frame a `world.screenshot`
 is armed for until two frames after it. On the first frame it fills with an
-external source bound, the jumbotron views render again, so no view shows an
-image it rendered from that source before; a view beyond that frame's
-offscreen budget (`OffscreenRenderBudget`) waits for its round-robin turn and
-may still show its older image. Simulation never
+external source bound, the binder composes the views again, which restarts
+their scheduling, so every view something shows renders over the fills that
+frame and none shows an image it rendered from that source before. Simulation never
 reads the gate, and no external pixel reaches simulation state, a replay or the
 state hash.
 
@@ -1369,14 +1368,15 @@ simulation reads is a mutation, not a lever). `instrument.state` reads which scr
 with, whether it carries the capability, and its tempo. See
 [`Audio/README.md`](Audio/README.md) for the instrument host itself.
 
-A placeable camera's offscreen view can also be EXPORTED—read as a GPU
-texture by a consumer outside the render engine (a probe kernel, see
-`## Probes` below) rather than only sampled by a jumbotron screen.
+A placeable camera's view can also be EXPORTED—read as a GPU texture by a
+consumer outside the render engine (a probe kernel, see `## Probes` below)
+rather than only sampled by a screen.
 `WorldScreenBinder.TryGetViewExport`/`ReleaseViewExport` register/withdraw a
-named camera's `SdfCameraView` for export, sharing the SAME persistent view a
+named camera's view for export, sharing the SAME view instance a
 `screen.source <index> view` binding uses (so a camera already filmed by a
-jumbotron gains export at no extra render cost) and keeping an export-only
-camera rendering every `ViewStack` refresh even with no screen wired to it.
+screen gains export at no extra render cost); an export-only camera is a view
+the display shows directly, so it renders at its refresh, at its declared
+extent, even with no screen wired to it.
 Export needs the Direct3D 12 host: the exported image is opened by a Direct3D
 11 `OpenSharedResource1` elsewhere in the process, which cannot open a Vulkan
 host's opaque Vulkan-to-Vulkan export handle, so the Vulkan host refuses
@@ -1400,8 +1400,8 @@ source (no authored `seat`) means "this panel's own seat"—the seat argument
 is what resolves that, not a value baked into the source record. They are the
 registry every non-screen consumer of a `WorldFrameSource` shares: the former
 opens a non-camera producer's underlying feed the first time anything asks
-for it (idempotent—a view renders every `ViewStack` refresh with no wired
-screen narrowing its round-robin turn, a probe reads whatever its own kernel
+for it (idempotent—a view a retained frame names is shown directly by the
+display, so it renders at its refresh; a probe reads whatever its own kernel
 publishes, a capture opens through the same ladder a declared screen's capture
 source uses); a `camera` source declares nothing here at all—it instead
 rides `RetainFrameSource`/`ReleaseFrameSource`'s reference-counted table,
@@ -1674,7 +1674,8 @@ state (an advancing `state` row—deterministic, replayed, settable with
   the 65536-instance ceiling. Empty stamp capacity emits no live instances.
   Camera-tile masking is a separate approximation selected by the quality
   policy or `world.shadow-mask camera-tile`.
-- `OffscreenRenderBudget.RegisteredViews = 64`: do not register a rendered view per
+- Every camera a screen, a HUD frame or a probe export shows is a view instance
+  the render graph renders at its refresh: do not show a rendered view per
   population entry.
 - XInput caps at 4 Xbox-family pads locally; HID pads are uncapped.
 

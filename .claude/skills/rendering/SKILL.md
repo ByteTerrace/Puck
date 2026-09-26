@@ -1,6 +1,6 @@
 ---
 name: rendering
-description: "Holds the settled contracts and working procedure for Puck's GPU presentation code: the SDF instruction set and its two interpreters (Puck.SignedDistance, including the fixed-point query evaluator), the Puck.SdfVm engine and its HLSL kernels, render assembly and composition emitters, camera rigs and ViewStack, how world render data reaches SdfFrame, Puck.Shaders packages and pipelines, and the views.post post passes. Use whenever changing or debugging an SDF op, shape, blend, field scope or packed layout; any .hlsl/.hlsli file; shader builds, kernel variants or hot reload; GPU cost, capacity or world.budget; cross-backend parity or captures; or a shader pipeline. Creation and shape authoring belongs to sdf-authoring, world-document render sections and console semantics to puck-world, .puck grammar to puck-dsl, fixed-point primitives to maths-usage. Carries the C#/HLSL sync contracts so they are never re-derived or forked."
+description: "Holds the settled contracts and working procedure for Puck's GPU presentation code: the SDF instruction set and its two interpreters (Puck.SignedDistance, including the fixed-point query evaluator), the Puck.SdfVm engine and its HLSL kernels, render assembly and composition emitters, camera rigs and camera views, how world render data reaches SdfFrame, Puck.Shaders packages and pipelines, and the views.post post passes. Use whenever changing or debugging an SDF op, shape, blend, field scope or packed layout; any .hlsl/.hlsli file; shader builds, kernel variants or hot reload; GPU cost, capacity or world.budget; cross-backend parity or captures; or a shader pipeline. Creation and shape authoring belongs to sdf-authoring, world-document render sections and console semantics to puck-world, .puck grammar to puck-dsl, fixed-point primitives to maths-usage. Carries the C#/HLSL sync contracts so they are never re-derived or forked."
 ---
 
 # Rendering
@@ -29,7 +29,7 @@ with the fixed-point query evaluator described below and with `maths-usage`.
 | Prototype bakes (mesh, textures, impostor) | `src/Puck.SignedDistance/Baking` (`SdfBaker`, `SdfBakeTier`, `SdfBakedTexture`); `src/Puck.Assets/Textures` (BC4/BC5/BC6H/BC7 codecs, `TextureMipChain`, `OctahedralNormal`); `CreationBaker`, `CreationBakeKey`, `CreationBakeCodec` in `src/Puck.World.Authoring/Authoring`; `WorldBakeStore`, `WorldBakeChunk` in `src/Puck.World.Schema`; `WorldBakeSchedule` in `src/Puck.World.Client` | [prototype bakes](../../../docs/rendering/sdf/handbook/bricks-and-baking.md#prototype-bakes), [creation bakes](../../../docs/architecture/worlds.md#creation-bakes) |
 | GPU engine and render assembly | `src/Puck.SdfVm` (`SdfWorldEngine.*.cs`, `SdfEngineNode`, `SdfWorldRenderSpec`/`SdfWorldRenderBuilder`, `SdfCompositionFrameSource`, `ISdfSceneEmitter`) | [`Puck.SdfVm` README](../../../src/Puck.SdfVm/README.md), [frame rendering](../../../docs/rendering/sdf/handbook/frame-rendering.md) |
 | Kernels | `src/Puck.SdfVm/Assets/Shaders/Sdf` — `sdf-isa.hlsli` the generated instruction-set declarations (`puck shaders generate`), `sdf-vm.hlsli` the interpreter (`mapCore`, `mapGradCore`), `sdf-world.hlsli` the view logic, one `*.comp.hlsl` wrapper per dispatch | [frame rendering](../../../docs/rendering/sdf/handbook/frame-rendering.md), [lighting and shading](../../../docs/rendering/sdf/handbook/lighting-and-shading.md), [shading, AO and shadows](../../../docs/rendering/sdf/reference/shading-ao-shadows.md) |
-| Cameras and offscreen views | `src/Puck.SdfVm/Views` (`SdfCameraProgram`, rigs, `ViewStack`, `ViewTransition`) | [motion and views](../../../docs/rendering/sdf/handbook/motion-and-views.md) |
+| Cameras and views | `src/Puck.SdfVm/Views` (`SdfCameraProgram`, rigs, `SdfCameraFrameSource`, `ViewTransition`); `WorldViewInstances` (`src/Puck.World.Client/Sources`); `WorldScreenBinder.CameraViews.cs`/`.Session.cs`/`.Views.cs` | [motion and views](../../../docs/rendering/sdf/handbook/motion-and-views.md) |
 | World data into frames | `src/Puck.World.Client` (`WorldFramePresenter`, `WorldSceneEmitter`, `WorldPlacementStamper`, `WorldStampPool`, `WorldRigCatalog`, `WorldCameraRigCompiler`, `WorldViewGraphHost`, `WorldRootGraph`); `src/Puck.World.Authoring/Authoring/CreationStampEmitter.cs` | `puck-world` skill for document meaning; [authoring README](../../../src/Puck.World.Authoring/README.md) |
 | Shader manifests, pipelines, builds | `src/Puck.Shaders`, `build/Shaders.targets` | [Shader manifests and pipelines](../../../docs/reference/shaders.md) |
 | Image sources and producers | `src/Puck.Abstractions/Sources` (contract, upload layout, conversion reference, verdict); `src/Puck.Shaders/Assets/Shaders/Sources` (conversion kernels); `WorldImageProducerVocabulary`/`WorldImageProducerSettings` (`src/Puck.World.Schema`); `WorldImageProducers`, `WorldCaptureGate` (`src/Puck.World.Client/Sources`); `WorldScreenBinder.Producers.cs` | [the World guide's image producers](../../../src/Puck.World/README.md#image-producers), [rendering plan P12](../../../docs/plans/rendering.md#p12--image-sources) |
@@ -232,7 +232,9 @@ These are one-line cautions; the owning pages hold the derivations.
   stress test for handle reuse must render a frame between image swaps
   (`world.wait`); swaps inside one frame never publish the retired handle.
 - **Screens.** `SetScreenSource(i, 0)` unbinds to the procedural test card, not
-  black. Inside view V's own render, any screen wired to V binds 0. A leased
+  black. Inside view V's own render, a screen showing V samples V's previous
+  output: the engine renders a view whose current output one of its own screens
+  samples into another output (`SdfWorldEngine.ViewOutputs`). A leased
   image (`Puck.Hosting.GpuImageLease`) stays in a `LeaseRetireList` until the
   submission that sampled it retires: `SdfEngineNode` keeps one list per
   frame-ring slot, and a `ShaderPipelineRenderNode` one per frame slot, which
@@ -247,9 +249,8 @@ These are one-line cautions; the owning pages hold the derivations.
   `SharedTargetRing` over a `LatestSlotPublication`, whose producer reserves
   write slots through it (`TryReserveWriteSlot`) and so never overwrites a slot
   a lease holds, and a reattach retires the ring, disposed with its fence by the
-  last lease. A screen reading a source instance is bound
-  under the world node's lease before the offscreen views render, and they
-  sample that image (`SdfEngineNode.BoundScreenSource`). Two devices are ordered by a Direct3D 12 shared
+  last lease. A screen is bound under the lease of the engine node that
+  samples it (`SdfEngineNode.BoundScreenSource` reports the world node's). Two devices are ordered by a Direct3D 12 shared
   fence the consumer creates beside the targets: a Direct3D 11 producer signals
   it through `Win32D3D11CompletionSignal`, the one completion primitive every
   Direct3D 11 producer uses, and publishes each slot with the value, and the
@@ -295,10 +296,9 @@ These are one-line cautions; the owning pages hold the derivations.
   lease), so only an external producer samples it, and a graph instance
   reading it draws a stand-in (`RenderGraphRuntime.Bind`).
   `SdfEngineNode` maps the reads it is handed to its screens through
-  `ISdfScreenSources` (`ReadOf` names a screen's instance; `Rendered` serves a
-  view or a session), taking each read's lease once
-  however many screens show it, and binds every read before the offscreen views
-  render, which sample the same images (`BoundScreenSource`). The binder
+  `ISdfScreenSources` (`ReadOf` names each screen's instance: a source's, or a
+  camera view's or a session's), taking each read's lease once however many
+  screens show it. The binder
   publishes before the runtime schedules (`WorldFramePresenter.PrepareGraph`),
   so the gate answers once per frame. An external image (camera, capture,
   probe output) is resolved through the binder's `WorldCaptureGate`, never
@@ -1169,8 +1169,29 @@ letterbox color `place.comp.hlsl` states, and a layout covering the whole
 display pays nothing for it. While the first view is not shown, its pass still
 letterboxes the whole output when `RenderGraphPlacement.Uncovered` says part of
 the display lies outside every shown rect (`WorldViewGraphHost.PlaceViews`
-counts it covered only when one shown view or pane covers it whole). Screens still render through `ViewStack` until
-later P11b work moves them.
+counts it covered only when one shown view or pane covers it whole).
+
+Camera views and sessions are instances too (`WorldViewInstances`,
+`src/Puck.World.Client/Sources`): each camera a screen, a HUD frame or a probe
+export shows (named by its registration, `WorldSeatAnchors.RegistrationName`)
+and each session screen (`session$<screen>`) is an external `sdf.world`
+instance whose producer the binder creates (`WorldScreenBinder.TryViewProducer`,
+tried before the world node in the render root's `sdf.world` factory): an
+`SdfEngineNode` of its own, one viewport and no brick pool, a camera's filming
+the frame the world node renders (`SdfEngineNode.HostFrame`, captured once a
+frame by whichever renders first) through `SdfCameraFrameSource`, a session's
+the destination's own frame source on its own clock. A camera view reads every
+source within the frame and every view, itself included, at its previous frame;
+a session reads nothing; the world's instance reads every view within the frame.
+`WorldViewGraphHost.TryCompose` puts the views after the sources, and a view a
+screen shows is demanded through a footprint of its declared extent over the
+display (`WorldViewDemand.Screen`), one a HUD frame or a probe export shows as a
+root beside the runtime's (`WorldViewGraphHost.Roots`, `WorldViewDemand.Root`),
+and a parked one not at all. Every view refreshes at `world.view-refresh`'s
+divisor except a window session (every frame). The binder recomposes the views
+only when they change (`ReconcileViews`), and forcibly on the first frame the
+capture gate fills while a screen shows external content, which restarts their
+scheduling so each renders over the fills.
 
 A displayed source's hit mapping is `SourceMapping` (`src/Puck.Commands/Sources`,
 [pointing at a displayed source](../../../docs/reference/commands.md#pointing-at-a-displayed-source)):
@@ -1214,10 +1235,11 @@ allocating while handles and extents hold (`WorldScreenMappingLawTests`). A
 live `screen.source` bind over a row publishes the bound source's mapping
 (`WorldScreenMappingSet.Reconcile`'s `live` map). `world.screens` prints each screen's `Describe` line. Every view's world
 producer reports those mappings as its placements
-(`WorldViewGraphHost.Screens`), so the walk continues through a screen; a
-screen showing a camera view ends `Unread`, since camera views still render
-through `ViewStack` rather than the live set. The GPU does not draw from a
-mapping (P13b-5).
+(`WorldViewGraphHost.Screens`), so the walk continues through a screen, and a
+camera view reports them too, so a walk through a screen showing a camera view
+continues into the view through the camera it last filmed from
+(`WorldViewGraphHost.ViewCameras`, the binder); a session reports none. The GPU
+does not draw from a mapping (P13b-5).
 
 HLSL is the one source language, and `ShaderCompiler` runs DXC alone: no pass
 declares a language, and a one-off source is an `.hlsl` compute pass read as a

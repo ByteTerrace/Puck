@@ -567,8 +567,8 @@ engaged screens; `rom-forge` for the SM83 framework and the Tune cart;
 - The per-pixel soft-shadow gather addresses ≤2048 mask words (all 65536
   instance slots); beyond that the engine falls back to coarser camera-tile
   masking.
-- `OffscreenRenderBudget.RegisteredViews = 64` (Puck.Abstractions.Presentation; the validator caps `cameras` by the same constant) — never register a rendered view per
-  population entry.
+- Every camera a screen, a HUD frame or a probe export shows is a view instance the render graph renders at its
+  refresh (`WorldViewInstances`) — never show a rendered view per population entry.
 - `WorldDynamicGeometryCeilings.MaxContributedDynamicInstances = 16000`:
   the document-global CPU/instance-grid ceiling. GPU cost is the author's
   frame budget, not an admission term.

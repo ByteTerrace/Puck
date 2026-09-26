@@ -8,7 +8,6 @@ using Puck.Platform;
 using Puck.Platform.Probes;
 using Puck.Hosting;
 using Puck.World.Client;
-using Puck.SdfVm.Views;
 
 namespace Puck.World;
 
@@ -139,15 +138,16 @@ internal sealed partial class WorldScreenBinder {
         }
 
         if (m_viewPipelines is null) {
-            fault = "the view pool is not configured";
+            fault = "the views are not configured";
 
             return false;
         }
 
         var feed = GetOrAddViewExport(camera: camera);
-        var handle = feed.View.ExportSharedHandle;
+        var node = (ViewProducerOf(name: feed.Name) as CameraViewProducer)?.Node;
+        var handle = (node?.ExportSharedHandle ?? 0);
 
-        generation = feed.View.ExportGeneration;
+        generation = node?.ExportGeneration;
 
         if (
             (0 == handle) ||
@@ -218,19 +218,8 @@ internal sealed partial class WorldScreenBinder {
             return;
         }
 
-        feed.Detach();
-        feed.View.ExportFactory = null;
-
-        if (ResolveCamera(name: cameraName) is { } camera) {
-            var registrationName = WorldSeatAnchors.RegistrationName(
-                camera: camera,
-                seat: DefaultViewSeat
-            );
-
-            if (0 == WiredScreensFor(name: registrationName).Count) {
-                ReleaseOrphanedCameraView(name: registrationName);
-            }
-        }
+        Detach(feed: feed);
+        ReleaseOrphanedCameraView(name: feed.Name);
     }
 
     private bool HasViewExportReferences(string cameraName) => m_viewExportReferences.ContainsKey(key: cameraName);
@@ -239,53 +228,67 @@ internal sealed partial class WorldScreenBinder {
             key: cameraName,
             value: out var feed
         )) {
-            feed.Detach();
+            Detach(feed: feed);
         }
     }
-    // Registers (idempotent) the camera's offscreen view for export — the same persistent SdfCameraView a jumbotron
-    // screen would use (RegisterCameraView), so a camera already filmed by a screen gains export with no second
-    // render pass. An export-only camera (no screen names it) still renders every ViewStack refresh: Register's
-    // isLive predicate defaults to null (always live), so the round-robin schedules it exactly like a wired view.
-    // Every caller already guards TryGetViewExport's own OS-version check before reaching here.
+    // Waits out the export's readers, then stops its registration exporting: the view's next frame renders into images of
+    // its engine's own again.
+    private void Detach(ViewExportFeed feed) {
+        feed.Slots.RetireAndWait();
+
+        if (m_cameraViews.TryGetValue(
+            key: feed.Name,
+            value: out var registration
+        )) {
+            registration.EndExportWrite = null;
+            registration.ExportFactory = null;
+            registration.TryBeginExportWrite = null;
+        }
+    }
+    // Registers (idempotent) the camera's view for export — the same registration a screen would show
+    // (RegisterCameraView), so a camera already filmed by a screen gains export with no second render. An export-only
+    // camera (no screen names it) is a view the display shows directly, so it renders at its refresh like a shown one, at
+    // its declared extent, the extent of the image it exports. Every caller already guards TryGetViewExport's own
+    // OS-version check before reaching here.
     [SupportedOSPlatform("windows10.0.10240")]
     private ViewExportFeed GetOrAddViewExport(WorldCamera camera) {
+        var name = WorldSeatAnchors.RegistrationName(
+            camera: camera,
+            seat: DefaultViewSeat
+        );
+
         RegisterCameraView(
             camera: camera,
             seat: DefaultViewSeat
         );
 
-        var view = m_cameraViews[WorldSeatAnchors.RegistrationName(
-            camera: camera,
-            seat: DefaultViewSeat
-        )].View;
+        var registration = m_cameraViews[name];
 
         if (m_viewExports.TryGetValue(
             key: camera.Name,
             value: out var existing
         )) {
-            if (ReferenceEquals(
-                objA: existing.View,
-                objB: view
-            )) {
+            if (registration.ExportFactory is not null) {
                 return existing;
             }
 
-            existing.Detach();
+            Detach(feed: existing);
             _ = m_viewExports.Remove(key: camera.Name);
         }
 
         var width = camera.RenderWidth;
         var height = camera.RenderHeight;
+        var feed = new ViewExportFeed(name: name);
 
-        view.ExportFactory = device => new DirectXGpuSurfaceExportFactory(deviceContext: ((DirectXDeviceContext)device)).CreateSharedComputeImage(
+        registration.ExportFactory = device => new DirectXGpuSurfaceExportFactory(deviceContext: ((DirectXDeviceContext)device)).CreateSharedComputeImage(
             format: GpuPixelFormat.R8G8B8A8Unorm,
             height: height,
             width: width
         );
-
-        var feed = new ViewExportFeed(view: view);
-
+        registration.EndExportWrite = feed.EndWrite;
+        registration.TryBeginExportWrite = feed.Slots.TryBeginWrite;
         m_viewExports[camera.Name] = feed;
+        ReconcileViews();
 
         return feed;
     }
@@ -391,11 +394,11 @@ internal sealed partial class WorldScreenBinder {
             feed.Release();
         }
     }
-    // No GPU teardown of its own — every export's engine/image is owned by its SdfCameraView, disposed with the
-    // rest of the pool by m_viewStack.Dispose(). Clearing the map only drops this binder's own bookkeeping.
+    // No GPU teardown of its own — every export's image is owned by its view's engine, which the render graph disposes.
+    // Clearing the map only drops this binder's own bookkeeping.
     private void DisposeViewExports() {
         foreach (var feed in m_viewExports.Values) {
-            feed.Detach();
+            Detach(feed: feed);
         }
 
         m_viewExports.Clear();
@@ -447,54 +450,32 @@ internal sealed partial class WorldScreenBinder {
             targets?.Retire();
         }
     }
-    // One camera's export state, keyed by camera name. Carries no GPU handle of its own — SdfCameraView.
-    // ExportSharedHandle/ExportGeneration are read fresh from the view each call, so this class is pure bookkeeping.
-    private sealed class ViewExportFeed {
-        public ViewExportFeed(SdfCameraView view) {
-            View = view;
-            view.TryBeginExportWrite = TryBeginWrite;
-            view.EndExportWrite = EndWrite;
-        }
-
-        private object? PendingGeneration { get; set; }
-
+    // One camera's export state, keyed by camera name: the registration it exports and the one-image ring its readers
+    // share. It carries no GPU handle of its own — the view's engine's exported handle and identity are read fresh each
+    // call.
+    private sealed class ViewExportFeed(string name) {
         public object? CompletedGeneration { get; private set; }
         public ProbeKernelInput.Ring? Input { get; set; }
         public object? InputGeneration { get; set; }
+
+        public string Name { get; } = name;
         public ViewExportRing Slots { get; } = new();
-        public SdfCameraView View { get; }
 
-        private void EndWrite(bool completed) {
+        // Publishes the identity of the engine a completed frame rendered on before the ring's ready state. A failed first
+        // submission after device loss may preserve an older readable image, but it must never bless the replacement
+        // engine's new handle as completed.
+        public void EndWrite(bool completed, object? generation) {
             if (completed) {
-                // Publish the generation identity before the ring's volatile ready state. A failed first submission
-                // after device loss may preserve an older readable image, but it must never bless the replacement
-                // engine's new handle as completed.
-                CompletedGeneration = PendingGeneration;
+                CompletedGeneration = generation;
             }
 
-            PendingGeneration = null;
             Slots.EndWrite(completed: completed);
-        }
-        private bool TryBeginWrite() {
-            if (!Slots.TryBeginWrite()) {
-                return false;
-            }
-
-            PendingGeneration = View.ExportGeneration;
-
-            return true;
-        }
-
-        public void Detach() {
-            Slots.RetireAndWait();
-            View.TryBeginExportWrite = null;
-            View.EndExportWrite = null;
         }
     }
     // The single-image counterpart of the multi-buffer camera/probe rings above: a view export has exactly one
     // physical texture, so producer and consumers coordinate through one atomic state instead of rotating slots.
-    // Positive states count concurrent D3D11 readers; SdfCameraView reserves the writer state before submitting
-    // the next D3D12 render and keeps the previous complete image when that reservation is unavailable. Export-mode
+    // Positive states count concurrent D3D11 readers; the camera view's producer reserves the writer state before
+    // submitting the next D3D12 render and keeps the previous complete image when that reservation is unavailable. Export-mode
     // SubmitFrame drains the producer queue before EndWrite publishes state 1, so the cross-device reader never
     // overlaps a writer over the same texels.
     private sealed class ViewExportRing : ISharedSlotRing {

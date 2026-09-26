@@ -385,9 +385,9 @@ they respond to is in the programme's implementation status.
 
 **The frame graph is the centre of rendering, and the SDF engine is one pass
 package in it.** The SDF engine began as the host. It composited panes in its
-second stage, it owns the 32 screen slots and caps nested cameras through
-`ViewStack`'s round-robin budget, and post-processing and the overlay were
-nodes chained after it. That
+second stage, it owns the 32 screen slots, it capped nested cameras through a
+round-robin refresh budget, and post-processing and the overlay were nodes
+chained after it. That
 design grew from a prototype, and each capacity in it is a constant rather than
 a planned cost. The replacement has to be better at every job the SDF engine
 does now. So composition, nesting, sources, and output belong to the graph, and
@@ -408,12 +408,11 @@ another's output. Instances render on demand, at the extent their on-screen
 footprint needs, at their own rate, and once per frame however many consumers
 they have. A self-reference goes through the planner's previous-frame edge, so a
 mirror shows the previous frame, and a same-frame cycle is refused because no
-order of passes can satisfy it. The main view, the panes and the split-screen
-seats already run as graph instances this way. Screens do not: `ViewStack`
-still renders every camera a screen shows, and a screen that would show the
-view rendering it gets the procedural test card. Moving screens onto graph
-instances, which completes nesting, is the contract P11b's remaining commits
-deliver.
+order of passes can satisfy it. The main view, the panes, the split-screen
+seats, and every camera and session a screen shows run as graph instances this
+way; a camera view is an external `sdf.world` instance that reads every view,
+itself included, at its previous frame, and whose engine renders into another
+output when one of its own screens samples the current one.
 
 **Post passes are passes of the synthesized root graph.** A world names them in
 `views.post`, each row written the way a graph document's `packages` row is,

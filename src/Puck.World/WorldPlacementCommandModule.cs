@@ -501,7 +501,7 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
         return string.Empty;
     }
     // The projection/true-cost tail every session line carries: a window projection renders every produced frame,
-    // never sharing ViewStack's round-robin the way an ordinary camera projection does, so its resolved pixel
+    // never refreshing at the views' divisor the way an ordinary camera projection does, so its resolved pixel
     // dimensions are a real, additive per-frame GPU cost. An ordinary camera projection reports its width/height
     // too (the same resolved render target every session pays for), so the line stays one shape for both.
     private static string ProjectionText(WorldScreenProjection projection, int width, int height, bool rendersEveryFrame) =>

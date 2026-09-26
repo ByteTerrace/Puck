@@ -115,9 +115,6 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     private readonly WorldSeatViewports m_viewports;
 
     private int m_builtDefinitionRevision;
-    // This produced frame's dressed SdfFrame, kept from Dress so the LATER RenderViews call can hand it to every
-    // offscreen view as the base each derives its own submission from. Null before the first Dress.
-    private SdfFrame? m_dressedFrame;
     private float m_elapsedSeconds;
     private double m_presentedSeconds;
     private SdfProgram? m_lastProgram;
@@ -125,11 +122,6 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     // camera" line has fired for the CURRENT empty stretch, cleared the instant a seat's view fills m_views again,
     // so a later departure re-narrates instead of staying silent forever.
     private bool m_noLocalSeatsNarrated;
-    // This frame's composed program + packed transforms, stashed by Dress so the post-capture jumbotron pass
-    // (RenderViews) films the SAME program the room renders. Null/empty until the first captured frame.
-    private SdfProgram? m_program;
-    // Advances exactly when the composed program is a NEW instance — the jumbotron engines' re-upload trigger.
-    private int m_programRevision;
 
     private readonly OverlayMarkerChip[][] m_markerChips = new OverlayMarkerChip[PlayerRoster.MaxSlots][];
     private readonly OverlayMarkerSeat[] m_markerSeats = new OverlayMarkerSeat[PlayerRoster.MaxSlots];
@@ -1152,6 +1144,13 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     /// layout change places its views and panes one frame later.</summary>
     /// <param name="context">The host's frame context.</param>
     public void PrepareGraph(in FrameContext context) {
+        // The frame context's target extent IS the launcher's live client area (window.Width/Height at this frame's
+        // BeginFrame) — the one place the World side can learn it. Published for the cursor feed's client→frame
+        // mapping (see WorldCursorFeed.Decide); the per-seat views carry the FIXED frame extent instead.
+        m_viewports.PublishClientExtent(
+            width: context.TargetWidth,
+            height: context.TargetHeight
+        );
         RegionTick = m_client.StateMirror.Tick;
         m_binder.Publish(context: in context);
 
@@ -1314,12 +1313,22 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
 
         ReconcileDelivery();
         m_bakes?.Pump(definition: m_client.Definition);
-        return m_composed.CaptureFrame(
+
+        var frame = m_composed.CaptureFrame(
             deltaSeconds: deltaSeconds,
             height: height,
             interpolationAlpha: interpolationAlpha,
             width: width
         );
+
+        // The camera views film this frame, their anchors resolving against its transforms and their rigs' clocks at its
+        // tick.
+        m_binder.PresentFrame(
+            authoritativeTick: m_simulation.Tick,
+            transforms: m_transforms
+        );
+
+        return frame;
     }
 
     /// <summary>Gets a value indicating whether every frame presents bound state at the delivered tick itself rather
@@ -1331,7 +1340,6 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         ArgumentNullException.ThrowIfNull(argument: program);
         ArgumentNullException.ThrowIfNull(argument: transforms);
 
-        m_program = program;
         m_transforms = transforms;
 
         // A rebuilt program is a NEW instance (the host hands back the previous one whenever the composed revision
@@ -1344,7 +1352,6 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
 
         if (programChanged) {
             m_lastProgram = program;
-            m_programRevision++;
             RebuildStaticField();
         }
 
@@ -1582,10 +1589,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             }
         }
 
-        // Stashed on the way out (see m_dressedFrame): RenderViews runs LATER in the same produced frame and hands
-        // this exact instance to every offscreen view, which derives its own submission from it. Returning it without
-        // keeping it is what left the views building their own.
-        return m_dressedFrame = new SdfFrame(
+        return new SdfFrame(
             Program: program,
             ProgramChanged: programChanged,
             Time: m_elapsedSeconds,
@@ -1642,40 +1646,6 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     /// <inheritdoc/>
     public void NotifyDeviceLost() {
         m_binder.NotifyDeviceLost();
-    }
-    /// <inheritdoc/>
-    public void RenderViews(in Puck.Hosting.FrameContext context) {
-        // The frame context's target extent IS the launcher's live client area (window.Width/Height at this frame's
-        // BeginFrame) — the one place the World side can learn it. Published for the cursor feed's client→frame
-        // mapping (see WorldCursorFeed.Decide); the per-seat views above carry the FIXED frame extent instead.
-        m_viewports.PublishClientExtent(
-            width: context.TargetWidth,
-            height: context.TargetHeight
-        );
-
-        // Render this frame's jumbotron views (the View screens) against the live device, feeding each the SAME world
-        // program / dynamic transforms / content clock the room renders with, so a jumbotron shows this world from its
-        // placeable camera. Called AFTER the screens reading source instances are bound (the views sample this frame's
-        // images of them) and BEFORE the screens showing views bind (so they bind this frame's offscreen render).
-        // The dressed frame is required, not optional: an offscreen view DERIVES its submission from it, so a frame
-        // this produced frame never dressed has nothing to derive from and the views hold their last resolved image
-        // for one frame rather than rendering off a fabricated one.
-        if (
-            (m_program is not { } program) ||
-            (m_dressedFrame is not { } hostFrame)
-        ) {
-            return;
-        }
-
-        m_binder.RenderViews(
-            context: in context,
-            program: program,
-            revision: m_programRevision,
-            transforms: m_transforms,
-            time: m_elapsedSeconds,
-            authoritativeTick: m_simulation.Tick,
-            hostFrame: hostFrame
-        );
     }
 
     /// <summary>Initializes a new instance of the <see cref="WorldFramePresenter"/> class, composing the world scene

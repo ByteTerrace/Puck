@@ -397,8 +397,8 @@ public static class WorldBootComposition {
         // window captures) and READS Server.WorldMachineHost's outputs for a machine-owning index (it no longer
         // boots, steps, or owns a machine itself — see WorldMachineHost's own remarks). CORE (not presentation-only)
         // because WorldPlacementCommandModule's world.faces and PlayerCommandModule's body.engage both read its
-        // bound/no-signal state. ConfigureViews (the offscreen jumbotron pool) is ONLY ever called from
-        // presentation-only code (the render-root factory) — a headless boot constructs the binder as pure state and
+        // bound/no-signal state. ConfigureViews (the camera and session views) is ONLY ever called from
+        // presentation-only code (WorldRenderRoot.Build) — a headless boot constructs the binder as pure state and
         // never GPU-wires it, so no capture device or GPU-side texture is ever touched.
         services.AddSingleton(implementationFactory: static sp => {
             var definition = sp.GetRequiredService<WorldDefinition>();
@@ -1019,9 +1019,8 @@ public static class WorldBootComposition {
     /// Registered only when <c>WorldHostSettings.Offscreen</c> is <see langword="true"/>; <c>world.screenshot</c>
     /// (core-registered) works unchanged because it reaches the render graph's own <c>RequestCapture</c>, never a
     /// presenter or swap chain. Every presentation-only console module (<see cref="WorldCommandModule"/>, audio, recording, gamepads)
-    /// stays unregistered and refuses as unknown, exactly like the <c>none</c> shape; diegetic View-type screens
-    /// (the jumbotron pool <c>AddWorldPresentation</c>'s render-root factory stands up via
-    /// <c>WorldScreenBinder.ConfigureViews</c>) are a known gap this shape does not compose.
+    /// stays unregistered and refuses as unknown, exactly like the <c>none</c> shape. Camera and session screens render
+    /// as in the windowed shape, through the views <see cref="WorldRenderRoot"/> configures.
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <param name="hostsOnDirectX">Whether the resolved backend is Direct3D 12 (else Vulkan).</param>
@@ -1477,25 +1476,6 @@ public static class WorldBootComposition {
         services.AddSingleton<IRenderNode>(implementationFactory: sp => {
             var hostSettings = sp.GetRequiredService<WorldHostSettings>();
             var binder = sp.GetRequiredService<WorldScreenBinder>();
-
-            // The composition's one pipeline cache: resolved once, eagerly, right here at the composition root, then
-            // forwarded unchanged through ConfigureViews and Build to every late-construction site (the binder's
-            // stashed camera-view factory, and SdfEngineNode itself). Each records through the services of the device
-            // context it renders on.
-            var pipelines = sp.GetRequiredService<SdfWorldPipelineCache>();
-
-            var frameSource = sp.GetRequiredService<WorldFramePresenter>();
-
-            // Stand up the jumbotron view pool now the frame source has probed the render envelope: each View screen
-            // registers a persistent offscreen camera render sized to these worst-case capacities, using the
-            // selected host's bytecode. A no-op when the world declares no View screen.
-            binder.ConfigureViews(
-                pipelines: pipelines,
-                hostsOnDirectX: hostSettings.HostsOnDirectX,
-                programWordCapacity: frameSource.ProgramWordCapacity,
-                instanceCapacity: frameSource.InstanceCapacity,
-                dynamicTransformCapacity: frameSource.DynamicTransformCapacity
-            );
 
             // The unified overlay (console mirror, per-seat binding bars, HUD, toasts, cursor and wheel) is the default
             // render graph's last pass, drawn over the world and its views.post passes on both backends: neutral

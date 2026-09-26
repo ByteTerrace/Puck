@@ -505,10 +505,9 @@ meant to establish.
   `puck scan --only comment-smells` classifies the inline comments that break
   these rules.
 - `*Options` denotes configuration-bound data.
-- Command-module conventions are documented on `ICommandModule`; screen-slot
-  claim arbitration is documented on `ScreenSlotPriority`; the split between the
-  headless core and the presentation layer that adds the GPU host is documented
-  on `WorldBootComposition`.
+- Command-module conventions are documented on `ICommandModule`; the split
+  between the headless core and the presentation layer that adds the GPU host
+  is documented on `WorldBootComposition`.
 - CA1502, CA1505, and CA1506 are suggestion-level design signals. Simplify a
   design when they identify real coupling; do not add facades solely to change
   a metric.

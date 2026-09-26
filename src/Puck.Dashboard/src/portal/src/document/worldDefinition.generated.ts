@@ -9453,7 +9453,7 @@ export type WorldScreenSourceSession = {
    */
   projection?: WorldScreenProjection;
   /**
-   * The offscreen target's [width, height] in pixels, or null for the engine default (Puck.SdfVm.Views.WorldSessionView.DefaultWidth x DefaultHeight — today's 160x144 panel, unchanged for an unauthored facet). Each axis is validated within 1..WorldDefinitionValidator.MaxSurfaceDimension. Omitted from the wire when null.
+   * The offscreen target's [width, height] in pixels, or null for the default 160x144 panel (Puck.World.Client.WorldViewInstances.DefaultSessionWidth x DefaultSessionHeight). Each axis is validated within 1..WorldDefinitionValidator.MaxSurfaceDimension. Omitted from the wire when null.
    */
   resolution?: WorldScreenResolution | null;
 };
