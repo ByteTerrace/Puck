@@ -31,8 +31,8 @@ namespace Puck.World.Client;
 /// mirrors as its catalog avatar, never the vehicle's own geometry, until that seam is opened.
 /// </para>
 /// <para>
-/// <b>The interpolation timebase.</b> <see cref="WorldSessionView"/> calls <c>ISdfFrameSource.CaptureFrame</c> with a
-/// fixed zero delta/alpha on every resolve (see that type's own remarks: "never through the host's own clock") — so
+/// <b>The interpolation timebase.</b> A session's view calls <c>ISdfFrameSource.CaptureFrame</c> with its own
+/// produced-frame interval and a zero alpha on every frame it renders, never through the host's own clock — so
 /// neither <see cref="Dress"/>'s <c>interpolationAlpha</c> parameter nor <see cref="SdfEmitContext.InterpolationAlpha"/>
 /// ever carries anything but 0 for this emitter. <see cref="WorldSessionMirror.InterpolationAlpha"/> derives its own honest
 /// fraction instead, purely from the mirror's (tick, pose) pairs plus this call's own wall-clock arrival: real elapsed
@@ -63,8 +63,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     private WorldStateMirror? m_bakedColorsMirror;
     private int m_bakedColorRevision;
     private SdfProgram? m_lastProgram;
-    // The WINDOW projection's per-produced-frame override — set by WorldScreenBinder.RenderViews (the one place with
-    // access to both the local eye and the border pair's two face rows) immediately before this view's Resolve.
+    // The WINDOW projection's per-produced-frame override — set by WorldScreenBinder.Publish (the one place with access
+    // to both the local eye and the border pair's two face rows) before the render graph renders this view.
     // Null (the default, and every non-window session's steady state) leaves Dress on the ordinary camera path below.
     private (CameraSnapshot Camera, Vector2 Offset)? m_windowOverride;
 
@@ -312,8 +312,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             DynamicTransforms = transforms,
             MovedTransforms = moved,
             // A budgeted 160x144-class panel image: re-marching full soft shadows/AO/far-bound here costs real GPU
-            // time for a tiny screen-space result no player is closely scrutinizing — the same cost posture
-            // SdfCameraView's own jumbotron rig already takes.
+            // time for a tiny screen-space result no player is closely scrutinizing — the same cost posture a camera
+            // view already takes.
             DisableAmbientOcclusion = true,
             DisableSoftShadows = true,
             DisableFarBound = true,
@@ -453,8 +453,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     }
     /// <summary>Sets (or clears) this frame's window camera override — the off-axis frustum
     /// <c>WorldWindowFrustumFit.TryFitWindow</c> fit against the border pair's two face rows and the local
-    /// viewer's eye. Called once per produced frame by <c>WorldScreenBinder.RenderViews</c>, immediately
-    /// before this session's <see cref="Puck.SdfVm.Views.WorldSessionView.Resolve"/>; <see langword="null"/> (no
+    /// viewer's eye. Called once per produced frame by <c>WorldScreenBinder.Publish</c>, before the render graph renders
+    /// this session's view; <see langword="null"/> (no
     /// eye/aperture available yet, or the fit refused — see <c>SdfAsymmetricFrustum.TryFit</c>) falls back to
     /// <see cref="ResolveCamera"/>'s ordinary named/default projection for that one frame.</summary>
     /// <param name="camera">The fitted camera apexed at the mapped eye, or <see langword="null"/> to use the

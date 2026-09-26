@@ -7,6 +7,15 @@ using Puck.Maths;
 
 namespace Puck.World.Client;
 
+/// <summary>The cameras the views a world renders beside its own film from, which a hit on a screen showing a view
+/// continues through.</summary>
+public interface IWorldViewCameras {
+    /// <summary>Finds the camera a view last rendered from.</summary>
+    /// <param name="view">The view's instance name.</param>
+    /// <param name="camera">The camera when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when the view has rendered from a camera.</returns>
+    bool TryCamera(string view, out CameraSnapshot camera);
+}
 public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
     private readonly Dictionary<string, CameraSnapshot> m_cameras = new(comparer: StringComparer.Ordinal);
     // The mapping last published for each pass of the root, kept while its region, extent and source hold so a steady
@@ -45,6 +54,9 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
     /// reports as its placements, so a hit walk continues from a view through a screen into its source;
     /// <see langword="null"/> reports none.</summary>
     public WorldScreenMappingSet? Screens { get; set; }
+    /// <summary>Gets or sets the cameras the views the world renders beside its own last filmed from, or
+    /// <see langword="null"/> for none.</summary>
+    public IWorldViewCameras? ViewCameras { get; set; }
 
     /// <summary>Publishes the panes this frame's placements show, to <see cref="Panes"/> and <see cref="Picker"/>: one
     /// <see cref="SourceMapping"/> per placement the root's <c>place</c> passes draw, in drawing order, naming its
@@ -204,9 +216,9 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
     }
 
     /// <inheritdoc/>
-    /// <remarks>Every view's world producer (<c>world</c>, <c>world$&lt;view&gt;</c>) renders the one world, so each
-    /// reports the mappings <see cref="Screens"/> last published; any other instance reports none, so a ray cast into it
-    /// ends on its world.</remarks>
+    /// <remarks>Every view's world producer (<c>world</c>, <c>world$&lt;view&gt;</c>) and every camera view renders the one
+    /// world, so each reports the mappings <see cref="Screens"/> last published; any other instance, a session's included,
+    /// reports none, so a ray cast into it ends on its world.</remarks>
     IReadOnlyList<SourceMapping> IRenderGraphHitScene.Placements(int instance) {
         if (
             (Screens is { } screens) &&
@@ -217,7 +229,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
                     b: WorldViewGraphs.WorldInstance,
                     comparisonType: StringComparison.Ordinal
                 ) ||
-                (WorldViewNames.ViewOf(instance: name) is not null)
+                (WorldViewNames.ViewOf(instance: name) is not null) ||
+                FilmsWorld(views: screens.Views, name: name)
             )
         ) {
             return screens.Mappings;
@@ -226,17 +239,29 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
         return [];
     }
     /// <inheritdoc/>
-    /// <remarks>A view's camera is the one its seat rendered from in the frame the panes were published for, and a pane's
-    /// the named camera its row pairs, recorded by <see cref="SetCamera"/>.</remarks>
+    /// <remarks>A view's camera is the one its seat rendered from in the frame the panes were published for, a pane's
+    /// the named camera its row pairs, recorded by <see cref="SetCamera"/>, and a camera view's the one it last rendered
+    /// from (<see cref="ViewCameras"/>).</remarks>
     bool IRenderGraphHitScene.TryCamera(int instance, out CameraSnapshot camera) {
         if (
             (m_runtime is { } runtime) &&
             (((uint)instance) < ((uint)runtime.Instances.Instances.Count))
         ) {
-            return m_cameras.TryGetValue(
-                key: runtime.Instances.Instances[instance].Name,
+            var name = runtime.Instances.Instances[instance].Name;
+
+            if (m_cameras.TryGetValue(
+                key: name,
                 value: out camera
-            );
+            )) {
+                return true;
+            }
+
+            if (ViewCameras is { } cameras) {
+                return cameras.TryCamera(
+                    camera: out camera,
+                    view: name
+                );
+            }
         }
 
         camera = default;
@@ -244,6 +269,20 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
         return false;
     }
 
+    // Whether a view films the world the screens stand in.
+    private static bool FilmsWorld(WorldViewInstances views, string name) {
+        foreach (var view in views.Views) {
+            if (string.Equals(
+                a: view.Name,
+                b: name,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                return view.FilmsWorld;
+            }
+        }
+
+        return false;
+    }
     // Publishes one pass's placement when the root draws it and its instance has rendered at an extent.
     private void PublishPane(RenderGraphInstanceSet set, RenderGraphSchedule latest, string pass, string instance) {
         if (

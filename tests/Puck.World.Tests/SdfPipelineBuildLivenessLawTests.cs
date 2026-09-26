@@ -101,7 +101,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
         void Pump() {
             source.Collect();
 
-            if (node.ProduceFrame(context: in context).IsEmpty) {
+            if (!node.Produce(context: in context, height: Extent, width: Extent)) {
                 emptyFrames++;
             }
         }
@@ -156,7 +156,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
             },
             timeout: TimeSpan.FromSeconds(value: 30)
         ));
-        Assert.False(condition: node.ProduceFrame(context: in context).IsEmpty);
+        Assert.True(condition: node.Produce(context: in context, height: Extent, width: Extent));
     }
     [Fact]
     public void ADeviceLossWaitsOnlyForThePipelinesInTheDriverAndTheNextFrameStartsAnother() {
@@ -189,7 +189,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
             TargetWidth: Extent
         );
 
-        Assert.True(condition: node.ProduceFrame(context: in context).IsEmpty);
+        Assert.False(condition: node.Produce(context: in context, height: Extent, width: Extent));
         driver.WaitUntilFull();
 
         // The loss cancels the build inside the cache's gate before the set leaves the cache, so once the cache no
@@ -212,7 +212,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
 
         Assert.True(condition: SpinWait.SpinUntil(
             condition: () => {
-                _ = node.ProduceFrame(context: in context);
+                _ = node.Produce(context: in context, height: Extent, width: Extent);
 
                 return node.IsReady;
             },

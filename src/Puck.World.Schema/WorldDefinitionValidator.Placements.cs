@@ -1,5 +1,4 @@
 using System.Globalization;
-using Puck.Abstractions.Presentation;
 using Puck.Maths;
 using Puck.World.Authoring;
 using Puck.SignedDistance;
@@ -2261,34 +2260,6 @@ public static partial class WorldDefinitionValidator {
                 rowNoun: rowNoun,
                 errors: errors
             );
-        }
-    }
-    // Document-wide: the simultaneous-window ceiling is OffscreenRenderBudget.PerProducedFrame (the presentation budget
-    // the view stack's refresh share also reads), refused BY NAME — a window is an unbudgeted render, a full offscreen
-    // submit every produced frame. Standalone (not in ValidateFaceSources): it needs the WHOLE document's placements.
-    private static void ValidateSessionWindowBudget(IReadOnlyList<WorldPlacement> placements, List<string> errors) {
-        var windows = new List<string>();
-
-        foreach (var placement in placements) {
-            if (placement is null) {
-                continue;
-            }
-
-            foreach (var face in (placement.FaceSources ?? [])) {
-                if (
-                    (face is not null) &&
-                    (face.Source is WorldScreenSource.Session { Projection: WorldScreenProjection.Window })
-                ) {
-                    windows.Add(item: $"{placement.Id}/{face.Face}");
-                }
-            }
-        }
-
-        if (windows.Count > OffscreenRenderBudget.PerProducedFrame) {
-            errors.Add(item: $"placements author {windows.Count} 'window'-projection session face(s) ({string.Join(
-                separator: ", ",
-                values: windows
-            )}), exceeding the simultaneous-window budget of {OffscreenRenderBudget.PerProducedFrame} — a window renders every produced frame regardless of whether anyone is looking through it, so this ceiling is a real GPU cost bound, not a taste one. Drop a window to a plain 'camera' projection or remove a face.");
         }
     }
     private static HashSet<string> ValidateTextCatalog(TextFontCatalogDefinition? text, List<string> errors) {

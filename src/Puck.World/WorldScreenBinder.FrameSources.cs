@@ -2,7 +2,6 @@ using Puck.Abstractions.Sources;
 using Puck.Commands;
 using Puck.Hosting;
 using Puck.World.Client;
-using Puck.SdfVm.Views;
 
 namespace Puck.World;
 
@@ -28,8 +27,8 @@ internal sealed partial class WorldScreenBinder {
     /// idempotent, safe to call at boot or on every definition/identity revision. A camera source declares nothing
     /// here — its demand is a live set recomputed every publish from actual consumers (<see cref="ReconcileCameraDemand"/>),
     /// including <see cref="RetainFrameSource"/>'s reference table); a view
-    /// camera renders every <see cref="ViewStack"/> refresh with no wired screen narrowing its round-robin turn
-    /// (<see cref="RegisterCameraView"/>'s default <c>isLive</c> is always-true); a probe reads whatever its own
+    /// camera registers a view the display shows directly while a retained HUD frame names it
+    /// (<see cref="WorldViewDemand.Root"/>); a probe reads whatever its own
     /// kernel publishes; a capture opens through <see cref="TryCreateCaptureFeed"/>, the same ladder a declared
     /// screen's capture source uses.</summary>
     /// <param name="source">The frame source a HUD element (or any other non-screen consumer) names.</param>
@@ -190,15 +189,13 @@ internal sealed partial class WorldScreenBinder {
         }
     }
 
-    // Parks a camera view no frame source retains: it keeps rendering only while a screen or export still films it.
+    // Parks a camera view no frame source retains: it keeps its instance and its last image, and renders only while a
+    // screen or export still shows it.
     private void ParkCameraView(string name) {
-        if (
-            (m_viewStack is null) ||
-            !m_cameraViews.TryGetValue(
+        if (!m_cameraViews.TryGetValue(
             key: name,
             value: out var registration
-        )
-        ) {
+        )) {
             return;
         }
 
@@ -209,6 +206,7 @@ internal sealed partial class WorldScreenBinder {
             !exported
         ) {
             _ = m_parkedViews.Add(item: name);
+            ReconcileViews();
         }
     }
     private static WorldFeedProfile RichestProfile(WorldFeedProfile left, WorldFeedProfile right) => new(
@@ -305,7 +303,7 @@ internal sealed partial class WorldScreenBinder {
     // bare camera name otherwise (and for an undeclared camera, so a fault still names what was asked for).
     private string ViewRegistrationName(string cameraName, int seat) =>
         ((ResolveCamera(name: cameraName) is { } camera)
-            ? WorldSeatAnchors.RegistrationName(
+            ? m_registrationNames.Of(
                 camera: camera,
                 seat: seat
             )
@@ -509,15 +507,16 @@ internal sealed partial class WorldScreenBinder {
 
                 break;
             case WorldScreenSource.View view:
-                if (m_viewStack is { } stack) {
-                    var handle = stack.Resolve(name: ViewRegistrationName(
+                if (
+                    (ViewProducerOf(name: ViewRegistrationName(
                         cameraName: view.CameraName,
                         seat: seat
-                    ));
+                    )) is { } producer) &&
+                    producer.TryAcquireOutput(output: out var output)
+                ) {
+                    frame = output.Lease;
 
-                    frame = handle;
-
-                    return (0 != handle);
+                    return true;
                 }
 
                 break;

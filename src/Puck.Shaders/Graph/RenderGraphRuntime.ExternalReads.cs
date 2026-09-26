@@ -2,11 +2,11 @@ using Puck.Hosting;
 
 namespace Puck.Shaders;
 
-// The images an external producer reads. An external instance may read other instances' images within the frame (the
-// set refuses its buffer and previous-frame reads): before it produces, the runtime binds each read to the latest
-// completed output of the instance read, an external producer's under the lease its acquisition returns and a graph
-// instance's unleased, and hands the list to Produce. The producer takes the leases its submission samples; the rest are
-// retired once Produce returns.
+// The images an external producer reads (the set refuses its buffer reads): before it produces, the runtime binds each
+// read to the latest completed output of the instance read, an external producer's under the lease its acquisition
+// returns and a graph instance's unleased, and hands the list to Produce. A read of the producer's own output therefore
+// binds the output it completed before this frame. On a capture frame a previous-frame read of a tainted output binds
+// nothing (Withholds). The producer takes the leases its submission samples; the rest are retired once Produce returns.
 public sealed partial class RenderGraphRuntime {
     // Each external instance's reads, or null for one that reads nothing, for the set they were made for.
     private RenderGraphExternalReads?[] m_externalReads = [];
@@ -37,10 +37,21 @@ public sealed partial class RenderGraphRuntime {
 
         for (var position = 0; (position < edges.Count); position++) {
             var producer = edges[position].Producer;
+            var previousFrame = edges[position].PreviousFrame;
 
             if (m_producers[producer] is { } external) {
                 if (external.TryAcquireOutput(output: out var output)) {
                     m_producerTainted[producer] = output.Tainted;
+
+                    if (Withholds(
+                        previousFrame: previousFrame,
+                        tainted: output.Tainted
+                    )) {
+                        output.Lease.Retire();
+
+                        continue;
+                    }
+
                     NoteTaint(
                         index: index,
                         producer: m_set.Instances[producer].Name,
@@ -72,7 +83,13 @@ public sealed partial class RenderGraphRuntime {
                 producer: producer
             );
 
-            if (completed.Image.IsSameDeviceImage) {
+            if (
+                completed.Image.IsSameDeviceImage &&
+                !Withholds(
+                    previousFrame: previousFrame,
+                    tainted: completed.Tainted
+                )
+            ) {
                 NoteTaint(
                     index: index,
                     producer: m_set.Instances[producer].Name,

@@ -35,6 +35,9 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.name {reservedReason}");
             } else if (!names.Add(item: graph.Name)) {
                 errors.Add(item: $"{path}.name '{graph.Name}' is duplicated.");
+            } else if (cameras.Contains(item: graph.Name)) {
+                // A camera a screen, a HUD frame or a probe export shows renders as a view instance named by the camera.
+                errors.Add(item: $"{path}.name '{graph.Name}' is a camera's name, which a view of that camera renders under; name another.");
             } else if (
                 (views.Root is null) &&
                 WorldViewGraphs.IsSynthesized(name: graph.Name)

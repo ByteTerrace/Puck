@@ -600,7 +600,7 @@ public sealed partial class RenderGraphSchedulerLawTests {
         Assert.Contains(expectedSubstring: "reads 'security' as Buffer, but its output is Image", actualString: bufferOfImage.Message);
     }
     [Fact]
-    public void AnExternalProducerReadsImagesButNoBufferOrPreviousFrame() {
+    public void AnExternalProducerReadsImagesAndPreviousFramesButNoBuffer() {
         Assert.True(condition: RenderGraphInstanceSet.TryCreate(
             instances: [
                 Instance(name: "camera"),
@@ -611,39 +611,51 @@ public sealed partial class RenderGraphSchedulerLawTests {
         ));
         Assert.Equal(expected: [0, 1], actual: set.Order);
 
+        // A previous-frame read, its own output's included, orders nothing.
         foreach (var read in ((RenderGraphRead[])[new(Producer: "camera", PreviousFrame: true), new(Producer: "world")])) {
-            Assert.False(condition: RenderGraphInstanceSet.TryCreate(
+            Assert.True(condition: RenderGraphInstanceSet.TryCreate(
                 instances: [
                     Instance(name: "camera"),
                     World(reads: [read]),
                 ],
-                refusal: out var refusal,
-                set: out _
-            ));
-            Assert.Equal(expected: RenderGraphInstanceRefusalCode.ExternalReads, actual: refusal.Code);
-            Assert.Equal(expected: ["world"], actual: refusal.Instances);
-            Assert.Contains(expectedSubstring: "'world' is the external producer 'sdf.world'", actualString: refusal.Message);
+                refusal: out var accepted,
+                set: out var withRead
+            ), userMessage: accepted?.Message);
+            Assert.True(condition: withRead.Reads[1][0].PreviousFrame);
+            Assert.Equal(expected: 0, actual: withRead.NestingDepth);
         }
-    }
-    [Fact]
-    public void APreviousFrameReadOfTheWorldProducerIsRefusedByName() {
+
         Assert.False(condition: RenderGraphInstanceSet.TryCreate(
             instances: [
-                World(),
-                Instance(
-                    name: "main",
-                    reads: [new RenderGraphRead(
-                        PreviousFrame: true,
-                        Producer: "world"
-                    )]
-                ),
+                Bricks(),
+                World(reads: [BufferRead(producer: "bricks")]),
             ],
             refusal: out var refusal,
             set: out _
         ));
-        Assert.Equal(expected: RenderGraphInstanceRefusalCode.ExternalPreviousFrame, actual: refusal.Code);
-        Assert.Equal(expected: ["main", "world"], actual: refusal.Instances);
-        Assert.Contains(expectedSubstring: "reads the previous frame of 'world', the external producer 'sdf.world'", actualString: refusal.Message);
+        Assert.Equal(expected: RenderGraphInstanceRefusalCode.ExternalReads, actual: refusal.Code);
+        Assert.Equal(expected: ["world"], actual: refusal.Instances);
+        Assert.Contains(expectedSubstring: "'world' is the external producer 'sdf.world'", actualString: refusal.Message);
+    }
+    [Fact]
+    public void TwoExternalViewsReadEachOthersPreviousFrame() {
+        var mirror = (World(reads: [new RenderGraphRead(Producer: "mirror", PreviousFrame: true)]) with { Name = "mirror" });
+        var set = Set(
+            (World(reads: [new RenderGraphRead(Producer: "mirror", PreviousFrame: true), new RenderGraphRead(Producer: "camera")]) with { Name = "watcher" }),
+            (World(reads: [new RenderGraphRead(Producer: "watcher", PreviousFrame: true)]) with { Name = "camera" }),
+            mirror,
+            Instance(
+                name: "main",
+                reads: [new RenderGraphRead(
+                    PreviousFrame: true,
+                    Producer: "watcher"
+                )]
+            )
+        );
+
+        // The one same-frame read orders the camera before the watcher; every previous-frame read orders nothing.
+        Assert.Equal(expected: [1, 0, 2, 3], actual: set.Order);
+        Assert.Equal(expected: 1, actual: set.NestingDepth);
     }
     [Fact]
     public void AnExternalProducerIsScheduledAndPricedLikeAnyInstance() {

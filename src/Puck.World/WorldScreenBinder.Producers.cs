@@ -6,9 +6,6 @@ using Puck.World.Client;
 namespace Puck.World;
 
 internal sealed partial class WorldScreenBinder {
-    // Whether the views' last render resolved external images to their fills.
-    private bool m_viewsRenderedFilling;
-
     // Whether an external image resolves to its capture fill this frame.
     private bool FillsExternal => m_captureGate.Fills(content: ImageContentClass.External);
 

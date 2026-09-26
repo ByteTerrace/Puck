@@ -106,9 +106,6 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     /// <see cref="SdfWorldInterfaces.ScreenMask"/> (the per-frame bound-slot bitmask) is a single <c>uint</c> — raising
     /// past 32 needs a second mask word on both sides.</summary>
     public const int MaxScreenSurfaces = Puck.SignedDistance.SdfProgramBuilder.MaxScreenSurfaces;
-    /// <summary>The most views one engine renders in a frame: its viewport capacity's ceiling, which sizes the per-view
-    /// descriptor sets and output images the engine can hold.</summary>
-    public const int MaxViewports = 5;
     /// <summary>The most bounded emissive volumes (<see cref="Puck.SignedDistance.SdfVolume"/>) one rendered frame
     /// carries — the same ceiling as <see cref="Puck.SignedDistance.SdfProgramBuilder.MaxVolumes"/>, which this
     /// reads rather than hand-syncing a second literal.</summary>
@@ -205,9 +202,9 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     // always renders the first frame before it can skip.
     private ulong m_previousFrameSignature;
     // CADENCE GATE: whether the LIVE uploaded program declares any ScreenSlab shape (bound or not) — computed once at
-    // UploadProgram (the single owner of per-program state), never per frame. A declared-but-unbound slab's face is the
-    // animated test-card (screenContent, sdf-world.hlsli), which reads presentation TIME every frame; the signature
-    // excludes that lane (ComputeFrameSignature), so this fact is what makes DecideCadenceSkip force a render instead.
+    // UploadProgram (the single owner of per-program state), never per frame. A bound slab's image changes in place under
+    // the same view handle, which no packed span the signature hashes sees (ComputeFrameSignature), so this fact is what
+    // makes DecideCadenceSkip force a render instead.
     private bool m_programDeclaresScreenSlab;
     // Monotonic revisions folded into the signature so a change to a resource NOT re-hashed each frame still invalidates
     // it: m_programRevision bumps on every UploadProgram (program words, live mask width, kernel variant, screen-surface
@@ -293,8 +290,8 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     /// <param name="height">The engine's extent height in pixels: the tallest any view renders.</param>
     /// <param name="options">The construction options (scene program, capacities, child mask, export seam).</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">A dimension is zero, the viewport capacity is 0 or above
-    /// <see cref="MaxViewports"/>, or the options enable a brick pool the pipelines were built without.</exception>
+    /// <exception cref="ArgumentException">A dimension is zero, the viewport capacity is 0, or the options enable a brick
+    /// pool the pipelines were built without.</exception>
     /// <exception cref="ObjectDisposedException"><paramref name="pipelines"/> has been disposed.</exception>
     /// <exception cref="InvalidOperationException">The device's descriptor heap cannot admit the engine's pool
     /// (<see cref="CheckAdmission"/>, checked before anything is allocated), or the loaded shader bytecode does not report
@@ -318,11 +315,8 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             throw new ArgumentException(message: "World engine dimensions must be non-zero.");
         }
 
-        if (
-            (0 == options.ViewportCapacity) ||
-            (options.ViewportCapacity > MaxViewports)
-        ) {
-            throw new ArgumentException(message: $"The world engine provisions 1 to {MaxViewports} viewport slots; the options ask for {options.ViewportCapacity}.");
+        if (0 == options.ViewportCapacity) {
+            throw new ArgumentException(message: "The world engine provisions at least one viewport slot; the options ask for 0.");
         }
 
         if ((options.BrickPoolVoxelCapacity > 0) && !pipelines.IncludesBrickPipelines) {
@@ -599,7 +593,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         for (var view = 0; (view < m_viewBlocks.Length); view++) {
             m_viewBlocks[view] = scope.Own(created: CreateBlockRegion(
                 blockBytes: SdfWorldInterfaces.WorldParameters.SizeBytes,
-                name: NameOf(detail: ViewDetails[view], part: "world-block")
+                name: NameOf(detail: ViewDetail(view: view), part: "world-block")
             ));
         }
 
@@ -647,7 +641,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
 
             for (var view = 0; (view < ((int)m_viewportCapacity)); view++) {
                 var viewsSet = m_bindings.AllocateSet(
-                    name: NameOf(detail: ViewDetails[view], index: slot, part: "views"),
+                    name: NameOf(detail: ViewDetail(view: view), index: slot, part: "views"),
                     descriptorSetLayoutHandle: groupLayouts[((int)PassGroup)],
                     poolHandle: m_pool
                 );

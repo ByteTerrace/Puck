@@ -268,12 +268,15 @@ public sealed class SdfEngineNodeLeaseLawTests {
         );
     }
 
-    private sealed class FixedFrameSource(SdfFrame frame, Action? onRenderViews) : ISdfFrameSource {
+    private sealed class FixedFrameSource(SdfFrame frame) : ISdfFrameSource {
+        public int Captures { get; private set; }
         public SdfFrame Frame { get; set; } = frame;
 
-        public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) =>
-            Frame;
-        public void RenderViews(in FrameContext context) => onRenderViews?.Invoke();
+        public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) {
+            Captures++;
+
+            return Frame;
+        }
     }
 
     // An image another device writes is sampled only after that device's fence reaches the value its write signals:
@@ -284,20 +287,40 @@ public sealed class SdfEngineNodeLeaseLawTests {
         using var fence = new SharedFence();
         var released = 0;
 
+        const string Source = "source$camera$0";
+        var reads = new RenderGraphExternalReads(producers: [Source]);
+
         using var rig = new Rig(screenSources: new ScreenSources(
-            readOf: static _ => null,
-            rendered: _ => new GpuImageLease(
-                ImageViewHandle: 0x51,
-                Release: _ => released++,
-                Wait: new GpuExternalWait(
-                    Fence: fence,
-                    Value: 7UL
-                )
-            ),
+            readOf: static _ => Source,
             screens: [0]
         ));
 
+        void Produce() {
+            reads.Bind(
+                image: default,
+                index: 0,
+                layout: GpuImageLayout.ShaderReadOnly,
+                lease: new GpuImageLease(
+                    ImageViewHandle: 0x51,
+                    Release: _ => released++,
+                    Wait: new GpuExternalWait(
+                        Fence: fence,
+                        Value: 7UL
+                    )
+                ),
+                tainted: false
+            );
+            Assert.True(condition: rig.Node.Produce(
+                context: rig.Context,
+                height: Extent,
+                reads: reads,
+                width: Extent
+            ));
+            reads.RetireUntaken();
+        }
+
         rig.ProduceFirst();
+        Produce();
 
         var (submission, fenced, wait) = Assert.Single(collection: rig.Gpu.CarriedWaits);
 
@@ -310,7 +333,7 @@ public sealed class SdfEngineNodeLeaseLawTests {
         // Each later frame's lease carries its own wait into its own submission; a slot's lease retires only once the
         // frame ring comes back to that slot.
         for (var frame = 1; (frame <= SdfWorldEngine.FrameRingSize); frame++) {
-            rig.Produce(extent: Extent);
+            Produce();
             Assert.Equal(expected: (frame + 1), actual: rig.Gpu.CarriedWaits.Count);
             Assert.Equal(expected: (rig.Gpu.Submissions, true), actual: (rig.Gpu.CarriedWaits[^1].Submission, rig.Gpu.CarriedWaits[^1].Fenced));
         }
@@ -328,7 +351,6 @@ public sealed class SdfEngineNodeLeaseLawTests {
 
         using var rig = new Rig(screenSources: new ScreenSources(
             readOf: static _ => Source,
-            rendered: static _ => throw new InvalidOperationException(message: "A screen reading a source is never rendered."),
             screens: [0, 3]
         ));
 
@@ -375,64 +397,105 @@ public sealed class SdfEngineNodeLeaseLawTests {
             expected: new[] { 0 }
         );
     }
-    // The offscreen views render inside the frame the node produces, after the screens reading source instances are bound:
-    // a view filming a screen samples the image the node bound for it this frame, whose lease the node holds past the
-    // frame's own submission, which the views' submissions precede. A screen the host renders itself binds after the
-    // views, so a view's own image is fresh when it binds.
+    // A view filming the world takes the frame the node renders next before the node renders it: the frame source captures
+    // once, the node's render takes that frame, and its next render captures anew.
     [Fact]
-    public void AnOffscreenViewSamplesTheLeaseTheNodeHoldsForAScreensSource() {
-        const string Source = "source$capture$0";
-        var released = 0;
-        var renders = 0;
-        var atViews = new List<(nint Read, nint Rendered)>();
-        SdfEngineNode? node = null;
-        var reads = new RenderGraphExternalReads(producers: [Source]);
+    public void AViewTakesTheFrameTheNodeRendersNext() {
+        using var rig = new Rig();
+
+        rig.ProduceFirst();
+
+        var captures = rig.Frames.Captures;
+        var first = rig.Node.HostFrame(context: rig.Context);
+
+        Assert.Same(
+            actual: rig.Node.HostFrame(context: rig.Context),
+            expected: first
+        );
+        rig.Produce(extent: Extent);
+        Assert.Equal(
+            actual: rig.Frames.Captures,
+            expected: (captures + 1)
+        );
+        rig.Produce(extent: Extent);
+        Assert.Equal(
+            actual: rig.Frames.Captures,
+            expected: (captures + 2)
+        );
+    }
+    // A frame a view captured ahead that the node never renders, because the graph did not schedule it, is dropped when the
+    // next frame begins, so the view films the current frame rather than the first one forever.
+    [Fact]
+    public void AViewFilmsTheCurrentFrameWhenTheNodeDoesNotRender() {
+        using var rig = new Rig();
+
+        rig.ProduceFirst();
+
+        var captures = rig.Frames.Captures;
+
+        _ = rig.Node.HostFrame(context: rig.Context);
+        rig.Node.BeginFrame();
+        _ = rig.Node.HostFrame(context: rig.Context);
+        rig.Node.BeginFrame();
+        _ = rig.Node.HostFrame(context: rig.Context);
+        Assert.Equal(
+            actual: rig.Frames.Captures,
+            expected: (captures + 3)
+        );
+    }
+    // A mirror: a screen sampling the node's own view binds the output the view completed before, and the engine renders
+    // the frame into another image, reusing a replaced one once nothing holds it, so a steady mirror cycles through at
+    // most three images: the one it writes, the one it samples, and the one a ring slot's fence still holds.
+    [Fact]
+    public void AViewSamplingItsOwnOutputNeverWritesTheImageItSamples() {
+        const string Self = "mirror";
+        var reads = new RenderGraphExternalReads(producers: [Self]);
+        var written = new HashSet<nint>();
 
         using var rig = new Rig(
-            onRenderViews: () => atViews.Add(item: (node!.BoundScreenSource(screen: 0), node.BoundScreenSource(screen: 1))),
             screenSources: new ScreenSources(
-                readOf: static screen => ((screen == 0)
-                    ? Source
-                    : null),
-                rendered: _ => ((nint)(0x70 + (++renders))),
-                screens: [0, 1]
-            )
-        );
-
-        node = rig.Node;
-        rig.ProduceFirst();
-        atViews.Clear();
-
-        var before = renders;
-
-        reads.Bind(
-            image: default,
-            index: 0,
-            layout: GpuImageLayout.ShaderReadOnly,
-            lease: new GpuImageLease(
-                ImageViewHandle: 0x61,
-                Release: _ => released++
+                readOf: static _ => Self,
+                screens: [0]
             ),
-            tainted: false
+            trackObjects: true
         );
-        Assert.True(condition: rig.Node.Produce(
-            context: rig.Context,
-            height: Extent,
-            reads: reads,
-            width: Extent
-        ));
-        reads.RetireUntaken();
 
-        // At the views, the read is this frame's and the rendered screen still the frame before's; after, both this frame's.
-        Assert.Equal(
-            actual: Assert.Single(collection: atViews),
-            expected: (((nint)0x61), ((nint)(0x70 + before)))
-        );
-        Assert.Equal(
-            actual: rig.Node.BoundScreenSource(screen: 1),
-            expected: ((nint)((0x70 + before) + 1))
-        );
-        Assert.Equal(actual: released, expected: 0);
+        rig.Gpu.DistinctImages = true;
+        rig.ProduceFirst();
+
+        var images = rig.LiveImages().Length;
+
+        for (var frame = 0; (frame < 8); frame++) {
+            Assert.True(condition: rig.Node.TryAcquireOutput(output: out var previous));
+            reads.Bind(
+                image: previous.Image,
+                index: 0,
+                layout: previous.Layout,
+                lease: previous.Lease,
+                tainted: previous.Tainted
+            );
+            Assert.True(condition: rig.Node.Produce(
+                context: rig.Context,
+                height: Extent,
+                reads: reads,
+                width: Extent
+            ));
+            reads.RetireUntaken();
+            Assert.True(condition: rig.Node.TryAcquireOutput(output: out var current));
+            Assert.Equal(
+                actual: rig.Node.BoundScreenSource(screen: 0),
+                expected: previous.Image.ImageViewHandle
+            );
+            Assert.NotEqual(
+                actual: current.Image.ImageViewHandle,
+                expected: previous.Image.ImageViewHandle
+            );
+            current.Lease.Retire();
+            _ = written.Add(item: current.Image.ImageViewHandle);
+        }
+
+        Assert.Equal(actual: written.Count, expected: 3);
+        Assert.Equal(actual: rig.LiveImages().Length, expected: (images + 2));
     }
     // The node's output carries the taint of the reads its latest submitted frame bound: a frame that read unfilled
     // external content hands out a tainted output, and the next frame over a filled read an untainted one.
@@ -443,7 +506,6 @@ public sealed class SdfEngineNodeLeaseLawTests {
 
         using var rig = new Rig(screenSources: new ScreenSources(
             readOf: static screen => Source,
-            rendered: static _ => ((nint)0),
             screens: [0]
         ));
 
@@ -484,14 +546,13 @@ public sealed class SdfEngineNodeLeaseLawTests {
 
         using var rig = new Rig(screenSources: new ScreenSources(
             readOf: static screen => Source,
-            rendered: static _ => ((nint)0),
             screens: [0]
         ));
 
-        var single = rig.Source.Frame;
+        var single = rig.Frames.Frame;
         var view = single.Views[0];
 
-        rig.Source.Frame = (single with {
+        rig.Frames.Frame = (single with {
             Views = [
                 (view with {
                     Region = new NormalizedRect(Height: 1f, Width: 0.5f, X: 0f, Y: 0f),
@@ -531,7 +592,7 @@ public sealed class SdfEngineNodeLeaseLawTests {
             expected: (true, true)
         );
 
-        rig.Source.Frame = single;
+        rig.Frames.Frame = single;
 
         Assert.Equal(
             actual: ProduceOver(tainted: false),
@@ -539,12 +600,11 @@ public sealed class SdfEngineNodeLeaseLawTests {
         );
     }
 
-    private sealed class ScreenSources(IReadOnlyList<int> screens, Func<int, string?> readOf, Func<int, GpuImageLease> rendered) : ISdfScreenSources {
+    private sealed class ScreenSources(IReadOnlyList<int> screens, Func<int, string?> readOf) : ISdfScreenSources {
         public IReadOnlyList<int> Screens => screens;
 
         public Vector3 Light(int screen) => Vector3.Zero;
         public string? ReadOf(int screen) => readOf(arg: screen);
-        public GpuImageLease Rendered(int screen) => rendered(arg: screen);
     }
     private sealed class SharedFence : IGpuSharedFence {
         public ulong CompletedValue => 0UL;
@@ -552,7 +612,7 @@ public sealed class SdfEngineNodeLeaseLawTests {
         public void Dispose() { }
     }
     private sealed class Rig : IDisposable {
-        public Rig(bool trackObjects = false, ISdfScreenSources? screenSources = null, Action? onRenderViews = null) {
+        public Rig(bool trackObjects = false, ISdfScreenSources? screenSources = null) {
             var gpu = new FakeGpuDevice(
                 reportVersion: SdfIsa.Version,
                 trackObjects: trackObjects
@@ -587,13 +647,10 @@ public sealed class SdfEngineNodeLeaseLawTests {
                 )]
             );
 
-            Source = new FixedFrameSource(
-                frame: frame,
-                onRenderViews: onRenderViews
-            );
+            Frames = new FixedFrameSource(frame: frame);
             Node = new SdfEngineNode(
                 brickPoolVoxelCapacity: 0,
-                frameSource: Source,
+                frameSource: Frames,
                 height: Extent,
                 kernels: SdfTestPipelines.Kernels(),
                 pipelines: SdfTestPipelines.Cache(),
@@ -615,9 +672,9 @@ public sealed class SdfEngineNodeLeaseLawTests {
         }
 
         public FrameContext Context { get; }
+        public FixedFrameSource Frames { get; }
         public FakeGpuDevice Gpu { get; }
         public SdfEngineNode Node { get; }
-        public FixedFrameSource Source { get; }
 
         public void Dispose() => Node.Dispose();
         // The images the device holds now, which a law watches for the one a later frame releases.
