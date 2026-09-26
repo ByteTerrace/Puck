@@ -13,7 +13,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
     // image, a framebuffer, a sampler and the pre-barrier, draw and post-barrier command pools.
     private const int PreviewCreations = (5 + (6 * ((int)InFlight)));
     // The feedback graph's own objects, as the replacement law counts them.
-    private const int GraphCreations = ((((3 * ((int)InFlight)) + (2 * (2 + (2 * ((int)InFlight))))) + (4 + (4 * ((int)InFlight)))) + 1);
+    private const int GraphCreations = (((((3 * ((int)InFlight)) + (2 * (2 + (2 * ((int)InFlight))))) + (4 + (4 * ((int)InFlight)))) + (4 * ((int)InFlight))) + 1);
 
     private static ShaderPipelineDimensions FrameRelative => ShaderPipelineDimensions.Relative();
 
@@ -183,11 +183,12 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             high: (firstRetirement - 1),
             low: 0
         );
-        // The 16x16 half-float history ring, the two 32x32 RGBA8 rings, and the 16x16 RGBA8 preview ring.
+        // The 16x16 half-float history ring, the two 32x32 RGBA8 rings, the 16x16 RGBA8 preview ring, and the ring of the
+        // four 256-byte constant buffers (the frame group's block and each pass's).
         const ulong Half = (Extent / 2);
 
         Assert.Equal(
-            expected: (((((Half * Half) * 8UL) * InFlight) + ((((2UL * Extent) * Extent) * 4UL) * InFlight)) + (((Half * Half) * 4UL) * InFlight)),
+            expected: ((((((Half * Half) * 8UL) * InFlight) + ((((2UL * Extent) * Extent) * 4UL) * InFlight)) + (((Half * Half) * 4UL) * InFlight)) + ((4UL * 256UL) * InFlight)),
             actual: node.AllocationBytes
         );
     }

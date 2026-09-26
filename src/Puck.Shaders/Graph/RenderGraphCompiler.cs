@@ -143,11 +143,11 @@ public sealed class RenderGraphCompiler(RenderGraphPackageCatalog packages, Shad
                     name: pass.Name
                 );
             }
-            if (pass.InputReferences.Concat(second: pass.OutputReferences).Any(predicate: static reference => reference.Binding.HasValue)) {
+            if (pass.InputReferences.Concat(second: pass.OutputReferences).Any(predicate: static reference => (reference.As is not null))) {
                 Add(
-                    code: "RENDERGRAPH_PACKAGE_BINDING",
+                    code: "RENDERGRAPH_PACKAGE_AS",
                     diagnostics: diagnostics,
-                    message: $"Package pass '{pass.Name}' declares a descriptor binding; a package binds its own descriptors.",
+                    message: $"Package pass '{pass.Name}' names a port with \"as\"; a package compiles no source, so nothing reads a port by name.",
                     name: pass.Name
                 );
             }
@@ -283,8 +283,9 @@ public sealed class RenderGraphCompiler(RenderGraphPackageCatalog packages, Shad
                 Config: config,
                 InputAccesses: [.. package!.Inputs.Select(selector: static port => port.Access)],
                 Inputs: pass.InputReferences,
-                OutputAccesses: [.. package.Outputs.Select(selector: static port => port.Access)],
+                Members: package.Members,
                 Name: pass.Name,
+                OutputAccesses: [.. package.Outputs.Select(selector: static port => port.Access)],
                 Outputs: pass.OutputReferences,
                 Package: pass.Package
             ));

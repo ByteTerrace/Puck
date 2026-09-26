@@ -20,13 +20,11 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 new ShaderPipelinePass(
                     EntryPoint: "main",
                     Inputs: [new ResourceReference(
-                        Binding: 0,
                         Name: "composed"
                     )],
                     Kind: ShaderPipelineDocumentPassKind.Compute,
                     Name: "after",
                     Outputs: [new ResourceReference(
-                        Binding: 1,
                         Name: "image"
                     )],
                     Source: "after.hlsl"
@@ -71,13 +69,11 @@ public sealed partial class RenderGraphRuntimeLawTests {
         Passes: [new ShaderPipelinePass(
             EntryPoint: "main",
             Inputs: [new ResourceReference(
-                Binding: 0,
                 Name: "world"
             )],
             Kind: ShaderPipelineDocumentPassKind.Compute,
             Name: "shade",
             Outputs: [new ResourceReference(
-                Binding: 1,
                 Name: "lit"
             )],
             Source: "shade.hlsl"
@@ -361,30 +357,18 @@ public sealed partial class RenderGraphRuntimeLawTests {
         Passes: [
             new ShaderPipelinePass(
                 EntryPoint: "main",
-                Inputs: [new ResourceReference(
-                    Binding: 0,
-                    Name: "world"
-                )],
+                Inputs: [new ResourceReference(Name: "world")],
                 Kind: ShaderPipelineDocumentPassKind.Compute,
                 Name: "shade",
-                Outputs: [new ResourceReference(
-                    Binding: 1,
-                    Name: "lit"
-                )],
+                Outputs: [new ResourceReference(Name: "lit")],
                 Source: "shade.hlsl"
             ),
             new ShaderPipelinePass(
                 EntryPoint: "main",
-                Inputs: [new ResourceReference(
-                    Binding: 0,
-                    Name: "world"
-                )],
+                Inputs: [new ResourceReference(Name: "world")],
                 Kind: ShaderPipelineDocumentPassKind.Compute,
                 Name: "tone",
-                Outputs: [new ResourceReference(
-                    Binding: 1,
-                    Name: "toned"
-                )],
+                Outputs: [new ResourceReference(Name: "toned")],
                 Source: "tone.hlsl"
             ),
         ],
@@ -415,16 +399,10 @@ public sealed partial class RenderGraphRuntimeLawTests {
         )],
         Passes: [new ShaderPipelinePass(
             EntryPoint: "main",
-            Inputs: [new ResourceReference(
-                Binding: 0,
-                Name: "world"
-            )],
+            Inputs: [new ResourceReference(Name: "world")],
             Kind: ShaderPipelineDocumentPassKind.Compute,
             Name: "accumulate",
-            Outputs: [new ResourceReference(
-                Binding: 1,
-                Name: "acc"
-            )],
+            Outputs: [new ResourceReference(Name: "acc")],
             Source: "accumulate.hlsl"
         )],
         Resources: [

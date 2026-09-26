@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
+using Puck.Abstractions.Gpu;
 using Puck.Hosting;
 
 namespace Puck.Shaders;
@@ -117,16 +118,21 @@ public sealed record RenderGraphPackagePort(
         return $"Buffer (stride {stride}, count {terms})";
     }
 }
-/// <summary>One engine package a graph can name: an id and its typed ports.</summary>
+/// <summary>One engine package a graph can name: an id, its typed ports, and what its shaders read from its pass
+/// group.</summary>
 /// <param name="Id">The id a <see cref="RenderGraphPackagePass"/> names.</param>
 /// <param name="Inputs">The input ports, in port order: what each version a pass of it reads carries, and the stage that
 /// reads it.</param>
 /// <param name="Outputs">The output ports, in port order: what each version a pass of it writes carries, and the stage
 /// that writes it, at least one.</param>
+/// <param name="Members">The pass-group members the package's shaders read beside the extent and config, in order: the
+/// values its recorder writes into the pass block each frame (<see cref="RenderGraphPackageRecording.PassBlock"/>)
+/// and the resources it binds in the pass group's set. Every member is in <see cref="ShaderInterfaceGroup.Pass"/>; the
+/// planner lays them out with the frame group (<see cref="ShaderPipelineParameterLayout.ForPackage"/>).</param>
 /// <param name="Summary">What the package renders.</param>
 /// <param name="Config">The config schema a pass of it binds its <see cref="RenderGraphPackagePass.Config"/> against,
 /// name to field, or <see langword="null"/> when it takes no config.</param>
-public sealed record RenderGraphPackage(string Id, IReadOnlyList<RenderGraphPackagePort> Inputs, IReadOnlyList<RenderGraphPackagePort> Outputs, string Summary, IReadOnlyDictionary<string, ShaderConfigField>? Config = null);
+public sealed record RenderGraphPackage(string Id, IReadOnlyList<RenderGraphPackagePort> Inputs, IReadOnlyList<RenderGraphPackagePort> Outputs, IReadOnlyList<ShaderInterfaceMember> Members, string Summary, IReadOnlyDictionary<string, ShaderConfigField>? Config = null);
 /// <summary>The engine packages a host offers graphs, by id.</summary>
 public sealed class RenderGraphPackageCatalog {
     /// <summary>The id of the SDF world view: primary traversal, surfaces, ambient occlusion and lighting of one view,
@@ -152,6 +158,12 @@ public sealed class RenderGraphPackageCatalog {
     /// <summary>The <see cref="Place"/> config field holding the reconstruction's sharpness, from 0 (bilinear) to 1
     /// (clamped Catmull-Rom).</summary>
     public const string PlaceSharpness = "sharpness";
+    /// <summary>The name of <see cref="Place"/>'s base image in its pass group, the first input.</summary>
+    public const string PlaceBase = "base";
+    /// <summary>The name of <see cref="Place"/>'s source image in its pass group, the second input.</summary>
+    public const string PlaceSource = "source";
+    /// <summary>The name of <see cref="Place"/>'s destination storage image in its pass group, the output.</summary>
+    public const string PlaceDestination = "destination";
 
     private readonly Dictionary<string, RenderGraphPackage> m_packages;
 
@@ -226,6 +238,55 @@ public sealed class RenderGraphPackageCatalog {
             Type: ShaderValueType.Float
         ),
     });
+    /// <summary>Gets what <see cref="Place"/>'s kernel reads from its pass group beside the extent and config: its base
+    /// image and its sampler, its source image and its sampler, and the destination it writes, each the member a
+    /// document pass compiling the same kernel derives from ports named for them. The kernel loads every texel, so it
+    /// never samples through either sampler.</summary>
+    public static IReadOnlyList<ShaderInterfaceMember> PlaceMembers { get; } = [
+        ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: PlaceBase, type: ShaderValueType.Float4),
+        ShaderInterfaceMember.Sampler(group: ShaderInterfaceGroup.Pass, name: (PlaceBase + ShaderPipelinePassPorts.SamplerSuffix)),
+        ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: PlaceSource, type: ShaderValueType.Float4),
+        ShaderInterfaceMember.Sampler(group: ShaderInterfaceGroup.Pass, name: (PlaceSource + ShaderPipelinePassPorts.SamplerSuffix)),
+        ShaderInterfaceMember.StorageImage(format: GpuPixelFormat.R8G8B8A8Unorm, group: ShaderInterfaceGroup.Pass, name: PlaceDestination, type: ShaderValueType.Float4),
+    ];
+    /// <summary>The number of frame slots the overlay samples: images a Frame element draws, such as a face cam.</summary>
+    public const int OverlayFrameSlotCount = 8;
+    /// <summary>The name of the overlay's input image in its pass group.</summary>
+    public const string OverlaySource = "source";
+    /// <summary>The name of the one sampler the overlay reads every image through.</summary>
+    public const string OverlaySampler = "linearSampler";
+    /// <summary>The name of the overlay's storage buffer: its variable-length records, tokens, glyph cells and clip
+    /// table.</summary>
+    public const string OverlayData = "overlayData";
+
+    /// <summary>Returns the name of one of the overlay's frame slot images.</summary>
+    /// <param name="slot">The slot, below <see cref="OverlayFrameSlotCount"/>.</param>
+    /// <returns>The name.</returns>
+    public static string OverlayFrameSlot(int slot) => string.Create(
+        provider: CultureInfo.InvariantCulture,
+        handler: $"frameSlot{slot}"
+    );
+    /// <summary>Gets what <see cref="Overlay"/>'s fragment stage reads from its pass group beside the extent: three
+    /// per-frame values its recorder writes (<c>counts</c>: panel and element counts and the atlas cell's width and
+    /// height; <c>sdf</c>: the distance range, the outline band and the panel and element bases; <c>misc</c>: the text,
+    /// atlas and clip bases and the glyph count), then its input image, its frame slot images, the one sampler they are
+    /// all read through, and its storage buffer.</summary>
+    public static IReadOnlyList<ShaderInterfaceMember> OverlayMembers { get; } = [
+        ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: "counts", type: ShaderValueType.Float4),
+        ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: "sdf", type: ShaderValueType.Float4),
+        ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: "misc", type: ShaderValueType.Float4),
+        ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: OverlaySource, type: ShaderValueType.Float4),
+        .. Enumerable.Range(
+            count: OverlayFrameSlotCount,
+            start: 0
+        ).Select(selector: static slot => ShaderInterfaceMember.SampledImage(
+            group: ShaderInterfaceGroup.Pass,
+            name: OverlayFrameSlot(slot: slot),
+            type: ShaderValueType.Float4
+        )),
+        ShaderInterfaceMember.Sampler(group: ShaderInterfaceGroup.Pass, name: OverlaySampler),
+        ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.Pass, name: OverlayData),
+    ];
     /// <summary>Gets the engine's own packages: <see cref="SdfWorld"/>, <see cref="SdfBricks"/>, <see cref="Overlay"/>
     /// and <see cref="Place"/>.</summary>
     public static RenderGraphPackageCatalog Engine { get; } = new(packages: EnginePackages());
@@ -246,18 +307,21 @@ public sealed class RenderGraphPackageCatalog {
             Id: SdfWorld,
             Inputs: [],
             Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite)],
+            Members: [],
             Summary: "The SDF world as the instance's camera sees it."
         ),
         new RenderGraphPackage(
             Id: SdfBricks,
             Inputs: [],
             Outputs: [BrickPool],
+            Members: [],
             Summary: "The world's SDF brick pool: brick uploads and carve bakes, which the views read over a buffer edge."
         ),
         new RenderGraphPackage(
             Id: Overlay,
             Inputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.FragmentSampled)],
             Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ColorAttachmentWrite)],
+            Members: OverlayMembers,
             Summary: "The console, HUD, toasts and cursor drawn over the input image."
         ),
         new RenderGraphPackage(
@@ -268,13 +332,15 @@ public sealed class RenderGraphPackageCatalog {
                 RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeRead),
             ],
             Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite)],
+            Members: PlaceMembers,
             Summary: "The base image with the source reconstructed into a rect over it, bilinear to clamped Catmull-Rom by sharpness."
         ),
     ];
 
     /// <summary>Creates the engine's catalog extended with one <c>post.&lt;id&gt;</c> package per shipped post-process
-    /// shader set, each reading one image, writing one, and taking its set's config schema. It reads each manifest's
-    /// declaration (<see cref="ShaderSetManifest.ReadDeclaration"/>) and none of its bytecode.</summary>
+    /// shader set, each sampling one image in a render pass that draws another, and taking its set's config schema and
+    /// pass-group members. It reads each manifest's declaration (<see cref="ShaderSetManifest.ReadDeclaration"/>) and
+    /// none of its bytecode.</summary>
     /// <param name="postProcess">The shipped shader sets.</param>
     /// <returns>The catalog.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="postProcess"/> is <see langword="null"/>.</exception>
@@ -282,18 +348,23 @@ public sealed class RenderGraphPackageCatalog {
     public static RenderGraphPackageCatalog WithPostProcess(ShaderSetCatalog postProcess) {
         ArgumentNullException.ThrowIfNull(argument: postProcess);
 
-        return new RenderGraphPackageCatalog(packages: EnginePackages().Concat(second: postProcess.Ids.Select(selector: id => new RenderGraphPackage(
-            Config: (postProcess.TryGetPath(
+        return new RenderGraphPackageCatalog(packages: EnginePackages().Concat(second: postProcess.Ids.Select(selector: id => {
+            var declaration = (postProcess.TryGetPath(
                 id: id,
                 path: out var path
             )
-                ? ShaderSetManifest.ReadDeclaration(manifestPath: path).Config
-                : null),
-            Id: (PostProcessPrefix + id),
-            Inputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.FragmentSampled)],
-            Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ColorAttachmentWrite)],
-            Summary: $"The shipped post-process shader set '{id}' over the input image."
-        ))));
+                ? ShaderSetManifest.ReadDeclaration(manifestPath: path)
+                : null);
+
+            return new RenderGraphPackage(
+                Config: declaration?.Config,
+                Id: (PostProcessPrefix + id),
+                Inputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.FragmentSampled)],
+                Members: (declaration?.Members ?? []),
+                Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ColorAttachmentWrite)],
+                Summary: $"The shipped post-process shader set '{id}' over the input image."
+            );
+        })));
     }
     /// <summary>Finds a package by id.</summary>
     /// <param name="id">The package id.</param>

@@ -127,7 +127,7 @@ separate constraint on dense populations; reusable appearances do not remove it.
   `WorldBodiesLimits.LocalSeatCount`, `WorldHudCapacity`,
   `WorldBindingBarCapacity`, `WorldMarkerCapacity`, and the
   `BindingWheelDefinition` ring/sector bounds to the
-  `Puck.Overlays.OverlayCapacity` a host constructs `UnifiedOverlayNode` with;
+  `Puck.Overlays.OverlayCapacity` a host constructs `OverlayPackage` with;
   the numbers cross the layering as constructor data, never restated.
 - `WorldSeatCameraPose.cs`—one seat's resolved listener-policy camera pose,
   the frame source's own input to the audio director's `Publish`.

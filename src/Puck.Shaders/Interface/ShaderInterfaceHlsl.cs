@@ -146,6 +146,8 @@ public static class ShaderInterfaceHlsl {
         var (register, declaration) = resource.Kind switch {
             GpuBindingKind.SampledImage => ('t', $"Texture2D<{member.Type!.Value.Spelling()}> {member.Name}"),
             GpuBindingKind.StorageImage => ('u', $"[[vk::image_format(\"{ShaderInterface.StorageFormatSpelling(format: member.Format!.Value)}\")]] RWTexture2D<{member.Type!.Value.Spelling()}> {member.Name}"),
+            GpuBindingKind.ReadOnlyBuffer => ('t', $"ByteAddressBuffer {member.Name}"),
+            GpuBindingKind.ReadWriteBuffer => ('u', $"RWByteAddressBuffer {member.Name}"),
             GpuBindingKind.Sampler => ('s', $"SamplerState {member.Name}"),
             _ => throw new ArgumentOutOfRangeException(
                 actualValue: resource.Kind,

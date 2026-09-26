@@ -1,7 +1,7 @@
 {
   "id": "pipeline-echo",
   "title": "The generated echo pass reads every frame-block member back as the sentinel the host wrote at its offset",
-  "binding": "Both legs boot an offscreen 256x256 world whose one pipeline row runs a generated echo pass: frame.echo.hlsl reads every member of its pass's frame block (the thirteen frame members and four config fields of float3, uint, float2 and int) through the declarations the engine generates for the pass, compares each word with the sentinel pipeline.sentinels makes the host write at that word's offset, and writes pixel i of a 17x1 image green when member i reads back exactly and red otherwise. The positive leg captures the one initialization frame after a reset with sentinels on, and every pixel is green on both backends. The discriminating leg reloads the row onto perturbed.echo.hlsl, the same echo reading a hand-perturbed copy of the declarations in which time and timeDelta read each other's offset, so those two pixels are red and the all-green observation turns red.",
+  "binding": "Both legs boot an offscreen 256x256 world whose one pipeline row runs a generated echo pass: frame.echo.hlsl reads every member of its frame group block and its pass block (the twelve frame values, then the extent and four config fields of float3, uint, float2 and int) through the declarations the engine generates for the pass, compares each word with the sentinel pipeline.sentinels makes the host write at that word's offset, and writes pixel i of a 17x1 image green when member i reads back exactly and red otherwise. The positive leg captures the one initialization frame after a reset with sentinels on, and every pixel is green on both backends. The discriminating leg reloads the row onto perturbed.echo.hlsl, the same echo over the generated declarations but expecting time and timeDelta to hold each other's sentinel, so those two pixels are red and the all-green observation turns red. Declarations that misplace a member never reach a device: a load refuses the module by name (EchoCanaryFixtureTests).",
   "bootShape": "offscreen",
   "backends": ["vulkan", "directx"],
   "requirements": ["gpu"],
@@ -10,8 +10,7 @@
     "echo.graph.json",
     "frame.echo.hlsl",
     "perturbed.graph.json",
-    "perturbed.echo.hlsl",
-    "perturbed-swapped.hlsli"
+    "perturbed.echo.hlsl"
   ],
   "positive": {
     "world": "tests/Puck.World.Canaries/pipeline-echo/fixture.world.json",
@@ -48,7 +47,7 @@
     ],
     "expect": [
       { "type": "imageRegion", "name": "every-member-reads-back-its-sentinel", "capture": "echo.png", "extent": [17, 1], "region": [0, 0, 1, 1], "reduce": "every", "minimum": [0, 1, 0, 1], "maximum": [0, 1, 0, 1], "toleranceCodes": 0, "holds": false },
-      { "type": "imageRegion", "name": "the-members-before-time-read-back", "capture": "echo.png", "extent": [17, 1], "region": [0, 0, 0.17, 1], "reduce": "every", "minimum": [0, 1, 0, 1], "maximum": [0, 1, 0, 1], "toleranceCodes": 0, "holds": true }
+      { "type": "imageRegion", "name": "the-members-before-time-read-back", "capture": "echo.png", "extent": [17, 1], "region": [0, 0, 0.12, 1], "reduce": "every", "minimum": [0, 1, 0, 1], "maximum": [0, 1, 0, 1], "toleranceCodes": 0, "holds": true }
     ]
   }
 }

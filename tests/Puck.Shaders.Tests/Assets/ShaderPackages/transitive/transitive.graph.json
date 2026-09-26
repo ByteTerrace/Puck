@@ -21,14 +21,14 @@
       "source": "blur.hlsl",
       "entryPoint": "main",
       "kind": "Compute",
-      "outputs": [ { "name": "field", "binding": 0 } ]
+      "outputs": [ { "name": "field" } ]
     },
     {
       "name": "present",
       "source": "present.hlsl",
       "entryPoint": "main",
       "kind": "Fullscreen",
-      "inputs": [ { "name": "field", "binding": 0 } ],
+      "inputs": [ { "name": "field" } ],
       "outputs": [ { "name": "image" } ]
     }
   ],

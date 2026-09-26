@@ -35,31 +35,31 @@
       "source": "../pipeline-feedback/accumulate.hlsl",
       "entryPoint": "main",
       "kind": "Compute",
-      "inputs": [ { "name": "history", "previousFrame": true, "binding": 1 } ],
-      "outputs": [ { "name": "history", "binding": 0 } ]
+      "inputs": [ { "name": "history", "previousFrame": true } ],
+      "outputs": [ { "name": "history" } ]
     },
     {
       "name": "peek",
       "source": "../pipeline-feedback/convert.hlsl",
       "entryPoint": "main",
       "kind": "Compute",
-      "inputs": [ { "name": "history", "binding": 1 } ],
-      "outputs": [ { "name": "scratch", "binding": 0 } ]
+      "inputs": [ { "name": "history" } ],
+      "outputs": [ { "name": "scratch", "as": "gray" } ]
     },
     {
       "name": "convert",
       "source": "../pipeline-feedback/convert.hlsl",
       "entryPoint": "main",
       "kind": "Compute",
-      "inputs": [ { "name": "history", "binding": 1 } ],
-      "outputs": [ { "name": "gray", "binding": 0 } ]
+      "inputs": [ { "name": "history" } ],
+      "outputs": [ { "name": "gray" } ]
     },
     {
       "name": "copy",
       "source": "../pipeline-feedback/copy.hlsl",
       "entryPoint": "main",
       "kind": "Fullscreen",
-      "inputs": [ { "name": "gray", "binding": 0 } ],
+      "inputs": [ { "name": "gray" } ],
       "outputs": [ { "name": "image" } ]
     }
   ],

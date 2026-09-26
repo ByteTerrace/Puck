@@ -8,11 +8,11 @@ namespace Puck.Cli.Tests;
 /// DXC on the search path.</summary>
 public sealed class ShadersPackageCommandLawTests {
     private const string Image = """
-        [[vk::binding(0, 0)]] RWTexture2D<float4> image : register(u0);
+        #include "image.interface.hlsli"
 
         [numthreads(8, 8, 1)]
         void main(uint3 id : SV_DispatchThreadID) {
-            image[id.xy] = float4(0.25, 0.5, 0.75, 1.0);
+            output[id.xy] = float4(0.25, 0.5, 0.75, 1.0);
         }
         """;
 

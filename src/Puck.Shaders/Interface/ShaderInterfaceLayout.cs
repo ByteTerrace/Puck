@@ -96,49 +96,38 @@ public sealed class ShaderInterfaceLayout {
             stages: stages
         );
     }
-    /// <summary>Returns why a compiled module reads the pushed block somewhere other than this layout puts it, or
-    /// <see langword="null"/> when it reads the block exactly as laid out or does not read it. The block is the binding
-    /// at set 0, binding 0 named for the pushed group, whether a SPIR-V module reflects it as push constants or a DXIL
-    /// container as a constant buffer.</summary>
+    /// <summary>Returns why a compiled module binds something other than this layout places, or <see langword="null"/>
+    /// when every binding it reads sits where the layout puts it. Each reflected binding must be a binding of the layout
+    /// at its set and number, of the same kind; a constant block's members must be the layout's; and a block the module
+    /// reads as push constants must be the layout's pushed block. A binding the module does not read is not reflected,
+    /// so it is not checked. A DXIL container cannot tell root constants from a bound constant buffer, so a pushed block
+    /// it reflects as a constant buffer at register <c>b0</c>, space 0 is the layout's pushed block.</summary>
     /// <param name="reflected">The module's bindings, as <see cref="SpirvInterfaceReader"/> or
     /// <see cref="DxilInterfaceReader"/> reads them.</param>
     /// <returns>The disagreement, or <see langword="null"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="reflected"/> is <see langword="null"/>.</exception>
-    public string? PushedBlockMismatch(IReadOnlyList<ShaderInterfaceBinding> reflected) {
+    public string? Mismatch(IReadOnlyList<ShaderInterfaceBinding> reflected) {
         ArgumentNullException.ThrowIfNull(argument: reflected);
 
-        if (PushedGroup is not { } group) {
-            return null;
+        foreach (var binding in reflected) {
+            var expected = Bindings.FirstOrDefault(predicate: candidate => (
+                (candidate.Set == binding.Set) &&
+                (candidate.Binding == binding.Binding) &&
+                (candidate.Kind == binding.Kind)
+            ));
+
+            if (
+                (expected is null) ||
+                (binding.Pushed && !expected.Pushed) ||
+                !binding.Members.SequenceEqual(second: expected.Members)
+            ) {
+                return $"the module reads {binding}; interface '{Interface.Name}' ({Interface.Hash}) lays out {((expected is null)
+                    ? $"no {binding.Kind} at set {binding.Set} binding {binding.Binding}"
+                    : expected.ToString())}.";
+            }
         }
 
-        var block = reflected.FirstOrDefault(predicate: binding => (
-            (binding.Kind == GpuBindingKind.ConstantBuffer) &&
-            (binding.Set == group.Set) &&
-            (binding.Binding == 0) &&
-            string.Equals(
-                a: binding.Name,
-                b: group.BlockVariableName,
-                comparisonType: StringComparison.Ordinal
-            )
-        ));
-
-        if (block is null) {
-            return null;
-        }
-        if (block.Members.SequenceEqual(second: group.BlockMembers)) {
-            return null;
-        }
-
-        var expected = new ShaderInterfaceBinding(
-            Binding: 0,
-            Kind: block.Kind,
-            Members: group.BlockMembers,
-            Name: block.Name,
-            Pushed: block.Pushed,
-            Set: group.Set
-        );
-
-        return $"the module reads {block}; interface '{Interface.Name}' ({Interface.Hash}) lays out {expected}.";
+        return null;
     }
 
     private static uint AlignUp(uint value, uint alignment) =>
@@ -147,6 +136,8 @@ public sealed class ShaderInterfaceLayout {
         kind switch {
             ShaderInterfaceMemberKind.SampledImage => GpuBindingKind.SampledImage,
             ShaderInterfaceMemberKind.StorageImage => GpuBindingKind.StorageImage,
+            ShaderInterfaceMemberKind.ReadOnlyBuffer => GpuBindingKind.ReadOnlyBuffer,
+            ShaderInterfaceMemberKind.ReadWriteBuffer => GpuBindingKind.ReadWriteBuffer,
             ShaderInterfaceMemberKind.Sampler => GpuBindingKind.Sampler,
             _ => throw new ArgumentOutOfRangeException(
                 actualValue: kind,

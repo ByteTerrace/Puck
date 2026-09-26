@@ -53,40 +53,38 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
     }
     /// <summary>The feedback graph; <paramref name="historyFormat"/> distinguishes a replacement whose history cannot
     /// be carried over, so every resource of the graph it replaces must retire. <paramref name="historyDimensions"/>
-    /// replaces the history's fixed 32x32 extent, for a history whose extent follows the frame or differs.</summary>
-    private static CompiledShaderPipeline Feedback(string historyFormat = "R16G16B16A16Float", ShaderPipelineDimensions? historyDimensions = null) {
+    /// replaces the history's fixed 32x32 extent, for a history whose extent follows the frame or differs.
+    /// <paramref name="convertConfig"/> gives the convert pass a config, for a law that sets it live.</summary>
+    private static CompiledShaderPipeline Feedback(string historyFormat = "R16G16B16A16Float", ShaderPipelineDimensions? historyDimensions = null, IReadOnlyDictionary<string, ShaderConfigField>? convertConfig = null) {
         var definition = new RenderGraphDefinition(
             name: "feedback",
             outputs: ["image"],
             passes: [
                 Pass(
                     inputs: [new ResourceReference(
-                        Binding: 1,
                         Name: "history",
                         PreviousFrame: true
                     )],
                     kind: ShaderPipelineDocumentPassKind.Compute,
                     name: "accumulate",
                     outputs: [new ResourceReference(
-                        Binding: 0,
                         Name: "history"
                     )]
                 ),
                 Pass(
                     inputs: [new ResourceReference(
-                        Binding: 1,
                         Name: "history"
                     )],
                     kind: ShaderPipelineDocumentPassKind.Compute,
                     name: "convert",
                     outputs: [new ResourceReference(
-                        Binding: 0,
                         Name: "gray"
                     )]
-                ),
+                ) with {
+                    Config = convertConfig,
+                },
                 Pass(
                     inputs: [new ResourceReference(
-                        Binding: 0,
                         Name: "gray"
                     )],
                     kind: ShaderPipelineDocumentPassKind.Fullscreen,
@@ -135,19 +133,16 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
                     kind: ShaderPipelineDocumentPassKind.Compute,
                     name: "produce",
                     outputs: [new ResourceReference(
-                        Binding: 0,
                         Name: "data"
                     )]
                 ),
                 Pass(
                     inputs: [new ResourceReference(
-                        Binding: 1,
                         Name: "data"
                     )],
                     kind: ShaderPipelineDocumentPassKind.Compute,
                     name: "consume",
                     outputs: [new ResourceReference(
-                        Binding: 0,
                         Name: "image"
                     )]
                 ),
@@ -240,10 +235,11 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         // Three images per slot (history, gray, and the image the fullscreen pass draws into); per compute pass a module,
         // a pipeline, and per slot a sampler and command pool; for the fullscreen pass two modules, a render pass and a
         // graphics pipeline, and per slot a framebuffer, a sampler, the barrier command pool and the draw command pool;
-        // and the graph's one descriptor pool.
+        // per slot a constant buffer for the frame group's block and one for each of the three passes' pass blocks; and the
+        // graph's one descriptor pool.
         Assert.Equal(
             actual: candidateCreations,
-            expected: ((((3 * ((int)InFlight)) + (2 * (2 + (2 * ((int)InFlight))))) + (4 + (4 * ((int)InFlight)))) + 1)
+            expected: (((((3 * ((int)InFlight)) + (2 * (2 + (2 * ((int)InFlight))))) + (4 + (4 * ((int)InFlight)))) + (4 * ((int)InFlight))) + 1)
         );
 
         for (var failAt = 1; (failAt <= candidateCreations); failAt++) {

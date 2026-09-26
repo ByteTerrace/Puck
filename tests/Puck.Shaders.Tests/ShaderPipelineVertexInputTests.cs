@@ -13,28 +13,15 @@ public sealed class ShaderPipelineVertexInputTests {
                 EntryPoint: "main",
                 Kind: ShaderPipelineDocumentPassKind.Compute,
                 Name: "fill",
-                Outputs: [new ResourceReference(
-                    Binding: 0,
-                    Name: "gray"
-                )],
+                Outputs: ["gray"],
                 Source: "fill.hlsl"
             ),
             new ShaderPipelinePass(
                 EntryPoint: "main",
-                Inputs: [new ResourceReference(
-                    Binding: ((secondKind == ShaderPipelineDocumentPassKind.Fullscreen)
-                        ? 0u
-                        : 1u),
-                    Name: "gray"
-                )],
+                Inputs: ["gray"],
                 Kind: secondKind,
                 Name: "copy",
-                Outputs: [((secondKind == ShaderPipelineDocumentPassKind.Fullscreen)
-                    ? new ResourceReference(Name: "image")
-                    : new ResourceReference(
-                        Binding: 0,
-                        Name: "image"
-                    ))],
+                Outputs: ["image"],
                 Source: "copy.hlsl",
                 Vertex: vertex
             ),

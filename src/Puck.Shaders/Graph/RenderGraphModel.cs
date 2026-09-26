@@ -16,7 +16,7 @@ public static class RenderGraphSchemas {
 /// <param name="Package">The package id, which the host's <see cref="RenderGraphPackageCatalog"/> declares.</param>
 /// <param name="Inputs">The versions the package reads, one per input port in port order, each carrying what its port
 /// carries (<see cref="RenderGraphPackagePort"/>). A reference may read a history version's previous frame. A package
-/// binds its own descriptors, so no reference declares a binding.</param>
+/// compiles no source, so no reference names an <c>as</c>.</param>
 /// <param name="Outputs">The versions the package writes, one per output port in port order, each carrying what its
 /// port carries.</param>
 /// <param name="Config">The values of the package's config schema (<see cref="RenderGraphPackage.Config"/>), each

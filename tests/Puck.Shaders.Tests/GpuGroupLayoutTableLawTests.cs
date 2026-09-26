@@ -41,7 +41,12 @@ public sealed class GpuGroupLayoutTableLawTests {
     }
     [Fact]
     public void An_interface_that_pushes_a_block_has_no_pipeline_layout() {
-        var exception = Assert.Throws<InvalidOperationException>(testCode: () => ShaderFrameInterface.For(config: null, name: "echo").Layout().PipelineLayout(
+        var pushed = new ShaderInterface(
+            members: ShaderFrameInterface.FrameGroupMembers,
+            name: "echo",
+            pushConstants: ShaderInterfaceGroup.Frame
+        );
+        var exception = Assert.Throws<InvalidOperationException>(testCode: () => pushed.Layout().PipelineLayout(
             pushesIndex: false,
             stages: GpuShaderStage.Compute
         ));
