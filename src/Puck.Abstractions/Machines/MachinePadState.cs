@@ -15,7 +15,8 @@ public readonly record struct MachinePadState {
         float LeftTrigger,
         float RightTrigger,
         Vector2 Tilt = default,
-        byte LightLevel = 0
+        byte LightLevel = 0,
+        MachinePointer Pointer = default
     ) {
         ValidateAxes(
             value: LeftStick,
@@ -45,6 +46,7 @@ public readonly record struct MachinePadState {
         this.RightTrigger = RightTrigger;
         this.Tilt = Tilt;
         this.LightLevel = LightLevel;
+        this.Pointer = Pointer;
     }
 
     /// <summary>Gets the digital buttons held this frame.</summary>
@@ -57,6 +59,9 @@ public readonly record struct MachinePadState {
     public byte LightLevel { get; }
     /// <summary>Gets a neutral image with no active input.</summary>
     public static MachinePadState Neutral => default;
+    /// <summary>Gets where the light gun aimed at the machine's video output lands, off the screen when no pointer
+    /// reaches it.</summary>
+    public MachinePointer Pointer { get; init; }
     /// <summary>Gets the right stick, normalized per axis to -1..1.</summary>
     public Vector2 RightStick { get; }
     /// <summary>Gets the right trigger in 0..1.</summary>
@@ -106,7 +111,12 @@ public readonly record struct MachinePadState {
         }
     }
 
-    /// <summary>Merges two validated pad images, clamping summed analog channels to their normalized domains.</summary>
+    /// <summary>Merges two validated pad images, clamping summed analog channels to their normalized domains. A machine
+    /// reads one light gun, so the merged pointer is the first image's when it lands on the screen and the second's
+    /// otherwise.</summary>
+    /// <param name="first">The image that wins the pointer while its own lands on the screen.</param>
+    /// <param name="second">The other image.</param>
+    /// <returns>The merged image.</returns>
     public static MachinePadState Merge(in MachinePadState first, in MachinePadState second) => new(
         Buttons: first.Buttons | second.Buttons,
         LeftStick: ClampAxes(value: (first.LeftStick + second.LeftStick)),
@@ -125,6 +135,10 @@ public readonly record struct MachinePadState {
         LightLevel: Math.Max(
             val1: first.LightLevel,
             val2: second.LightLevel
+        ),
+        Pointer: (first.Pointer.OnScreen
+            ? first.Pointer
+            : second.Pointer
         )
     );
 }

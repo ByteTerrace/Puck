@@ -1072,6 +1072,27 @@ casts the OS pointer through its seat's published camera with
 `IntentRayWireLawTests`, `PointerWorldRuleFactLawTests`,
 `WorldSeatViewportsLocateLawTests` and `SourcePointerCommandLawTests`.
 
+A machine reads the pointer as a light gun. `MachinePadState.Pointer` is a
+`MachinePointer`, off the screen or on it at an exact fraction of the output in
+1/65536 units, and it rides the one pad path every applied intent reaches a
+machine by: `WorldEngagement.FoldTick` aims each screen application's pad with
+`WorldEngagement.Aim`, which maps the applied body's ray through the row's
+`WorldScreenMappings.Normalized` mapping, the one the `$pointer:` read runs, and
+leaves the gun off for no ray, a miss, the bezel or a screen that is not
+`Simulation`. The Humble brick wires the gun, `LightGunComponent`, to its
+infrared receive line: a game reads RP bit 1 or a HuC IR window and sees light
+while the aim lands on a pixel the LCD shows at least half bright, and the
+gun's trigger is an ordinary kit-mapped button. The aim is snapshot state and
+the queued checkpoint carries it (`puck.queued-machine.v2`); the advanced brick
+has no light gun and ignores the pointer. `screen.state` echoes the tick's aim
+as `gun=`. The laws are the Humble battery's `light-gun` stage and
+`LightGunLawTests`, whose probe cartridge (`LightGunProbeCartridge`) draws a
+white and a black half and publishes what it senses: a lit aim reads light in
+the running program, a dark aim, a miss, no ray and no application read dark,
+and a recorded tape of pointer intents replays to the same machine state and
+state hash. No canary drives it: `puck.cartridge.v1` has no light read, so no
+authored cartridge a headless World boots can see the gun.
+
 Panes publish their mappings from the live renderer (P13b-1's pane half, P13b-3's
 host half and P13b-6). `WorldFramePresenter.PrepareGraph` ends with
 `WorldViewGraphHost.PublishPanes`, which writes one mapping per placement the
@@ -1135,7 +1156,7 @@ and `Win32PassthroughWindowTests`.
 
 P13b owes the rest. The screen shading still reads its own bezel constant,
 which `WorldScreenMappings` mirrors, and the GPU does not yet draw from the
-mapping. No machine reads a mapped pointer. The pointer's pane hover reads the
+mapping. The pointer's pane hover reads the
 picker on the CPU (P13b-3, `WorldCursorFeed` through `WorldViewGraphHost.Hover`,
 outlined by the overlay's `CursorWriter` and echoed as `world.view.panes`'
 `hovered=`); GPU picking follows P4. The recorded Windows run, a click reaching
@@ -3487,7 +3508,17 @@ Each commit is marked with what it waits on; only step 5 waits on P7b's groups.
      the wire and the tape bit for bit and an absent one costs one byte; a
      three-tick burst gives three snapshots, each carrying the ray; and
      `Locate` answers what the cursor's own mapping answered.
-   A machine that reads a pointer, a light gun, is still owed.
+   - A machine reads the pointer as a light gun, landed:
+     `MachinePadState.Pointer` carries the aim through the one pad path,
+     `WorldEngagement.Aim` maps the applied body's ray through the row's
+     normalized mapping, and the Humble brick's `LightGunComponent` puts the
+     aimed LCD pixel's brightness on the infrared receive line. Laws: the
+     `light-gun` Post stage and `LightGunLawTests` (a lit aim changes the
+     running program's state, a dark aim, a miss, no ray and no application
+     read dark, and a tape replays to the same machine state and hash).
+     Remaining: a `puck.cartridge.v1` light read, with its measured cost
+     weight, so an authored cartridge can see the gun and a headless canary
+     can drive one.
 3. The presentation destination. The CPU half has landed: the World host
    publishes its panes to its `SourcePanePicker` every frame, from the
    placements `place` draws, and the drawn cursor's feed (`WorldCursorFeed`)
