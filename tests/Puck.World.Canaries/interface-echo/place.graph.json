@@ -1,0 +1,35 @@
+{
+  "$schema": "puck.render.graph.v1",
+  "name": "place",
+  "resources": [
+    {
+      "name": "echo",
+      "kind": "Image",
+      "format": "R8G8B8A8Unorm",
+      "dimensions": {
+        "mode": "Absolute",
+        "width": 16,
+        "height": 1
+      }
+    }
+  ],
+  "passes": [
+    {
+      "name": "place",
+      "source": "place.echo.hlsl",
+      "entryPoint": "main",
+      "kind": "Compute",
+      "outputs": [
+        {
+          "name": "echo"
+        }
+      ],
+      "config": {
+        "letterbox": { "type": "uint", "default": 0, "min": 0, "max": 1, "description": "1 fills the destination outside the rect with the letterbox color rather than the base." },
+        "rect": { "type": "float4", "default": [0, 0, 1, 1], "min": 0, "max": 1, "description": "The destination rect as fractions of the destination extent: left, top, width, height." },
+        "sharpness": { "type": "float", "default": 0, "min": 0, "max": 1, "description": "Reconstruction sharpness: 0 is bilinear, 1 clamped Catmull-Rom." }
+      }
+    }
+  ],
+  "outputs": ["echo"]
+}

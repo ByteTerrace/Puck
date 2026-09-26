@@ -1,0 +1,35 @@
+{
+  "$schema": "puck.render.graph.v1",
+  "name": "overlay",
+  "resources": [
+    {
+      "name": "echo",
+      "kind": "Image",
+      "format": "R8G8B8A8Unorm",
+      "dimensions": {
+        "mode": "Absolute",
+        "width": 16,
+        "height": 1
+      }
+    }
+  ],
+  "passes": [
+    {
+      "name": "overlay",
+      "source": "overlay.echo.hlsl",
+      "entryPoint": "main",
+      "kind": "Compute",
+      "outputs": [
+        {
+          "name": "echo"
+        }
+      ],
+      "config": {
+        "counts": { "type": "float4", "default": [0, 0, 0, 0], "description": "The overlay recorder's counts value." },
+        "misc": { "type": "float4", "default": [0, 0, 0, 0], "description": "The overlay recorder's misc value." },
+        "sdf": { "type": "float4", "default": [0, 0, 0, 0], "description": "The overlay recorder's sdf value." }
+      }
+    }
+  ],
+  "outputs": ["echo"]
+}
