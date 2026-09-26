@@ -155,7 +155,11 @@ re-expressed for the document that uses it (`WorldDocumentVocabulary.RelocateFil
 Relocation follows the value: a string is re-expressed from the directory of
 the source whose literal produced it (a `let`'s own file, a module argument's
 call site), whatever expression carries it to the file-path member
-(`IDocumentVocabulary.NoteWrittenString`). `--output` elsewhere re-expresses
+(`IDocumentVocabulary.NoteWrittenString`); the record rides every copy the
+evaluator makes (`DocumentEvaluationBudget.Copy`), so an array holding the path
+or a builtin copying it keeps it. A builtin that builds a brand-new string
+(`concat` of two strings) carries no record, so its result is not
+re-expressed. `--output` elsewhere re-expresses
 the written document's paths from where it lands. Each destination and the lock is replaced
 atomically on its own, but publication of the whole set is not transactional.
 

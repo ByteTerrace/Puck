@@ -43,21 +43,18 @@ public sealed class WorldDocumentVocabulary(WorldConstructTable? constructs = nu
     }
     /// <inheritdoc />
     /// <remarks>A string written in a source outside the document's directory is recorded with that source's
-    /// directory, so a file path reaching a file-path member through a <c>let</c>, a module argument or any other
-    /// expression is re-expressed from where its literal was written.</remarks>
+    /// directory on the compilation's budget, which carries the record through every copy, so a file path reaching a
+    /// file-path member through a <c>let</c>, a module argument, a collection or any other expression is re-expressed
+    /// from where its literal was written.</remarks>
     public void NoteWrittenString(System.Text.Json.Nodes.JsonValue value, DocumentScope scope) {
         if (
             (scope.BasePath is { } written) &&
             !((scope.Annotations.GetValueOrDefault(key: DocumentDirectoryAnnotation) is string document) &&
             Puck.Abstractions.PuckPaths.Comparer.Equals(x: WorldDocumentPaths.FullDirectory(directory: written), y: document))
         ) {
-            WrittenBeside.AddOrUpdate(key: value, value: WorldDocumentPaths.FullDirectory(directory: written));
+            scope.Budget.NoteWrittenBeside(directory: WorldDocumentPaths.FullDirectory(directory: written), value: value);
         }
     }
-
-    // Each string node a literal outside the document's directory produced, to that source's directory. Keyed by the
-    // node, which every borrowed read of a binding returns, so the record follows the value rather than its syntax.
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<System.Text.Json.Nodes.JsonNode, string> WrittenBeside = new();
 
     /// <summary>The shared instance; the vocabulary is a pure lookup and carries no per-pass state.</summary>
     public static WorldDocumentVocabulary Instance { get; } = new();
@@ -108,7 +105,7 @@ public sealed class WorldDocumentVocabulary(WorldConstructTable? constructs = nu
                 ? System.Text.Json.Nodes.JsonValue.Create(value: RelocateFileReference(
                     path: path,
                     scope: scope,
-                    writtenBeside: (WrittenBeside.TryGetValue(key: borrowed, value: out var beside) ? beside : null)
+                    writtenBeside: (scope.Budget.TryGetWrittenBeside(directory: out var beside, value: borrowed) ? beside : null)
                 ))
                 : scope.Budget.Copy(span: expression.Span, value: borrowed)
             );

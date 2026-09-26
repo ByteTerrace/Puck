@@ -16,9 +16,12 @@ public sealed class FileReferenceRelocationLawTests {
           }
         }
         """;
-    // The same file named through a `let`, and through a module argument written in the module's own directory.
+    // The same file named through a `let`, an array holding it, a builtin copying that array, and a module argument
+    // written in the module's own directory.
     private const string CarriedModule = """
         let file = "board.graph.json"
+        let files = [file]
+        let mapped = map(files, item => item)
 
         module board() {
           views {
@@ -32,6 +35,22 @@ public sealed class FileReferenceRelocationLawTests {
           views {
             graph "named" {
               source: graphFile
+            }
+          }
+        }
+
+        module listed() {
+          views {
+            graph "listed" {
+              source: files[0]
+            }
+          }
+        }
+
+        module mappedBoard() {
+          views {
+            graph "mapped" {
+              source: mapped[0]
             }
           }
         }
@@ -81,8 +100,10 @@ public sealed class FileReferenceRelocationLawTests {
     }
     [InlineData("use board()")]
     [InlineData("use wrapped()")]
+    [InlineData("use listed()")]
+    [InlineData("use mappedBoard()")]
     [Theory]
-    public void APathCarriedByALetOrAnArgumentNamesTheFileBesideItsLiteral(string use) {
+    public void APathCarriedByALetACollectionOrAnArgumentNamesTheFileBesideItsLiteral(string use) {
         using var directory = new TemporaryDirectory();
 
         _ = directory.WriteText(name: "modules/board.puck", text: CarriedModule);

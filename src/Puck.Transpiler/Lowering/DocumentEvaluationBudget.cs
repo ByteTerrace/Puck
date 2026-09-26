@@ -17,6 +17,9 @@ public sealed class DocumentEvaluationBudget {
 
     private int m_depth;
     private int m_work;
+    // Each string node a vocabulary recorded as written beside a directory, by reference, so a record follows the node
+    // through every copy this budget makes.
+    private Dictionary<JsonNode, string>? m_writtenBeside;
 
     /// <summary>Gets the cancellation signal shared by all evaluations in this compilation.</summary>
     public CancellationToken CancellationToken { get; init; }
@@ -49,8 +52,59 @@ public sealed class DocumentEvaluationBudget {
             node: value,
             span: span
         );
-        return value?.DeepClone();
+        var copy = value?.DeepClone();
+
+        if ((m_writtenBeside is { Count: > 0 }) && (value is not null)) {
+            CarryWrittenBeside(copy: copy!, source: value);
+        }
+
+        return copy;
     }
+    /// <summary>Records the directory of the source whose literal produced a string node, so the record follows the
+    /// node and every copy <see cref="Copy"/> makes of it, whatever expression carries it.</summary>
+    /// <param name="value">The string node, as the evaluation produced it.</param>
+    /// <param name="directory">The full path of the writing source's directory.</param>
+    public void NoteWrittenBeside(JsonValue value, string directory) {
+        ArgumentNullException.ThrowIfNull(argument: value);
+        ArgumentNullException.ThrowIfNull(argument: directory);
+
+        (m_writtenBeside ??= new(comparer: ReferenceEqualityComparer.Instance))[value] = directory;
+    }
+    /// <summary>Returns the directory recorded for a node by <see cref="NoteWrittenBeside"/>, carried through copies.</summary>
+    /// <param name="value">The node.</param>
+    /// <param name="directory">The recorded directory, or empty when none is recorded.</param>
+    /// <returns><see langword="true"/> when a directory is recorded for <paramref name="value"/>.</returns>
+    public bool TryGetWrittenBeside(JsonNode? value, out string directory) {
+        directory = string.Empty;
+
+        return ((value is not null) && (m_writtenBeside?.TryGetValue(key: value, value: out directory!) == true));
+    }
+
+    // DeepClone keeps the shape and member order, so the copy is walked beside its source.
+    private void CarryWrittenBeside(JsonNode source, JsonNode copy) {
+        switch (source) {
+            case JsonValue:
+                if (m_writtenBeside!.TryGetValue(key: source, value: out var directory)) {
+                    m_writtenBeside[copy] = directory;
+                }
+                break;
+            case JsonArray array:
+                for (var index = 0; (index < array.Count); index++) {
+                    if (array[index] is { } element) {
+                        CarryWrittenBeside(copy: ((JsonArray)copy)[index]!, source: element);
+                    }
+                }
+                break;
+            case JsonObject obj:
+                foreach (var (key, member) in obj) {
+                    if (member is not null) {
+                        CarryWrittenBeside(copy: ((JsonObject)copy)[key]!, source: member);
+                    }
+                }
+                break;
+        }
+    }
+
     /// <summary>Takes a value the evaluation built itself into output, charging it exactly as <see cref="Copy"/>
     /// charges a borrowed one.</summary>
     /// <param name="value">A value no binding, cache or other container holds.</param>
