@@ -261,7 +261,10 @@ internal sealed partial class PlayerCommandModule {
         return CommandResult.None;
     }
     // The pointer ray's quantization door: a bound Axis3D value or a typed <x> <y> <z> triple becomes fixed point
-    // once, through CommandValueQuantization.QuantizeAxis3D, and an already-seated player keeps it for this tick.
+    // once, through CommandValueQuantization.QuantizeAxis3D, and an already-seated player keeps it for this tick. A
+    // typed value is also sustained on the seat's lane, the path WorldPointerRayCapture holds the windowed ray on, so
+    // every later tick re-dispatches it through the bound branch until a new aim replaces it or source.pointer.clear
+    // ends it.
     private CommandResult PointerRouter(CommandContext context, WireArgs args, Action<SeatController, FixedVector3> set, string verb) {
         Vector3 value;
 
@@ -307,14 +310,38 @@ internal sealed partial class PlayerCommandModule {
             arg2: quantized
         );
 
-        // A bound value re-dispatches every tick and stays quiet; a typed one answers with the value the seat keeps.
-        return ((args.Count == 0)
-            ? CommandResult.None
-            : Echoed(
-                args: in args,
-                handler: $"[{verb}: p{PlayerRoster.DisplayNumber(slot: context.Slot)} ({quantized.X}, {quantized.Y}, {quantized.Z}) for this tick]"
-            )
+        // A bound value re-dispatches every tick and stays quiet; a typed one is held and answers with the value the
+        // seat keeps.
+        if (args.Count == 0) {
+            return CommandResult.None;
+        }
+
+        _ = router().Sustain(
+            command: verb,
+            slot: context.Slot,
+            value: CommandValue.Axis(value: value)
         );
+
+        return Echoed(
+            args: in args,
+            handler: $"[{verb}: p{PlayerRoster.DisplayNumber(slot: context.Slot)} ({quantized.X}, {quantized.Y}, {quantized.Z}) held]"
+        );
+    }
+    // Ends both halves of a seat's held pointer ray: the seat drops this tick's ray, as a typed aim takes effect in its
+    // own tick, and neither half rides the lane from the next snapshot on. True when the seat held either half.
+    private bool ClearPointer(int slot) {
+        m_roster.Seat(slot: slot)?.ClearPointer();
+
+        var origin = router().EndSustain(
+            command: SourcePointerCommands.Origin,
+            slot: slot
+        );
+        var direction = router().EndSustain(
+            command: SourcePointerCommands.Direction,
+            slot: slot
+        );
+
+        return (origin || direction);
     }
     // The picker step direction while pending: only the Turn-role channel steers the picker (positive scale = next
     // candidate, negative = previous), every other channel is inert — the channel-role generalization of the old
@@ -660,7 +687,7 @@ internal sealed partial class PlayerCommandModule {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: SourcePointerCommands.Origin,
-            description: "The seat's pointer-ray origin (Axis3D, world units), quantized once here and folded with source.pointer.direction into the seat's intent for this tick; the server maps the ray through each Simulation screen's row in fixed point for the $pointer: rule read. A typed source.pointer.origin <x> <y> <z> injects one exact tick and echoes the quantized value.",
+            description: "The seat's pointer-ray origin (Axis3D, world units), quantized once here and folded with source.pointer.direction into the seat's intent for this tick; the server maps the ray through each Simulation screen's row in fixed point for the $pointer: rule read. A typed source.pointer.origin <x> <y> <z> holds the origin on every tick until it is typed again or source.pointer.clear ends it, and echoes the quantized value.",
             valueKind: CommandValueKind.Axis3D,
             handler: (context, args) => PointerRouter(
                 args: args,
@@ -672,7 +699,7 @@ internal sealed partial class PlayerCommandModule {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: SourcePointerCommands.Direction,
-            description: "The seat's pointer-ray direction (Axis3D, need not be unit length), quantized once here and folded with source.pointer.origin into the seat's intent for this tick. A typed source.pointer.direction <x> <y> <z> injects one exact tick and echoes the quantized value.",
+            description: "The seat's pointer-ray direction (Axis3D, need not be unit length), quantized once here and folded with source.pointer.origin into the seat's intent for this tick. A typed source.pointer.direction <x> <y> <z> holds the direction on every tick until it is typed again or source.pointer.clear ends it, and echoes the quantized value.",
             valueKind: CommandValueKind.Axis3D,
             handler: (context, args) => PointerRouter(
                 args: args,
@@ -680,6 +707,15 @@ internal sealed partial class PlayerCommandModule {
                 set: static (seat, value) => seat.SetPointerDirection(direction: value),
                 verb: SourcePointerCommands.Direction
             )
+        );
+        yield return CommandDefinition.Verb(
+            bindability: CommandBindability.Bindable,
+            name: SourcePointerCommands.Clear,
+            description: "Ends the seat's sustained pointer ray, a typed aim or the one a windowed host casts from the OS pointer (the two share one sustained value per half: the later write is the one that rides, and a windowed host ending its ray ends that value whichever wrote it): from the tick it lands in, the seat carries no ray and neither source.pointer.origin nor source.pointer.direction is sustained on its lane, so every Simulation screen reads on 0 for it. A windowed host aims again on its next frame while the OS pointer is over the seat's view, and a device bound to either command keeps feeding it while it reports.",
+            valueKind: CommandValueKind.Digital,
+            handler: context => new CommandResult(Output: $"[{SourcePointerCommands.Clear}: p{PlayerRoster.DisplayNumber(slot: context.Slot)} {(ClearPointer(slot: context.Slot)
+                ? "ray cleared"
+                : "held no ray")}]")
         );
         yield return CommandDefinition.Verb(
             bindability: CommandBindability.Bindable,

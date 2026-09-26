@@ -397,7 +397,7 @@ public static class WorldBootComposition {
         // window captures) and READS Server.WorldMachineHost's outputs for a machine-owning index (it no longer
         // boots, steps, or owns a machine itself — see WorldMachineHost's own remarks). CORE (not presentation-only)
         // because WorldPlacementCommandModule's world.faces and PlayerCommandModule's body.engage both read its
-        // bound/no-signal state. ConfigureViews (the camera and session views) is ONLY ever called from
+        // bound/unbound state. ConfigureViews (the camera and session views) is ONLY ever called from
         // presentation-only code (WorldRenderRoot.Build) — a headless boot constructs the binder as pure state and
         // never GPU-wires it, so no capture device or GPU-side texture is ever touched.
         services.AddSingleton(implementationFactory: static sp => {
@@ -1365,7 +1365,7 @@ public static class WorldBootComposition {
         // router the window pump offers every raw event to before the observers above, so a focused source's keys and
         // the pointer over its pane reach its window instead of the game.
         services.AddSingleton(implementationFactory: static sp => new WorldSourcePassthrough(
-            binder: sp.GetRequiredService<WorldScreenBinder>(),
+            windows: sp.GetRequiredService<WorldScreenBinder>(),
             graphs: sp.GetRequiredService<WorldViewGraphHost>(),
             viewports: sp.GetRequiredService<WorldSeatViewports>()
         ));

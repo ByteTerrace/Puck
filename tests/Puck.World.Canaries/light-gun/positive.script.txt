@@ -1,7 +1,7 @@
-# The seat engages the gallery's Simulation screen, so its pointer reaches the machine as a light gun. Three
-# ticks aimed at the lit left half publish seen=1 (screen.state echoes the tick's aim), then three aimed at the dark right
-# half publish seen=0. Each typed ray carries one tick, so every aim is typed again, and the read after each tick's wait
-# sees what the machine published under that aim. The recorded run replays to the same state.
+# The seat engages the gallery's Simulation screen, so its pointer reaches the machine as a light gun. One aim at the lit
+# left half holds for three ticks and publishes seen=1 (screen.state echoes the held aim before the third), then one aim
+# at the dark right half replaces it for three more and publishes seen=0. A typed ray is held until it is aimed again or
+# cleared, so each phase aims once; after the clear the gun is off. The recorded run replays to the same state.
 replay.record light-gun
 world.wait 10
 body.engage 0
@@ -9,26 +9,20 @@ world.wait 3
 # Aimed at the lit half.
 source.pointer.origin -0.5 1 5
 source.pointer.direction 0 0 -1
-world.wait 1
-source.pointer.origin -0.5 1 5
-source.pointer.direction 0 0 -1
-world.wait 1
-source.pointer.origin -0.5 1 5
-source.pointer.direction 0 0 -1
+world.wait 2
 screen.state 0
 world.wait 1
 world.state seen
 # Aimed at the dark half.
 source.pointer.origin 0.5 1 5
 source.pointer.direction 0 0 -1
-world.wait 1
-source.pointer.origin 0.5 1 5
-source.pointer.direction 0 0 -1
-world.wait 1
-source.pointer.origin 0.5 1 5
-source.pointer.direction 0 0 -1
+world.wait 2
 screen.state 0
 world.wait 1
 world.state seen
+# Cleared: the held ray ends and the gun turns off.
+source.pointer.clear
+world.wait 1
+screen.state 0
 replay.stop
 replay.verify light-gun

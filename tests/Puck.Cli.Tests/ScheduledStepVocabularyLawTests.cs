@@ -88,6 +88,7 @@ public sealed class ScheduledStepVocabularyLawTests {
             "player.orbit",
             "player.signal",
             "player.steer",
+            "source.pointer.clear",
             "source.pointer.direction",
             "source.pointer.origin",
             "view.override",

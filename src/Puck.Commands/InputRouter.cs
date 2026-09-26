@@ -222,7 +222,7 @@ public sealed partial class InputRouter : IDisposable {
         alwaysActiveBindings: alwaysActiveBindings
     ) {
         m_inputSlotResolver = slotResolver;
-        slotResolver.DeviceSlotChanging += ReleaseHeld;
+        AttachSlotResolver(slotResolver: slotResolver);
     }
 
     internal CommandRegistry Registry => m_registry;
@@ -1898,7 +1898,7 @@ public sealed partial class InputRouter : IDisposable {
         }
 
         if (m_inputSlotResolver is not null) {
-            m_inputSlotResolver.DeviceSlotChanging -= ReleaseHeld;
+            DetachSlotResolver(slotResolver: m_inputSlotResolver);
         }
 
         var abandoned = new List<CapturedInjection>();

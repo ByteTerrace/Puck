@@ -77,7 +77,8 @@ public sealed partial class InputRouter {
     /// <see cref="EndSustain"/> ends it or another call replaces the value. It is not a binding: it reaches the lane
     /// whatever the seat's active maps, and the entry is unstamped, so snapshot construction resolves the seat's current
     /// principal exactly as it does for physical input. A host producer, such as a pointer ray cast through a seat's
-    /// camera, owns the value; <see cref="ReleaseHeld()"/> and <see cref="ClearSlotHeld"/> leave it standing.</summary>
+    /// camera, owns the value; <see cref="ReleaseHeld()"/> and <see cref="ClearSlotHeld"/> leave it standing, and the slot
+    /// resolver's <see cref="IInputSlotResolver.SlotVacated"/> edge ends every value the vacated slot sustained.</summary>
     /// <param name="slot">The logical seat whose lane carries the command.</param>
     /// <param name="command">The registered command name.</param>
     /// <param name="value">The command's value on every tick until the sustain ends or changes.</param>
@@ -109,6 +110,29 @@ public sealed partial class InputRouter {
 
         return true;
     }
+
+    // The slot resolver's two edges: a device changing slots releases what it held, and a vacated slot ends what it
+    // sustained. Detached together when the router is disposed.
+    private void AttachSlotResolver(IInputSlotResolver slotResolver) {
+        slotResolver.DeviceSlotChanging += ReleaseHeld;
+        slotResolver.SlotVacated += EndSlotSustains;
+    }
+    private void DetachSlotResolver(IInputSlotResolver slotResolver) {
+        slotResolver.DeviceSlotChanging -= ReleaseHeld;
+        slotResolver.SlotVacated -= EndSlotSustains;
+    }
+    // Ends every value a vacated slot sustained: a sustain belongs to the occupancy it was set for, so the slot's next
+    // occupant starts with none.
+    private void EndSlotSustains(int slot) {
+        lock (m_captureGate) {
+            foreach (var held in m_sustained.Keys) {
+                if (held.Slot == slot) {
+                    _ = m_sustained.Remove(key: held);
+                }
+            }
+        }
+    }
+
     /// <summary>Ends a <see cref="Sustain"/>: snapshots from the next one on no longer carry the command for the seat.
     /// Ending a command the seat does not sustain changes nothing.</summary>
     /// <param name="slot">The logical seat.</param>

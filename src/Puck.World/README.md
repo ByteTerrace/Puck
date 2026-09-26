@@ -671,7 +671,7 @@ Facts a script needs:
   console's tick barrier, `WorldMachineHost` and `WorldScreenBinder`—the
   machine host is core state that boots and steps in every shape, and the
   binder is CORE too, since `world.faces`/`body.engage` read its bound/
-  no-signal state even headless—every server-safe command module including
+  unbound state even headless—every server-safe command module including
   `ScreenCommandModule`, and the camera control application (the `player.mode`
   and `player.camera` verbs)—for command-vocabulary parity: a world's binding document commits
   that vocabulary in every boot shape, and the validator checks it against what
@@ -1221,8 +1221,11 @@ destination as `input:<destination>`. The mapping and its laws are described in
 On a windowed host, `WorldPointerRayCapture` casts the OS pointer through its
 seat's camera each frame and holds the two commands on that seat's lane, the
 seat folds them into its intent's `SourceRay`, and a rule reads the mapped hit
-as `$pointer:<seat>:<screenIndex>:x|y|on`. `body.channels` echoes the ray and
-its hit on every `Simulation` screen.
+as `$pointer:<seat>:<screenIndex>:x|y|on`. A typed
+`source.pointer.origin <x> <y> <z>` or `source.pointer.direction <x> <y> <z>`
+is held on the seat's lane in the same way, until it is typed again,
+`source.pointer.clear` ends the ray, or the seat is vacated. `body.channels`
+echoes the ray and its hit on every `Simulation` screen.
 
 **A window captured into a pane takes input only when the local user opens it.**
 `source.passthrough open <instance> <windowTitle...>` opens the window capture a
@@ -1242,10 +1245,14 @@ open source's window, captured frame, client area and DPI scale. Only the
 host's own console may run the verb, as typed text; the local operator
 attachment (`world.control`) is that console too. No binding, seat, peer,
 addon, schedule or world document can open a passthrough source or send it
-input. A source whose pane is no longer published, or stops showing the window
-it was opened on (its instance stops, its capture reopens onto another window,
-or a row of the same name replaces it), is closed before the next event routes.
-Closing a source, by the verb or this way, releases every key and button its
+input. A source that stops showing the window it was opened on (its instance
+stops, its capture reopens onto another window, or a row of the same name
+replaces it) is closed before the next event routes. A source whose pane is
+only not published for a while stays open: its window receives nothing while the
+pane is unshown, and an event arriving then first takes the keyboard from it and
+releases what it holds. Once the same instance's pane is published again a click
+on it reaches the window again.
+Closing a source, by the verb or on removal, releases every key and button its
 window holds and returns the keyboard to the game. Delivery is Windows-only:
 the capture feed's `Win32PassthroughWindow` sends window messages to the
 captured window, described in

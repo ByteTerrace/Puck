@@ -8238,7 +8238,7 @@ export type WorldPrototype = {
          */
         shapeId?: number | null;
         /**
-         * The feed this face shows when nothing else is wired, as a source token a consuming world resolves through a closed four-token map — none (no signal), test (the test pattern), and camera:<name> / feed:<name> (a View of the named camera, resolved against the placement's derived creation-eye feeds then the world's own camera rows). An unrecognized token (including a bare named:emotes, which named a host registry no world provides) lights the no-signal card. Null = the no-signal card until a world's face override wires a feed.
+         * The feed this face shows when nothing else is wired, as a source token a consuming world resolves through a closed four-token map — none (unbound glass), test (the test pattern), and camera:<name> / feed:<name> (a View of the named camera, resolved against the placement's derived creation-eye feeds then the world's own camera rows). An unrecognized token (including a bare named:emotes, which named a host registry no world provides) shows unbound glass. Null = unbound glass until a world's face override wires a feed.
          */
         defaultSource?: string | null;
       } | null)[] | null;
