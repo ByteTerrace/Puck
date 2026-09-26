@@ -258,10 +258,19 @@ and addon read pump and before machine stepping, visits EVERY live body once:
    value, so this costs nothing).
 3. For each member: the own-body member routes nowhere (the avatar's own
    integration in `WorldBody.Advance` IS its delivery, which the latch just
-   enabled); a screen member masks `body.EngagedIntent` by `Reach`, translates
-   through the kit's compiled pad map, and merges into the screen's pad
-   (`MachinePadState.Merge`: buttons OR, sticks sum+clamp); a body member appends
-   a `BodyRouteContribution(TargetBody, Principal, Intent)`.
+   enabled); a screen member masks `body.EngagedIntent` by the screen's LIVE
+   reach, translates through its live kit's compiled pad map, and merges into the
+   screen's pad (`MachinePadState.Merge`: buttons OR, sticks sum+clamp); a body
+   member masks by its application's `Reach` and appends a
+   `BodyRouteContribution(TargetBody, Principal, Intent)`.
+
+A screen's policy (reach, pad kit) and a kit's pad map are read from the rows
+the live document holds (`WorldEngagement.PolicyOf`/`PadOf`), compiled once per
+row object and kept while the document still holds that row, so a
+`world.row.set` of the screen or kit, or a reload, reaches the next fold with
+no re-compose (`EngagementPolicyLiveEditLawTests`). The `Kit`/`Reach` a screen
+application records are the policy at compose, for the echoes; the fold does not
+read them. Channels are boot-fixed and compile once.
 
 `body.EngagedIntent` is captured on EVERY `WorldBody.Advance` call, so it is
 available whether or not the avatar is idle. The server passes

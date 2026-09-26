@@ -230,7 +230,8 @@ public sealed partial class WorldServer {
 
         // The application-set summary: every target this seat's channels reach, each with its kit and reach mask, so
         // the same read-back that already shows the fold shows the whole engagement truth beside it (CLAUDE.md's
-        // read-back rule: no decision surface without an echoing verb). The own-body member is listed like any
+        // read-back rule: no decision surface without an echoing verb). A screen member shows its screen's live
+        // policy, the one the fold applies (WorldEngagement.Live), not the one it recorded at compose. The own-body member is listed like any
         // other, so its ABSENCE — capture — is legible rather than inferred.
         var applyPrincipal = Principal.Seat(slot: bodyIndex);
         var applications = m_grants.Applications(principal: applyPrincipal);
@@ -238,7 +239,7 @@ public sealed partial class WorldServer {
             ? "none"
             : string.Join(
                 separator: ",",
-                values: applications.Select(selector: static application => application.Describe())
+                values: applications.Select(selector: application => m_engagement.Live(application: application).Describe())
             ))}";
 
         var channels = m_population.Channels;
