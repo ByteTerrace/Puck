@@ -836,25 +836,32 @@ surface to one capability row with its graph equivalent and check, so a new
 public member needs a row, and nothing a row claims is deleted before the row
 is green.
 The grouped binding contract is the pass interface in `src/Puck.Shaders/Interface`
-([pass interfaces](../../../docs/reference/shaders.md#pass-interfaces)); every
-pipeline pass and post-process package reads its frame block through one, and no shipped
-pass binds a group as a descriptor set yet. Its placement rules are its own: a
-group's ordinal is its set and register space, a register number equals the
-Vulkan binding, and block offsets are explicit `vk::offset`s with named `uint`
-padding that Direct3D 12 needs to land on them; a pushed group
-(`ShaderInterface.PushConstants`, the frame group only) keeps those offsets as
-push constants at `register(b0, space0)`. An interface that binds its groups
-may instead push one index (`ShaderInterface.PushesIndex`, read as
-`pushedIndex.index` at `b0` in space 4), never both. A buffer member with an
-element type is a structured buffer (never a three-component element), and
-every buffer binding carries the stride each bytecode reflects
-(`ShaderInterfaceBinding.ElementStride`; a raw buffer is 4 in SPIR-V and 0 in
-DXIL), so `Mismatch` holds a module to `Bindings` or `DxilBindings` as a whole.
+([pass interfaces](../../../docs/reference/shaders.md#pass-interfaces)). Every
+shipped pass binds its groups as sets: each pipeline pass and package pass
+(post-process, `place`, `overlay`, the source conversions) through its
+interface, the SDF engine's kernels through `SdfWorldInterfaces` (`World` and
+`BrickBake`), and both surface compositors' blits through `SurfaceBlitLayout`.
+The region copy is the one pipeline created from a positional binding list
+(`GpuRegion.CopyPipeline`), bound as one set at group 0. Its placement rules
+are its own: a group's ordinal is its set and register space, a register number
+equals the Vulkan binding, and block offsets are explicit `vk::offset`s with
+named `uint` padding that Direct3D 12 needs to land on them. The one value a
+pipeline pushes is an index (`ShaderInterface.PushesIndex`, read as
+`pushedIndex.index`: a 4-byte Vulkan push range, and a Direct3D 12 root
+constant at `b0` in space 4); the SDF brick baker is the one shipped
+interface that declares it, pushing its slice ordinal per dispatch.
+`ShaderInterface.PushConstants` still declares a pushed frame block, but
+`ShaderInterfaceLayout.PipelineLayout` refuses it, so no pipeline is created
+from one; bind the frame group instead. A buffer member with an element type is
+a structured buffer (never a three-component element), and every buffer binding
+carries the stride each bytecode reflects (`ShaderInterfaceBinding.ElementStride`;
+a raw buffer is 4 in SPIR-V and 0 in DXIL), so `Mismatch` holds a module to
+`Bindings` or `DxilBindings` as a whole.
 Change a rule in `ShaderInterfaceLayout`
 and `ShaderInterfaceSpikeTests` hold both bytecode readers to it; never add a
 register remap. `ShaderRegisterBindingLawTests` holds every shader the build
-compiles to the register rule, with a shrink-only list of the declarations that
-break it today ([kernels](references/kernels.md#registers-and-bindings)).
+compiles to the register rule, with no exception
+([kernels](references/kernels.md#registers-and-bindings)).
 A binding's kind is `GpuBindingKind`, the one closed set for graphics and
 compute; push constants are not a kind, and a pushed block is a constant
 buffer marked `ShaderInterfaceBinding.Pushed`. A pipeline's groups are one
@@ -887,7 +894,9 @@ name on both backends. A pool's sets release with it
 (`DirectXGpuBindings.LiveHandles`). `DirectXGroupedBindingLawTests` and
 `VulkanGroupedBindingLawTests` hold the writes and binds. Every pipeline pass and
 package pass is created from its interface's layout
-(`ShaderInterfaceLayout.PipelineLayout`). A description's positional binding list
+(`ShaderInterfaceLayout.PipelineLayout`), except the float preview, whose one
+group `ShaderPipelineRenderNode.PreviewLayout` declares by hand; keep it and
+`pipeline-preview.frag.hlsl`'s registers in step. A description's positional binding list
 (`GpuComputeBinding`) states a `GpuBindingKind` and holds only buffers and
 storage images; a sampled image or a sampler belongs to a group.
 
@@ -1146,10 +1155,13 @@ declares a language, and a one-off source is an `.hlsl` compute pass read as a
 one-pass graph. A document pass reads its frame values, extent, config and ports
 only through its generated interface
 ([frame values, extent and ports](../../../docs/reference/shaders.md#frame-values-extent-and-ports)):
-the frame group at set 0 (`frameGroup`), then its pass group at set 3
-(`passGroup`: extent, config in ordinal name order) followed by its ports, each
-reading as its resource's name in camel case or its `"as"`. The declarations are
-generated into `<interface>.interface.hlsli`, which the loader supplies in memory
+the frame group at set 0 (`frameGroup`), the World group at set 1 when it
+declares `arrays` (their block, in ordinal name order), then its pass group at
+set 3 (`passGroup`: extent, config in ordinal name order) followed by its ports,
+each reading as its resource's name in camel case or its `"as"`. The node binds
+each as its own set every frame (`ShaderPipelineRenderNode.Groups.cs`). The
+declarations are generated into `<interface>.interface.hlsli`, which the loader
+supplies in memory
 (`ShaderPipelineLoader.GeneratedIncludeOf`) and a post-process package checks in
 (`puck shaders generate`, or `puck shaders interface <directory> --package <id> --write`). Never hand-declare a frame struct or a port
 binding: a load refuses a module whose reflected bindings differ from its layout
@@ -1163,8 +1175,9 @@ presentation clock, the state mirror (`WorldViewGraphHost.PresentedFrame` over
 clock, and a pane's time is that clock through its `timeScale` and the
 `pipeline.time` controls (`WorldPresentedFrameLawTests`). `ShaderFrameBlockLawTests` compiles every shipped pipeline source
 and holds the offsets DXC assigned in both bytecodes to the host writer's, so a
-new shipped pass joins its data; `ShaderInterfaceEcho` generates the echo pass
-the `pipeline-echo` canary runs with `pipeline.sentinels` on.
+new shipped pass joins its data; `ShaderInterfaceEcho` generates the echo passes
+the `pipeline-echo` and `interface-echo` canaries run with `pipeline.sentinels`
+on.
 
 Compile inputs have one statement each. `ShaderSourceClosure` is the one
 include walk. It reads every `#include` line of every file and runs before
@@ -1244,27 +1257,32 @@ puck canary pipeline-feedback pipeline-ink pipeline-edit pipeline-supersede pipe
 dotnet test tests/Puck.Shaders.Tests -c Release             # includes ShaderPipelineRenderNodeLawTests, ShaderPipelineVersionLawTests and ShaderPackageLawTests (no device)
 ```
 
-The fifteen pipeline canaries are the machine check for `Puck.Shaders` pipelines:
+The sixteen pipeline canaries are the machine check for `Puck.Shaders` pipelines:
 an arithmetic feedback oracle, the shipped ink pipeline's exposure regions, a
 broken middle-pass edit followed by a corrected one, two valid edits back to
 back (only the latest renders), compute-compute-fullscreen
 over half-float intermediates, sparse bindings, a raw buffer and the
 `vertex: "Position"` adapter with per-stage oracles through output selection,
 a resize installed while paused and applied while running, exact per-pass work
-counts that must read the same on both backends, and a committed per-instance
-override that renders after a relaunch on the saved document, a relocated package whose source tree is gone rendering a saved override (an altered package file fails by its pin),
-a candidate refused by `SHADERPIPE_BUDGET` under a `pipeline.budget` cap with
-exact counts while the installed graph keeps running, a running instance
-whose graph is replaced and whose row is removed and reloaded three times over,
-an edit whose second image `gpu.faults` fails on the real device, refused with
-`GPU_CREATION_FAULT` while the instance's owned bytes return to its installed
-graph's and a clean retry installs, two indexed, depth-tested geometry passes continuing one color and one depth
-attachment, with a fullscreen pass sampling by UV the right way up,
-a generated echo pass reading back every frame-block sentinel (an echo expecting
-two members to hold each other's sentinel turns their pixels red), and, in a World with `dxc` hidden from its path,
-the shipped ink pipeline rendering from its stored package and a relocated
-package from its binaries while an unpackaged source row is refused by
-`SHADERPKG_ABSENT`.
+counts that must read the same on both backends, a committed per-instance
+override that renders after a relaunch on the saved document, a relocated
+package whose source tree is gone rendering a saved override (an altered
+package file fails by its pin), a candidate refused by `SHADERPIPE_BUDGET`
+under a `pipeline.budget` cap with exact counts while the installed graph keeps
+running, a running instance whose graph is replaced and whose row is removed
+and reloaded three times over, an edit whose second image `gpu.faults` fails on
+the real device, refused with `GPU_CREATION_FAULT` while the instance's owned
+bytes return to its installed graph's and a clean retry installs, two indexed,
+depth-tested geometry passes continuing one color and one depth attachment,
+with a fullscreen pass sampling by UV the right way up, a generated echo pass
+reading back every frame-block sentinel (an echo expecting two members to hold
+each other's sentinel turns their pixels red), one generated echo per shipped
+interface family (the ink passes, the package canary's tint, `sdf.film-grain`,
+`place` and `overlay`) reading its frame and pass blocks back (`interface-echo`,
+each perturbed twin turning its last pixel red), and, in a World with `dxc`
+hidden from its path, the shipped ink pipeline rendering from its stored
+package and a relocated package from its binaries while an unpackaged source
+row is refused by `SHADERPKG_ABSENT`.
 Each proof runs once per backend, and an absent GPU or compiler is reported as
 unsupported rather than passed, except in a leg that hides the compiler. Under
 `puck canary --debug-layers` the runner fails every leg on any

@@ -43,8 +43,8 @@ through that model, and `world.counters`, `pipeline.inspect`, and
 thread and keeps a persistent pipeline cache per device. Neutral vertex and
 draw infrastructure exists to extend. SDF traversal and shading passes exist
 with no shared mesh visibility path. The live authoring and compiler foundation
-exists, and so does its first relocatable package form; persistence is still
-open.
+exists, with its relocatable package form and the committed per-instance
+overrides that survive a save and a relaunch, so P5's persistence is complete.
 
 P1a's first slice has landed; the package stays open. `puck canary` has an
 `offscreen` boot shape that runs every leg once per backend. It also has an
@@ -74,7 +74,8 @@ windowed boot with no usable device is meant to exit 2 with the unsupported
 line, as the offscreen shape does. Its first no-driver run exposed a teardown
 defect, which is now fixed: disposing the render root threw from GPU consumers
 that had never allocated, and that error replaced the device failure. That
-boot has not been rerun on a machine without a driver since the fix.
+boot has not been rerun on a machine without a driver since the fix; the rerun
+is [deferred to the end](#deferred-to-the-end).
 
 The third slice adds three canaries, each running on both backends.
 `pipeline-supersede` loads two valid edits back to back on a paused instance.
@@ -282,7 +283,8 @@ P5 is complete. P8 extended the manifest: each pass entry records its
 interface hash, and the package carries its precompiled binaries.
 
 P7's gate spike has run its build-time half and its GPU half, the `binding`
-parity station; P10 has not started. The spike's [pass interface](../reference/shaders.md#pass-interfaces)
+parity station. P10's steps 1 to 3 have landed and step 4 is in flight; steps 5
+to 8 remain, and so does step 2's debt of one shared region per bound row. The spike's [pass interface](../reference/shaders.md#pass-interfaces)
 lives in `src/Puck.Shaders/Interface/`. It interfaces variants of
 `sdf-film-grain.frag.hlsl` and a pixelate compute pass whose only copy is
 the spike's fixture under `tests/Puck.Shaders.Tests`, each with a frame group
@@ -308,26 +310,29 @@ The capability report has been read too: each backend fills
 `IGpuDeviceContext.Capabilities` (`GpuDeviceCapabilities`) at device creation,
 `world.counters gpu` prints it on a `capabilities` line and in its JSON, and the
 floor and ceiling devices' readings on both backends are recorded under step 14.
-One leg stays open, and is not yet proven: one build on Linux compared byte for
-byte with the Windows build of the same commit. CI runs it as `verify.yml`'s
-`shader-bytecode` job (see P7's gate).
+One leg is not yet proven: one build on Linux compared byte for byte with the
+Windows build of the same commit, which CI runs as `verify.yml`'s
+`shader-bytecode` job (see P7's gate). It is
+[deferred to the end](#deferred-to-the-end).
 
 P8 is complete but for one item of its check: the `interface-echo` canary
-echoes every shipped interface family, and has not yet run on a GPU (see P8's
-check). The frame group is a descriptor set,
+echoes every shipped interface family but the SDF engine's two, which P14-5
+adds, and has not yet run on a GPU (see P8's check). The frame group is a descriptor set,
 set 0, since P7b step 15 put pipelines on groups. HLSL is the one source
 language. `ShaderCompiler` runs DXC alone, a pass document names no
 language, and the Shadertoy adapter, the GLSL front end, the translation back
 into HLSL and the register remap are deleted, so a compile identity is the
 compiler revision, the stages and their DXC steps, and the closure.
 
-A pass reads its frame data only through its frame block, a pass interface the
-engine derives from the pass (`ShaderFrameInterface`): extent, pointer, the
-engine tick and tick rate, presentation time and its delta, the frame count,
-the pointer's pressed state and press count, and the paired camera, then the
-pass's config fields in ordinal name order, all in the frame group. The group
-is a descriptor set, set 0, which each pass binds by group (P7b step 15), and
-nothing a pass records is pushed. Its declarations are generated into
+A pass reads its frame data only through a pass interface the engine derives
+from the pass (`ShaderFrameInterface`). The frame group, set 0, holds what every
+pass of a node shares each frame: the pointer, the engine tick and tick rate,
+presentation time and its delta, the frame count, the pointer's pressed state
+and press count, and the paired camera. The pass block, `b0` of set 3, holds the
+pass's own extent and then its config fields in ordinal name order, followed by
+its ports; a pass that binds arrays reads them from the World group, set 1. Each
+pass binds its groups as descriptor sets (P7b step 15), and nothing it records is
+pushed but an optional pushed index. Its declarations are generated into
 `<interface>.interface.hlsli`, which the
 loader supplies in memory for a pipeline pass and an engine package checks in, and
 the host writes the block through `ShaderPipelineParameterLayout.WriteFrame`.
@@ -377,8 +382,12 @@ alone, are ink finish's. Its discriminating leg reloads every row onto an echo w
 member's first word expects the next word's sentinel.
 `InterfaceEchoCanaryFixtureTests` hold each echo's blocks to its targets' and
 fail when a shipped package with frame data has no echo. The
-SDF engine's `sdf-world` and `sdf-brick-bake` interfaces join the canary in
-the change that lands them (S16).
+canary does not yet cover the SDF engine's `sdf-world` and `sdf-brick-bake`
+interfaces (`src/Puck.SdfVm/SdfWorldInterfaces.cs`), because an echo is a graph
+document, whose pass block is its extent and then its config in ordinal name
+order. `sdf-world`'s pass members are not in that order, and `sdf-brick-bake`
+has no frame group or extent at all, only a pass block and a pushed index.
+P14-5 reshapes both into that one spelling and adds them to the canary.
 
 Open: the `interface-echo` canary has not yet run on a GPU, which is what P8's
 check asks for. The worlds under the
@@ -477,7 +486,10 @@ consumed, so a still frame packs and stages no transform rows, and
 frame source and the one each session view composes for itself. A material
 color still resolves at program build.
 
-A pipeline row reads no state row. Its frame block's `tick` is the mirror's
+A pipeline row reads state only through the mirror: each bound parameter and
+array (P10 steps 1 and 2) is a mirror slot the row registers at install, read
+with `SlotOf` and written into its pass's block only when the slot moved
+(`WorldViewGraphHost.Parameters.cs`). Its frame block's `tick` is the mirror's
 delivered engine tick and its `time` the mirror's presented engine tick in
 seconds (`WorldViewGraphHost.PresentedFrame`), which the host hands every graph
 instance each frame and the node writes whole through
@@ -485,10 +497,11 @@ instance each frame and the node writes whole through
 through its row's `timeScale` and the `pipeline.time` and `pipeline.step`
 controls, re-anchored at the frame last presented, never a clock of its own.
 `WorldPresentedFrameLawTests` pins the tick bytes, low word then high word, and
-the time. Every shipped shader binding declares descriptor set
-zero and no shipped source names a Direct3D register space, so the resource
-layout is one flat set with hand-assigned register numbers documented in
-banner comments.
+the time. A pass's resources bind through the groups its generated interface
+declares (`<interface>.interface.hlsli`): the frame group at set 0, the World
+group at set 1 and the pass group at set 3, each register number the Vulkan
+binding and each group's ordinal its register space, so no pass source assigns
+a register by hand.
 
 P7's adapter memory profile, residency selector, consumer migration and binding
 groups have landed. `IGpuDeviceContext`
@@ -564,10 +577,11 @@ for that price.
 
 P11b owes the rest of the package. The main view, every `views.graphs` pane
 and every split-screen seat run through the graph runtime (commits 6, 9 and 10
-below), but `ViewStack` still renders every screen. P11b moves the screens onto graph instances fed by the scheduler,
-puts the live schedule's extents and prices in `world.budget`, runs the parity
-and counted-GPU checks, and makes the rest of the deletions P11 lists (commits
-11, 13 and 14 below). These
+below), but `ViewStack` still renders every screen. Commits 11 and 12, the
+per-device pass-pipeline cache and the live schedule's extents and prices in
+`world.budget`, have landed. Only commits 13 and 14 remain: P11b moves the
+screens onto graph instances fed by the scheduler, runs the parity and
+counted-GPU checks, and makes the rest of the deletions P11 lists. These
 P11b items have landed: the first-class package pass kind in
 `ShaderPipelineCompiler`, a steady-state schedule that allocates nothing, a
 document pass kind with no package member, so package work enters the
@@ -641,11 +655,12 @@ into the begun command buffer it is handed, and it never submits, waits or
 creates a pipeline on the frame thread. The post-process packages and
 `overlay` become recorders. `sdf.world` stays an external producer until P14-6: its output is
 the engine's latest completed image, held as a `GpuImageLease` until the
-submission that samples it retires, and never copied. The commit lands as four
-sub-steps, in this order:
+submission that samples it retires, and never copied. The commit landed as
+four sub-steps, in this order, each on the fake GPU first; commit 6 then wired
+all four live. The notes below record how each landed.
 
-- 5a has landed: `sdf.world` runs as an external-producer instance, on the
-  fake GPU only, since nothing wires it live yet.
+- 5a has landed: `sdf.world` runs as an external-producer instance, live since
+  commit 6.
   - `RenderGraphInstance` has a kind (`RenderGraphInstanceKind`): a graph it
     renders, or an external producer named by `ExternalPackage`.
     `RenderGraphInstanceSet.TryCreate` refuses an external instance that
@@ -730,9 +745,9 @@ sub-steps, in this order:
     `views.post` row's package against the catalog at document load. A probe's
     `post` target's `pass` cross-reference stays in world validation.
   - `PostProcessPackageLawTests` hold it on `FakePipelineGpu`: the render
-    pass, pipeline description, vertex buffer and draw, input write and pushed
-    frame blocks `FullscreenPassNode` recorded for the shipped film grain,
-    pinned since that node's deletion, with bound config and a live config
+    pass, pipeline description, vertex buffer and draw, and input write for the
+    shipped film grain, with its frame and pass blocks bound as groups and
+    nothing pushed, with bound config and a live config
     change; the pipeline built off the frame
     thread and released on replacement, device loss and disposal; the config
     refusal by name; and a steady frame allocating nothing.
@@ -767,7 +782,7 @@ sub-steps, in this order:
     publishes the output, bound frame-slot leases move into the frame's list,
     and a steady drawn frame allocates nothing.
 - 5d has landed: the one planner plans a package pass's barriers and layouts,
-  on the fake GPU only.
+  live since commit 6.
   - A package port declares the stage and access its package reaches it by
     (`RenderGraphPortAccess`): a compute read or a fragment-sampled read for an
     input, a compute write or a color-attachment write for an output, which only
@@ -798,34 +813,23 @@ sub-steps, in this order:
     standing for the output. The post pass's pinned recording and the
     steady-frame allocation laws hold unchanged.
 
-Each sub-step's gate:
+Each sub-step landed on its fake-GPU laws while nothing ran it live, and its
+live gate came with commit 6, which runs the default composition through the
+graph:
 
 - 5a: `puck parity` on both backends, with exact state hashes and per-tile
-  pixels unchanged, once the default composition runs through the graph. The
-  canaries that `tests/Puck.Affected/canary-coverage.json` maps to
-  `SdfEngineNode.cs` and `LeaseRetireList.cs` run too. The mapping is read as
-  text rather than from a `puck affected` run, so it is unverified. Nothing
-  live runs through 5a yet, so these gates run when the default composition
-  moves onto the graph; until then its evidence is the fake-GPU laws above.
-- 5b: the `post-pass` canary, which 5b lands behind. It boots a `views.post`
-  row running `sdf.film-grain` on both backends and pins its pixels, with a
-  discriminating leg without the row. No parity world authors `views.post`,
-  and although the coverage index maps
-  `FullscreenPassNode.cs` to 21 canaries, none of them composes a post pass.
-- 5c: parity likely does not cross the overlay: with nothing visible the
-  pass-through returns the SDF frame, and the parity world appears to show no
-  overlay, which is unverified. The coverage index maps
-  `src/Puck.Overlays` to four canaries: `instrument-clock-source`,
-  `music-conditional-layer-and-embellishment`, `voice-babble` and
-  `world-seat-binding-recompose`. Whether their captures include overlay pixels
-  is unverified, so 5c also runs `OverlayPackageLawTests` and
-  `OverlayFrameSlotsLawTests` and states which of those canaries observes an
-  overlay.
-- 5d: the 5b post canary and the 5c overlay canaries once the wiring commit
-  records a package pass live, with the Vulkan and Direct3D 12 debug layers
-  clean over a drawn post and overlay frame, since a planned layout the driver
-  disagrees with shows only there. Until then its evidence is the fake-GPU laws
-  above.
+  pixels unchanged.
+- 5b: the `post-pass` canary. It boots a `views.post` row running
+  `sdf.film-grain` on both backends and pins its pixels, with a discriminating
+  leg without the row. No parity world authors `views.post`.
+- 5c: `OverlayPackageLawTests` and `OverlayFrameSlotsLawTests`, beside the
+  canaries the coverage index maps to `src/Puck.Overlays`
+  (`instrument-clock-source`, `music-conditional-layer-and-embellishment`,
+  `voice-babble` and `world-seat-binding-recompose`). Parity does not cross the
+  overlay: with nothing visible the pass-through returns the SDF frame.
+- 5d: the post and overlay canaries with the Vulkan and Direct3D 12 debug
+  layers clean over a drawn post and overlay frame, since a planned layout the
+  driver disagrees with shows only there.
 
 P11b commit 6 has landed: the main view runs through the graph runtime, and
 captures come from the graph's root output.
@@ -1110,7 +1114,8 @@ mapping. No host feeds
 `SourceFocus` or delivers a focused source's input to its window, no machine
 reads a mapped pointer, and nothing reads the picker for hover yet. The
 recorded Windows run, a click reaching a captured editor window at the mapped
-point and the chord returning input to the game, belongs to P13b.
+point and the chord returning input to the game, belongs to P13b-4 and is
+[deferred to the end](#deferred-to-the-end).
 
 Rendering today runs the default render graph `WorldRootGraph` composes,
 through `RenderGraphRuntime` behind `RenderGraphRuntimeNode`, the host's render
@@ -1170,7 +1175,8 @@ capture shows its declared fill and never its pixels. That covers every frame of
 an offscreen host, which serves captures and `puck parity`, and a windowed frame
 from a `world.screenshot` for two frames after. A deterministic source states the
 exact image it shows (`IImageSourceReference`) for the exact verdict
-`ImageSourceVerdict`, which the P12b canary will apply before composition.
+`ImageSourceVerdict`, which the `uploaded-sources` canary applies to a
+test-pattern source instance before composition.
 
 An uploaded source's pixels travel as one region, `ImageSourceUploadLayout`'s
 header and planes. The shipped kernels in `src/Puck.Shaders/Assets/Shaders/Sources`
@@ -1179,9 +1185,11 @@ convert a region into the image a consumer samples. `source-palette` and
 carries a BGRA swizzle, and `source-transfer` decodes sRGB, linear or PQ into
 linear light. `ImageSourceConversion` is their CPU reference, and the
 `source-conversion` canary holds all four kernels to it on both backends. The
-test pattern and the QR code write regions, which an uploaded source
-instance's one-pass graph converts in the render-graph runtime; screens still
-show them through `CpuSurfaceSource`. The emulators still publish through
+test pattern and the QR code already convert through graph regions: each writes
+a region that an uploaded source instance's one-pass graph converts in the
+render-graph runtime, which a pane or a `captures` row reads. Screens still show
+them through `CpuSurfaceSource`, and the other feeds still need the same
+migration. The emulators still publish through
 `IMachineVideoOutput`'s own `IGpuSurfaceUpload`, and the capture and camera CPU
 tiers and the fills through `CpuSurfaceSource`. Only the camera's CPU tier hands the screen a counted
 lease; the others and the machine outputs hand it a bare handle. Each waits
@@ -1283,8 +1291,10 @@ shown on two screens renders once per frame; the mirror shows the previous
 frame; the editor pane receives a click at the mapped point and appears only as
 the redaction fill in every capture; a recorded Steam Deck run renders the
 world with temporal upscaling on; and the HDR path passes P16's check on the
-desktop. Whether the Steam Deck run holds a frame-time target is not checked:
-wall-clock and GPU timing are deferred with no date.
+desktop. The recorded Steam Deck run and the HDR-display checks are
+[deferred to the end](#deferred-to-the-end). Whether the Steam Deck run holds a
+frame-time target is not checked: wall-clock and GPU timing are deferred with no
+date.
 
 ## Packages
 
@@ -1454,8 +1464,9 @@ and the offscreen host's through its GPU activation. A capture armed at the
 loss is refused as `deviceLost` in the capture manifest, and a run that gives up
 refuses it first too. `gpu.faults lose` injects a loss on a real device, and the
 `device-loss` and `device-loss-windowed` canaries recover from one on both
-backends with a capture armed at it. A driver-initiated removal (a timeout
-detection and recovery) is still exercised only by hand.
+backends with a capture armed at it. Exercising a driver-initiated removal (a
+timeout detection and recovery) on real hardware is
+[deferred to the end](#deferred-to-the-end).
 
 Thresholds for frame-time median and tail and for reload stalls are deferred.
 They need wall-clock and GPU timing, which the owner has deferred with no date,
@@ -1608,8 +1619,8 @@ surface upload, a Vulkan shared-surface import or a Direct3D 12 exportable
 image released after its device throws, with its owner's release on the stack,
 rather than leaking.
 
-Still open: the runs on the RTX 4070 and the AMD devices. Direct3D 12 cells are
-blocked on a machine whose debug layer stops device creation.
+The runs on the RTX 4070 and the AMD devices, Direct3D 12 cells included, are
+[deferred to the end](#deferred-to-the-end).
 
 ### P3 — Attachments and indexed geometry
 
@@ -1939,7 +1950,8 @@ each SPIR-V and DXIL output to the Windows one (`puck shaders compare --build`).
 It runs only in CI: on every pull request and every push to `main`, through
 **Release Azure**, or by dispatching **Verify runtime behavior** by hand. The leg
 is proven when that job passes; a difference it names, such as DXIL the Linux
-compiler hashes or signs differently, is the gate's failure toward Slang.
+compiler hashes or signs differently, is the gate's failure toward Slang. The
+leg's run is [deferred to the end](#deferred-to-the-end).
 Both backends' capability reports, read on the floor and ceiling devices, show that
 neither lacks what the grouped contract assumes. The gate still fails toward
 Slang when DXC output is not byte-stable across hosts, or when the second group
@@ -1958,9 +1970,10 @@ type or member this package deletes; `puck architecture --check` and `puck parit
 **P7b, the rest of the package.** The binding groups start from several test
 fakes of the whole service surface and a Direct3D 12 backend with positional
 registers, static samplers and one shader-visible heap per descriptor pool,
-which cannot bind two groups from different pools. P7b is 22 commits in four phases, each done when
-its laws pass and `puck parity` holds; the services phase also reads identical
-counts before and after through `puck counters compare`.
+which cannot bind two groups from different pools. P7b is 22 numbered steps in
+four phases, step 14 split into sub-commits, and every step has landed. Each
+step was done when its laws passed and `puck parity` held; the services phase
+also read identical counts before and after through `puck counters compare`.
 
 Phase 0 needs nothing else, and all of it has landed:
 
@@ -2452,7 +2465,11 @@ Phase 3, the groups, follows phase 2:
     exception. A buffer member names its element type, so the kernels keep
     their structured loads, and a buffer one pass writes and a later pass
     reads is a read-write member and a read-only member over the one buffer.
-21. The owning guides and the `rendering` skill describe the result.
+21. Done: the owning guides and the `rendering` skill describe the result.
+    [Shader manifests and pipelines](../reference/shaders.md#pass-interfaces)
+    states that every shipped pass binds its groups as descriptor sets, the
+    region copy's positional list the one exception, and that the only value a
+    pipeline pushes is a pushed index, which the brick bake alone declares.
 22. Done: the P7 deletions no earlier step owns. Vulkan has one
     pipeline factory, `VulkanGpuPipelineFactory`, which creates graphics
     pipelines through `IVulkanGraphicsPipelineApi` itself. Both swapchain
@@ -2515,17 +2532,18 @@ block's `historyValid` at 0; a name colliding with `ShaderInterfaceHlsl`'s
 takes the nearest free spelling. `GpuResidency.Select` also takes whether
 readers are in flight, and brick staging is a region with an external
 destination. A region's staging buffer states its copy (header, run table,
-words), so the region-copy kernel pushes nothing. The SDF engine's groups are
-P7b-20's; after it the 32 screens bind as 32 bindings and one sampler, and
+words), so the region-copy kernel pushes nothing. The SDF engine's groups
+landed with P7b-20: the 32 screens bind as 32 bindings and one sampler, and
 P12b-8 makes them an array with per-screen filtering. The test fakes
-consolidate as the surface shrinks. Open: the gate's Linux build, which CI's
-`shader-bytecode` job runs and has not yet proven.
+consolidate as the surface shrinks. The gate's Linux build, which CI's
+`shader-bytecode` job runs, is [deferred to the end](#deferred-to-the-end).
 
 ### P8 — The shader package, and one source language
 
 **Owns:** the pass interface schema and its hash; the declaration generator; the
-package format, its variants, and the generated echo pass; the frame block the
-HLSL pipeline sources declare by hand; the two run-time compilation paths.
+package format, its variants, and the generated echo pass; the frame block every
+HLSL pipeline source reads, which is generated rather than declared by hand; the
+two run-time compilation paths.
 
 **Delivers:** a pass interface declared as data — named scalars, vectors,
 arrays, and images with GPU types — and declarations generated from it with
@@ -3061,9 +3079,10 @@ except step 8.
    on it unretired until the Direct3D 11 signal, and skips by name on a device
    without the extension. WARP's Direct3D 11 device opens the shared fence, so
    the WARP case orders its write by the fence rather than a CPU wait, and the
-   WARP reader reads the pattern. Still open: a recorded camera run on both
-   backends on real hardware, and the capture GPU route, which publishes
-   its slot's value but acquires no lease until step 2.
+   WARP reader reads the pattern. Still open: the capture GPU route, which
+   publishes its slot's value but acquires no lease until step 2. A recorded
+   camera run on both backends on real hardware is
+   [deferred to the end](#deferred-to-the-end).
 5. The capture gate over the graph. Can land now, after step 2. The gate
    reads the capture armed on `RenderGraphRuntime` rather than
    `WorldRenderProbe`'s pending path, and its fixed `HoldFrames` gives way to
@@ -3218,8 +3237,8 @@ Each commit is marked with what it waits on; only step 5 waits on P7b's groups.
 4. Host passthrough. Can land after P12b-2 on Windows. The input router feeds
    `SourceFocus`, a focused capture source's window receives pointer and key
    events at `SourcePassthrough.ToClient`'s client coordinates, and the chord
-   returns focus to the game. The check is the recorded Windows run, on real
-   hardware.
+   returns focus to the game. Its check, the recorded Windows run on real
+   hardware, is [deferred to the end](#deferred-to-the-end).
 5. The GPU draws from the mapping. Waits on P7b-20. The screen shading reads
    each screen's UV layout, crop, letterbox and warp inset from the published
    mapping instead of `CrtBezel` in `sdf-world.hlsli`, and its mirror,
@@ -3370,7 +3389,13 @@ instances. `sdf-vm.hlsli` splits into a generated `isa/` and `field/`, and
    the cull buffer by its tile-plane term, so the cutover resolves its real
    instance count.
 5. The SDF pass interfaces over the four groups, with generated declarations;
-   parity reads identically.
+   parity reads identically. Every pass block takes one spelling, the one
+   `ShaderFrameInterface.ForPass` gives a document pass: `sdf-world`'s pass
+   members move into ordinal name order after its extent, and the brick bake
+   becomes the `sdf.bricks` instance's pass, with a frame group and an extent.
+   Both interfaces then join the `interface-echo` canary and
+   `InterfaceEchoCanaryFixtureTests` in this commit, and P8 closes on that
+   canary's GPU run.
 6. The cutover, the riskiest commit: the package records into the graph's
    command list, and Direct3D 12's promotion from `COMMON`, the
    indirect-argument state and per-instance scratch hazards all move with it.
@@ -3478,11 +3503,11 @@ alternative pass.
 **Check:** a static scene converges to a supersampled reference within a
 stated tolerance; an object moving across SDF tile boundaries stays under a
 stated ghosting metric; a set of disocclusion scenes; history reset on a cut;
-parity captures pin the jitter index so pixel verdicts stay meaningful; a
-recorded Steam Deck run with dynamic resolution on shows render scale
-responding to the pacing signal; P2's work counts recorded on both reference
-machines. Whether the run holds its frame-time target is not checked while
-wall-clock and GPU timing are deferred.
+parity captures pin the jitter index so pixel verdicts stay meaningful; P2's
+work counts recorded on both reference machines. The recorded Steam Deck run,
+with dynamic resolution on and render scale responding to the pacing signal,
+is [deferred to the end](#deferred-to-the-end). Whether the run holds its
+frame-time target is not checked while wall-clock and GPU timing are deferred.
 
 **Depends on:** P4's motion and jitter contract, P11 for per-instance history,
 and P14.
@@ -3509,10 +3534,11 @@ converts through P12. SDR stays the default and the fallback. Calibration UI,
 per-display metadata, and HDR on the Steam Deck OLED under Linux are later work
 and stay listed in open items until scheduled.
 
-**Check:** on an HDR display the swapchain reports an HDR color space and a
-test ramp exceeds SDR white; on an SDR display the same graph produces the
-previous image within the parity contract; an HDR desktop capture displays
-without clipping; the HUD renders at paper white.
+**Check:** on an SDR display the same graph produces the previous image within
+the parity contract. The HDR-display checks, the swapchain reporting an HDR
+color space, a test ramp exceeding SDR white, an HDR desktop capture displayed
+without clipping and the HUD at paper white, are
+[deferred to the end](#deferred-to-the-end).
 
 **Depends on:** P11, and P14's float working targets.
 
@@ -3522,11 +3548,11 @@ without clipping; the HUD renders at paper white.
 `SdfBrickPoolLayout` holding at most 8 bricks of 128 cubed samples) for settled
 carves; the CPU baker, its key, its cache, the `BAKE` chunk of
 [compiled worlds](runtime-and-delivery.md#compiled-worlds), and background baking
-on the device, described under the implementation status; and no path that
+on the CPU thread pool, described under the implementation status; and no path that
 draws a bake.
 
 **Owns:** the baker, the texture pipeline, the content-addressed bake cache,
-its chunk in compiled worlds, and background baking on the device.
+its chunk in compiled worlds, and background baking on the CPU thread pool.
 
 **Delivers:** one baker that turns an SDF prototype into presentation assets:
 
@@ -3547,10 +3573,11 @@ Each bake is keyed by the prototype's content hash, the baker version, and the
 quality tier, and one cache is filled in two ways. A build ships each bake once
 in a bake pack, and a compiled world's chunk names the keys it needs from it, so
 a released world bakes nothing on a player's device. On a cache miss, which happens during live authoring or for a world
-that has not been compiled, the device bakes in the background. It bakes only
+that has not been compiled, the CPU baker runs in the background on the thread
+pool (`WorldBakeSchedule`), never on the frame thread or the GPU. It bakes only
 the prototypes that changed, stores the results locally, and keeps drawing the
-SDF path until each bake is ready. Baking is data processing with shipped
-kernels, so it needs no toolchain on the device.
+SDF path until each bake is ready. Baking is data processing in the shipped
+baker, so it needs no toolchain on the device.
 
 Bakes are presentation only: contact and queries keep reading the SDF field.
 The parity world ships its bakes, so captures never depend on a local bake.
@@ -3570,25 +3597,24 @@ packaging, and compiled worlds in the runtime and delivery programme.
 
 **Foundation.** P2, P3 and P5 are complete. P1a and P1b stay open beside the
 rest: neither blocks P4 or releasing the foundation. P4-0, P4-1a to P4-1c,
-P4-2a and P4-2b have landed; P4-2c onward follows the SDF engine's groups
-(P7b-20), as P4's build sequence orders them. P6 follows P4.
+P4-2a and P4-2b have landed; the SDF engine's groups (P7b-20), which P4-2c
+waited on, have landed too, and P4-2c joins P14-6. P6 follows P4.
 Image-only packaging stays
 independent of placed-surface support, and shared GPU and World files have one
 owner at a time.
 
-**Contracts.** P7's memory profile and residency selector have landed, and P7b
-is under way: steps 1 to 13, 14a, 14b-1 to 14b-7, 15 to 20 and 22 have
-landed. What remains is step 21. P8 is
-complete but for a GPU run of its echo of every shipped interface family, and its frame
-group
-became a descriptor set when step 15 put pipelines on groups. P7 and P8 do not
+**Contracts.** P7's memory profile and residency selector have landed, and so
+has every step of P7b; the gate's Linux bytecode leg is
+[deferred to the end](#deferred-to-the-end). P8 is complete but for its echo of
+the SDF engine's two interfaces, which P14-5 adds, and that canary's GPU run;
+its frame group became a descriptor set when step 15 put pipelines on groups. P7 and P8 do not
 read simulation state, so they do not wait on the state rebuild.
 
 **The frame graph and nesting.** P11's CPU half has landed, and so have the
 P11b items its implementation status lists, the main view through the graph
 runtime among them. The rest of P11b, commits 13 and 14, waits on nothing from
-P7b, whose groups have landed for everything but the SDF engine; commit 13, the
-screens, follows P12b-2. P12's
+P7b, whose groups have landed for every pass; commit 13, the screens, follows
+P12b-2. P12's
 source contract, producers and conversion passes have landed; P12b, the graph
 wiring, follows P11b, and P13b follows P12b and P11b. P14 follows P4, P7b, P8,
 P11b and P12b, because the engine's composition and screens need somewhere to
@@ -3610,9 +3636,47 @@ P7's residency policies and P9's mirror as well as P5-1 and P8's interface,
 which have landed. It also follows P11b's graph wiring, because the rows it
 binds are `views.graphs` rows.
 
-The longest remaining chain runs through the SDF engine's groups (P7b-20) to
-P4-2c, then P14, and ends with P15; the rest of P11b and P12b proceed beside
-P7b.
+The SDF engine's groups (P7b-20) have landed, so the longest remaining chain now
+runs P12b-2, P11b-13, P14-5, then P14-6 (which P4-2c joins), P14-7 to P14-13,
+and ends with P15. P16 follows P14-10's float working targets, and drawing a
+bake (P17) comes before P6's choice between a bake and the field.
+
+## Deferred to the end
+
+Some checks need a particular machine, device or environment rather than a
+change to the code, so they run once, when the programme closes, instead of
+holding each package open. A package whose other checks pass lands with these
+listed here, and its own text points here rather than naming them as open
+blockers. Each is still required before the programme is done.
+
+- **Hardware: P1a's no-driver windowed boot.** A windowed boot on a machine with
+  no usable GPU driver exits 2 with the unsupported line, rerun since the
+  teardown fix.
+- **Hardware: P1b's reference-GPU qualification.** `puck qualify` over the
+  release profile on the RTX 4070 and the AMD devices, the Direct3D 12 cells
+  included.
+- **Hardware: P1b's driver-removal exercise.** A driver-initiated removal (a
+  timeout detection and recovery) recovers as an injected loss does.
+- **Environment: P7's shader-bytecode comparison.** CI's `shader-bytecode` job
+  passes, holding a Linux build's SPIR-V and DXIL byte for byte to the Windows
+  build of the same commit.
+- **Hardware: P12b-4's recorded camera run.** A real camera feeding a screen on
+  both backends, recorded.
+- **Hardware: P13b-4's recorded Windows editor click.** A click reaching a
+  captured editor window at the mapped point, and the chord returning input to
+  the game, recorded on real hardware.
+- **Hardware: P15's recorded Steam Deck run.** The world with temporal
+  upscaling and dynamic resolution on, render scale responding to the pacing
+  signal.
+- **Hardware: P16's HDR-display checks.** On an HDR display the swapchain
+  reports an HDR color space, a test ramp exceeds SDR white, an HDR desktop
+  capture displays without clipping, and the HUD renders at paper white.
+- **Review: cross-backend agreement.** A change's own GPU checks run on the
+  backends at hand as it lands; whether Vulkan and Direct3D 12 agree across
+  those checks is judged in one final review pass.
+
+The reasoning is recorded in
+[the decisions register](../decisions/rendering.md).
 
 ## Verification summary
 
@@ -3621,8 +3685,9 @@ through the real `Puck.World` executable on both backends. Performance is
 judged by code, disassembly, and deterministic counts; wall-clock and GPU
 timing are deferred with no date. A GPU-backed check runs on real floor and
 ceiling hardware, not over a remote session, because a remote session does not
-report the adapter's memory properties. A missing environment leaves the
-package open with its blocked checks named. A completed package updates its
+report the adapter's memory properties. A check that needs a particular machine
+or environment is listed under [deferred to the end](#deferred-to-the-end)
+rather than holding its package open. A completed package updates its
 owning guide, and the landing commit message carries the evidence: the
 candidate, commands, environment, expected results, and retained evidence.
 
