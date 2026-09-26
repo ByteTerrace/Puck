@@ -482,9 +482,13 @@ internal sealed partial class WorldScreenBinder {
                     cameraName: declared.CameraName
                 );
 
+                // The view the row names, not a live bind over it.
+                _ = m_liveBinds.Remove(item: slot.Index);
                 Console.Error.WriteLine(value: $"[world.camera: {outcome.Message}]");
             }
         }
+
+        ReconcileMappings(screens: Mappings.Screens);
     }
     /// <summary>Points a declared screen at a placeable camera — the runtime <c>screen.source &lt;index&gt; view</c> path. Any existing
     /// producer on the slot is cleared first. Requires the view pool to have been configured (it is, at startup); fails
@@ -542,6 +546,8 @@ internal sealed partial class WorldScreenBinder {
         ) {
             ReleaseOrphanedCameraView(name: previous.Name);
         }
+
+        ShowLive(index: index);
 
         return (Ok: true, Message: $"screen {index} showing camera '{camera.Name}'");
     }
