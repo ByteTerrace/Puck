@@ -1097,6 +1097,14 @@ public static partial class WorldDecompiler {
                 continue;
             }
             if (
+                string.Equals(a: identifier, b: "graph", comparisonType: StringComparison.Ordinal) &&
+                string.Equals(a: k, b: "parameters", comparisonType: StringComparison.Ordinal) &&
+                (v is JsonObject bound)
+            ) {
+                DecompileGraphParameters(indentLevel: (indentLevel + 1), parameters: bound, sb: sb);
+                continue;
+            }
+            if (
                 string.Equals(
                 a: k,
                 b: "shapes",
@@ -1126,6 +1134,20 @@ public static partial class WorldDecompiler {
             CultureInfo.InvariantCulture,
             $"{indent}}}"
         );
+    }
+    // A graph row's parameters print one `parameter pass.member = value` statement a bound member, the one spelling
+    // the lowering reads them in.
+    private static void DecompileGraphParameters(StringBuilder sb, JsonObject parameters, int indentLevel) {
+        var indent = new string(c: ' ', count: (indentLevel * 4));
+
+        foreach (var (pass, members) in parameters) {
+            foreach (var (member, value) in ((members as JsonObject) ?? [])) {
+                sb.AppendLine(
+                    CultureInfo.InvariantCulture,
+                    $"{indent}parameter {PuckPrinter.PrintName(name: pass)}.{PuckPrinter.PrintName(name: member)} = {FormatValue(indentLevel: indentLevel, node: value)}"
+                );
+            }
+        }
     }
     private static string FormatValue(JsonNode? node, int indentLevel, Type? context = null) {
         if (node is null) {

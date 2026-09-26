@@ -276,6 +276,9 @@ public static partial class WorldDocumentEmitter {
             case WorldLinkNode link:
                 DeclareLink(declaration: link, scope: scope);
                 break;
+            case GraphParameterNode parameter:
+                LowerGraphParameter(parameter: parameter, scope: scope, target: target);
+                break;
             case LetNode:
             case TemplateNode:
                 // Already indexed in pre-scan
@@ -377,6 +380,10 @@ public static partial class WorldDocumentEmitter {
                 break;
 
             case PropertyNode propNode: {
+                    if (RefusesRawGraphParameters(name: propNode.Name, scope: scope, span: propNode.Span)) {
+                        break;
+                    }
+
                     var childPointer = $"{scope.CurrentPointer}/{propNode.Name}";
 
                     scope.SourceMap?.Register(
@@ -583,6 +590,9 @@ public static partial class WorldDocumentEmitter {
                 }
 
             case BlockNode blockNode: {
+                    if (RefusesRawGraphParameters(name: blockNode.Identifier, scope: scope, span: blockNode.Span)) {
+                        break;
+                    }
                     LowerBlock(
                         block: blockNode,
                         parent: target,
@@ -1164,14 +1174,20 @@ public static partial class WorldDocumentEmitter {
             array = [];
             target[targetKey] = array;
         }
+        var rowPointer = $"{scope.CurrentPointer}/{targetKey}/{array.Count}";
+        var oldPointer = scope.CurrentPointer;
+
         scope.SourceMap?.Register(
-            jsonPointer: $"{scope.CurrentPointer}/{targetKey}/{array.Count}",
+            jsonPointer: rowPointer,
             span: block.Span
         );
+        scope.CurrentPointer = rowPointer;
         var obj = ((row is null)
             ? LowerBlockToObject(block: block, scope: scope)
             : DocumentLowering.At(context: row, lower: () => LowerBlockToObject(block: block, scope: scope), scope: scope)
         );
+
+        scope.CurrentPointer = oldPointer;
 
         if (block.Name is not null) {
             obj["name"] = block.Name;

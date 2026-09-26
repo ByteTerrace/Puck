@@ -2761,8 +2761,12 @@ follow it.
    literal leg. `puck test worlds/rulepush --reproduce` holds the row's cells to
    the turns that write them. Open: every pass bound to the row still holds its
    own World block (step 2's shared region).
-4. The `parameter` statement: `parameter <pass>.<member> = <value>` inside a
-   `graph` block lowers to `parameters`, and the decompiler prints it back.
+4. Done: the `parameter` statement. `parameter <pass>.<member> = <value>`
+   inside a `graph` block lowers to that row's `parameters.<pass>.<member>`
+   (`GraphParameterNode`, `WorldDocumentEmitter.Graphs.cs`), the formatter and
+   the decompiler print it back, and it is the row's one spelling: a raw
+   `parameters` block, a statement outside a `graph` block, or a member bound
+   twice is PUCK120. `level.puck` binds the board pass with it.
 5. The deterministic tick and the tick verdict. A pass reading a requested tick
    rate gets the tick divided by the engine rate over that rate, refused unless
    the rate divides the engine rate exactly; a capture records the tick its

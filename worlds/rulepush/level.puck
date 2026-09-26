@@ -15,13 +15,9 @@ module level(centre: Point, record, layout, presentation = "Windowed") {
   views {
     graph "board" {
       source: "board.graph.json"
-      parameters {
-        draw {
-          tiles: "state.tiles"
-          width: length(layout[0])
-          height: length(layout)
-        }
-      }
+      parameter draw.tiles = "state.tiles"
+      parameter draw.width = length(layout[0])
+      parameter draw.height = length(layout)
     }
     layout "play" {
       seatCount: 1
