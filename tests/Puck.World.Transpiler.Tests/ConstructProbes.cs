@@ -106,6 +106,10 @@ internal static class ConstructProbes {
             Pointer: "/views/graphs/0",
             Source: Doc(body: "views {\n    graph \"main\" {\n    }\n}")
         )],
+        ["parameter"] = [new(
+            Pointer: "/views/graphs/0/parameters",
+            Source: Doc(body: "views {\n    graph \"main\" {\n        parameter draw.width = 16\n        parameter draw.tiles = \"state.tiles\"\n    }\n}")
+        )],
         ["post"] = [new(
             Pointer: "/views/post/0",
             Source: Doc(body: "views {\n    post \"grain\" {\n        package: \"sdf.film-grain\"\n        config {\n            intensity: 0.5\n        }\n    }\n}")

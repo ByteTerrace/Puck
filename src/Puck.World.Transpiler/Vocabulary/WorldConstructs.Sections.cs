@@ -63,6 +63,44 @@ public static partial class WorldConstructs {
             Summary: "One named instance of a frame graph."
         ),
         new(
+            DocumentMember: "views.graphs[].parameters",
+            Enclosing: "graph",
+            Grammar: "parameter pass.member = <value>",
+            Keyword: "parameter",
+            Members: [
+                new(
+                    DocumentKeys: [],
+                    Kind: WorldMemberKind.Name,
+                    Lowering: "the key under `parameters` the pass's bindings sit on",
+                    Name: "pass",
+                    Position: WorldMemberPosition.Header,
+                    Required: true,
+                    Summary: "The pass the parameter belongs to."
+                ),
+                new(
+                    DocumentKeys: [],
+                    Kind: WorldMemberKind.Name,
+                    Lowering: "the key under the pass that holds the value",
+                    Name: "member",
+                    Position: WorldMemberPosition.Header,
+                    Required: true,
+                    Summary: "The pass's config field the value binds; one statement a field."
+                ),
+                new(
+                    DocumentKeys: ["parameters"],
+                    Kind: WorldMemberKind.Value,
+                    Name: "value",
+                    Position: WorldMemberPosition.Header,
+                    Required: true,
+                    Summary: "A number, or a `state.<row>` binding token naming the cell or the whole row the pass reads."
+                ),
+            ],
+            Shape: WorldConstructShape.Statement,
+            Snippet: "parameter ${1:pass}.${2:member} = ${3:value}",
+            Sugar: new(Fallback: "none: a graph row's `parameters` is written only as `parameter` statements", Open: true),
+            Summary: "One bound parameter of the enclosing graph instance, which the pass reads through its state mirror slot."
+        ),
+        new(
             DocumentMember: "views.post[]",
             Enclosing: "views",
             Grammar: "post \"name\" { package: … config { … } }",

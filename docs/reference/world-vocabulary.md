@@ -55,6 +55,7 @@ kind.
 | `interrupt` | `decision` | statement | `rules[].decision.interrupt` | What cuts a commitment short. |
 | `onNoChoice` | `decision` | block | `rules[].decision.onNoChoice` | What fires when no option's gate admits it. |
 | `option` | `decision` | block | `rules[].decision.options[]` | One candidate of a decision. |
+| `parameter` | `graph` | statement | `views.graphs[].parameters` | One bound parameter of the enclosing graph instance, which the pass reads through its state mirror slot. |
 | `placement` | `placements` | row | `placements.rows[]` | One placed prototype. |
 | `prototype` | `prototypes` | row | `prototypes[]` | One creation document under an identity. |
 | `claim` | `rule` | block | `rules[].effects[][claim]` | Claims one available instance and binds its fields for nested effects. |
@@ -529,6 +530,20 @@ option "name" { [when Gate] score: <operand> [neighbors { … }] <effect>* }
 | `effects` | body | statements | — | `effects` | — | What fires when this option is the one chosen. |
 
 Printed back as `option` when the node carries `name`, `score`, and its gate has a `when` spelling; otherwise `gate: <call-form>`, an ordinary option-body property. Every field of the node the description does not name prints as an ordinary property.
+
+### `parameter`
+
+```puck
+parameter pass.member = <value>
+```
+
+| Member | Written | Kind | Admitted on | Lowers to | Default | Means |
+|---|---|---|---|---|---|---|
+| `pass` (required) | header | name | — | the key under `parameters` the pass's bindings sit on | — | The pass the parameter belongs to. |
+| `member` (required) | header | name | — | the key under the pass that holds the value | — | The pass's config field the value binds; one statement a field. |
+| `value` (required) | header | value | — | `parameters` | — | A number, or a `state.<row>` binding token naming the cell or the whole row the pass reads. |
+
+Printed back as `parameter` when the node carries `parameters`; otherwise none: a graph row's `parameters` is written only as `parameter` statements. Every field of the node the description does not name prints as an ordinary property.
 
 ### `placement`
 

@@ -381,6 +381,33 @@ public static partial class PuckParser {
             return new WorldLinkNode(linkKind, left, right, body.Statements, startOffset, (cursor.Offset - startOffset), line, col) { Trivia = body.Trivia };
         }
 
+        // `parameter pass.member = value` binds one graph parameter; `parameter:` alone is an ordinary property.
+        if (TryMatchKeyword(context: context, keyword: "parameter")) {
+            SkipWhiteSpace(context: context);
+            if (cursor.Current is ':' or '[' or '{') {
+                cursor.ResetPosition(position: startPosition);
+            } else {
+                if (!TryReadName(admitted: NameForms.Identifier | NameForms.String, context: context, spelling: out var passSpelling, text: out var pass)) {
+                    throw CreateException(context: context, message: "Expected a pass name after 'parameter'");
+                }
+                SkipWhiteSpace(context: context);
+                if (!TryConsume(c: '.', context: context)) {
+                    throw CreateException(context: context, message: $"Expected '.' and a member after 'parameter {pass}'");
+                }
+                if (!TryReadName(admitted: NameForms.Identifier | NameForms.String, context: context, spelling: out var memberSpelling, text: out var member)) {
+                    throw CreateException(context: context, message: $"Expected a member name after 'parameter {pass}.'");
+                }
+                SkipWhiteSpace(context: context);
+                if (!TryConsume(c: '=', context: context)) {
+                    throw CreateException(context: context, message: $"Expected '=' after 'parameter {pass}.{member}'");
+                }
+
+                var value = ParseExpression(context: context);
+
+                return new GraphParameterNode(pass, member, value, passSpelling.Quoted, memberSpelling.Quoted, startOffset, (cursor.Offset - startOffset), line, col);
+            }
+        }
+
         if (TryMatchKeyword(context: context, keyword: "let")) {
             SkipWhiteSpace(context: context);
             if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var varName)) {

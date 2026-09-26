@@ -60,16 +60,15 @@ stages all four documents under its state directory and starts in the entry,
 so every border crossing finds its neighbour. The canaries boot it the same way.
 
 ```text
+puck compile rulepush.puck --validate -o <directory>
 Puck.World --world rulepush.puck
 ```
 
-The level names its board graph as an `asset`, pinned in
-[rulepush.assets.json](rulepush.assets.json), so the graph resolves from
-`level.puck` whichever source uses the level. Refresh the pin after editing
-the graph with `puck compile rulepush.puck --validate --update-assets`. A source
-with asset references compiles only beside itself, so that command writes one
-`<world>.world.json` per declaration into this folder; delete them afterwards,
-since the folder holds sources only.
+`puck compile` writes one `<world>.world.json` per declaration into the
+directory it is given; write them outside this folder, which holds sources
+only. The level names its board graph by a plain path, which resolves beside
+`level.puck` whichever source uses the level, and a document written
+elsewhere names the graph from where it lands.
 
 ```text
 puck format --check .

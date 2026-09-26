@@ -2191,8 +2191,11 @@ publishing several files can leave earlier replacements in place.
 
 `asset "path"` verifies bytes against the source's sibling `.assets.json` lock.
 `--update-assets` explicitly refreshes the complete pin set, implies semantic
-validation, and cannot be combined with `--watch`. A source with asset references
-must emit beside its source so relative asset paths retain their meaning.
+validation, and cannot be combined with `--watch`. Every relative file path a
+source or a module it uses writes, `asset "…"` or plain, resolves beside the
+file that writes it, and the compiled document names the file from its own
+directory; a document written away from its source with `--output` names each
+file from where it lands.
 See [file assets and world composition](../authoring/README.md#pinning-file-assets)
 for examples and the distinction between compilation pins and runtime assets.
 
