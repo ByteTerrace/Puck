@@ -24,6 +24,7 @@ public sealed class GpuObjectNamingLawTests {
         ["IGpuBufferFactory.CreateHostVisible(data)"] = (GpuObjectKind.Buffer, static (services, name) => _ = services.BufferFactory.CreateHostVisible(data: new byte[16], name: name, usage: GpuBufferUsage.Vertex)),
         ["IGpuCommandPoolFactory.Create"] = (GpuObjectKind.CommandPool, static (services, name) => _ = services.CommandPoolFactory.Create(name: name)),
         ["IGpuImageFactory.Create"] = (GpuObjectKind.Image, static (services, name) => _ = services.ImageFactory.Create(format: GpuPixelFormat.R8G8B8A8Unorm, height: 4, name: name, usage: GpuImageUsage.Storage, width: 4)),
+        ["IGpuImageFactory.CreateDepth"] = (GpuObjectKind.Image, static (services, name) => _ = services.ImageFactory.CreateDepth(attachment: new GpuDepthAttachment(ClearDepth: 0f, Format: GpuPixelFormat.D32Float, Load: GpuAttachmentLoad.Clear, Store: GpuAttachmentStore.Discard), height: 4, name: name, width: 4)),
         ["IGpuPipelineFactory.Create(compute)"] = (GpuObjectKind.Pipeline, static (services, name) => _ = services.PipelineFactory.Create(computeShaderModule: null!, description: null!, name: name)),
         ["IGpuPipelineFactory.Create(graphics)"] = (GpuObjectKind.Pipeline, static (services, name) => _ = services.PipelineFactory.Create(description: null!, fragmentShaderModule: null!, name: name, renderPass: null!, vertexShaderModule: null!)),
         ["IGpuRenderPassFactory.Create"] = (GpuObjectKind.RenderPass, static (services, name) => _ = services.RenderPassFactory.Create(description: null!, name: name)),

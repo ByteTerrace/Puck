@@ -269,14 +269,21 @@ rows).
 one-pass graph, or a `puck.shader.package.v1` directory) or an engine
 `package` producer (such as `sdf.world`), a camera, a `refresh` of exactly one
 positive `divisor` or `hertz`, `inputs` binding a graph's external version to
-another row, and the per-instance `timeScale`, `output` and `overrides`
-(documents-render.md owns those three). The validator
+another row, the per-instance `timeScale`, `output` and `overrides`
+(documents-render.md owns those three), and a `tier` (`low`, `medium`,
+`high`, `QualityTier`, written bare in `.puck`), which selects the source's
+package variant and never what it reads, so it moves no manifest, mirror or
+state hash; a package row takes none. The validator
 (`WorldDefinitionValidator.Graphs.cs`) refuses a loop of same-frame inputs
 through `RenderGraphInstanceSet.TryCreate`, naming every instance; a self-input
 and a `previousFrame` input are legal. `views.graphBudget.passPixelsPerFrame`
-is the scheduler's price ceiling. `world.budget` echoes every row with its
+is the scheduler's price ceiling, and `bytesPerTick` and `bytesPerFrame` cap
+the bytes every bound parameter together owes its pass (`WorldBindingCost`,
+priced from the document alone), refused naming the graph and the binding that
+crosses one. `world.budget` echoes every row with its
 extent ceiling, rate and planned passes (`WorldPresentationCost`, priced by
-`WorldPipelineSources.PlanGraph`), then the live budget: what the runtime's latest
+`WorldPipelineSources.PlanGraph`) and every binding with its bytes per tick and
+per frame, then the live budget: what the runtime's latest
 schedule decided for every instance, with its extent, divisor, passes,
 pass-pixels and its newest completed submission's counts (`RenderGraphLiveBudget`).
 `views.root` names the row the display
@@ -300,6 +307,15 @@ one frame later. The `rendering` skill owns the graph document, the scheduler
 and the host (`WorldViewGraphHost`).
 
 ## Pointer, cursor, Free Cam
+
+`WorldSourcePassthrough` is the one window input filter (`IWindowInputFilter`):
+the pump offers it every raw event before the observer, and an event it
+consumes (a key a focused passthrough source takes, a click or wheel over a
+passthrough pane) never reaches the observer or the command router. Only
+`source.passthrough open`, run as typed text from the host's own console, makes
+a pane a passthrough source; never add a document field, binding or other
+principal's door to it. A new raw-event consumer that must withhold events from
+the game joins that filter rather than adding a second one.
 
 `WorldPointerSink` is the one window observer. `WorldSeatViewInput` drains
 motion only for camera steering and asks the active preference whether the

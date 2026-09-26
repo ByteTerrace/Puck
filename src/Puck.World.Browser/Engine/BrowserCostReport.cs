@@ -25,6 +25,39 @@ public sealed record BrowserResourceDimensions(
     string? RetainedKeyBytes, string? ArenaFootprintBytes, string ArenaAdmissionCeilingBytes,
     string JournalAllowanceBytes, string? MeasurementIssue, string UnmodeledTotalMemoryReason
 );
+/// <summary>One frame-graph instance of the presentation dimension (<see cref="WorldGraphInstanceCost"/>).</summary>
+public sealed record BrowserGraphInstanceCost(string Name, string Source, int? Divisor, int? Hertz, int? Passes, string? Issue);
+/// <summary>One bound parameter of the presentation dimension (<see cref="WorldBindingCost"/>), its byte counts exact
+/// decimal strings.</summary>
+public sealed record BrowserBindingCost(string Pipeline, string Pass, string Member, string Token, int Elements, string BytesPerTick, string BytesPerFrame);
+/// <summary>The presentation dimension (<see cref="WorldPresentationCost"/>) on the browser wire: priced from the
+/// document alone, so a native host and the WebAssembly engine report it alike.</summary>
+public sealed record BrowserPresentationCost(
+    IReadOnlyList<BrowserGraphInstanceCost> Instances, string PassPixelsPerFrame, IReadOnlyList<BrowserBindingCost> Bindings,
+    string BytesPerTick, string BytesPerFrame, string BytesPerTickCeiling, string BytesPerFrameCeiling
+) {
+    /// <summary>Projects the dimension, keeping every byte count exact.</summary>
+    /// <param name="presentation">The dimension.</param>
+    /// <returns>The projection.</returns>
+    public static BrowserPresentationCost From(WorldPresentationCost presentation) {
+        ArgumentNullException.ThrowIfNull(argument: presentation);
+
+        return new(
+            presentation.Instances.Select(selector: static line => new BrowserGraphInstanceCost(
+                line.Name, line.Source, line.Divisor, line.Hertz, line.Passes, line.Issue
+            )).ToArray(),
+            Text(value: presentation.PassPixelsPerFrame),
+            presentation.Bindings.Select(selector: static line => new BrowserBindingCost(
+                line.Pipeline, line.Pass, line.Member, line.Token, line.Elements, Text(value: line.BytesPerTick),
+                Text(value: line.BytesPerFrame)
+            )).ToArray(),
+            Text(value: presentation.BytesPerTick), Text(value: presentation.BytesPerFrame),
+            Text(value: presentation.BytesPerTickCeiling), Text(value: presentation.BytesPerFrameCeiling)
+        );
+    }
+
+    private static string Text(long value) => value.ToString(provider: CultureInfo.InvariantCulture);
+}
 /// <summary>The shared authored cost report projected onto the browser wire. Preview-host capability refusals
 /// do not reduce the document's cost; the same definition has the server's report.</summary>
 public sealed record BrowserCostReport(
@@ -32,7 +65,7 @@ public sealed record BrowserCostReport(
     BrowserCostBound RecurringBound, BrowserCostBound SearchReservations, BrowserCostBound TotalBound,
     BrowserCostBound EditBurstBound, bool Admitted, string HeuristicWorkUnitsPerTick,
     IReadOnlyList<BrowserCostContributor> Contributors, IReadOnlyList<BrowserCostSource> ContributorSources,
-    IReadOnlyList<string> Issues, BrowserResourceDimensions Resources
+    IReadOnlyList<string> Issues, BrowserResourceDimensions Resources, BrowserPresentationCost Presentation
 ) {
     /// <summary>Projects an existing analysis without compiling or repricing any program.</summary>
     public static BrowserCostReport From(WorldCostReport report) => new(
@@ -59,7 +92,8 @@ public sealed record BrowserCostReport(
             report.Resources.ArenaAdmissionCeilingBytes.ToString(provider: CultureInfo.InvariantCulture),
             report.Resources.JournalAllowanceBytes.ToString(provider: CultureInfo.InvariantCulture),
             report.Resources.MeasurementIssue, report.Resources.UnmodeledTotalMemoryReason
-        )
+        ),
+        BrowserPresentationCost.From(presentation: report.Presentation)
     );
 
     private static string? Text(long? value) => value?.ToString(provider: CultureInfo.InvariantCulture);

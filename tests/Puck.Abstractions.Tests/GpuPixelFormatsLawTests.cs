@@ -54,4 +54,25 @@ public sealed class GpuPixelFormatsLawTests {
             );
         }
     }
+    // A depth attachment image is created from its attachment alone, so the depth it clears to has one statement: Create
+    // refuses the usage, and CreateDepth takes a depth format and a clear depth in [0, 1].
+    [Fact]
+    public void ADepthAttachmentImageIsCreatedFromItsAttachment() {
+        static GpuDepthAttachment Depth(GpuPixelFormat format, float clear) => new(
+            ClearDepth: clear,
+            Format: format,
+            Load: GpuAttachmentLoad.Clear,
+            Store: GpuAttachmentStore.Discard
+        );
+
+        GpuImageUsages.ValidateDepth(attachment: Depth(format: GpuPixelFormat.D32Float, clear: 0f), height: 4U, width: 4U);
+        GpuImageUsages.ValidateDepth(attachment: Depth(format: GpuPixelFormat.D32Float, clear: 1f), height: 4U, width: 4U);
+        Assert.StartsWith(
+            actualString: Assert.Throws<ArgumentException>(testCode: () => GpuImageUsages.ValidateCreate(format: GpuPixelFormat.D32Float, height: 4U, usage: GpuImageUsage.DepthAttachment, width: 4U)).Message,
+            expectedStartString: "A depth attachment image is created from its attachment (IGpuImageFactory.CreateDepth)"
+        );
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => GpuImageUsages.ValidateDepth(attachment: Depth(format: GpuPixelFormat.D32Float, clear: 1.5f), height: 4U, width: 4U));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => GpuImageUsages.ValidateDepth(attachment: Depth(format: GpuPixelFormat.D32Float, clear: float.NaN), height: 4U, width: 4U));
+        _ = Assert.Throws<ArgumentException>(testCode: () => GpuImageUsages.ValidateDepth(attachment: Depth(format: GpuPixelFormat.R8G8B8A8Unorm, clear: 0f), height: 4U, width: 4U));
+    }
 }

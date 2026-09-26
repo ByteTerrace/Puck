@@ -8,7 +8,8 @@ using Xunit;
 namespace Puck.World.Transpiler.Tests;
 
 /// <summary>The <c>parameter pass.member = value</c> statement against a graph row's <c>parameters</c>: it lowers to
-/// the row's member, the formatter and the decompiler print it back, and it is the row's one spelling (PUCK120).</summary>
+/// the row's member, the formatter and the decompiler print it back, and it is the row's one spelling (PUCK120). The
+/// row's tier, a closed word, lowers and prints back bare.</summary>
 public sealed class GraphParameterStatementTests {
     private const string Graph = """
         let size = 4
@@ -16,6 +17,7 @@ public sealed class GraphParameterStatementTests {
         views {
           graph "board" {
             source: "board.graph.json"
+            tier: high
             parameter draw.tiles = "state.tiles"
             parameter draw.width = size * 2
             parameter "tone-map".exposure = 0.5
@@ -31,6 +33,7 @@ public sealed class GraphParameterStatementTests {
         Assert.Equal(expected: "state.tiles", actual: parameters["draw"]!["tiles"]!.GetValue<string>());
         Assert.Equal(expected: 8L, actual: parameters["draw"]!["width"]!.GetValue<long>());
         Assert.Equal(expected: 0.5m, actual: parameters["tone-map"]!["exposure"]!.GetValue<decimal>());
+        Assert.Equal(expected: "high", actual: document["views"]!["graphs"]![0]!["tier"]!.GetValue<string>());
     }
     [Fact]
     public void TheFormatterPrintsTheStatementAsWritten() {
@@ -50,6 +53,8 @@ public sealed class GraphParameterStatementTests {
         Assert.Contains(actualString: printed, comparisonType: StringComparison.Ordinal, expectedSubstring: "parameter draw.tiles = \"state.tiles\"");
         Assert.Contains(actualString: printed, comparisonType: StringComparison.Ordinal, expectedSubstring: "parameter \"tone-map\".exposure = 0.5");
         Assert.DoesNotContain(actualString: printed, comparisonType: StringComparison.Ordinal, expectedSubstring: "parameters {");
+        Assert.Contains(actualString: printed, comparisonType: StringComparison.Ordinal, expectedSubstring: "tier: high");
+        Assert.DoesNotContain(actualString: printed, comparisonType: StringComparison.Ordinal, expectedSubstring: "tier: \"high\"");
         Assert.Equal(expected: document.ToJsonString(), actual: WorldSources.LowerSourceClean(source: printed).ToJsonString());
     }
     [InlineData("views {\n  graph \"board\" {\n    parameters {\n      draw {\n        width: 1\n      }\n    }\n  }\n}\n", "parameters {")]

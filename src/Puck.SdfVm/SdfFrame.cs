@@ -59,7 +59,7 @@ public sealed record SdfFrame(
     /// all-zero table whose first bound ends the shader's scan.</summary>
     public IReadOnlyList<SdfVolume> Volumes { get; init; } = [];
     /// <summary>The frame's opaque triangle meshes: every static placement of a prototype that carries a mesh. Empty by
-    /// default; no pass draws it yet.</summary>
+    /// default; rasterized per view before primary traversal. A producer supplies a new list when its draws change.</summary>
     public IReadOnlyList<SdfMeshDraw> MeshDraws { get; init; } = [];
     /// <summary>A per-frame scale on the world path's ambient term (default 1 = unchanged). Below 1 dims the room so
     /// the diegetic screen glow dominates — the overworld sets it low for mood; other scenes leave the default.</summary>

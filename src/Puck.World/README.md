@@ -419,8 +419,10 @@ reports it as `hovered=`
 ([pointing at a displayed source](../../docs/reference/commands.md#pointing-at-a-displayed-source)).
 The row's optional camera supplies shader camera inputs, and `timeScale` seeds its presentation clock.
 A row also takes a refresh divisor or rate and inputs bound to other rows'
-outputs, with `views.graphBudget` as the scheduler's pass-pixel ceiling, and
-`world.budget` prices each row by planning its source, then reads back what the
+outputs, with `views.graphBudget` as the scheduler's pass-pixel ceiling and
+the bound parameters' byte ceilings, and
+`world.budget` prices each row by planning its source and each bound parameter
+in bytes per tick and per frame, then reads back what the
 render graph runtime scheduled for every instance in its latest frame: rendered
 or not, its extent, frame divisor, passes and pass-pixels, and the passes,
 dispatches and draws its newest completed submission counted. `views.shaderToolchain`
@@ -1212,6 +1214,34 @@ seat's camera each frame and holds the two commands on that seat's lane, the
 seat folds them into its intent's `SourceRay`, and a rule reads the mapped hit
 as `$pointer:<seat>:<screenIndex>:x|y|on`. `body.channels` echoes the ray and
 its hit on every `Simulation` screen.
+
+**A window captured into a pane takes input only when the local user opens it.**
+`source.passthrough open <instance> <windowTitle...>` opens the window capture a
+shown `views.graphs` pane draws (a `source.capture` row naming a window) as a
+passthrough source, once the captured window's title contains the title the
+user typed, so the user names the window that will take their input. The pane's
+published mapping then takes the `Passthrough` destination with the local-user
+opener, which `world.view.panes` shows. On a windowed host,
+`WorldSourcePassthrough` offers every raw window event to its
+`SourcePassthroughRouter` before the game sees it: pointer events over the pane
+reach the window at the pane's mapped client point, a click there gives the
+window the keyboard, keys and text then go to it instead of the game, every
+release goes where its press went, and Control+Alt+Escape returns the keyboard
+to the game. `source.passthrough close <instance>` closes one, and
+`source.passthrough` with no argument echoes where the keyboard is and each
+open source's window, captured frame, client area and DPI scale. Only the
+host's own console may run the verb, as typed text; the local operator
+attachment (`world.control`) is that console too. No binding, seat, peer,
+addon, schedule or world document can open a passthrough source or send it
+input. A source whose pane is no longer published, or stops showing the window
+it was opened on (its instance stops, its capture reopens onto another window,
+or a row of the same name replaces it), is closed before the next event routes.
+Closing a source, by the verb or this way, releases every key and button its
+window holds and returns the keyboard to the game. Delivery is Windows-only:
+the capture feed's `Win32PassthroughWindow` sends window messages to the
+captured window, described in
+[Device input](../../docs/reference/input.md#keyboard-focus-and-passthrough-sources).
+A headless or offscreen boot has no window and no such verb.
 
 **A physical camera is an input device, seated like a gamepad, never named by
 hardware.** Each enumerated device gets a reconnect-stable `InputDeviceId`

@@ -8,15 +8,17 @@ public enum SourceFocusRoute : byte {
     Game = 0,
     /// <summary>The focused source: the event goes to the external window it shows, and the game never sees it.</summary>
     Source = 1,
-    /// <summary>Nobody: the reserved chord's key, which neither the game nor a source ever receives.</summary>
+    /// <summary>Nobody: the Escape that completes the reserved chord while a source has focus, which neither the game
+    /// nor the source receives.</summary>
     Consumed = 2,
 }
 /// <summary>Keyboard focus between the game and a <see cref="SourceDestination.Passthrough"/> source. A pointer press on a
 /// permitted passthrough source focuses it, and a press anywhere else returns focus to the game; while a source has
 /// focus its keys and text go to it instead of the game. The reserved chord, <see cref="InputSources.Keyboard.ControlLeft"/>
 /// or <see cref="InputSources.Keyboard.ControlRight"/> with <see cref="InputSources.Keyboard.AltLeft"/> or
-/// <see cref="InputSources.Keyboard.AltRight"/> held and <see cref="InputSources.Keyboard.Escape"/> pressed, always
-/// returns focus to the game, and its Escape reaches nobody. A key's release goes wherever its press went, so neither
+/// <see cref="InputSources.Keyboard.AltRight"/> held and <see cref="InputSources.Keyboard.Escape"/> pressed, returns
+/// focus to the game while a source has it, and that Escape reaches nobody; while the game has focus the chord means
+/// nothing, and its Escape is the game's. A key's release goes wherever its press went, so neither
 /// side is left holding a key after focus moves. Pointer events are routed by the mapping a hit lands on, never by
 /// focus, so this routes only key and text events; every other kind goes to the game.</summary>
 /// <remarks>Window-pump-thread only. The route is a pure function of the event sequence and the presses reported to
@@ -28,7 +30,9 @@ public sealed class SourceFocus {
     /// <summary>Gets the source that has keyboard focus, or <see langword="null"/> when the game has it.</summary>
     public SourceHandle? Focused { get; private set; }
 
+    // The chord only returns focus, so with none to return it is no chord and the game keeps its Escape.
     private bool IsChord(in WindowInputEvent inputEvent) => (
+        Focused.HasValue &&
         (inputEvent.Key == KeyCode.Escape) &&
         (inputEvent.Phase == CommandPhase.Started) &&
         (m_held.IsHeld(source: InputSources.Keyboard.ControlLeft) || m_held.IsHeld(source: InputSources.Keyboard.ControlRight)) &&

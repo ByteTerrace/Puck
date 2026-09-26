@@ -1,0 +1,85 @@
+{
+  "dynamics": [
+    {
+      "f": 2,
+      "name": "ease",
+      "r": 0,
+      "zeta": 0.7
+    }
+  ],
+  "schema": "puck.world.definition.v1",
+  "state": {
+    "world": [
+      {
+        "kind": "Int",
+        "max": 10,
+        "min": 0,
+        "name": "level",
+        "value": 0
+      },
+      {
+        "advance": {
+          "perSecondDenominator": 1,
+          "perSecondNumerator": 6
+        },
+        "kind": "Int",
+        "max": 1000,
+        "min": 0,
+        "name": "clock",
+        "value": 0
+      },
+      {
+        "cells": [
+          {
+            "dynamics": {
+              "row": "ease"
+            },
+            "key": "0",
+            "value": "0"
+          }
+        ],
+        "kind": "Fixed",
+        "max": "1",
+        "min": "-1",
+        "name": "eased"
+      },
+      {
+        "capacity": 8,
+        "kind": "Int",
+        "max": 9,
+        "min": 0,
+        "name": "cells"
+      }
+    ]
+  },
+  "views": {
+    "graphBudget": {
+      "bytesPerFrame": 16,
+      "bytesPerTick": 1024
+    },
+    "graphs": [
+      {
+        "name": "board",
+        "parameters": {
+          "draw": {
+            "level": "state.level",
+            "tiles": "state.cells",
+            "width": 8
+          }
+        },
+        "source": "board.graph.json"
+      },
+      {
+        "name": "gauge",
+        "parameters": {
+          "fill": {
+            "clock": "state.clock",
+            "eased": "state.eased.0",
+            "stored": "state.eased.0.$target"
+          }
+        },
+        "source": "gauge.graph.json"
+      }
+    ]
+  }
+}

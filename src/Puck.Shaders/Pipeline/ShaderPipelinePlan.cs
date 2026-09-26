@@ -229,7 +229,10 @@ public sealed class ShaderPipelinePlan {
             Resources: new ReadOnlyCollection<ShaderPipelineResource>(list: resources),
             Outputs: new ReadOnlyCollection<string>(list: definition.Outputs.ToArray()),
             Passes: new ReadOnlyCollection<ShaderPipelinePass>(list: passes),
-            TickRate: definition.TickRate
+            TickRate: definition.TickRate,
+            Tiers: ((definition.Tiers is { } tiers)
+                ? new ReadOnlyCollection<Puck.Abstractions.Presentation.QualityTier>(list: tiers.ToArray())
+                : null)
         );
     }
     private static Dictionary<string, ShaderConfigField> SnapshotConfig(IReadOnlyDictionary<string, ShaderConfigField> config) =>

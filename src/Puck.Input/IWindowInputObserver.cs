@@ -3,8 +3,8 @@ namespace Puck.Input;
 /// <summary>
 /// An OPTIONAL observer of every raw window input event, resolved by the window pump as a HELD root
 /// <c>IHostContext</c> capability — never referenced by <see cref="Puck.Input"/> itself, so the pump stays
-/// engine-agnostic. Called for EVERY event the pump dequeues (not only pointer kinds); implementations should
-/// ignore kinds they do not care about. Absolute cursor position and derived browsing state — hover, capture,
+/// engine-agnostic. Called for EVERY event the pump dequeues (not only pointer kinds) that no
+/// <see cref="IWindowInputFilter"/> consumed; implementations should ignore kinds they do not care about. Absolute cursor position and derived browsing state — hover, capture,
 /// cursor visibility — remain presentation-only. Relative mouse motion, wheel motion, and button edges also project
 /// through <see cref="WindowInputMapper"/> into ordinary command bindings; observing the raw event here does not
 /// consume or replace that command-plane projection. A composition root contributes an implementation
@@ -15,7 +15,8 @@ namespace Puck.Input;
 /// </summary>
 public interface IWindowInputObserver {
     /// <summary>Observes one raw window input event, called for every event the pump dequeues (not only pointer
-    /// kinds); implementations should ignore kinds they do not care about.</summary>
+    /// kinds) that no <see cref="IWindowInputFilter"/> consumed; implementations should ignore kinds they do not care
+    /// about.</summary>
     /// <param name="inputEvent">The dequeued event.</param>
     void Observe(in WindowInputEvent inputEvent);
 }

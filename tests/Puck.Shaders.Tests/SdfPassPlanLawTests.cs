@@ -30,6 +30,7 @@ public sealed class SdfPassPlanLawTests {
         SdfFramePass.Mask => "mask",
         SdfFramePass.Beam => "beam",
         SdfFramePass.CullArgs => "cull-args",
+        SdfFramePass.Mesh => "mesh",
         SdfFramePass.Primary => "primary",
         SdfFramePass.Surface => "surface",
         SdfFramePass.Ambient => "ambient",
@@ -119,6 +120,10 @@ public sealed class SdfPassPlanLawTests {
                 from: "sky",
                 name: "color"
             ),
+            Image(
+                from: null,
+                name: "mesh"
+            ),
         };
         var passes = new List<(string Label, List<ResourceReference> Inputs, List<ResourceReference> Outputs, List<string> Arguments)>();
 
@@ -162,8 +167,14 @@ public sealed class SdfPassPlanLawTests {
                         break;
                 }
             }
+            // The images the engine's passes write outside the buffer plan: the sky, the mesh visibility target primary and
+            // surface read, and the view's color.
             if (label == "sky") {
                 outputs.Add(item: "sky");
+            } else if (label == "mesh") {
+                outputs.Add(item: "mesh");
+            } else if (label is "primary" or "surface") {
+                inputs.Add(item: "mesh");
             } else if (label == "views") {
                 outputs.Add(item: "color");
             }

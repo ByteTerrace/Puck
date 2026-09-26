@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 
 namespace Puck.Shaders;
@@ -56,6 +57,10 @@ public sealed record RenderGraphPackagePass(
 /// (<see cref="ShaderFrameInterface.EngineTickRate"/>). A pass reads the engine tick divided by the engine rate over this
 /// rate, so the rate must divide the engine rate exactly; the planner refuses any other by name
 /// (<c>SHADERPIPE_TICK_RATE</c>).</param>
+/// <param name="Tiers">The quality tiers the graph's shader passes vary by, each a variant a package of the graph
+/// compiles beside <c>default</c> with <see cref="QualityTiers.Define"/> set, or <see langword="null"/> for none, which
+/// builds <c>default</c> alone. A tier the graph does not declare loads <c>default</c>
+/// (<see cref="VariantOf"/>).</param>
 [method: JsonConstructor]
 public sealed record RenderGraphDefinition(
     [property: JsonPropertyName("$schema")] string Schema,
@@ -64,8 +69,22 @@ public sealed record RenderGraphDefinition(
     IReadOnlyList<string> Outputs,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ShaderPipelinePass>? Passes = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<RenderGraphPackagePass>? Packages = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] uint? TickRate = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] uint? TickRate = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<QualityTier>? Tiers = null
 ) {
+    /// <summary>Gets the variant tier of every variant a package of the graph compiles, cheapest first: no tier, then
+    /// each declared tier in <see cref="QualityTiers.All"/> order.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<QualityTier?> Variants => [null, .. QualityTiers.All.Where(predicate: tier => (Tiers ?? []).Contains(value: tier)).Select(selector: static tier => ((QualityTier?)tier))];
+
+    /// <summary>Returns the tier a row naming <paramref name="tier"/> compiles or loads at: the tier when the graph
+    /// declares it, and otherwise none, the <c>default</c> variant.</summary>
+    /// <param name="tier">The tier a row names, or <see langword="null"/> for none.</param>
+    /// <returns>The variant's tier, or <see langword="null"/> for <c>default</c>.</returns>
+    public QualityTier? VariantOf(QualityTier? tier) => (((tier is { } named) && (Tiers ?? []).Contains(value: named))
+        ? named
+        : null);
+
     /// <summary>Initializes a graph using <see cref="RenderGraphSchemas.Graph"/>.</summary>
     /// <param name="name">The graph name.</param>
     /// <param name="resources">The resource versions.</param>

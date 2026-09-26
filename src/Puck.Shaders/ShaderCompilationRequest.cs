@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using Puck.Abstractions.Presentation;
 
 namespace Puck.Shaders;
 
@@ -9,9 +10,20 @@ public sealed record ShaderCompilationRequest {
     /// <param name="stages">The stages, at most one of each <see cref="ShaderStage"/>.</param>
     /// <param name="generatedIncludes">The text of each include the caller generates, by full path, which the compile
     /// reads instead of a file at that path; <see langword="null"/> for none.</param>
-    /// <exception cref="ArgumentException">There is no stage, a stage is incomplete or undefined, or a stage is declared
-    /// twice.</exception>
-    public ShaderCompilationRequest(string name, IReadOnlyList<ShaderStageSource> stages, IReadOnlyDictionary<string, string>? generatedIncludes = null) {
+    /// <param name="tier">The quality tier every stage compiles for (<see cref="ShaderCompiler.StepsOf"/>), or
+    /// <see langword="null"/> for the variant no tier names.</param>
+    /// <exception cref="ArgumentException">There is no stage, a stage is incomplete or undefined, a stage is declared
+    /// twice, or <paramref name="tier"/> is not a declared tier.</exception>
+    public ShaderCompilationRequest(string name, IReadOnlyList<ShaderStageSource> stages, IReadOnlyDictionary<string, string>? generatedIncludes = null, QualityTier? tier = null) {
+        if (
+            (tier is { } named) &&
+            !Enum.IsDefined(value: named)
+        ) {
+            throw new ArgumentException(
+                message: $"Quality tier {named} is not a declared tier.",
+                paramName: nameof(tier)
+            );
+        }
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(stages);
         if (stages.Count == 0) {
@@ -43,6 +55,7 @@ public sealed record ShaderCompilationRequest {
             }
         }
         Name = name;
+        Tier = tier;
         Stages = new ReadOnlyCollection<ShaderStageSource>(list: stages.ToArray());
         GeneratedIncludes = new ReadOnlyDictionary<string, string>(dictionary: new Dictionary<string, string>(
             collection: (generatedIncludes ?? new Dictionary<string, string>()).Select(selector: static pair => new KeyValuePair<string, string>(
@@ -59,4 +72,7 @@ public sealed record ShaderCompilationRequest {
     public string Name { get; }
     /// <summary>Gets the stages, in the order they compile.</summary>
     public IReadOnlyList<ShaderStageSource> Stages { get; }
+    /// <summary>Gets the quality tier every stage compiles for, or <see langword="null"/> for the variant no tier
+    /// names.</summary>
+    public QualityTier? Tier { get; }
 }

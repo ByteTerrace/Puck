@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Microsoft.Win32.SafeHandles;
+using Puck.Input;
 using Puck.Platform.Windows.Interop;
 using Windows.Foundation;
 using Windows.Graphics;
@@ -175,6 +176,10 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         }
     }
     /// <inheritdoc/>
+    /// <remarks>A window feed's window is created with the feed, over the handle it captures; a monitor feed has
+    /// none.</remarks>
+    public ISourcePassthroughWindow? Window { get; }
+    /// <inheritdoc/>
     public int SourceWidth => Volatile.Read(location: ref m_sourceWidth);
     /// <inheritdoc/>
     public int SourceHeight => Volatile.Read(location: ref m_sourceHeight);
@@ -299,6 +304,7 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
                 processId: out m_ownerProcessId,
                 windowHandle: targetHandle
             );
+            Window = new Win32PassthroughWindow(windowHandle: targetHandle);
         }
         var outputByteLength = checked(((width * height) * 4));
 

@@ -1,13 +1,13 @@
 // Shared dispatch for primary, surface, ambient and views. Each wrapper selects its pass macro; views reads the
-// resulting visibility records and shades the set's view into its own output image. SDF_MONOLITHIC_VIEWS retains the
-// combined reference walk. The render graph's place pass puts each view's output into its rect. All four hit passes use
-// an 8x8 workgroup and identical indirect tile bbox, camera, masks and active-pixel tests.
+// resulting visibility records and shades the set's view into its own output image. The render graph's place pass
+// puts each view's output into its rect. All four hit passes use an 8x8 workgroup and identical indirect tile bbox,
+// camera, masks and active-pixel tests. Primary also reads the mesh pass's target (sdf-mesh.hlsli).
 // Every hit pass reads its resources through the sdf-world interface: dynamic transforms, screen sources, and the
 // read-only instance mask instance-cull produced (sdfInstanceMasks). Primary, surface and ambient write the visibility
 // records through sdfVisibilityRecordsRW; views reads them through sdfVisibilityRecords (sdf-visibility.hlsli).
 // Unused shading resources compile out of primary traversal.
 #define SDF_DYNAMIC_TRANSFORMS
-#if !defined(SDF_PRIMARY_PASS) && !defined(SDF_MONOLITHIC_VIEWS)
+#ifndef SDF_PRIMARY_PASS
 #define SDF_PRIMARY_READ
 #endif
 #define SDF_FRAME_INSTANCE_GRID

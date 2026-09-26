@@ -71,7 +71,8 @@ public sealed partial class SdfWorldEngine {
     ];
     /// <summary>Returns the one descriptor pool an engine creates itself, the statement its construction creates the
     /// pool from: per frame ring slot the frame set and one views set per view, each holding its group of
-    /// <see cref="SdfWorldInterfaces.World"/>; with a brick pool, one bake set per brick slot holding the pass group of
+    /// <see cref="SdfWorldInterfaces.World"/>, and the mesh set holding the pass group of
+    /// <see cref="SdfWorldInterfaces.Mesh"/>; with a brick pool, one bake set per brick slot holding the pass group of
     /// <see cref="SdfWorldInterfaces.BrickBake"/>.</summary>
     /// <param name="brickPool">Whether the engine keeps a brick pool.</param>
     /// <param name="viewportCapacity">The views the engine is provisioned for.</param>
@@ -81,10 +82,12 @@ public sealed partial class SdfWorldEngine {
         var frame = GpuDescriptorPoolSizes.ForGroups(groups: world.Where(predicate: static group => (group.Ordinal == FrameGroup)).ToArray());
         var views = GpuDescriptorPoolSizes.ForGroups(groups: world.Where(predicate: static group => (group.Ordinal == PassGroup)).ToArray());
         var bake = GpuDescriptorPoolSizes.ForGroups(groups: PipelineLayouts.BrickBake.Groups);
+        var mesh = GpuDescriptorPoolSizes.ForGroups(groups: PipelineLayouts.Mesh.Groups);
         var sizes = default(GpuDescriptorPoolSizes);
 
         for (var slot = 0; (slot < FrameRingSize); slot++) {
             sizes += frame;
+            sizes += mesh;
 
             for (var view = 0u; (view < viewportCapacity); view++) {
                 sizes += views;

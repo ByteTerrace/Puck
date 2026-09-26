@@ -35,4 +35,7 @@ public sealed class CompiledShaderPipeline {
     public ShaderPipelinePlan Plan { get; }
     /// <summary>Gets compiled shader results keyed by planned shader pass name.</summary>
     public IReadOnlyDictionary<string, CompiledShader> Shaders { get; }
+    /// <summary>Gets the quality tier whose variant the shaders are, or <see langword="null"/> for <c>default</c>:
+    /// the tier a row named when its graph declares it (<see cref="RenderGraphDefinition.VariantOf"/>).</summary>
+    public Puck.Abstractions.Presentation.QualityTier? Tier { get; init; }
 }

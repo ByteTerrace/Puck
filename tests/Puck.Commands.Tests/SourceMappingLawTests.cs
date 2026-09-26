@@ -385,34 +385,54 @@ public sealed class SourceMappingLawTests {
     }
     [Fact]
     public void PassthroughCoordinatesScaleToTheWindowsClientAreaAndItsDpi() {
+        // The capture spans the window's frame: a border of 8 and a title bar of 40 physical pixels around the client.
+        var window = new SourcePassthroughWindow(
+            Client: new SourcePixelRect(
+                Height: 960,
+                Width: 1280,
+                X: 8,
+                Y: 40
+            ),
+            DpiScale: 1.5f,
+            FrameHeight: 1008,
+            FrameWidth: 1296
+        );
         var point = SourcePassthrough.ToClient(
             coordinate: Point(
                 x: 160,
                 y: 120
             ),
-            sourceHeight: 240,
-            sourceWidth: 320,
-            window: new SourcePassthroughWindow(
-                ClientHeight: 960,
-                ClientWidth: 1280,
-                DpiScale: 1.5f
-            )
+            sourceHeight: 252,
+            sourceWidth: 324,
+            window: window
         );
 
         Assert.Equal(
             expected: new Vector2(
-                x: 640f,
-                y: 480f
+                x: 632f,
+                y: 440f
             ),
             actual: point.Physical
         );
         Assert.Equal(
             expected: new Vector2(
-                x: (640f / 1.5f),
-                y: 320f
+                x: (632f / 1.5f),
+                y: (440f / 1.5f)
             ),
             actual: point.Logical
         );
+        Assert.True(condition: point.InClient);
+
+        // A point on the captured title bar lies outside the client area.
+        Assert.False(condition: SourcePassthrough.ToClient(
+            coordinate: Point(
+                x: 160,
+                y: 5
+            ),
+            sourceHeight: 252,
+            sourceWidth: 324,
+            window: window
+        ).InClient);
     }
     [Fact]
     public void TheSameMappingAndRaysGiveBitIdenticalHitsOnEveryEvaluationAndThread() {

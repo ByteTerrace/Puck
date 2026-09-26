@@ -4,7 +4,10 @@ This suite checks provider-neutral input capture in `Puck.Input`, including
 gamepad parsing and coalescing, device and lane lifecycle, keyboard and mouse
 sources, output effects, motion and source vocabulary, the arbiter's
 single-drain behavior, and keyboard focus between the game and a passthrough
-source, reserved chord included (`SourceFocusLawTests`). The fixtures use injected transport fakes; the suite
+source, reserved chord included (`SourceFocusLawTests`), and its router, which
+hands a focused source's pointer and keys to a fake window at the mapped client
+point and every release where its press went (`SourcePassthroughRouterLawTests`).
+The fixtures use injected transport fakes; the suite
 does not claim live hardware coverage. The fake transport's timed reads and a
 device's own deadlines (receiver silence, rumble expiry, the disposal join) run
 on one manual `TimeProvider`, so a deadline expires only when a test advances

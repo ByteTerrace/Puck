@@ -24,4 +24,6 @@ public enum GpuStage : uint {
     /// <summary>The depth tests of a graphics pass, before and after its fragment shader, which read and write its depth
     /// attachment.</summary>
     FragmentTests = 0x40,
+    /// <summary>The vertex shader stage: a draw's vertex stage reading a buffer, as a mesh pass pulls its triangles.</summary>
+    VertexShader = 0x80,
 }

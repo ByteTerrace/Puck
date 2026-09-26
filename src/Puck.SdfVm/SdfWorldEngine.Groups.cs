@@ -147,5 +147,6 @@ public sealed partial class SdfWorldEngine {
         BinaryPrimitives.WriteUInt32LittleEndian(destination: block[ScreenMaskOffset..], value: m_screenSourceMask);
         BinaryPrimitives.WriteUInt32LittleEndian(destination: block[InstanceMaskWordCountOffset..], value: ((uint)m_liveInstanceMaskWordCount));
         BinaryPrimitives.WriteUInt32LittleEndian(destination: block[SampleIndexOffset..], value: sampleIndex);
+        BinaryPrimitives.WriteUInt32LittleEndian(destination: block[MeshDrawsOffset..], value: m_meshDrawCount);
     }
 }

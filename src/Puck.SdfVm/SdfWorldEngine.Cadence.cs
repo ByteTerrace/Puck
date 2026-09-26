@@ -78,6 +78,13 @@ public sealed partial class SdfWorldEngine {
             value: in m_dynamicTransformRevision
         );
         hash.Add(values: dynamicsRevision);
+        // The mesh draws: the world block carries their count, and the revision moves with every new draw list, since the
+        // mesh pass rasterizes them and primary bounds its march by them.
+        MemoryMarshal.Write(
+            destination: dynamicsRevision,
+            value: in m_meshRevision
+        );
+        hash.Add(values: dynamicsRevision);
         hash.Add(values: m_screenSurfaceRegion.Contents);
         hash.Add(values: m_screenLightScratch);
 
@@ -88,13 +95,14 @@ public sealed partial class SdfWorldEngine {
     // frame's change signature exactly matches the last rendered frame's, the live program declares no ScreenSlab,
     // no carve bake is in progress, and no view's output was replaced this frame (a new image holds nothing).
     //
-    // Signature coverage — the signature (ComputeFrameSignature) folds in everything the five skipped passes consume
+    // Signature coverage — the signature (ComputeFrameSignature) folds in everything the skipped passes consume
     // (the sky pass reads only m_viewportScratch + m_screenLightScratch, both already covered below):
     //   - m_programRevision  : the uploaded program (words, live instance-mask width, kernel variant, reseeded
     //                          screen-surface table, invariant instance grid) — bumped by UploadProgram.
     //   - m_worldBlock       : the world values every view's block shares — width/height/tileGrid (constant),
     //                          viewportCount, screenSourceMask (bound-slot bitmask), liveInstanceMaskWordCount and the
-    //                          twinkle tick; each view's own extent and index follow from these and the viewports.
+    //                          twinkle tick and the mesh draws' count; each view's own extent and index follow from
+    //                          these and the viewports.
     //   - m_viewportScratch  : per-view camera basis + fov/aspect, render extent, debug view mode, the off-axis
     //                          offset, and the frame's far distance — excluding each row's presentation-time lane (PackViewports'
     //                          position.w; byte offset 12 of each 96-byte ViewportData row). Time free-runs every
@@ -110,6 +118,8 @@ public sealed partial class SdfWorldEngine {
     //                          rows + the engine-bench lever rows (soft-shadow/AO/shadow-distance/screen-lights) + the
     //                          shadow-proxy rows + the analytic-normal and shadow-cull toggles — every shading lever.
     //   - m_decalRevision    : the glyph-decal buffer — revision-tracked (it is 820 KB, not re-hashed each frame).
+    //   - m_meshRevision     : the mesh draws the mesh pass rasterizes and primary bounds its march by — bumped for
+    //                          every new draw list StageMeshRegion packs.
     // The rect a view is placed in and its reconstruction sharpness are the render graph's (its place pass runs every
     // frame), never this engine's input.
     // Not covered by any packed span — handled conservatively by forcing a render:

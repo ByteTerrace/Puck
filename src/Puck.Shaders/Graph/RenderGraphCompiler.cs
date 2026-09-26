@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
+using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 
 namespace Puck.Shaders;
@@ -104,6 +105,18 @@ public sealed class RenderGraphCompiler(RenderGraphPackageCatalog packages, Shad
                 code: "RENDERGRAPH_SCHEMA",
                 diagnostics: diagnostics,
                 message: $"Graph '{definition.Name}' declares schema '{definition.Schema}'; expected '{RenderGraphSchemas.Graph}'.",
+                name: definition.Name
+            );
+        }
+        // A declared tier names one variant, so it is declared once.
+        if (
+            (definition.Tiers is { } tiers) &&
+            (tiers.Distinct().Count() != tiers.Count)
+        ) {
+            Add(
+                code: "RENDERGRAPH_TIERS",
+                diagnostics: diagnostics,
+                message: $"Graph '{definition.Name}' declares the tiers [{string.Join(separator: ", ", values: tiers.Select(selector: QualityTiers.Name))}]; each tier is declared once.",
                 name: definition.Name
             );
         }

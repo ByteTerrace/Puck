@@ -40,6 +40,10 @@ public sealed class SdfWorldEngineObjectNameLawTests {
             device: gpu,
             ledger: ledger
         );
+        using var meshRaster = SdfTestPipelines.MeshRaster(
+            device: gpu,
+            ledger: ledger
+        );
         using var pipelines = SdfWorldPipelines.Build(
             cancellationToken: CancellationToken.None,
             device: gpu,
@@ -60,6 +64,7 @@ public sealed class SdfWorldEngineObjectNameLawTests {
                 WorkLedger: ledger
             ),
             pipelines: pipelines,
+            meshRaster: meshRaster,
             regionCopy: regionCopy.Compute!,
             width: Extent
         );

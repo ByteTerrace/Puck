@@ -71,6 +71,10 @@ public sealed class SdfShaderSetVerificationLawTests {
             device: gpu,
             ledger: ledger
         );
+        using var meshRaster = SdfTestPipelines.MeshRaster(
+            device: gpu,
+            ledger: ledger
+        );
         using var pipelines = SdfTestPipelines.Build(
             device: gpu,
             kernels: kernels,
@@ -88,6 +92,7 @@ public sealed class SdfShaderSetVerificationLawTests {
                 WorkLedger: ledger
             ),
             pipelines: pipelines,
+            meshRaster: meshRaster,
             regionCopy: regionCopy.Compute!,
             width: Extent
         );

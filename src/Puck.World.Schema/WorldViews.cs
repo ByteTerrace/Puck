@@ -74,6 +74,10 @@ public sealed record WorldViewGraphInput(string Resource, string Instance, bool 
 /// through its state mirror slot, eased by default. A field a row names both here and in <see cref="Overrides"/> is
 /// refused by name, and a binding that does not resolve leaves the field at its source's default.
 /// <see langword="null"/> binds nothing.</param>
+/// <param name="Tier">The quality tier the instance renders at, from the authored quality vocabulary: the variant of
+/// its source's package it loads, or the tier its source compiles for where no package holds it. A tier selects how
+/// the passes compute and never what they read, so two documents differing only in a row's tier present the same
+/// state. <see langword="null"/> loads the variant no tier names.</param>
 /// <param name="Settings">A source package row's producer settings, which its producer opens the image with and its
 /// shape validates, as a screen's <c>producer</c> source's settings are, or <see langword="null"/> for the producer's
 /// defaults. Only a row naming a source package (<c>source.&lt;producer id&gt;</c>) takes settings.</param>
@@ -87,7 +91,8 @@ public sealed record WorldViewGraph(string Name,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Output = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, System.Text.Json.JsonElement>? Overrides = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, System.Text.Json.JsonElement>? Settings = null,
-    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, IReadOnlyDictionary<string, BindableScalar>>? Parameters = null);
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, IReadOnlyDictionary<string, BindableScalar>>? Parameters = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] Puck.Abstractions.Presentation.QualityTier? Tier = null);
 /// <summary>One pass the render graph composition synthesizes runs over the composed frame: a post-process package pass
 /// of the root graph (<c>WorldViewGraphs.MainInstance</c>), written as a <c>puck.render.graph.v1</c> document's
 /// <c>packages</c> row is, less its ports. The rows run in order after every view and pane is placed and before the
@@ -103,11 +108,18 @@ public sealed record WorldViewGraph(string Name,
 /// boot refuses a value that does not bind, naming the row.</param>
 public sealed record WorldViewPostPass(string Name, string Package,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] System.Text.Json.JsonElement? Config = null);
-/// <summary>The price ceiling the graph scheduler holds the instances the display does not show directly to.</summary>
+/// <summary>The presentation's price ceilings: the pass-pixels the graph scheduler holds the instances the display does
+/// not show directly to, and the bytes the <c>views.graphs</c> rows' bound parameters may owe their passes
+/// (<see cref="WorldBindingCost"/>).</summary>
 /// <param name="PassPixelsPerFrame">The pass-pixels (passes times rendered pixels) those instances may spend in one
 /// presented frame; the stalest due instance is admitted first and the rest read their latest completed output. 0 sets
 /// no ceiling.</param>
-public sealed record WorldViewGraphBudget(long PassPixelsPerFrame = 0);
+/// <param name="BytesPerTick">The bytes every bound parameter together may owe its pass on a tick that moves its row,
+/// or 0 for no ceiling. A document whose bindings exceed it is refused, naming the graph and the binding that crosses
+/// it.</param>
+/// <param name="BytesPerFrame">The bytes every bound parameter together may owe its pass on each presented frame
+/// between ticks, or 0 for no ceiling, refused the same way.</param>
+public sealed record WorldViewGraphBudget(long PassPixelsPerFrame = 0, long BytesPerTick = 0, long BytesPerFrame = 0);
 /// <summary>One named window composition — an ordered list of <see cref="WorldViewSlot"/>s plus a transition envelope,
 /// selected for a given session shape by its <see cref="SeatCount"/> (0 = the catch-all for any joined-seat count). The
 /// data-side replacement for a compiled layout <c>switch</c>: an author can see it, change it, and add arrangements.</summary>

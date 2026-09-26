@@ -6,8 +6,8 @@ using Puck.SignedDistance;
 namespace Puck.SdfVm;
 
 public sealed partial class SdfWorldEngine {
-    // upload → (per view: sky → mask → beam → cull-args → primary → surface → ambient → views). The hit passes share the
-    // indirect bbox and have barriers between consumers; each view's output ends in its consumer layout.
+    // upload → (per view: sky → mask → beam → cull-args → mesh → primary → surface → ambient → views). The hit passes share
+    // the indirect bbox and have barriers between consumers; each view's output ends in its consumer layout.
     private void Record(uint viewportCount) {
         var recorder = m_gpu.Recorder;
         var commandBuffer = m_commandPools[m_currentSlot].CommandBufferHandle;
@@ -48,6 +48,8 @@ public sealed partial class SdfWorldEngine {
             );
             m_fillerInitialized = true;
         }
+
+        InitializeMeshTarget(commandBuffer: commandBuffer);
 
         // FRAME-RING cross-frame gate: the GPU-written device-local scratch (tile / instance-mask / indirect-args /
         // cull-bounds / primary-hit buffers) is SHARED across ring slots, so with FrameRingSize
@@ -253,6 +255,14 @@ public sealed partial class SdfWorldEngine {
                 commandBufferHandle: commandBuffer
             );
 
+            m_work.LeavePass();
+            m_work.EnterPass(pass: MeshPass);
+            // The mesh pass (SdfWorldEngine.MeshPass.cs): the frame's mesh draws rasterize into the mesh visibility target,
+            // which primary reads. A frame with no draws records nothing here.
+            RecordMeshPass(
+                commandBuffer: commandBuffer,
+                view: view
+            );
             m_work.LeavePass();
 
             // Primary's buffer transitions carry the indirect args into the indirect-argument state (Direct3D 12's

@@ -40,6 +40,13 @@ export interface EngineCostReport {
     arenaFootprintBytes: bigint | null; arenaAdmissionCeilingBytes: bigint; journalAllowanceBytes: bigint;
     measurementIssue: string | null; unmodeledTotalMemoryReason: string;
   };
+  /** The presentation dimension, priced from the document alone; every byte count is an exact decimal string. */
+  presentation: {
+    instances: { name: string; source: string; divisor: number | null; hertz: number | null; passes: number | null; issue: string | null }[];
+    passPixelsPerFrame: string;
+    bindings: { pipeline: string; pass: string; member: string; token: string; elements: number; bytesPerTick: string; bytesPerFrame: string }[];
+    bytesPerTick: string; bytesPerFrame: string; bytesPerTickCeiling: string; bytesPerFrameCeiling: string;
+  };
 }
 
 /** The shared `Parse`/`ParseFragment`/`Canonicalize` outcome shape. */
