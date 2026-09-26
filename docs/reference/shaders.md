@@ -666,7 +666,13 @@ pixel *i* of a one-row image green when member *i* reads back exactly. A
 package build compiles each interface's echo and holds its reflection to the
 layout; the `pipeline-echo` canary runs one on both backends with
 `pipeline.sentinels` on, and an echo expecting two members' sentinels swapped
-fails it.
+fails it. The `interface-echo` canary runs one echo per shipped interface
+family the same way: the ink simulation, visualize and finish passes (finish's
+blocks are also the Moth's), the package canary's tint, the film grain set
+(whose blocks are also the `post.sdf-film-grain` package's), and the `place`
+and `overlay` packages. Each echo document declares its target's blocks, and
+its perturbed twin expects its last member's first word to hold the next
+word's sentinel.
 
 ## API
 
@@ -1659,7 +1665,7 @@ match its render pass and a pipeline whose depth test disagrees with it.
 `vertex` member. `puck canary pipeline-feedback pipeline-ink pipeline-edit
 pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override
 pipeline-package pipeline-budget pipeline-churn pipeline-fault pipeline-geometry pipeline-echo
-no-device-compile` runs the real World
+interface-echo no-device-compile` runs the real World
 offscreen on Vulkan and on Direct3D 12. It checks a float
 history against an arithmetic oracle across pause, reset, step and paused
 capture, and checks the shipped ink pipeline's exposure parameter in the

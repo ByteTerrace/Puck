@@ -28,6 +28,7 @@
     "pipeline-fault",
     "pipeline-geometry",
     "pipeline-echo",
+    "interface-echo",
     "no-device-compile",
     "world-counters",
     "source-conversion",
