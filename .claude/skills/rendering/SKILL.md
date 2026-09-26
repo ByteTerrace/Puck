@@ -710,7 +710,10 @@ These are one-line cautions; the owning pages hold the derivations.
   (`VulkanSwapchainFactory.SelectOutput` over the surface's pairs, the
   Direct3D 12 compositor's `ReportedOutputs` over `IDXGIOutput6`); a Vulkan
   surface offering none of them refuses at creation, never mid-frame.
-  `ISurfacePresenter.Output` exposes the chosen one.
+  `ISurfacePresenter.Output` exposes the chosen one. Paper white is
+  `PresentationOptions.PaperWhiteNits` (80 to 10,000 nits, default
+  `DisplayOutput.SdrWhiteNits`), and `DisplayOutput.WhiteScale` is the one
+  conversion to an output's UI white: one in SDR at every level.
   `ShaderPipelineMemoryBudget.For(profile)` is the other reader: a pipeline
   instance's budget is a quarter of the device-local bytes, or 512 MiB when the
   profile reports none.

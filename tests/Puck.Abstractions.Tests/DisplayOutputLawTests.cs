@@ -6,7 +6,8 @@ namespace Puck.Abstractions.Tests;
 /// <summary>Laws for choosing a display output (<see cref="DisplayOutput.TrySelect"/>) over synthetic capability lists:
 /// SDR in an 8-bit unsigned normalized format by default and as the fallback; HDR10 or scRGB only when requested and
 /// reported in its own format; the preferred SDR format when reported; never the order a display reports in; and no
-/// output when nothing a swapchain may take is reported. The presentation options ask for SDR.</summary>
+/// output when nothing a swapchain may take is reported. The presentation options ask for SDR, and their paper white
+/// defaults to the SDR white level, refuses a level outside its range, and leaves SDR white at one.</summary>
 public sealed class DisplayOutputLawTests {
     private static readonly DisplayOutput Hdr10 = new(
         ColorSpace: DisplayColorSpace.Hdr10,
@@ -111,6 +112,35 @@ public sealed class DisplayOutputLawTests {
             expected: default
         );
         Assert.Throws<ArgumentOutOfRangeException>(testCode: static () => DisplayOutput.HdrFormatOf(colorSpace: DisplayColorSpace.Srgb));
+    }
+    [Fact]
+    public void PaperWhiteDefaultsToTheSdrWhiteLevelAndRefusesALevelOutsideItsRange() {
+        Assert.Equal(
+            actual: (new PresentationOptions().PaperWhiteNits, new PresentationOptions { PaperWhiteNits = 203.0 }.PaperWhiteNits, new PresentationOptions { PaperWhiteNits = DisplayOutput.MaxPaperWhiteNits }.PaperWhiteNits),
+            expected: (DisplayOutput.SdrWhiteNits, 203.0, 10_000.0)
+        );
+
+        foreach (var level in (ReadOnlySpan<double>)[79.999, 10_000.001, double.NaN, double.PositiveInfinity, 0.0, -80.0]) {
+            Assert.Equal(
+                actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new PresentationOptions { PaperWhiteNits = level }).ParamName,
+                expected: "nits"
+            );
+        }
+    }
+    [Fact]
+    public void SdrWhiteIsOneAtEveryPaperWhiteAndHdrWhiteFollowsTheLevel() {
+        foreach (var level in (ReadOnlySpan<double>)[DisplayOutput.SdrWhiteNits, 203.0, 1_000.0, DisplayOutput.MaxPaperWhiteNits]) {
+            Assert.Equal(
+                actual: (SdrBgra.WhiteScale(paperWhiteNits: level), SdrRgba.WhiteScale(paperWhiteNits: level)),
+                expected: (1.0, 1.0)
+            );
+            Assert.Equal(
+                actual: (ScRgb.WhiteScale(paperWhiteNits: level), Hdr10.WhiteScale(paperWhiteNits: level)),
+                expected: ((level / 80.0), (level / 10_000.0))
+            );
+        }
+
+        Assert.Throws<ArgumentOutOfRangeException>(testCode: static () => SdrBgra.WhiteScale(paperWhiteNits: 40.0));
     }
     [Fact]
     public void ThePresentationOptionsAskForSdr() =>

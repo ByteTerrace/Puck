@@ -17,6 +17,12 @@ namespace Puck.Abstractions.Presentation;
 /// <param name="Format">The format of the swapchain's images.</param>
 /// <param name="ColorSpace">The color space the images are encoded in.</param>
 public readonly record struct DisplayOutput(GpuPixelFormat Format, DisplayColorSpace ColorSpace) {
+    /// <summary>The SDR white level, in nits: the luminance of an SDR pixel value of one, and the default paper
+    /// white.</summary>
+    public const double SdrWhiteNits = 80.0;
+    /// <summary>The highest paper-white level, in nits: the peak the ST 2084 perceptual quantizer encodes.</summary>
+    public const double MaxPaperWhiteNits = 10_000.0;
+
     /// <summary>Gets the formats an SDR swapchain may be created in, in the order <see cref="TrySelect"/> prefers them
     /// when the preferred format is not reported: 8-bit unsigned normalized, then 8-bit sRGB, then 10-bit, then half
     /// float.</summary>
@@ -106,4 +112,48 @@ public readonly record struct DisplayOutput(GpuPixelFormat Format, DisplayColorS
         ColorSpace: DisplayColorSpace.Srgb,
         Format: format
     );
+    /// <summary>Returns a paper-white level when it lies within the SDR white level and the perceptual quantizer's
+    /// peak.</summary>
+    /// <param name="nits">The paper-white level, in nits.</param>
+    /// <returns><paramref name="nits"/>.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nits"/> is not a number, below
+    /// <see cref="SdrWhiteNits"/> or above <see cref="MaxPaperWhiteNits"/>.</exception>
+    public static double RequirePaperWhite(double nits) {
+        if (
+            double.IsNaN(d: nits) ||
+            (nits < SdrWhiteNits) ||
+            (nits > MaxPaperWhiteNits)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: nits,
+                message: $"The paper-white level is {SdrWhiteNits} to {MaxPaperWhiteNits} nits.",
+                paramName: nameof(nits)
+            );
+        }
+
+        return nits;
+    }
+
+    /// <summary>Returns the linear pixel value that UI white takes in this output at a paper-white level: one in SDR,
+    /// whatever the level, since an SDR display shows its own white; the level over <see cref="SdrWhiteNits"/> in
+    /// scRGB; and the level over <see cref="MaxPaperWhiteNits"/> in HDR10, before the perceptual quantizer encodes
+    /// it.</summary>
+    /// <param name="paperWhiteNits">The paper-white level, in nits.</param>
+    /// <returns>The linear value of UI white.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="paperWhiteNits"/> is outside the range
+    /// <see cref="RequirePaperWhite"/> accepts, or <see cref="ColorSpace"/> is not a defined value.</exception>
+    public double WhiteScale(double paperWhiteNits) {
+        var nits = RequirePaperWhite(nits: paperWhiteNits);
+
+        return ColorSpace switch {
+            DisplayColorSpace.Srgb => 1.0,
+            DisplayColorSpace.ScRgb => (nits / SdrWhiteNits),
+            DisplayColorSpace.Hdr10 => (nits / MaxPaperWhiteNits),
+            _ => throw new ArgumentOutOfRangeException(
+                actualValue: ColorSpace,
+                message: "The color space is not a defined value.",
+                paramName: nameof(ColorSpace)
+            ),
+        };
+    }
 }
