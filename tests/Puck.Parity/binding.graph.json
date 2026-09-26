@@ -50,7 +50,7 @@
       "outputs": [ { "name": "image" } ],
       "config": {
         "seed": { "type": "uint", "default": 7, "description": "The grain hash's seed." },
-        "intensity": { "type": "float", "default": 0.08, "min": 0, "max": 1, "description": "The peak per-channel offset." },
+        "amplitude": { "type": "uint", "default": 20, "max": 255, "description": "The peak per-channel offset, in 255ths." },
         "flickerHz": { "type": "uint", "default": 24, "min": 1, "description": "How often the grain changes, per second." }
       }
     }
