@@ -10,8 +10,8 @@ namespace Puck.Cli.Parity;
 /// same integer steps its three passes take (<c>binding-seed.hlsl</c>, <c>binding-pixelate.hlsl</c>,
 /// <c>binding-grain.hlsl</c>), so a pass that reads a wrong config value, a wrong binding or a wrong frame value fails
 /// the capture by pixel on either backend, not only when the two backends disagree. The config comes from the graph
-/// document's defaults, except the scalar fields the contract states a bound parameter reads at the capture ticks, and
-/// the step rate from the world; the frame group's tick at a captured simulation tick is that tick times the engine
+/// document's defaults, except where the contract states the steps of a bound parameter's row, which the field reads
+/// at each capture tick, and the step rate from the world; the frame group's tick at a captured simulation tick is that tick times the engine
 /// ticks of one step, as the offscreen pump advances it.
 /// </summary>
 internal sealed class ParityBindingReference {
@@ -25,16 +25,18 @@ internal sealed class ParityBindingReference {
     private readonly uint m_cellSize;
     private readonly uint m_flickerHz;
     private readonly uint[] m_levels;
+    private readonly IReadOnlyDictionary<(string Pass, string Field), (ulong From, uint Value)[]> m_parameters;
     private readonly uint m_seed;
     private readonly ulong m_stepTicks;
 
-    private ParityBindingReference(uint width, uint height, uint cellSize, uint[] levels, uint seed, uint amplitude, uint flickerHz, ulong stepTicks) {
+    private ParityBindingReference(uint width, uint height, uint cellSize, uint[] levels, uint seed, uint amplitude, uint flickerHz, ulong stepTicks, IReadOnlyDictionary<(string Pass, string Field), (ulong From, uint Value)[]> parameters) {
         Width = width;
         Height = height;
         m_amplitude = amplitude;
         m_cellSize = cellSize;
         m_flickerHz = flickerHz;
         m_levels = levels;
+        m_parameters = parameters;
         m_seed = seed;
         m_stepTicks = stepTicks;
     }
@@ -55,13 +57,26 @@ internal sealed class ParityBindingReference {
 
         return value;
     }
-    private static uint Scalar(RenderGraphDefinition graph, IReadOnlyDictionary<(string Pass, string Field), uint> parameters, string pass, string field) =>
-        (parameters.TryGetValue(
+    // A bound field reads the value of the last step at or before the tick; before its first step, and when the
+    // contract states none, it reads the graph default.
+    private uint At(string pass, string field, uint fallback, ulong tick) {
+        var value = fallback;
+
+        if (m_parameters.TryGetValue(
             key: (pass, field),
-            value: out var bound
-        )
-            ? bound
-            : Default(field: field, graph: graph, pass: pass).GetUInt32());
+            value: out var steps
+        )) {
+            foreach (var step in steps) {
+                if (step.From > tick) {
+                    break;
+                }
+
+                value = step.Value;
+            }
+        }
+
+        return value;
+    }
     private static JsonElement Default(RenderGraphDefinition graph, string pass, string field) {
         var declaration = ((graph.Passes ?? []).FirstOrDefault(predicate: candidate => string.Equals(
             a: candidate.Name,
@@ -81,14 +96,14 @@ internal sealed class ParityBindingReference {
     /// station's bound parameters read at its capture ticks, and the world's simulation rate.</summary>
     /// <param name="graphPath">The binding graph document.</param>
     /// <param name="worldPath">The world document that runs it.</param>
-    /// <param name="parameters">The scalar fields a bound parameter moves, keyed by pass and field, each with the value
-    /// its row holds at the capture ticks; a field it names replaces the graph's default. Only the scalar fields the
-    /// reference reads may be named.</param>
+    /// <param name="parameters">The scalar fields a bound parameter moves, keyed by pass and field, each with the steps
+    /// of the value its row holds: from each step's simulation tick on, the field reads the step's value, and before the
+    /// first step it reads the graph's default. Only the scalar fields the reference reads may be named.</param>
     /// <param name="reference">The reference, when this returns <see langword="true"/>.</param>
     /// <param name="error">Why the inputs were refused, when this returns <see langword="false"/>.</param>
     /// <returns><see langword="true"/> when both documents supply every input and every named parameter is a scalar
     /// field the reference reads.</returns>
-    public static bool TryLoad(string graphPath, string worldPath, IReadOnlyDictionary<(string Pass, string Field), uint> parameters, out ParityBindingReference reference, out string error) {
+    public static bool TryLoad(string graphPath, string worldPath, IReadOnlyDictionary<(string Pass, string Field), IReadOnlyList<(ulong From, uint Value)>> parameters, out ParityBindingReference reference, out string error) {
         reference = null!;
         error = string.Empty;
 
@@ -137,12 +152,16 @@ internal sealed class ParityBindingReference {
             }
 
             reference = new ParityBindingReference(
-                amplitude: Scalar(field: "amplitude", graph: graph, parameters: parameters, pass: GrainPass),
-                cellSize: Scalar(field: "cellSize", graph: graph, parameters: parameters, pass: PixelatePass),
-                flickerHz: Scalar(field: "flickerHz", graph: graph, parameters: parameters, pass: GrainPass),
+                amplitude: Default(field: "amplitude", graph: graph, pass: GrainPass).GetUInt32(),
+                cellSize: Default(field: "cellSize", graph: graph, pass: PixelatePass).GetUInt32(),
+                flickerHz: Default(field: "flickerHz", graph: graph, pass: GrainPass).GetUInt32(),
                 height: height,
                 levels: [.. Default(field: "levels", graph: graph, pass: PixelatePass).EnumerateArray().Select(selector: static level => level.GetUInt32())],
-                seed: Scalar(field: "seed", graph: graph, parameters: parameters, pass: GrainPass),
+                parameters: parameters.ToDictionary(
+                    elementSelector: static pair => pair.Value.OrderBy(keySelector: static step => step.From).ToArray(),
+                    keySelector: static pair => pair.Key
+                ),
+                seed: Default(field: "seed", graph: graph, pass: GrainPass).GetUInt32(),
                 stepTicks: (EngineTicks.PerSecond / ((ulong)rateHz)),
                 width: width
             );
@@ -167,10 +186,13 @@ internal sealed class ParityBindingReference {
         var width = Width;
         var height = Height;
         var image = new byte[checked(((((int)width) * ((int)height)) * 4))];
-        var cell = Math.Max(val1: 1U, val2: m_cellSize);
+        var amplitude = At(fallback: m_amplitude, field: "amplitude", pass: GrainPass, tick: tick);
+        var cell = Math.Max(val1: 1U, val2: At(fallback: m_cellSize, field: "cellSize", pass: PixelatePass, tick: tick));
+        var flickerHz = At(fallback: m_flickerHz, field: "flickerHz", pass: GrainPass, tick: tick);
+        var seed = At(fallback: m_seed, field: "seed", pass: GrainPass, tick: tick);
         var tickRate = ((uint)EngineTicks.PerSecond);
-        var grainFrame = unchecked((((uint)(tick * m_stepTicks)) / Math.Max(val1: 1U, val2: (tickRate / Math.Max(val1: 1U, val2: m_flickerHz)))));
-        var grainKey = Hash(value: unchecked(m_seed ^ (grainFrame * 0x9E3779B9u)));
+        var grainFrame = unchecked((((uint)(tick * m_stepTicks)) / Math.Max(val1: 1U, val2: (tickRate / Math.Max(val1: 1U, val2: flickerHz)))));
+        var grainKey = Hash(value: unchecked(seed ^ (grainFrame * 0x9E3779B9u)));
 
         uint Seed(uint x, uint y, int channel) => channel switch {
             0 => (((x * 37U) + (y * 11U)) & 255U),
@@ -183,7 +205,7 @@ internal sealed class ParityBindingReference {
                 var centreX = Math.Min(val1: (((x / cell) * cell) + (cell / 2U)), val2: (width - 1U));
                 var centreY = Math.Min(val1: (((y / cell) * cell) + (cell / 2U)), val2: (height - 1U));
                 var noise = Hash(value: unchecked((x + (y * 4099U)) ^ grainKey));
-                var offset = (((int)(noise % ((2U * m_amplitude) + 1U))) - ((int)m_amplitude));
+                var offset = (((int)(noise % ((2U * amplitude) + 1U))) - ((int)amplitude));
                 var at = checked((((((int)y) * ((int)width)) + ((int)x)) * 4));
 
                 for (var channel = 0; (channel < 3); channel++) {

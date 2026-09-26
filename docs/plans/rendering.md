@@ -2967,19 +2967,23 @@ follow it.
    reference tier, `high`: the binding graph declares it and the parity world's
    `bound` row names it, so the station renders the graph's `high` variant. The
    row binds the grain pass's `seed` to the `grainSeed` state row, which the
-   world's `toGrainSeed` rule moves from 0 to 13 at tick 1210, and its captures
-   at ticks 1215 and 1235 must equal the binding reference drawn with the value
-   the contract states for the bound field (`reference.parameters` in
-   `parity.contract.json`, `ParityBindingReference`). Bound to any other literal,
-   or left unresolved so the graph's default draws, the station fails
-   `REFERENCE-FAILED` on both backends while its pixel verdict still holds. A
+   world's `toGrainSeed` rule moves from 0 to 13 at tick 1210. Its captures sit
+   on both sides of the move, at ticks 1195 and 1215, and each must equal the
+   binding reference drawn with the value the row holds at that tick, which the
+   contract states as the row's steps (`reference.parameters` in
+   `parity.contract.json`, `ParityBindingReference`). Bound to any literal, the
+   station fails `REFERENCE-FAILED` on both backends at the capture whose value
+   the literal is not (0 fails tick 1215, 13 fails tick 1195), and left
+   unresolved so the graph's default draws, it fails both, while its pixel
+   verdict still holds. A
    `world.screenshot` writes no manifest entry, so the comparator is the one
    place a mid-burst capture's skew is judged: `ParityComparatorTests` hands it
    a capture whose frame refreshed its regions after the armed tick and holds
    it to `TICK-FAILED` with `PIXEL-OK`. Laws: `ParityBindingReferenceLawTests`
-   (the bound station's reference reads the stated value, a frame drawn with the
-   default fails it, and a parameter naming a field the reference does not read
-   or a value that is not a whole number is refused by name). The floor-tier
+   (the bound station's reference follows the stated steps, a frame drawn with
+   either literal or the default fails the capture it does not match, and a
+   parameter naming a field the reference does not read, a step key that is not
+   a tick or a value that is not a whole number is refused by name). The floor-tier
    leg, the same stations at `low` on floor hardware, is a deferred hardware
    check.
 

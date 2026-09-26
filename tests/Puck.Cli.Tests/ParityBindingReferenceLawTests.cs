@@ -8,7 +8,7 @@ namespace Puck.Cli.Tests;
 /// <summary>
 /// Proves the parity binding stations' exact references and the <c>puck parity</c> schedule read against the
 /// checked-in parity documents: a frame both backends agree on still fails when it is not the reference, one wrong byte
-/// names its side, the bound station's reference reads its row's stated value rather than the graph default, a
+/// names its side, the bound station's reference follows its row's stated steps rather than the graph default, a
 /// reference the comparator cannot compute is refused by name, and a world whose schedule cannot be read or leaves no
 /// room for the wait margin is a named refusal rather than an exception.
 /// </summary>
@@ -291,64 +291,91 @@ public sealed class ParityBindingReferenceLawTests : IDisposable {
         );
         Assert.Equal(
             actual: waitTick,
-            expected: 1265UL
+            expected: 1255UL
         );
     }
-    /// <summary>The <c>bound</c> station's grain seed is bound to a state row the world's rules move, and its contract
-    /// states the value the row holds at the capture ticks. A frame drawn with the graph's default seed, which is what
-    /// the pane shows when the binding does not resolve, both backends agreeing, fails the reference; the frame drawn
-    /// with the row's value holds it.</summary>
+    /// <summary>The <c>bound</c> station's grain seed is bound to a state row the world's rules move from 0 to 13 at
+    /// tick 1210, its captures sit on both sides of the move, and its contract states the row's steps. The frame the
+    /// row draws holds the reference at both ticks. A seed that does not follow the row, both backends agreeing, fails
+    /// one capture or both: the literal 0 fails the capture after the move, the literal 13 the capture before it, and
+    /// the graph's default, which the pane shows when the binding does not resolve, both.</summary>
     [Fact]
-    public void TheBoundStationsReferenceReadsTheRowsValueAndAFrameDrawnWithTheDefaultFailsIt() {
+    public void TheBoundStationsCapturesFailEverySeedThatDoesNotFollowTheRow() {
         const string BoundStation = "bound";
-        const ulong BoundTick = 1215UL;
+        const ulong Before = 1195UL;
+        const ulong After = 1215UL;
 
         var (contract, bound) = LoadContract(station: BoundStation);
         var (_, defaults) = LoadContract();
-        var expected = bound.Render(tick: BoundTick);
-        var unbound = defaults.Render(tick: BoundTick);
+        var literalZero = LoadBound(parameters: """{ "grain": { "seed": { "0": 0 } } }""");
+        var literalThirteen = LoadBound(parameters: """{ "grain": { "seed": { "0": 13 } } }""");
 
-        Assert.NotEqual(
-            actual: unbound,
-            expected: expected
-        );
-        Assert.Equal(
-            actual: Verdict(
+        string Judge(ParityBindingReference drawn, ulong tick) {
+            var frame = drawn.Render(tick: tick);
+
+            return Verdict(
                 prefix: "REFERENCE-",
                 verdicts: Compare(
                     contract: contract,
                     height: ((int)bound.Height),
-                    left: expected,
-                    right: expected,
+                    left: frame,
+                    right: frame,
                     station: BoundStation,
-                    tick: BoundTick,
+                    tick: tick,
                     width: ((int)bound.Width)
                 )
-            ).Name,
-            expected: "REFERENCE-OK"
-        );
-
-        var failed = Verdict(
-            prefix: "REFERENCE-",
-            verdicts: Compare(
-                contract: contract,
-                height: ((int)bound.Height),
-                left: unbound,
-                right: unbound,
-                station: BoundStation,
-                tick: BoundTick,
-                width: ((int)bound.Width)
-            )
-        );
+            ).Name;
+        }
 
         Assert.Equal(
-            actual: failed.Name,
-            expected: "REFERENCE-FAILED"
+            actual: ((string[])[
+                Judge(drawn: bound, tick: Before),
+                Judge(drawn: bound, tick: After),
+                Judge(drawn: literalZero, tick: Before),
+                Judge(drawn: literalZero, tick: After),
+                Judge(drawn: literalThirteen, tick: Before),
+                Judge(drawn: literalThirteen, tick: After),
+                Judge(drawn: defaults, tick: Before),
+                Judge(drawn: defaults, tick: After),
+            ]),
+            expected: ["REFERENCE-OK", "REFERENCE-OK", "REFERENCE-OK", "REFERENCE-FAILED", "REFERENCE-FAILED", "REFERENCE-OK", "REFERENCE-FAILED", "REFERENCE-FAILED"]
+        );
+    }
+
+    private ParityBindingReference LoadBound(string parameters) {
+        Assert.True(
+            condition: ParityManifestLoader.TryLoadContract(
+                contract: out var contract,
+                error: out var error,
+                path: WriteContract(edit: contract => contract["stations"]!["bound"]!["reference"]!["parameters"] = JsonNode.Parse(json: parameters))
+            ),
+            userMessage: error
+        );
+        Assert.True(condition: contract.TryResolveStation(
+            resolved: out var resolved,
+            station: "bound"
+        ));
+
+        return Assert.IsType<ParityBindingReference>(@object: resolved.Reference);
+    }
+
+    [Fact]
+    public void AReferenceParameterStepThatDoesNotNameATickIsRefusedByName() {
+        var path = WriteContract(edit: static contract => contract["stations"]!["bound"]!["reference"]!["parameters"] = JsonNode.Parse(json: """{ "grain": { "seed": { "later": 13 } } }"""));
+
+        Assert.False(condition: ParityManifestLoader.TryLoadContract(
+            contract: out _,
+            error: out var error,
+            path: path
+        ));
+        Assert.Contains(
+            actualString: error,
+            expectedSubstring: "parameters.grain.seed key 'later' must be the simulation tick the value starts at"
         );
     }
     [Fact]
     public void AReferenceParameterNamingAFieldTheReferenceDoesNotReadIsRefusedByName() {
-        var path = WriteContract(edit: static contract => contract["stations"]!["bound"]!["reference"]!["parameters"] = JsonNode.Parse(json: """{ "grain": { "levels": 3 } }"""));
+        var path = WriteContract(edit: static contract => contract["stations"]!["bound"]!["reference"]!["parameters"] = JsonNode.Parse(json: """{ "grain": { "levels": { "0": 3 } } }"""));
 
         Assert.False(condition: ParityManifestLoader.TryLoadContract(
             contract: out _,
@@ -362,7 +389,7 @@ public sealed class ParityBindingReferenceLawTests : IDisposable {
     }
     [Fact]
     public void AReferenceParameterThatIsNotAWholeNumberIsRefusedByName() {
-        var path = WriteContract(edit: static contract => contract["stations"]!["bound"]!["reference"]!["parameters"] = JsonNode.Parse(json: """{ "grain": { "seed": -1 } }"""));
+        var path = WriteContract(edit: static contract => contract["stations"]!["bound"]!["reference"]!["parameters"] = JsonNode.Parse(json: """{ "grain": { "seed": { "0": -1 } } }"""));
 
         Assert.False(condition: ParityManifestLoader.TryLoadContract(
             contract: out _,
@@ -371,7 +398,7 @@ public sealed class ParityBindingReferenceLawTests : IDisposable {
         ));
         Assert.Contains(
             actualString: error,
-            expectedSubstring: "parameters.grain.seed must be a whole number"
+            expectedSubstring: "parameters.grain.seed.0 must be a whole number"
         );
     }
     [Fact]

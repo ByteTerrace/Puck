@@ -25,7 +25,7 @@ frame, and the `binding` and `bound` rows capture each instance's own output.
 | `noise` | `noiseDisplace` + `cellJitter`—`sdfPcg3d` agreement on SPIR-V and DXIL. |
 | `vocabulary` | The `vocabRig` creation (`prototypes`/`placements`): a chamfered Box, a Prism with a `ChamferedRectangle` profile and a recessed panel, a Cylinder with a chamfer and a raised panel, a `symmetry`-folded pair riding a `parent`'s swing, and a `repeat` (with an `origin`) plate—placed twice, at placement scale 1 and 2. The swing reads `state.station` with immediate weight, so both backends render the same nonzero pose at the scheduled ticks. A wall-time driver would integrate different phases as the backends render at different rates. Separate static prototypes add a recessed `GrooveUnion` seam, a `PipeUnion` joint, and `cells` relief in both `F1` and `F2MinusF1` modes at their supported randomness limits. |
 | `binding` | The binding groups on both backends: every pass reads a frame group at set 0 and a pass group at set 3 through its generated interface. A compute pass seeds an integer pattern, a compute pass pixelates it (the pass group's config `cellSize` and a `uint3` of `levels`, a formatted load, a storage image), and a fullscreen pass samples it through the pass group's image and sampler and adds an integer grain of up to `amplitude` 255ths, hashed from the pixel, the seed and the frame group's tick. Every step works in whole 255ths, so no half-way unorm value is left to a backend to round, and the 96x96 output must equal a CPU reference exactly. |
-| `bound` | A bound row reaching a pass. The same graph at the reference tier, `high`, which the graph declares and the row names (`tier`), with the grain pass's `seed` bound to the `grainSeed` state row (`parameters`). The row starts at 0 and the world's `toGrainSeed` rule sets it to 13 at tick 1210, so the captures at ticks 1215 and 1235 must equal the reference drawn with seed 13. A literal in the binding's place, a binding that does not resolve (which draws the graph's default seed, 7), or a row that never moved all draw another grain and fail the reference. |
+| `bound` | A bound row reaching a pass. The same graph at the reference tier, `high`, which the graph declares and the row names (`tier`), with the grain pass's `seed` bound to the `grainSeed` state row (`parameters`). The row starts at 0 and the world's `toGrainSeed` rule sets it to 13 at tick 1210. The captures sit on both sides of the move: tick 1195 must equal the reference drawn with seed 0, and tick 1215 the reference drawn with seed 13. Any literal in the binding's place fails at least one of them, a binding that does not resolve (which draws the graph's default seed, 7) fails both, and so does a row that never moved at tick 1215. |
 
 `parity.contract.json` is the per-station comparison contract (tile size,
 per-tile mean/max delta ceilings, census floors). It is versioned beside the
@@ -42,13 +42,15 @@ backends make the same mistake. The census stays as the floor under it. The one
 reference kind, `binding`, is `ParityBindingReference`: it reads the config
 defaults from `binding.graph.json` and the step rate from `parity.world.json`,
 and repeats the three passes' integer steps at the capture tick. A station whose
-row binds a scalar field states the value the bound row holds at its capture
-ticks in the reference's `parameters`, keyed by pass and field as the row keys
-them (`bound` states `grain.seed` 13), and that value replaces the field's
-default; a field the reference does not read is refused by name. The captures
-sit mid-way through a grain frame (ticks 1205, 1215, 1225 and 1235 show grain
-frames 120, 121, 122 and 123 of the 24 Hz flicker), so a capture a few steps
-early or late still shows the same grain. An edit to those passes changes
+row binds a scalar field states the steps of the bound row in the reference's
+`parameters`, keyed by pass and field as the row keys them, each step mapping
+the simulation tick a value starts at to the value (`bound` states `grain.seed`
+as `{ "0": 0, "1210": 13 }`). At a capture tick the field reads the last step at
+or before it, and the graph default before the first; a field the reference
+does not read, or a key that is not a tick, is refused by name. The captures sit
+mid-way through a grain frame (ticks 1195, 1205, 1215 and 1225 show grain frames
+119, 120, 121 and 122 of the 24 Hz flicker), so a capture a few steps early or
+late still shows the same grain. An edit to those passes changes
 `ParityBindingReference` in the same change.
 
 `puck parity` runs at one pinned reference tier, `high`: the `bound` row names
