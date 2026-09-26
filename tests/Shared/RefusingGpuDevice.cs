@@ -97,7 +97,6 @@ internal sealed class RefusingGpuDevice :
         }
     }
     void IGpuBindings.DestroySampler(nint samplerHandle) => throw Reach(member: "IGpuBindings.DestroySampler");
-    void IGpuBindings.WriteCombinedImageSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) => throw Reach(member: "IGpuBindings.WriteCombinedImageSampler");
     void IGpuBindings.WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride) => throw Reach(member: "IGpuBindings.WriteBuffer");
     void IGpuBindings.WriteConstantBuffer(nint descriptorSetHandle, uint binding, uint arrayElement, nint bufferHandle, ulong bufferSize) => throw Reach(member: "IGpuBindings.WriteConstantBuffer");
     void IGpuBindings.WriteSampledImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) => throw Reach(member: "IGpuBindings.WriteSampledImage");

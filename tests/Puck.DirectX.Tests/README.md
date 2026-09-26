@@ -13,7 +13,9 @@ layout planner turns the gate spike's two-group layouts into dense root
 parameters: a view table per group, a second table for a group's samplers,
 and the pushed index at `b0` in space 4. It refuses a description no backend
 may plan. The root signature serialized from that plan, read back through the
-runtime's deserializer, holds the same tables and no static sampler.
+runtime's deserializer, holds the same tables and no static sampler. Every
+neutral pixel format, the sRGB and 10-bit formats a Vulkan swapchain may take
+included, maps to its own `DXGI_FORMAT`.
 
 The device laws run on a software (WARP) device without the debug layer and
 skip when the host has none: the shader-visible heap pair, pools as ranges of

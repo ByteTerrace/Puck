@@ -536,6 +536,59 @@
             "additionalProperties": false,
             "default": null,
             "title": "ShaderPipelineDispatch"
+          },
+          "arrays": {
+            "description": "Optional arrays in the World group, each an element type and a length, which a world binds to whole state rows (ShaderArrayField).",
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "description": "One array a pass declares in its arrays: an interface array in the World group, which a world binds to a whole state row with a parameters entry and the pass reads through its generated accessor, worldGroup.\u003Cname\u003EAt(i). An array no row binds reads zeros.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "type": {
+                  "description": "The element type: float, int or uint. A bound row must fill it: an integer element takes a row whose declared bounds fit its range.",
+                  "enum": [
+                    "float",
+                    "float2",
+                    "float3",
+                    "float4",
+                    "uint",
+                    "uint2",
+                    "uint3",
+                    "uint4",
+                    "int",
+                    "int2",
+                    "int3",
+                    "int4"
+                  ],
+                  "title": "ShaderValueType"
+                },
+                "length": {
+                  "description": "The element count, from one to MaxLength. A bound row\u0027s cell count must not exceed it; element i holds the row\u0027s cell i, and elements past the row read zero.",
+                  "type": "integer"
+                },
+                "description": {
+                  "description": "The array\u0027s description.",
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                }
+              },
+              "required": [
+                "type",
+                "length"
+              ],
+              "additionalProperties": false,
+              "title": "ShaderArrayField"
+            },
+            "default": null
           }
         },
         "required": [

@@ -63,29 +63,47 @@ public static class ShaderFrameInterface {
     ];
 
     /// <summary>Creates the interface of a document pass: the frame group (<see cref="FrameGroupMembers"/>), bound at set
-    /// 0; then the pass group at set 3, whose block holds the pass's <see cref="Extent"/> and each config field in
+    /// 0; the World group at set 1, whose block holds the pass's arrays; then the pass group at set 3, whose block holds the pass's <see cref="Extent"/> and each config field in
     /// ordinal name order, followed by the pass's ports in the order given. No block is pushed, so a pass reads
     /// <c>frameGroup.time</c>, <c>passGroup.extent</c> or a config field such as <c>passGroup.decay</c>, its ports by
     /// their generated names, and a pushed index, when it has one, as <c>pushedIndex.index</c>.</summary>
     /// <param name="name">The interface's name (<see cref="NameOf"/>).</param>
     /// <param name="config">The pass's config schema, or <see langword="null"/> when it has none.</param>
     /// <param name="ports">The pass's port members, each in <see cref="ShaderInterfaceGroup.Pass"/>, in document order.</param>
+    /// <param name="arrays">The pass's arrays, laid out in the World group's block in ordinal name order, or
+    /// <see langword="null"/> for none.</param>
     /// <param name="pushesIndex">Whether the pass's pipeline pushes one 4-byte index
     /// (<see cref="ShaderInterface.PushesIndex"/>), which it reads as <c>pushedIndex.index</c>.</param>
     /// <returns>The interface.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="ports"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidDataException"><paramref name="name"/> is not an interface name, a config field's or
     /// port's name is not an identifier or repeats another member's, or a port is not in the pass group.</exception>
-    public static ShaderInterface ForPass(string name, IReadOnlyDictionary<string, ShaderConfigField>? config, IReadOnlyList<ShaderInterfaceMember> ports, bool pushesIndex = false) {
+    public static ShaderInterface ForPass(string name, IReadOnlyDictionary<string, ShaderConfigField>? config, IReadOnlyList<ShaderInterfaceMember> ports, IReadOnlyDictionary<string, ShaderArrayField>? arrays = null, bool pushesIndex = false) {
         ArgumentNullException.ThrowIfNull(argument: ports);
 
-        var members = new List<ShaderInterfaceMember>(collection: FrameGroupMembers) {
+        var members = new List<ShaderInterfaceMember>(collection: FrameGroupMembers);
+
+        // A pass's arrays are the World group's block, in ordinal name order: the rows a world binds change at most once a
+        // tick, so they bind apart from the pass block's config and extent.
+        foreach (var (field, array) in (arrays ?? new Dictionary<string, ShaderArrayField>()).OrderBy(
+            comparer: StringComparer.Ordinal,
+            keySelector: static pair => pair.Key
+        )) {
+            members.Add(item: ShaderInterfaceMember.Array(
+                group: ShaderInterfaceGroup.World,
+                length: array.Length,
+                name: field,
+                type: array.Type
+            ));
+        }
+
+        members.AddRange(collection: [
             ShaderInterfaceMember.Value(
                 group: ShaderInterfaceGroup.Pass,
                 name: Extent,
                 type: ShaderValueType.Uint2
             ),
-        };
+        ]);
 
         AddConfig(
             config: config,

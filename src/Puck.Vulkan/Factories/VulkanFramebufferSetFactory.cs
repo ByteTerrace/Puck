@@ -117,7 +117,7 @@ public sealed class VulkanFramebufferSetFactory : IVulkanFramebufferSetFactory {
             for (var index = 0; (index < swapchainImages.Count); ++index) {
                 imageViewHandles[index] = CreateImageView(
                     device: logicalDevice.Commands,
-                    format: swapchain.ImageFormat,
+                    format: VulkanGpuFormats.ToVkFormat(gpuPixelFormat: swapchain.Format),
                     imageHandle: swapchainImages[index]
                 );
                 framebufferHandles[index] = CreateFramebuffer(

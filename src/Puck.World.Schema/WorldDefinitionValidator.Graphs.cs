@@ -50,9 +50,10 @@ public static partial class WorldDefinitionValidator {
                 if (
                     (graph.TimeScale != 1f) ||
                     (graph.Output is not null) ||
-                    (graph.Overrides is not null)
+                    (graph.Overrides is not null) ||
+                    (graph.Parameters is not null)
                 ) {
-                    errors.Add(item: $"{path}: package instance '{graph.Name}' takes no timeScale, output or overrides.");
+                    errors.Add(item: $"{path}: package instance '{graph.Name}' takes no timeScale, output, overrides or parameters.");
                 }
                 // A source package names a producer by id and opens it from the row's settings, as a screen's producer
                 // source does.
@@ -101,6 +102,12 @@ public static partial class WorldDefinitionValidator {
                 overrides: graph.Overrides,
                 path: path,
                 timeScale: graph.TimeScale
+            );
+            ValidateParameters(
+                definition: definition,
+                errors: errors,
+                graph: graph,
+                path: path
             );
             if (
                 (graph.Camera is { } camera) &&
@@ -174,10 +181,72 @@ public static partial class WorldDefinitionValidator {
 
         return names;
     }
-    // The views.post rows, which the synthesized root runs over the composed frame: each name, and each package against
-    // the host's post-process vocabulary. A row's config is opaque here; the graph compiler binds it against its
-    // package's schema when the root graph is composed (RENDERGRAPH_PACKAGE_CONFIG), and the boot refuses it naming the
-    // row.
+    // A row's bound parameters: each value a finite number or a state token naming a Fixed or Int cell, and no field
+    // both bound here and overridden, since a binding rewritten over an override every frame hides one of the two. The
+    // source's config schema checks that each pass and field exists when the server binds the row.
+    private static void ValidateParameters(string path, WorldViewGraph graph, WorldDefinition definition, List<string> errors) {
+        foreach (var (pass, fields) in (graph.Parameters ?? new Dictionary<string, IReadOnlyDictionary<string, BindableScalar>>())) {
+            if (string.IsNullOrWhiteSpace(value: pass)) {
+                errors.Add(item: $"{path}.parameters names an empty pass.");
+
+                continue;
+            }
+            if (fields is not { Count: > 0 }) {
+                errors.Add(item: $"{path}.parameters.{pass} binds no field; omit the pass instead.");
+
+                continue;
+            }
+
+            var overridden = ((
+                (graph.Overrides is { } overrides) &&
+                overrides.TryGetValue(
+                    key: pass,
+                    value: out var config
+                ) &&
+                (config.ValueKind == JsonValueKind.Object)
+            )
+                ? config
+                : (JsonElement?)null
+            );
+
+            foreach (var (field, value) in fields) {
+                if (string.IsNullOrWhiteSpace(value: field)) {
+                    errors.Add(item: $"{path}.parameters.{pass} names an empty field.");
+                } else if (
+                    !value.IsAuthorable(definition: definition) &&
+                    !BindsWholeRow(
+                    definition: definition,
+                    value: value
+                )
+                ) {
+                    errors.Add(item: $"{path}.parameters.{pass}.{field} {BindableScalar.Grammar}.");
+                } else if (
+                    (overridden is { } overrideObject) &&
+                    overrideObject.TryGetProperty(
+                        propertyName: field,
+                        value: out _
+                    )
+                ) {
+                    errors.Add(item: $"{path}.parameters.{pass}.{field}: graph '{graph.Name}' binds pass '{pass}' field '{field}' and also overrides it; a field is bound or overridden, never both.");
+                }
+            }
+        }
+    }
+    // A token naming a keyed numeric row with no key binds the whole row, which only an array member reads; the server's
+    // source bind holds it to the array it fills.
+    private static bool BindsWholeRow(BindableScalar value, WorldDefinition definition) => (
+        (value.State is { Key: null } binding) &&
+        WorldBoundRow.TryResolve(
+        definition: definition,
+        length: out _,
+        row: out var row,
+        rowName: binding.Row
+    ) &&
+        (row.Kind is CellKind.Int or CellKind.Fixed or CellKind.Bool)
+    );
+    // The views.post rows, which the synthesized root runs over the composed frame: each name, each package against the
+    // host's post-process vocabulary, and each config bound against its package's schema, as the graph compiler binds
+    // it when the root is composed, so a live views.post edit whose config does not bind is refused naming the row.
     private static void ValidatePostPasses(WorldViewDefaults views, List<string> errors, ICollection<string>? deferred) {
         var passes = (views.Post ?? []);
 
@@ -230,6 +299,10 @@ public static partial class WorldDefinitionValidator {
                     break;
                 case null:
                     deferred?.Add(item: $"{path}.package: post-process package '{pass.Package}' deferred — this host carries no render graph package catalog.");
+
+                    break;
+                case true when (WorldPostProcessVocabularyHook.ConfigRefusal(config: pass.Config, package: pass.Package, pass: pass.Name) is { } refusal):
+                    errors.Add(item: $"{path}.config of post pass '{pass.Name}' does not bind to package '{pass.Package}': {refusal}");
 
                     break;
             }

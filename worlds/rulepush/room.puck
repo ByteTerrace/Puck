@@ -1,9 +1,10 @@
 // The physical room every rulepush world stands in: a floor, an arrival spot, a walking body for the seat, a camera
-// behind it, and the walking controls: WASD and the left stick.
+// behind it, and the walking controls: WASD and the left stick. A room opens a window unless its world is presented
+// another way, as a canary booting a level offscreen presents it.
 
-module room(centre: Point, size) {
+module room(centre: Point, size, presentation = "Windowed") {
   host {
-    presentation: Windowed
+    presentation: presentation
     backend: auto
     width: 1280
     height: 960

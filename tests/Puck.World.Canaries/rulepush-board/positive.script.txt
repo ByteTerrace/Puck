@@ -1,0 +1,13 @@
+# The board row compiles in the background and draws the Hedges map: the imp at (1, 4), boulders at (2, 4) and (3, 4).
+pipeline.wait board compiled 60
+pipeline.wait board installed 10
+world.wait 6
+pipeline.wait board submitted 1 10
+pipeline.capture board {run}/before.png
+pipeline.wait board captured 10
+# One press east moves the imp and pushes both boulders one cell; the classify rule rewrites the tiles row.
+body.press east
+world.wait 6
+pipeline.wait board submitted 1 10
+pipeline.capture board {run}/after.png
+pipeline.wait board captured 10

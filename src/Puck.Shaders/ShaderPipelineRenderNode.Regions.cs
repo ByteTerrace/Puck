@@ -309,13 +309,17 @@ public sealed partial class ShaderPipelineRenderNode {
 
             foreach (var region in regions) {
                 m_copyRecording.Record(
+                    handsToReaders: true,
                     region: region,
                     slot: slot
                 );
             }
         }
+        // A host buffer port's readers' planned barriers start from the host's state, which covers the copy's write, and
+        // they are recorded before this list though submitted after it, so the port's buffer is theirs to hand over.
         foreach (var region in m_externalRegions.Values) {
             m_copyRecording.Record(
+                handsToReaders: false,
                 region: region,
                 slot: slot
             );

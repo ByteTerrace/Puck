@@ -16,6 +16,18 @@ public sealed record ShaderPipelineParameterSlot(
     ShaderValueType Type,
     uint Offset
 );
+/// <summary>One array of a pass's World block, at the byte offset its interface places it.</summary>
+/// <param name="Name">The array's name.</param>
+/// <param name="Type">The element type, a scalar.</param>
+/// <param name="Offset">The byte offset of element zero inside the World block; element <c>i</c> lies 16 bytes a row
+/// further on.</param>
+/// <param name="Length">The element count.</param>
+public sealed record ShaderPipelineArraySlot(
+    string Name,
+    ShaderValueType Type,
+    uint Offset,
+    uint Length
+);
 /// <summary>
 /// A pass's frame data: its <see cref="ShaderFrameInterface"/> interface, where the interface's layout places every
 /// member, and the config schema its config fields bind through. A document pass reads two blocks: the frame group's,
@@ -61,6 +73,22 @@ public sealed class ShaderPipelineParameterLayout {
                 Offset: offsets[name],
                 Type: schema[name].Type
             )).ToArray()));
+        var worldBlock = layout.Groups.SingleOrDefault(predicate: static group => (group.Group == ShaderInterfaceGroup.World));
+
+        WorldBlockSizeBytes = (worldBlock?.BlockSizeBytes ?? 0U);
+        Arrays = new ReadOnlyCollection<ShaderPipelineArraySlot>(list: ((worldBlock is null)
+            ? []
+            : [.. worldBlock.BlockMembers
+                .Where(predicate: static member => (member.Length != 0))
+                .Select(selector: static member => new ShaderPipelineArraySlot(
+                    Length: member.Length,
+                    Name: member.Name,
+                    Offset: member.Offset,
+                    Type: ShaderValueTypes.FromComponents(
+                        count: 1,
+                        kind: member.Type.ScalarKind()
+                    )
+                ))]));
         m_extent = offsets[ShaderFrameInterface.Extent];
         m_passOffsets = offsets;
         m_pointer = frameOffsets[ShaderFrameInterface.Pointer];
@@ -91,7 +119,58 @@ public sealed class ShaderPipelineParameterLayout {
     /// <summary>Gets the config fields in ordinal name order, each at its offset inside the block of
     /// <see cref="SizeBytes"/>.</summary>
     public IReadOnlyList<ShaderPipelineParameterSlot> Slots { get; }
+    /// <summary>Gets the size in bytes, a multiple of 16, of the World group's block, which holds the pass's arrays, or
+    /// zero for a pass that declares none.</summary>
+    public uint WorldBlockSizeBytes { get; }
+    /// <summary>Gets the pass's arrays in ordinal name order, each at its offset inside the World block of
+    /// <see cref="WorldBlockSizeBytes"/>.</summary>
+    public IReadOnlyList<ShaderPipelineArraySlot> Arrays { get; }
 
+    /// <summary>Writes an array's elements into a World block: element <c>i</c> in the first component of the array's
+    /// <c>i</c>th 16-byte row, as its element type (an integer element rounded to the nearest integer and clamped to its
+    /// range), and zero in every row past <paramref name="values"/>.</summary>
+    /// <param name="block">The World block, at least <see cref="WorldBlockSizeBytes"/> long.</param>
+    /// <param name="array">The array, one of <see cref="Arrays"/>.</param>
+    /// <param name="values">The elements; at most the array's length are written.</param>
+    /// <exception cref="ArgumentException"><paramref name="block"/> is shorter than
+    /// <see cref="WorldBlockSizeBytes"/>.</exception>
+    public void WriteArray(Span<byte> block, ShaderPipelineArraySlot array, ReadOnlySpan<double> values) {
+        ArgumentNullException.ThrowIfNull(argument: array);
+        Require(
+            block: block,
+            sizeBytes: WorldBlockSizeBytes
+        );
+
+        for (var index = 0; (index < array.Length); index++) {
+            var value = ((index < values.Length)
+                ? values[index]
+                : 0d);
+            var row = block[((int)(array.Offset + (((uint)index) * 16U)))..];
+
+            switch (array.Type) {
+                case ShaderValueType.Float:
+                    BinaryPrimitives.WriteSingleLittleEndian(destination: row, value: ((float)value));
+
+                    break;
+                case ShaderValueType.Int:
+                    BinaryPrimitives.WriteInt32LittleEndian(destination: row, value: ((int)Math.Clamp(
+                        max: int.MaxValue,
+                        min: int.MinValue,
+                        value: Math.Round(mode: MidpointRounding.ToEven, value: value)
+                    )));
+
+                    break;
+                default:
+                    BinaryPrimitives.WriteUInt32LittleEndian(destination: row, value: ((uint)Math.Clamp(
+                        max: uint.MaxValue,
+                        min: 0d,
+                        value: Math.Round(mode: MidpointRounding.ToEven, value: value)
+                    )));
+
+                    break;
+            }
+        }
+    }
     /// <summary>Returns where a value of the pass block lies: the byte offset, in a block <see cref="SizeBytes"/> long, the
     /// generated declarations read the member from. A package's recorder writes the values it declares there each
     /// frame (<see cref="RenderGraphPackageRecording.PassBlock"/>).</summary>
@@ -204,10 +283,15 @@ public sealed class ShaderPipelineParameterLayout {
             schema: pass.Config,
             ownerName: pass.Name
         );
+        ShaderArrayField.Validate(
+            arrays: pass.Arrays,
+            ownerName: pass.Name
+        );
 
         return new(
             schema: pass.Config,
             shaderInterface: ShaderFrameInterface.ForPass(
+                arrays: pass.Arrays,
                 config: pass.Config,
                 name: ShaderFrameInterface.NameOf(sourcePath: pass.Source),
                 ports: ShaderPipelinePassPorts.Members(

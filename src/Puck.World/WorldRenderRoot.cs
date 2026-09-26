@@ -32,11 +32,11 @@ internal sealed class WorldOverlayGlyphs {
     public OverlayGlyphSdfPack? Pack { get; }
 }
 /// <summary>Builds the render root both GPU presentation shapes present and capture: the SDF engine node as the
-/// <c>sdf.world</c> producer, the graph's packages (<c>place</c>, each <c>views.post</c> row's package, and the overlay when
-/// the shape draws one), and the <see cref="RenderGraphRuntime"/> that runs the document's instances — its
-/// <c>views.graphs</c> rows beside the default graph composition synthesizes, or the rows alone under an authored
-/// <c>views.root</c> — behind the node the host produces frames from. The <see cref="WorldViewGraphHost"/> drives the
-/// runtime from then on, frame by frame.</summary>
+/// <c>sdf.world</c> producer, the graph's packages (<c>place</c>, every post-process package a <c>views.post</c> row may
+/// name, and the overlay when the shape draws one), and the <see cref="RenderGraphRuntime"/> that runs the document's
+/// instances — its <c>views.graphs</c> rows beside the default graph composition synthesizes, or the rows alone under an
+/// authored <c>views.root</c> — behind the node the host produces frames from. The <see cref="WorldViewGraphHost"/>
+/// drives the runtime from then on, frame by frame.</summary>
 internal static class WorldRenderRoot {
     /// <summary>Builds the render root and records it, and the engine node, on the <see cref="WorldRenderProbe"/>.</summary>
     /// <param name="sp">The composed services.</param>
@@ -110,12 +110,9 @@ internal static class WorldRenderRoot {
             package: RenderGraphPackageCatalog.Place
         );
 
-        // Each post-process package a views.post row runs, which the graph compiler has already found in the catalog.
-        foreach (var package in RenderGraphPackageCatalog.Engine.Packages.Where(predicate: package => (package.IsPostProcess && graph.Post.Any(predicate: pass => string.Equals(
-            a: pass.Package,
-            b: package.Id,
-            comparisonType: StringComparison.Ordinal
-        ))))) {
+        // Every post-process package the catalog offers, not only the ones the booted views.post rows run: a live views.post
+        // edit may name any of them, and a factory reads its stages only when a pass builds.
+        foreach (var package in RenderGraphPackageCatalog.Engine.Packages.Where(predicate: static package => package.IsPostProcess)) {
             packages.Register(
                 factory: new PostProcessPackage(package: package),
                 package: package.Id
@@ -164,11 +161,12 @@ internal static class WorldRenderRoot {
 
         binder.Runtime = runtime;
 
-        var post = definition.Views.Post;
         var overlaid = (overlay is not null);
 
+        // The host composes the root again whenever the document's panes, views or views.post move, from the post passes
+        // the document names then, so a live views.post edit reaches the running root.
         host.Attach(
-            compose: (panes, views) => WorldRootGraph.Compose(
+            compose: (panes, views, post) => WorldRootGraph.Compose(
                 overlay: overlaid,
                 packages: RenderGraphPackageCatalog.Engine,
                 post: post,
@@ -196,7 +194,7 @@ internal static class WorldRenderRoot {
         probe.Node = engine;
         probe.Root = root;
         sp.GetRequiredService<WorldPostPasses>().Attach(
-            graph: graph,
+            graph: () => host.Synthesized,
             root: () => runtime.NodeOf(instance: WorldViewGraphs.MainInstance)
         );
 

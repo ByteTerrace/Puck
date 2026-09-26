@@ -16,6 +16,7 @@ internal static class BrowserExtensionVocabulary {
     [ModuleInitializer]
     public static void Install() {
         WorldPostProcessVocabularyHook.PostProcessPackageCheck = static _ => null;
+        WorldPostProcessVocabularyHook.PostProcessConfigCheck = static (_, _, _) => null;
         WorldProbeVocabularyHook.ProbeKindCheck = static _ => null;
     }
 }

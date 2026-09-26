@@ -92,9 +92,6 @@ public sealed class VulkanGpuPipelineFactory(IVulkanDeviceContext deviceContext,
     }
 
     private VulkanGpuComputePipeline CreateCompute(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) {
-        // description.SamplerFilter is a Direct3D 12 static-sampler concern; on Vulkan the sampler is a bound
-        // descriptor whose filter the caller chose at CreateSampler time, so the combined-image-sampler layout
-        // binding is filter-agnostic.
         ArgumentNullException.ThrowIfNull(computeShaderModule);
         ArgumentNullException.ThrowIfNull(description);
 
@@ -153,14 +150,11 @@ public sealed class VulkanGpuPipelineFactory(IVulkanDeviceContext deviceContext,
             descriptorBindings[index] = new VkDescriptorSetLayoutBinding {
                 Binding = bindings[index].Binding,
                 DescriptorCount = bindings[index].Count,
-                // A storage image and a sampled image are each their own type; both storage-buffer kinds (read and
-                // read-write) are a Vulkan storage buffer — the read/write distinction only matters to the Direct3D 12
-                // SRV/UAV split.
-                DescriptorType = bindings[index].Kind switch {
-                    GpuComputeBindingKind.StorageImage => VulkanDescriptorType.StorageImage,
-                    GpuComputeBindingKind.SampledImage => VulkanDescriptorType.CombinedImageSampler,
-                    _ => VulkanDescriptorType.StorageBuffer,
-                },
+                // Both buffer kinds (read-only and read-write) are a Vulkan storage buffer; the distinction only matters
+                // to the Direct3D 12 SRV/UAV split.
+                DescriptorType = ((bindings[index].Kind == GpuBindingKind.StorageImage)
+                    ? VulkanDescriptorType.StorageImage
+                    : VulkanDescriptorType.StorageBuffer),
                 StageFlags = ((uint)GpuShaderStage.Compute),
             };
         }

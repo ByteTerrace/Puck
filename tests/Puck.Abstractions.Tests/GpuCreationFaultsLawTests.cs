@@ -47,7 +47,6 @@ public sealed class GpuCreationFaultsLawTests {
         "IGpuBindings.DestroySampler",
         "IGpuBindings.HeapReleaseRevision",
         "IGpuBindings.WriteBuffer",
-        "IGpuBindings.WriteCombinedImageSampler",
         "IGpuBindings.WriteConstantBuffer",
         "IGpuBindings.WriteSampledImage",
         "IGpuBindings.WriteSampler",
@@ -318,7 +317,6 @@ public sealed class GpuCreationFaultsLawTests {
         bindings.DestroyPool(poolHandle: 2);
         bindings.DestroySampler(samplerHandle: 3);
         bindings.WriteBuffer(binding: 0, bufferHandle: 1, bufferSize: 4, descriptorSetHandle: 1, elementStride: 0, kind: GpuBindingKind.ReadOnlyBuffer);
-        bindings.WriteCombinedImageSampler(arrayElement: 0, binding: 0, descriptorSetHandle: 1, imageViewHandle: 1, samplerHandle: 1);
         bindings.WriteStorageImage(arrayElement: 0, binding: 0, descriptorSetHandle: 1, imageViewHandle: 1);
         bindings.WriteConstantBuffer(arrayElement: 0, binding: 0, bufferHandle: 1, bufferSize: 256, descriptorSetHandle: 1);
         bindings.WriteSampledImage(arrayElement: 0, binding: 1, descriptorSetHandle: 1, imageViewHandle: 1);

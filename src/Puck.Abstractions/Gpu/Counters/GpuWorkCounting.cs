@@ -406,16 +406,6 @@ file sealed class CountingBindings(IGpuBindings inner, GpuWorkLedger ledger) : C
         );
         Tally(column: GpuWork.DescriptorWritesColumn);
     }
-    public void WriteCombinedImageSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) {
-        inner.WriteCombinedImageSampler(
-            arrayElement: arrayElement,
-            binding: binding,
-            descriptorSetHandle: descriptorSetHandle,
-            imageViewHandle: imageViewHandle,
-            samplerHandle: samplerHandle
-        );
-        Tally(column: GpuWork.DescriptorWritesColumn);
-    }
     public void WriteConstantBuffer(nint descriptorSetHandle, uint binding, uint arrayElement, nint bufferHandle, ulong bufferSize) {
         inner.WriteConstantBuffer(
             arrayElement: arrayElement,

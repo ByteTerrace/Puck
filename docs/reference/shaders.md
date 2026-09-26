@@ -131,11 +131,16 @@ through the declarations the engine generates from its
 for the pass's source file, up to its first period, so `ink-simulation.hlsl`
 reads `ink-simulation` and `sdf-film-grain.frag.hlsl` reads `sdf-film-grain`;
 the name must be lowercase ASCII words joined by hyphens
-(`SHADERPIPE_INTERFACE` otherwise). A document pass's interface has two groups:
+(`SHADERPIPE_INTERFACE` otherwise). A document pass's interface has two groups,
+or three when the pass declares `arrays`, and the node binds each as its own
+descriptor set every frame:
 
 - The frame group, set 0, whose block `frameGroup` holds the frame values
   every pass of a node shares. The node writes it once a frame into one
   per-node region, and every pass binds the same constant buffer.
+- The World group, set 1, present only when the pass declares
+  [arrays](#per-instance-overrides), whose block holds them in ordinal name
+  order.
 - The pass group, set 3, whose block `passGroup` holds the pass's `extent` and
   then its config fields in ordinal name order, followed by its ports.
 
@@ -578,7 +583,10 @@ two-group binding spike built. Every pipeline pass and package pass reads its
 blocks through one. A document pass binds its frame group at set 0 and its pass
 group at set 3 as descriptor sets
 ([frame values, extent and ports](#frame-values-extent-and-ports)), and so does
-a package's pass. The code lives in
+a package's pass. The SDF engine's kernels bind their groups the same way,
+through the interfaces `SdfWorldInterfaces` declares, and both swapchain
+compositors bind their blit's one group, `SurfaceBlitLayout`, at set 3. The code
+lives in
 `src/Puck.Shaders/Interface/`; the spike's two variant passes and their laws
 live in `tests/Puck.Shaders.Tests`.
 
@@ -611,16 +619,16 @@ binding allocator is consulted:
 - An array element is stored as one whole 16-byte row, so an array's stride is
   16 on both backends.
 - Every gap is filled with a `uint` padding member named `_pad<offset>`.
-- An interface may push its frame group's block (`ShaderInterface.PushConstants`):
-  the block is then a pushed constant-buffer binding
-  (`ShaderInterfaceBinding.Pushed`) at set 0, binding 0, laid out by
-  the same rule and declared `[[vk::push_constant]]` with `register(b0, space0)`,
-  where both backends' root constants live. A pushed group holds values and
-  arrays only.
-- An interface that binds its groups may instead push one 4-byte index
-  (`ShaderInterface.PushesIndex`), described under
-  [the pushed index](#the-pushed-index). It pushes its frame block or an index,
-  never both.
+- An interface may push one 4-byte index (`ShaderInterface.PushesIndex`),
+  described under [the pushed index](#the-pushed-index). It is the one value a
+  pipeline pushes.
+- The interface model can still declare its frame group's block as pushed
+  (`ShaderInterface.PushConstants`): a pushed constant-buffer binding
+  (`ShaderInterfaceBinding.Pushed`) at set 0, binding 0, laid out by the same
+  rule and declared `[[vk::push_constant]]` with `register(b0, space0)`. No
+  shipped interface does, and no pipeline can be created from one (see below).
+  A pushed group holds values and arrays only, and an interface pushes its
+  frame block or an index, never both.
 
 `ShaderInterfaceHlsl.Generate` writes the include a pass reads, named
 `<interface>.interface.hlsli`. It declares one struct per group, named for the
@@ -668,7 +676,7 @@ finds every binding, block member and stride where `Bindings` put it, and the
 DXIL reader where `DxilBindings` put it. DXC writes identical SPIR-V and DXIL
 on a second build in another directory. A hand-edited `vk::offset` fails the SPIR-V
 reader, and a removed padding member fails the DXIL reader. Every document pass
-runs the two-group layout on both backends; running it inside the parity
+runs the grouped layout on both backends; running it inside the parity
 contract's tolerances is open.
 
 `ShaderInterfaceLayout.PipelineLayout` turns an interface's groups into a
@@ -693,11 +701,22 @@ and Vulkan creates the planned set layouts and a pipeline layout over them. The
 pipeline's `GroupLayoutHandles` give one handle per group, which a set of that
 group is allocated against, and `GpuDescriptorPoolSizes.ForGroups` sizes a
 pool for one set of each group. On Direct3D 12 a group's samplers take a range
-of the device's sampler heap. Every document pass is created this way.
+of the device's sampler heap. Every shipped pass is created this way: each
+document pass, each package pass, the SDF engine's kernels and the swapchain
+blits. All but one take their layout from a pass interface; the float-output
+preview (`pipeline-float-preview`) declares its one group by hand
+(`ShaderPipelineRenderNode.PreviewLayout`: a sampled image and a sampler in
+the pass group, set 3), which its shader's registers must match. The one
+pipeline created from a positional binding list instead is
+[the region copy](#the-region-copy) (`GpuRegion.CopyPipeline`), which binds its
+two buffers as one set at group 0; such a list holds only buffers and storage
+images (`GpuComputeBinding`), so a sampled image or a sampler always belongs to
+a group.
 
-An interface that pushes its frame block has no pipeline layout, because a
-pipeline pushes only an index. An interface that pushes an index gives its
-pipeline layout that push ([the pushed index](#the-pushed-index)).
+An interface that pushes its frame block has no pipeline layout:
+`ShaderInterfaceLayout.PipelineLayout` refuses it, because a pipeline pushes
+only an index. An interface that pushes an index gives its pipeline layout that
+push ([the pushed index](#the-pushed-index)).
 
 `ShaderInterfaceLayout.Mismatch` names how a compiled module reads a binding, a
 block member, an offset or a buffer stride other than as laid out; a load runs
@@ -754,14 +773,16 @@ a `Mismatch` on both backends that names both strides.
 An interface constructed with `pushesIndex: true` declares that its pipeline
 pushes one 4-byte index, the one value a grouped pipeline can push; an
 interface pushes its frame block or an index, never both, and refuses the pair
-by name. After the groups the include declares:
+by name. The SDF engine's brick baker (`SdfWorldInterfaces.BrickBake`, the
+interface `sdf-brick-bake`) is the one shipped interface that declares it: it
+pushes each dispatch's slice ordinal. After the groups its include declares:
 
 ```hlsl
 // The pushed index: Vulkan push constants at offset 0, Direct3D 12 root constants at register b0, space 4.
-struct SdfBricksPushedIndex {
+struct SdfBrickBakePushedIndex {
     [[vk::offset(0)]] uint index;
 };
-[[vk::push_constant]] ConstantBuffer<SdfBricksPushedIndex> pushedIndex : register(b0, space4);
+[[vk::push_constant]] ConstantBuffer<SdfBrickBakePushedIndex> pushedIndex : register(b0, space4);
 ```
 
 The struct is named for the interface (`ShaderInterface.PushedIndexTypeName`),
@@ -849,8 +870,9 @@ at binding 2), one thread a pixel in 8×8 groups. A graph names its ports
 | `source-transfer.comp.hlsl` | RGBA8 or R10G10B10A2 under an sRGB, linear or PQ transfer function | half-float linear light, 1 at the 203 cd/m² reference white |
 
 `ImageSourceConversion` is their CPU reference and names the kernel a format
-needs (`PassOf`). The build compiles all four for both backends. No host
-dispatches them yet; the frame graph's source nodes will. The
+needs (`PassOf`). The build compiles all four for both backends. The graph
+runtime dispatches them as catalog packages (`SourceConversionPackage`, which
+the World registers) when it renders an uploaded source instance. The
 `source-conversion` canary runs the palette and NV12 kernels as passes of an
 offscreen pipeline on both backends and holds their output to the CPU
 reference.
@@ -1527,6 +1549,53 @@ For a graph document or a one-off shader, the source identity covers only
 the file the row names; its pass sources and includes are outside it. For a
 package, it is the content pin of the canonical manifest, which pins every file
 of the source closure, so an edit anywhere in a package is a changed source.
+
+A row can also bind a pass's scalar config fields to state. `parameters` is
+keyed by pass name and then by field, like `overrides`, and each value is a
+number or a `state.<row>[.<key>][.$target]` token naming a Fixed or Int cell,
+the grammar a HUD gauge and a camera operand read:
+
+```json
+{ "name": "cistern", "source": "../pipelines/water.graph.json",
+  "parameters": { "water": { "level": "state.cisternLevel" } } }
+```
+
+The token joins the presentation manifest, so the state mirror registers its
+slot when the document installs, and the host reads it through that slot each
+frame, eased by default and as stored truth with `.$target`, and writes it into
+the pass's parameter block at the field's offset only when it moved
+(`ShaderPipelineRenderNode.TryWriteParameter`). A float field takes the value as
+it presents; an int or uint field takes it rounded to the nearest integer, so an
+integer cell arrives exactly. A binding that does not resolve draws the field's
+source default. A field a row names in both `parameters` and `overrides` is
+refused at validation naming the row, the pass and the field, and a live
+`pipeline.set` of a bound field is refused the same way. When the server binds
+the row, a parameter naming a pass or field the source does not declare, or a
+vector field, is refused as `pipeline.overrides/ParameterUnbound`.
+
+A pass can also declare `arrays`, each a scalar element type and a length of
+at most 4,096, which a parameter binds to a whole keyed state row:
+
+```json
+"arrays": { "tiles": { "type": "int", "length": 64 } }
+```
+
+```json
+"parameters": { "board": { "tiles": "state.tiles" } }
+```
+
+The arrays are the World group's block, set 1, laid out in ordinal name order
+at 16 bytes an element, and a pass reads element `i` through its generated
+accessor, `tilesAt(i)`. Element `i` holds the row's cell keyed `i`: a lattice
+row presents one element per cell of its topology, any other keyed row its cell
+ceiling, and an absent cell and every element past the row read zero, as an
+unbound array does. The state mirror reads the row whole through one row slot
+when a tick moves it, and the host writes the slot's elements into the pass's
+World block only when the slot changed. The load gate refuses a row that is not
+keyed, one longer than the array, and one whose values the element type cannot
+hold exactly: an integer element takes only an Int or Bool row whose declared
+bounds lie in its range, and a Fixed row fills only a float element. A scalar
+field bound to a keyed row with no key is refused the same way.
 
 A replay tape records the directory the server's source reader resolves rows
 against, and `replay.verify` gives its shadow server a reader over the same

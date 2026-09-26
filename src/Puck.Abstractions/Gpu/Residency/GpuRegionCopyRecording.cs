@@ -6,7 +6,12 @@ namespace Puck.Abstractions.Gpu;
 /// The first copy is preceded by one memory barrier that orders every earlier read of a staged destination by the
 /// regions' reader stages, in this or an earlier submission, before the copies write it, and <see cref="Finish"/> makes
 /// each copied buffer's writes visible to those stages with one buffer barrier. A recording with nothing owed records
-/// nothing and never begins its command buffer.
+/// nothing and never begins its command buffer. A region recorded with <c>handsToReaders</c> false gets no such barrier.
+/// <para>Direct3D 12 carries a buffer's state from one command list to the next of one submission, and each list's first
+/// transition of a buffer starts from the state its declared prior access names, so a buffer transitions in only one
+/// command list of a submission. A copy list submitted ahead of command lists whose planned barriers already hand the
+/// copied buffer to its readers (a render node's host buffer ports, whose readers start from the host's state, which
+/// covers the copy's write) records those regions with <c>handsToReaders</c> false.</para>
 /// </summary>
 /// <param name="recorder">The recorder the copies and barriers are recorded through: the one the regions record their
 /// copies through.</param>
@@ -24,8 +29,10 @@ public sealed class GpuRegionCopyRecording(IGpuRecorder recorder, GpuStage reade
     /// writes.</summary>
     /// <param name="region">The region.</param>
     /// <param name="slot">The frame slot the command buffer belongs to, whose fence has retired.</param>
+    /// <param name="handsToReaders">Whether <see cref="Finish"/> hands the copied buffer to the readers; false when the
+    /// readers' own barriers, in command lists submitted after this one, do.</param>
     /// <exception cref="ArgumentNullException"><paramref name="region"/> is <see langword="null"/>.</exception>
-    public void Record(GpuRegion region, int slot) {
+    public void Record(GpuRegion region, int slot, bool handsToReaders) {
         ArgumentNullException.ThrowIfNull(argument: region);
 
         region.Flush(slot: slot);
@@ -49,10 +56,12 @@ public sealed class GpuRegionCopyRecording(IGpuRecorder recorder, GpuStage reade
             commandBuffer: m_commandBuffer,
             slot: slot
         );
-        m_copied.Add(item: region.Buffer(slot: slot));
+        if (handsToReaders) {
+            m_copied.Add(item: region.Buffer(slot: slot));
+        }
     }
-    /// <summary>Makes every copied buffer's writes visible to the readers, one buffer barrier each, and starts the next
-    /// recording empty.</summary>
+    /// <summary>Makes every copied buffer recorded for it visible to the readers, one buffer barrier each, and starts the
+    /// next recording empty.</summary>
     /// <returns>The command buffer holding the recording, or zero when nothing was owed.</returns>
     public nint Finish() {
         foreach (var buffer in m_copied) {

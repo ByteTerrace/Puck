@@ -312,7 +312,7 @@ public sealed partial class WorldDocument {
         WorldMutation.SetAudioDefaults => WorldSection.Audio,
         WorldMutation.SetCollision => WorldSection.Collision,
         WorldMutation.SetHostDefaults => WorldSection.Host,
-        WorldMutation.SetViewDefaults or WorldMutation.SetViewSeatRig or WorldMutation.SetViewSeatControl or WorldMutation.UpsertViewLayout or WorldMutation.RemoveViewLayout
+        WorldMutation.SetViewDefaults or WorldMutation.SetViewSeatRig or WorldMutation.SetViewSeatControl or WorldMutation.SetViewPost or WorldMutation.UpsertViewLayout or WorldMutation.RemoveViewLayout
             or WorldMutation.UpsertViewGraph or WorldMutation.RemoveViewGraph or WorldMutation.CommitViewGraph => WorldSection.Views,
         WorldMutation.SetPlayerDefaults or WorldMutation.SetPlayerSeatLook => WorldSection.PlayerDefaults,
         WorldMutation.UpsertLook or WorldMutation.RemoveLook or WorldMutation.SetLookAssignment => WorldSection.Looks,
@@ -1011,12 +1011,8 @@ public sealed partial class WorldDocument {
                 candidate = (current with { ViewsRaw = m.Views });
 
                 return true;
-            case WorldMutation.SetViewSeatRig m:
-                candidate = (current with { ViewsRaw = (current.Views with { SeatRigRaw = m.SeatRig }) });
-
-                return true;
-            case WorldMutation.SetViewSeatControl m:
-                candidate = (current with { ViewsRaw = (current.Views with { SeatControlRaw = m.SeatControl }) });
+            case WorldMutation.SetViewSeatRig or WorldMutation.SetViewSeatControl or WorldMutation.SetViewPost:
+                candidate = (current with { ViewsRaw = ComposeViewField(mutation: mutation, views: current.Views) });
 
                 return true;
             case WorldMutation.SetPlayerDefaults m:

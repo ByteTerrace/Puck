@@ -633,6 +633,12 @@ public abstract record WorldMutation(Principal Principal) {
     /// <param name="SeatControl">The seat view control.</param>
     [MutationKind(ordinal: 71, section: WorldSection.Views)]
     public sealed record SetViewSeatControl(Principal Principal, WorldSeatViewControl SeatControl) : WorldMutation(Principal);
+    /// <summary>Sets the views section's post passes alone, the whole ordered list, composed against the views row as it
+    /// stands when the mutation applies: a row added, reordered or removed recomposes the synthesized root live.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Post">The post passes in the order the root runs them; empty for none.</param>
+    [MutationKind(ordinal: 79, section: WorldSection.Views)]
+    public sealed record SetViewPost(Principal Principal, IReadOnlyList<WorldViewPostPass> Post) : WorldMutation(Principal);
     /// <summary>Sets the player defaults' seat look alone, composed against the player-defaults row as it stands when
     /// the mutation applies.</summary>
     /// <param name="Principal">The acting identity.</param>

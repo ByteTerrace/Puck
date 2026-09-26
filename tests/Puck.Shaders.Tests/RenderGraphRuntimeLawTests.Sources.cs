@@ -305,6 +305,55 @@ public sealed partial class RenderGraphRuntimeLawTests {
             expectedSubstring: $" regions {regionBytes} bytes"
         );
     }
+    /// <summary>The node records a staged region's copy after the frame's passes, whose recorders write the regions, but
+    /// submits it ahead of them, so every buffer state one command buffer leaves must be the state the next one declares:
+    /// replayed in submission order as Direct3D 12 tracks a submission's buffer states, no transition of the frames that
+    /// copy the source's region starts from another state than the one the command buffers before it left.</summary>
+    [Fact]
+    public void AStagedRegionsCopyAndItsReadersAgreeOnItsStateInSubmissionOrder() {
+        var gpu = new UploadModelGpu(reportVersion: 0);
+        var recorders = new Recorders();
+        var upload = new FakeUpload(format: ImagePixelFormat.B8G8R8A8Unorm);
+
+        SourceConversionPackage.RegisterAll(packages: recorders.Registry);
+        recorders.Registry.RegisterSource(
+            factory: _ => upload,
+            package: Upload
+        );
+
+        using var runtime = Runtime(gpu, recorders, Set(RenderGraphInstance.Source(name: "pattern", producer: "test")), "pattern", new RenderGraphRuntimeGraph[1]);
+
+        var index = 0L;
+
+        // A new tick each frame converts, and the region the upload rewrote owes a copy.
+        Assert.True(
+            condition: SpinWait.SpinUntil(
+                condition: () => {
+                    index++;
+
+                    var frame = new RenderGraphFrame(
+                        DisplayHeight: Display,
+                        DisplayHertz: 60,
+                        DisplayWidth: Display,
+                        Footprints: [],
+                        Index: index,
+                        Roots: [new RenderGraphRoot(Height: 1.0, Instance: "pattern", Width: 1.0)],
+                        Tick: index
+                    );
+
+                    _ = runtime.ProduceFrame(
+                        context: default,
+                        frame: in frame
+                    );
+
+                    return (gpu.UploadCopies >= 3);
+                },
+                timeout: TimeSpan.FromSeconds(value: 30)
+            ),
+            userMessage: "The staged source never copied three times."
+        );
+        Assert.Empty(collection: gpu.StateConflicts);
+    }
     [Fact]
     public void ARefusedUploadRendersNothingAndNamesItsFault() {
         var gpu = new FakePipelineGpu();

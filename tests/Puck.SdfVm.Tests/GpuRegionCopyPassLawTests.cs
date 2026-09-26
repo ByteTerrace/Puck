@@ -126,6 +126,7 @@ public sealed class GpuRegionCopyPassLawTests {
         );
 
         recording.Record(
+            handsToReaders: true,
             region: region,
             slot: slot
         );

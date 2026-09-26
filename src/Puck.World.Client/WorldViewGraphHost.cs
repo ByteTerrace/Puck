@@ -27,6 +27,9 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// <summary>The source loader used by both boot and live authoring: a row naming a package directory loads through
     /// the package, and any other row through the ordinary pipeline loader.</summary>
     public ShaderPackager Packager { get; }
+    /// <summary>Gets the synthesized root graph the runtime runs, which a live <c>views.post</c> or pane change recomposes,
+    /// or <see langword="null"/> when the document names its own root or no runtime is attached.</summary>
+    public WorldRootGraph? Synthesized => m_synthesized;
     /// <summary>A non-destructive pointer read, absent in an offscreen host.</summary>
     public Func<WorldPipelinePointerSample>? ReadPointer { get; set; }
     /// <summary>Completed compilation reports, delivered only from the presentation thread.</summary>
@@ -288,7 +291,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     private readonly List<RenderGraphFootprint> m_footprints = [];
     private readonly Dictionary<string, RenderGraphPlacement> m_placements = new(comparer: StringComparer.Ordinal);
 
-    private Func<IReadOnlyList<string>, int, WorldRootGraph>? m_compose;
+    private Func<IReadOnlyList<string>, int, IReadOnlyList<WorldViewPostPass>?, WorldRootGraph>? m_compose;
     private bool m_disposed;
     // The source instances the running set was composed with, and the footprints its screen-rendering instance shows
     // them through.
@@ -447,13 +450,13 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// onto it.</summary>
     /// <param name="runtime">The runtime, built from the set <see cref="TryCompose"/> composed for the booted
     /// document.</param>
-    /// <param name="compose">Synthesizes the default graph over the panes a document's layouts place and the views they
-    /// compose (<see cref="WorldRootGraph.ViewsOf"/>).</param>
+    /// <param name="compose">Synthesizes the default graph over the panes a document's layouts place, the views they
+    /// compose (<see cref="WorldRootGraph.ViewsOf"/>) and the document's current <c>views.post</c> passes.</param>
     /// <param name="synthesized">The default graph the runtime was built with, or <see langword="null"/> when the booted
     /// document names its own root.</param>
     /// <exception cref="ArgumentNullException"><paramref name="runtime"/> or <paramref name="compose"/> is
     /// <see langword="null"/>.</exception>
-    public void Attach(IRenderGraphInstances runtime, Func<IReadOnlyList<string>, int, WorldRootGraph> compose, WorldRootGraph? synthesized) {
+    public void Attach(IRenderGraphInstances runtime, Func<IReadOnlyList<string>, int, IReadOnlyList<WorldViewPostPass>?, WorldRootGraph> compose, WorldRootGraph? synthesized) {
         ArgumentNullException.ThrowIfNull(argument: runtime);
         ArgumentNullException.ThrowIfNull(argument: compose);
 
@@ -1019,10 +1022,11 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             if (
                 (synthesized is null) ||
                 (synthesized.Views != composedViews) ||
-                !synthesized.Panes.SequenceEqual(second: panes, comparer: StringComparer.Ordinal)
+                !synthesized.Panes.SequenceEqual(second: panes, comparer: StringComparer.Ordinal) ||
+                !synthesized.Post.SequenceEqual(second: (views.Post ?? []))
             ) {
                 try {
-                    synthesized = m_compose!(arg1: panes, arg2: composedViews);
+                    synthesized = m_compose!(arg1: panes, arg2: composedViews, arg3: views.Post);
                 } catch (WorldRootGraphRefusedException exception) {
                     ReportRefusal(reason: exception.Message);
 

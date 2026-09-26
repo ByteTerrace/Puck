@@ -151,6 +151,60 @@ public sealed class ShaderPipelineSource {
             comparisonType: StringComparison.Ordinal
         )
     ));
+    /// <summary>Checks that a bound parameter names a scalar config field or an array of one of the definition's passes,
+    /// the members a state binding fills.</summary>
+    /// <param name="passName">The pass the parameter binds.</param>
+    /// <param name="field">The config field or array it binds.</param>
+    /// <param name="array">The array the parameter names, or <see langword="null"/> when it names a scalar field.</param>
+    /// <param name="reason">Why the parameter cannot bind, naming the pass and the field, or empty.</param>
+    /// <returns><see langword="true"/> when the pass declares the field as a scalar or an array.</returns>
+    public bool TryCheckParameter(string passName, string field, out ShaderArrayField? array, out string reason) {
+        array = null;
+
+        var pass = Definition.ShaderPasses.FirstOrDefault(predicate: candidate => string.Equals(
+            a: candidate.Name,
+            b: passName,
+            comparisonType: StringComparison.Ordinal
+        ));
+
+        if (pass is null) {
+            reason = $"'{passName}' is not a pass of pipeline '{Definition.Name}'.";
+
+            return false;
+        }
+        if (
+            (pass.Arrays is { } arrays) &&
+            arrays.TryGetValue(
+                key: field,
+                value: out var declaredArray
+            )
+        ) {
+            array = declaredArray;
+            reason = string.Empty;
+
+            return true;
+        }
+        if (
+            (pass.Config is not { } config) ||
+            !config.TryGetValue(
+                key: field,
+                value: out var declared
+            )
+        ) {
+            reason = $"pass '{passName}' declares no config field or array '{field}'.";
+
+            return false;
+        }
+        if (declared.Type.ComponentCount() != 1) {
+            reason = $"pass '{passName}' field '{field}' is {declared.Type}; a parameter binds a scalar field.";
+
+            return false;
+        }
+
+        reason = string.Empty;
+
+        return true;
+    }
     /// <summary>Binds per-pass parameter overrides through each pass's config schema, the same binder a live
     /// parameter change and an installed graph use: every key names a pass that declares config, and every value is
     /// that pass's config object, whose absent fields keep the pass's declared defaults.</summary>

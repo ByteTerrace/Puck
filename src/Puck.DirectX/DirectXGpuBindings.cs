@@ -268,22 +268,6 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
     /// <inheritdoc/>
     public void DestroySampler(nint samplerHandle) { }
     /// <inheritdoc/>
-    public void WriteCombinedImageSampler(
-        nint descriptorSetHandle,
-        uint binding,
-        uint arrayElement,
-        nint imageViewHandle,
-        nint samplerHandle
-    ) =>
-        CreateTextureView(
-            destination: ViewSlot(
-                arrayElement: arrayElement,
-                binding: binding,
-                set: ((DirectXDescriptorSet)GCHandle.FromIntPtr(value: descriptorSetHandle).Target!)
-            ),
-            imageViewHandle: imageViewHandle
-        );
-    /// <inheritdoc/>
     public void WriteConstantBuffer(nint descriptorSetHandle, uint binding, uint arrayElement, nint bufferHandle, ulong bufferSize) {
         IGpuBindings.RequireConstantBufferSize(bufferSize: bufferSize);
 

@@ -82,10 +82,13 @@
         <Compile Include="..\Shared\TestRecords.cs" Link="TestRecords.cs" />
         <Compile Include="..\Shared\ShippedWorldDocuments.cs" Link="ShippedWorldDocuments.cs" />
         <Compile Include="..\Shared\FakeGpuDevice.cs" Link="FakeGpuDevice.cs" />
+        <Compile Include="..\Shared\UploadModelGpu.cs" Link="UploadModelGpu.cs" />
         <Compile Include="..\Shared\RefusingGpuDevice.cs" Link="RefusingGpuDevice.cs" />
         <Compile Include="..\Shared\SdfTestPipelines.cs" Link="SdfTestPipelines.cs" />
         <Compile Include="..\Shared\ObservedPackageFactory.cs" Link="ObservedPackageFactory.cs" />
         <Compile Include="..\Shared\WarpDeviceApi.cs" Link="WarpDeviceApi.cs" />
+        <Compile Include="..\Shared\DirectXTestDevices.cs" Link="DirectXTestDevices.cs" />
+        <Compile Include="..\Shared\HeadlessVulkanDevice.cs" Link="HeadlessVulkanDevice.cs" />
     </ItemGroup>
     <ItemGroup>
         <!-- A world's music, tune, and patch rows resolve their source against the executable's own directory, where

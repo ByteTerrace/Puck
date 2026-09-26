@@ -472,11 +472,6 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         WaitIdleCount++;
         Record(text: "device drain");
     }
-    public void WriteCombinedImageSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) {
-        if (Recording) {
-            DescriptorWrites.Add(item: (descriptorSetHandle, binding, imageViewHandle));
-        }
-    }
     public void WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride) {
         if (Recording) {
             DescriptorWrites.Add(item: (descriptorSetHandle, binding, bufferHandle));

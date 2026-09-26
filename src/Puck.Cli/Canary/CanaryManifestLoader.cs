@@ -1550,27 +1550,31 @@ internal static partial class CanaryManifestLoader {
             discriminating.ScriptPath,
         };
 
-        if (IsWithin(
-            root: canaryDirectory,
-            path: positive.WorldPath
-        )) {
-            expected.Add(item: positive.WorldPath);
+        // A selected world inside the directory owns itself and, for a .puck source, the asset lock beside it that pins
+        // the files its asset references name.
+        void AddWorld(string worldPath) {
+            if (!IsWithin(
+                root: canaryDirectory,
+                path: worldPath
+            )) {
+                return;
+            }
+
+            expected.Add(item: worldPath);
+
+            if (worldPath.EndsWith(
+                comparisonType: StringComparison.OrdinalIgnoreCase,
+                value: ".puck"
+            )) {
+                expected.Add(item: Path.GetFullPath(path: Puck.World.Transpiler.Assets.AssetLock.DeriveLockPath(sourcePath: worldPath)));
+            }
         }
-        if (IsWithin(
-            root: canaryDirectory,
-            path: discriminating.WorldPath
-        )) {
-            expected.Add(item: discriminating.WorldPath);
-        }
+
+        AddWorld(worldPath: positive.WorldPath);
+        AddWorld(worldPath: discriminating.WorldPath);
         foreach (var role in positive.Authorities.Concat(second: discriminating.Authorities)) {
             expected.Add(item: role.ScriptPath);
-
-            if (IsWithin(
-                root: canaryDirectory,
-                path: role.WorldPath
-            )) {
-                expected.Add(item: role.WorldPath);
-            }
+            AddWorld(worldPath: role.WorldPath);
         }
         foreach (var relaunch in new[] { positive.Relaunch, discriminating.Relaunch }) {
             if (relaunch is not null) {
@@ -1589,7 +1593,7 @@ internal static partial class CanaryManifestLoader {
             var fullPath = Path.GetFullPath(path: file);
 
             if (!expected.Contains(item: fullPath)) {
-                throw new CanaryManifestRefusal(message: $"canary '{id}' contains orphan file '{Path.GetFileName(path: file)}'; every file in a canary directory must be the manifest, a selected world/script, or a declared fixture.");
+                throw new CanaryManifestRefusal(message: $"canary '{id}' contains orphan file '{Path.GetFileName(path: file)}'; every file in a canary directory must be the manifest, a selected world or script, a selected .puck world's asset lock, or a declared fixture.");
             }
         }
     }

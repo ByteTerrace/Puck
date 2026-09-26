@@ -116,6 +116,8 @@ public sealed partial class WorldViewGraphHost {
                 }
             }
 
+            BindParameters();
+
             // The node keeps its selection across an install, so an output is selected only when the effective one
             // differs from the last this entry selected; the source's first output is never selected needlessly.
             var desired = (SelectedOutput ?? Row?.Output);
@@ -178,6 +180,18 @@ public sealed partial class WorldViewGraphHost {
             ArgumentException.ThrowIfNullOrWhiteSpace(argument: pass);
             Synchronize();
 
+            if (change.ValueKind == JsonValueKind.Object) {
+                foreach (var field in change.EnumerateObject()) {
+                    if (Binds(
+                        field: field.Name,
+                        pass: pass
+                    )) {
+                        reason = $"pass '{pass}' field '{field.Name}' is bound by the row's parameters; a field is bound or overridden, never both.";
+
+                        return false;
+                    }
+                }
+            }
             if (!TryMergeOverride(
                 change: change,
                 current: EffectiveConfig(pass: pass),

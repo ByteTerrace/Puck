@@ -23,8 +23,12 @@ buffers and images, shared-surface export, and queue submission. Swapchains and 
 Compute, graphics, and readback use one legacy resource-barrier model on the
 same direct queue. Texture owners register their initial state and remove it
 on disposal; the one recorder, `DirectXGpuRecorder`, carries that state across
-compute and graphics passes. Buffer states last only for one command list,
-because Direct3D 12 returns every buffer to `COMMON` after each `ExecuteCommandLists`. A buffer's
+compute and graphics passes. Buffer states are tracked per command list,
+because Direct3D 12 returns every buffer to `COMMON` after each `ExecuteCommandLists`. One
+submission of several lists carries a buffer's state from each list to the next, so a buffer
+transitions in only one list of a submission: a shader pipeline's copy list hands a copied
+package region to its readers, and a host buffer port's copied buffer is handed over by its
+readers' planned barriers in the pass lists submitted after it. A buffer's
 first transition in a list starts from the state its declared prior access
 implies, so callers declare the access that actually preceded it: the SDF
 engine declares each pass's buffer uses in `SdfFrameBufferPlan`, and a shader

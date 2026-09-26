@@ -79,6 +79,19 @@ functional set holds every `pipeline-*` canary, `pipeline-geometry` and
 `pipeline-*` canary is missing from it, so a canary that lands cannot sit
 outside qualification unnoticed.
 
+**Hardware- and environment-only checks run once, at the programme's close.**
+A check that needs a particular device, driver state, operating system or
+display is not run package by package. Each is listed in
+[the programme's deferred checks](../plans/rendering.md#deferred-to-the-end),
+and they run together when the programme ends, on the code it finally ships.
+They are P1a's windowed boot on a machine with no GPU driver; P1b's
+qualification on the reference GPUs, the RTX 4070 and the AMD devices, and its
+driver-removal exercise; P7's comparison of the shader bytecode that Linux and
+Windows CI build; the recorded camera run of P12b-4; the recorded Windows
+editor click of P13b-4; P15's recorded Steam Deck run; and P16's checks on an
+HDR display. For the GPU checks each change runs, whether the two backends
+agree is judged in one final review pass rather than change by change.
+
 **Device-local memory is counted by role, not by memory type.** Images,
 device-local buffers and imports count on both backends; host-visible,
 staging, upload and readback memory never count. On a unified-memory device
@@ -92,6 +105,17 @@ unified-memory devices included.
 "everything is an SDF" with "all environments are SDFs"; meshes, continuous
 fields, and baked distant content may each fit a scene, and no broad shadow or
 ambient-occlusion speedup is assumed without a scene and fidelity comparison.
+
+**P6's three representation experiments are in the programme's scope.** They
+are a per-placement choice between the field, a bake and a mesh, decided by
+counted cost; shadows and ambient occlusion on meshes; and capsule or ellipsoid
+proxies on a character's bones for approximate shadows and ambient occlusion
+that never silently become the contact surface. Each is scoped on its own and
+becomes a default only once it shows a useful scene, its fidelity limits and
+its measured cost. The other representations
+[P6](../plans/rendering.md#p6--representation-experiments) names, such as
+destructible fields, mesh import and skinning, stay out until a scene shows
+the need.
 
 ## How worlds reach the GPU
 
@@ -170,9 +194,10 @@ interface, both backends' layout planners, and `IGpuBindings.WriteBuffer` all
 read it, and whether a buffer is read or written is part of its kind, so it is
 the one statement of buffer access. Keeping another binding-kind type beside it
 with translations between them is rejected, because each translation is a
-second statement of the same access that can drift from the first.
-`GpuComputeBindingKind` goes once the SDF engine's combined image samplers have
-moved to a separate image and sampler.
+second statement of the same access that can drift from the first. A
+positional compute binding (`GpuComputeBinding`) states it too, and holds only
+buffers and storage images: a sampled image is always read through a separate
+sampler in a group, so no combined image sampler exists anywhere.
 
 **A binding is visible to the pipeline's stages, never to its own.** A
 pipeline's stages come from its pass kind, compute or vertex and fragment, and
@@ -272,14 +297,17 @@ value-over-time trait is evaluated at that fractional time, so a parameter eased
 by a 30 Hz simulation is smooth at 144 Hz. A plain cell steps, because a score
 of 3.5 is wrong and an author who wants smoothness declares `dynamics`. An
 offscreen capture pins the fraction to one, so a capture shows exactly one named
-tick. Presentation time is a float and never re-enters state. On the GPU the
-mirror is regions of the World group: scalars copied into pass parameter blocks
-at the offsets the interface fixes, arrays in shared regions keyed by row and
-element format so two passes reading one row the same way read one copy, a row
-bound once indexed per instance so a board of sixty-four pieces is one binding,
-and the field lattice as a region kind so a field has one truth on the GPU. The
-mirror reads [the presentation view's](runtime-and-delivery.md#the-presentation-view)
-state interface, not a document.
+tick. Presentation time is a float and never re-enters state. On the GPU a
+bound scalar is copied into its pass's parameter block at the offset the
+interface fixes, and a bound row fills an array member in that pass's own World
+group block; each is written only when its value moves. The rest of the GPU
+side is the contract P10's remaining work delivers: arrays move into shared
+regions keyed by row and element format, so two passes reading one row the same
+way read one copy; a row bound once is indexed per instance, so a board of
+sixty-four pieces is one binding; and the field lattice becomes a region kind,
+so a field has one truth on the GPU. The mirror reads
+[the presentation view's](runtime-and-delivery.md#the-presentation-view) state
+interface, not a document.
 
 **A binding reads eased by default and the stored truth with `.$target`, for
 every consumer.** A HUD gauge, a camera operand, and a pipeline parameter answer
@@ -289,6 +317,19 @@ for the eased value. Giving pipelines their own default is rejected
 because it leaves two mechanisms for one decision. Changing the default later
 moves camera and pipeline pixels and the parity contract, and moves no state
 hash, because easing is presentation-side over the exported rows.
+
+**A member is bound or overridden, never both.** A `views.graphs` row's
+`parameters` bind a pass's config field to a literal or a state token, and its
+`overrides` set the field's authored value, which a live `pipeline.set`
+previews and `pipeline.commit` records. A row naming one field of one pass in
+both is refused at validation, naming the row, the pass and the field. Letting
+one win silently was rejected: an override that a binding overwrites every
+frame is a commit that changes nothing on screen, and a binding an override
+masks is state that never reaches the pass, and neither shows the author why.
+An unbound field keeps the value its source's default and the row's override
+give it; a bound field's fallback is its source's default, which it draws while
+its binding does not resolve. A live `pipeline.set` of a bound field is refused
+by the same rule.
 
 **Residency is chosen from what the adapter reports.** The properties a policy
 needs — whether device-local memory is host-visible and coherent, and how much of
@@ -314,28 +355,28 @@ rows in P10, which owns the tier a pipeline names. Building tier variants into
 the package format first was rejected, because nothing would select them and no
 check could tell a correct variant from a wrong one.
 
-**Bound rows are priced, and a capture reports the tick it shows.** A world's
-bindings appear in the cost report as bytes per tick and bytes per frame, beside
-and separate from the simulation's cycle bound, and a document over its ceiling
-is refused at validation naming the pipeline and the binding.
+**Bound rows are priced, and a capture reports the tick it shows.**
 `FixedStepPump.Advance` can run several steps in one call, so a frame composed
 after one tick may show a later one. For the simulation tick a scheduled capture
-does both. It fences, because the pump ends its burst at the armed tick through
-`IFixedStepSimulation.AwaitsFrame`, so the host composes that tick's frame
-before stepping on; only frame interleaving changes, never the steps. The
+already does both. It fences, because the pump ends its burst at the armed
+tick through `IFixedStepSimulation.AwaitsFrame`, so the host composes that
+tick's frame before stepping on; only frame interleaving changes, never the steps. The
 offscreen host, whose frames are its only output, also holds its clock: it
 steps no tick past the armed one until the capture is served or refused, and
 refuses it by name after a bounded hold. It also
 reports: `WorldCaptureScheduler` refuses a capture served by a frame showing
 another tick as `stale`, naming both ticks, rather than leaving it out of the
-manifest. A state-bound parameter adds a second tick, the one its regions were
-refreshed at, which the fence does not pin. That tick is reported: a capture
-carries it, and `puck parity` gains a verdict that the frame shows the tick it
-was armed for, ordered before the pixel verdict, so a skewed capture fails as a
-skew.
-`puck parity` pins one reference tier, the parity world carries one station
-whose pixels depend on a bound row, and a second leg at the floor tier follows
-once tiers exist.
+manifest. The pricing and the second tick are the contract P10's remaining
+work delivers, and neither exists yet. A world's bindings are to appear in the
+cost report as bytes per tick and bytes per frame, beside and separate from the
+simulation's cycle bound, with a document over its ceiling refused at
+validation naming the pipeline and the binding. A state-bound parameter adds a
+second tick, the one its regions were refreshed at, which the fence does not
+pin. That tick is to be reported: a capture carries it, and `puck parity` gains
+a verdict that the frame shows the tick it was armed for, ordered before the
+pixel verdict, so a skewed capture fails as a skew. `puck parity` is then to pin
+one reference tier, with one station in the parity world whose pixels depend on
+a bound row, and a second leg at the floor tier follows once tiers exist.
 
 ## The frame graph and nesting
 
@@ -365,10 +406,14 @@ previous frame.** Every view, from the main camera to a pane to a camera on a
 screen, is an instance of a graph, and nesting is one instance reading
 another's output. Instances render on demand, at the extent their on-screen
 footprint needs, at their own rate, and once per frame however many consumers
-they have. Today a view that would see itself gets the procedural test card.
-Instead, a self-reference goes through the planner's previous-frame edge, so a
-mirror shows the previous frame. A same-frame cycle is refused because no order
-of passes can satisfy it.
+they have. A self-reference goes through the planner's previous-frame edge, so a
+mirror shows the previous frame, and a same-frame cycle is refused because no
+order of passes can satisfy it. The main view, the panes and the split-screen
+seats already run as graph instances this way. Screens do not: `ViewStack`
+still renders every camera a screen shows, and a screen that would show the
+view rendering it gets the procedural test card. Moving screens onto graph
+instances, which completes nesting, is the contract P11b's remaining commits
+deliver.
 
 **Post passes are passes of the synthesized root graph.** A world names them in
 `views.post`, each row written the way a graph document's `packages` row is,
@@ -412,13 +457,18 @@ Passthrough exists only for a source the local user opened. A world document
 arriving through a portal must never be able to type into the player's
 desktop. Focus stays with the input system, which reads the mapping.
 
-**Generated declarations are build outputs and are not committed.** Compiled
-`.dxil` and `.spv` files are already ignored by Git and built by
-`build/Shaders.targets`, and CI builds the packages that ship. Committing
-generated HLSL with a check that it is current was rejected because it adds
-churn to every interface change and duplicates what the build and the echo pass
-already prove. Generated files go under `obj/`, so nobody edits one by mistake.
-Every build host already needs DXC.
+**The engine's generated declarations are committed and checked against their
+generator; compiled binaries are build outputs.** The includes the C# model
+owns, `sdf-isa.hlsli` and the `*.interface.hlsli` of each engine package and
+SDF kernel interface, are written by `puck shaders generate` and tracked in
+Git, because the engine's kernels include them from the source tree. CI runs
+`puck shaders generate --check`, which regenerates each in memory and fails on
+any difference, on a checked-in interface include no generator owns, and on a
+package whose include is missing, so a committed include cannot fall behind
+the model. A world's own pipeline passes commit nothing: the loader generates
+their declarations in memory, and a package carries them. Compiled `.dxil` and
+`.spv` files are ignored by Git and built by `build/Shaders.targets`, and CI
+builds the packages that ship. Every build host already needs DXC.
 
 **A kernel nothing dispatches is deleted rather than kept for the sweep.**
 `sdf-child`, `pixelate` and `viewport-composite` compiled into shipped

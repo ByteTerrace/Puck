@@ -1,13 +1,39 @@
-// One rulepush level as a world: the room it stands in, the rule set stamped with the level's map, and the record a win
-// leaves. A win sets the visitor's own identity fact named for the level, which is what the overworld reads to open
-// the next gate; the fact travels with the visitor, so nothing crosses between the worlds except the visitor.
+// One rulepush level as a world: the room it stands in, the rule set stamped with the level's map, the board drawn
+// beside the room, and the record a win leaves. A win sets the visitor's own identity fact named for the level, which
+// is what the overworld reads to open the next gate; the fact travels with the visitor, so nothing crosses between the
+// worlds except the visitor.
 
 import "rules.puck"
 import "room.puck"
 
-module level(centre: Point, record, layout) {
-  use room(centre: centre, size: [length(layout[0]) * 1m + 8m, length(layout) * 1m + 8m])
+module level(centre: Point, record, layout, presentation = "Windowed") {
+  use room(centre: centre, size: [length(layout[0]) * 1m + 8m, length(layout) * 1m + 8m], presentation: presentation)
   use rules(width: length(layout[0]), height: length(layout), layout: layout)
+
+  // The board pass reads the tiles row whole, one look a cell, and draws it at the level's own size. A seated player
+  // sees the room on the left and the board on the right; with no seat, the board fills the window.
+  views {
+    graph "board" {
+      source: asset "board.graph.json"
+      parameters {
+        draw {
+          tiles: "state.tiles"
+          width: length(layout[0])
+          height: length(layout)
+        }
+      }
+    }
+    layout "play" {
+      seatCount: 1
+      slots [
+        { height: 1, width: 0.5, x: 0, y: 0 }
+        { instance: "board", height: 1, width: 0.5, x: 0.5, y: 0 }
+      ]
+    }
+    layout "board" {
+      slots [{ instance: "board", height: 1, width: 1, x: 0, y: 0 }]
+    }
+  }
 
   state {
     world {
