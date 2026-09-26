@@ -477,7 +477,6 @@ public sealed class SdfEngineNodeLeaseLawTests {
         Assert.Equal(actual: written.Count, expected: 3);
         Assert.Equal(actual: rig.LiveImages().Length, expected: (images + 2));
     }
-
     // The node's output carries the taint of the reads its latest submitted frame bound: a frame that read unfilled
     // external content hands out a tainted output, and the next frame over a filled read an untainted one.
     [Fact]

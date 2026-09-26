@@ -241,6 +241,77 @@ public sealed partial class RenderGraphRuntimeLawTests {
             Assert.Null(@object: runtime.UnservedCaptureReason);
         }
     }
+    // A view that reads itself carries its taint from frame to frame through its previous-frame read, so a capture frame
+    // binds no tainted previous-frame read: the view renders once without its own image, over the camera's fill, and the
+    // capture is served.
+    [Fact]
+    public void ACaptureFrameBindsNoTaintedPreviousFrameReadSoAViewReadingItselfIsServed() {
+        var gpu = new FakePipelineGpu();
+        var camera = new FakeCamera(gpu: gpu);
+        var recorders = new Recorders();
+        var producers = new Producers(gpu: gpu);
+
+        producers.Register(registry: recorders.Registry);
+        recorders.Registry.RegisterProducer(
+            factory: _ => camera,
+            package: Feed
+        );
+
+        var runtime = Runtime(
+            gpu,
+            recorders,
+            Set(
+                new RenderGraphInstance(
+                    ExternalPackage: Feed,
+                    Name: "camera",
+                    Passes: 1,
+                    Reads: [],
+                    Refresh: RenderGraphRefresh.EveryFrame
+                ),
+                External(name: "world") with {
+                    Reads = [
+                        new RenderGraphRead(Producer: "camera"),
+                        new RenderGraphRead(
+                            PreviousFrame: true,
+                            Producer: "world"
+                        ),
+                    ],
+                }
+            ),
+            "world",
+            null!,
+            null!
+        );
+        var frames = new Frames(
+            footprints: [new RenderGraphFootprint(Consumer: "world", Height: 1.0, Producer: "camera", Width: 1.0)],
+            roots: [new RenderGraphRoot(Height: 1.0, Instance: "world", Width: 1.0)],
+            runtime: runtime
+        );
+
+        using (runtime) {
+            var world = producers.Only;
+
+            world.CarriesTaint = true;
+            camera.Filling = static () => false;
+            frames.Settle();
+            frames.Next(count: 2);
+
+            // Outside a capture the view shows its own tainted image.
+            Assert.True(condition: world.WorldReadBound[^1]);
+
+            var request = CaptureRequest();
+
+            runtime.RequestCapture(request: request);
+            camera.Filling = () => (runtime.PendingCapturePath is not null);
+            _ = frames.Next();
+
+            Assert.Equal(
+                actual: (request.Completion.IsCompleted, Assert.Single(collection: world.Captured), world.WorldReadBound[^1]),
+                expected: (true, request.Path, false)
+            );
+            Assert.Null(@object: runtime.UnservedCaptureReason);
+        }
+    }
 
     /// <summary>A camera handed out through a capture gate: its own image, tainted, or while the gate fills its fill,
     /// untainted. Both are same-device images, so a graph instance binds them.</summary>

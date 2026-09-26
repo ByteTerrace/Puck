@@ -322,9 +322,11 @@ These are one-line cautions; the owning pages hold the derivations.
   `SdfViewOutput.Tainted`), a frame begun with a capture pending names
   every tainted instance the captured one reads to render again
   (`RenderGraphFrame.Rerender`, due and admitted whatever its refresh and the
-  budget), and a capture moves to its instance only over untainted inputs,
-  a graph instance's or an external producer's, whose blocking read
-  `UnservedCaptureReasonOf` names. A
+  budget), and on that frame an external producer's previous-frame read of a
+  tainted output binds nothing, so a camera view reading itself or another view
+  clears its taint rather than carrying it. A capture moves to its instance only
+  over untainted inputs, a graph instance's or an external producer's, whose
+  blocking read `UnservedCaptureReasonOf` names. A
   new producer of external content states its taint; never hold the gate open
   for a count of frames. An uploaded producer registers an upload for its source package
   (`RenderGraphPackageRecorders.RegisterSource`), never an external producer:
