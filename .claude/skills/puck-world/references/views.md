@@ -347,6 +347,12 @@ Free Cam do not alter the logical movement basis.
   viewport mapping (`WorldSeatViewports.Locate`, which the pointer-ray capture
   shares), visibility, arming reason, buttons, hover, and system-release
   generation.
+- `world.view.panes [<x> <y>]` — reads the panes the root's `place` passes
+  draw, in drawing order, each as its published `SourceMapping`
+  (`WorldViewGraphHost.PublishPanes`); given a display point, it echoes the
+  presentation picker's answer (`pick=instance:<name> pixel <x>,<y>` or
+  `pick=none`) and how the hit walk through the live instance set ends. It
+  refuses by name in a boot with no GPU presentation.
 - `view.override camera|layout <name|auto>` — live composition override;
   `layout toggle` and `layout next` cycle the authored layouts. It is
   bindable: a bound dispatch (wheel sector / chord row, no tokens) selects the
@@ -377,6 +383,7 @@ Use a writable state directory when booting locally:
 world.view.camera 1
 world.view.state
 world.view.pointer
+world.view.panes 8.5 40.5
 ```
 
 The camera read-back reports pitch limits and live angles in degrees; authored

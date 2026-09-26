@@ -8,3 +8,6 @@ pipeline.wait pane submitted 3 10
 world.wait 10
 world.screenshot {run}/frame.png
 world.wait 10
+# The pane's published mapping, and a display point on each half mapped through it to the source pixel beneath.
+world.view.panes 8.5 40.5
+world.view.panes 40.5 40.5

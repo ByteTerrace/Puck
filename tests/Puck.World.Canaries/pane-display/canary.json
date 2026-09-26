@@ -1,7 +1,7 @@
 {
   "id": "pane-display",
-  "title": "A pipeline pane named by a layout slot shows inside that slot's rect of the composed display, captured at the render graph's root",
-  "binding": "The positive leg boots an offscreen 64x64 world whose one layout slot fills the left half of the display with the pane instance, a one-pass graph that writes opaque magenta over its whole extent. Once the pane has installed and submitted frames, world.screenshot captures the composed display at the render graph's root: every pixel of the left half is magenta, and the right half, which no slot fills, is not. The discriminating leg boots the same world with the slot moved to the right half, so the left-half observation turns red and the right-half one turns green: the capture shows where the slot places the pane, not only that a pane rendered.",
+  "title": "A pipeline pane named by a layout slot shows inside that slot's rect of the composed display, captured at the render graph's root, and publishes the mapping a display point maps through to the pane's pixel",
+  "binding": "The positive leg boots an offscreen 64x64 world whose one layout slot fills the left half of the display with the pane instance, a one-pass graph that writes opaque magenta over its whole extent. Once the pane has installed and submitted frames, world.screenshot captures the composed display at the render graph's root: every pixel of the left half is magenta, and the right half, which no slot fills, is not. world.view.panes then reads the mapping the host published from the same placement: the pane instance's whole 32x64 image over the left half, a display point at (8.5, 40.5) picking the pane's pixel (8, 40) and a hit walk that ends on the pane, which renders from no camera, and a point on the right half picking nothing. The discriminating leg boots the same world with the slot moved to the right half, so the left-half observations turn red and the right-half ones turn green: the capture and the mapping both show where the slot places the pane, not only that a pane rendered.",
   "bootShape": "offscreen",
   "backends": ["vulkan", "directx"],
   "requirements": ["gpu"],
@@ -19,11 +19,16 @@
       { "verb": "pipeline.wait", "occurrence": 3, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
       { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" }
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "world.view.panes", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.view.panes", "occurrence": 2, "outcome": "accepted" }
     ],
     "expect": [
       { "type": "imageRegion", "name": "the-left-half-is-the-pane", "capture": "frame.png", "extent": [64, 64], "region": [0.03125, 0.03125, 0.46875, 0.96875], "reduce": "every", "minimum": [1, 0, 1, 1], "maximum": [1, 0, 1, 1], "toleranceCodes": 1, "holds": true },
-      { "type": "imageRegion", "name": "the-right-half-is-the-pane", "capture": "frame.png", "extent": [64, 64], "region": [0.53125, 0.03125, 0.96875, 0.96875], "reduce": "every", "minimum": [1, 0, 1, 1], "maximum": [1, 0, 1, 1], "toleranceCodes": 1, "holds": false }
+      { "type": "imageRegion", "name": "the-right-half-is-the-pane", "capture": "frame.png", "extent": [64, 64], "region": [0.53125, 0.03125, 0.96875, 0.96875], "reduce": "every", "minimum": [1, 0, 1, 1], "maximum": [1, 0, 1, 1], "toleranceCodes": 1, "holds": false },
+      { "type": "line", "name": "the-pane-publishes-its-mapping-over-the-left-half", "stream": "stdout", "match": "contains", "text": "panes=1 | pane0 instance:pane pane 0,0 0.5x1 source 32x64 crop 0,0 32x64 layout Identity fit Stretch destination Presentation", "present": true },
+      { "type": "line", "name": "a-left-half-point-maps-to-the-pane-pixel-beneath", "stream": "stdout", "match": "contains", "text": "at 8.5,40.5 pick=instance:pane pixel 8,40 walk=NoCamera steps=1", "present": true },
+      { "type": "line", "name": "a-right-half-point-maps-to-no-pane", "stream": "stdout", "match": "contains", "text": "at 40.5,40.5 pick=none walk=World steps=0", "present": true }
     ]
   },
   "discriminating": {
@@ -36,11 +41,18 @@
       { "verb": "pipeline.wait", "occurrence": 3, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
       { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" }
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "world.view.panes", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.view.panes", "occurrence": 2, "outcome": "accepted" }
     ],
     "expect": [
       { "type": "imageRegion", "name": "the-left-half-is-the-pane", "capture": "frame.png", "extent": [64, 64], "region": [0.03125, 0.03125, 0.46875, 0.96875], "reduce": "every", "minimum": [1, 0, 1, 1], "maximum": [1, 0, 1, 1], "toleranceCodes": 1, "holds": false },
-      { "type": "imageRegion", "name": "the-right-half-is-the-pane", "capture": "frame.png", "extent": [64, 64], "region": [0.53125, 0.03125, 0.96875, 0.96875], "reduce": "every", "minimum": [1, 0, 1, 1], "maximum": [1, 0, 1, 1], "toleranceCodes": 1, "holds": true }
+      { "type": "imageRegion", "name": "the-right-half-is-the-pane", "capture": "frame.png", "extent": [64, 64], "region": [0.53125, 0.03125, 0.96875, 0.96875], "reduce": "every", "minimum": [1, 0, 1, 1], "maximum": [1, 0, 1, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "line", "name": "the-pane-publishes-its-mapping-over-the-left-half", "stream": "stdout", "match": "contains", "text": "panes=1 | pane0 instance:pane pane 0,0 0.5x1 source 32x64 crop 0,0 32x64 layout Identity fit Stretch destination Presentation", "present": false },
+      { "type": "line", "name": "a-left-half-point-maps-to-the-pane-pixel-beneath", "stream": "stdout", "match": "contains", "text": "at 8.5,40.5 pick=instance:pane pixel 8,40 walk=NoCamera steps=1", "present": false },
+      { "type": "line", "name": "a-right-half-point-maps-to-no-pane", "stream": "stdout", "match": "contains", "text": "at 40.5,40.5 pick=none walk=World steps=0", "present": false },
+      { "type": "line", "name": "the-moved-pane-publishes-its-mapping-over-the-right-half", "stream": "stdout", "match": "contains", "text": "panes=1 | pane0 instance:pane pane 0.5,0 0.5x1 source 32x64 crop 0,0 32x64 layout Identity fit Stretch destination Presentation", "present": true },
+      { "type": "line", "name": "a-right-half-point-maps-to-the-moved-pane-pixel-beneath", "stream": "stdout", "match": "contains", "text": "at 40.5,40.5 pick=instance:pane pixel 8,40 walk=NoCamera steps=1", "present": true }
     ]
   }
 }

@@ -1018,10 +1018,23 @@ pointer-to-pane mapping, so a pipeline's frame-block pointer
 screen pointer path reads a mapping rather than scaling a rect by hand. A warp
 pass is an input path only with a declared exact inverse; a new warp kind is a
 new `SourceWarpInverse` arm. The screen glass bezel is a sync pair
-([references/sync-pairs.md](references/sync-pairs.md)). A hit on a rendered
-source continues through `RenderGraphHitWalk` (`src/Puck.Hosting/Graph`) up to
-`RenderGraphInstanceSet.NestingDepth`. Nothing in the live renderer publishes or
-draws from a mapping until P13b.
+([references/sync-pairs.md](references/sync-pairs.md)). Panes publish their
+mappings from the placements `place` draws: `WorldFramePresenter.PrepareGraph`
+ends with `WorldViewGraphHost.PublishPanes`, which writes one whole-image
+mapping per shown view and pane, in drawing order, named by the instance's
+`RenderGraphInstance.Handle` at the extent the runtime's latest schedule
+renders it at (`IRenderGraphInstances.Latest`), into `Panes` and the host's
+`SourcePanePicker`. A steady frame publishes the mappings it published before
+and allocates nothing (`WorldViewPaneMappingLawTests`); a view the root stands
+for is no pane. The pane pointer reads its instance's published mapping
+(`TryGetPane`), so it maps the pane as the display last showed it. A hit on a
+rendered source continues through `RenderGraphHitWalk` (`src/Puck.Hosting/Graph`)
+up to `RenderGraphInstanceSet.NestingDepth`; `WorldViewGraphHost.Walk` runs it
+over the runtime's live set, with each view's seat camera and each pane's
+paired camera, and `world.view.panes` echoes the panes, a pick and a walk.
+Screens publish no mapping and no instance reports the surfaces in its world
+yet, so a walk ends on the first instance's world, and the GPU does not draw
+from a mapping (P13b-1's screen half and P13b-5).
 
 HLSL is the one source language, and `ShaderCompiler` runs DXC alone: no pass
 declares a language, and a one-off source is an `.hlsl` compute pass read as a

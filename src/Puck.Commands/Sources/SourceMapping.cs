@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using Puck.Abstractions.Presentation;
 using Puck.Maths;
 
@@ -233,6 +234,31 @@ public sealed record SourceMapping(
         );
     }
 
+    /// <summary>Describes the mapping on one line, the form a read-back verb echoes: the source by kind and name, the
+    /// placement, the source extent and crop, the layout, the fit, any warp, and the destination.</summary>
+    /// <returns>The description, formatted invariantly.</returns>
+    public string Describe() {
+        var source = ((Source.Kind == SourceHandleKind.Producer) ? "producer" : "instance");
+        var placement = Placement switch {
+            SourcePlacement.Pane pane => string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"pane {pane.Region.X:0.####},{pane.Region.Y:0.####} {pane.Region.Width:0.####}x{pane.Region.Height:0.####}"
+            ),
+            SourcePlacement.Surface surface => string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"surface origin {surface.Origin.X:0.###},{surface.Origin.Y:0.###},{surface.Origin.Z:0.###} right {surface.Right.X:0.###},{surface.Right.Y:0.###},{surface.Right.Z:0.###} up {surface.Up.X:0.###},{surface.Up.Y:0.###},{surface.Up.Z:0.###} half {surface.HalfWidth:0.###}x{surface.HalfHeight:0.###}"
+            ),
+            _ => "no placement",
+        };
+        var warp = ((Warp is { } drawn)
+            ? $" warp {drawn.Pass} {((drawn.Inverse is null) ? "no-inverse" : "inverse")}"
+            : string.Empty);
+
+        return string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"{source}:{Source.Name} {placement} source {SourceWidth}x{SourceHeight} crop {Crop.X},{Crop.Y} {Crop.Width}x{Crop.Height} layout {Layout} fit {Fit}{warp} destination {Destination}"
+        );
+    }
     /// <summary>Validates the mapping: its shape, and the destination rules. A <see cref="SourceDestination.Passthrough"/>
     /// destination needs a source the local user opened; a <see cref="SourceDestination.Simulation"/> destination needs
     /// a surface, because a pane's aspect ratio depends on the host's display rather than on document data; and an input

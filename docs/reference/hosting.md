@@ -335,7 +335,10 @@ point. A walk continues at most the limit it is given, which is normally
 It ends on a producer's pixels, on an instance's world, off a source, at the
 limit, on an image the showing instance does not read, or at an instance with
 no camera. Every step maps in fixed point, so the same inputs walk the same
-path on every run.
+path on every run. A World host walks its runtime's live instance set from the
+pane mappings it publishes each frame, with each view's seat camera and each
+pane's paired camera; no instance reports the surfaces in its world yet, so a
+walk that continues into an instance ends on that instance's world.
 
 `PublishBuffer<T>` is the smaller handoff for immutable latest-state values. A
 single writer swaps a holder reference and readers snapshot the newest value.

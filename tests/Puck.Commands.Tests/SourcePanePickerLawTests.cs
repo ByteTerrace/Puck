@@ -8,8 +8,8 @@ namespace Puck.Commands.Tests;
 /// <summary>Laws for the presentation destination's CPU picker (<see cref="SourcePanePicker"/>) and the one topmost rule
 /// it and the hit walk share (<see cref="SourcePanes.Topmost"/>): of overlapping panes the last in drawing order whose
 /// face holds the point wins, a point off every face picks nothing, a topmost face's letterbox bar covers the panes
-/// beneath rather than letting the point through, and a world-surface placement is never picked by a display
-/// point.</summary>
+/// beneath rather than letting the point through, a world-surface placement is never picked by a display point, and a
+/// published pane's read-back (<see cref="SourceMapping.Describe"/>) names its whole chain.</summary>
 public sealed class SourcePanePickerLawTests {
     private const int DisplayHeight = 600;
     private const int DisplayWidth = 800;
@@ -95,6 +95,25 @@ public sealed class SourcePanePickerLawTests {
             pick: out _,
             point: new Vector2(x: 220f, y: 300f)
         ));
+    }
+    /// <summary>A published pane's read-back names the whole chain on one line, invariantly: the source by kind and name,
+    /// the rect, the extent, the crop, the layout, the fit, any warp and the destination.</summary>
+    [Fact]
+    public void APublishedPaneDescribesItsChainOnOneLine() {
+        Assert.Equal(
+            actual: Front.Describe(),
+            expected: "producer:front pane 0.25,0.25 0.5x0.5 source 100x100 crop 0,0 100x100 layout Identity fit Stretch destination Presentation"
+        );
+        Assert.Equal(
+            actual: (Front with {
+                Crop = new SourcePixelRect(Height: 50, Width: 40, X: 10, Y: 20),
+                Fit = SourceFit.Contain,
+                Layout = SourceUvLayout.Rotate90,
+                Source = SourceHandle.Instance(name: "pane"),
+                Warp = new SourceWarp(Pass: "glass"),
+            }).Describe(),
+            expected: "instance:pane pane 0.25,0.25 0.5x0.5 source 100x100 crop 10,20 40x50 layout Rotate90 fit Contain warp glass no-inverse destination Presentation"
+        );
     }
     [Fact]
     public void AWorldSurfacePlacementIsNeverPickedByADisplayPoint() {

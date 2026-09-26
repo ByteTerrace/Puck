@@ -529,7 +529,14 @@ the sharpness `world.upscale-sharpness` sets, adds a footprint (consumer
 `main`, producer the pane, at the slot's width and height) so the scheduler
 renders the pane at that extent, advances the pane's clock, and feeds its
 camera, pointer and time. A pane the active layout does not show is not shown:
-its place pass draws nothing and its instance is not scheduled.
+its place pass draws nothing and its instance is not scheduled. Once every
+slot is placed, the host publishes the mapping of each view and pane the
+`place` passes draw (`WorldViewGraphHost.PublishPanes`): the instance's whole
+image over its rect, at the extent the runtime's latest schedule
+(`IRenderGraphInstances.Latest`) renders it at. A pane's pointer maps through
+that mapping, which a steady frame publishes without allocating;
+[pointing at a displayed source](commands.md#pointing-at-a-displayed-source)
+covers what reads it.
 
 The layout composer runs inside the world producer's frame, so a layout change
 places panes one frame later. A
