@@ -1,3 +1,4 @@
+using Puck.Abstractions.Machines;
 using Puck.GamingBricks.Forge;
 using Puck.HumbleGamingBrick;
 using Puck.HumbleGamingBrick.Forge;
@@ -70,6 +71,16 @@ public sealed class CartridgeProbe : IDisposable {
         }
 
         return probe;
+    }
+    /// <summary>Aims the humble machine's light gun, held until the next aim.</summary>
+    /// <param name="pointer">The aim: off the screen, or a fraction of the picture.</param>
+    /// <exception cref="InvalidOperationException">The cartridge runs on the advanced machine, which has no light gun.</exception>
+    public void Aim(MachinePointer pointer) {
+        if (m_hgb is null) {
+            throw new InvalidOperationException(message: "The advanced machine has no light gun.");
+        }
+
+        m_hgb.Aim(pointer: pointer);
     }
     /// <summary>Compiles a document with the compiler its target names.</summary>
     /// <param name="document">The cartridge source.</param>
