@@ -527,9 +527,13 @@ buffers live
 where `GpuResidency.RingMemory` says: in the device-local aperture
 (`IGpuBufferFactory.CreateHostVisibleDeviceLocal`, counted under
 `memory.<backend>`) on a discrete adapter that exposes one, and in host memory
-on unified memory. The one state-shaped path that reaches the GPU is the
-physics field lattice, mirrored on the client by `WorldClientFieldLattice` and
-uploaded by `WorldFieldEmitter` one field per produced frame.
+on unified memory. State reaches the GPU through the state mirror alone. A
+bound row reaches a pass through the row regions P10 adds, and the physics
+field lattice is a row like any other: the client's state view keeps the
+field cells each snapshot carries (`WorldDocumentStateView.ApplyFieldCells`),
+a pass binds a field row to an array as `state.<field>`, and `WorldFieldEmitter`
+bakes each height field's brick from the same mirror slot, uploading one field
+per produced frame through the brick pool's staged region.
 
 P11's CPU half has landed. Its second half, P11b, runs beside P7b. The binding
 groups it waited on have landed: the overlay is a package on groups, and
@@ -2650,8 +2654,9 @@ registered; and a law that a document swap retires what only the previous
 manifest registered, keeps the index of what both register, never answers a
 lookup with a retired slot, and allocates nothing once warm.
 
-P9 is complete. The materials a program bakes at build join the mirror with
-P10, when the field lattice becomes a region kind. The
+P9 is complete, and the colors a program bakes at build (a creation palette's,
+a height field's, a text screen's ink) read through the mirror too, since P10's
+step 8. The
 `WorldStateMirrorLawTests`, `WorldPresentationManifestLawTests`,
 `WorldPresentationLookupLawTests`, `WorldStateReadRoutingLawTests`,
 `SeatRouteDeliveryLawTests`, `WorldWheelRingsLawTests`,
@@ -2682,8 +2687,8 @@ the declared element format refuses the same way. Scalars land in pass parameter
 blocks at the interface's offsets and arrays in shared regions keyed by row and
 element format, so two passes reading one row the same way read one copy, a row
 bound once is indexed per instance, and the field lattice becomes a region kind
-so a field has one truth on the GPU rather than a second path beside
-`WorldClientFieldLattice`. The frame group carries the deterministic tick from
+so a field reaches a pass through the state mirror rather than a second path
+beside it. The frame group carries the deterministic tick from
 the source the shader push-constant vocabulary already specifies, ticks divided
 by the engine rate over the requested rate, refused unless that rate divides the
 engine rate exactly. A capture records the tick its regions were refreshed at,
@@ -2830,8 +2835,30 @@ follow it.
    binding; `world.budget` prints it, and the browser report carries it.
 7. Tiers. A package builds its variants beyond `default`, and a row names its
    tier from `low`, `medium` and `high`.
-8. The field lattice as a region kind, replacing `WorldClientFieldLattice`'s
-   second path, and the materials a program bakes join the mirror.
+8. Done: the field lattice as a region kind, and the materials a program
+   bakes join the mirror. A field row is a row the mirror reads like any other:
+   the client's state view keeps the cells each snapshot carries
+   (`WorldDocumentStateView.ApplyFieldCells`, cell `i` of the row being lattice
+   cell `i`: z, then layer, then x) and names the rows they moved, which the
+   mirror re-reads (`WorldStateMirror.RefreshRows`). `WorldBoundRow` presents a
+   field row as one element per lattice cell, so a pass binds it to a float
+   array as `state.<field>` through the same row region every bound row takes,
+   and the presentation manifest registers each height field's row whole, the
+   slot `WorldFieldEmitter` bakes its brick from. The client's separate mirror
+   of the lattice is gone. The colors a program or a decal bakes (a creation
+   palette's surface, bounce, weathering and inset colors, a height field's
+   color, a text screen's ink) are manifest surfaces, registered in the mirror
+   at install and resolved through it (`WorldBakedColors`); a bound one moving
+   rebuilds the program or rebakes the decal. The brick itself is still baked
+   on the CPU and uploaded through the brick pool, since baking it from the
+   region on the GPU belongs to the SDF engine. Laws:
+   `WorldFieldRowLawTests` (a field row reads the delivered cells and a
+   snapshot moving them reads it once, with no allocation once warm; the row
+   reaches a pass's region with the same bytes under all three residency
+   policies; a height field's brick is baked from its row slot once per move;
+   baked colors are in the mirror at install and followed through it) and
+   `PipelineOverrideLawTests.Parameters` (the load gate binds a field row to an
+   array only as long as its lattice).
 
 ### P11 — The frame graph document and nested views
 

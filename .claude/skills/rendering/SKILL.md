@@ -819,6 +819,18 @@ field needs its validator bound, its `SdfFrame`/`SdfEnvironment` lane, and its
 shader consumer in the same change. What a document field means belongs to
 `puck-world`.
 
+Every state read reaches a program, a decal or a pass through the state
+mirror, never through the document. A color a build bakes (a palette's surface,
+bounce, weathering or inset color, a height field's color, a text screen's ink)
+resolves through `WorldBakedColors`, whose slots the presentation manifest
+registers at install; its builder calls `Begin` at a live build and follows
+`TryTakeMove` in its revision, so a bound color moving rebuilds it. A new baked
+color is a manifest surface resolved the same way. The field lattice is a row
+like any other: the client's state view keeps the cells each snapshot carries,
+`WorldFieldEmitter` bakes a height field's brick from its row slot, and a pass
+binds a field row to an array through the row region a bound row takes; never
+add a second mirror of the lattice.
+
 ## Shader manifests and pipelines
 
 `docs/reference/shaders.md` owns the `puck.render.graph.v1` contract, post

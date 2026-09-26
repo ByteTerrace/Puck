@@ -1,9 +1,10 @@
 namespace Puck.World;
 
 /// <summary>What a whole state row bound to a pass's array presents: a keyed document row read as numbers, cell <c>i</c>
-/// at element <c>i</c>, over as many elements as the row's shape holds. A lattice row holds one element per cell of its
-/// topology, a ring row its capacity, and any other keyed row its cell ceiling; an element whose cell is absent reads
-/// zero. The state mirror reads a bound row through this shape, and the load gate holds it to the array it fills.</summary>
+/// at element <c>i</c>, over as many elements as the row's shape holds. A field row holds one element per cell of the
+/// field lattice (<see cref="WorldDefinition.Fields"/>; cell <c>i</c> counts z, then layer, then x), a lattice row one
+/// per cell of its topology, a ring row its capacity, and any other keyed row its cell ceiling; an element whose cell
+/// is absent reads zero. The state mirror reads a bound row through this shape, and the load gate holds it to the array it fills.</summary>
 public static class WorldBoundRow {
     /// <summary>Resolves a bound row: a keyed document-lane row, and the element count it presents.</summary>
     /// <param name="definition">The document.</param>
@@ -34,6 +35,16 @@ public static class WorldBoundRow {
 
         var resolved = definition.State[handle.Ordinal];
 
+        if (resolved.Field is not null) {
+            // A field row's cells are the field lattice's, which a snapshot carries rather than the document.
+            length = ((definition.Fields?.Lattice is { } lattice)
+                ? ((lattice.Width * lattice.Layers) * lattice.Depth)
+                : 0
+            );
+            row = resolved;
+
+            return (length > 0);
+        }
         if (!resolved.IsKeyed) {
             return false;
         }

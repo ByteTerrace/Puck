@@ -167,6 +167,11 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     private readonly Dictionary<int, Func<SdfScreenDecalFrame?>> m_screenDecals = new();
     private readonly Dictionary<int, (WorldScreenSource.Text Text, PackedFontAtlasCatalog Catalog, SdfScreenDecalFrame Frame)> m_screenDecalCache = new();
 
+    // The ink colors the cached decals baked, read through the state mirror; a bound one moving rebakes every decal.
+    private readonly WorldBakedColors m_decalColors;
+    // The colors the presentation query field's build resolves; the query reads no material, so nothing follows them.
+    private readonly WorldBakedColors m_queryColors;
+
     // The BUILTIN viewport ladder for the player at slot-order position `index` of `count`, used only when the
     // world authors no `views.layouts` (WorldViewComposer.ResolveBuiltin's fallback). NormalizedRect convention:
     // origin top-left, Y increasing down. 1 = fullscreen; 2 = side-by-side halves; 3 = big-top (full-width, top
@@ -456,11 +461,13 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
 
             // Only what a body can touch: a solid placement. A presentation-only placement (the wallpaper-folded
             // ground texture) has no fixed-point query twin and would refuse the whole field.
+            m_queryColors.Begin();
             WorldPlacementStamper.EmitStatic(
                 builder: builder,
                 definition: definition,
                 creations: definition.Creations,
-                placements: [.. definition.Placements.Where(predicate: static placement => (placement.Solid is not null))]
+                placements: [.. definition.Placements.Where(predicate: static placement => (placement.Solid is not null))],
+                colors: m_queryColors
             );
 
             var facets = WorldPrototypeFacets.Derive(
@@ -528,8 +535,10 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             m_screenDecals[index] = () => ResolveScreenDecal(index: capturedIndex);
         }
 
-        // Every decal rebakes on delivery: a source's colors may bind to state cells the delivery moved.
+        // Every decal rebakes on delivery, which may have changed its text; a bound ink color moving in the state mirror
+        // rebakes them too (ResolveScreenDecal).
         m_screenDecalCache.Clear();
+        m_decalColors.Begin();
         // The SAME facets.Faces the binder just reconciled its sources against, threaded to the emitter so the
         // ScreenSlab geometry it composes and the binder's bound sources never disagree about which face maps to
         // which placement — one WorldPrototypeFacets.Derive call per delivery, never two.
@@ -1003,6 +1012,10 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             return null;
         }
 
+        if (m_decalColors.TryTakeMove()) {
+            m_screenDecalCache.Clear();
+            m_decalColors.Begin();
+        }
         if (
             m_screenDecalCache.TryGetValue(
             key: index,
@@ -1022,7 +1035,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
 
         var frame = WorldScreenTextDecal.Bake(
             catalog: catalog,
-            definition: m_client.Definition,
+            colors: m_decalColors,
             text: text
         );
 
@@ -1769,6 +1782,8 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         audio.MachineSourceResolver = binder.AudioOutput;
         m_frameRate = frameRate;
         m_client = client;
+        m_decalColors = new WorldBakedColors(mirror: client.StateMirror);
+        m_queryColors = new WorldBakedColors(mirror: client.StateMirror);
         m_anchor = anchor;
         m_speech = speech;
         m_overlayFacts = overlayFacts;

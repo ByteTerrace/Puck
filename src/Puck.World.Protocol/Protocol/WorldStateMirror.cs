@@ -331,6 +331,22 @@ public sealed class WorldStateMirror : IWorkCounterSource {
             moved: stamp.MovedRows.Span
         );
     }
+    /// <summary>Re-reads the slots bound to rows whose values arrive beside the document rather than in it, at the
+    /// mirror's current tick: a field row, whose cells a snapshot carries
+    /// (<see cref="WorldDocumentStateView.ApplyFieldCells"/>). Such a row's cells never move between writes, so the
+    /// read leaves every moving slot's interpolation as it was; a row no slot reads reads nothing.</summary>
+    /// <param name="ordinals">The catalog ordinals of the rows whose values moved, each once.</param>
+    public void RefreshRows(ReadOnlySpan<int> ordinals) {
+        foreach (var ordinal in ordinals) {
+            if (((uint)ordinal) >= ((uint)m_firstSlotByOrdinal.Length)) {
+                continue;
+            }
+
+            for (var slot = m_firstSlotByOrdinal[ordinal]; (slot >= 0); slot = m_nextSlotOfOrdinal[slot]) {
+                Read(slot: slot);
+            }
+        }
+    }
     /// <summary>Refreshes the slots whose trait-bearing cell has not come to rest, at a tick no state delivery
     /// refreshed.</summary>
     /// <param name="tick">The completed tick.</param>
