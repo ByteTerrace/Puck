@@ -89,7 +89,7 @@ public sealed class AffectedDocumentsLawTests {
         );
 
         // The film-grain package is reached only through the world that runs it in views.post.
-        Assert.Equal(actual: reachedBy["src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-film-grain.frag.hlsl"], expected: ["post-pass"]);
+        Assert.Equal(actual: reachedBy["src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-film-grain.frag.hlsl"], expected: ["post-pass"]);
 
         Assert.Contains(collection: reachedBy["src/Puck.Shaders/Assets/Shaders/Graph/place.comp.hlsl"], expected: "resample-reconstruction");
 

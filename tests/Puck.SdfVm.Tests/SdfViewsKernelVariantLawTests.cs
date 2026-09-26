@@ -5,7 +5,7 @@ using Xunit;
 
 namespace Puck.SdfVm.Tests;
 
-/// <summary>Pins the host half of the superellipsoid's strip split in sdf-vm.hlsli: the fold tier compiles only the
+/// <summary>Pins the host half of the superellipsoid's strip split in field/sdf-shapes.hlsli and field/sdf-gradients.hlsli: the fold tier compiles only the
 /// exponent-2 ellipsoid gauge of <c>SDF_SHAPE_SUPERELLIPSOID</c>, so <see cref="SdfViewsKernelVariants.Select"/> must
 /// send every other exponent to <see cref="SdfViewsKernelVariant.Full"/>, or the fold kernel would evaluate a
 /// squircle as an ellipsoid.</summary>

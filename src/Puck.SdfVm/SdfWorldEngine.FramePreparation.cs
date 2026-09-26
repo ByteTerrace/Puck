@@ -180,7 +180,7 @@ public sealed partial class SdfWorldEngine {
             offset: (slot * DynamicTransformByteLength)
         );
     // position.w encodes per-instance soft-shadow participation: 0 = casts, 1 = shadow-suppressed (skipped by the
-    // soft-shadow march only), read by sdf-world.hlsli's sdfShadowParticipationActive skip. The lanes row is what an op
+    // soft-shadow march only), read by field/sdf-layout.hlsli's sdfShadowParticipationActive skip. The lanes row is what an op
     // evaluating under this slot (SDF_OP_LANE_ERODE, shade-volumes.hlsli's selected intensity lane) reads through
     // sdfDynamicTransforms[(3*slot)+2]; a shape under no slot reads zero.
     private static void PackDynamicTransform(Span<float> floats, in DynamicTransform transform) {
@@ -193,7 +193,7 @@ public sealed partial class SdfWorldEngine {
     }
     // Pack the per-frame screen-light buffer: entries 0..(MaxScreenSurfaces-1) = each screen's emitted color (the
     // framebuffer average set via SetScreenLight) with the room-glow intensity gain in w, the last entry = the
-    // environment (ambient/sun dimming from the frame). KEEP IN SYNC with sdf-world.hlsli's sdfScreenLights layout
+    // environment (ambient/sun dimming from the frame). KEEP IN SYNC with shade/sdf-environment.hlsli's sdfScreenLights layout
     // (SdfScreenLightEnv must equal MaxScreenSurfaces there).
     private void PackScreenLights(SdfFrame frame) {
         var floats = MemoryMarshal.Cast<byte, float>(span: m_screenLightScratch.AsSpan());
@@ -213,7 +213,7 @@ public sealed partial class SdfWorldEngine {
 
         // The grid-lock overlay rows (grid-locking §4a): four float4 rows AFTER the env entry (env stays at
         // MaxScreenSurfaces, load-bearing as the shader's screen-count loop bound). Default 0 = no overlay, so a frame
-        // that never sets the Grid* fields uploads the same zeros. KEEP IN SYNC with sdf-world.hlsli's SdfGridWorld..
+        // that never sets the Grid* fields uploads the same zeros. KEEP IN SYNC with shade/sdf-environment.hlsli's SdfGridWorld..
         var gridWorldBase = ((MaxScreenSurfaces + 1) * 4);
 
         floats[(gridWorldBase + 0)] = frame.GridFlags; floats[(gridWorldBase + 1)] = frame.GridFloorY; floats[(gridWorldBase + 2)] = frame.GridWorldPitch.X; floats[(gridWorldBase + 3)] = frame.GridWorldPitch.Y;
@@ -227,7 +227,7 @@ public sealed partial class SdfWorldEngine {
         floats[(gridObjFrameBase + 0)] = frame.GridObjectFrame.X; floats[(gridObjFrameBase + 1)] = frame.GridObjectFrame.Y; floats[(gridObjFrameBase + 2)] = frame.GridObjectFrame.Z; floats[(gridObjFrameBase + 3)] = frame.GridObjectFrame.W;
 
         // The .z lane is the analytic-normal A/B toggle (0 = the forward-mode dual normal, the default; 1 = the legacy
-        // 4-tap finite-difference probe), read by sdf-world.hlsli's worldUseTapNormals. The .w lane is the soft-shadow
+        // 4-tap finite-difference probe), read by debug/sdf-levers.hlsli's worldUseTapNormals. The .w lane is the soft-shadow
         // GRID-CULL toggle (0 = ON, the default grid-gathered shadow march; 1 = OFF, the flat all-instances reference),
         // read by worldShadowCullEnabled. Both were reserved before, so an unset frame uploads 0 = analytic normals +
         // cull ON. KEEP IN SYNC with SdfFrame.UseFiniteDifferenceNormals / SdfFrame.DisableShadowCull.
@@ -244,8 +244,8 @@ public sealed partial class SdfWorldEngine {
         // Engine-bench shader-feature levers: one reserved row after the grid rows. x = disable soft
         // shadows, y = disable AO, z = shadow-distance scale (0 = the full 1.0 reach — an unset frame uploads 0), w =
         // disable screen lights. All default 0, so a frame that never sets the Disable*/ShadowDistanceScale fields
-        // uploads the same zeros = every feature ON at full reach. KEEP IN SYNC with sdf-world.hlsli's SdfBenchParams
-        // decode (worldSoftShadowsDisabled/worldAoDisabled/worldShadowDistanceScale/worldScreenLightsDisabled).
+        // uploads the same zeros = every feature ON at full reach. KEEP IN SYNC with shade/sdf-environment.hlsli's SdfBenchParams
+        // row and debug/sdf-levers.hlsli's decode (worldSoftShadowsDisabled/worldAoDisabled/worldShadowDistanceScale/worldScreenLightsDisabled).
         var benchParamsBase = ((MaxScreenSurfaces + 5) * 4);
 
         floats[(benchParamsBase + 0)] = (frame.DisableSoftShadows
@@ -264,8 +264,8 @@ public sealed partial class SdfWorldEngine {
         // hull); y = use the camera-tile shadow mask instead of the per-pixel shadow-grid gather; z = use the bounded-cost
         // fast soft-shadow marcher; w = use the one-sample contact-AO approximation.
         // Both default 0, so a frame that never sets either lever uploads the same zeros = the full gathered occluder
-        // set. KEEP IN SYNC with sdf-world.hlsli's SdfShadowProxyParams / worldShadowProxyEnabled /
-        // worldUseCameraTileShadowMask / worldUseFastSoftShadowMarch / worldUseFastAmbientOcclusion.
+        // set. KEEP IN SYNC with shade/sdf-environment.hlsli's SdfShadowProxyParams, shade/sdf-shadow-gather.hlsli's
+        // worldShadowProxyEnabled, and debug/sdf-levers.hlsli's worldUseCameraTileShadowMask / worldUseFastSoftShadowMarch / worldUseFastAmbientOcclusion.
         var shadowProxyBase = ((MaxScreenSurfaces + 6) * 4);
 
         floats[(shadowProxyBase + 0)] = (frame.EnableShadowProxy
@@ -283,8 +283,8 @@ public sealed partial class SdfWorldEngine {
         );
 
         // The far-field lever row: x = disable the beam-published per-tile far bound (the fine march then runs to
-        // the far distance); yzw reserved. Default 0 = the far bound ON. KEEP IN SYNC with sdf-world.hlsli's
-        // SdfFarFieldParams / worldFarBoundDisabled.
+        // the far distance); yzw reserved. Default 0 = the far bound ON. KEEP IN SYNC with shade/sdf-environment.hlsli's
+        // SdfFarFieldParams and debug/sdf-levers.hlsli's worldFarBoundDisabled.
         var farFieldBase = ((MaxScreenSurfaces + 7) * 4);
 
         floats[(farFieldBase + 0)] = (frame.DisableFarBound
@@ -343,7 +343,7 @@ public sealed partial class SdfWorldEngine {
     // no such asymmetry), the sun-disc angular radius baked into the pow() exponent that puts the disc's edge at half
     // brightness (k = ln 0.5 / ln cos r), the twinkle rate baked into a period in engine ticks so the shader reduces
     // the tick counter by an integer modulo, and the cloud drift, shear and spin integrated from the tick counter in
-    // double (offsets wrapped modulo the lattice period, the angle modulo 2π). KEEP IN SYNC with sdf-world.hlsli's
+    // double (offsets wrapped modulo the lattice period, the angle modulo 2π). KEEP IN SYNC with shade/sdf-environment.hlsli's
     // SdfEnv* rows and SdfEnvironment's row layout.
     private static void PackEnvironment(SdfFrame frame, Span<float> floats) {
         var environment = frame.Environment;
@@ -454,7 +454,7 @@ public sealed partial class SdfWorldEngine {
     // sky, the tile passes and the hit passes all read the same one. The far distance rides the row's last lane because the viewport table is the one buffer every marching kernel (beam, views, instance cull, sky)
     // already binds — no descriptor grows. The rows are packed into m_viewportScratch, which the cadence signature reads,
     // and written into the viewport region, which owes only the words that changed; a row carries the frame's
-    // presentation time, so its time word is owed whenever that time moves. KEEP IN SYNC with sdf-world.hlsli's
+    // presentation time, so its time word is owed whenever that time moves. KEEP IN SYNC with frame/sdf-viewport.hlsli's
     // ViewportData / worldFarDistance.
     private void PackViewports(SdfFrame frame, uint viewportCount) {
         var mirror = MemoryMarshal.Cast<byte, float>(span: m_viewportScratch.AsSpan());

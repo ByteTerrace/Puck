@@ -203,7 +203,7 @@ public sealed class ShaderFrameBlockLawTests {
     }
     [Fact]
     public void The_film_grain_package_includes_the_declarations_its_frame_layout_generates() {
-        var directory = RepositoryPaths.Resolve(relativePath: "src/Puck.SdfVm/Assets/Shaders/Sdf");
+        var directory = RepositoryPaths.Resolve(relativePath: "src/Puck.SdfVm/Assets/Shaders/Sdf/passes");
 
         Assert.True(condition: RenderGraphPackageCatalog.Engine.TryGet(
             id: RenderGraphPackageCatalog.SdfFilmGrain,

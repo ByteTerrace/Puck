@@ -3,7 +3,7 @@ using System.Numerics;
 
 namespace Puck.SignedDistance;
 
-// Packed layout (each element is one uvec4 = 16 bytes); KEEP IN SYNC with Shaders/Sdf/sdf-vm.hlsli sdfWords[] indexing:
+// Packed layout (each element is one uvec4 = 16 bytes); KEEP IN SYNC with Shaders/Sdf/isa/sdf-world.interface.hlsli sdfWords[] indexing:
 //   word[0]             = (instructionCount, materialCount, dataOffset, materialOffset) in uvec4 units
 //   [1 .. 1+N)          = instruction headers (op, shape, blend, material)
 //   [dataOffset ..)     = instruction data, 2 uvec4 per instruction (data0, data1 as float bits)
@@ -23,7 +23,7 @@ namespace Puck.SignedDistance;
 //                         bits), i1 = (mode, dynamicSlot, segmentFirst, segmentEnd) — segmentFirst/segmentEnd index
 //                         the SEGMENT directory above (not raw instructions): every segment in that range is
 //                         guaranteed (by construction — AnalyzeBounds splits/merges never cross an instance
-//                         boundary) to be owned by exactly that instance, so mapCore (sdf-vm.hlsli) evaluates the
+//                         boundary) to be owned by exactly that instance, so mapCore (field/sdf-map.hlsli) evaluates the
 //                         whole range when the instance's per-tile mask bit is set and never touches it otherwise,
 //                         and the BEAM prepass reads only i0/i1 for its per-tile cull. shadingFlags bit 0 proves
 //                         the entire stream has no Detail shape; zero requires shade re-evaluation. See PackInstances.
@@ -50,7 +50,7 @@ namespace Puck.SignedDistance;
 // Screen surfaces are a SEPARATE fixed-size side table (ScreenSurfaceWords), not part of the sdfWords stream above —
 // they are shading-only data the world renderer's Stage 1 binds into its own buffer, ALWAYS sized to
 // SdfProgramBuilder.MaxScreenSurfaces and indexed DIRECTLY by screen index (KEEP IN SYNC with SdfWorldEngine and
-// sdf-world.hlsli's ScreenSurfaceData).
+// shade/sdf-environment.hlsli's ScreenSurfaceData).
 /// <summary>Contains the typed SDF instruction stream and its packed GPU representation, bounds, instances,
 /// materials, screen surfaces, and acceleration metadata.</summary>
 public sealed partial class SdfProgram {
@@ -68,17 +68,17 @@ public sealed partial class SdfProgram {
     /// keeps sagging below the accumulator until the candidate is 1.70711 radii away, unlike every other soft blend,
     /// which saturates at one radius.</summary>
     private const float ChamferUnionHaloScale = 1.7071068f;
-    /// <summary><c>SDF_SQRT_HALF</c> (sdf-vm.hlsli): the scale on every chamfer arm's bevel plane, and so the divisor in
+    /// <summary><c>SDF_SQRT_HALF</c> (field/sdf-program.hlsli): the scale on every chamfer arm's bevel plane, and so the divisor in
     /// that arm's Lipschitz recurrence. KEEP IN SYNC with the shader constant.</summary>
     private const float SqrtHalf = 0.70710678f;
-    /// <summary>The PARKED-instance sentinel radius (KEEP IN SYNC with sdf-world.hlsli's <c>collectInstanceMaskWord</c>
+    /// <summary>The PARKED-instance sentinel radius (KEEP IN SYNC with march/sdf-cone.hlsli's <c>collectInstanceMaskWord</c>
     /// negative-radius skip). An <see cref="SdfInstanceRange.Active"/> = <see langword="false"/> instance packs this
     /// instead of a real (always non-negative) radius, so the beam prepass rejects it with one <c>bound.w &lt; 0</c>
     /// branch — no sphere-vs-cone math, mask bit left 0 — while the slot still occupies its reserved capacity. Chosen
     /// well below any legitimate rounding of a real radius toward 0 so the branch never misfires on a genuine bound.</summary>
     private const float ParkedBoundRadius = -1f;
     /// <summary>Each packed screen-surface entry's uvec4 (16-byte) stride: right.xyz+halfWidth, up.xyz+halfHeight,
-    /// origin.xyz+pad (KEEP IN SYNC with sdf-world.hlsli's ScreenSurfaceData).</summary>
+    /// origin.xyz+pad (KEEP IN SYNC with shade/sdf-environment.hlsli's ScreenSurfaceData).</summary>
     private const int ScreenSurfaceVectorsPerEntry = 3;
     /// <summary>Each packed <see cref="SdfShapeType.Sweep"/> curve table entry's uvec4 stride: (A.xyz, radiusStart),
     /// (B.xyz, radiusEnd), (C.xyz, bulge).</summary>
@@ -484,7 +484,7 @@ public sealed partial class SdfProgram {
     /// <c>Puck.SdfVm.SdfWorldEngine</c> sizes its mask buffer from it and pushes the live uploaded program's value per
     /// frame as the kernels' indexing width (WorldParams.instanceMaskWordCount); the reader's inner word
     /// iteration independently derives the same formula (KEEP IN SYNC with sdfInstanceMaskWordCount in
-    /// Assets/Shaders/Sdf/sdf-vm.hlsli).</summary>
+    /// Assets/Shaders/Sdf/field/sdf-program.hlsli).</summary>
     public int InstanceMaskWordCount => InstanceMaskWordCountFor(instanceCount: m_instances.Length);
     /// <summary>Gets the per-object instances this program declared, in declaration order (matches the packed instance
     /// directory's index order — see the type-level remarks). Empty for a zero-instance (flat) program.</summary>
@@ -541,14 +541,14 @@ public sealed partial class SdfProgram {
     public IReadOnlyList<SdfScreenSurface> ScreenSurfaces => m_screenSurfacesView;
     /// <summary>Gets the per-program Lipschitz step scale (1/L, in (0, 1]) baked into the packed words — read back here
     /// from the segment-directory header's <c>.y</c> lane, which the packed stream makes the single source of truth.
-    /// <c>mapCore</c> (sdf-vm.hlsli) multiplies its final returned distance by it so sphere tracing takes
+    /// <c>mapCore</c> (field/sdf-map.hlsli) multiplies its final returned distance by it so sphere tracing takes
     /// field-rate-safe steps through a non-1-Lipschitz warp (twist/bend) or an overestimating blend without
     /// overstepping and holing. Exactly <c>1.0f</c> for a warp-free, seam-free (isometric) program, so
     /// isometric scenes stay byte-identical. See <see cref="AnalyzeLipschitz"/>. The <c>&gt; 0</c> guard mirrors the
     /// shader: an all-zero header lane reads as 1.0.</summary>
     public float StepScale {
         get {
-            // Mirror the shader's segment-directory offset chain (sdf-vm.hlsli mapCore): materialOffset (m_words[3])
+            // Mirror the shader's segment-directory offset chain (field/sdf-map.hlsli mapCore): materialOffset (m_words[3])
             // + MaterialVectorsPerEntry*materialCount (m_words[1]) = boundsOffset; + 2*instructionCount =
             // segmentOffset. The step scale is the header uvec4's .y lane.
             var segmentOffsetVectors = ((((int)m_words[3]) + (MaterialVectorsPerEntry * ((int)m_words[1]))) + (2 * InstructionCount));
@@ -668,7 +668,7 @@ public sealed partial class SdfProgram {
 
         return (shapeBounds, segments);
     }
-    /// <summary>The Lipschitz bound of ONE <c>blendShape</c> composition (sdf-vm.hlsli), given the bounds of the running
+    /// <summary>The Lipschitz bound of ONE <c>blendShape</c> composition (field/sdf-blend.hlsli), given the bounds of the running
     /// accumulator and the incoming candidate.</summary>
     /// <param name="current">The accumulator's Lipschitz bound.</param>
     /// <param name="candidate">The candidate's Lipschitz bound.</param>
@@ -982,7 +982,7 @@ public sealed partial class SdfProgram {
     // wall, the field returns dist(p, shapeA) — round() picked A — but the TRUE nearest surface may be shapeB in the
     // adjacent cell, whose hashed offset pushed it toward the wall. So the folded field OVERESTIMATES true distance
     // across every cell wall (the classic domain-repetition overstep, sharpened by jitter and tumble), and the
-    // OVER-RELAXED march (omega 1.2, sdf-world.hlsli) tunnels through the content behind the wall unless the step clamps.
+    // OVER-RELAXED march (omega 1.2, march/sdf-primary.hlsli) tunnels through the content behind the wall unless the step clamps.
     //
     // The bound. R = shapeReach is the prototype's FULL bounding radius (chainShapeReach). Two halves:
     //  * d_true >= m. With the in-cell margin m = min(spacing)/2 - jitter/2 - R, every cell's bounding sphere (radius R
@@ -1528,7 +1528,7 @@ public sealed partial class SdfProgram {
     // (Data1.Y = mode, matching SdfLift / the shader's `data1.y > 0.5`; Data0.W = the lift amount). EXTRUDE sweeps the
     // 2D disc ±half-height along Z ⇒ √(r² + h²); REVOLVE offsets the disc by o then lathes it ⇒ the whole solid lies
     // within (o + r) of the axis-centred origin (see the enclose bound derivation). Both are exact conservative bounds
-    // (KEEP IN SYNC with sdfExtrude2D/sdfRevolve2D in Assets/Shaders/Sdf/sdf-vm.hlsli).
+    // (KEEP IN SYNC with sdfExtrude2D/sdfRevolve2D in Assets/Shaders/Sdf/field/sdf-shapes.hlsli).
     // radius2D is read off the packed (already rounding-inset) Data0 lanes, so adding the rounding back — the same
     // offset the kernel applies — reproduces the authored extent exactly and can never exceed it.
     private static float LiftedBoundRadius(float radius2D, in SdfInstruction instruction) {
@@ -1706,7 +1706,7 @@ public sealed partial class SdfProgram {
 
         m_words[segmentHeaderBase] = ((uint)segments.Count);
         // The header's .y carries the final field's Lipschitz correction; .z locates the rigid plan directory.
-        // KEEP IN SYNC with sdfLoadProgramLayout in sdf-vm.hlsli.
+        // KEEP IN SYNC with sdfLoadProgramLayout in field/sdf-layout.hlsli.
         m_words[(segmentHeaderBase + 1)] = BitConverter.SingleToUInt32Bits(value: stepScale);
         // Absolute uint4 offset of the plan directory. The table is appended after the instance grid so the grid's
         // long-settled offset chain stays byte-for-byte unchanged.

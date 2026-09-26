@@ -217,7 +217,7 @@ public sealed partial class SdfWorldEngine {
     /// transform already moved (a mismatched frame sizes/rotates/positions the sampled image wrong without affecting
     /// the geometry at all — see <see cref="SdfProgramBuilder.ScreenSlab(Vector3, float, Vector3, Vector3, Vector3, int, SdfBlendOp, float)"/>'s
     /// frame contract). Pure host-side buffer state: the shader's <c>screenSurfaces[screenIndex]</c> read
-    /// (<c>sdf-world.hlsli</c>) already resolves at shading time with no HLSL change required for this seam — only the
+    /// (<c>shade/sdf-environment.hlsli</c>) already resolves at shading time with no HLSL change required for this seam — only the
     /// host-side table this call patches needed to become writable per frame. A call that reproduces the entry's
     /// current values (a static screen, or a rig sampled at an unchanged pose) is a no-op — it does not dirty the
     /// upload; the GPU table only re-uploads on an actual change.</summary>
@@ -235,7 +235,7 @@ public sealed partial class SdfWorldEngine {
         var unitRight = Vector3.Normalize(value: right);
         var unitUp = Vector3.Normalize(value: up);
         // 3 float4 per entry (right.xyz+halfWidth, up.xyz+halfHeight, origin.xyz+pad) — KEEP IN SYNC with SdfProgram's
-        // ScreenSurfaceWords packing and sdf-world.hlsli's ScreenSurfaceData.
+        // ScreenSurfaceWords packing and shade/sdf-environment.hlsli's ScreenSurfaceData.
         Span<float> floats = stackalloc float[(ScreenSurfaceByteLength / sizeof(float))];
 
         floats[0] = unitRight.X; floats[1] = unitRight.Y; floats[2] = unitRight.Z; floats[3] = halfWidth;

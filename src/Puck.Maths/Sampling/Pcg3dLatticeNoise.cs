@@ -10,7 +10,7 @@ namespace Puck.Maths;
 /// </summary>
 /// <remarks>
 /// <see cref="Pcg3d"/> is the integer mix the renderer's <c>sdfPcg3d</c> uses (Jarzynski &amp; Olano) — KEEP IN
-/// SYNC with <c>sdfPcg3d</c> in <c>Assets/Shaders/Sdf/sdf-vm.hlsli</c>; that C#/HLSL pair is a hand-kept mirror
+/// SYNC with <c>sdfPcg3d</c> in <c>Assets/Shaders/Sdf/field/sdf-hash.hlsli</c>; that C#/HLSL pair is a hand-kept mirror
 /// across a language boundary, separate from the C#-to-C# duplication this type exists to eliminate.
 /// </remarks>
 public static class Pcg3dLatticeNoise {

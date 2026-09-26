@@ -5,9 +5,9 @@
 // point at camera-space right x, up y and forward distance w, with the lens row's frustum offset (ox, oy). The render
 // pass's area is the view's render extent, so clip space covers exactly the pixels whose centers the SDF march casts
 // through.
-#include "sdf-mesh.interface.hlsli"
-#include "sdf-viewport.hlsli"
-#include "sdf-mesh.hlsli"
+#include "../isa/sdf-mesh.interface.hlsli"
+#include "../frame/sdf-viewport.hlsli"
+#include "../frame/sdf-mesh.hlsli"
 
 MeshVertex VSMain(uint vertexId : SV_VertexID) {
     uint record = sdfMeshRecord((pushedIndex.index & SdfMeshDrawMask));

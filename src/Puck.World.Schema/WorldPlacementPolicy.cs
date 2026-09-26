@@ -32,7 +32,7 @@ public static class WorldPlacementPolicy {
     /// other boot-probe consumer (the avatar catalog, static placements, screens, every adjacency band's
     /// reservation, the field bricks) draws against the same
     /// <c>Puck.SignedDistance.SdfProgramBuilder.MaxInstances</c> ceiling (65536, itself synced to
-    /// <c>SDF_MAX_INSTANCES</c> in <c>sdf-vm.hlsli</c>), and those draws are not independent of this constant either
+    /// <c>SDF_MAX_INSTANCES</c> in <c>isa/sdf-isa.hlsli</c>), and those draws are not independent of this constant either
     /// (the static-placement probe also reserves one instance per <see cref="MaxShapesPerStamp"/>-shape floor per
     /// authoring-headroom placement, so the shipped overworld's whole probe grows by 144 instances per shape here:
     /// 128 pool registrations + 16 headroom placements). 367 is the measured ceiling that keeps the shipped

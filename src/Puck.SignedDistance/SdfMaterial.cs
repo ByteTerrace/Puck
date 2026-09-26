@@ -14,7 +14,7 @@ namespace Puck.SignedDistance;
 /// <see cref="Specular"/>/<see cref="Metal"/>). 0 = mirror-tight highlight, 1 = the broadest lobe this material model
 /// reaches. The shader floors it before squaring — <c>rough = sqrt(roughness^2 + SdfRoughnessFloorSquared)</c>,
 /// <c>alpha2 = rough * rough</c> — so a bare light direction never collapses the GGX lobe to a delta function
-/// (<c>sdfMaterialShade</c> in <c>sdf-vm.hlsli</c> is the one decode/shade point). A document that still spells
+/// (<c>sdfMaterialShade</c> in <c>shade/sdf-material.hlsli</c> is the one decode/shade point). A document that still spells
 /// <c>shininess</c> is refused by name.</param>
 /// <param name="Sheen">The finite sheen strength in [0, 1]: a per-material fresnel edge lift,
 /// <c>sheen * (1 - saturate(dot(normal, -rayDirection)))^SdfSheenFresnelExponent</c>, multiplied into the material's
@@ -46,7 +46,7 @@ namespace Puck.SignedDistance;
 public readonly record struct SdfMaterial(Vector3 Albedo, float Emissive = 0f, float Specular = 0f, float Roughness = SdfMaterial.DefaultRoughness, float Sheen = 0f, float Metal = 0f, float Coat = 0f, SdfWeathering? Weathering = null, float Wrap = 0f, float Soften = 0f, Vector3 Bounce = default, SdfInset? Inset = null) {
     /// <summary>The roughness whose GGX alpha (<c>sqrt(roughness^2 + SdfRoughnessFloorSquared)</c>, see
     /// <see cref="Roughness"/>) equals the Walter et al. (2007) Blinn-Phong-equivalent alpha of exponent 32,
-    /// <c>sqrt(2 / (32 + 2))</c>. KEEP IN SYNC with <c>SdfRoughnessFloorSquared</c> in <c>sdf-vm.hlsli</c>
+    /// <c>sqrt(2 / (32 + 2))</c>. KEEP IN SYNC with <c>SdfRoughnessFloorSquared</c> in <c>shade/sdf-material.hlsli</c>
     /// (0.018) — the two constants together fix the default highlight width.</summary>
     public const float DefaultRoughness = 0.20204833f;
 }

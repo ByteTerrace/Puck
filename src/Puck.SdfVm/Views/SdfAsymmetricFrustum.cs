@@ -8,7 +8,7 @@ namespace Puck.SdfVm.Views;
 /// that need not be centered on it — the Kooima generalized-perspective-projection construction (as used by portal-
 /// style rendering: a camera fixed to the screen's own orientation, with the eye's off-center position absorbed
 /// entirely into the frustum's shear), specialized to ray directions rather than a projection matrix, because the
-/// SDF march consumes a ray origin + direction (<c>sdf-world.hlsli</c>'s <c>cameraRayDirection</c>) and never
+/// SDF march consumes a ray origin + direction (<c>march/sdf-cone.hlsli</c>'s <c>cameraRayDirection</c>) and never
 /// projects a vertex through a near/far clip.
 /// </summary>
 /// <remarks>
@@ -27,7 +27,7 @@ namespace Puck.SdfVm.Views;
 /// <see cref="CameraSnapshot.TanHalfFieldOfView"/>/<see cref="CameraSnapshot.AspectRatio"/> pair already carries, no
 /// row growth) plus a constant shear (<see cref="CenterOffset"/>, the two render-scale spares
 /// <see cref="Puck.SdfVm.SdfViewSnapshot.AsymmetricFrustumOffset"/> repacks) reproduces the same ray
-/// <c>sdf-world.hlsli</c>'s <c>cameraRayDirection</c> already computes for a symmetric camera, plus one trailing
+/// <c>march/sdf-cone.hlsli</c>'s <c>cameraRayDirection</c> already computes for a symmetric camera, plus one trailing
 /// offset term — see that shader function's own remarks for why the offset must be a trailing addition, not a
 /// reassociated one, to keep an ordinary (zero-offset) camera bit-exact.</para>
 /// </remarks>

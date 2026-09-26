@@ -21,7 +21,7 @@
 #define SDF_SAMPLED_REGIONS
 // The bounded volumes are in the shared interface, but only shading uses shade-volumes.hlsli's call at the end of
 // renderView; primary compiles it out.
-// The per-tile shadow gather (sdf-world.hlsli's sdfShadowGatherGroup): one groupshared shadow candidate mask per 8x8
+// The per-tile shadow gather (shade/sdf-shadow-gather.hlsli's sdfShadowGatherGroup): one groupshared shadow candidate mask per 8x8
 // workgroup, built cooperatively at the uniform seam inside renderView. Every lane — rendered pixel or not — must
 // reach renderView, so CSMain below turns its per-pixel extent test into an `active` flag instead of a return.
 // Primary and surface exit before group gathers; ambient and views each execute their own uniform gather.
@@ -58,7 +58,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     // The symmetry-LOD origin: this viewport's camera (the per-sample wallpaper LOD rule measures from it).
     sdfLodOrigin = view.position.xyz;
-    // The per-invocation program-layout cache (sdf-vm.hlsli): primary/shadow marches, AO taps and normal queries
+    // The per-invocation program-layout cache (field/sdf-layout.hlsli): primary/shadow marches, AO taps and normal queries
     // repeatedly call the field evaluators. Decode once for this invocation before renderView runs.
     sdfProgramLayout = sdfLoadProgramLayout();
     sdfPartBoundsViewport = viewIndex;

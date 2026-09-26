@@ -35,14 +35,14 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     // The decal buffer's leading DESCRIPTOR band (one uint4 per screen slot) precedes the shared cell region; a screen's
     // cell run starts at DecalDescriptorCount + screenIndex * MaxScreenDecalCells (KEEP IN SYNC with sdfSampleGlyphDecal).
     private const int DecalDescriptorCount = MaxScreenSurfaces;
-    private const int DecalWordsPerCell = 4; // one uint4 per cell/descriptor (KEEP IN SYNC with sdf-world.hlsli's sdfDecalCells)
-    private const int DynamicTransformByteLength = ((sizeof(float) * 4) * 3); // 48-byte rigid transform: float4 position (xyz + .w = soft-shadow participation: 0 casts / 1 shadow-suppressed) + float4 orientation quaternion + float4 anonymous Lanes (DynamicTransform.Lanes) (KEEP IN SYNC with sdf-vm.hlsli sdfDynamicTransforms: position.w is read by sdfShadowParticipationActive's per-instance skip in sdf-world.hlsli, the third row by SDF_OP_LANE_ERODE's currentLanes and shade-volumes.hlsli's selected intensity lane)
+    private const int DecalWordsPerCell = 4; // one uint4 per cell/descriptor (KEEP IN SYNC with shade/sdf-environment.hlsli's sdfDecalCells)
+    private const int DynamicTransformByteLength = ((sizeof(float) * 4) * 3); // 48-byte rigid transform: float4 position (xyz + .w = soft-shadow participation: 0 casts / 1 shadow-suppressed) + float4 orientation quaternion + float4 anonymous Lanes (DynamicTransform.Lanes) (KEEP IN SYNC with isa/sdf-world.interface.hlsli sdfDynamicTransforms: position.w is read by sdfShadowParticipationActive's per-instance skip in field/sdf-layout.hlsli, the third row by SDF_OP_LANE_ERODE's currentLanes and shade-volumes.hlsli's selected intensity lane)
     private const GpuPixelFormat Format = GpuPixelFormat.R8G8B8A8Unorm;
     private const int MaxBrickBakeVoxelsPerSlice = (256 * 1024); // <= 256K voxels per brick per produced frame: ~1-2 ms background-budget
     private const int MaxBrickCarvesPerBake = 4096; // request-buffer carve capacity per slot (the debug pool's MaxCarves ceiling)
-    private const int ScreenLightByteLength = ((sizeof(float) * 4) * ((MaxScreenSurfaces + 8) + SdfEnvironment.RowCount)); // float4 rgb+intensity per screen (0..MaxScreenSurfaces-1) + env (MaxScreenSurfaces) + FOUR grid-lock rows (+1..+4) + the engine-bench params row (+5) + the shadow-policy row (+6) + the far-field row (+7) + the environment block (+8 onward: SdfEnvironment's row layout) — KEEP IN SYNC with sdf-world.hlsli SdfGridWorld..SdfEnvBase
+    private const int ScreenLightByteLength = ((sizeof(float) * 4) * ((MaxScreenSurfaces + 8) + SdfEnvironment.RowCount)); // float4 rgb+intensity per screen (0..MaxScreenSurfaces-1) + env (MaxScreenSurfaces) + FOUR grid-lock rows (+1..+4) + the engine-bench params row (+5) + the shadow-policy row (+6) + the far-field row (+7) + the environment block (+8 onward: SdfEnvironment's row layout) — KEEP IN SYNC with shade/sdf-environment.hlsli SdfGridWorld..SdfEnvBase
     private const float ScreenLightIntensity = 2.5f; // room-glow gain applied to each screen's average color
-    private const int ScreenSurfaceByteLength = ((sizeof(float) * 4) * 3); // 48-byte ScreenSurfaceData: right.xyz+halfWidth, up.xyz+halfHeight, origin.xyz+pad (KEEP IN SYNC with sdf-world.hlsli)
+    private const int ScreenSurfaceByteLength = ((sizeof(float) * 4) * 3); // 48-byte ScreenSurfaceData: right.xyz+halfWidth, up.xyz+halfHeight, origin.xyz+pad (KEEP IN SYNC with shade/sdf-environment.hlsli)
     // The tile cull buffer carries FOUR planes per (viewport, tile), each of stride
     // (tileGrid.x * tileGrid.y * viewportCount): plane 0 = the march-start lower bound (the classic beam
     // output; the ONLY plane cull-args reads, so its indexing is unchanged), plane 1 =
@@ -51,14 +51,14 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     // any footprint-accepted hit through the frame's far distance). The extra planes are written by sdf-beam and
     // read by sdf-world-views only; a tile with no proven gap/far bound packs the far distance (teleport/far-exit
     // disabled), so every plane is a total function.
-    // KEEP IN SYNC with WorldTilePlaneCount + worldTilePlaneStride in sdf-world.hlsli / sdf-tile.hlsli.
+    // KEEP IN SYNC with WorldTilePlaneCount + worldTilePlaneStride in frame/sdf-frame.hlsli / frame/sdf-tile.hlsli.
     private const uint TilePlaneCount = 4;
     // Primary and AO cache bands, each holding two float3 corners per (viewport, live instance), after the tile planes.
     // KEEP IN SYNC with SdfPartBoundFloatCount and sdfPartBoundIndex in sdf-part-bounds.hlsli.
     private const uint PartBoundFloatCount = 12;
 
     /// <summary>The primary (camera) march's per-pixel step budget. KEEP IN SYNC with <c>MaxSteps</c> in
-    /// sdf-world.hlsli. Exposed so a host's cost sheet can quote an authored <see cref="SdfFrame.FarDistance"/>
+    /// march/sdf-march-constants.hlsli. Exposed so a host's cost sheet can quote an authored <see cref="SdfFrame.FarDistance"/>
     /// against the budget that has to reach it (a ray skimming open ground at height <c>h</c> takes roughly one step
     /// per <c>h</c> units of depth, so the far distance is that ray's step count per unit of height).</summary>
     public const int PrimaryMarchSteps = 128;
@@ -67,10 +67,10 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     /// <c>ConeNear</c> in sdf-viewport.hlsli.</summary>
     public const float ConeNear = 0.02f;
     /// <summary>The edge of one screen tile in pixels, the unit the beam, the instance masks and the cull buffer
-    /// count in. KEEP IN SYNC with <c>WorldTileSize</c> in sdf-world.hlsli.</summary>
+    /// count in. KEEP IN SYNC with <c>WorldTileSize</c> in frame/sdf-tile.hlsli.</summary>
     public const uint TileSize = 16;
 
-    private const int ViewportByteLength = ((sizeof(float) * 4) * 6); // 96-byte ViewportData incl. the renderScale row (KEEP IN SYNC with sdf-world.hlsli)
+    private const int ViewportByteLength = ((sizeof(float) * 4) * 6); // 96-byte ViewportData incl. the renderScale row (KEEP IN SYNC with frame/sdf-viewport.hlsli)
     private const ulong ViewsArgsByteLength = (sizeof(uint) * 3); // the three indirect group counts sdf-cull-args.comp writes
     private const int PrimaryHitByteLength = (15 * sizeof(uint)); // the visibility record's fifteen words in its V, C, L, N and S rows; paired with sdf-visibility.hlsli's SdfVisibilityWords
     // Packed flow/cloud volume stride; paired with shade-volumes.hlsli.
@@ -206,7 +206,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private ulong m_previousFrameSignature;
     // CADENCE GATE: whether the LIVE uploaded program declares any ScreenSlab shape (bound or not) — computed once at
     // UploadProgram (the single owner of per-program state), never per frame. A declared-but-unbound slab's face is the
-    // animated test-card (screenContent, sdf-world.hlsli), which reads presentation TIME every frame; the signature
+    // animated test-card (screenContent, shade/sdf-sky.hlsli), which reads presentation TIME every frame; the signature
     // excludes that lane (ComputeFrameSignature), so this fact is what makes DecideCadenceSkip force a render instead.
     private bool m_programDeclaresScreenSlab;
     // Monotonic revisions folded into the signature so a change to a resource NOT re-hashed each frame still invalidates

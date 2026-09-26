@@ -8,7 +8,7 @@ public sealed partial class SdfProgram {
     // complexity ceilings). It answers the one question sphere tracing needs: by how much can this program's packed
     // distance field OVERESTIMATE true distance? A field that overestimates by factor L lets the marcher step L times
     // too far and tunnel through thin/twisted surfaces, so mapCore scales its final distance by 1/L to keep every step
-    // conservative (KEEP IN SYNC with the stepScale read + final multiply in Assets/Shaders/Sdf/sdf-vm.hlsli's mapCore).
+    // conservative (KEEP IN SYNC with the stepScale read + final multiply in Assets/Shaders/Sdf/field/sdf-map.hlsli's mapCore).
     //
     // TWO passes, because a chain's factor bounds one CANDIDATE while the program's L bounds the ACCUMULATOR the
     // candidates compose into; chamfers and round seams can exceed both of their input bounds:
@@ -17,7 +17,7 @@ public sealed partial class SdfProgram {
     //   Pass 2 — here: walk the stream in mapCore's own COMPOSITION order, folding each candidate into a running
     //            accumulator bound through ComposeLipschitz. mapCore seeds result.distance with the CONSTANT
     //            SDF_FAR_DISTANCE (gradient 0, so L = 0) and carries that one accumulator across every ResetPoint (the
-    //            accumulator rule, sdf-vm.hlsli); PushField saves it and reseeds the same constant, PopField composes
+    //            accumulator rule, field/sdf-map.hlsli); PushField saves it and reseeds the same constant, PopField composes
     //            the scope back in. This walk mirrors that state machine exactly, so segment splitting is NOT a
     //            protection and is not treated as one.
     //

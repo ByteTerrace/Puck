@@ -152,14 +152,14 @@ public sealed class AffectedStandInsLawTests {
             tree: new AffectedWorkingTree(root: repositoryRoot)
         );
 
-        Assert.Contains(collection: standInsFor(arg: "src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-visibility.hlsli"), expected: "src/Puck.SdfVm/SdfWorldEngine.Pipelines.cs");
+        Assert.Contains(collection: standInsFor(arg: "src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-visibility.hlsli"), expected: "src/Puck.SdfVm/SdfWorldEngine.Pipelines.cs");
         Assert.Contains(collection: standInsFor(arg: "src/Puck.Shaders/Assets/puck.render.graph.v1.schema.json"), expected: "src/Puck.Shaders/Graph/RenderGraphModel.cs");
         Assert.Contains(collection: standInsFor(arg: "src/Puck.World/Assets/worlds/puck.world.projection.v1.schema.json"), expected: "src/Puck.World.Schema/WorldProjection.cs");
 
         // A post-process package's stage source and interface stand for the package's owner, and a conversion kernel for
         // the constant that names it in a project the kernel's project references.
         foreach (var path in ((string[])["sdf-film-grain.frag.hlsl", "sdf-film-grain.interface.hlsli"])) {
-            Assert.Contains(collection: standInsFor(arg: $"src/Puck.SdfVm/Assets/Shaders/Sdf/{path}"), expected: "src/Puck.Shaders/Graph/PostProcessPackage.cs");
+            Assert.Contains(collection: standInsFor(arg: $"src/Puck.SdfVm/Assets/Shaders/Sdf/passes/{path}"), expected: "src/Puck.Shaders/Graph/PostProcessPackage.cs");
         }
         foreach (var path in ((string[])["source-rgba.comp.hlsl", "source-transfer.comp.hlsl"])) {
             Assert.Contains(collection: standInsFor(arg: $"src/Puck.Shaders/Assets/Shaders/Sources/{path}"), expected: "src/Puck.Abstractions/Sources/ImageSourceConversion.cs");

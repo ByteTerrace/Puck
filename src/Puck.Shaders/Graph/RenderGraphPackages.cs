@@ -163,7 +163,7 @@ public sealed class RenderGraphPackageCatalog {
     public const string Overlay = "overlay";
     /// <summary>The id of the film grain post-process package: a per-pixel integer-hashed offset added over its input.
     /// The hash is a pure function of pixel cell, grain frame and seed, so it renders identically on both backends. Its
-    /// fragment stage is <c>src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-film-grain.frag.hlsl</c>, compiled at build, and its
+    /// fragment stage is <c>src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-film-grain.frag.hlsl</c>, compiled at build, and its
     /// interface is <c>sdf-film-grain</c>.</summary>
     public const string SdfFilmGrain = "sdf.film-grain";
     /// <summary>The id of the one placement pass: its base image, with its source reconstructed into a destination rect
@@ -466,7 +466,7 @@ public sealed class RenderGraphPackageCatalog {
             Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ColorAttachmentWrite)],
             Members: SdfFilmGrainMembers,
             Stages: new RenderGraphPackageStages(
-                Directory: "Assets/Shaders/Sdf",
+                Directory: "Assets/Shaders/Sdf/passes",
                 Fragment: "sdf-film-grain.frag",
                 Vertex: "fullscreen.vert"
             ),

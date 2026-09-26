@@ -27,7 +27,7 @@ namespace Puck.World.Tests;
 /// capture is applied to the document the oracle reads for it.
 /// </summary>
 public sealed class SdfMeshCanaryOracleLawTests {
-    // The visibility debug view's colors (sdf-world.hlsli's renderView, mode 11), background first.
+    // The visibility debug view's colors (passes/sdf-render-view.hlsli's renderView, mode 11), background first.
     // A pixel whose fixed-point march ended without proving its answer: no region may be judged over one.
     private const int Inconclusive = 3;
     private static readonly Vector3[] KindColors = [
@@ -235,7 +235,7 @@ public sealed class SdfMeshCanaryOracleLawTests {
             viewportWidth: width
         );
     }
-    // The normalized ray through a pixel's center, as sdf-world.hlsli's cameraRayDirection casts it.
+    // The normalized ray through a pixel's center, as march/sdf-cone.hlsli's cameraRayDirection casts it.
     private static Vector3 Direction(CameraSnapshot camera, int width, int height, int x, int y) {
         var ndcX = ((((x + 0.5) / width) * 2.0) - 1.0);
         var ndcY = -((((y + 0.5) / height) * 2.0) - 1.0);

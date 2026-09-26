@@ -18,7 +18,7 @@ public sealed partial class SdfProgramBuilder {
     /// that exists today — creator groups cannot nest and a chamfer wedge is depth 1 — enforced by a validator rule and
     /// not part of the packed word layout, so raising it never re-gates the stream. But it is not a one-line bump: the
     /// interpreter holds the parent accumulator in one non-indexed <c>(savedFieldDistance, savedFieldMaterial)</c> scalar
-    /// pair in <c>mapCore</c> (Assets/Shaders/Sdf/sdf-vm.hlsli), and the generated <c>SDF_MAX_FIELD_SCOPE_DEPTH</c> is
+    /// pair in <c>mapCore</c> (Assets/Shaders/Sdf/field/sdf-map.hlsli), and the generated <c>SDF_MAX_FIELD_SCOPE_DEPTH</c> is
     /// documentation only — no shader expression reads it. Raising this depth means converting that save pair into an
     /// indexed array and giving push/pop real push/pop-by-depth stack semantics in the shader first, then raising this
     /// constant and regenerating the kernels' declarations.</summary>
@@ -52,7 +52,7 @@ public sealed partial class SdfProgramBuilder {
     /// <see cref="SdfProgram.InstanceMaskWordCountFor"/> — so a program declaring fewer instances than this cap packs
     /// byte-identically regardless of the cap's value; only the shader's <c>min(count, SDF_MAX_INSTANCES)</c> clamp
     /// constant tracks it. The ceiling's static cost is the per-tile mask buffer, and (Stage 1's per-workgroup shadow/AO
-    /// gather masks) the two groupshared <c>SDF_SHADOW_MASK_WORDS</c> arrays in sdf-vm.hlsli: 2048 words x 4 bytes x 2
+    /// gather masks) the two groupshared <c>SDF_SHADOW_MASK_WORDS</c> arrays in field/sdf-program.hlsli: 2048 words x 4 bytes x 2
     /// arrays = 16 KiB, plus ~1 KiB for the gather's other groupshared state (sdfShadowGatherPoints/Cone/LitCount) — about
     /// 17 KiB per workgroup, comfortably under the 32 KiB Direct3D 12 thread-group-shared-memory limit (a hard API cap,
     /// not a per-GPU one) with ~15 KiB to spare. The kernels read it as <c>SDF_MAX_INSTANCES</c>.</summary>
@@ -180,7 +180,7 @@ public sealed partial class SdfProgramBuilder {
     private bool m_openInstanceIsDynamic;
     private float m_openInstanceRadius;
     private int m_openInstanceSlot;
-    // Chain-local HOST MIRROR of the shader's parityMaterialDelta slot (Assets/Shaders/Sdf/sdf-vm.hlsli): which
+    // Chain-local HOST MIRROR of the shader's parityMaterialDelta slot (Assets/Shaders/Sdf/field/sdf-map.hlsli and field/sdf-point.hlsli): which
     // recently emitted instruction (WallpaperFold or RepeatPolar), if any, is driving a positional material recolor
     // for the shape(s) that follow in the CURRENT ResetPoint..ResetPoint chain segment — its index in m_instructions,
     // the raw stride value packed into that instruction's Material lane, and the largest additional material offset
@@ -320,7 +320,7 @@ public sealed partial class SdfProgramBuilder {
     }
     // The largest value the shader's parityMaterialDelta can hold for `recolor`, read from the raw Material lane of the
     // recoloring instruction itself so a lane the scope clamp already narrowed is seen at its narrowed value. KEEP IN
-    // SYNC with the three parityMaterialDelta writers in Assets/Shaders/Sdf/sdf-vm.hlsli: WallpaperFold multiplies its
+    // SYNC with the three parityMaterialDelta writers in Assets/Shaders/Sdf/field/sdf-map.hlsli and field/sdf-point.hlsli: WallpaperFold multiplies its
     // stride by a cell key in 0..2 (a hex group's 3-coloring) or 0..1 (every other group's parity), RepeatPolar by a
     // sector index in 0..count-1, and CellJitter takes a hashed row in 0..variants-1 — a COUNT, not a stride, which is
     // the whole reason it subtracts one where the folds multiply.
@@ -364,7 +364,7 @@ public sealed partial class SdfProgramBuilder {
     // palette span this shape's contributor owns; null when the builder has no scope open at all. A shape carrying a
     // screen sentinel records nothing: the
     // shader applies the delta only under `material < SDF_SCREEN_MATERIAL`, so a screen face is never recolored (KEEP IN
-    // SYNC with the SDF_OP_SHAPE_BLEND parityMaterialDelta apply in Assets/Shaders/Sdf/sdf-vm.hlsli). A zero delta records
+    // SYNC with the SDF_OP_SHAPE_BLEND parityMaterialDelta apply in Assets/Shaders/Sdf/field/sdf-map.hlsli). A zero delta records
     // nothing either — the shape reaches only its own declared material, which this gate does not own.
     private void RecordPositionalMaterialWindow(int material) {
         if (
@@ -566,7 +566,7 @@ public sealed partial class SdfProgramBuilder {
         );
     }
 
-    // KEEP IN SYNC with SDF_SQRT_HALF in Assets/Shaders/Sdf/sdf-vm.hlsli and SdfProgram's private copy.
+    // KEEP IN SYNC with SDF_SQRT_HALF in Assets/Shaders/Sdf/field/sdf-program.hlsli and SdfProgram's private copy.
     private const float SqrtHalf = 0.70710678f;
 
     /// <summary>The edge-rounding radius an authored value actually emits at for a 2D-family shape or a cylinder:
@@ -1028,7 +1028,7 @@ public sealed partial class SdfProgramBuilder {
         EndInstance();
     }
     // Data1.x is the ISA-wide smooth-blend radius; .yzw carry per-shape HOST-BAKED derived constants (the shader's
-    // decode is per shape case — KEEP IN SYNC with sdf-vm.hlsli evaluateShape).
+    // decode is per shape case — KEEP IN SYNC with field/sdf-shapes.hlsli evaluateShape).
     private SdfProgramBuilder Shape(SdfShapeType shape, Vector4 dimensions, int material, SdfBlendOp blend, float smooth, float derived1 = 0f, float derived2 = 0f, float derived3 = 0f, bool detail = false) {
         // The two arguments EVERY public shape method shares, checked once here rather than at twenty call sites.
         // material is cast to uint on the way into the packed lane, so a negative id would arrive as a huge positive
@@ -1156,7 +1156,7 @@ public sealed partial class SdfProgramBuilder {
         // so this covers every emitted shape by construction and cannot drift from one.
         //
         // The sentinel BAND is bounded on both sides, for the same reason the palette is. sampleScreenSurface
-        // (sdf-world.hlsli) turns any id above ScreenMaterialId into a direct screenSurfaces[]/sdfDecalCells[] index
+        // (shade/sdf-environment.hlsli) turns any id above ScreenMaterialId into a direct screenSurfaces[]/sdfDecalCells[] index
         // with no search, so an id naming no declared surface reads a slot the program never packed. The band's top is
         // judged HERE for the palette's reason: the screen list is still growing while shapes are emitted.
         // (AddMaterial owns the palette's own ceiling: it refuses the row that would collide with the sentinel.)

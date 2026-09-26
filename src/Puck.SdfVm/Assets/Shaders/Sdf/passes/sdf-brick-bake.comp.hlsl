@@ -2,7 +2,7 @@
 // a bin's settled sphere-carve list from a request buffer and writes the closed-form UNION distance
 // min_i(|v - c_i| - r_i) / lambda into the persistent brick pool at the brick's base word. The values are pre-scaled by
 // 1/lambda (lambda = sqrt(3) folded in at bake), which makes the trilinear interpolant the render kernels sample
-// (sdfSampledRegion in sdf-vm.hlsli) 1-Lipschitz and march-safe with NO stepScale change and an unchanged zero set.
+// (sdfSampledRegion in field/sdf-shapes.hlsli) 1-Lipschitz and march-safe with NO stepScale change and an unchanged zero set.
 //
 // DELIBERATE closed form (not a grid of map() calls): v1 brick content is exactly a hard-Subtraction sphere-union, so
 // the closed form needs no program buffer, instance masks, or blend tail — the general map()-grid baker is the recorded
@@ -19,10 +19,10 @@
 //   req[2] = (asfloat(destWordOffset) [uint bits], invLambda, 0, 0)
 //   req[3 .. 3 + carveCount) = (center.xyz, radius) per carve
 // The linear voxel index is x-fastest: destWordOffset + x + y*dimX + z*dimX*dimY (KEEP IN SYNC with sdfBrickVoxel's
-// fetch ordering in sdf-vm.hlsli and the SdfBrickBake request packing in SdfWorldEngine).
+// fetch ordering in field/sdf-shapes.hlsli and the SdfBrickBake request packing in SdfWorldEngine).
 
 // bakeRequest, brickPool, the slice size and the pushed slice ordinal, generated from SdfWorldInterfaces.BrickBake.
-#include "sdf-brick-bake.interface.hlsli"
+#include "../isa/sdf-brick-bake.interface.hlsli"
 
 static const uint BrickBakeHeaderFloat4Count = 3u;
 

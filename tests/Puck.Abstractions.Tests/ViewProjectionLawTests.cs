@@ -43,7 +43,7 @@ public sealed class ViewProjectionLawTests {
             }
         }
     }
-    // The ray sdf-world.hlsli's cameraRayDirection takes through a sample, spelled from the camera basis alone.
+    // The ray march/sdf-cone.hlsli's cameraRayDirection takes through a sample, spelled from the camera basis alone.
     private static Vector3 MarchDirection(CameraSnapshot camera, Vector2 offset, Vector2 ndc) =>
         Vector3.Normalize(value: (
             ((camera.Forward +

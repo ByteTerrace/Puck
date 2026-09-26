@@ -244,7 +244,7 @@ internal static class ShaderInterfaceSpike {
                 path1: AppContext.BaseDirectory,
                 path2: "Assets",
                 path3: "Shaders",
-                path4: "Sdf"
+                path4: "Sdf/field"
             ));
             var spirvPath = Path.Combine(
                 path1: root,

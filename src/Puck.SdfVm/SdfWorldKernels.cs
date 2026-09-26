@@ -39,7 +39,8 @@ public readonly record struct SdfWorldKernels(
     /// <summary>The name a counters report heads <see cref="LoadWork"/>'s section with.</summary>
     public const string LoadWorkSourceName = "shaders.sdf-kernels";
 
-    /// <summary>The standard deploy location (<c>Assets/Shaders/Sdf</c> next to the application, where the
+    /// <summary>The standard deploy location of the pass entry points' bytecode (<c>Assets/Shaders/Sdf/passes</c> next to
+    /// the application, where the
     /// <c>Puck.SdfVm</c> reference copies the bytecode its build compiles; the bytecode is a build product, never
     /// tracked in git) — <see cref="Load(string)"/>'s default directory,
     /// exposed for callers that load an individual SDF-directory asset directly (e.g. the shared <c>fullscreen.vert</c>
@@ -48,7 +49,7 @@ public readonly record struct SdfWorldKernels(
         path1: AppContext.BaseDirectory,
         path2: "Assets",
         path3: "Shaders",
-        path4: "Sdf"
+        path4: "Sdf/passes"
     );
 
     /// <summary>Gets the kind counting kernel-set loads: one per <see cref="Load(string, string, WorkCounterSet)"/>

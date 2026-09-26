@@ -26,7 +26,7 @@ public sealed partial class SdfProgramBuilder {
     // The three conservative-margin coefficients SweepConservativeMargin folds against the curve's own authored
     // bulge/strand-offset/taper — calibrated over a randomized grid against a fine-sampled reference tube within the
     // MaxSweepBulgeRatio/MaxSweepTaperRatio/MaxSweepStrandOffsetRatio envelope above (see SweepLawTests). KEEP IN
-    // SYNC with sdfSweepConservativeMargin (sdf-vm.hlsli) and the fixed-point mirror
+    // SYNC with sdfSweepConservativeMargin (field/sdf-shapes.hlsli) and the fixed-point mirror
     // (Puck.SignedDistance.Queries.SdfFieldEvaluator).
     internal const float SweepBulgeMarginFactor = 1.0f;
     internal const float SweepStrandMarginFactor = 0.7f;
@@ -36,7 +36,7 @@ public sealed partial class SdfProgramBuilder {
 
     /// <summary>Returns the conservative margin <see cref="Sweep"/> subtracts from its raw closest-point-minus-radius
     /// candidate — see <see cref="MaxSweepBulgeRatio"/>'s remarks for what this margin covers and how it was
-    /// calibrated. KEEP IN SYNC with sdfSweepConservativeMargin (sdf-vm.hlsli) and the fixed-point mirror.</summary>
+    /// calibrated. KEEP IN SYNC with sdfSweepConservativeMargin (field/sdf-shapes.hlsli) and the fixed-point mirror.</summary>
     /// <param name="bulge">The mid-span radius bulge amplitude.</param>
     /// <param name="strandOffset">The strand orbit radius.</param>
     /// <param name="twist">The strand orbit rate, in turns.</param>

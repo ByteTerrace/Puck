@@ -5,7 +5,7 @@
 // beam before cull-args/Stage 1. It bins the program's per-object instances (SdfProgramBuilder.BeginInstance/
 // BeginInstanceDynamic) against the tile's cone into the per-tile bitmask — via the packed uniform grid
 // (collectInstanceGridMask) when the program carries one, else the flat per-instance loop (collectInstanceMaskWord,
-// sdf-world.hlsli).
+// march/sdf-cone.hlsli).
 //
 // Running FIRST means no TileEmpty skip (the beam has not marched yet), so EVERY in-viewport tile bins — cheap: a
 // sky/lateral-miss tile hits the grid walk's ray∩grid early-out and walks zero slabs, and what the mask saves the

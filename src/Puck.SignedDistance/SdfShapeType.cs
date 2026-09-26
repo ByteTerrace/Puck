@@ -2,7 +2,7 @@ namespace Puck.SignedDistance;
 
 /// <summary>Identifies an SDF primitive. The kernels read each member as <c>SDF_SHAPE_*</c> from the generated
 /// <c>sdf-isa.hlsli</c> (<c>Puck.SdfVm.SdfIsaHlsl</c>); each data layout must match its shape decoder in
-/// <c>Assets/Shaders/Sdf/sdf-vm.hlsli</c>.</summary>
+/// <c>Assets/Shaders/Sdf/field/sdf-shapes.hlsli</c>.</summary>
 public enum SdfShapeType : uint {
     Box = 0, // Data0 = (halfX, halfY, halfZ, roundingRadius)
     Capsule = 1, // Data0 = (endX, endY, endZ, radius); the segment runs from the local origin to the endpoint
@@ -97,7 +97,7 @@ public enum SdfShapeType : uint {
     // failure mode a single-sample "closest point on a fat, tapered tube" approximation always has — proven
     // numerically over a randomized grid, see SweepLawTests and SdfProgramBuilder.Sweep's admission bounds), so the
     // shape returns the raw candidate minus a CONSERVATIVE MARGIN derived from the curve's own authored parameters —
-    // KEEP IN SYNC with SdfProgramBuilder.SweepConservativeMargin / sdfSweepConservativeMargin (sdf-vm.hlsli) / the
+    // KEEP IN SYNC with SdfProgramBuilder.SweepConservativeMargin / sdfSweepConservativeMargin (field/sdf-shapes.hlsli) / the
     // fixed-point mirror in Puck.SignedDistance.Queries.SdfFieldEvaluator. The margin is a NUMERICALLY CALIBRATED
     // constant (like Vesica's pre-fix history), not a closed-form Lipschitz proof; SdfProgramBuilder.Sweep refuses (by name) a declaration
     // whose bulge/taper/strand-offset ratios exceed the envelope that margin was calibrated against.

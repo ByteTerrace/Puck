@@ -41,7 +41,7 @@ SdfVolumeData sdfLoadVolume(uint index) {
     return v;
 }
 // Transforms a world point/direction into the volume's own frame: first undo the riding dynamic slot's rigid
-// transform (when dynamicSlot >= 0), matching how a dynamic shape instance resolves its bound (sdf-vm.hlsli's
+// transform (when dynamicSlot >= 0), matching how a dynamic shape instance resolves its bound (field/sdf-map.hlsli's
 // rigidBasePosition), then undo the volume's own Position/Rotation offset within that frame. A direction only
 // undoes the rotations (no translation).
 float3 sdfVolumeLocalPoint(SdfVolumeData v, float3 worldPoint) {

@@ -121,7 +121,7 @@ walk retains internal cuts, blend order, shape participation flags, material
 seams and the scope's distance correction. Unsupported parts and analytic dual
 queries use the existing interpreter. This is a shorter execution program;
 it does not introduce approximate distances or a new spatial-culling rule.
-The shader implementation is in `Assets/Shaders/Sdf/sdf-parts.hlsli`.
+The shader implementation is in `Assets/Shaders/Sdf/field/sdf-parts.hlsli`.
 
 When the program's root combines shapes and scopes only by hard union and has
 no field-wide modifiers, primary rays trace compiled parts independently of
@@ -132,7 +132,7 @@ return only geometry, avoiding attribute state carried through their loops. This
 repeated part evaluation but can select different sample positions within the
 existing pixel-footprint acceptance band; images need not be bit-identical to
 the full-scene march. Other root compositions keep the reference traversal.
-Both paths share the marcher in `Assets/Shaders/Sdf/sdf-primary.hlsli`.
+Both paths share the marcher in `Assets/Shaders/Sdf/march/sdf-primary.hlsli`.
 
 For admitted programs, the beam also refits a world-space box for each compiled
 part once per viewport. Primary rays intersect those cached boxes to skip missed
@@ -393,7 +393,7 @@ the [parity README](../../tests/Puck.Parity/README.md) has the recipe. GPU
 kernel behavior outside the parity stations is not verified by any machine
 check.
 The kernels read the instruction set from
-`Assets/Shaders/Sdf/sdf-isa.hlsli`, which `SdfIsaHlsl` generates from
+`Assets/Shaders/Sdf/isa/sdf-isa.hlsli`, which `SdfIsaHlsl` generates from
 `Puck.SignedDistance`: the ISA version and report word, every opcode, shape,
 blend, lift, noise, polar-axis and wallpaper enum, and the packed-layout
 constants. It is checked in and never edited by hand. After changing any of

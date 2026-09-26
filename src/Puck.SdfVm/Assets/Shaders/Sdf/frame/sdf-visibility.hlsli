@@ -26,7 +26,7 @@
 #ifndef SDF_VISIBILITY_HLSLI
 #define SDF_VISIBILITY_HLSLI
 
-#include "sdf-octahedral.hlsli"
+#include "../field/sdf-octahedral.hlsli"
 
 #if defined(SDF_PRIMARY_PASS) || defined(SDF_SURFACE_PASS) || defined(SDF_AMBIENT_PASS)
 #define sdfVisibilityRecordBuffer sdfVisibilityRecordsRW

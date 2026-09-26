@@ -13,11 +13,11 @@ namespace Puck.Cli.Tests;
 /// are among the includes it checks.
 /// </summary>
 public sealed class ShadersGenerateLawTests {
-    private const string FilmGrainPath = "src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-film-grain.interface.hlsli";
-    private const string IsaPath = "src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-isa.hlsli";
+    private const string FilmGrainPath = "src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-film-grain.interface.hlsli";
+    private const string IsaPath = "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-isa.hlsli";
     private const string OverlayPath = "src/Puck.Overlays/Assets/Shaders/overlay.interface.hlsli";
     private const string PlacePath = "src/Puck.Shaders/Assets/Shaders/Graph/place.interface.hlsli";
-    private const string WorldPath = "src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-world.interface.hlsli";
+    private const string WorldPath = "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-world.interface.hlsli";
 
     // The SDF engine kernels' includes, each with the text its interface generates: owned whatever the tree holds.
     private static readonly (string Path, string Text)[] EngineKernels = [.. SdfWorldInterfaces.Includes.Select(selector: static include => (include.Path, ShaderInterfaceHlsl.Generate(shaderInterface: include.Interface)))];
@@ -159,7 +159,7 @@ public sealed class ShadersGenerateLawTests {
         Assert.Empty(collection: problems);
         Assert.Equal(
             actual: includes.Select(selector: static include => include.Path),
-            expected: [IsaPath, OverlayPath, "src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-brick-bake.interface.hlsli", FilmGrainPath, WorldPath, PlacePath, .. SourceIncludes.Select(selector: static include => include.Path)]
+            expected: [IsaPath, OverlayPath, "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-brick-bake.interface.hlsli", "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-mesh.interface.hlsli", WorldPath, FilmGrainPath, PlacePath, .. SourceIncludes.Select(selector: static include => include.Path)]
         );
     }
 }

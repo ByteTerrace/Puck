@@ -106,7 +106,7 @@ public sealed partial class SdfWorldEngine {
     //   - m_viewportScratch  : per-view camera basis + fov/aspect, render extent, debug view mode, the off-axis
     //                          offset, and the frame's far distance — excluding each row's presentation-time lane (PackViewports'
     //                          position.w; byte offset 12 of each 96-byte ViewportData row). Time free-runs every
-    //                          frame (it feeds the animated test-card in screenContent, sdf-world.hlsli), so hashing
+    //                          frame (it feeds the animated test-card in screenContent, shade/sdf-sky.hlsli), so hashing
     //                          it would make the signature never repeat and the gate permanently inert. Any camera
     //                          ease still counts (it changes the surrounding lanes in the same row).
     //   - m_dynamicTransformRevision : bumped whenever a frame packs an owed dynamic-transform row (the producer's moved
@@ -125,7 +125,7 @@ public sealed partial class SdfWorldEngine {
     // Not covered by any packed span — handled conservatively by forcing a render:
     //   - m_programDeclaresScreenSlab (computed once at UploadProgram — see there): covers both the declared-but-
     //     unbound case (the excluded time lane is the sole per-frame driver of screenContent's test-card —
-    //     sdf-world.hlsli's renderView reads it into `time` at exactly one call site, gated on
+    //     passes/sdf-render-view.hlsli's renderView reads it into `time` at exactly one call site, gated on
     //     `material >= SDF_SCREEN_MATERIAL`) and the bound case (a live CRT's image content updates in place each
     //     frame with the same view handle, unseen by any packed span) — force-renders on any declared ScreenSlab
     //     regardless of binding.
