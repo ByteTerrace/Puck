@@ -19,6 +19,7 @@ public sealed partial class InputRouter {
             )
         );
     };
+
     // Seeds each slot's working lane for a tick from carried state: held digitals re-assert as Active, every held
     // contribution re-asserts, and every host-sustained command appears Active with its value. Each lane is then put in
     // (command id, source) order, so the carried half of a snapshot never depends on dictionary order.

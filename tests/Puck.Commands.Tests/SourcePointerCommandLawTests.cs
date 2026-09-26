@@ -114,7 +114,6 @@ public sealed class SourcePointerCommandLawTests {
             );
         }
     }
-
     [Fact]
     public void ASustainedRayRidesEverySnapshotOfABurstUntilItEnds() {
         var dispatched = new List<(int Slot, Vector3 Value)>();

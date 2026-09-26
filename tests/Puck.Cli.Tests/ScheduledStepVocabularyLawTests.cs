@@ -88,6 +88,8 @@ public sealed class ScheduledStepVocabularyLawTests {
             "player.orbit",
             "player.signal",
             "player.steer",
+            "source.pointer.direction",
+            "source.pointer.origin",
             "view.override",
         ]),
         ("a chat channel, whose effect is a message rather than state", [

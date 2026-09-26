@@ -231,12 +231,14 @@ internal sealed class WorldPointer {
             comparand: held
         ) != held);
     }
+
     /// <summary>Gets the seat the process's one OS pointer rides: the seat of the latest reported position, or
     /// <see langword="null"/> before any position was reported. Non-destructive, like <see cref="Position"/>.</summary>
     public int? PositionedSlot => ((Volatile.Read(location: ref m_positionedSlot) is var slot and >= 0)
         ? slot
         : null
     );
+
     /// <summary>Records a seat's new absolute cursor position.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
     /// <param name="position">The absolute position in client pixels.</param>
