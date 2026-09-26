@@ -3,9 +3,11 @@ using Puck.Assets;
 
 namespace Puck.Shaders.Tests;
 
-/// <summary>The two-group binding spike's build-time laws: each variant pass compiles for both backends against the
-/// include its interface generates, both bytecode readers find every binding and block member exactly where the
-/// interface's layout put it, and DXC writes the same bytes on a second build.</summary>
+/// <summary>The two-group binding spike's build-time laws: each spike pass compiles for both backends against the
+/// include its interface generates, both bytecode readers find every binding, block member and buffer stride exactly
+/// where the interface's layout put it (<see cref="ShaderInterfaceLayout.Bindings"/> for SPIR-V,
+/// <see cref="ShaderInterfaceLayout.DxilBindings"/> for DXIL), a kernel declaring another buffer stride is a mismatch,
+/// and DXC writes the same bytes on a second build.</summary>
 public sealed class ShaderInterfaceSpikeTests {
     public static TheoryData<string> PassNames => new(values: ShaderInterfaceSpike.Passes.Select(selector: static pass => pass.Interface.Name).ToArray());
 
@@ -102,7 +104,7 @@ public sealed class ShaderInterfaceSpikeTests {
 
             Assert.Equal(
                 actual: reader.Read(container: build.Dxil),
-                expected: pass.Interface.Layout().Bindings
+                expected: pass.Interface.Layout().DxilBindings
             );
         }
     }
@@ -134,6 +136,53 @@ public sealed class ShaderInterfaceSpikeTests {
         );
         // The pins let two hosts running the same DXC compare their builds byte for byte (-showLiveOutput prints them).
         TestContext.Current.TestOutputHelper?.WriteLine(message: $"{name} {ShaderInterfaceSpike.Dxc}: spirv {ContentPin.Compute(content: first.Spirv)} dxil {ContentPin.Compute(content: first.Dxil)}");
+    }
+    // The interface says a structured buffer of uint; the kernel declares one of uint4 at the same register, so only the
+    // element stride disagrees.
+    [Fact]
+    public async Task A_kernel_declaring_another_element_stride_is_a_mismatch_on_both_backends() {
+        SkipWithoutDxc();
+
+        var layout = new ShaderInterface(
+            members: [
+                ShaderInterfaceMember.ReadOnlyBuffer(
+                    element: ShaderValueType.Uint,
+                    group: ShaderInterfaceGroup.Pass,
+                    name: "values"
+                ),
+                ShaderInterfaceMember.ReadWriteBuffer(
+                    group: ShaderInterfaceGroup.Pass,
+                    name: "sums"
+                ),
+            ],
+            name: "strided"
+        ).Layout();
+        var build = await ShaderInterfaceSpike.CompileSourceAsync(
+            cancellationToken: TestContext.Current.CancellationToken,
+            entryPoint: "CSMain",
+            profile: "cs_6_6",
+            source: "[[vk::binding(0, 3)]] StructuredBuffer<uint4> values : register(t0, space3);\n[[vk::binding(1, 3)]] RWByteAddressBuffer sums : register(u1, space3);\n[numthreads(1, 1, 1)] void CSMain(uint3 id : SV_DispatchThreadID) { sums.Store((id.x * 4u), values[id.x].w); }"
+        );
+
+        AssertStrideMismatch(mismatch: layout.Mismatch(reflected: SpirvInterfaceReader.Read(module: build.Spirv)));
+
+        if (OperatingSystem.IsWindows()) {
+            using var reader = DxilInterfaceReader.Load(toolchain: new ShaderToolchain());
+
+            AssertStrideMismatch(mismatch: layout.Mismatch(reflected: reader.Read(container: build.Dxil)));
+        }
+
+        static void AssertStrideMismatch(string? mismatch) {
+            Assert.NotNull(@object: mismatch);
+            Assert.StartsWith(
+                actualString: mismatch,
+                expectedStartString: "the module reads values set 3 binding 0 ReadOnlyBuffer stride 16;"
+            );
+            Assert.Contains(
+                actualString: mismatch,
+                expectedSubstring: "lays out values set 3 binding 0 ReadOnlyBuffer stride 4."
+            );
+        }
     }
     [Fact]
     public void Both_passes_place_the_frame_group_identically() {

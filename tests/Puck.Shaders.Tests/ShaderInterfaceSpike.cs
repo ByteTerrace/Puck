@@ -3,9 +3,10 @@ using Puck.Hosting;
 
 namespace Puck.Shaders.Tests;
 
-/// <summary>The two-group binding spike's package: an interface for each of two existing passes, the generated include
-/// beside a variant of each pass, and a DXC build of both for both backends. The variants live under
-/// <c>Assets/Interfaces/&lt;interface&gt;/</c>; the passes they copy keep their own sources and bindings.</summary>
+/// <summary>The two-group binding spike's package: an interface for each of two existing passes and for a pass reading
+/// typed and raw buffers and a pushed index, the generated include beside each pass's source, and a DXC build of each
+/// for both backends. The sources live under <c>Assets/Interfaces/&lt;interface&gt;/</c>; the existing passes they copy
+/// keep their own sources and bindings.</summary>
 internal static class ShaderInterfaceSpike {
     /// <summary>One variant pass: its interface, its source file, and the stage it compiles as.</summary>
     internal sealed record Pass(ShaderInterface Interface, string SourceFileName, string Profile, string EntryPoint);
@@ -99,6 +100,47 @@ internal static class ShaderInterfaceSpike {
         ],
         name: "pixelate"
     );
+    // Structured buffers of a 4-byte and a 16-byte element and a raw buffer it reads, a structured and a raw buffer it
+    // writes, and a pushed index beside its bound frame group, which SPIR-V reports at the same set and binding.
+    internal static ShaderInterface TypedBuffers { get; } = new(
+        members: [
+            ShaderInterfaceMember.Value(
+                group: ShaderInterfaceGroup.Frame,
+                name: "tick",
+                type: ShaderValueType.Uint
+            ),
+            ShaderInterfaceMember.Value(
+                group: ShaderInterfaceGroup.Frame,
+                name: "extent",
+                type: ShaderValueType.Uint2
+            ),
+            ShaderInterfaceMember.ReadOnlyBuffer(
+                element: ShaderValueType.Uint,
+                group: ShaderInterfaceGroup.Pass,
+                name: "narrow"
+            ),
+            ShaderInterfaceMember.ReadOnlyBuffer(
+                element: ShaderValueType.Float4,
+                group: ShaderInterfaceGroup.Pass,
+                name: "wide"
+            ),
+            ShaderInterfaceMember.ReadOnlyBuffer(
+                group: ShaderInterfaceGroup.Pass,
+                name: "raw"
+            ),
+            ShaderInterfaceMember.ReadWriteBuffer(
+                element: ShaderValueType.Uint2,
+                group: ShaderInterfaceGroup.Pass,
+                name: "output"
+            ),
+            ShaderInterfaceMember.ReadWriteBuffer(
+                group: ShaderInterfaceGroup.Pass,
+                name: "rawOutput"
+            ),
+        ],
+        name: "typed-buffers",
+        pushesIndex: true
+    );
     internal static IReadOnlyList<Pass> Passes { get; } = [
         new Pass(
             EntryPoint: "PSMain",
@@ -111,6 +153,12 @@ internal static class ShaderInterfaceSpike {
             Interface: Pixelate,
             Profile: "cs_6_6",
             SourceFileName: "pixelate.comp.hlsl"
+        ),
+        new Pass(
+            EntryPoint: "CSMain",
+            Interface: TypedBuffers,
+            Profile: "cs_6_6",
+            SourceFileName: "typed-buffers.comp.hlsl"
         ),
     ];
 

@@ -111,7 +111,6 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
             key: GpuPassPipelineKey.OfGraphics(
                 description: new GpuGraphicsPipelineDescription(
                     Layout: context.Parameters.Layout.PipelineLayout(
-                        pushesIndex: false,
                         stages: GpuShaderStage.Vertex | GpuShaderStage.Fragment
                     ),
                     Name: Id,

@@ -23,20 +23,11 @@ public sealed partial class SdfWorldEngine {
             commandBufferHandle: commandBuffer,
             pipelineHandle: pipeline.Handle
         );
-        recorder.BindDescriptorSet(
-            bindPoint: GpuBindPoint.Compute,
-            commandBufferHandle: commandBuffer,
-            descriptorSetHandle: viewsSet,
-            group: 0,
-            pipelineLayoutHandle: pipeline.LayoutHandle
-        );
-        recorder.PushConstants(
-            bindPoint: GpuBindPoint.Compute,
-            commandBufferHandle: commandBuffer,
-            data: m_viewPush,
-            offset: 0,
-            pipelineLayoutHandle: pipeline.LayoutHandle,
-            stageFlags: GpuShaderStage.Compute
+        BindWorldGroups(
+            commandBuffer: commandBuffer,
+            frameSet: m_frameSets[m_currentSlot],
+            pipeline: pipeline,
+            viewsSet: viewsSet
         );
         recorder.DispatchIndirect(
             argumentBufferHandle: m_viewsArgsBuffer.BufferHandle,

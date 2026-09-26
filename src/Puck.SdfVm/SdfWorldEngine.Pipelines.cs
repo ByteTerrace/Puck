@@ -76,215 +76,27 @@ public sealed partial class SdfWorldEngine {
         return reload.ChangedPipelines;
     }
 
-    // The binding layouts and pipeline descriptions every engine shares. A nested holder, so its initializers run after
-    // the engine's own statics (ScreenSourceBindingIndices above all), whatever order the partial files are compiled in.
+    // The pipeline descriptions every engine shares. A nested holder, so its initializers run after the engine's own
+    // statics, whatever order the partial files are compiled in.
     internal static class PipelineLayouts {
-        // Beam prepass: program (1) + viewports (2) + dynamic entity transforms (9) + cull buffer written (3) + the
-        // per-tile instance mask READ (7 — the MASK-FIRST order: the cone march evaluates the tile-masked field the
-        // instance-cull pass wrote, so a march sample costs O(instances near the tile), not O(all instances)). No
-        // output image. Direct3D 12 assigns registers from THIS order: t0 program, t1 viewports, t2 dynamicTransforms,
-        // u0 tiles, t3 instanceMasks — the kernel's SDF_INSTANCE_MASKS_REGISTER override mirrors it.
-        internal static readonly GpuComputeBinding[] Beam = [
-            new GpuComputeBinding(
-                Binding: ProgramBindingIndex,
-                Kind: GpuComputeBindingKind.StorageBufferRead
-            ),
-            new GpuComputeBinding(
-                Binding: ViewportBindingIndex,
-                Kind: GpuComputeBindingKind.StorageBufferRead
-            ),
-            new GpuComputeBinding(
-                Binding: DynamicTransformBindingIndex,
-                Kind: GpuComputeBindingKind.StorageBufferRead
-            ),
-            new GpuComputeBinding(
-                Binding: TileBindingIndex,
-                Kind: GpuComputeBindingKind.StorageBufferReadWrite
-            ),
-            new GpuComputeBinding(
-                Binding: InstanceMaskBindingIndex,
-                Kind: GpuComputeBindingKind.StorageBufferRead
-            ),
-            // The brick pool (sdfBrickPool), APPENDED LAST so its SRV resolves to register t4 (after instanceMasks t3) —
-            // the cone march samples baked SampledRegion carves. Always present (a filler when the pool is disabled).
-            new GpuComputeBinding(
-                Binding: BrickPoolBindingIndex,
-                Kind: GpuComputeBindingKind.StorageBufferRead
-            ),
-        ];
-        // Instance-cull pass (sdf-instance-cull.comp — the frame's FIRST pass, and its OWN kernel so the cell walk's
-        // register footprint never taxes the cone march's occupancy): program (1) + viewports (2) + dynamic entity
-        // transforms (9, a DYNAMIC instance's bound resolves through it) + the per-tile instance mask written (7).
-        // Direct3D 12 assigns registers from THIS order: t0 program, t1 viewports, t2 dynamicTransforms, u0
-        // instanceMasks — the kernel's register() annotations mirror it exactly.
-        internal static readonly GpuComputeBinding[] InstanceCull = [
-            new GpuComputeBinding(
-                Binding: ProgramBindingIndex,
-                Kind: GpuComputeBindingKind.StorageBufferRead
-            ),
-            new GpuComputeBinding(
-                Binding: ViewportBindingIndex,
-                Kind: GpuComputeBindingKind.StorageBufferRead
-            ),
-            new GpuComputeBinding(
-                Binding: DynamicTransformBindingIndex,
-                Kind: GpuComputeBindingKind.StorageBufferRead
-            ),
-            new GpuComputeBinding(
-                Binding: InstanceMaskBindingIndex,
-                Kind: GpuComputeBindingKind.StorageBufferReadWrite
-            ),
-            new GpuComputeBinding(
-                Binding: FrameInstanceGridBindingIndex,
-                Kind: GpuComputeBindingKind.StorageBufferRead
-            ),
-        ];
-        // Cull-args reduction: cull buffer read (3) + the views indirect args written (5) + the dispatch box written (6).
-        internal static readonly GpuComputeBinding[] CullArgs = [
-            new GpuComputeBinding(
-                Binding: TileBindingIndex,
-                Kind: GpuComputeBindingKind.StorageBufferRead
-            ),
-            new GpuComputeBinding(
-                Binding: CullArgsBindingIndex,
-                Kind: GpuComputeBindingKind.StorageBufferReadWrite
-            ),
-            new GpuComputeBinding(
-                Binding: CullBoundsBindingIndex,
-                Kind: GpuComputeBindingKind.StorageBufferReadWrite
-            ),
-        ];
-        // Stage 1 (per-view SDF): program (1) + viewports (2) + dynamic entity transforms (9) + the view's output (4) +
-        // the GPU-computed dispatch box (8) + the screen-surface table (10) + THIRTY-TWO separate screen-source
-        // SampledImage bindings (12..43 — DXC cannot fuse an ARRAY texture into one Vulkan combined-image-sampler, so
-        // each screen index gets its own binding; the pipeline factory bakes in ONE static nearest sampler PER
-        // SampledImage binding on Direct3D 12, all sharing that one filter) + the per-tile instance mask read (7) and
-        // the later read-only tables, then the cull buffer read (3), the visibility records written (49) and the same
-        // records read (50). The SRV registers resolve program t0, viewport t1, dynamicTransforms t2, cullBounds t3,
-        // screenSurfaces t4, screenSources t5..t36, instanceMasks t37, screenLights t38, glyph atlas t39, decals t40,
-        // brick pool t41, frame instance grid t42, volumes t43, cull buffer t44, visibility records t45; the UAVs
-        // resolve the output image u0, visibility records u1 (matching the HLSL) — Direct3D 12 assigns t#/u#/s# registers
-        // from THIS array's order (DirectXGpuPipelineFactory), so the HLSL's explicit register annotations must mirror
-        // this exact sequence; a reorder here without the matching HLSL edit desyncs the root signature. Every buffer
-        // a hit pass only reads binds read-only, so SdfFrameBufferPlan declares plain reads for it. The 32
-        // screen-source bindings are SPREAD from a MaxScreenSurfaces-derived list — never a hand-listed run.
-        internal static readonly GpuComputeBinding[] Views = [
-            new GpuComputeBinding(
-                Binding: ProgramBindingIndex,
-                Kind: GpuComputeBindingKind.StorageBufferRead
-            ),
-            new GpuComputeBinding(
-                Binding: ViewportBindingIndex,
-                Kind: GpuComputeBindingKind.StorageBufferRead
-            ),
-            new GpuComputeBinding(
-                Binding: DynamicTransformBindingIndex,
-                Kind: GpuComputeBindingKind.StorageBufferRead
-            ),
-            new GpuComputeBinding(
-                Binding: ViewOutputBindingIndex,
-                Kind: GpuComputeBindingKind.StorageImage
-            ),
-            new GpuComputeBinding(
-                Binding: ViewsCullBoundsBindingIndex,
-                Kind: GpuComputeBindingKind.StorageBufferRead
-            ),
-            new GpuComputeBinding(
-                Binding: ScreenSurfaceBindingIndex,
-                Kind: GpuComputeBindingKind.StorageBufferRead
-            ),
-            .. BuildScreenSourceBindings(),
-            new GpuComputeBinding(
-                Binding: InstanceMaskBindingIndex,
-                Kind: GpuComputeBindingKind.StorageBufferRead
-            ),
-            // The per-frame screen-light buffer — its SRV resolves to register t38 (after instanceMasks t37).
-            new GpuComputeBinding(
-                Binding: ScreenLightBindingIndex,
-                Kind: GpuComputeBindingKind.StorageBufferRead
-            ),
-            // The SDF_SHAPE_GLYPH font atlas: its SRV resolves to register t39 (after screenLights t38) and its
-            // static sampler to s32 (after the 32 screen samplers). One more SampledImage on this set, (re)bound per
-            // frame by BindScreenSources to the atlas view or the neutral 1×1 filler when none is set.
-            new GpuComputeBinding(
-                Binding: GlyphAtlasBindingIndex,
-                Kind: GpuComputeBindingKind.SampledImage
-            ),
-            // The GLYPH DECAL buffer, so its SRV resolves to register t40 (after the glyph atlas t39) — the
-            // material-level text tier the decal-mode screens sample (see sdf-world.hlsli's sdfDecalCells).
-            new GpuComputeBinding(
-                Binding: DecalCellsBindingIndex,
-                Kind: GpuComputeBindingKind.StorageBufferRead
-            ),
-            // The brick pool (sdfBrickPool), APPENDED LAST so its SRV resolves to register t41 (after sdfDecalCells t40) —
-            // Stage 1 samples baked SampledRegion carves O(1). Always present (a filler when the pool is disabled); the
-            // core-ops variant shares this bindings array, so both Stage 1 pipelines bind the pool identically.
-            new GpuComputeBinding(
-                Binding: BrickPoolBindingIndex,
-                Kind: GpuComputeBindingKind.StorageBufferRead
-            ),
-            // The frame-local instance grid resolves to t42, after the brick pool's t41.
-            new GpuComputeBinding(
-                Binding: FrameInstanceGridBindingIndex,
-                Kind: GpuComputeBindingKind.StorageBufferRead
-            ),
-            // The bounded-volume buffer, APPENDED LAST so its SRV resolves to t43 (after the frame instance grid t42) —
-            // shade-volumes.hlsli's renderView and sky-prepass call sites.
-            new GpuComputeBinding(
-                Binding: VolumeBindingIndex,
-                Kind: GpuComputeBindingKind.StorageBufferRead
-            ),
-            // The beam's cull buffer, read-only in every hit pass: t44, after the bounded volumes.
-            new GpuComputeBinding(
-                Binding: TileBindingIndex,
-                Kind: GpuComputeBindingKind.StorageBufferRead
-            ),
-            // The visibility records, written by primary, surface and ambient (u1, after the output image) and
-            // read by views through a read-only binding of the same buffer (t45).
-            new GpuComputeBinding(
-                Binding: PrimaryHitBindingIndex,
-                Kind: GpuComputeBindingKind.StorageBufferReadWrite
-            ),
-            new GpuComputeBinding(
-                Binding: PrimaryHitReadBindingIndex,
-                Kind: GpuComputeBindingKind.StorageBufferRead
-            ),
-        ];
-        // The carve-bake baker's set: the per-slot request buffer (a float4 SRV at t0) + the shared pool WRITTEN as a UAV
-        // (u0). One set per brick slot, each binding that slot's request buffer + the pool; only used when the pool is
-        // enabled. Direct3D 12 assigns registers from THIS order: t0 bakeRequest, u0 brickPool.
-        internal static readonly GpuComputeBinding[] BrickBake = [
-            new GpuComputeBinding(
-                Binding: BrickBakeRequestBindingIndex,
-                Kind: GpuComputeBindingKind.StorageBufferRead
-            ),
-            new GpuComputeBinding(
-                Binding: BrickBakePoolBindingIndex,
-                Kind: GpuComputeBindingKind.StorageBufferReadWrite
-            ),
-        ];
+        // Every per-view pipeline binds the sdf-world interface's groups, and the baker the sdf-brick-bake interface's, so
+        // one frame set and one views set per ring slot and view bind against any of the ten per-view pipelines.
+        internal static readonly GpuPipelineLayoutDescription World = SdfWorldInterfaces.WorldLayout.PipelineLayout(stages: GpuShaderStage.Compute);
+        internal static readonly GpuPipelineLayoutDescription BrickBake = SdfWorldInterfaces.BrickBakeLayout.PipelineLayout(stages: GpuShaderStage.Compute);
 
-        // A pipeline factory reads a push-constant range's size and stages; each engine records its own payload.
-        private static readonly GpuPushConstantBinding PassPush = Push(length: PushConstantByteLength);
-        private static readonly GpuPushConstantBinding BrickPush = Push(length: BrickBakePushByteLength);
-
-        // Indexed by the *PipelineIndex constants. The hit passes, the sky and the three views variants share Views,
-        // so their descriptor-set layouts are identically defined and one per-slot, per-view views set binds against each
-        // of them.
-        // Nearest filtering end to end on those: a bound screen source (an emulator or child's native pixels) magnifies
-        // as crisp cells, never bilinear smears.
+        // Indexed by the *PipelineIndex constants.
         internal static readonly PipelineSpec[] Specs = [
-            Spec(name: "sdf-beam", bindings: Beam, push: PassPush),
-            Spec(name: "sdf-instance-cull", bindings: InstanceCull, push: PassPush),
-            Spec(name: "sdf-cull-args", bindings: CullArgs, push: PassPush),
-            Spec(name: "sdf-world-primary", bindings: Views, push: PassPush, filter: GpuSamplerFilter.Nearest),
-            Spec(name: "sdf-world-surface", bindings: Views, push: PassPush, filter: GpuSamplerFilter.Nearest),
-            Spec(name: "sdf-world-ambient", bindings: Views, push: PassPush, filter: GpuSamplerFilter.Nearest),
-            Spec(name: "sdf-world-views", bindings: Views, push: PassPush, filter: GpuSamplerFilter.Nearest),
-            Spec(name: "sdf-world-views-core", bindings: Views, push: PassPush, filter: GpuSamplerFilter.Nearest),
-            Spec(name: "sdf-world-views-folds", bindings: Views, push: PassPush, filter: GpuSamplerFilter.Nearest),
-            Spec(name: "sdf-sky", bindings: Views, push: PassPush, filter: GpuSamplerFilter.Nearest),
-            Spec(name: "sdf-brick-bake", bindings: BrickBake, push: BrickPush, brick: true),
+            Spec(name: "sdf-beam", layout: World),
+            Spec(name: "sdf-instance-cull", layout: World),
+            Spec(name: "sdf-cull-args", layout: World),
+            Spec(name: "sdf-world-primary", layout: World),
+            Spec(name: "sdf-world-surface", layout: World),
+            Spec(name: "sdf-world-ambient", layout: World),
+            Spec(name: "sdf-world-views", layout: World),
+            Spec(name: "sdf-world-views-core", layout: World),
+            Spec(name: "sdf-world-views-folds", layout: World),
+            Spec(name: "sdf-sky", layout: World),
+            Spec(name: "sdf-brick-bake", layout: BrickBake, brick: true),
         ];
         // The order a build starts the pipelines in (SdfWorldPipelines.Build): the views variants, the longest driver
         // translations, start last, lightest first (core, folds, full), and every other pipeline starts before them in
@@ -303,21 +115,14 @@ public sealed partial class SdfWorldEngine {
             ViewsPipelineIndex,
         ];
 
-        private static GpuPushConstantBinding Push(int length) =>
-            new(
-                data: new byte[length],
-                offset: 0,
-                stageFlags: GpuShaderStage.Compute
-            );
-        private static PipelineSpec Spec(string name, GpuComputeBinding[] bindings, GpuPushConstantBinding push, GpuSamplerFilter filter = GpuSamplerFilter.Linear, bool brick = false) =>
+        private static PipelineSpec Spec(string name, GpuPipelineLayoutDescription layout, bool brick = false) =>
             new(
                 Brick: brick,
                 Description: new GpuComputePipelineDescription(
-                    Bindings: bindings,
+                    Bindings: [],
+                    Layout: layout,
                     Name: name,
-                    PushConstantBinding: push,
-                    Registers: GpuRegisterNumbering.PackedByClass,
-                    SamplerFilter: filter
+                    PushConstantBinding: null
                 )
             );
     }

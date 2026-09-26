@@ -169,7 +169,7 @@ public sealed partial class SdfWorldEngine {
 
             m_bindings.WriteStorageImage(
                 arrayElement: 0,
-                binding: ViewOutputBindingIndex,
+                binding: OutputBinding,
                 descriptorSetHandle: m_viewsSets[m_currentSlot][view],
                 imageViewHandle: imageView
             );

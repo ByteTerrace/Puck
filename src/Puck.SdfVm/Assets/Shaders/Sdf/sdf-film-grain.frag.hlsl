@@ -1,6 +1,6 @@
 // Film grain (single-source HLSL; DXC compiles it to SPIR-V for Vulkan and DXIL for Direct3D 12): a fullscreen
 // pass over the inner render node's own output, adding a per-pixel integer-hashed grain offset. Reuses
-// fullscreen.vert.hlsl (no vertex stage of its own) and sdfPcg3d (sdf-vm.hlsli) rather than a new hash — both are
+// fullscreen.vert.hlsl (no vertex stage of its own) and sdfPcg3d (sdf-hash.hlsli) rather than a new hash — both are
 // already-proven, integer-only, bit-identical across DXC's two targets.
 //
 // Everything it reads comes from the set's generated interface (sdf-film-grain.interface.hlsli, regenerated with
@@ -8,7 +8,7 @@
 // source image and the sampler it reads it through from the pass group. The grain frame is the tick quantized to the
 // flicker period, never a wall-clock or RNG value, so the same simulation moment hashes identically on every run,
 // machine, and backend.
-#include "sdf-vm.hlsli"
+#include "sdf-hash.hlsli"
 #include "sdf-film-grain.interface.hlsli"
 
 // The low 32 bits of floor(tick / period) for the 64-bit tick (low word, high word) and a period below 2^16, divided

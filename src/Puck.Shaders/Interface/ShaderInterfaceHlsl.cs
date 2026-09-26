@@ -11,7 +11,11 @@ namespace Puck.Shaders;
 /// <c>[[vk::binding(b, set)]]</c> paired with <c>register(xb, spaceset)</c>, and a pushed group's block carries
 /// <c>[[vk::push_constant]]</c> paired with <c>register(b0, space0)</c>, where both backends' root constants live. Values
 /// reach a pass as members of a named struct per group, and an array is read through a generated accessor that hides how
-/// its elements are stored.
+/// its elements are stored. A buffer with an element type is a <c>StructuredBuffer&lt;T&gt;</c> or
+/// <c>RWStructuredBuffer&lt;T&gt;</c>, and one without is a <c>ByteAddressBuffer</c> or <c>RWByteAddressBuffer</c>. A
+/// pushed index (<see cref="ShaderInterface.PushesIndex"/>) follows the groups as a one-member struct carrying
+/// <c>[[vk::push_constant]]</c> paired with <c>register(b0, space4)</c>, the space
+/// <see cref="GpuPipelineLayoutDescription.PushIndexSpace"/> names.
 /// <para>The text is a pure function of the interface: the same interface generates the same bytes, with LF line
 /// endings, on every host.</para>
 /// </summary>
@@ -101,6 +105,36 @@ public static class ShaderInterfaceHlsl {
             }
         }
 
+        if (shaderInterface.PushesIndex) {
+            var typeName = ShaderInterface.PushedIndexTypeName(interfaceName: shaderInterface.Name);
+            var space = Number(value: GpuPipelineLayoutDescription.PushIndexSpace);
+
+            Line(
+                line: "",
+                text: text
+            );
+            Line(
+                line: $"// The pushed index: Vulkan push constants at offset 0, Direct3D 12 root constants at register b0, space {space}.",
+                text: text
+            );
+            Line(
+                line: $"struct {typeName} {{",
+                text: text
+            );
+            Line(
+                line: $"    [[vk::offset(0)]] uint {ShaderInterface.PushedIndexMemberName};",
+                text: text
+            );
+            Line(
+                line: "};",
+                text: text
+            );
+            Line(
+                line: $"[[vk::push_constant]] ConstantBuffer<{typeName}> {ShaderInterface.PushedIndexVariableName}{Register(binding: 0, register: 'b', set: GpuPipelineLayoutDescription.PushIndexSpace)};",
+                text: text
+            );
+        }
+
         var arrays = layout.Groups.SelectMany(selector: static group => group.BlockMembers.Select(selector: member => (Group: group, Member: member)))
             .Where(predicate: static entry => (entry.Member.Length != 0))
             .ToArray();
@@ -146,8 +180,12 @@ public static class ShaderInterfaceHlsl {
         var (register, declaration) = resource.Kind switch {
             GpuBindingKind.SampledImage => ('t', $"Texture2D<{member.Type!.Value.Spelling()}> {member.Name}"),
             GpuBindingKind.StorageImage => ('u', $"[[vk::image_format(\"{ShaderInterface.StorageFormatSpelling(format: member.Format!.Value)}\")]] RWTexture2D<{member.Type!.Value.Spelling()}> {member.Name}"),
-            GpuBindingKind.ReadOnlyBuffer => ('t', $"ByteAddressBuffer {member.Name}"),
-            GpuBindingKind.ReadWriteBuffer => ('u', $"RWByteAddressBuffer {member.Name}"),
+            GpuBindingKind.ReadOnlyBuffer => ('t', ((member.Type is { } element)
+                ? $"StructuredBuffer<{element.Spelling()}> {member.Name}"
+                : $"ByteAddressBuffer {member.Name}")),
+            GpuBindingKind.ReadWriteBuffer => ('u', ((member.Type is { } element)
+                ? $"RWStructuredBuffer<{element.Spelling()}> {member.Name}"
+                : $"RWByteAddressBuffer {member.Name}")),
             GpuBindingKind.Sampler => ('s', $"SamplerState {member.Name}"),
             _ => throw new ArgumentOutOfRangeException(
                 actualValue: resource.Kind,

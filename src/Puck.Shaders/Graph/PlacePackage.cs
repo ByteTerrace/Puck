@@ -97,7 +97,6 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
                 description: new GpuComputePipelineDescription(
                     Bindings: [],
                     Layout: context.Parameters.Layout.PipelineLayout(
-                        pushesIndex: false,
                         stages: GpuShaderStage.Compute
                     ),
                     Name: RenderGraphPackageCatalog.Place,

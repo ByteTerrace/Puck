@@ -11,15 +11,11 @@ public sealed unsafe partial class DirectXGpuPipelineFactory {
     /// The descriptor table holds one range per binding, with each range's slot in the heap fixed at its binding
     /// index (<c>OffsetInDescriptorsFromTableStart = binding</c>, matching how <see cref="DirectXGpuBindings"/> writes a
     /// descriptor at <c>CpuBase + binding * size</c>). A UAV binding (a storage image or a read-write buffer) takes a
-    /// <c>u#</c> register and an SRV binding (a read-only buffer or a sampled image) a <c>t#</c>, numbered as
-    /// <see cref="GpuComputePipelineDescription.Registers"/> says: at the binding number, or per type in binding-list
-    /// order. An array binding (<see cref="GpuComputeBinding.Count"/> &gt; 1) consumes that many consecutive registers
+    /// <c>u#</c> register and an SRV binding (a read-only buffer or a sampled image) a <c>t#</c>, each at its binding
+    /// number. An array binding (<see cref="GpuComputeBinding.Count"/> &gt; 1) consumes that many consecutive registers
     /// and heap slots. Every parameter is <c>SHADER_VISIBILITY_ALL</c> (the compute visibility class); each SampledImage
-    /// binding adds its own CLAMP static sampler, at the <c>s#</c> matching its texture's number under
-    /// <see cref="GpuRegisterNumbering.Binding"/> and at s0, s1, ... in binding-list order otherwise (all sharing the
-    /// pipeline's one requested filter — DXC's <c>vk::combinedImageSampler</c> only fuses a scalar Texture2D+SamplerState
-    /// pair, so a kernel with several screen-like sources declares several distinct sampler symbols at distinct
-    /// registers); the input-layout flag is dropped. Push constants are eight 32-bit root constants at <c>b0</c>.
+    /// binding adds its own CLAMP static sampler at the <c>s#</c> matching its texture's number, with the pipeline's one
+    /// requested filter; the input-layout flag is dropped. Push constants are eight 32-bit root constants at <c>b0</c>.
     /// <para>A description with a <see cref="GpuComputePipelineDescription.Layout"/> takes none of that: its root
     /// signature is <see cref="DirectXRootSignatures.CreateLayout"/>'s, with its samplers in sampler tables rather than
     /// static samplers.</para>
@@ -92,7 +88,6 @@ public sealed unsafe partial class DirectXGpuPipelineFactory {
             device: device,
             hasDescriptorTable: hasDescriptorTable,
             hasRootConstants: hasRootConstants,
-            registers: description.Registers,
             rootConstantsCount: layout.RootConstantsCount,
             samplerFilter: samplerFilter,
             serialized: out layout.RootSignatureBlob,
@@ -145,7 +140,6 @@ public sealed unsafe partial class DirectXGpuPipelineFactory {
         bool hasRootConstants,
         uint rootConstantsCount,
         GpuSamplerFilter samplerFilter,
-        GpuRegisterNumbering registers,
         uint[] slotByBinding,
         out byte[] serialized
     ) {
@@ -160,13 +154,10 @@ public sealed unsafe partial class DirectXGpuPipelineFactory {
             : 1)];
         var parameters = stackalloc D3D12_ROOT_PARAMETER[2];
         var paramIndex = 0;
-        var nextSrvRegister = 0u;
-        var nextUavRegister = 0u;
 
         // One range per binding. The heap slot is the packed slot from slotByBinding (DirectXGpuBindings writes each
-        // descriptor at that slot + its array element); a shader register is the binding number, or the next of its
-        // type in binding order when packed (UAVs u0,u1...; SRVs t0,t1...), an array binding consuming `Count`
-        // consecutive registers and heap slots.
+        // descriptor at that slot + its array element); a shader register is the binding number, an array binding
+        // consuming `Count` consecutive registers and heap slots.
         for (var index = 0; (index < bindings.Count); index++) {
             var binding = bindings[index];
             // A read-only storage buffer and a sampled image bind as SRVs (t#); a storage image or a read-write buffer binds
@@ -177,20 +168,8 @@ public sealed unsafe partial class DirectXGpuPipelineFactory {
                 ? D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_SRV
                 : D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_UAV
             );
-            var baseRegister = ((registers == GpuRegisterNumbering.Binding)
-                ? binding.Binding
-                : (isSrv
-                    ? nextSrvRegister
-                    : nextUavRegister));
-
-            if (isSrv) {
-                nextSrvRegister += count;
-            } else {
-                nextUavRegister += count;
-            }
-
             ranges[index] = new D3D12_DESCRIPTOR_RANGE {
-                BaseShaderRegister = baseRegister,
+                BaseShaderRegister = binding.Binding,
                 NumDescriptors = count,
                 OffsetInDescriptorsFromTableStart = slotByBinding[binding.Binding],
                 RangeType = rangeType,
@@ -227,11 +206,9 @@ public sealed unsafe partial class DirectXGpuPipelineFactory {
             parameters[paramIndex++] = constantsParam;
         }
 
-        // Each SampledImage binding reads its SRV through its own sampler register (s0, s1, ... in binding-list order):
-        // DXC's vk::combinedImageSampler fuses only a scalar Texture2D and SamplerState pair, never an array, so a shader
-        // with several screen-like sources declares a distinct sampler symbol per source. One static sampler per
-        // SampledImage binding, each with the requested filter, clamp-addressed and visible to all stages, matches that; a
-        // pipeline with no SampledImage binding has no static sampler.
+        // Each SampledImage binding reads its SRV through its own static sampler at its binding number: DXC's
+        // vk::combinedImageSampler fuses only a scalar Texture2D and SamplerState pair. Each has the requested filter, is
+        // clamp-addressed and visible to all stages; a pipeline with no SampledImage binding has no static sampler.
         var sampledImageCount = 0u;
 
         for (var index = 0; (index < bindings.Count); index++) {
@@ -254,9 +231,7 @@ public sealed unsafe partial class DirectXGpuPipelineFactory {
                 filter: ((samplerFilter == GpuSamplerFilter.Nearest)
                 ? D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_POINT
                 : D3D12_FILTER.D3D12_FILTER_MIN_MAG_LINEAR_MIP_POINT),
-                shaderRegister: ((registers == GpuRegisterNumbering.Binding)
-                    ? bindings[index].Binding
-                    : samplerIndex),
+                shaderRegister: bindings[index].Binding,
                 shaderVisibility: D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_ALL
             );
 

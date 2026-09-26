@@ -8,9 +8,10 @@
 // the closed form needs no program buffer, instance masks, or blend tail — the general map()-grid baker is the recorded
 // follow-up that reuses the SAME ISA op when baked content outgrows carve unions.
 //
-// SLICED (async / off the live edit path — verdict-row 55): the engine advances a voxel cursor across produced frames,
-// dispatching <= 256K voxels per frame. The push constants carry THIS dispatch's [sliceVoxelStart, sliceVoxelCount)
-// window; slicing changes no value (each voxel is written exactly once, independent of slice boundaries).
+// SLICED (async / off the live edit path): the engine advances a voxel cursor across produced frames, dispatching at
+// most passGroup.sliceVoxels voxels per frame. The pushed index is THIS dispatch's slice ordinal, so its window is
+// [ordinal * sliceVoxels, min(total, (ordinal + 1) * sliceVoxels)); slicing changes no value (each voxel is written
+// exactly once, independent of slice boundaries).
 //
 // Request buffer (StructuredBuffer<float4>): a fixed 3-float4 header, then the carve list.
 //   req[0] = (boxMin.xyz, cellSize)
@@ -20,16 +21,8 @@
 // The linear voxel index is x-fastest: destWordOffset + x + y*dimX + z*dimX*dimY (KEEP IN SYNC with sdfBrickVoxel's
 // fetch ordering in sdf-vm.hlsli and the SdfBrickBake request packing in SdfWorldEngine).
 
-[[vk::binding(0, 0)]] StructuredBuffer<float4> bakeRequest : register(t0);
-[[vk::binding(1, 0)]] RWStructuredBuffer<float> brickPool : register(u0);
-
-struct BrickBakePush {
-    uint sliceVoxelStart; // the first global voxel index this dispatch writes
-    uint sliceVoxelCount; // how many voxels this dispatch writes (<= 256K)
-    uint pad0;
-    uint pad1;
-};
-[[vk::push_constant]] BrickBakePush bakePush;
+// bakeRequest, brickPool, the slice size and the pushed slice ordinal, generated from SdfWorldInterfaces.BrickBake.
+#include "sdf-brick-bake.interface.hlsli"
 
 static const uint BrickBakeHeaderFloat4Count = 3u;
 
@@ -37,11 +30,11 @@ static const uint BrickBakeHeaderFloat4Count = 3u;
 void CSMain(uint3 id : SV_DispatchThreadID) {
     uint local = id.x;
 
-    if (local >= bakePush.sliceVoxelCount) {
+    if (local >= passGroup.sliceVoxels) {
         return;
     }
 
-    uint voxel = (bakePush.sliceVoxelStart + local);
+    uint voxel = ((pushedIndex.index * passGroup.sliceVoxels) + local);
 
     float4 header0 = bakeRequest[0];
     float4 header1 = bakeRequest[1];

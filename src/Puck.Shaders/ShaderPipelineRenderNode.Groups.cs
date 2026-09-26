@@ -15,7 +15,6 @@ public sealed partial class ShaderPipelineRenderNode {
     // The pipeline layout of a document pass that binds groups, visible to its pass kind's stages.
     private static GpuPipelineLayoutDescription GroupLayoutOf(ShaderPipelinePlannedPass planned) =>
         planned.Parameters.Layout.PipelineLayout(
-            pushesIndex: false,
             stages: planned.Declaration!.Kind.Stages()
         );
     // The bytes of a uniform region holding a block: whole constant-buffer views.
@@ -60,7 +59,6 @@ public sealed partial class ShaderPipelineRenderNode {
     // describe; which stages a group is visible to does not change what its sets hold.
     private static GpuDescriptorPoolSizes GroupPoolSizes(ShaderPipelinePlannedPass planned, uint inFlight) {
         var groups = planned.Parameters.Layout.PipelineLayout(
-            pushesIndex: false,
             stages: (planned.Declaration?.Kind.Stages() ?? GpuShaderStage.Fragment)
         ).Groups;
         var sizes = default(GpuDescriptorPoolSizes);

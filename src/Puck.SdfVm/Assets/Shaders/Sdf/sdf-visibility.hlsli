@@ -1,7 +1,6 @@
 // The visibility record: what each full-extent pixel of each viewport sees, written by the hit passes and shaded by
 // views. This module owns its layout; every reader and writer goes through the typed load and store functions below
-// and holds only a record address. KEEP IN SYNC with SdfWorldEngine.PrimaryHitByteLength, PrimaryHitBindingIndex,
-// PrimaryHitReadBindingIndex and their places in the views binding order.
+// and holds only a record address. KEEP IN SYNC with SdfWorldEngine.PrimaryHitByteLength.
 //
 // A record is fifteen words in five rows:
 // V (4 words): the ray parameter t (Euclidean distance along the normalized camera ray), the identity, the material,
@@ -21,19 +20,19 @@
 // is identity 0. An SDF hit's source is the winning instance's dynamic-transform frame slot plus one, so source 0 is
 // the static field. A mesh hit's source is its draw.
 //
-// The views layout binds the one buffer twice: primary, surface and ambient write it through the read-write binding
-// 49 (u1, after the view's output image u0); views only reads it, through the read-only binding 50 (t45, after
-// the cull buffer t44). Scalar uint storage matches the engine's four-byte descriptor stride on both backends.
+// The views set binds the one buffer twice: primary, surface and ambient write it through sdfVisibilityRecordsRW; views
+// only reads it, through sdfVisibilityRecords. Every function below reaches it through sdfVisibilityRecordBuffer, the
+// binding its kernel uses.
 #ifndef SDF_VISIBILITY_HLSLI
 #define SDF_VISIBILITY_HLSLI
 
 #include "sdf-octahedral.hlsli"
 
 #if defined(SDF_PRIMARY_PASS) || defined(SDF_SURFACE_PASS) || defined(SDF_AMBIENT_PASS)
-[[vk::binding(49, 0)]] RWStructuredBuffer<uint> sdfVisibilityRecords : register(u1);
+#define sdfVisibilityRecordBuffer sdfVisibilityRecordsRW
 #define SDF_VISIBILITY_WRITABLE
 #else
-[[vk::binding(50, 0)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t45);
+#define sdfVisibilityRecordBuffer sdfVisibilityRecords
 #endif
 
 static const uint SdfVisibilityWords = 15u;
@@ -122,7 +121,7 @@ uint sdfVisibilityQueries(SdfVisibility visibility) {
 }
 
 uint4 sdfVisibilityLoadRow(uint word) {
-    return uint4(sdfVisibilityRecords[word], sdfVisibilityRecords[word + 1u], sdfVisibilityRecords[word + 2u], sdfVisibilityRecords[word + 3u]);
+    return uint4(sdfVisibilityRecordBuffer[word], sdfVisibilityRecordBuffer[word + 1u], sdfVisibilityRecordBuffer[word + 2u], sdfVisibilityRecordBuffer[word + 3u]);
 }
 // The seam word: the blend weight's 15-bit fraction, then the other material plus one. Each field is masked to its
 // bits, so a NaN weight cannot write into the material's.
@@ -160,10 +159,10 @@ SdfVisibility sdfLoadVisibility(uint record) {
 }
 SdfVisibilityCoverage sdfLoadVisibilityCoverage(uint record) {
     uint word = (record + SdfVisibilityRowC);
-    uint blend = sdfVisibilityRecords[word + 2u];
+    uint blend = sdfVisibilityRecordBuffer[word + 2u];
     SdfVisibilityCoverage coverage;
-    coverage.terminalRadius = asfloat(sdfVisibilityRecords[word]);
-    coverage.threshold = asfloat(sdfVisibilityRecords[word + 1u]);
+    coverage.terminalRadius = asfloat(sdfVisibilityRecordBuffer[word]);
+    coverage.threshold = asfloat(sdfVisibilityRecordBuffer[word + 1u]);
     coverage.blendWeight = (float(blend & SdfVisibilityBlendMask) / SdfVisibilityBlendScale);
     coverage.blendOther = (((int)(blend >> SdfVisibilityBlendOtherShift)) - 1);
     return coverage;
@@ -174,14 +173,14 @@ float4 sdfLoadVisibilityLanes(uint record) {
 SdfVisibilityNormal sdfLoadVisibilityNormal(uint record) {
     uint word = (record + SdfVisibilityRowN);
     SdfVisibilityNormal normal;
-    normal.normal = sdfVisibilityUnpackNormal(sdfVisibilityRecords[word]);
-    normal.gradientMagnitude = asfloat(sdfVisibilityRecords[word + 1u]);
+    normal.normal = sdfVisibilityUnpackNormal(sdfVisibilityRecordBuffer[word]);
+    normal.gradientMagnitude = asfloat(sdfVisibilityRecordBuffer[word + 1u]);
     return normal;
 }
 SdfVisibilitySurface sdfLoadVisibilitySurface(uint record) {
     uint word = (record + SdfVisibilityRowS);
-    uint shading = sdfVisibilityRecords[word];
-    uint counts = sdfVisibilityRecords[word + 1u];
+    uint shading = sdfVisibilityRecordBuffer[word];
+    uint counts = sdfVisibilityRecordBuffer[word + 1u];
     SdfVisibilitySurface surface;
     surface.curvature = f16tof32(shading & 0xFFFFu);
     surface.ambient = f16tof32(shading >> 16u);
@@ -192,32 +191,32 @@ SdfVisibilitySurface sdfLoadVisibilitySurface(uint record) {
 
 #ifdef SDF_VISIBILITY_WRITABLE
 void sdfVisibilityStoreRow(uint word, uint4 bits) {
-    sdfVisibilityRecords[word] = bits.x;
-    sdfVisibilityRecords[word + 1u] = bits.y;
-    sdfVisibilityRecords[word + 2u] = bits.z;
-    sdfVisibilityRecords[word + 3u] = bits.w;
+    sdfVisibilityRecordBuffer[word] = bits.x;
+    sdfVisibilityRecordBuffer[word + 1u] = bits.y;
+    sdfVisibilityRecordBuffer[word + 2u] = bits.z;
+    sdfVisibilityRecordBuffer[word + 3u] = bits.w;
 }
 void sdfStoreVisibility(uint record, SdfVisibility visibility) {
     sdfVisibilityStoreRow(record + SdfVisibilityRowV, uint4(asuint(visibility.t), visibility.identity, asuint(visibility.material), visibility.flags));
 }
 void sdfStoreVisibilityCoverage(uint record, SdfVisibilityCoverage coverage) {
     uint word = (record + SdfVisibilityRowC);
-    sdfVisibilityRecords[word] = asuint(coverage.terminalRadius);
-    sdfVisibilityRecords[word + 1u] = asuint(coverage.threshold);
-    sdfVisibilityRecords[word + 2u] = sdfVisibilityPackBlend(coverage.blendWeight, coverage.blendOther);
+    sdfVisibilityRecordBuffer[word] = asuint(coverage.terminalRadius);
+    sdfVisibilityRecordBuffer[word + 1u] = asuint(coverage.threshold);
+    sdfVisibilityRecordBuffer[word + 2u] = sdfVisibilityPackBlend(coverage.blendWeight, coverage.blendOther);
 }
 void sdfStoreVisibilityLanes(uint record, float4 lanes) {
     sdfVisibilityStoreRow(record + SdfVisibilityRowL, asuint(lanes));
 }
 void sdfStoreVisibilityNormal(uint record, SdfVisibilityNormal normal) {
     uint word = (record + SdfVisibilityRowN);
-    sdfVisibilityRecords[word] = sdfVisibilityPackNormal(normal.normal);
-    sdfVisibilityRecords[word + 1u] = asuint(normal.gradientMagnitude);
+    sdfVisibilityRecordBuffer[word] = sdfVisibilityPackNormal(normal.normal);
+    sdfVisibilityRecordBuffer[word + 1u] = asuint(normal.gradientMagnitude);
 }
 void sdfStoreVisibilitySurface(uint record, SdfVisibilitySurface surface) {
     uint word = (record + SdfVisibilityRowS);
-    sdfVisibilityRecords[word] = ((f32tof16(clamp(surface.curvature, -SdfVisibilityHalfMax, SdfVisibilityHalfMax)) & 0xFFFFu) | ((f32tof16(surface.ambient) & 0xFFFFu) << 16u));
-    sdfVisibilityRecords[word + 1u] = ((surface.flags & SdfVisibilitySurfaceFlagMask) | (min((uint)surface.queries, SdfVisibilitySurfaceQueryMask) << SdfVisibilitySurfaceQueryShift));
+    sdfVisibilityRecordBuffer[word] = ((f32tof16(clamp(surface.curvature, -SdfVisibilityHalfMax, SdfVisibilityHalfMax)) & 0xFFFFu) | ((f32tof16(surface.ambient) & 0xFFFFu) << 16u));
+    sdfVisibilityRecordBuffer[word + 1u] = ((surface.flags & SdfVisibilitySurfaceFlagMask) | (min((uint)surface.queries, SdfVisibilitySurfaceQueryMask) << SdfVisibilitySurfaceQueryShift));
 }
 #endif
 #endif

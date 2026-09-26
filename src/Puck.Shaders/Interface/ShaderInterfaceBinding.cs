@@ -27,13 +27,19 @@ public readonly record struct ShaderInterfaceBlockMember(
 /// <param name="Pushed">Whether the constant block is delivered as push constants rather than bound: a SPIR-V
 /// <c>PushConstant</c> variable, which carries no set or binding and is placed at set 0, binding 0. A DXIL container
 /// cannot tell root constants from a bound constant buffer, so its reader never sets it.</param>
+/// <param name="ElementStride">The byte stride of a buffer's elements as the bytecode reflects it: a SPIR-V buffer's
+/// runtime-array <c>ArrayStride</c>, or a DXIL buffer's <c>D3D12_SHADER_INPUT_BIND_DESC.NumSamples</c>. A structured
+/// buffer's stride is its element's size on both backends; a raw buffer's is whatever each backend reports for a
+/// byte-address buffer (<see cref="ShaderInterfaceLayout.SpirvRawBufferStride"/>,
+/// <see cref="ShaderInterfaceLayout.DxilRawBufferStride"/>). Zero for every binding that is not a buffer.</param>
 public sealed record ShaderInterfaceBinding(
     string Name,
     uint Set,
     uint Binding,
     GpuBindingKind Kind,
     IReadOnlyList<ShaderInterfaceBlockMember> Members,
-    bool Pushed = false
+    bool Pushed = false,
+    uint ElementStride = 0
 ) {
     /// <inheritdoc/>
     /// <remarks>Compares <see cref="Members"/> element by element rather than by reference.</remarks>
@@ -48,6 +54,7 @@ public sealed record ShaderInterfaceBinding(
         (Binding == other.Binding) &&
         (Kind == other.Kind) &&
         (Pushed == other.Pushed) &&
+        (ElementStride == other.ElementStride) &&
         Members.SequenceEqual(second: other.Members));
     /// <inheritdoc/>
     public override int GetHashCode() =>
@@ -57,11 +64,12 @@ public sealed record ShaderInterfaceBinding(
             value3: Binding,
             value4: Kind,
             value5: Pushed,
-            value6: Members.Count
+            value6: ElementStride,
+            value7: Members.Count
         );
     /// <inheritdoc/>
     public override string ToString() =>
-        $"{Name} set {Set} binding {Binding} {(Pushed ? "pushed " : "")}{Kind}{((Members.Count == 0)
+        $"{Name} set {Set} binding {Binding} {(Pushed ? "pushed " : "")}{Kind}{((ElementStride == 0) ? "" : $" stride {ElementStride}")}{((Members.Count == 0)
             ? ""
             : $" [{string.Join(separator: ", ", values: Members.Select(selector: static member => $"{member.Name}@{member.Offset}:{member.Type.Spelling()}{((member.Length == 0) ? "" : $"[{member.Length}]")}"))}]")}";
 

@@ -25,46 +25,40 @@
 // The cone march must see moving entities so their tiles aren't culled away — so this kernel opts into the per-frame
 // dynamic-transform buffer (sdf-vm.hlsli) that Stage 1 also uses.
 #define SDF_DYNAMIC_TRANSFORMS
-// The per-tile instance mask, READ here by the cone march (the instance-cull pass wrote it). register(t3): the
-// Direct3D 12 SRV order follows the engine's beam binding list (program t0, viewports t1, dynamicTransforms t2,
-// instanceMasks t3) — the hit passes bind the SAME buffer at their own t37.
+// The per-tile instance mask, READ here by the cone march (the instance-cull pass wrote it).
 #define SDF_INSTANCE_MASKS
 // The serial tile-beam walk measured faster with its two payload vectors fetched together before the opcode switch;
 // Stage 1's wider per-pixel interpreter benefits from the default case-local loads instead.
 #define SDF_VM_EAGER_PAYLOADS
-#define SDF_INSTANCE_MASKS_REGISTER t3
-// The brick pool (sdf-vm.hlsli's sdfBrickPool at binding 46): the cone march must evaluate baked SampledRegion carves
-// so a brick-carved cavity isn't masked into a tile that then holes. register(t4): the Direct3D 12 SRV order follows
-// the engine's beam binding list (program t0, viewports t1, dynamicTransforms t2, instanceMasks t3, brickPool t4).
+// The brick pool (sdfBrickPool): the cone march must evaluate baked SampledRegion carves so a brick-carved cavity isn't
+// masked into a tile that then holes.
 #define SDF_SAMPLED_REGIONS
-#define SDF_BRICK_POOL_REGISTER t4
 #define SDF_PART_RAY_BOUNDS
-// The tile planes and appended per-view part bounds share one device-local buffer. The beam is its only writer;
-// cull-args and the hit passes bind it read-only.
+// The tile planes and appended per-view part bounds share one device-local buffer. The beam is its only writer, so it
+// reads and writes it through tilesRW (worldTiles); cull-args and the hit passes read it through tiles.
 #define SDF_TILES_READ_WRITE
-[[vk::binding(3, 0)]] RWStructuredBuffer<float> tiles : register(u0);
 #include "sdf-world.hlsli"
 
 [numthreads(1, 1, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
-    if (params.sampleIndex == SDF_ISA_REPORT_REQUEST) {
-        tiles[0] = asfloat(SDF_ISA_VERSION);
+    if (passGroup.sampleIndex == SDF_ISA_REPORT_REQUEST) {
+        tilesRW[0] = asfloat(SDF_ISA_VERSION);
         return;
     }
 
     uint viewIndex = worldViewOf(id.z);
 
     if (
-        (viewIndex >= params.viewportCount) ||
-        (id.x >= params.tileGrid.x) ||
-        (id.y >= params.tileGrid.y)
+        (viewIndex >= passGroup.viewportCount) ||
+        (id.x >= passGroup.tileGrid.x) ||
+        (id.y >= passGroup.tileGrid.y)
     ) {
         return;
     }
 
-    uint tileIndex = worldTileIndex(viewIndex, id.xy, params.tileGrid);
+    uint tileIndex = worldTileIndex(viewIndex, id.xy, passGroup.tileGrid);
 
-    ViewportData view = viewports[viewIndex];
+    ViewportData view = worldViewport(viewIndex);
 
     // The symmetry-LOD origin: this viewport's camera (the per-sample wallpaper LOD rule measures from it).
     sdfLodOrigin = view.position.xyz;
@@ -121,19 +115,19 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         }
     }
 
-    tiles[worldTileMarchStartIndex(tileIndex)] = bounds.entry;
+    tilesRW[worldTileMarchStartIndex(tileIndex)] = bounds.entry;
     // The four-bound teleport's extra planes + the F1 far bound (Stage 1 reads them; cull-args ignores them). Always written so the device-local buffer holds a defined, total-function gap AND far bound for every
     // (viewport, tile) this frame.
-    tiles[worldTileFirstExitIndex(tileIndex)] = bounds.firstExit;
-    tiles[worldTileSecondEntryIndex(tileIndex)] = bounds.secondEntry;
-    tiles[worldTileFarBoundIndex(tileIndex)] = bounds.farBound;
+    tilesRW[worldTileFirstExitIndex(tileIndex)] = bounds.firstExit;
+    tilesRW[worldTileSecondEntryIndex(tileIndex)] = bounds.secondEntry;
+    tilesRW[worldTileFarBoundIndex(tileIndex)] = bounds.farBound;
 
     // Each part is refitted once per viewport, even when it has more instances than screen tiles. This work
     // reads only program/pose/camera data, so it needs no synchronization with other beam invocations.
     if (sdfCanTracePartsIndependently()) {
-        uint tileCount = params.tileGrid.x * params.tileGrid.y;
+        uint tileCount = passGroup.tileGrid.x * passGroup.tileGrid.y;
         [loop]
-        for (uint instance = id.y * params.tileGrid.x + id.x;
+        for (uint instance = id.y * passGroup.tileGrid.x + id.x;
             instance < sdfProgramLayout.instanceCount; instance += tileCount) {
             sdfWritePartBound(viewIndex, instance, view.position.xyz, farDistance,
                 (2.0 * view.right.w) / max(regionSizePx.y, 1.0));
