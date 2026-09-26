@@ -12,8 +12,8 @@ internal sealed record GeneratedInclude(string Path, Func<string> Generate);
 /// <summary><c>puck shaders generate</c>: writes every HLSL include the C# model owns, each regenerated from the live
 /// types, or under <c>--check</c> regenerates them in memory and compares, the drift shape <c>puck schema --check</c>
 /// and <c>puck registry --check</c> share. The includes are <c>sdf-isa.hlsli</c> and every generated shader
-/// interface (<see cref="ShaderInterfaceHlsl"/>): each shader-set manifest's, beside the manifest, and each engine
-/// package's that declares pass-group members, found by its interface's file name. A checked-in
+/// interface (<see cref="ShaderInterfaceHlsl"/>) an engine package declares with pass-group members, found by its
+/// interface's file name. A checked-in
 /// <c>*.interface.hlsli</c> no generator owns, and a package whose include cannot be found, fail both modes by name.
 /// Exit 0 wrote or matched, 1 check found drift or an include is unowned or missing, 2 missing repository
 /// root.</summary>
@@ -23,14 +23,13 @@ internal static class GenerateCommand {
 
     /// <summary>Finds every include the model owns among a tree's files, and every problem that keeps one from being
     /// generated.</summary>
-    /// <param name="repositoryRoot">The repository root the files are relative to.</param>
-    /// <param name="files">The tree's files, repository-relative with forward slashes: every shader-set manifest and
-    /// every <c>*.interface.hlsli</c> is read from these.</param>
+    /// <param name="files">The tree's files, repository-relative with forward slashes: every <c>*.interface.hlsli</c> is
+    /// read from these.</param>
     /// <param name="packages">The engine packages whose declared interfaces are owned includes.</param>
-    /// <param name="problems">Receives one line per include no generator owns, per package whose include is missing or
-    /// named twice, and per manifest that makes no interface.</param>
+    /// <param name="problems">Receives one line per include no generator owns and per package whose include is missing or
+    /// named twice.</param>
     /// <returns>The owned includes, <c>sdf-isa.hlsli</c> first, then in path order.</returns>
-    internal static IReadOnlyList<GeneratedInclude> Includes(string repositoryRoot, IReadOnlyList<string> files, RenderGraphPackageCatalog packages, List<string> problems) {
+    internal static IReadOnlyList<GeneratedInclude> Includes(IReadOnlyList<string> files, RenderGraphPackageCatalog packages, List<string> problems) {
         var owned = new SortedDictionary<string, GeneratedInclude>(comparer: StringComparer.Ordinal);
         var interfaceFiles = files.Where(predicate: static file => file.EndsWith(comparisonType: StringComparison.Ordinal, value: InterfaceSuffix)).ToArray();
 
@@ -41,16 +40,6 @@ internal static class GenerateCommand {
             );
         }
 
-        foreach (var manifest in files.Where(predicate: static file => file.EndsWith(comparisonType: StringComparison.Ordinal, value: ShaderSetManifest.FileSuffix))) {
-            try {
-                var shaderInterface = ShaderSetManifest.ReadFrameInterface(manifestPath: System.IO.Path.Combine(path1: repositoryRoot, path2: manifest));
-                var directory = manifest[..(manifest.LastIndexOf(value: '/') + 1)];
-
-                Own(path: (directory + ShaderFrameInterface.IncludeFileName(interfaceName: shaderInterface.Name)), shaderInterface: shaderInterface);
-            } catch (Exception exception) when ((exception is InvalidDataException or IOException or System.Text.Json.JsonException)) {
-                problems.Add(item: $"{manifest} makes no interface: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
-            }
-        }
         foreach (var package in packages.Packages.Where(predicate: static package => (package.Members.Count > 0))) {
             var shaderInterface = ShaderPipelineParameterLayout.ForPackage(
                 config: package.Config,
@@ -71,7 +60,7 @@ internal static class GenerateCommand {
             Own(path: found[0], shaderInterface: shaderInterface);
         }
         foreach (var file in interfaceFiles.Where(predicate: file => !owned.ContainsKey(key: file))) {
-            problems.Add(item: $"{file} is named as a generated interface, but no shader-set manifest or engine package owns it");
+            problems.Add(item: $"{file} is named as a generated interface, but no engine package owns it");
         }
 
         return [new GeneratedInclude(Generate: SdfIsaHlsl.Generate, Path: $"src/Puck.SdfVm/Assets/Shaders/Sdf/{SdfIsaHlsl.FileName}"), .. owned.Values];
@@ -86,7 +75,7 @@ internal static class GenerateCommand {
         var problems = new List<string>();
         var matched = true;
 
-        foreach (var include in Includes(files: files, packages: packages, problems: problems, repositoryRoot: repositoryRoot)) {
+        foreach (var include in Includes(files: files, packages: packages, problems: problems)) {
             matched &= CliGeneratedFile.WriteOrCheck(
                 check: check,
                 detail: "",
@@ -111,7 +100,7 @@ internal static class GenerateCommand {
 
         // Tracked and untracked files git does not ignore, so a new include is checked before it is committed and build
         // output never is.
-        var listed = CliGit.Run(repositoryRoot, "ls-files", "--cached", "--others", "--exclude-standard", "--", $"*{ShaderSetManifest.FileSuffix}", $"*{InterfaceSuffix}");
+        var listed = CliGit.Run(repositoryRoot, "ls-files", "--cached", "--others", "--exclude-standard", "--", $"*{InterfaceSuffix}");
 
         return Run(
             check: check,
@@ -132,10 +121,10 @@ internal static class GenerateCommand {
         with. A kernel build reads the checked-in file, so a C# change to the instruction set is
         regenerated here and rebuilt.
 
-        Every generated shader interface (<name>.interface.hlsli) is owned too: a shader-set
-        manifest's, written beside the manifest, and an engine package's that declares pass-group
-        members (such as overlay and place), found by its file name. A checked-in interface include
-        no manifest or package owns, or a package whose include is missing, fails by name.
+        Every generated shader interface (<name>.interface.hlsli) an engine package declares with
+        pass-group members (such as overlay, place and sdf.film-grain) is owned too, found by its
+        file name. A checked-in interface include no package owns, or a package whose include is
+        missing, fails by name.
         """,
         name: "generate",
         run: Run

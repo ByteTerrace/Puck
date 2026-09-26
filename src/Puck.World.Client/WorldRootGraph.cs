@@ -12,10 +12,10 @@ namespace Puck.World.Client;
 /// root graph (<see cref="WorldViewGraphs.MainInstance"/>) that reads them. The root places each view's output into its
 /// rect with one <c>place</c> pass per view (<c>main$view$&lt;n&gt;</c>), the first writing the letterbox color outside
 /// its rect (<see cref="RenderGraphPackageCatalog.PlaceLetterbox"/>) so pixels no view covers show it, each pane over them with one <c>place</c> pass
-/// per <c>views.graphs</c> instance a layout slot names, then runs each <c>render.extensions</c> pass as its
-/// <c>post.&lt;id&gt;</c> package in document order, then the <c>overlay</c> package. With one view and nothing to draw
+/// per <c>views.graphs</c> instance a layout slot names, then runs each <c>views.post</c> row as a pass of its
+/// post-process package, named by the row, in document order, then the <c>overlay</c> package. With one view and nothing to draw
 /// over it, the producer is the root. The graph is a document value planned by <see cref="RenderGraphCompiler"/>, the one path every
-/// graph takes, so a pass config that does not bind is the compiler's refusal, named by its entry.</summary>
+/// graph takes, so a pass config that does not bind is the compiler's refusal, named by its row.</summary>
 public sealed class WorldRootGraph {
     // The versions and passes the root declares for itself are generated names (WorldViewNames.Root), so none can equal a
     // pane's version or place pass, which take the pane's authored name.
@@ -24,13 +24,12 @@ public sealed class WorldRootGraph {
     private static readonly string WorldVersion = WorldViewNames.Root(WorldViewGraphs.WorldInstance);
     private static readonly JsonElement FirstViewConfig = JsonDocument.Parse(json: $$"""{ "{{RenderGraphPackageCatalog.PlaceLetterbox}}": 1 }""").RootElement.Clone();
 
-    private const string PostPart = "post";
     private const string ViewPart = "view";
 
-    private WorldRootGraph(RenderGraphPlan? plan, IReadOnlyDictionary<string, IReadOnlyList<string>> postPasses, IReadOnlyList<string> panes, int views) {
+    private WorldRootGraph(RenderGraphPlan? plan, IReadOnlyList<WorldViewPostPass> post, IReadOnlyList<string> panes, int views) {
         Plan = plan;
         Panes = panes;
-        PostPasses = postPasses;
+        Post = post;
         Views = views;
         // One view is the world itself, which the root places with no pass of its own.
         ViewPasses = ((views > 1)
@@ -97,9 +96,9 @@ public sealed class WorldRootGraph {
     /// <summary>Gets the root graph's plan, or <see langword="null"/> when nothing is drawn over the world and the world
     /// is the root.</summary>
     public RenderGraphPlan? Plan { get; }
-    /// <summary>Gets each <c>render.extensions</c> id's passes in the root graph, in document order; an id the document
-    /// names more than once has one pass per entry.</summary>
-    public IReadOnlyDictionary<string, IReadOnlyList<string>> PostPasses { get; }
+    /// <summary>Gets the <c>views.post</c> rows the root graph runs, in document order, each a pass named by its row;
+    /// empty when the root runs none.</summary>
+    public IReadOnlyList<WorldViewPostPass> Post { get; }
     /// <summary>Gets the name of the instance the display shows and captures read by default: the root graph whenever
     /// there is one, which there always is with more than one view.</summary>
     public string Root => ((Plan is null)
@@ -107,9 +106,9 @@ public sealed class WorldRootGraph {
         : WorldViewGraphs.MainInstance);
 
     /// <summary>Synthesizes and plans a world's default render graph.</summary>
-    /// <param name="extensions">The document's <c>render.extensions</c> entries, or <see langword="null"/> for none.</param>
+    /// <param name="post">The document's <c>views.post</c> rows, or <see langword="null"/> for none.</param>
     /// <param name="overlay">Whether the presentation draws the overlay over the world.</param>
-    /// <param name="packages">The packages the host offers: the engine's and one per shipped post-process set.</param>
+    /// <param name="packages">The packages the host offers.</param>
     /// <param name="panes">The <c>views.graphs</c> instances a layout slot names (<see cref="PanesOf"/>), or
     /// <see langword="null"/> for none.</param>
     /// <param name="views">The most views a layout composes (<see cref="ViewsOf"/>); with more than one, the root places
@@ -119,9 +118,9 @@ public sealed class WorldRootGraph {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="views"/> is below one or above
     /// <see cref="SdfWorldEngine.MaxViewports"/>.</exception>
     /// <exception cref="WorldRootGraphRefusedException">The graph compiler refused the synthesized graph, such as an
-    /// entry's config that does not bind against its set's schema; the message names the entry and the compiler's
+    /// row's config that does not bind against its package's schema; the message names the row and the compiler's
     /// code.</exception>
-    public static WorldRootGraph Compose(IReadOnlyList<WorldRenderExtensionEntry>? extensions, bool overlay, RenderGraphPackageCatalog packages, IReadOnlyList<string>? panes = null, int views = 1) {
+    public static WorldRootGraph Compose(IReadOnlyList<WorldViewPostPass>? post, bool overlay, RenderGraphPackageCatalog packages, IReadOnlyList<string>? panes = null, int views = 1) {
         ArgumentNullException.ThrowIfNull(argument: packages);
         ArgumentOutOfRangeException.ThrowIfLessThan(
             other: 1,
@@ -132,20 +131,19 @@ public sealed class WorldRootGraph {
             value: views
         );
 
-        var entries = (extensions ?? []);
+        var entries = (post ?? []);
         var placed = (panes ?? []);
         // One view is the world itself, which needs no place pass of its own.
         var viewCount = ((views > 1)
             ? views
             : 0);
         var passCount = (((viewCount + placed.Count) + entries.Count) + (overlay ? 1 : 0));
-        var postPasses = new Dictionary<string, List<string>>(comparer: StringComparer.Ordinal);
 
         if (passCount == 0) {
             return new WorldRootGraph(
                 panes: placed,
                 plan: null,
-                postPasses: new Dictionary<string, IReadOnlyList<string>>(comparer: StringComparer.Ordinal),
+                post: entries,
                 views: views
             );
         }
@@ -157,7 +155,7 @@ public sealed class WorldRootGraph {
             ),
         };
         var passes = new List<RenderGraphPackagePass>(capacity: passCount);
-        // The entry each pass came from, so a refusal names the document's entry rather than a synthesized pass.
+        // The row each post pass came from, so a refusal names the document's row rather than a synthesized pass.
         var entryOf = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
 
         for (var index = 0; (index < passCount); index++) {
@@ -214,29 +212,13 @@ public sealed class WorldRootGraph {
                 var entryIndex = (index - (viewCount + placed.Count));
                 var entry = entries[entryIndex];
 
-                if (!postPasses.TryGetValue(
-                    key: entry.Id,
-                    value: out var named
-                )) {
-                    named = [];
-                    postPasses.Add(
-                        key: entry.Id,
-                        value: named
-                    );
-                }
-
-                var name = ((named.Count == 0)
-                    ? WorldViewNames.Root(PostPart, entry.Id)
-                    : WorldViewNames.Root(PostPart, entry.Id, (named.Count + 1).ToString(provider: CultureInfo.InvariantCulture)));
-
-                named.Add(item: name);
-                entryOf[name] = entryIndex;
+                entryOf[entry.Name] = entryIndex;
                 passes.Add(item: new RenderGraphPackagePass(
                     Config: entry.Config,
                     Inputs: [new ResourceReference(Name: input)],
-                    Name: name,
+                    Name: entry.Name,
                     Outputs: [new ResourceReference(Name: output)],
-                    Package: (RenderGraphPackageCatalog.PostProcessPrefix + entry.Id)
+                    Package: entry.Package
                 ));
             } else {
                 passes.Add(item: new RenderGraphPackagePass(
@@ -267,7 +249,7 @@ public sealed class WorldRootGraph {
                     key: pass,
                     value: out var entryIndex
                 ))
-                    ? $"render.extensions[{entryIndex}] '{entries[entryIndex].Id}': {diagnostic.Code}: {diagnostic.Message}"
+                    ? $"views.post[{entryIndex}] '{entries[entryIndex].Name}': {diagnostic.Code}: {diagnostic.Message}"
                     : $"the default render graph: {diagnostic.Code}: {diagnostic.Message}"))
             ));
         }
@@ -275,11 +257,7 @@ public sealed class WorldRootGraph {
         return new WorldRootGraph(
             panes: placed,
             plan: plan,
-            postPasses: postPasses.ToDictionary(
-                comparer: StringComparer.Ordinal,
-                elementSelector: static pair => ((IReadOnlyList<string>)pair.Value),
-                keySelector: static pair => pair.Key
-            ),
+            post: entries,
             views: views
         );
     }
@@ -382,7 +360,7 @@ public sealed class WorldRootGraph {
         view.ToString(provider: CultureInfo.InvariantCulture)
     );
 }
-/// <summary>A world's default render graph that the graph compiler refused, such as a <c>render.extensions</c> entry
-/// whose config does not bind against its shader set's schema. A boot reports it as a refused definition.</summary>
-/// <param name="message">The refusal, naming each refused entry and the compiler's code.</param>
+/// <summary>A world's default render graph that the graph compiler refused, such as a <c>views.post</c> row whose
+/// config does not bind against its package's schema. A boot reports it as a refused definition.</summary>
+/// <param name="message">The refusal, naming each refused row and the compiler's code.</param>
 public sealed class WorldRootGraphRefusedException(string message) : Exception(message: message);

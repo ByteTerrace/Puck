@@ -7,9 +7,9 @@ using Puck.Testing;
 namespace Puck.Shaders.Tests;
 
 /// <summary>
-/// Laws of the <c>post.&lt;id&gt;</c> package (<see cref="PostProcessPackage"/>) on <see cref="FakePipelineGpu"/>: the
-/// shipped film-grain set run as a package pass of a graph records a pinned recording over its input (the render pass
-/// and graphics pipeline it is created for, the vertex buffer and the draw, the input written at the set's source
+/// Laws of a post-process package (<see cref="PostProcessPackage"/>) on <see cref="FakePipelineGpu"/>: the film grain
+/// package run as a package pass of a graph records a pinned recording over its input (the render pass
+/// and graphics pipeline it is created for, the vertex buffer and the draw, the input written at the package's source
 /// binding, and the frame group and pass blocks the draw reads byte for byte, bound config and live changes included,
 /// with nothing pushed); it is handed its input shader-readable and its target in render-target layout by the node's
 /// planned barriers and records none of its own; its pipeline is built off the frame thread, shared with a graph that
@@ -29,19 +29,14 @@ public sealed class PostProcessPackageLawTests {
         Width: Extent
     );
 
-    private static string ShadersDirectory => Path.Combine(
-        path1: AppContext.BaseDirectory,
-        path2: "Assets",
-        path3: "Shaders"
-    );
-
-    private static ShaderSetManifest FilmGrain() => ShaderSetManifest.Load(manifestPath: Path.Combine(
-        path1: ShadersDirectory,
-        path2: "Sdf",
-        path3: "sdf-film-grain.puck.shader.json"
-    ));
-    private static RenderGraphPackageCatalog Catalog() => RenderGraphPackageCatalog.WithPostProcess(postProcess: ShaderSetCatalog.Scan(rootDirectory: ShadersDirectory));
-    private static RenderGraphDefinition Graph(JsonElement? config, string package = "post.sdf-film-grain") => new(
+    private static RenderGraphPackage FilmGrain() => (RenderGraphPackageCatalog.Engine.TryGet(
+        id: RenderGraphPackageCatalog.SdfFilmGrain,
+        package: out var package
+    )
+        ? package
+        : throw new InvalidOperationException(message: "The engine catalog declares no film grain package."));
+    private static RenderGraphPackageCatalog Catalog() => RenderGraphPackageCatalog.Engine;
+    private static RenderGraphDefinition Graph(JsonElement? config, string package = RenderGraphPackageCatalog.SdfFilmGrain) => new(
         Name: "post",
         Outputs: ["output"],
         Packages: [new RenderGraphPackagePass(
@@ -67,11 +62,10 @@ public sealed class PostProcessPackageLawTests {
         Schema: RenderGraphSchemas.Graph
     );
     private static JsonElement Json(string text) => JsonDocument.Parse(json: text).RootElement.Clone();
-    // A node running the film-grain set as the graph's one package pass over the bound input, through the factory a law
-    // wraps it in, if any.
+    // A node running the film grain package as the graph's one package pass over the bound input, through the factory a
+    // law wraps it in, if any.
     private static ShaderPipelineRenderNode PackageNode(FakePipelineGpu gpu, JsonElement? config, Func<PostProcessPackage, IRenderGraphPackageFactory>? wrap = null, GpuCreationFaults? faults = null) {
-        var manifest = FilmGrain();
-        var package = new PostProcessPackage(manifest: manifest);
+        var package = new PostProcessPackage(package: FilmGrain());
         var packages = new RenderGraphPackageRecorders();
 
         packages.Register(
@@ -107,14 +101,14 @@ public sealed class PostProcessPackageLawTests {
 
         return node;
     }
-    // The recording the law pins for four frames: the fullscreen pass the set is drawn by, with no push and no combined
-    // sampler; the input written at the set's source binding; and the two blocks each draw reads, in hex. The frame group
+    // The recording the law pins for four frames: the fullscreen pass the package is drawn by, with no push and no combined
+    // sampler; the input written at the package's source binding; and the two blocks each draw reads, in hex. The frame group
     // block holds the frame counter, counting from one, and the tick rate; the pass block holds the 64x64 extent, the
-    // default flicker rate of 24, then the bound config (intensity, seed, then the set's remaining fields).
+    // default flicker rate of 24, then the bound config (intensity, seed, then the package's remaining fields).
     private static Recorded Pinned(string configHex) => new(
         Blocks: [.. Enumerable.Range(count: 4, start: 1).Select(selector: frame => $"{new string(c: '0', count: 48)}{frame:X2}000000E0C40000{new string(c: '0', count: 128)} 400000004000000018000000{configHex}00000000")],
         Commands: [.. Enumerable.Repeat(count: 4, element: new[] { "vertices 24 8", "draw 0 3" }).SelectMany(selector: static pair => pair)],
-        Pipeline: "sdf-film-grain  8 GpuVertexAttribute { Location = 0, Format = R32G32Float, OffsetBytes = 0 }",
+        Pipeline: "sdf.film-grain  8 GpuVertexAttribute { Location = 0, Format = R32G32Float, OffsetBytes = 0 }",
         RenderPass: "GpuColorAttachment { Format = R8G8B8A8Unorm, Load = Clear, Store = Store, FinalLayout = RenderTarget } ",
         RenderPasses: 4,
         Writes: [.. Enumerable.Repeat(count: 4, element: $"1 {Input.ImageViewHandle}")]
@@ -131,7 +125,11 @@ public sealed class PostProcessPackageLawTests {
     // constant buffers of the sets it bound as the frame is recorded.
     private static Recorded Record(FakePipelineGpu gpu, IRenderNode node, Action<int>? before = null) {
         var blocks = new List<string>();
-        var layout = FilmGrain().FrameLayout;
+        var layout = ShaderPipelineParameterLayout.ForPackage(
+            config: FilmGrain().Config,
+            members: FilmGrain().Members,
+            package: RenderGraphPackageCatalog.SdfFilmGrain
+        );
 
         ProduceUntilPublished(node: node);
         gpu.Recording = true;
@@ -322,7 +320,7 @@ public sealed class PostProcessPackageLawTests {
             actual: first.DisposeCount
         );
 
-        // A resize replaces the graph with the same set's pass, whose pipeline key is unchanged: the replacement joins the
+        // A resize replaces the graph with the same package's pass, whose pipeline key is unchanged: the replacement joins the
         // pass-pipeline cache's entry, so the replaced graph's retirement releases its lease and disposes nothing.
         node.Resize(
             height: (Extent / 2),

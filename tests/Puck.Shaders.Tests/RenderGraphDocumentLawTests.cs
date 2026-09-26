@@ -236,17 +236,14 @@ public sealed class RenderGraphDocumentLawTests {
         }
     }
     [Fact]
-    public void TheShippedCatalogOffersEveryShippedPostProcessSetAsAPackage() {
-        var catalog = RenderGraphPackageCatalog.WithPostProcess(postProcess: ShaderSetCatalog.Scan(rootDirectory: Path.Combine(
-            path1: AppContext.BaseDirectory,
-            path2: "Assets",
-            path3: "Shaders"
-        )));
+    public void TheEngineCatalogOffersTheFilmGrainPostProcessPackage() {
+        var catalog = RenderGraphPackageCatalog.Engine;
 
         Assert.True(condition: catalog.TryGet(
-            id: "post.sdf-film-grain",
+            id: RenderGraphPackageCatalog.SdfFilmGrain,
             package: out var grain
         ));
+        Assert.True(condition: grain.IsPostProcess);
         Assert.Equal(expected: RenderGraphPackagePort.Image(access: RenderGraphPortAccess.FragmentSampled), actual: Assert.Single(collection: grain.Inputs));
         Assert.Equal(expected: RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ColorAttachmentWrite), actual: Assert.Single(collection: grain.Outputs));
         Assert.True(condition: catalog.TryGet(

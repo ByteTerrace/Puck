@@ -5,8 +5,8 @@ namespace Puck.Shaders.Tests;
 /// <summary>The <c>interface-echo</c> canary's fixtures echo every shipped interface family: each echo document's frame and
 /// pass blocks are the blocks of the shipped interfaces it stands for, member for member at the same offsets and types, its
 /// echo pass is what the generator makes of it, its perturbed twin differs from the generator's output only by the edits it
-/// names, and its image holds one pixel per member. A shipped package or shader set whose frame data no echo stands for
-/// turns the coverage law red. Where DXC is on the search path, compiler reflection holds each echo to its layout.</summary>
+/// names, and its image holds one pixel per member. A shipped package whose frame data no echo stands for turns the
+/// coverage law red. Where DXC is on the search path, compiler reflection holds each echo to its layout.</summary>
 public sealed class InterfaceEchoCanaryFixtureTests {
     // The echo documents, one per row of the canary's world, in its row order.
     private static readonly string[] Echoes = ["ink-simulation", "ink-visualize", "ink-finish", "tint", "sdf-film-grain", "place", "overlay"];
@@ -21,7 +21,7 @@ public sealed class InterfaceEchoCanaryFixtureTests {
     private static ShaderInterfaceLayout PassOf(string relativePath, string pass) =>
         PassesOf(path: RepositoryPaths.Resolve(relativePath: relativePath)).Single(predicate: planned => (planned.Name == pass)).Parameters.Layout;
     private static ShaderInterfaceLayout PackageOf(string id) {
-        Assert.True(condition: RenderGraphPackageCatalog.Shipped.TryGet(
+        Assert.True(condition: RenderGraphPackageCatalog.Engine.TryGet(
             id: id,
             package: out var package
         ));
@@ -32,14 +32,6 @@ public sealed class InterfaceEchoCanaryFixtureTests {
             package: package.Id
         ).Layout;
     }
-    private static string ShaderSetPath(string id) {
-        Assert.True(condition: ShaderSetCatalog.Shipped.TryGetPath(
-            id: id,
-            path: out var path
-        ));
-
-        return path;
-    }
 
     // What each echo stands for, by name: the shipped interfaces whose blocks it reads.
     private static readonly (string Echo, string Target, Func<ShaderInterfaceLayout> Layout)[] Targets = [
@@ -48,8 +40,7 @@ public sealed class InterfaceEchoCanaryFixtureTests {
         ("ink-finish", "ink.graph.json finish", static () => PassOf(pass: "finish", relativePath: "src/Puck.World/Assets/pipelines/ink.graph.json")),
         ("ink-finish", "moth.hlsl", static () => PassOf(pass: "moth", relativePath: "src/Puck.World/Assets/pipelines/moth.hlsl")),
         ("tint", "the pipeline-package canary's tint", static () => PassOf(pass: "tint", relativePath: "tests/Puck.World.Canaries/pipeline-package/tint.graph.json")),
-        ("sdf-film-grain", "shader set sdf-film-grain", static () => new ShaderInterfaceLayout(shaderInterface: ShaderSetManifest.ReadFrameInterface(manifestPath: ShaderSetPath(id: "sdf-film-grain")))),
-        ("sdf-film-grain", "package post.sdf-film-grain", static () => PackageOf(id: (RenderGraphPackageCatalog.PostProcessPrefix + "sdf-film-grain"))),
+        ("sdf-film-grain", "package sdf.film-grain", static () => PackageOf(id: RenderGraphPackageCatalog.SdfFilmGrain)),
         ("place", "package place", static () => PackageOf(id: RenderGraphPackageCatalog.Place)),
         ("overlay", "package overlay", static () => PackageOf(id: RenderGraphPackageCatalog.Overlay)),
     ];
@@ -123,13 +114,13 @@ public sealed class InterfaceEchoCanaryFixtureTests {
             );
         }
     }
-    /// <summary>Every shipped package with frame data of its own, a config or declared members, and every shipped shader
-    /// set is a target of some echo.</summary>
+    /// <summary>Every shipped package with frame data of its own, a config or declared members, is a target of some
+    /// echo.</summary>
     [Fact]
-    public void Every_shipped_package_and_shader_set_with_frame_data_is_echoed() {
+    public void Every_shipped_package_with_frame_data_is_echoed() {
         var targets = Targets.Select(selector: static target => target.Target).ToHashSet(comparer: StringComparer.Ordinal);
 
-        foreach (var package in RenderGraphPackageCatalog.Shipped.Packages) {
+        foreach (var package in RenderGraphPackageCatalog.Engine.Packages) {
             if (((package.Config?.Count ?? 0) == 0) && (package.Members.Count == 0)) {
                 continue;
             }
@@ -137,15 +128,6 @@ public sealed class InterfaceEchoCanaryFixtureTests {
             Assert.Contains(
                 collection: targets,
                 expected: $"package {package.Id}"
-            );
-        }
-
-        Assert.NotEmpty(collection: ShaderSetCatalog.Shipped.Ids);
-
-        foreach (var id in ShaderSetCatalog.Shipped.Ids) {
-            Assert.Contains(
-                collection: targets,
-                expected: $"shader set {id}"
             );
         }
     }

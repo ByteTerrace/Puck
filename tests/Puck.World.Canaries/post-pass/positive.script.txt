@@ -1,4 +1,4 @@
-# Every frame renders every pass, and the film grain extension composes over each one.
+# Every frame renders every pass, and the film grain post pass composes over each one.
 # The engine ready first: its pipeline set installed and its first frame produced, however long a cold driver
 # cache takes.
 world.wait ready 45

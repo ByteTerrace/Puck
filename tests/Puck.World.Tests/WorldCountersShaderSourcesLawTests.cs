@@ -29,17 +29,13 @@ public sealed class WorldCountersShaderSourcesLawTests {
                 kinds: SdfWorldKernels.LoadWork.WorkKinds,
                 name: SdfWorldKernels.LoadWorkSourceName
             ));
-            _ = services.AddSingleton<IWorkCounterSource>(implementationInstance: new WorkCounterSet(
-                kinds: ShaderSetManifest.LoadWork.WorkKinds,
-                name: ShaderSetManifest.LoadWorkSourceName
-            ));
 
             using var provider = services.BuildServiceProvider();
             var result = new CommandRegistry(modules: provider.GetServices<ICommandModule>()).Submit(line: "world.counters shaders --json");
 
             Assert.False(condition: result.IsError);
             Assert.Equal(
-                expected: """[world.counters: {"sources":[{"name":"shaders.compiler","counts":{"shaders.compiler.requests":0,"shaders.compiler.cache-hits":0,"shaders.compiler.runs.dxc":0}},{"name":"shaders.sdf-kernels","counts":{"shaders.sdf-kernels.loads":0,"shaders.sdf-kernels.bytecode-bytes":0}},{"name":"shaders.set-manifest","counts":{"shaders.set-manifest.loads":0,"shaders.set-manifest.bytecode-bytes":0}}],"kinds":{"shaders.compiler.requests":{"unit":"count","class":"per-backend-deterministic"},"shaders.compiler.cache-hits":{"unit":"count","class":"pacing"},"shaders.compiler.runs.dxc":{"unit":"count","class":"per-backend-deterministic"},"shaders.sdf-kernels.loads":{"unit":"count","class":"per-backend-deterministic"},"shaders.sdf-kernels.bytecode-bytes":{"unit":"bytes","class":"per-backend-deterministic"},"shaders.set-manifest.loads":{"unit":"count","class":"per-backend-deterministic"},"shaders.set-manifest.bytecode-bytes":{"unit":"bytes","class":"per-backend-deterministic"}}}]""",
+                expected: """[world.counters: {"sources":[{"name":"shaders.compiler","counts":{"shaders.compiler.requests":0,"shaders.compiler.cache-hits":0,"shaders.compiler.runs.dxc":0}},{"name":"shaders.sdf-kernels","counts":{"shaders.sdf-kernels.loads":0,"shaders.sdf-kernels.bytecode-bytes":0}}],"kinds":{"shaders.compiler.requests":{"unit":"count","class":"per-backend-deterministic"},"shaders.compiler.cache-hits":{"unit":"count","class":"pacing"},"shaders.compiler.runs.dxc":{"unit":"count","class":"per-backend-deterministic"},"shaders.sdf-kernels.loads":{"unit":"count","class":"per-backend-deterministic"},"shaders.sdf-kernels.bytecode-bytes":{"unit":"bytes","class":"per-backend-deterministic"}}}]""",
                 actual: result.Output
             );
         } finally {

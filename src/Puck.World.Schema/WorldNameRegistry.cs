@@ -1655,9 +1655,9 @@ public static partial class WorldNameRegistry {
             "spawn point ids"
         ),
         new(
-            typeof(WorldRenderExtensionEntry),
-            nameof(WorldRenderExtensionEntry.Id),
-            "a post-render extension id"
+            typeof(WorldViewPostPass),
+            nameof(WorldViewPostPass.Name),
+            "a post pass name"
         ),
         new(
             typeof(WorldScreenSource.Producer),
@@ -1915,14 +1915,14 @@ public static partial class WorldNameRegistry {
             "an input source id"
         ),
         new(
-            typeof(WorldProbeParameterTarget.Extension),
-            nameof(WorldProbeParameterTarget.Extension.Id),
-            "a post-render extension id"
+            typeof(WorldProbeParameterTarget.Post),
+            nameof(WorldProbeParameterTarget.Post.Pass),
+            "a post pass name"
         ),
         new(
-            typeof(WorldProbeParameterTarget.Extension),
-            nameof(WorldProbeParameterTarget.Extension.Field),
-            "an extension config field"
+            typeof(WorldProbeParameterTarget.Post),
+            nameof(WorldProbeParameterTarget.Post.Field),
+            "a post pass config field"
         ),
         new(
             typeof(WorldProbeParameterTarget.Probe),

@@ -81,14 +81,14 @@ public sealed class AffectedDocumentsLawTests {
         var workingTree = new AffectedWorkingTree(root: repositoryRoot);
         var reachedBy = AffectedDocuments.ReachedBy(
             canaries: canaries,
-            setFiles: new AffectedShaders(
+            packageFiles: new AffectedShaders(
                 projects: AffectedCommand.Projects(model: ArchitectureModel.Load(repositoryRoot: repositoryRoot), repositoryRoot: repositoryRoot),
                 tree: workingTree
             ).FilesOf,
             tree: workingTree
         );
 
-        // The film-grain set is reached only through the world that lists it in render.extensions.
+        // The film-grain package is reached only through the world that runs it in views.post.
         Assert.Equal(actual: reachedBy["src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-film-grain.frag.hlsl"], expected: ["post-pass"]);
 
         Assert.Contains(collection: reachedBy["src/Puck.Shaders/Assets/Shaders/Graph/place.comp.hlsl"], expected: "resample-reconstruction");
