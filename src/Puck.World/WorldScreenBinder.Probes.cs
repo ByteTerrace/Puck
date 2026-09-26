@@ -72,16 +72,13 @@ internal sealed partial class WorldScreenBinder {
             feed.Release();
         }
     }
-    /// <summary>Binds a declared screen to a probe's texture output. Fails for an undeclared screen or a probe that
-    /// declares no output.</summary>
+    /// <summary>Binds a declared screen to a probe's texture output, whose source instance the screen shows over its row
+    /// from the render graph's next frame. Fails for an undeclared screen or a probe that declares no output.</summary>
     /// <param name="index">The engine screen-surface index.</param>
     /// <param name="id">The <c>probes[].id</c>.</param>
     /// <returns>Whether the bind succeeded, and a message describing the outcome.</returns>
     public (bool Ok, string Message) TryProbe(int index, string id) {
-        if (!m_slots.TryGetValue(
-            key: index,
-            value: out var slot
-        )) {
+        if (!m_slots.ContainsKey(key: index)) {
             return (Ok: false, Message: $"no screen {index} declared");
         }
         if (
@@ -94,10 +91,10 @@ internal sealed partial class WorldScreenBinder {
             return (Ok: false, Message: $"probe '{id}' declares no texture output");
         }
 
-        slot.ClearLive();
-        slot.Probe = feed;
-        slot.DeclaredFault = null;
-        ShowLive(index: index);
+        ShowLive(
+            index: index,
+            source: new WorldScreenSource.Probe(Id: id)
+        );
 
         return (Ok: true, Message: $"screen {index} showing probe '{id}'");
     }
@@ -368,7 +365,7 @@ internal sealed partial class WorldScreenBinder {
 
         slots.Configure(targetCount: images.Count);
 
-        var targets = new CameraGpuTargetSet(
+        var targets = new SharedTargetRing(
             fence: fence,
             images: images,
             importedViews: views,
@@ -415,7 +412,7 @@ internal sealed partial class WorldScreenBinder {
         public bool Live { get; set; }
         public ProbeKernelOutput? Output { get; set; }
         public (int Width, int Height)? Request { get; set; }
-        public CameraGpuTargetSet? Targets { get; set; }
+        public SharedTargetRing? Targets { get; set; }
 
         public GpuImageLease AcquireFrame() {
             if (

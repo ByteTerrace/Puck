@@ -4,14 +4,9 @@ using Puck.SdfVm.Views;
 
 namespace Puck.World.Client;
 
-/// <summary>What a screen shows at run time, as <see cref="WorldScreenMappingSet"/> reads it: whether the screen still
-/// shows its row's source, and the extent of an image only the running producer knows.</summary>
+/// <summary>What a screen shows at run time, as <see cref="WorldScreenMappingSet"/> reads it: the extent of an image only
+/// the running producer knows.</summary>
 public interface IWorldScreenImages {
-    /// <summary>Returns whether a screen shows the source its row names, rather than a live presentation source bound
-    /// over it, which no row names.</summary>
-    /// <param name="screen">The screen's index.</param>
-    /// <returns><see langword="true"/> when the screen shows its row's source.</returns>
-    bool ShowsRow(int screen);
     /// <summary>Finds the extent of the image a producer, machine or probe source shows on a screen.</summary>
     /// <param name="screen">The screen's index.</param>
     /// <param name="width">The image's width, in pixels, when this returns <see langword="true"/>.</param>
@@ -20,32 +15,35 @@ public interface IWorldScreenImages {
     bool TryExtent(int screen, out int width, out int height);
 }
 /// <summary>
-/// The mapping every screen row publishes (<see cref="WorldScreenMappings.Of"/>, with the screen glass's bezel as its
-/// warp), named by the handle of the instance its source is: a producer, machine or probe source by its source
-/// instance (<see cref="WorldSourceInstances"/>, <c>source$&lt;producer&gt;$&lt;digest&gt;</c>), a view by its camera's
+/// The mapping every screen publishes (<see cref="WorldScreenMappings.Of"/>, with the screen glass's bezel as its warp)
+/// for the source it shows — its row's, or the source a live presentation verb bound over the row — named by the handle
+/// of the instance that source is: a producer, machine or probe source by its source instance
+/// (<see cref="WorldSourceInstances"/>, <c>source$&lt;producer&gt;$&lt;digest&gt;</c>), a view by its camera's
 /// registration (<see cref="WorldSeatAnchors.RegistrationName"/>) and a session by its screen's session view
 /// (<see cref="WorldViewNames.Session"/>). A view's and a session's extent is document data; a source instance's is the
-/// running image's (<see cref="IWorldScreenImages.TryExtent"/>). A screen showing nothing, text, a live presentation
-/// source, or an image of unknown extent publishes no mapping, and <see cref="Describe"/> says why.
-/// <para><see cref="Reconcile"/> runs when the rows or the cameras change and allocates; <see cref="Publish"/> runs
-/// every frame and, while every row's handle and extent hold, publishes the mappings it published before without
-/// allocating.</para>
+/// running image's (<see cref="IWorldScreenImages.TryExtent"/>). A screen showing nothing, text, or an image of unknown
+/// extent publishes no mapping, and <see cref="Describe"/> says why.
+/// <para><see cref="Reconcile"/> runs when the rows, the live binds or the cameras change and allocates;
+/// <see cref="Publish"/> runs every frame and, while every row's handle and extent hold, publishes the mappings it
+/// published before without allocating.</para>
 /// </summary>
 public sealed class WorldScreenMappingSet {
-    private const string LiveSource = "a live presentation source no row names";
     private const string NoExtent = "the image's extent is not known yet";
     private const string NoImage = "no image source";
     private const string Unpublished = "not published";
 
     private readonly List<SourceMapping> m_published = [];
-
     private Row[] m_rows = [];
 
     /// <summary>Gets the mapping of every screen that publishes one, in row order, as <see cref="Publish"/> last
     /// published them. The set rewrites the list in place.</summary>
     public IReadOnlyList<SourceMapping> Mappings => m_published;
+
     /// <summary>Gets the screen rows the set last reconciled, in order.</summary>
     public IReadOnlyList<WorldScreen> Screens { get; private set; } = [];
+    /// <summary>Gets the source instances the screens show, a new value on every <see cref="Reconcile"/>: the render graph
+    /// runs them, and each screen showing one samples its image.</summary>
+    public WorldSourceInstances Sources { get; private set; } = WorldSourceInstances.Of(shown: []);
 
     // The row a screen's source names: its handle and document extent, or why it names none.
     private static Row RowOf(WorldScreen screen, int position, WorldSourceInstances sources, IReadOnlyList<WorldCamera> cameras) {
@@ -130,23 +128,40 @@ public sealed class WorldScreenMappingSet {
             }
         }
     }
-    /// <summary>Reconciles the set with the rows and cameras the screens now read: derives each row's source instance
-    /// and handle, and drops every mapping, which the next <see cref="Publish"/> rebuilds.</summary>
+    /// <summary>Reconciles the set with the sources the screens now show and the cameras they name: derives each screen's
+    /// source instance and handle, and drops every mapping, which the next <see cref="Publish"/> rebuilds. A screen shows
+    /// the source a live presentation verb bound over its row, or else its row's.</summary>
     /// <param name="screens">The screen rows, in order.</param>
     /// <param name="cameras">The cameras a view source names.</param>
-    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public void Reconcile(IReadOnlyList<WorldScreen> screens, IReadOnlyList<WorldCamera> cameras) {
+    /// <param name="live">The source a live presentation verb shows over a row, by screen index, or
+    /// <see langword="null"/> for none; the set reads it only while it reconciles.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="screens"/> or <paramref name="cameras"/> is
+    /// <see langword="null"/>.</exception>
+    public void Reconcile(IReadOnlyList<WorldScreen> screens, IReadOnlyList<WorldCamera> cameras, IReadOnlyDictionary<int, WorldScreenSource>? live = null) {
         ArgumentNullException.ThrowIfNull(argument: screens);
         ArgumentNullException.ThrowIfNull(argument: cameras);
 
-        var sources = WorldSourceInstances.Of(shown: [.. screens.Select(selector: static screen => screen.Source)]);
-        var rows = new Row[screens.Count];
+        var shown = new WorldScreen[screens.Count];
 
         for (var position = 0; (position < screens.Count); position++) {
+            var screen = screens[position];
+
+            shown[position] = (((live is not null) && live.TryGetValue(
+                key: screen.Index,
+                value: out var bound
+            ))
+                ? (screen with { Source = bound })
+                : screen);
+        }
+
+        var sources = WorldSourceInstances.Of(shown: [.. shown.Select(selector: static screen => screen.Source)]);
+        var rows = new Row[shown.Length];
+
+        for (var position = 0; (position < shown.Length); position++) {
             rows[position] = RowOf(
                 cameras: cameras,
                 position: position,
-                screen: screens[position],
+                screen: shown[position],
                 sources: sources
             );
         }
@@ -154,6 +169,20 @@ public sealed class WorldScreenMappingSet {
         m_rows = rows;
         m_published.Clear();
         Screens = screens;
+        Sources = sources;
+    }
+    /// <summary>Returns the name of the source instance a screen shows, without allocating.</summary>
+    /// <param name="screen">The screen's index.</param>
+    /// <returns>The instance's name, or <see langword="null"/> when no reconciled row has that index or its source is
+    /// no source instance.</returns>
+    public string? InstanceOf(int screen) {
+        for (var position = 0; (position < m_rows.Length); position++) {
+            if (m_rows[position].Screen.Index == screen) {
+                return Sources.InstanceOf(screen: position);
+            }
+        }
+
+        return null;
     }
     /// <summary>Finds the mapping a screen last published.</summary>
     /// <param name="screen">The screen's index.</param>
@@ -195,13 +224,6 @@ public sealed class WorldScreenMappingSet {
 
                 return;
             }
-            if (!images.ShowsRow(screen: Screen.Index)) {
-                Mapping = null;
-                Refusal = LiveSource;
-
-                return;
-            }
-
             var width = 0;
             var height = 0;
 

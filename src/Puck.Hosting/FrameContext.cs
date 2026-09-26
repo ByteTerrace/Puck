@@ -18,6 +18,8 @@ namespace Puck.Hosting;
 /// <param name="StepTicks">The fixed update period in engine ticks; the render interpolation denominator.</param>
 /// <param name="TargetWidth">The pixel width the parent is asking this node to fill.</param>
 /// <param name="TargetHeight">The pixel height the parent is asking this node to fill.</param>
+/// <param name="DisplayHertz">The presented frames a second the host paces the display at, or zero when it is unknown
+/// or unbounded, such as offscreen. Presentation only: a render graph counts a rate source's cadence in these frames.</param>
 public readonly record struct FrameContext(
     IHostContext Host,
     ulong ElapsedTicks,
@@ -26,7 +28,8 @@ public readonly record struct FrameContext(
     ulong AccumulatorTicks,
     ulong StepTicks,
     uint TargetWidth,
-    uint TargetHeight
+    uint TargetHeight,
+    int DisplayHertz = 0
 ) {
     /// <summary>Gets the seconds the simulation advances this frame (<see cref="DeltaTicks"/> as seconds).</summary>
     public double DeltaSeconds =>

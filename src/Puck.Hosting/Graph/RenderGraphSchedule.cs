@@ -16,6 +16,10 @@ public enum RenderGraphInstanceStatus : byte {
     /// <summary>Its refresh is due, but rendering it would exceed the policy's pass-pixel budget; its consumers read
     /// its latest completed output, and it is first in line on a later frame.</summary>
     Deferred = 4,
+    /// <summary>It is a source whose producer declares a rate cadence while the frame states no display rate
+    /// (<see cref="RenderGraphFrame.DisplayHertz"/> zero), so its rate cannot be counted in frames: it does not render
+    /// until the display's rate is known, and this row names it.</summary>
+    Refused = 5,
 }
 /// <summary>One instance's row in a frame's schedule: its decision and its price.</summary>
 /// <param name="Instance">The instance name.</param>

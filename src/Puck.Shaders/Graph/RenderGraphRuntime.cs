@@ -709,7 +709,19 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 continue;
             }
             if (m_producers[binding.Producer] is { } producer) {
-                if (producer.TryAcquireOutput(output: out var external)) {
+                var acquired = producer.TryAcquireOutput(output: out var external);
+
+                // A source whose image arrives from another thread or device as an image view alone hands out no image a
+                // graph's barriers can name, so its reader draws a stand-in, as one of a producer with no output does.
+                if (
+                    acquired &&
+                    !external.Image.IsSameDeviceImage
+                ) {
+                    external.Lease.Retire();
+                    acquired = false;
+                }
+
+                if (acquired) {
                     node.BindImage(
                         image: new ShaderPipelineExternalImage(
                             Format: external.Image.Format,
@@ -966,15 +978,25 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 if (index == m_captureInstance) {
                     m_capture.Forward(target: producer);
                 }
-                if (
-                    (row.Width <= 0) ||
-                    (row.Height <= 0) ||
-                    !producer.Produce(
+
+                var reads = BindExternalReads(
+                    index: index,
+                    schedule: schedule
+                );
+                var produced = (
+                    (row.Width > 0) &&
+                    (row.Height > 0) &&
+                    producer.Produce(
                         context: in context,
                         height: ((uint)row.Height),
+                        reads: reads,
                         width: ((uint)row.Width)
                     )
-                ) {
+                );
+
+                reads?.RetireUntaken();
+
+                if (!produced) {
                     m_unproduced++;
                     schedule.Next.Withdraw(
                         index: index,

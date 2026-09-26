@@ -1095,8 +1095,9 @@ document data; a source instance's is the running image's, which the binder
 answers through `IWorldScreenImages` (a machine output's `Width` and `Height`,
 a producer feed's descriptor, a probe's ring). `WorldScreenBinder.Publish`
 republishes every mapping each frame, allocating nothing while handles and
-extents hold. A screen showing no image, a live `screen.source` bind over its
-row, or an image of unknown extent publishes none, and `world.screens` prints
+extents hold. A live `screen.source` bind over a row publishes the bound
+source's mapping. A screen showing no image, or an image of unknown extent,
+publishes none, and `world.screens` prints
 each screen's mapping in `SourceMapping.Describe`'s line or why it has none.
 Every view's world producer reports the published screens as the placements
 standing in its world (`WorldViewGraphHost.Screens`), so a walk from a view's
@@ -1160,8 +1161,9 @@ Direct3D 11 write and publishes the slot with the value, and the consuming
 submission waits for it on the GPU (a Vulkan host through the fence imported as
 a timeline semaphore); a device that cannot share the fence, and the probe
 kernel, which reads its channels on the CPU, wait on the CPU instead. The
-consumer holds a CPU slot lease until its submission retires. The capture GPU
-route and the offscreen views' renders sample a slot with no lease at all.
+consumer holds a CPU slot lease until its submission retires, the desktop capture's
+included (its targets' `LatestSlotPublication`, which its producer reserves write
+slots through, so it never overwrites a slot a lease holds).
 Every image that enters rendering from outside a pass is
 described by `ImageSourceDescriptor` (`Puck.Abstractions.Sources`): producer,
 transport, extent, pixel format (including palette-indexed and NV12), color
@@ -1188,16 +1190,20 @@ convert a region into the image a consumer samples. `source-palette` and
 carries a BGRA swizzle, and `source-transfer` decodes sRGB, linear or PQ into
 linear light. `ImageSourceConversion` is their CPU reference, and the
 `source-conversion` canary holds all four kernels to it on both backends. The
-test pattern and the QR code already convert through graph regions: each writes
-a region that an uploaded source instance's one-pass graph converts in the
-render-graph runtime, which a pane or a `captures` row reads. Screens still show
-them through `CpuSurfaceSource`, and the other feeds still need the same
-migration. The emulators still publish through
-`IMachineVideoOutput`'s own `IGpuSurfaceUpload`, and the capture and camera CPU
-tiers and the fills through `CpuSurfaceSource`. Only the camera's CPU tier hands the screen a counted
-lease; the others and the machine outputs hand it a bare handle. Each waits
-for P12b to record its region flush and conversion dispatch as a graph source
-node. Desktop capture runs through `Win32GraphicsCaptureFeed` and cameras
+test pattern and the QR code convert through graph regions: each writes a
+region that an uploaded source instance's one-pass graph converts in the
+render-graph runtime, which a pane, a `captures` row or a screen showing the
+source reads. The capture and camera CPU tiers and the capture fills convert
+through the same one-pass graph on a node of their own
+(`RenderGraphRuntime.CreateConverter`, `RenderGraphSourceConverter`), since
+their tier is chosen per device at run time and the HUD reads them outside the
+set, and hand out counted leases. A fill converts as soon as a screen shows or
+a HUD frame names an external source, because a converter's graph builds off
+the frame thread; a camera source's descriptor states the extent its seat's
+sensor delivers, requested until the device negotiates one. The emulators still publish through
+`IMachineVideoOutput`'s own `IGpuSurfaceUpload`, from the machine source
+instance's producer, and hand the screen a bare handle; P12b-6 moves them onto
+a region. Desktop capture runs through `Win32GraphicsCaptureFeed` and cameras
 through Media Foundation (`Win32MediaFoundationCameraService`). Linux registers
 null capture services, and there is no POSIX file-descriptor import or
 external semaphore.
@@ -2964,20 +2970,19 @@ schema or planner change.
 **Depends on:** P11 and P7.
 
 **P12b, the rest of the package.** P12b moves the source contract into the
-graph. Today the screen binder resolves every screen's image into
-`SdfEngineNode`'s 32 screen slots through one lease callback per slot
-(`WorldScreenBinder.ScreenSources`, read through
-`SdfWorldRenderSpec.ScreenSourceFrames`), and the graph runtime never sees a
-source. Four facts shape the order:
+graph. A producer, machine or probe source a screen shows, its row's or a live
+bind's, is a source instance the live set runs, and `SdfEngineNode` binds the
+image the runtime hands it for each through `ISdfScreenSources`; a view and a
+session are still images the binder hands the node itself. Four facts shape
+the order:
 
-- `sdf.world` is an external producer, and the runtime refuses an external
-  instance that declares reads, so a screen inside the SDF frame cannot read a
-  source instance through a graph edge until external producers take image
-  reads or P14-6 makes the engine a package. P12b takes the first path, so it
-  does not wait on P14.
-- Two paths sample a shared slot with no lease (see the implementation status).
+- `sdf.world` is an external producer, which takes image reads (step 2), so a
+  screen inside the SDF frame reads a source instance through a graph edge
+  without waiting on P14-6.
+- Every image another thread or device writes, the desktop capture's GPU route
+  included, is sampled under a lease its producer cannot overwrite (step 2).
 - Only the test pattern and the QR code write upload regions, which a source
-  instance's graph converts, and no screen reads one yet.
+  instance's graph converts and a screen showing the source samples.
 - Few canaries reach this path. The coverage index maps no canary to the
   capture feed, the camera converter, the QR binder or the descriptor, and the
   62 it maps to `WorldScreenBinder.cs` mostly construct the binder, because the
@@ -3017,14 +3022,8 @@ except step 8.
    `WorldSourceInstanceLawTests`: removing or reordering screens keeps every
    remaining source's name and producer; no name is reused for other
    content; equal settings in another member order or number spelling read
-   one instance. What is still open moves to step 2: no screen reads a source
-   instance yet, because `sdf.world` takes no image reads, so the live set
-   does not install them and no host supplies `RenderGraphFrame.Sources`; and
-   the live runtime node passes a display rate of zero, under which a rate
-   source may render on every frame.
-2. Feeds are external producers, and every screen image is a lease. Can land
-   now; it edits `SdfEngineNode`, so it lands before or after P7b-20, not
-   beside it. An `IWorldImageFeed` adapts to `IRenderGraphExternalProducer`:
+   one instance. Step 2 installs them in the live set.
+2. Feeds are external producers, and every screen image is a lease. Landed. An `IWorldImageFeed` adapts to `IRenderGraphExternalProducer`:
    `Produce` publishes the feed at its cadence, and `TryAcquireOutput` returns
    `WorldCaptureGate.Resolve`'s lease, so the gate sits at the one place a
    source's image is acquired. External producers take image reads: the runtime
@@ -3050,9 +3049,102 @@ except step 8.
    Laws on the fake GPU: a screen's lease
    retires after the sampling slot's fence; a slot the capture producer is
    lapping is never handed out while leased; a filled external source binds
-   its fill and is never acquired. Canaries: `view-screens`,
-   `instrument-clock-source`, `hud-frame-slots`, the rest of the binder's 62,
-   and `puck parity`.
+   its fill and is never acquired; an external wait lands in the submission
+   that samples its image. Canaries: `view-screens`,
+   `instrument-clock-source`, `hud-frame-slots`, `uploaded-sources`,
+   `source-conversion`, the binder's canaries `puck affected` lists, and
+   `puck parity`. It lands as these commits, in order, each green:
+   1. External producers take image reads. `RenderGraphInstanceSet` refuses
+      only an external producer's buffer and previous-frame reads.
+      `IRenderGraphExternalProducer.Produce` takes the frame's
+      `RenderGraphExternalReads`: the runtime binds each image read's latest
+      completed output as a lease (an external producer's acquisition, a graph
+      instance's output unleased), the producer takes the leases it samples,
+      and the runtime retires the rest after `Produce`. A source's external
+      producer states its cadence and extent (`RenderGraphSourceState`), which
+      the runtime adds to `RenderGraphFrame.Sources` beside the uploads'.
+      `FrameContext.DisplayHertz` carries the presented rate the pacer
+      targets, `RenderGraphRuntimeNode` passes it, and while it is zero the
+      scheduler refuses a `Rate` source: it is never due, and its row in the
+      schedule reads `RenderGraphInstanceStatus.Refused`, which names it.
+      Landed.
+   2. The external wait rides the lease. `GpuImageLease` carries its
+      `GpuExternalWait`, and the node that samples it adds the wait to the
+      submission that samples it, never to whichever submission comes next.
+      The node's screen sources are leases only: `SetScreenSourceFrames` and
+      the handle-only `SdfWorldRenderSpec.ScreenSources` go, and the leased map
+      takes that name. Landed.
+   3. Feeds are external producers and screens read source instances. Every
+      `IWorldImageFeed` adapts to a source producer whose `TryAcquireOutput`
+      is `WorldCaptureGate.Resolve`, and the machine and probe arms register
+      producers of their reserved ids. `WorldSourceInstances` joins the live
+      set, the world producer reads each shown source with a footprint, and
+      `SdfEngineNode` maps the reads to its screen slots. `ScreenSourceCell`,
+      the binder's per-slot callbacks and `SdfWorldRenderSpec.ScreenSources`
+      go. Landed: a producer that is not uploaded adapts to
+      `WorldImageFeedProducer`, which owns the feed its instance's factory
+      opened, publishes it when the runtime renders the instance and hands out
+      an image view through the gate; `machine` and `probe` register the
+      binder's `MachineSource` and `ProbeSource`. `WorldViewGraphHost.TryCompose`
+      runs the rows' sources (`WorldScreenMappingSet.Sources`) ahead of the
+      world producer, which reads each with a footprint, and recomposes when
+      the rows move. `SdfEngineNode` takes `ISdfScreenSources` (the render
+      spec's `ScreenSources`): a screen reading an instance binds the read, its
+      lease taken once however many screens show it and held to the sampling
+      slot's fence, before the offscreen views render; any other binds
+      `Rendered`. The binder publishes before the runtime schedules, and a graph
+      input bound to an imported source draws a stand-in, since it hands out an
+      image view alone. Laws:
+      `SdfEngineNodeLeaseLawTests.AScreensSourceLeaseRetiresOnlyAfterTheSamplingSlotsFence`
+      and `ImageProducerLawTests.AFilledExternalSourceHandsOutItsFillAndNeverAcquiresItsFeed`.
+   4. Live `screen.source` binds are source instances, so they publish
+      mappings. Landed: the binder keeps the source each live verb binds over
+      a row (a camera, a capture, a QR code, a probe, a `screen.select`
+      entry), and `WorldScreenMappingSet.Reconcile` derives the source
+      instances and mappings from the shown sources, so the live set runs a
+      live bind's instance in the row's place. A capture verb parks the
+      capture it opened to prove its target for the instance to adopt, so a
+      capture opens once. The slot keeps only a view, a session and text;
+      `IWorldScreenImages.ShowsRow` goes. With no caller left, the uploaded
+      feeds' `CpuSurfaceSource` path goes too: `IWorldImageFeed` keeps the
+      descriptor, fault and light, and `IWorldImportFeed` carries the acquire,
+      handle, publish and device-loss members only an imported producer's
+      feed has. Law:
+      `WorldScreenMappingLawTests.ALiveBindOverARowPublishesTheBoundSourcesMapping`.
+   5. The capture GPU route acquires its slot through `LatestSlotPublication`,
+      and its superseded images and shared fence are released through the
+      lease after the last submission that samples them. Landed: the capture
+      targets are a `SharedTargetRing` (the camera's and the probe's ring,
+      renamed), whose publication rides `NativeImageGpuCaptureTargets.Slots`;
+      `Win32GraphicsCaptureFeed` reserves each write slot through it and drops a
+      tick with none free, the feed acquires the latest slot as a lease that
+      holds it and carries its fence value, and a reattach or a lost source
+      retires the old ring, disposed with its fence by the last lease.
+      `INativeImageCaptureFeed.LatestGpuSlot` and `GpuSlotFenceValue` go. Law:
+      `LatestSlotPublicationTests.A_lapping_producer_never_writes_a_slot_a_lease_holds`.
+   6. The offscreen views bind acquired leases rather than
+      `ScreenSlot.Handle()` until P11b-13 deletes `ViewStack`. Landed: the
+      node binds every screen reading a source instance before `ISdfFrameSource.RenderViews`,
+      and a view resolves such a screen to the image the node bound for it
+      (`WorldScreenBinder.CurrentHandle` over `SdfEngineNode.BoundScreenSource`),
+      under the lease the node holds past its own submission, which the
+      views' submissions precede on the queue. `ScreenSlot.Handle()` serves only
+      a view's or a session's own offscreen output, which no other thread or
+      device writes. Law:
+      `SdfEngineNodeLeaseLawTests.AnOffscreenViewSamplesTheLeaseTheNodeHoldsForAScreensSource`.
+   7. The capture and camera CPU tiers go through `source-rgba`, each capture
+      fill is a static source, and `CpuSurfaceSource`'s screen role goes with
+      its last caller. Landed: the conversion an uploaded source instance
+      renders through is a `RenderGraphSourceConverter` the runtime makes for CPU
+      pixels outside the set (`RenderGraphRuntime.CreateConverter`, sharing the
+      instance's region binding), since a camera's tier is chosen per device at
+      run time and the HUD reads a camera or a capture outside the set. The
+      binder's `ConvertedPixels` converts a camera's or a capture's CPU tier,
+      and each capture fill once as a static 1x1 source, hands the image out
+      under a counted lease, and disposes a converter a new extent replaced, or
+      its owner retired, after the last lease. `CpuSurfaceSource` is deleted,
+      and publishing takes the frame context. Law:
+      `RenderGraphRuntimeLawTests.AConverterConvertsPixelsOutsideTheSetThroughItsDescriptorsConversion`.
 3. Uploaded sources write regions, and conversions are planned passes. The
    source-graph side has landed. An uploaded producer registers an upload for
    its source package (`RenderGraphPackageRecorders.RegisterSource`, through
@@ -3078,11 +3170,10 @@ except step 8.
    palette and NV12 kernels, and `uploaded-sources` captures a test-pattern
    source instance before composition and shows it and a QR code in panes.
    The conversion packages bind the frame and pass groups as every package
-   does. The node records a staged region's copy (P7b-22). Still open: screens
-   still read the binder's `CpuSurfaceSource` uploads of the same feeds until
-   step 2 connects them; the capture and camera CPU tiers and the capture fills
-   move onto `source-rgba` and static sources after that, and
-   `CpuSurfaceSource`'s screen role goes with its last caller.
+   does. The node records a staged region's copy (P7b-22). A screen showing a
+   test pattern or a QR code samples the instance's converted output, and the
+   capture and camera CPU tiers and the capture fills convert through the same
+   graph on converters of their own (step 2).
 4. Fences across devices. Landed. The consumer creates a
    `D3D12_FENCE_FLAG_SHARED` fence beside the shared targets it provisions
    (`DirectXGpuSurfaceExportFactory.CreateExportableFence`, an
@@ -3092,10 +3183,12 @@ except step 8.
    (`Win32D3D11CompletionSignal`, the one completion primitive of every Direct3D
    11 producer), signals the next value on its immediate context after each
    write and flushes, and publishes the slot with that value
-   (`LatestSlotPublication.Publish`, `INativeImageCaptureFeed.GpuSlotFenceValue`).
-   The consumer acquires the slot with its value and adds a `GpuExternalWait`
-   to the render device's queue submitter (`IGpuQueueSubmitter.AddExternalWait`),
-   whose next submission carries it: `ID3D12CommandQueue::Wait` before the
+   (`LatestSlotPublication.Publish`; a capture through its targets'
+   `NativeImageGpuCaptureTargets.Slots`).
+   The consumer acquires the slot with its value, the lease carries a
+   `GpuExternalWait`, and the node that samples it adds the wait to the
+   submission that samples it (`IGpuQueueSubmitter.AddExternalWait` right
+   before that submit): `ID3D12CommandQueue::Wait` before the
    execute on Direct3D 12, and on Vulkan the fence imported as a timeline
    semaphore (`IGpuSurfaceTransferFactory.TryImportFence`, `VulkanSharedFence`,
    `VK_KHR_external_semaphore_win32` and the timeline-semaphore feature, both
@@ -3114,9 +3207,7 @@ except step 8.
    on it unretired until the Direct3D 11 signal, and skips by name on a device
    without the extension. WARP's Direct3D 11 device opens the shared fence, so
    the WARP case orders its write by the fence rather than a CPU wait, and the
-   WARP reader reads the pattern. Still open: the capture GPU route, which
-   publishes its slot's value but acquires no lease until step 2. A recorded
-   camera run on both backends on real hardware is
+   WARP reader reads the pattern. A recorded camera run on both backends on real hardware is
    [deferred to the end](#deferred-to-the-end).
 5. The capture gate over the graph. Can land now, after step 2. The gate
    reads the capture armed on `RenderGraphRuntime` rather than
@@ -3222,9 +3313,8 @@ Each commit is marked with what it waits on; only step 5 waits on P7b's groups.
    pixels, identically on every run) and
    `WorldViewPaneMappingLawTests.TheHitWalkContinuesThroughAScreenIntoItsSource`;
    the `view-screens` canary. A screen showing a camera view ends its walk
-   `Unread` until camera views render as live instances (P11b), and a live
-   `screen.source` bind, which no row names, publishes no mapping until P12b-2
-   makes live binds source instances.
+   `Unread` until camera views render as live instances (P11b). A live
+   `screen.source` bind publishes the bound source's mapping (P12b-2).
 2. The simulation destination, landed. A tick's command snapshot never reaches
    the server, which integrates each seat's `PlayerIntent`, so the intent
    carries the ray:
@@ -3660,9 +3750,9 @@ read simulation state, so they do not wait on the state rebuild.
 P11b items its implementation status lists, the main view through the graph
 runtime among them. The rest of P11b, commits 13 and 14, waits on nothing from
 P7b, whose groups have landed for every pass; commit 13, the screens, follows
-P12b-2. P12's
-source contract, producers and conversion passes have landed; P12b, the graph
-wiring, follows P11b, and P13b follows P12b and P11b. P14 follows P4, P7b, P8,
+P12b-2, which has landed. P12's
+source contract, producers and conversion passes have landed, and so has P12b-2;
+the rest of P12b, the graph wiring, follows P11b, and P13b follows P12b and P11b. P14 follows P4, P7b, P8,
 P11b and P12b, because the engine's composition and screens need somewhere to
 go before it moves; its capability matrix (P14-1), generated instruction-set
 declarations (P14-3) and the planner's vocabulary with multi-basis counts
@@ -3682,8 +3772,8 @@ P7's residency policies and P9's mirror as well as P5-1 and P8's interface,
 which have landed. It also follows P11b's graph wiring, because the rows it
 binds are `views.graphs` rows.
 
-The SDF engine's groups (P7b-20) have landed, so the longest remaining chain now
-runs P12b-2, P11b-13, P14-5, then P14-6 (which P4-2c joins), P14-7 to P14-13,
+The SDF engine's groups (P7b-20) and P12b-2 have landed, so the longest remaining
+chain now runs P11b-13, P14-5, then P14-6 (which P4-2c joins), P14-7 to P14-13,
 and ends with P15. P16 follows P14-10's float working targets, and drawing a
 bake (P17) comes before P6's choice between a bake and the field.
 

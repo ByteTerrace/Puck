@@ -301,9 +301,14 @@ and the frame's pass-pixel budget:
   `RenderGraphSourceState`: its cadence and its negotiated extent, never a
   refresh or a footprint. A static source renders once, a tick source at most
   once per completed simulation tick (`RenderGraphFrame.Tick`), and a rate
-  source at most its rate, counted in presented frames at the display's rate;
-  when the display's rate is unknown it may render on every frame. A source
-  whose producer declares nothing or no extent does not render. Cadence is
+  source at most its rate, counted in presented frames at the display's rate
+  (`RenderGraphFrame.DisplayHertz`, which a host takes from
+  `FrameContext.DisplayHertz`, the rate its pacer targets). While the
+  display's rate is unknown (zero, as offscreen) a rate source is refused: it
+  does not render, and its row reads `RenderGraphInstanceStatus.Refused`. A
+  source whose producer declares nothing or no extent does not render. The
+  runtime declares an upload's state and a source producer's
+  (`IRenderGraphSourceProducer.Descriptor`) itself, after the host's. Cadence is
   counted in ticks and frames, never the wall clock.
   `RenderGraphHistory.Withdraw` takes back a render the producer could not
   complete, so its cadence counts from its last completed frame.
@@ -319,10 +324,12 @@ alternates two schedules schedules a steady frame without allocating once their
 read lists have grown to the frame's reads, and `RenderGraphFrame` is a value,
 so describing each frame over the same root and footprint lists allocates
 nothing either. The main view and the `views.graphs` panes render through it
-(`RenderGraphRuntime` in `Puck.Shaders`); screens still render through the
-offscreen view stack until the rest of P11b in
+(`RenderGraphRuntime` in `Puck.Shaders`), and so do the source instances the
+screens show, which the SDF world producer reads as leases when it produces;
+screens themselves still render inside the SDF frame, and a screen showing a
+camera view through the offscreen view stack, until the rest of P11b in
 [the rendering programme](../plans/rendering.md#p11--the-frame-graph-document-and-nested-views)
-moves them, and no screen reads a source instance until P12b-2.
+moves them.
 
 `RenderGraphHitWalk` follows a hit through nested instances. Each instance
 reports, through `IRenderGraphHitScene`, the source placements in its world

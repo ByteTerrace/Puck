@@ -25,6 +25,7 @@ public sealed class RenderGraphLiveBudget {
         RenderGraphInstanceStatus.Rendered => "rendered",
         RenderGraphInstanceStatus.Waiting => "waiting",
         RenderGraphInstanceStatus.Deferred => "deferred",
+        RenderGraphInstanceStatus.Refused => "refused (rate source, display rate unknown)",
         _ => "unread",
     };
     // Appends the work the instance's newest completed submission counted, or that it has none yet.

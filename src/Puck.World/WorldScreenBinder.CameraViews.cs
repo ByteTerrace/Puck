@@ -472,7 +472,7 @@ internal sealed partial class WorldScreenBinder {
         foreach (var slot in m_slots.Values) {
             if (
                 (slot.View is null) &&
-                !slot.HasLive &&
+                !m_live.ContainsKey(key: slot.Index) &&
                 (slot.DeclaredSource is WorldScreenSource.View declared) &&
                 (ResolveCamera(name: declared.CameraName) is not null) &&
                 (m_viewPipelines is not null)
@@ -483,12 +483,12 @@ internal sealed partial class WorldScreenBinder {
                 );
 
                 // The view the row names, not a live bind over it.
-                _ = m_liveBinds.Remove(item: slot.Index);
+                ShowRow(index: slot.Index);
                 Console.Error.WriteLine(value: $"[world.camera: {outcome.Message}]");
             }
         }
 
-        ReconcileMappings(screens: Mappings.Screens);
+        ReconcileMappings();
     }
     /// <summary>Points a declared screen at a placeable camera — the runtime <c>screen.source &lt;index&gt; view</c> path. Any existing
     /// producer on the slot is cleared first. Requires the view pool to have been configured (it is, at startup); fails
@@ -526,7 +526,6 @@ internal sealed partial class WorldScreenBinder {
             camera: camera,
             seat: DefaultViewSeat
         );
-        slot.ClearLive();
         slot.View = new ViewFeed(name: registrationName) { Stack = m_viewStack };
         slot.DeclaredFault = null;
         m_viewStack!.SetWiredScreens(
@@ -547,7 +546,10 @@ internal sealed partial class WorldScreenBinder {
             ReleaseOrphanedCameraView(name: previous.Name);
         }
 
-        ShowLive(index: index);
+        ShowLive(
+            index: index,
+            source: new WorldScreenSource.View(CameraName: cameraName)
+        );
 
         return (Ok: true, Message: $"screen {index} showing camera '{camera.Name}'");
     }

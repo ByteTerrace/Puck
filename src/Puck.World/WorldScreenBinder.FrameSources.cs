@@ -1,4 +1,3 @@
-using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Sources;
 using Puck.Commands;
 using Puck.Hosting;
@@ -345,22 +344,17 @@ internal sealed partial class WorldScreenBinder {
         m_cameraDemand.Clear();
 
         foreach (var slot in m_slots.Values) {
-            if (slot.LiveFeed is not CameraSlotFeed { Seat: var seat, Sensor: var sensor }) {
+            // A screen showing a camera reads its source instance, whose feed resolves the seat's shared feed this demand
+            // opens.
+            if (!WorldImageProducerSettings.TryCamera(
+                camera: out var shown,
+                source: ShownOf(screen: slot.Index)
+            )) {
                 continue;
             }
 
-            var requested = ((
-                WorldImageProducerSettings.TryCamera(
-                    camera: out var declared,
-                    source: slot.DeclaredSource
-                ) &&
-                ((declared.Seat ?? seat) == seat) &&
-                (declared.Sensor == sensor)
-            )
-                ? (declared.Profile ?? WorldFeedProfile.Default)
-                : WorldFeedProfile.Default
-            );
-            var key = (seat, sensor);
+            var requested = (shown.Profile ?? WorldFeedProfile.Default);
+            var key = ((shown.Seat ?? DefaultViewSeat), shown.Sensor);
 
             m_cameraDemand[key] = (m_cameraDemand.TryGetValue(
                 key: key,
@@ -453,13 +447,10 @@ internal sealed partial class WorldScreenBinder {
                     continue;
                 }
 
-                var replacement = new CameraFeed(
+                var replacement = NewCameraFeed(
                     profile: requested,
-                    sensor: feed.Sensor,
-                    surface: new CpuSurfaceSource()
-                ) {
-                    Fault = "camera opening",
-                };
+                    sensor: feed.Sensor
+                );
 
                 feed.Dispose();
                 device.Feeds[index] = replacement;
@@ -559,9 +550,9 @@ internal sealed partial class WorldScreenBinder {
         return false;
     }
 
-    // Whether a frame source's content is external: a producer whose registered shape says so, or a probe, which
-    // processes a camera's frames.
-    private static bool IsExternal(WorldFrameSource source) => source switch {
+    // Whether a source's content is external: a producer whose registered shape says so, or a probe, which processes a
+    // camera's frames.
+    private static bool IsExternal(WorldScreenSource? source) => source switch {
         WorldScreenSource.Producer producer => (WorldImageProducerVocabulary.TryGet(
             id: producer.Id,
             shape: out var shape
@@ -571,11 +562,11 @@ internal sealed partial class WorldScreenBinder {
     };
     // Standalone captures ride the same per-frame pull cadence a slot-owned capture does, from Publish (below), and
     // the same device-lost/dispose sweeps every other feed this binder owns gets.
-    private void PublishFrameCaptures(IGpuDeviceContext deviceContext) {
+    private void PublishFrameCaptures(in FrameContext context) {
         foreach (var feed in m_frameCaptures.Values) {
             if (feed.ShouldPull()) {
                 CaptureWindow(
-                    deviceContext: deviceContext,
+                    context: in context,
                     feed: feed
                 );
             }

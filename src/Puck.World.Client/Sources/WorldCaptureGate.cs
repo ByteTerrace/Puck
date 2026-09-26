@@ -56,7 +56,7 @@ public sealed class WorldCaptureGate {
     /// <returns>The lease the frame samples.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="feed"/> or <paramref name="fill"/> is
     /// <see langword="null"/>.</exception>
-    public GpuImageLease Resolve(IWorldImageFeed feed, Func<uint, GpuImageLease> fill) {
+    public GpuImageLease Resolve(IWorldImportFeed feed, Func<uint, GpuImageLease> fill) {
         ArgumentNullException.ThrowIfNull(argument: feed);
         ArgumentNullException.ThrowIfNull(argument: fill);
 

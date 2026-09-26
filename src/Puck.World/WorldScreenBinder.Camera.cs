@@ -6,6 +6,7 @@ using System.Runtime.Versioning;
 using System.Text;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
+using Puck.Abstractions.Sources;
 using Puck.Commands;
 using Puck.DirectX;
 using Puck.DirectX.Apis;
@@ -13,19 +14,19 @@ using Puck.DirectX.Interop;
 using Puck.Platform;
 using Puck.Platform.Probes;
 using Puck.Hosting;
-using Puck.SdfVm.Views;
 using Puck.World.Client;
 
 namespace Puck.World;
 
-internal sealed partial class WorldScreenBinder {
+internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
     // Render frames between a graph ending (unplug, end of stream) and the reopen attempt, and between a refused open
     // and its retry — long enough for a driver to finish tearing down, short enough that a replug recovers unaided.
     private const int CameraReopenFrames = 60;
     private const int CameraRefusalFrames = 120;
-    // Shared-target ring depth per stream: enough room for the renderer's two in-flight frames plus one write target;
+    // Shared-target ring depth per camera stream and desktop capture: enough room for the renderer's two in-flight frames
+    // plus one write target;
     // explicit slot acquisitions enforce the guarantee when producer and renderer cadence diverge.
-    private const int CameraTargetCount = 3;
+    private const int SharedTargetCount = 3;
 
     // The document-member-to-platform-control pairing, stated once so ApplyCameraControlsFor and DescribeCameraFeed
     // can never disagree about which authored member drives which device control.
@@ -89,10 +90,11 @@ internal sealed partial class WorldScreenBinder {
         return builder.ToString();
     }
     /// <summary>Binds a declared screen to a seat's camera device's sensor — the runtime
-    /// <c>screen.source &lt;index&gt; camera [color|infrared] [seat N]</c> path. Any existing producer on the slot is
-    /// cleared first. The seat's camera device resolves (and its sensor feed opens, or reopens with the new sensor
-    /// set) on the next publish; an unassigned seat or an incompatible sensor then reports through the slot's fault
-    /// and <c>screen.camera</c>. Fails loudly for an undeclared screen or a platform without camera support.</summary>
+    /// <c>screen.source &lt;index&gt; camera [color|infrared] [seat N]</c> path. The screen shows the camera's source
+    /// instance over its row from the render graph's next frame. The seat's camera device resolves (and its sensor feed
+    /// opens, or reopens with the new sensor set) on the next publish; an unassigned seat or an incompatible sensor then
+    /// reports through the screen's fault and <c>screen.camera</c>. Fails loudly for an undeclared screen or a platform
+    /// without camera support.</summary>
     /// <param name="index">The engine screen-surface index (must be a declared screen).</param>
     /// <param name="sensor">Which sensor stream to bind.</param>
     /// <param name="seat">The 1-based local seat whose camera device this screen shows.</param>
@@ -106,10 +108,7 @@ internal sealed partial class WorldScreenBinder {
             return (Ok: false, Message: $"unknown camera sensor '{sensor}'");
         }
 
-        if (!m_slots.TryGetValue(
-            key: index,
-            value: out var slot
-        )) {
+        if (!m_slots.ContainsKey(key: index)) {
             return (Ok: false, Message: $"no screen {index} declared");
         }
 
@@ -117,17 +116,18 @@ internal sealed partial class WorldScreenBinder {
             return (Ok: false, Message: "no camera device present");
         }
 
-        slot.ClearLive();
-        slot.LiveFeed = new CameraSlotFeed(
-            binder: this,
-            profile: null,
-            seat: seat,
-            sensor: sensor
+        // Demand resolves at the next publish (ReconcileCameraDemand reads the camera each screen shows) — one produced
+        // frame's seam between this bind and the seat's device/feed appearing live.
+        ShowLive(
+            index: index,
+            source: WorldImageProducerSettings.SourceOf(
+                id: WorldImageProducerSettings.CameraId,
+                settings: new WorldCameraSettings(
+                    Seat: seat,
+                    Sensor: sensor
+                )
+            )
         );
-        slot.DeclaredFault = null;
-        // Demand resolves at the next publish (ReconcileCameraDemand reads the slot's camera feed directly) — one
-        // produced frame's seam between this bind and the seat's device/feed appearing live.
-        ShowLive(index: index);
 
         return (Ok: true, Message: $"screen {index} showing seat {seat}'s {SensorName(sensor: sensor)} webcam");
     }
@@ -180,7 +180,7 @@ internal sealed partial class WorldScreenBinder {
     // Services the device table, then every known device's lifecycle and every one of its declared feeds. Opens run
     // on the thread pool (a Media Foundation open can block for seconds proving a graph live); the render thread only
     // adopts a finished open.
-    private void CaptureCamera(IGpuDeviceContext deviceContext) {
+    private void CaptureCamera(in FrameContext context, IGpuDeviceContext deviceContext) {
         ServiceCameraDevices();
         ReconcileCameraDemand();
 
@@ -203,8 +203,8 @@ internal sealed partial class WorldScreenBinder {
 
             foreach (var feed in device.Feeds) {
                 ServiceCameraFeed(
+                    context: in context,
                     device: device,
-                    deviceContext: deviceContext,
                     feed: feed
                 );
             }
@@ -395,9 +395,7 @@ internal sealed partial class WorldScreenBinder {
 
         return true;
     }
-    // The four per-frame reads a ScreenSlot bound to (CameraSeat, CameraSensorKind) makes — thin wrappers over
-    // TryResolveCamera so the slot itself carries no camera machinery of its own.
-    private GpuImageLease AcquireCameraFrame(int seat, WorldCameraSensor sensor) =>
+    GpuImageLease IWorldSeatCameras.Acquire(int seat, WorldCameraSensor sensor) =>
         (TryResolveCamera(
             device: out _,
             fault: out _,
@@ -408,7 +406,7 @@ internal sealed partial class WorldScreenBinder {
             ? feed!.AcquireFrame()
             : default
         );
-    private nint CameraHandleFor(int seat, WorldCameraSensor sensor) =>
+    nint IWorldSeatCameras.Handle(int seat, WorldCameraSensor sensor) =>
         (TryResolveCamera(
             device: out _,
             fault: out _,
@@ -443,7 +441,18 @@ internal sealed partial class WorldScreenBinder {
                 SharedFence: false
             ));
     }
-    private Vector3 CameraLightFor(int seat, WorldCameraSensor sensor) =>
+    (uint Width, uint Height)? IWorldSeatCameras.Extent(int seat, WorldCameraSensor sensor) =>
+        (TryResolveCamera(
+            device: out _,
+            fault: out _,
+            feed: out var feed,
+            seat: seat,
+            sensor: sensor
+        )
+            ? feed!.Extent
+            : null
+        );
+    Vector3 IWorldSeatCameras.Light(int seat, WorldCameraSensor sensor) =>
         (TryResolveCamera(
             device: out _,
             fault: out _,
@@ -454,7 +463,7 @@ internal sealed partial class WorldScreenBinder {
             ? feed!.Light
             : Vector3.Zero
         );
-    private string? CameraFaultFor(int seat, WorldCameraSensor sensor) {
+    string? IWorldSeatCameras.Fault(int seat, WorldCameraSensor sensor) {
         if (!TryResolveCamera(
             device: out _,
             fault: out var fault,
@@ -670,7 +679,7 @@ internal sealed partial class WorldScreenBinder {
                 graph: shared
             )) {
                 device.Shared = shared;
-                Console.Out.WriteLine(value: $"[camera] GPU tier: '{shared.Name}' {DescribeStreams(graph: shared)}, {CameraTargetCount} shared targets per sensor{(m_hostsOnDirectX
+                Console.Out.WriteLine(value: $"[camera] GPU tier: '{shared.Name}' {DescribeStreams(graph: shared)}, {SharedTargetCount} shared targets per sensor{(m_hostsOnDirectX
                     ? ""
                     : ", imported for Vulkan sampling")}.");
             } else {
@@ -766,7 +775,7 @@ internal sealed partial class WorldScreenBinder {
                 return false;
             }
 
-            var targets = new CameraGpuTargetSet(
+            var targets = new SharedTargetRing(
                 fence: fence,
                 images: images,
                 importedViews: views,
@@ -809,7 +818,7 @@ internal sealed partial class WorldScreenBinder {
     // the CPU for its readings, gets none.
     [SupportedOSPlatform("windows10.0.10240")]
     private bool TryProvisionSharedRing(long adapterLuid, IGpuDeviceContext deviceContext, GpuPixelFormat format, int width, int height, bool sharedFence, out IReadOnlyList<IGpuExportableImage> images, out IGpuSurfaceImport[]? imports, out nint[]? importedViews, out SharedRingFence? fence, out string fault) {
-        var allocated = new IGpuExportableImage[CameraTargetCount];
+        var allocated = new IGpuExportableImage[SharedTargetCount];
         var handles = new nint[allocated.Length];
         IGpuSurfaceImport[]? createdImports = null;
         nint[]? createdViews = null;
@@ -896,7 +905,7 @@ internal sealed partial class WorldScreenBinder {
             return false;
         }
     }
-    private void ServiceCameraFeed(CameraDevice device, CameraFeed feed, IGpuDeviceContext deviceContext) {
+    private void ServiceCameraFeed(CameraDevice device, CameraFeed feed, in FrameContext context) {
         if (feed.SharedStream is { } shared) {
             // The platform publishes completed slots on its own thread and the screen samples the latest one directly;
             // no CPU pixels ever exist on this tier, so Light stays dark.
@@ -948,8 +957,9 @@ internal sealed partial class WorldScreenBinder {
             surface: in surface
         );
 
-        _ = feed.Surface.Publish(
-            deviceContext: deviceContext,
+        _ = TryConvert(
+            context: in context,
+            pixels: feed.Pixels,
             surface: in panelSurface
         );
         feed.StarvedPulls = 0;
@@ -1147,13 +1157,10 @@ internal sealed partial class WorldScreenBinder {
             return existing;
         }
 
-        var feed = new CameraFeed(
+        var feed = NewCameraFeed(
             profile: profile,
-            sensor: sensor,
-            surface: new CpuSurfaceSource()
-        ) {
-            Fault = "camera opening",
-        };
+            sensor: sensor
+        );
 
         m_cameraFeeds[key] = feed;
         device.Feeds.Add(item: feed);
@@ -1246,7 +1253,7 @@ internal sealed partial class WorldScreenBinder {
             device.SharedRefused = false;
 
             foreach (var feed in device.Feeds) {
-                feed.Surface.NotifyDeviceLost();
+                feed.Pixels.OnDeviceLost();
                 feed.LastFrameVersion = -1L;
                 feed.Rearm();
             }
@@ -1267,7 +1274,7 @@ internal sealed partial class WorldScreenBinder {
     }
     // The platform session owns its negotiated format and may ignore the preferred extent. A diegetic panel should not
     // upload a megapixel-scale frame it cannot display, so fit CPU pixels into the declaration's envelope before the
-    // synchronous GPU upload. The buffer is retained by the feed and reused; no steady-state allocation.
+    // conversion. The buffer is retained by the feed and reused; no steady-state allocation.
     private static Surface FitPanelSurface(in Surface surface, CameraFeed feed) {
         if (
             !surface.IsCpuPixels ||
@@ -1315,6 +1322,18 @@ internal sealed partial class WorldScreenBinder {
             format: surface.Format
         );
     }
+    // The one construction of a sensor's shared feed, opening, whose CPU tier converts through its own conversion.
+    private static CameraFeed NewCameraFeed(WorldFeedProfile profile, WorldCameraSensor sensor) => new(
+        pixels: new ConvertedPixels(
+            content: ImageContentClass.External,
+            name: $"camera:{sensor}",
+            producer: WorldImageProducerSettings.CameraId
+        ),
+        profile: profile,
+        sensor: sensor
+    ) {
+        Fault = "camera opening",
+    };
     private static string CameraAbsenceFault(WorldCameraSensor sensor) => ((WorldCameraSensor.Infrared == sensor)
         ? "no infrared camera present"
         : "no camera device present"
@@ -1415,9 +1434,9 @@ internal sealed partial class WorldScreenBinder {
     }
     private readonly record struct CameraOpenResult(ICameraGraph<ICameraSharedStream>? Shared, ICameraGraph<ICameraPixelStream>? Pixels, WorldCameraSensor[] Dropped);
     // One sensor's shared feed: its stream on whichever tier the device opened, the render resources that tier needs
-    // (shared rings and the Vulkan host's importers, or the CPU upload surface), and live/fault/glow state. The handle
+    // (shared rings and the Vulkan host's importers, or the CPU tier's conversion), and live/fault/glow state. The handle
     // is 0 (unbound) until the first frame lands and whenever the feed is not live.
-    private sealed class CameraFeed(WorldFeedProfile profile, WorldCameraSensor sensor, CpuSurfaceSource surface) : IDisposable {
+    private sealed class CameraFeed(WorldFeedProfile profile, WorldCameraSensor sensor, ConvertedPixels pixels) : IDisposable {
         private readonly PullCadence m_cadence = new(rateHz: profile.RefreshRateHz);
 
         public long LastFrameVersion { get; set; } = -1L;
@@ -1425,15 +1444,13 @@ internal sealed partial class WorldScreenBinder {
         public uint OutputWidth { get; } = checked((uint)profile.Width);
         public WorldFeedProfile Profile { get; } = profile;
         public WorldCameraSensor Sensor { get; } = sensor;
-        public CpuSurfaceSource Surface { get; } = surface;
+        // The CPU tier's pixels, converted into the image a frame samples.
+        public ConvertedPixels Pixels { get; } = pixels;
 
-        private int m_outstandingCpuFrames;
-        private Action<int>? m_releaseCpuFrame;
         private bool m_retired;
-        private bool m_surfaceDisposed;
 
         public string? Fault { get; set; }
-        public CameraGpuTargetSet? GpuTargets { get; set; }
+        public SharedTargetRing? GpuTargets { get; set; }
         public Vector3 Light { get; set; }
         public bool Live { get; set; }
         public byte[]? PanelPixels { get; set; }
@@ -1441,26 +1458,12 @@ internal sealed partial class WorldScreenBinder {
         public ICameraSharedStream? SharedStream { get; private set; }
         public int StarvedPulls { get; set; }
         public ICameraStream? Stream => (((ICameraStream?)SharedStream) ?? PixelStream);
-
-        private void DisposeSurface() {
-            if (m_surfaceDisposed) {
-                return;
-            }
-
-            m_surfaceDisposed = true;
-            Surface.Dispose();
-        }
-        private void ReleaseCpuFrame(int token) {
-            _ = token;
-            --m_outstandingCpuFrames;
-
-            if (
-                m_retired &&
-                (0 == m_outstandingCpuFrames)
-            ) {
-                DisposeSurface();
-            }
-        }
+        // The extent a frame samples: the shared ring's, the stream's negotiated one; the CPU tier's converted image's,
+        // fitted into the profile; the profile's before either has an image.
+        public (uint Width, uint Height) Extent => (((GpuTargets is not null) && (SharedStream is { } shared))
+            ? (checked((uint)shared.Width), checked((uint)shared.Height))
+            : (Pixels.Extent ?? (OutputWidth, OutputHeight))
+        );
 
         public GpuImageLease AcquireFrame() {
             if (
@@ -1479,19 +1482,7 @@ internal sealed partial class WorldScreenBinder {
                 );
             }
 
-            var handle = Surface.CurrentHandle;
-
-            if (0 == handle) {
-                return 0;
-            }
-
-            m_releaseCpuFrame ??= ReleaseCpuFrame;
-            ++m_outstandingCpuFrames;
-
-            return new GpuImageLease(
-                ImageViewHandle: handle,
-                Release: m_releaseCpuFrame
-            );
+            return Pixels.Acquire();
         }
         public void Attach(ICameraStream stream) {
             SharedStream = (stream as ICameraSharedStream);
@@ -1519,10 +1510,7 @@ internal sealed partial class WorldScreenBinder {
 
             m_retired = true;
             ReleaseGpuTargets();
-
-            if (0 == m_outstandingCpuFrames) {
-                DisposeSurface();
-            }
+            Pixels.Retire();
         }
         public nint Handle() {
             if (!Live) {
@@ -1536,7 +1524,7 @@ internal sealed partial class WorldScreenBinder {
                 return targets.Handle(slot: slot);
             }
 
-            return Surface.CurrentHandle;
+            return Pixels.Handle;
         }
         public void Rearm() => m_cadence.Rearm();
         // Retires the shared ring. Its resources are destroyed immediately when no submitted frame samples them, or
@@ -1549,11 +1537,12 @@ internal sealed partial class WorldScreenBinder {
         }
         public bool ShouldPull() => m_cadence.ShouldPull();
     }
-    // One platform producer's render-device-owned target ring — a camera stream's or a probe kernel output's. A
-    // screen-source frame acquires both the ring slot (so the producer cannot overwrite it) and this set's lifetime
-    // (so a producer close cannot destroy the texture while an already-submitted renderer frame still samples it).
-    // All methods run on the render thread except the ring's producer-side checks.
-    private sealed class CameraGpuTargetSet {
+    // One platform producer's render-device-owned target ring — a camera stream's, a desktop capture's or a probe kernel
+    // output's. A screen-source frame acquires both the ring slot (so the producer cannot overwrite it) and this set's
+    // lifetime (so a producer close or a reattach cannot destroy the texture or the shared fence while an
+    // already-submitted renderer frame still samples it). All methods run on the render thread except the ring's
+    // producer-side checks.
+    private sealed class SharedTargetRing {
         private readonly SharedRingFence? m_fence;
         private readonly IReadOnlyList<IGpuExportableImage> m_images;
         private readonly nint[]? m_importedViews;
@@ -1579,7 +1568,7 @@ internal sealed partial class WorldScreenBinder {
         /// has none).</summary>
         public string FenceRefusal => (m_fence?.Refusal ?? "");
 
-        public CameraGpuTargetSet(IReadOnlyList<IGpuExportableImage> images, nint[]? importedViews, IGpuSurfaceImport[]? imports, SharedRingFence? fence, ISharedSlotRing ring, DisposeAfterDependents<IDisposable>? targetDevice) {
+        public SharedTargetRing(IReadOnlyList<IGpuExportableImage> images, nint[]? importedViews, IGpuSurfaceImport[]? imports, SharedRingFence? fence, ISharedSlotRing ring, DisposeAfterDependents<IDisposable>? targetDevice) {
             m_fence = fence;
             m_images = images;
             m_importedViews = importedViews;
@@ -1641,6 +1630,12 @@ internal sealed partial class WorldScreenBinder {
                 : m_images[slot].ImageViewHandle
             );
         }
+        // The image view of the latest published slot, for a read that submits no GPU work; zero before the first
+        // publication and once retired.
+        public nint LatestHandle() => (m_retired
+            ? 0
+            : Handle(slot: m_stream.LatestSlot)
+        );
         public void Retire() {
             m_retired = true;
 
@@ -1673,18 +1668,17 @@ internal sealed partial class WorldScreenBinder {
 
             ++m_outstanding;
 
-            // The producer published the value its write signals; the submission that samples this lease waits for it
-            // on the GPU. Zero means the write finished before publication.
-            if (0UL != fenceValue) {
-                m_fence!.Wait(value: fenceValue);
-            }
-
             var handle = Handle(slot: slot);
 
+            // The producer published the value its write signals; the submission that samples this lease waits for it
+            // on the GPU. Zero means the write finished before publication.
             frame = new GpuImageLease(
                 ImageViewHandle: handle,
                 Release: m_release,
-                ReleaseToken: slot
+                ReleaseToken: slot,
+                Wait: ((0UL != fenceValue)
+                    ? m_fence!.WaitFor(value: fenceValue)
+                    : default)
             );
 
             return true;
@@ -1697,13 +1691,11 @@ internal sealed partial class WorldScreenBinder {
     private sealed class SharedRingFence : IDisposable {
         private readonly IGpuExportableFence? m_exported;
         private readonly IGpuSharedFence? m_imported;
-        private readonly IGpuQueueSubmitter m_submitter;
         private readonly IGpuSharedFence? m_waitable;
 
-        private SharedRingFence(IGpuExportableFence? exported, IGpuSharedFence? imported, IGpuSharedFence? waitable, IGpuQueueSubmitter submitter, string refusal) {
+        private SharedRingFence(IGpuExportableFence? exported, IGpuSharedFence? imported, IGpuSharedFence? waitable, string refusal) {
             m_exported = exported;
             m_imported = imported;
-            m_submitter = submitter;
             m_waitable = waitable;
             Refusal = refusal;
         }
@@ -1717,14 +1709,12 @@ internal sealed partial class WorldScreenBinder {
         [SupportedOSPlatform("windows10.0.10240")]
         public static SharedRingFence Create(DirectXGpuSurfaceExportFactory export, bool hostsOnDirectX, IGpuDeviceContext renderDevice) {
             var exported = export.CreateExportableFence();
-            var submitter = renderDevice.Services.QueueSubmitter;
 
             if (hostsOnDirectX) {
                 return new SharedRingFence(
                     exported: exported,
                     imported: null,
                     refusal: "",
-                    submitter: submitter,
                     waitable: exported
                 );
             }
@@ -1738,7 +1728,6 @@ internal sealed partial class WorldScreenBinder {
                     exported: exported,
                     imported: imported,
                     refusal: "",
-                    submitter: submitter,
                     waitable: imported
                 );
             }
@@ -1749,7 +1738,6 @@ internal sealed partial class WorldScreenBinder {
                 exported: null,
                 imported: null,
                 refusal: refusal,
-                submitter: submitter,
                 waitable: null
             );
         }
@@ -1757,9 +1745,9 @@ internal sealed partial class WorldScreenBinder {
             m_imported?.Dispose();
             m_exported?.Dispose();
         }
-        public void Wait(ulong value) => m_submitter.AddExternalWait(wait: new GpuExternalWait(
+        public GpuExternalWait WaitFor(ulong value) => new(
             Fence: m_waitable!,
             Value: value
-        ));
+        );
     }
 }

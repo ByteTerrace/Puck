@@ -155,7 +155,9 @@ public sealed class LauncherWindowHostedService : BackgroundService {
             );
         }
     }
-    private long ResolveRenderPeriod(DisplayTimingSnapshot displayTiming, long frequency, double requestedHertz) {
+    // The pacer's period in stopwatch ticks, and the presented rate it targets in whole frames a second (zero when
+    // unbounded), which the frame context carries to the render graph's rate sources.
+    private (long Period, int Hertz) ResolveRenderPeriod(DisplayTimingSnapshot displayTiming, long frequency, double requestedHertz) {
         var decision = PresentPacingPolicy.Resolve(
             requestedHertz: requestedHertz,
             timing: displayTiming
@@ -179,7 +181,10 @@ public sealed class LauncherWindowHostedService : BackgroundService {
             );
         }
 
-        return decision.ToPeriodTicks(frequency: frequency);
+        return (
+            decision.ToPeriodTicks(frequency: frequency),
+            ((int)Math.Round(a: decision.TargetHertz))
+        );
     }
     private void RunWindowLoop(CancellationToken stoppingToken) {
         try {
@@ -288,7 +293,8 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 // this control's version advances (mirroring the display-change re-resolve below). Presentation only —
                 // never reaches the fixed-step sim.
                 var presentPacingVersion = m_presentPacing.Version;
-                var renderPeriod = ResolveRenderPeriod(
+
+                var (renderPeriod, displayHertz) = ResolveRenderPeriod(
                     displayTiming: displayTiming,
                     frequency: frequency,
                     requestedHertz: m_presentPacing.TargetHertz
@@ -345,7 +351,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     ) {
                         displayConfigurationVersion = displayTimingInfo.DisplayConfigurationVersion;
                         displayTiming = DisplayTimingSnapshot.Unknown;
-                        renderPeriod = ResolveRenderPeriod(
+                        (renderPeriod, displayHertz) = ResolveRenderPeriod(
                             displayTiming: displayTiming,
                             frequency: frequency,
                             requestedHertz: m_presentPacing.TargetHertz
@@ -363,7 +369,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
 
                         --displayTimingRetryAttemptsRemaining;
                         displayTiming = requeriedTiming;
-                        renderPeriod = ResolveRenderPeriod(
+                        (renderPeriod, displayHertz) = ResolveRenderPeriod(
                             displayTiming: displayTiming,
                             frequency: frequency,
                             requestedHertz: m_presentPacing.TargetHertz
@@ -382,7 +388,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     // only — the fixed-step sim is untouched.
                     if (m_presentPacing.Version != presentPacingVersion) {
                         presentPacingVersion = m_presentPacing.Version;
-                        renderPeriod = ResolveRenderPeriod(
+                        (renderPeriod, displayHertz) = ResolveRenderPeriod(
                             displayTiming: displayTiming,
                             frequency: frequency,
                             requestedHertz: m_presentPacing.TargetHertz
@@ -546,6 +552,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                             var frameContext = new FrameContext(
                                 AccumulatorTicks: (pump?.AccumulatorTicks ?? 0UL),
                                 DeltaTicks: (fixedSteps * stepTicks),
+                                DisplayHertz: displayHertz,
                                 ElapsedTicks: (pump?.ElapsedTicks ?? 0UL),
                                 FrameDeltaTicks: deltaTicks,
                                 Host: m_rootHostContext,
