@@ -201,7 +201,16 @@ public sealed class WorldStateMirrorRowLawTests {
                 );
                 _ = region.Write(bytes: block, offset: 0);
                 region.Flush(slot: (frame % Slots));
-                region.RecordCopy(commandBuffer: 2, slot: (frame % Slots));
+
+                // The owed copy is recorded as an owner records it, behind the barrier ordering earlier reads.
+                var recording = new GpuRegionCopyRecording(
+                    begin: static () => 2,
+                    readers: GpuStage.ComputeShader,
+                    recorder: gpu.Services.Recorder
+                );
+
+                recording.Record(region: region, slot: (frame % Slots));
+                _ = recording.Finish();
 
                 var read = gpu.Memory(bufferHandle: region.Buffer(slot: (frame % Slots)).BufferHandle)[..byteCount];
 
