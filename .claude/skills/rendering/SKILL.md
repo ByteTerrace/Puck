@@ -605,7 +605,15 @@ These are one-line cautions; the owning pages hold the derivations.
   row, the external destination and byte-identical region
   contents over `UploadModelGpu` (`tests/Shared`),
   `GpuRegionCopyPassLawTests` one pipeline per device shared by its
-  owners, and `pipeline.inspect` echoes the profile and the policy.
+  owners, and `pipeline.inspect` echoes the profile and the policy. A device
+  with an aperture rings by default, so the staged path on a real device is
+  chosen through the profile alone: `StagedRegionDeviceLawTests`
+  (`tests/Puck.World.Tests`) hands the runtime a context reporting the device's
+  own profile with no host-visible device-local bytes and reads an uploaded
+  source's conversion back byte-exact on Vulkan, Direct3D 12 hardware and WARP.
+  A Vulkan swapchain is created only in a `GpuPixelFormat`
+  (`VulkanSwapchainFactory.SelectSurfaceFormat` over `SwapchainFormats`); a
+  surface offering none of them refuses at creation, never mid-frame.
   `ShaderPipelineMemoryBudget.For(profile)` is the other reader: a pipeline
   instance's budget is a quarter of the device-local bytes, or 512 MiB when the
   profile reports none.
