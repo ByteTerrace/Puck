@@ -55,10 +55,12 @@ public sealed class PublishedMachineOutputsLawTests {
     // Models QueuedMachineWorker's publish: the upload is created on the device before the submit that can lose it.
     private sealed class UploadThenLoseOutput : IMachineVideoOutput {
         public Vector3 EmittedLight => Vector3.Zero;
+        public int Height => 1;
         public bool HoldsUpload { get; private set; }
         public bool LosesDevice { get; init; } = true;
         public nint NativeImageViewHandle => 0;
         public int Retirements { get; private set; }
+        public int Width => 1;
 
         public void NotifyDeviceLost() {
             HoldsUpload = false;

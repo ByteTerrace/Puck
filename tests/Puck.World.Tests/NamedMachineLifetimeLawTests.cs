@@ -1231,7 +1231,9 @@ public sealed class NamedMachineLifetimeLawTests {
     }
     private sealed class CounterOutput : IMachineVideoOutput {
         public Vector3 EmittedLight => Vector3.Zero;
+        public int Height => 1;
         public nint NativeImageViewHandle => 0;
+        public int Width => 1;
 
         public void NotifyDeviceLost() { }
         public void PublishFrame(IGpuDeviceContext deviceContext) { }

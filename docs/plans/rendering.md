@@ -1084,11 +1084,33 @@ echoes the published mappings, a pick and a walk; the laws are
 `WorldViewPaneMappingLawTests`, and the `pane-display` canary maps a display
 point to the pane's pixel and moves it with the slot.
 
-P13b owes the rest. No screen publishes a mapping, so the screen shading still
-reads its own bezel constant, which `WorldScreenMappings` mirrors, and the GPU
-does not yet draw from the mapping. No instance reports the surfaces standing
-in its world (`IRenderGraphHitScene.Placements` is empty on the live host), so
-a walk that continues into an instance ends on its world. No host feeds
+Screens publish their mappings too (P13b-1's screen half). The screen binder
+holds a `WorldScreenMappingSet` (`src/Puck.World.Client/Sources`) reconciled
+with the rows it applies: each row's `WorldScreenMappings.Of` mapping, with the
+glass bezel as its warp, named by the instance its source is, a producer,
+machine or probe source by its `WorldSourceInstances` handle
+(`source$<producer>$<digest>`), a view by its camera's registration and a
+session by its screen's session view. A view's and a session's extent is
+document data; a source instance's is the running image's, which the binder
+answers through `IWorldScreenImages` (a machine output's `Width` and `Height`,
+a producer feed's descriptor, a probe's ring). `WorldScreenBinder.Publish`
+republishes every mapping each frame, allocating nothing while handles and
+extents hold. A screen showing no image, a live `screen.source` bind over its
+row, or an image of unknown extent publishes none, and `world.screens` prints
+each screen's mapping in `SourceMapping.Describe`'s line or why it has none.
+Every view's world producer reports the published screens as the placements
+standing in its world (`WorldViewGraphHost.Screens`), so a walk from a view's
+pane continues through a screen into its source: it ends `Producer` at a
+producer source's pixel, and `Unread` on a screen showing a camera view, which
+renders through `ViewStack` and is no instance of the live set. The laws are
+`WorldScreenMappingLawTests` and
+`WorldViewPaneMappingLawTests.TheHitWalkContinuesThroughAScreenIntoItsSource`,
+and the `view-screens` canary prints and holds each screen's mapping and a walk
+through each screen.
+
+P13b owes the rest. The screen shading still reads its own bezel constant,
+which `WorldScreenMappings` mirrors, and the GPU does not yet draw from the
+mapping. No host feeds
 `SourceFocus` or delivers a focused source's input to its window, no machine
 reads a mapped pointer, and nothing reads the picker for hover yet. The
 recorded Windows run, a click reaching a captured editor window at the mapped
@@ -3029,24 +3051,32 @@ pick through a portal reaches the nested world's surface.
 
 **Depends on:** P11 and P12.
 
-**P13b, the rest of the package.** Panes publish live mappings and the hit walk
-runs over the live instance set, but `WorldScreenMappings.Of` and `SourceFocus`
-are called only by their laws, `SourceHandle.Producer` only by tests, and the
-screen shading reads its own bezel constant. Each commit is marked with what it
-waits on; only step 5 waits on P7b's groups.
+**P13b, the rest of the package.** Panes and screens publish live mappings and
+the hit walk runs over the live instance set through both, but `SourceFocus` is
+called only by its laws and the screen shading reads its own bezel constant.
+Each commit is marked with what it waits on; only step 5 waits on P7b's groups.
 
-1. Mappings are published from the live renderer. The pane half has landed:
-   `WorldViewGraphHost.PublishPanes` publishes each shown view's and pane's
-   `SourceMapping` through its graph instance, named by the instance's
+1. Mappings are published from the live renderer, landed in both halves. The
+   pane half: `WorldViewGraphHost.PublishPanes` publishes each shown view's and
+   pane's `SourceMapping` through its graph instance, named by the instance's
    `RenderGraphInstance.Handle`, at the extent the runtime's latest schedule
    renders it at, and `world.view.panes` reports the mappings it publishes.
    Laws: `WorldViewPaneMappingLawTests` over the live host's placements; the
-   `pane-display` canary. The screen half is owed, GPU-free, after P12b-3: the
-   binder publishes each screen's `SourceMapping` through
-   `WorldScreenMappings.Of`, with the source instance's `SourceHandle` in place
-   of the stand-in, and `world.screens` reports the mapping it publishes
-   (`SourceMapping.Describe`, the line `world.view.panes` prints). Laws:
-   `WorldScreenInputLawTests` over the live binder's rows.
+   `pane-display` canary. The screen half: the binder's
+   `WorldScreenMappingSet` publishes each screen's `SourceMapping` through
+   `WorldScreenMappings.Of`, named by its source instance's `SourceHandle`
+   (`WorldSourceInstances`; a view's camera registration or a session's view
+   for those arms), and `world.screens` reports the mapping it publishes
+   (`SourceMapping.Describe`, the line `world.view.panes` prints). Every view's
+   world producer reports the screens as its placements, so the walk continues
+   through a screen into its source. Laws: `WorldScreenMappingLawTests` over
+   the binder's rows (a screen at an arbitrary pose maps known points to known
+   pixels, identically on every run) and
+   `WorldViewPaneMappingLawTests.TheHitWalkContinuesThroughAScreenIntoItsSource`;
+   the `view-screens` canary. A screen showing a camera view ends its walk
+   `Unread` until camera views render as live instances (P11b), and a live
+   `screen.source` bind, which no row names, publishes no mapping until P12b-2
+   makes live binds source instances.
 2. The simulation destination, landed. A tick's command snapshot never reaches
    the server, which integrates each seat's `PlayerIntent`, so the intent
    carries the ray:
@@ -3106,9 +3136,9 @@ waits on; only step 5 waits on P7b's groups.
    `WorldViewGraphHost.Walk` runs `RenderGraphHitWalk` over the runtime's
    instance set from the published panes, with each view's seat camera and each
    pane's paired camera, and the pane pointer maps through its instance's
-   published mapping. The live host reports no surface placements inside an
-   instance's world, so a walk ends on the first instance it continues into
-   until screens publish (step 1's screen half). The portal check, a pick
+   published mapping. Each view's world producer reports the published screens
+   as the surface placements inside its world, so a walk continues from a view
+   through a screen into its source (step 1's screen half). The portal check, a pick
    through a portal reaching the nested world's surface, needs a nested world
    rendered as an instance, which no live world does yet.
 

@@ -177,6 +177,10 @@ public sealed class QueuedMachineWorker : IDisposable {
     /// <summary>Gets the native image-view handle of the published framebuffer, or 0 before the first publish (or after a
     /// device loss).</summary>
     public nint NativeImageViewHandle => m_boundSourceView;
+    /// <summary>Gets the framebuffer's height, in pixels.</summary>
+    public int Height => m_height;
+    /// <summary>Gets the framebuffer's width, in pixels.</summary>
+    public int Width => m_width;
     /// <summary>Gets the number of accepted segments not yet completed, including one currently executing.</summary>
     public long PendingSteps =>
         m_lifecycle.PendingSteps;

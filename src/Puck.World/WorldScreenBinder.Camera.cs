@@ -127,6 +127,7 @@ internal sealed partial class WorldScreenBinder {
         slot.DeclaredFault = null;
         // Demand resolves at the next publish (ReconcileCameraDemand reads the slot's camera feed directly) — one
         // produced frame's seam between this bind and the seat's device/feed appearing live.
+        ShowLive(index: index);
 
         return (Ok: true, Message: $"screen {index} showing seat {seat}'s {SensorName(sensor: sensor)} webcam");
     }

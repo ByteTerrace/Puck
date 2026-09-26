@@ -28,6 +28,11 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
     /// published.</summary>
     public SourcePanePicker Picker { get; } = new();
 
+    /// <summary>Gets or sets the screens standing in the world, whose published mappings every world producer's instance
+    /// reports as its placements, so a hit walk continues from a view through a screen into its source;
+    /// <see langword="null"/> reports none.</summary>
+    public WorldScreenMappingSet? Screens { get; set; }
+
     /// <summary>Publishes the panes this frame's placements show, to <see cref="Panes"/> and <see cref="Picker"/>: one
     /// <see cref="SourceMapping"/> per placement the root's <c>place</c> passes draw, in drawing order, naming its
     /// instance by <see cref="RenderGraphInstance.Handle"/> and showing its whole image at the extent the runtime's
@@ -134,9 +139,27 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
     }
 
     /// <inheritdoc/>
-    /// <remarks>No instance publishes the surfaces standing in its world yet, so every list is empty and a ray cast into
-    /// an instance ends on its world.</remarks>
-    IReadOnlyList<SourceMapping> IRenderGraphHitScene.Placements(int instance) => [];
+    /// <remarks>Every view's world producer (<c>world</c>, <c>world$&lt;view&gt;</c>) renders the one world, so each
+    /// reports the mappings <see cref="Screens"/> last published; any other instance reports none, so a ray cast into it
+    /// ends on its world.</remarks>
+    IReadOnlyList<SourceMapping> IRenderGraphHitScene.Placements(int instance) {
+        if (
+            (Screens is { } screens) &&
+            (InstanceName(index: instance) is { } name) &&
+            (
+                string.Equals(
+                    a: name,
+                    b: WorldViewGraphs.WorldInstance,
+                    comparisonType: StringComparison.Ordinal
+                ) ||
+                (WorldViewNames.ViewOf(instance: name) is not null)
+            )
+        ) {
+            return screens.Mappings;
+        }
+
+        return [];
+    }
     /// <inheritdoc/>
     /// <remarks>A view's camera is the one its seat rendered from in the frame the panes were published for, and a pane's
     /// the named camera its row pairs, recorded by <see cref="SetCamera"/>.</remarks>

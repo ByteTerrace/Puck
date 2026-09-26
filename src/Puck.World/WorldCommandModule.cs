@@ -179,8 +179,18 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             return CommandResult.Error(output: "[world.screens: no arguments — lists every declared screen]");
         }
 
-        // The LIVE definition's rows (never the boot snapshot), so a screen mutation's new source narrates honestly.
-        var declaredScreens = server.Definition.Screens;
+        // The LIVE definition's rows (never the boot snapshot), so a screen mutation's new source narrates honestly, then
+        // each creation face showing a source, as the presentation last derived it.
+        var declaredScreens = new List<WorldScreen>(collection: server.Definition.Screens);
+
+        foreach (var face in screens.Mappings.Screens) {
+            if (
+                (face.Index >= WorldPrototypeFacets.DerivedFaceBase) &&
+                (face.Source is not WorldScreenSource.None)
+            ) {
+                declaredScreens.Add(item: face);
+            }
+        }
 
         if (declaredScreens.Count == 0) {
             return new CommandResult(Output: "[world.screens: none declared]");
@@ -217,7 +227,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 ? "bound"
                 : "unbound")} {(screen.Route.Engageable
                 ? "engageable"
-                : "fixed")} input:{(screen.Route.Input ?? SourceDestination.Presentation)}{engagedText}{orderText}"
+                : "fixed")} input:{(screen.Route.Input ?? SourceDestination.Presentation)}{engagedText}{orderText} mapping {(screens.Mappings.Describe(screen: screen.Index) ?? "none (no slot)")}"
             );
         }
 
@@ -347,7 +357,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.screens",
-            description: "Lists every declared diegetic screen, one segment each — index, source kind (test-pattern|none|machine|camera|view|capture; a machine reads machine:<engine>), bound/unbound (a nonzero live provider handle this frame), its engage policy (engageable|fixed), and, for a camera on its GPU tier or a capture on its GPU route, order:fence (the render device waits on the producer's shared fence) or order:cpu-wait (reason) (a device that cannot share the fence waits on the CPU). No argument; the pipe-assertable state proving the test-pattern screen is bound and the unbound screen falls back to the engine's procedural no-signal card (never black). A query — its listing always echoes, even under wire.ack quiet.",
+            description: "Lists every declared diegetic screen, then every creation face showing a source, one segment each — index, source kind (test-pattern|none|machine|camera|view|capture; a machine reads machine:<engine>), bound/unbound (a nonzero live provider handle this frame), its engage policy (engageable|fixed), for a camera on its GPU tier or a capture on its GPU route, order:fence (the render device waits on the producer's shared fence) or order:cpu-wait (reason) (a device that cannot share the fence waits on the CPU), and last the mapping the screen publishes, in the line world.view.panes prints for a pane (mapping producer:source$<producer>$<digest> surface … or instance:<view> surface …, the source extent, crop, layout, fit, the glass warp and the destination), or mapping none (reason): no image source, a live presentation source no row names, an extent not known yet, or not published by a boot that presents nothing. No argument; the pipe-assertable state proving the test-pattern screen is bound and the unbound screen falls back to the engine's procedural no-signal card (never black). A query — its listing always echoes, even under wire.ack quiet.",
             handler: ScreensHandler
         );
         yield return CommandDefinition.WithWireArgs(

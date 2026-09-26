@@ -55,6 +55,10 @@ internal static class WorldRenderRoot {
         var definition = sp.GetRequiredService<WorldDefinition>();
         var graph = sp.GetRequiredService<WorldRootGraph>();
         var host = sp.GetRequiredService<WorldViewGraphHost>();
+
+        // A walk into a view's world continues through the screens standing in it.
+        host.Screens = binder.Mappings;
+
         var synthesized = ((definition.Views.Root is null)
             ? graph
             : null);
