@@ -13,6 +13,9 @@ namespace Puck.World.Tests;
 /// write is refused.</summary>
 public sealed class WorldPostRenderExtensionPassesLawTests {
     private const string FilmGrain = "sdf-film-grain";
+    // The root graph's own pass names for the id's two entries (WorldViewNames.Root).
+    private const string FirstPass = "main$post$sdf-film-grain";
+    private const string SecondPass = "main$post$sdf-film-grain$2";
 
     private static JsonElement Json(string text) => JsonDocument.Parse(json: text).RootElement.Clone();
     private static (WorldPostRenderExtensionPasses Passes, Dictionary<string, JsonNode?> Written) Twice() {
@@ -58,8 +61,8 @@ public sealed class WorldPostRenderExtensionPassesLawTests {
             value: 0.5f,
             write: Write
         ));
-        AssertConfig(json: """{"intensity":0.5,"size":2}""", pass: FilmGrain, written: written);
-        AssertConfig(json: """{"intensity":0.5,"size":4}""", pass: $"{FilmGrain}-2", written: written);
+        AssertConfig(json: """{"intensity":0.5,"size":2}""", pass: FirstPass, written: written);
+        AssertConfig(json: """{"intensity":0.5,"size":4}""", pass: SecondPass, written: written);
 
         Assert.True(condition: passes.TrySetConfig(
             field: "size",
@@ -67,8 +70,8 @@ public sealed class WorldPostRenderExtensionPassesLawTests {
             value: 8f,
             write: Write
         ));
-        AssertConfig(json: """{"intensity":0.5,"size":8}""", pass: FilmGrain, written: written);
-        AssertConfig(json: """{"intensity":0.5,"size":8}""", pass: $"{FilmGrain}-2", written: written);
+        AssertConfig(json: """{"intensity":0.5,"size":8}""", pass: FirstPass, written: written);
+        AssertConfig(json: """{"intensity":0.5,"size":8}""", pass: SecondPass, written: written);
     }
     [Fact]
     public void AWriteAPassRefusesChangesNoPasssKeptConfig() {
@@ -78,7 +81,7 @@ public sealed class WorldPostRenderExtensionPassesLawTests {
             field: "intensity",
             id: FilmGrain,
             value: 0.9f,
-            write: (pass, _) => (pass == FilmGrain)
+            write: (pass, _) => (pass == FirstPass)
         ));
         Assert.True(condition: passes.TrySetConfig(
             field: "size",
@@ -90,8 +93,8 @@ public sealed class WorldPostRenderExtensionPassesLawTests {
                 return true;
             }
         ));
-        AssertConfig(json: """{"intensity":0.1,"size":3}""", pass: FilmGrain, written: written);
-        AssertConfig(json: """{"intensity":0.3,"size":3}""", pass: $"{FilmGrain}-2", written: written);
+        AssertConfig(json: """{"intensity":0.1,"size":3}""", pass: FirstPass, written: written);
+        AssertConfig(json: """{"intensity":0.3,"size":3}""", pass: SecondPass, written: written);
     }
     [Fact]
     public void WithNoRootAttachedEveryWriteIsRefused() {
