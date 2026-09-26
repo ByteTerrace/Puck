@@ -43,12 +43,10 @@ public sealed partial class SdfWorldEngine {
     // The slice ordinal a bake dispatch pushes.
     private readonly byte[] m_brickBakeIndex = new byte[GpuPipelineLayoutDescription.PushIndexBytes];
 
-    /// <summary>Gets or sets the presentation values the next frame's frame block carries: its time, the pointer and the
-    /// paired camera. The engine's kernels read none of them today; they reach any kernel that reads its frame group,
+    /// <summary>Gets or sets the values the next frame's frame block carries: the presented tick, its time, the pointer and
+    /// the paired camera. The engine's kernels read none of them today; they reach any kernel that reads its frame group,
     /// as every graph pass's do.</summary>
     public ShaderFrameValues FrameValues { get; set; }
-    /// <summary>Gets or sets the engine tick the next frame's frame block carries.</summary>
-    public ulong FrameTick { get; set; }
 
     // The bytes of a uniform region holding a block: whole constant-buffer views.
     private static int UniformBytes(uint blockBytes) =>
@@ -102,7 +100,6 @@ public sealed partial class SdfWorldEngine {
         SdfWorldInterfaces.WorldParameters.WriteFrame(
             block: block,
             frame: frame,
-            tick: FrameTick,
             values: FrameValues
         );
         _ = m_frameRegion.Write(

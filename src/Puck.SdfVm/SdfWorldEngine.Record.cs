@@ -75,7 +75,7 @@ public sealed partial class SdfWorldEngine {
         // The region copies run on every frame, skipped ones included (the tables are this frame's inputs whatever the
         // passes do with them), copying only the words the staged regions owe, then transitioning each copied buffer
         // for the passes that read it.
-        RecordRegionCopies(commandBuffer: commandBuffer);
+        RecordRegionCopies();
         m_work.LeavePass();
 
         // Cadence gate: when this frame's inputs are byte-identical to the last RENDERED frame's (DecideCadenceSkip

@@ -27,6 +27,20 @@ public sealed class GpuResidencyLawTests {
 
     // An integrated device whose device-local heap the host reaches coherently, beside host memory: a handheld's
     // unified memory. Types and heaps are in the native pair layout.
+    // Records one region's owed copy for a slot as its owner does: through the owed-copy recording, into command buffer 2.
+    private static void Copy(UploadModelGpu gpu, GpuRegion region, int slot) {
+        var recording = new GpuRegionCopyRecording(
+            begin: static () => 2,
+            readers: GpuStage.ComputeShader,
+            recorder: gpu.Services.Recorder
+        );
+
+        recording.Record(
+            region: region,
+            slot: slot
+        );
+        _ = recording.Finish();
+    }
     private static GpuMemoryProfile CoherentUnified => GpuMemoryProfile.FromVulkan(
         deviceType: IntegratedDevice,
         memoryHeaps: [(4UL * GiB), HeapDeviceLocal, (8UL * GiB), 0UL],
@@ -258,12 +272,7 @@ public sealed class GpuResidencyLawTests {
                     );
                     bytes.CopyTo(array: expected, index: offset);
                 }
-
-                region.Flush(slot: slot);
-                region.RecordCopy(
-                    commandBuffer: 2,
-                    slot: slot
-                );
+                Copy(gpu: gpu, region: region, slot: slot);
 
                 var read = gpu.Memory(bufferHandle: region.Buffer(slot: slot).BufferHandle)[..ByteCount];
 
@@ -292,6 +301,72 @@ public sealed class GpuResidencyLawTests {
         Assert.Equal(
             expected: readings[GpuResidencyPolicy.Staged],
             actual: readings[GpuResidencyPolicy.InPlace]
+        );
+    }
+    // An owner records a frame's owed copies through one recording. Nothing owed begins no command buffer and records
+    // nothing; the first owed copy begins the buffer once, behind the barrier ordering the earlier reads of every staged
+    // destination before the copies write it, which the memory model requires of every copy it runs.
+    [Fact]
+    public void ARecordingBeginsOnlyForAnOwedCopyAndOrdersTheEarlierReadsBeforeIt() {
+        var gpu = new UploadModelGpu(reportVersion: 0);
+        using var copy = CopyPipeline(gpu: gpu);
+        using var region = new GpuRegion(
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
+            byteCount: 256,
+            copyPipeline: copy,
+            memory: GpuHostVisibleMemory.Host,
+            policy: GpuResidencyPolicy.Staged,
+            recorder: gpu.Services.Recorder,
+            slotCount: 2,
+            name: default
+        );
+        var begun = 0;
+        var recording = new GpuRegionCopyRecording(
+            begin: () => {
+                begun++;
+
+                return 7;
+            },
+            readers: GpuStage.ComputeShader,
+            recorder: gpu.Services.Recorder
+        );
+
+        Copy(gpu: gpu, region: region, slot: 0);
+        gpu.ResetTallies();
+        recording.Record(region: region, slot: 1);
+        Assert.Equal(expected: 0, actual: recording.Finish());
+        Assert.Equal(expected: (0, 0), actual: (begun, gpu.UploadCopies));
+
+        _ = region.Write(bytes: [1, 2, 3, 4], offset: 16);
+        recording.Record(region: region, slot: 1);
+        recording.Record(region: region, slot: 1);
+        Assert.Equal(expected: 7, actual: recording.Finish());
+        Assert.Equal(expected: (1, 1), actual: (begun, gpu.UploadCopies));
+        Assert.Equal(expected: region.Contents.ToArray(), actual: gpu.Memory(bufferHandle: region.Buffer(slot: 1).BufferHandle));
+    }
+    // The memory model refuses a copy recorded where nothing ordered the earlier reads of its destination before it.
+    [Fact]
+    public void ACopyRecordedWithNoBarrierOrderingTheEarlierReadsIsRefused() {
+        var gpu = new UploadModelGpu(reportVersion: 0);
+        using var copy = CopyPipeline(gpu: gpu);
+        using var region = new GpuRegion(
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
+            byteCount: 64,
+            copyPipeline: copy,
+            memory: GpuHostVisibleMemory.Host,
+            policy: GpuResidencyPolicy.Staged,
+            recorder: gpu.Services.Recorder,
+            slotCount: 1,
+            name: default
+        );
+
+        region.Flush(slot: 0);
+        gpu.Services.Recorder.BeginCommandBuffer(commandBufferHandle: 9);
+        Assert.Contains(
+            actualString: Assert.Throws<InvalidOperationException>(testCode: () => region.RecordCopy(commandBuffer: 9, slot: 0)).Message,
+            expectedSubstring: "no barrier ordering the earlier compute reads"
         );
     }
     [Fact]
@@ -414,8 +489,7 @@ public sealed class GpuResidencyLawTests {
         );
 
         _ = region.Write(bytes: [1, 2, 3, 4], offset: 8);
-        region.Flush(slot: 0);
-        region.RecordCopy(commandBuffer: 2, slot: 0);
+        Copy(gpu: gpu, region: region, slot: 0);
 
         using var second = new GpuRegionCopyPool(
             bindings: gpu.Services.Bindings,
@@ -430,8 +504,7 @@ public sealed class GpuResidencyLawTests {
 
         for (var slot = 0; (slot < 2); slot++) {
             _ = region.Write(bytes: [((byte)(5 + slot)), 6, 7, 8], offset: (16 + (slot * 4)));
-            region.Flush(slot: slot);
-            region.RecordCopy(commandBuffer: 2, slot: slot);
+            Copy(gpu: gpu, region: region, slot: slot);
             Assert.Equal(expected: region.Contents.ToArray(), actual: gpu.Memory(bufferHandle: region.Buffer(slot: slot).BufferHandle));
         }
 
@@ -515,10 +588,8 @@ public sealed class GpuResidencyLawTests {
         _ = beside.Write(bytes: [9, 10, 11, 12], offset: 4);
 
         for (var slot = 0; (slot < 2); slot++) {
-            kept.Flush(slot: slot);
-            kept.RecordCopy(commandBuffer: 2, slot: slot);
-            beside.Flush(slot: slot);
-            beside.RecordCopy(commandBuffer: 2, slot: slot);
+            Copy(gpu: gpu, region: kept, slot: slot);
+            Copy(gpu: gpu, region: beside, slot: slot);
             Assert.Equal(expected: kept.Contents.ToArray(), actual: gpu.Memory(bufferHandle: kept.Buffer(slot: slot).BufferHandle));
             Assert.Equal(expected: beside.Contents.ToArray(), actual: gpu.Memory(bufferHandle: beside.Buffer(slot: slot).BufferHandle));
         }
@@ -559,9 +630,7 @@ public sealed class GpuResidencyLawTests {
             recorder: gpu.Services.Recorder,
             slotCount: 2
         );
-
-        region.Flush(slot: 0);
-        region.RecordCopy(commandBuffer: 2, slot: 0);
+        Copy(gpu: gpu, region: region, slot: 0);
         gpu.ResetTallies();
 
         // Two words far apart are two runs: the header, a run-table entry per run and each word. The same bytes again
@@ -569,17 +638,15 @@ public sealed class GpuResidencyLawTests {
         _ = region.Write(bytes: [1, 0, 0, 0], offset: 8);
         _ = region.Write(bytes: [2], offset: 200);
         Assert.False(condition: region.Write(bytes: [1, 0, 0, 0], offset: 8));
-        region.Flush(slot: 1);
         Assert.True(condition: region.OwesCopy);
-        region.RecordCopy(commandBuffer: 2, slot: 1);
+        Copy(gpu: gpu, region: region, slot: 1);
         Assert.Equal(expected: ((long)((HeaderBytes + (2 * RunEntryBytes)) + (2 * sizeof(uint)))), actual: gpu.HostBytes());
         Assert.Equal(expected: 1, actual: gpu.UploadCopies);
         Assert.Equal(expected: region.Contents.ToArray(), actual: gpu.Memory(bufferHandle: region.Buffer(slot: 1).BufferHandle));
         Assert.False(condition: region.OwesCopy);
 
         gpu.ResetTallies();
-        region.Flush(slot: 0);
-        region.RecordCopy(commandBuffer: 2, slot: 0);
+        Copy(gpu: gpu, region: region, slot: 0);
         Assert.Equal(expected: (0L, 0), actual: (gpu.HostBytes(), gpu.UploadCopies));
         Assert.Null(@object: GpuRegion.CopyPipeline.PushConstantBinding);
     }
@@ -616,8 +683,7 @@ public sealed class GpuResidencyLawTests {
 
         region.Target(destinationWord: 40);
         Assert.True(condition: region.Write(bytes: block, offset: 0));
-        region.Flush(slot: 0);
-        region.RecordCopy(commandBuffer: 2, slot: 0);
+        Copy(gpu: gpu, region: region, slot: 0);
         Assert.Equal(expected: block, actual: memory[160..172]);
         Assert.All(collection: memory[..160].Concat(second: memory[172..]), action: static value => Assert.Equal(actual: value, expected: 0xEE));
 
@@ -627,15 +693,13 @@ public sealed class GpuResidencyLawTests {
         Assert.False(condition: region.Write(bytes: block, offset: 0));
         region.Target(destinationWord: 40);
         Assert.True(condition: region.Write(bytes: block, offset: 0));
-        region.Flush(slot: 1);
-        region.RecordCopy(commandBuffer: 2, slot: 1);
+        Copy(gpu: gpu, region: region, slot: 1);
         Assert.Equal(expected: block, actual: memory[160..172]);
 
         // A retarget waits for the copy of what the region owes, and a write stays inside the destination.
         _ = region.Write(bytes: [9], offset: 0);
         _ = Assert.Throws<InvalidOperationException>(testCode: () => region.Target(destinationWord: 0));
-        region.Flush(slot: 0);
-        region.RecordCopy(commandBuffer: 2, slot: 0);
+        Copy(gpu: gpu, region: region, slot: 0);
         region.Target(destinationWord: (DestinationWords - 4));
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => region.Write(bytes: new byte[20], offset: 0));
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => region.Target(destinationWord: DestinationWords));
@@ -694,8 +758,7 @@ public sealed class GpuResidencyLawTests {
 
         new Random(Seed: 11).NextBytes(buffer: bytes);
         _ = region.Write(bytes: bytes, offset: 0);
-        region.Flush(slot: 0);
-        region.RecordCopy(commandBuffer: 2, slot: 0);
+        Copy(gpu: gpu, region: region, slot: 0);
         Assert.Equal(expected: bytes, actual: gpu.Memory(bufferHandle: region.Buffer(slot: 0).BufferHandle));
         Assert.Equal(expected: (GpuRegion.CopyMaxGroupsPerDimension, 2U), actual: GpuRegion.CopyGroups(count: ((uint)words)));
         Assert.Equal(expected: (1U, 1U), actual: GpuRegion.CopyGroups(count: 1U));
@@ -793,7 +856,7 @@ public sealed class GpuResidencyLawTests {
         ring.Flush(slot: 1);
 
         // Each slot holds the region now, so an unchanged write owes nothing and a flush sends nothing.
-        var settled = gpu.HostBytes();
+        var settled = gpu.BlockBytes();
 
         _ = ring.Write(
             bytes: [1, 2, 3, 4],
@@ -801,14 +864,14 @@ public sealed class GpuResidencyLawTests {
         );
         ring.Flush(slot: 0);
         Assert.Equal(
-            actual: gpu.HostBytes(),
+            actual: gpu.BlockBytes(),
             expected: settled
         );
 
         ring.OweAll(slot: 0);
         ring.Flush(slot: 0);
         Assert.Equal(
-            actual: (gpu.HostBytes() - settled),
+            actual: (gpu.BlockBytes() - settled),
             expected: alignment
         );
         Assert.Equal(

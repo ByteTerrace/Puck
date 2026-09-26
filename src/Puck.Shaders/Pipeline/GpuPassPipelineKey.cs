@@ -159,7 +159,6 @@ public sealed class GpuPassPipelineKey : IEquatable<GpuPassPipelineKey> {
             writer: writer
         );
         Write(value: ((uint)description.SamplerFilter), writer: writer);
-        Write(value: ((uint)description.Registers), writer: writer);
         Write(
             layout: description.Layout,
             writer: writer

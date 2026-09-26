@@ -39,6 +39,10 @@ internal sealed class UploadModelGpu :
     private readonly ConcurrentDictionary<nint, byte> m_uploadModules = new();
     private readonly ConcurrentDictionary<nint, byte> m_uploadPipelines = new();
 
+    // The command buffers recorded since a barrier whose first scope holds the compute stage, which orders every earlier
+    // compute read of a staged destination before a copy writes it; a copy recorded in any other is refused.
+    private readonly HashSet<nint> m_readsOrdered = [];
+
     private nint m_boundPipeline;
     private nint m_boundSet;
 
@@ -190,7 +194,7 @@ internal sealed class UploadModelGpu :
     void IGpuBindings.WriteSampledImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) { }
     void IGpuBindings.WriteSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint samplerHandle) { }
     void IGpuBindings.WriteStorageImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) { }
-    void IGpuRecorder.BeginCommandBuffer(nint commandBufferHandle) { }
+    void IGpuRecorder.BeginCommandBuffer(nint commandBufferHandle) => _ = m_readsOrdered.Remove(item: commandBufferHandle);
     void IGpuRecorder.EndCommandBuffer(nint commandBufferHandle) { }
     void IGpuRecorder.BeginDebugGroup(nint commandBufferHandle, string label) { }
     void IGpuRecorder.EndDebugGroup(nint commandBufferHandle) { }
@@ -205,13 +209,20 @@ internal sealed class UploadModelGpu :
     void IGpuRecorder.ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) { }
     void IGpuRecorder.ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) { }
     void IGpuRecorder.TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) { }
-    void IGpuRecorder.MemoryBarrier(nint commandBufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) { }
+    void IGpuRecorder.MemoryBarrier(nint commandBufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) {
+        if (sourceStageMask.HasFlag(flag: GpuStage.ComputeShader)) {
+            _ = m_readsOrdered.Add(item: commandBufferHandle);
+        }
+    }
     void IGpuRecorder.TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) { }
     void IGpuRecorder.BindDescriptorSet(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, uint group, nint descriptorSetHandle) => m_boundSet = descriptorSetHandle;
     void IGpuRecorder.BindPipeline(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineHandle) => m_boundPipeline = pipelineHandle;
     void IGpuRecorder.Dispatch(nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) {
         if (!m_uploadPipelines.ContainsKey(key: m_boundPipeline)) {
             return;
+        }
+        if (!m_readsOrdered.Contains(item: commandBufferHandle)) {
+            throw new InvalidOperationException(message: "A region copy was recorded with no barrier ordering the earlier compute reads of its destination before it.");
         }
 
         var source = MemoryMarshal.Cast<byte, uint>(span: m_buffers[m_bindings[(m_boundSet, 0u)]].Memory.AsSpan());

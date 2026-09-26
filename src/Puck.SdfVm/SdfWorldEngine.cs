@@ -125,8 +125,8 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
 
     private readonly Queue<(int Slot, int Count, float[] Voxels)> m_brickUploads = new();
 
-    // The device's region-copy pipeline (GpuRegionCopyPipelineCache), which every staged region records its copy with;
-    // the engine never owns it.
+    // The device's region-copy pipeline, leased from the pass-pipeline cache's GpuRegionCopyPass, which every staged region
+    // records its copy with; the engine never owns it.
     private readonly IGpuComputePipeline m_regionCopyPipeline;
     // The carve-bake brick pool: one persistent device-local f32 buffer the sliced bake writes and
     // the beam + views kernels sample. Always allocated (a 1-float filler when the pool is disabled), always bound to
@@ -390,6 +390,11 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         m_viewsFoldsPipeline = pipelines.Pipeline(index: ViewsFoldsPipelineIndex);
         m_skyPipeline = pipelines.Pipeline(index: SkyPipelineIndex);
         m_regionCopyPipeline = regionCopy;
+        m_regionCopies = new GpuRegionCopyRecording(
+            begin: BeginUpload,
+            readers: GpuStage.ComputeShader,
+            recorder: gpu.Recorder
+        );
 
         m_viewsSets = new nint[FrameRingSize][];
         m_viewOutputs = new ViewOutput?[((int)m_viewportCapacity)];

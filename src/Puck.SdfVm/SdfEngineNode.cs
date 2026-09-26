@@ -477,8 +477,7 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
 
         // The frame group every dispatch binds: the host's tick and its presentation clock. No pointer or paired camera
         // reaches the world engine; its cameras are the frame's views.
-        m_engine!.FrameTick = context.ElapsedTicks;
-        m_engine.FrameValues = new ShaderFrameValues(
+        m_engine!.FrameValues = new ShaderFrameValues(
             CameraFov: 0f,
             CameraPosition: default,
             CameraTarget: default,
@@ -486,6 +485,7 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
             Pointer: default,
             PointerDown: false,
             PointerPresses: 0,
+            Tick: context.ElapsedTicks,
             Time: context.ElapsedSeconds,
             TimeDelta: context.FrameDeltaSeconds
         );

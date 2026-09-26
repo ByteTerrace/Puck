@@ -89,8 +89,7 @@ public sealed class SdfCapabilityMatrixLawTests {
             Green: false,
             Members: [
                 "SdfWorldEngine.SubmitFrame", "SdfWorldEngine.RenderFrame", "SdfWorldEngine.ReadPixels", "SdfWorldEngine.FrameRingSize",
-                "SdfEngineNode.ProduceFrame", "SdfEngineNode.Descriptor", "SdfFrame.Time", "SdfWorldEngine.FrameTick",
-                "SdfWorldEngine.FrameValues",
+                "SdfEngineNode.ProduceFrame", "SdfEngineNode.Descriptor", "SdfFrame.Time", "SdfWorldEngine.FrameValues",
             ]
         ),
         new(

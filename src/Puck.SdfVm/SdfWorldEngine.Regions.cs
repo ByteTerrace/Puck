@@ -42,8 +42,8 @@ public sealed partial class SdfWorldEngine {
     // Every region's copy sets, by its index: RegionAt's, then the brick staging's with a brick pool.
     private readonly GpuRegionCopyPool m_regionCopyPool;
 
-    // The buffers the upload pass copied into, which it transitions for reading once every copy is recorded.
-    private readonly IGpuBuffer?[] m_copiedRegions = new IGpuBuffer?[RegionCount];
+    // The upload pass's owed copies, recorded through the engine's counted recorder into the frame's command buffer.
+    private readonly GpuRegionCopyRecording m_regionCopies;
 
     // Replaced, with every binding of them, when UploadProgram grows the program or instance capacity.
     private GpuRegion m_programRegion;
@@ -128,53 +128,37 @@ public sealed partial class SdfWorldEngine {
 
         m_regionCopyPool.Dispose();
     }
-    // The upload pass: sends this ring slot, whose fence has retired, what it owes of every region, records every staged
-    // region's copy, then makes each copied buffer readable by the passes after it. Every host write and copy of the
-    // regions is counted in this pass. A frame owing nothing writes and records nothing.
-    private void RecordRegionCopies(nint commandBuffer) {
-        var recorder = m_gpu.Recorder;
-        var copied = 0;
-
+    // The upload pass: sends this ring slot, whose fence has retired, what it owes of every region, and records every
+    // staged region's copy through the one owed-copy recording the render node shares: at the first copy the barrier
+    // ordering the earlier frames' reads of every staged destination before the copies write it, then the copies, then
+    // one transition per copied buffer so the passes after it read what it wrote. Every host write and copy of the regions
+    // is counted in this pass. A frame owing nothing writes and records nothing.
+    private void RecordRegionCopies() {
         for (var index = 0; (index < RegionCount); index++) {
-            RegionAt(index: index)?.Flush(slot: m_currentSlot);
-        }
-
-        for (var index = 0; (index < RegionCount); index++) {
-            if (RegionAt(index: index) is not { OwesCopy: true } region) {
-                continue;
-            }
-
-            if (copied == 0) {
-                recorder.BeginDebugGroup(
-                    commandBufferHandle: commandBuffer,
-                    label: "upload"
+            if (RegionAt(index: index) is { } region) {
+                m_regionCopies.Record(
+                    region: region,
+                    slot: m_currentSlot
                 );
             }
-
-            region.RecordCopy(
-                commandBuffer: commandBuffer,
-                slot: m_currentSlot
-            );
-            m_copiedRegions[copied++] = region.Buffer(slot: m_currentSlot);
         }
 
-        for (var index = 0; (index < copied); index++) {
-            recorder.TransitionBuffer(
-                bufferHandle: m_copiedRegions[index]!.BufferHandle,
-                commandBufferHandle: commandBuffer,
-                destinationAccessMask: GpuAccess.ShaderRead,
-                destinationStageMask: GpuStage.ComputeShader,
-                sourceAccessMask: GpuAccess.ShaderWrite,
-                sourceStageMask: GpuStage.ComputeShader
-            );
-            m_copiedRegions[index] = null;
-        }
+        var commandBuffer = m_regionCopies.Finish();
 
-        if (copied > 0) {
-            recorder.EndDebugGroup(
-                commandBufferHandle: commandBuffer
-            );
+        if (commandBuffer != 0) {
+            m_gpu.Recorder.EndDebugGroup(commandBufferHandle: commandBuffer);
         }
+    }
+    // Opens the upload pass's debug group in the frame's command buffer, at the frame's first owed copy.
+    private nint BeginUpload() {
+        var commandBuffer = m_commandPools[m_currentSlot].CommandBufferHandle;
+
+        m_gpu.Recorder.BeginDebugGroup(
+            commandBufferHandle: commandBuffer,
+            label: "upload"
+        );
+
+        return commandBuffer;
     }
     private GpuRegion? RegionAt(int index) => index switch {
         ProgramRegionIndex => m_programRegion,
