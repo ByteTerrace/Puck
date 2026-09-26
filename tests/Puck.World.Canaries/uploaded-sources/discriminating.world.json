@@ -150,6 +150,10 @@
         "$type": "machine",
         "instance": "instrument",
         "output": "video"
+      },
+      "route": {
+        "engageable": false,
+        "engageRadius": 0
       }
     }
   ]
