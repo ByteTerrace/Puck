@@ -952,10 +952,12 @@ passes.
 `RenderGraphRuntime`): each frame, before the runtime schedules, it reconciles
 the accepted `views` section into the runtime's instance set with
 `TryReconfigure` (a surviving instance keeps its node, graph and history; a
-removed one retires, except that a removed graph instance a kept consumer's
-installed graph still binds is held through `ShaderPipelineRenderNode.HoldBinding`
-until that consumer installs a graph that no longer reads it, rebinds the name
-or is released, `RenderGraphRuntime.RetiredProducers` counting what is held),
+removed one retires, except that a removed instance a kept consumer's installed
+graph still binds is held through `ShaderPipelineRenderNode.HoldBinding` until
+that consumer installs a graph that no longer reads it, rebinds the name or is
+released: a graph instance as the consumer bound it, an external producer
+through one more acquisition of its latest output, bound for every frame, and
+`RenderGraphRuntime.RetiredProducers` counts what is held),
 compiles each source row in the background through
 `ShaderPackager.LoadSource`, and installs it with `TryInstall`, inputs taken
 from the row's `inputs`. A row naming an engine `package` (such as `sdf.world`)

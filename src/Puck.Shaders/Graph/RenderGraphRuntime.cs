@@ -863,6 +863,10 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     public void OnDeviceLost() {
         m_capture.RefuseForDeviceLoss();
 
+        // A retired producer a node still holds hears of the loss when that node's loss releases it.
+        foreach (var retired in m_retiredProducers) {
+            retired.OnDeviceLost();
+        }
         // The nodes first, retiring every lease their lost submissions held, then the producers.
         foreach (var node in m_nodes) {
             node?.OnDeviceLost();

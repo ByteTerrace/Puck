@@ -123,6 +123,41 @@ public sealed partial class ShaderPipelineRenderNode {
             value: lease
         );
     }
+    /// <summary>Binds a named external image for every later frame and holds it as
+    /// <see cref="HoldBinding(string, GpuImageLease)"/> does: a host that retired a producer whose images it leased one
+    /// frame at a time hands the node one last acquisition, which then serves every frame until the hold is released. An
+    /// unheld lease the name was bound with is retired, and the name serves later frames without being bound again.</summary>
+    /// <param name="name">The name of a bound external image.</param>
+    /// <param name="image">The image the hold keeps, in the layout its producer leaves it in.</param>
+    /// <param name="lease">The host's hold on the image; one that requires no retirement holds nothing.</param>
+    /// <exception cref="ArgumentException"><paramref name="name"/> is empty or names no bound external image, or an
+    /// image handle is zero.</exception>
+    public void HoldBinding(string name, ShaderPipelineExternalImage image, GpuImageLease lease) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentOutOfRangeException.ThrowIfZero(image.ImageHandle);
+        ArgumentOutOfRangeException.ThrowIfZero(image.ImageViewHandle);
+
+        if (m_disposed) {
+            lease.Retire();
+
+            return;
+        }
+        if (!m_externalImages.ContainsKey(key: name)) {
+            lease.Retire();
+
+            throw new ArgumentException(
+                message: $"External image '{name}' is not bound, so there is no binding to hold.",
+                paramName: nameof(name)
+            );
+        }
+
+        ClearLease(name: name);
+        m_externalImages[name] = image;
+        HoldBinding(
+            lease: lease,
+            name: name
+        );
+    }
 
     // Retires the hold on a binding once the node's latest submission, the last that could sample it, has completed.
     private void ReleaseBindingHold(string name) {
