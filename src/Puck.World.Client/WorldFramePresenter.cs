@@ -1176,6 +1176,18 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             !((m_views[0].RenderScale > 0f) && (m_views[0].RenderScale < 1f))
         );
 
+        // Before the world has composed a frame there are no views to place, but the world must still be scheduled, since
+        // it composes inside its own frame: it renders at the whole display until its first frame names its views.
+        if (m_views.Count == 0) {
+            _ = graphs.PlaceView(
+                region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f),
+                renderScale: 1f,
+                sharpness: m_settings.UpscaleSharpness,
+                shown: false,
+                view: 0
+            );
+        }
+
         for (var view = 0; (view < m_views.Count); view++) {
             var snapshot = m_views[view];
 

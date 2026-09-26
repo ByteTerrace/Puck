@@ -905,6 +905,12 @@ It deletes the SDF engine's composite and has landed in two halves.
   lone full-window view at native scale is not placed, so `main` stands for
   `world` and parity holds. The `split-seats` canary shows two seats of the
   split layout drawing different content.
+- Owed after 10b: only the last pass of a graph may stand for its input when it
+  draws nothing, so every earlier place pass that shows nothing copies its base
+  instead. A one-seat world with K = 4 therefore records three full-extent
+  place copies a frame (`world-counters` shows them on `main`). A chain of
+  passes that draw nothing should resolve to the first input they stand for,
+  so an unshown view costs nothing.
 
 P13's CPU half has landed; its second half, P13b, waits on P12b and P11b. The
 published mapping is `SourceMapping` in `src/Puck.Commands/Sources`: a surface

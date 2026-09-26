@@ -1,7 +1,7 @@
 {
   "id": "split-seats",
   "title": "Two seats in the split layout each render through their own view output, placed side by side, so each half shows its own seat's view",
-  "binding": "The positive leg boots the shipped world windowed, joins a second seat, switches to the split layout and moves seat 2's body out onto the field, then captures the composed display at the render graph's root. The engine renders each seat's view through its own dispatch set into its own output, and the root's place passes put each output into its seat's half: the left half, seat 1 at spawn facing the dark wall, reads dark on average, and the right half, seat 2 on the field, reads green. The discriminating leg leaves seat 2 at spawn beside seat 1, so both halves show the wall and the right half's green observation turns red: the capture shows two different views, not one view twice, as a view that rendered into another view's output or a view placed from the wrong output would show.",
+  "binding": "The positive leg boots the shipped world windowed, joins a second seat, which composes the world's two-seat split layout, and moves seat 2's body out onto the field, then captures the composed display at the render graph's root. The engine renders each seat's view through its own dispatch set into its own output, and the root's place passes put each output into its seat's half: the left half, seat 1 at spawn facing the dark wall, reads dark on average, and the right half, seat 2 on the field, reads green. The discriminating leg leaves seat 2 at spawn beside seat 1, so both halves show the wall and the right half's green observation turns red: the capture shows two different views, not one view twice, as a view that rendered into another view's output or a view placed from the wrong output would show.",
   "bootShape": "windowed",
   "backends": ["vulkan", "directx"],
   "requirements": ["gpu"],
@@ -13,7 +13,6 @@
     "commands": [
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
       { "verb": "player.join", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "view.override", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
       { "verb": "body.pose", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
@@ -31,7 +30,6 @@
     "commands": [
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
       { "verb": "player.join", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "view.override", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
       { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
