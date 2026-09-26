@@ -1,5 +1,4 @@
-// The private Direct3D 11 device, frames, and shared targets the probe-kernel tests drive the shipped kernels with, and
-// the Direct3D 11 writer the shared-fence laws order against a Direct3D 12 or Vulkan reader.
+// The private Direct3D 11 device, frames, and shared targets the probe-kernel tests drive the shipped kernels with.
 CreateDXGIFactory1
 D3D11CreateDevice
 D3D11_SDK_VERSION
@@ -9,7 +8,6 @@ ID3D11Resource
 ID3D11ShaderResourceView
 ID3D11Texture2D
 IDXGIAdapter1
-IDXGIDevice
 IDXGIFactory1
 IDXGIResource1
 D3D_DRIVER_TYPE

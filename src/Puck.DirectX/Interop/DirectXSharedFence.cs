@@ -42,7 +42,6 @@ public sealed unsafe class DirectXSharedFence : IGpuSharedFence {
 
     /// <summary>Gets the native <c>ID3D12Fence</c> pointer, or zero once disposed.</summary>
     public nint FenceHandle => m_fence;
-
     /// <inheritdoc/>
     /// <remarks>Reads <c>ID3D12Fence::GetCompletedValue</c>. A removed device reports <c>UINT64_MAX</c>, which surfaces
     /// as <see cref="DeviceLostException"/>.</remarks>
@@ -113,7 +112,6 @@ public sealed unsafe class DirectXExportableFence : IGpuExportableFence {
     public nint FenceHandle => m_fence;
     /// <inheritdoc/>
     public nint SharedHandle => ((nint)m_sharedHandle.Value);
-
     /// <inheritdoc/>
     /// <remarks>Reads <c>ID3D12Fence::GetCompletedValue</c>. A removed device reports <c>UINT64_MAX</c>, which surfaces
     /// as <see cref="DeviceLostException"/>.</remarks>

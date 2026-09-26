@@ -80,8 +80,8 @@ public sealed unsafe class Win32D3D11CompletionSignal : IDisposable {
                 var value = ++m_lastValue;
 
                 m_context4->Signal(
-                    pFence: m_fence,
-                    Value: value
+                    Value: value,
+                    pFence: m_fence
                 );
                 m_context->Flush();
 

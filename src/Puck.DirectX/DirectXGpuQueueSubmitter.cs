@@ -31,7 +31,7 @@ public sealed unsafe class DirectXGpuQueueSubmitter(DirectXDeviceContext deviceC
 
         if (wait.Fence is not (DirectXSharedFence or DirectXExportableFence)) {
             throw new ArgumentException(
-                message: $"A Direct3D 12 submission waits only on a Direct3D 12 fence, not a {wait.Fence?.GetType().Name ?? "null"}.",
+                message: $"A Direct3D 12 submission waits only on a Direct3D 12 fence, not a {(wait.Fence?.GetType().Name ?? "null")}.",
                 paramName: nameof(wait)
             );
         }
@@ -66,18 +66,21 @@ public sealed unsafe class DirectXGpuQueueSubmitter(DirectXDeviceContext deviceC
         if (m_externalWaits.Count != 0) {
             var calls = DirectXDeviceCommandCalls.Of(deviceContext: deviceContext);
 
-            foreach (var wait in m_externalWaits) {
-                DirectXCommandCalls.QueueWait(
-                    calls: calls,
-                    fence: ((ID3D12Fence*)((wait.Fence is DirectXSharedFence opened)
-                        ? opened.FenceHandle
-                        : ((DirectXExportableFence)wait.Fence).FenceHandle)),
-                    queue: queue,
-                    value: wait.Value
-                );
+            // The list is spent even when a wait fails, so a device loss never carries a lost device's fence onward.
+            try {
+                foreach (var wait in m_externalWaits) {
+                    DirectXCommandCalls.QueueWait(
+                        calls: calls,
+                        fence: ((ID3D12Fence*)((wait.Fence is DirectXSharedFence opened)
+                            ? opened.FenceHandle
+                            : ((DirectXExportableFence)wait.Fence).FenceHandle)),
+                        queue: queue,
+                        value: wait.Value
+                    );
+                }
+            } finally {
+                m_externalWaits.Clear();
             }
-
-            m_externalWaits.Clear();
         }
 
         var lists = stackalloc ID3D12CommandList*[commandBufferHandles.Length];

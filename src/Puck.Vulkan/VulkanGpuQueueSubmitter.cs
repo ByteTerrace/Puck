@@ -25,7 +25,8 @@ public sealed class VulkanGpuQueueSubmitter(IVulkanDeviceContext deviceContext, 
         start: 0
     );
 
-    // A submission that reached the queue carried the list; an empty one did not, so it keeps the list.
+    // A submission carries the list and spends it, even when it fails, so a device loss never carries a lost device's
+    // semaphore onward; an empty submission reaches no queue, so it keeps the list.
     private void ClearWaitsAfter(ReadOnlySpan<nint> commandBufferHandles) {
         if (!commandBufferHandles.IsEmpty) {
             m_waitCount = 0;
@@ -39,7 +40,7 @@ public sealed class VulkanGpuQueueSubmitter(IVulkanDeviceContext deviceContext, 
 
         if (wait.Fence is not VulkanSharedFence fence) {
             throw new ArgumentException(
-                message: $"A Vulkan submission waits only on an imported timeline semaphore, not a {wait.Fence?.GetType().Name ?? "null"}.",
+                message: $"A Vulkan submission waits only on an imported timeline semaphore, not a {(wait.Fence?.GetType().Name ?? "null")}.",
                 paramName: nameof(wait)
             );
         }
@@ -77,42 +78,51 @@ public sealed class VulkanGpuQueueSubmitter(IVulkanDeviceContext deviceContext, 
     public void Submit(ReadOnlySpan<nint> commandBufferHandles) {
         var vkContext = deviceContext;
 
-        queueSubmitter.Submit(
-            commandBufferHandles: commandBufferHandles,
-            device: vkContext.LogicalDevice.Commands,
-            graphicsQueue: vkContext.LogicalDevice.GraphicsQueue,
-            waitSemaphores: WaitSemaphores,
-            waitValues: WaitValues
-        );
-        ClearWaitsAfter(commandBufferHandles: commandBufferHandles);
+        try {
+            queueSubmitter.Submit(
+                commandBufferHandles: commandBufferHandles,
+                device: vkContext.LogicalDevice.Commands,
+                graphicsQueue: vkContext.LogicalDevice.GraphicsQueue,
+                waitSemaphores: WaitSemaphores,
+                waitValues: WaitValues
+            );
+        } finally {
+            ClearWaitsAfter(commandBufferHandles: commandBufferHandles);
+        }
     }
     /// <inheritdoc/>
     public void Submit(ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) {
         var vkContext = deviceContext;
         var vkFence = ((VulkanGpuSubmissionFence)fence);
 
-        queueSubmitter.Submit(
-            commandBufferHandles: commandBufferHandles,
-            device: vkContext.LogicalDevice.Commands,
-            fenceHandle: vkFence.Arm(),
-            graphicsQueue: vkContext.LogicalDevice.GraphicsQueue,
-            waitSemaphores: WaitSemaphores,
-            waitValues: WaitValues
-        );
-        ClearWaitsAfter(commandBufferHandles: commandBufferHandles);
+        try {
+            queueSubmitter.Submit(
+                commandBufferHandles: commandBufferHandles,
+                device: vkContext.LogicalDevice.Commands,
+                fenceHandle: vkFence.Arm(),
+                graphicsQueue: vkContext.LogicalDevice.GraphicsQueue,
+                waitSemaphores: WaitSemaphores,
+                waitValues: WaitValues
+            );
+        } finally {
+            ClearWaitsAfter(commandBufferHandles: commandBufferHandles);
+        }
     }
     /// <inheritdoc/>
     public void SubmitAndWait(ReadOnlySpan<nint> commandBufferHandles) {
         var vkContext = deviceContext;
 
-        queueSubmitter.SubmitAndWait(
-            commandBufferHandles: commandBufferHandles,
-            device: vkContext.LogicalDevice.Commands,
-            graphicsQueue: vkContext.LogicalDevice.GraphicsQueue,
-            waitSemaphores: WaitSemaphores,
-            waitValues: WaitValues
-        );
-        ClearWaitsAfter(commandBufferHandles: commandBufferHandles);
+        try {
+            queueSubmitter.SubmitAndWait(
+                commandBufferHandles: commandBufferHandles,
+                device: vkContext.LogicalDevice.Commands,
+                graphicsQueue: vkContext.LogicalDevice.GraphicsQueue,
+                waitSemaphores: WaitSemaphores,
+                waitValues: WaitValues
+            );
+        } finally {
+            ClearWaitsAfter(commandBufferHandles: commandBufferHandles);
+        }
     }
 }
 

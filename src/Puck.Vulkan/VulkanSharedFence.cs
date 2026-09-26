@@ -44,8 +44,8 @@ public sealed unsafe class VulkanSharedFence : IGpuSharedFence {
 
         var typeInfo = new VkSemaphoreTypeCreateInfo {
             InitialValue = 0,
-            SemaphoreType = VkSemaphoreTypeCreateInfo.Timeline,
             SType = VkSemaphoreTypeCreateInfo.StructureType,
+            SemaphoreType = VkSemaphoreTypeCreateInfo.Timeline,
         };
         var createInfo = new VkSemaphoreCreateInfo {
             PNext = ((nint)(&typeInfo)),
@@ -67,8 +67,8 @@ public sealed unsafe class VulkanSharedFence : IGpuSharedFence {
         var importInfo = new VkImportSemaphoreWin32HandleInfoKhr {
             Handle = sharedHandle,
             HandleType = VkImportSemaphoreWin32HandleInfoKhr.D3D12FenceHandleType,
-            Semaphore = semaphore,
             SType = VkImportSemaphoreWin32HandleInfoKhr.StructureType,
+            Semaphore = semaphore,
         };
         var imported = device.ImportSemaphoreWin32HandleKhr(
             device.Handle,
@@ -96,7 +96,6 @@ public sealed unsafe class VulkanSharedFence : IGpuSharedFence {
 
     /// <summary>Gets the native timeline <c>VkSemaphore</c> handle, or zero once disposed.</summary>
     public nint SemaphoreHandle => m_semaphore;
-
     /// <inheritdoc/>
     /// <remarks>Reads <c>vkGetSemaphoreCounterValue</c>; <c>VK_ERROR_DEVICE_LOST</c> surfaces as
     /// <see cref="DeviceLostException"/>.</remarks>

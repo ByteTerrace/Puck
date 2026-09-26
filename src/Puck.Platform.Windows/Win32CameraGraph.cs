@@ -139,7 +139,6 @@ internal sealed class Win32PixelStream(CameraSensor sensor, int width, int heigh
 internal sealed class Win32SharedStream(CameraSensor sensor, int width, int height, CameraCaptureFormat nativeFormat, SurfaceFormat targetFormat) : ICameraSharedStream {
     private readonly Lock m_orderGate = new();
     private readonly TaskCompletionSource<nint[]> m_targets = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
-
     private SharedFenceOrder m_order = SharedFenceOrder.Pending;
 
     public LatestSlotPublication Slots { get; } = new();

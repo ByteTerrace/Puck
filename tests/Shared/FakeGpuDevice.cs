@@ -130,8 +130,10 @@ internal sealed class FakeGpuDevice :
     /// admitted into it, or refused with <see cref="GpuDescriptorHeapRefusalException"/>, and returns its ranges when
     /// destroyed, as a Direct3D 12 device's pools do.</summary>
     public GpuDescriptorHeapBudget? DescriptorHeap { get; set; }
+
     /// <summary>Gets every external wait added, in the order the submitter took them.</summary>
     public List<GpuExternalWait> ExternalWaits { get; } = [];
+
     /// <summary>Gets the number of submissions made, fenced or not.</summary>
     public int Submissions { get; private set; }
 

@@ -4,6 +4,8 @@
     </PropertyGroup>
     <PropertyGroup>
         <IsPackable>false</IsPackable>
+        <!-- SharedFenceLawTests drives its Direct3D 11 writer through the device's vtable, with no interop generator. -->
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <!-- The document/protocol/server surface this project exercises is read directly (public members only —
              see CLAUDE.md's InternalsVisibleTo ruling), never through reflection, so AOT/trim analysis holds. -->
         <IsAotCompatible>false</IsAotCompatible>

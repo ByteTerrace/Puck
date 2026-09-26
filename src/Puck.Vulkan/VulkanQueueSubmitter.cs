@@ -18,7 +18,7 @@ public sealed unsafe class VulkanQueueSubmitter {
             );
         }
 
-        uint* waitStages = stackalloc uint[waitSemaphores.Length];
+        var waitStages = stackalloc uint[waitSemaphores.Length];
 
         for (var index = 0; (index < waitSemaphores.Length); index++) {
             waitStages[index] = PipelineStageAllCommands;

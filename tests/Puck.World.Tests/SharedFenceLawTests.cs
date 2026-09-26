@@ -5,13 +5,14 @@ using Puck.DirectX;
 using Puck.DirectX.Apis;
 using Puck.DirectX.Interfaces;
 using Puck.DirectX.Interop;
+using Puck.Platform.Windows;
 using Puck.Vulkan;
 using Puck.Vulkan.Bindings;
 using Puck.Vulkan.Factories;
 using Puck.Vulkan.Interop;
 using Xunit;
 
-namespace Puck.Platform.Windows.Tests;
+namespace Puck.World.Tests;
 
 /// <summary>
 /// A Direct3D 11 writer and a reader on another API, on one adapter, ordered only by a Direct3D 12 shared fence: the
@@ -72,7 +73,6 @@ public sealed unsafe class SharedFenceLawTests {
         Assert.False(condition: submission.IsSignaled);
 
         writer.Write(
-            height: Extent,
             pixels: pattern,
             target: target,
             width: Extent
@@ -326,7 +326,7 @@ public sealed unsafe class SharedFenceLawTests {
     }
     // Each pixel's red and green are its column and row, blue their exclusive or, alpha opaque.
     private static byte[] Pattern() {
-        var pixels = new byte[(Extent * Extent * 4)];
+        var pixels = new byte[((Extent * Extent) * 4)];
 
         for (var y = 0; (y < Extent); y++) {
             for (var x = 0; (x < Extent); x++) {

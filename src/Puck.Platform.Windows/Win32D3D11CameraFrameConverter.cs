@@ -479,7 +479,6 @@ public sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable, IProbeK
         Release(value: m_device);
         m_targets = [];
     }
-
     /// <summary>Returns the path of the build-compiled conversion kernel for a native subtype: the cs_5_0 DXBC a
     /// converter creates its shader from.</summary>
     /// <param name="subtype">The native transport subtype FOURCC: <c>YUY2</c>, <c>NV12</c> or <c>L8</c>.</param>
@@ -557,7 +556,8 @@ public sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable, IProbeK
         return ((shader is null)
             ? throw new InvalidOperationException(message: $"D3D11 camera conversion kernel '{entry}' creation returned no shader")
             : shader);
-    }    private static string KernelPathOf(string entry) => Path.Combine(
+    }
+    private static string KernelPathOf(string entry) => Path.Combine(
         path1: AppContext.BaseDirectory,
         path2: "Assets",
         path3: "Shaders",

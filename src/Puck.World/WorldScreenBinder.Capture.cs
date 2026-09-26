@@ -4,6 +4,7 @@ using System.Runtime.Versioning;
 using Puck.Abstractions.Gpu;
 using Puck.DirectX;
 using Puck.DirectX.Interop;
+using Puck.Hosting;
 using Puck.Platform;
 using Puck.SdfVm.Views;
 using Puck.World.Client;

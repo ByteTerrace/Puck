@@ -197,6 +197,7 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
             : 0UL
         );
     }
+
     /// <inheritdoc/>
     public bool GpuTargetsOutdated {
         get {
@@ -832,9 +833,9 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
 
         public int CpuReadbackDivisor { get; }
         public ulong[] FenceValues { get; }
-        public Win32D3D11CompletionSignal Signal { get; }
         public int Height { get; }
         public int NextSlot { get; set; }
+        public Win32D3D11CompletionSignal Signal { get; }
         public nint[] SlotTextures { get; }
         public int Width { get; }
     }
