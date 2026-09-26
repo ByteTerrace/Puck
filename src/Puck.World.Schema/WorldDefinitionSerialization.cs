@@ -332,7 +332,7 @@ namespace Puck.World;
     // their converter at their own declaration now (Puck.Commands references Puck.Abstractions for exactly that),
     // so this context and Puck.Commands.BindingProfileJsonContext read the shape off the TYPE rather than each
     // repeating a registration the other could drift from.
-    Converters = new[] { typeof(Puck.Assets.Documents.Vector2JsonConverter), typeof(Puck.Assets.Documents.Vector3JsonConverter), typeof(Puck.Assets.Documents.QuaternionJsonConverter), typeof(CreationDocumentJsonConverter), typeof(WorldBackendPreferenceJsonConverter), typeof(SurfaceFormatJsonConverter), typeof(GrantSubjectJsonConverter), typeof(PrincipalJsonConverter), typeof(GranteeJsonConverter), typeof(ChannelReachMaskJsonConverter), typeof(ChannelConsentMaskJsonConverter), typeof(MutationKindMaskJsonConverter), typeof(DocumentWriteMaskJsonConverter), typeof(WorldStateRowJsonConverter), typeof(SafeNameJsonConverter), typeof(CellNameJsonConverter), typeof(WorldDestinationDurabilityJsonConverter), typeof(WorldPortalTravelJsonConverter), typeof(WorldPortalArrivalJsonConverter), typeof(WorldDestinationScopeJsonConverter) },
+    Converters = new[] { typeof(Puck.Assets.Documents.Vector2JsonConverter), typeof(Puck.Assets.Documents.Vector3JsonConverter), typeof(Puck.Assets.Documents.QuaternionJsonConverter), typeof(CreationDocumentJsonConverter), typeof(WorldBackendPreferenceJsonConverter), typeof(QualityTierJsonConverter), typeof(SurfaceFormatJsonConverter), typeof(GrantSubjectJsonConverter), typeof(PrincipalJsonConverter), typeof(GranteeJsonConverter), typeof(ChannelReachMaskJsonConverter), typeof(ChannelConsentMaskJsonConverter), typeof(MutationKindMaskJsonConverter), typeof(DocumentWriteMaskJsonConverter), typeof(WorldStateRowJsonConverter), typeof(SafeNameJsonConverter), typeof(CellNameJsonConverter), typeof(WorldDestinationDurabilityJsonConverter), typeof(WorldPortalTravelJsonConverter), typeof(WorldPortalArrivalJsonConverter), typeof(WorldDestinationScopeJsonConverter) },
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     // The OTHER half of strict parse. UnmappedMemberHandling below refuses a member the model does not have; this
     // refuses a member the model REQUIRES and the document does not carry. Without it, a constructor parameter with
@@ -947,6 +947,20 @@ internal sealed class SurfaceFormatJsonConverter() : TokenEnumJsonConverter<Surf
     protected override SurfaceFormat? Parse(string? token) => WorldHostTokens.ParseSurfaceFormat(token: token);
     /// <inheritdoc/>
     protected override string ToToken(SurfaceFormat value) => WorldHostTokens.SurfaceFormatToken(format: value);
+}
+/// <summary>
+/// Reads and writes a <see cref="Puck.Abstractions.Presentation.QualityTier"/> as its name (<c>low</c> / <c>medium</c>
+/// / <c>high</c>), the spelling a shader package names the tier's variant with, so a <c>views.graphs</c> row's tier
+/// and the variant it loads read alike. See <see cref="Puck.Abstractions.Presentation.QualityTiers"/>.
+/// </summary>
+internal sealed class QualityTierJsonConverter() : TokenEnumJsonConverter<Puck.Abstractions.Presentation.QualityTier>(
+    "tier",
+    Puck.Abstractions.Presentation.QualityTiers.Names
+) {
+    /// <inheritdoc/>
+    protected override Puck.Abstractions.Presentation.QualityTier? Parse(string? token) => Puck.Abstractions.Presentation.QualityTiers.Parse(name: token);
+    /// <inheritdoc/>
+    protected override string ToToken(Puck.Abstractions.Presentation.QualityTier value) => Puck.Abstractions.Presentation.QualityTiers.Name(tier: value);
 }
 /// <summary>
 /// Reads and writes a <see cref="WorldDestinationDurability"/> as the lowercase token

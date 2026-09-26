@@ -269,8 +269,11 @@ rows).
 one-pass graph, or a `puck.shader.package.v1` directory) or an engine
 `package` producer (such as `sdf.world`), a camera, a `refresh` of exactly one
 positive `divisor` or `hertz`, `inputs` binding a graph's external version to
-another row, and the per-instance `timeScale`, `output` and `overrides`
-(documents-render.md owns those three). The validator
+another row, the per-instance `timeScale`, `output` and `overrides`
+(documents-render.md owns those three), and a `tier` (`low`, `medium`,
+`high`, `QualityTier`, written bare in `.puck`), which selects the source's
+package variant and never what it reads, so it moves no manifest, mirror or
+state hash; a package row takes none. The validator
 (`WorldDefinitionValidator.Graphs.cs`) refuses a loop of same-frame inputs
 through `RenderGraphInstanceSet.TryCreate`, naming every instance; a self-input
 and a `previousFrame` input are legal. `views.graphBudget.passPixelsPerFrame`

@@ -43,24 +43,6 @@
   "passes": [
     {
       "name": "blur",
-      "stages": [
-        {
-          "stage": "Geometry",
-          "entryPoint": "main",
-          "profile": "cs_6_6",
-          "steps": [
-            {
-              "tool": "dxc",
-              "options": [
-                "-T",
-                "cs_6_6",
-                "-E",
-                "main"
-              ]
-            }
-          ]
-        }
-      ],
       "interface": {
         "path": "blur.interface.json",
         "pin": "sha256/0000000000000000000000000000000000000000000000000000000000000000",
@@ -74,6 +56,24 @@
       "variants": [
         {
           "name": "default",
+          "stages": [
+            {
+              "stage": "Geometry",
+              "entryPoint": "main",
+              "profile": "cs_6_6",
+              "steps": [
+                {
+                  "tool": "dxc",
+                  "options": [
+                    "-T",
+                    "cs_6_6",
+                    "-E",
+                    "main"
+                  ]
+                }
+              ]
+            }
+          ],
           "binaries": [
             {
               "stage": "Compute",
@@ -86,6 +86,123 @@
               "stage": "Compute",
               "target": "dxil",
               "path": "binaries/blur.default.comp.dxil",
+              "pin": "sha256/0000000000000000000000000000000000000000000000000000000000000000",
+              "bytes": 1
+            }
+          ]
+        },
+        {
+          "name": "low",
+          "stages": [
+            {
+              "stage": "Geometry",
+              "entryPoint": "main",
+              "profile": "cs_6_6",
+              "steps": [
+                {
+                  "tool": "dxc",
+                  "options": [
+                    "-T",
+                    "cs_6_6",
+                    "-E",
+                    "main",
+                    "-D",
+                    "PUCK_QUALITY_TIER=0"
+                  ]
+                }
+              ]
+            }
+          ],
+          "binaries": [
+            {
+              "stage": "Compute",
+              "target": "spirv",
+              "path": "binaries/blur.low.comp.spv",
+              "pin": "sha256/0000000000000000000000000000000000000000000000000000000000000000",
+              "bytes": 1
+            },
+            {
+              "stage": "Compute",
+              "target": "dxil",
+              "path": "binaries/blur.low.comp.dxil",
+              "pin": "sha256/0000000000000000000000000000000000000000000000000000000000000000",
+              "bytes": 1
+            }
+          ]
+        },
+        {
+          "name": "medium",
+          "stages": [
+            {
+              "stage": "Geometry",
+              "entryPoint": "main",
+              "profile": "cs_6_6",
+              "steps": [
+                {
+                  "tool": "dxc",
+                  "options": [
+                    "-T",
+                    "cs_6_6",
+                    "-E",
+                    "main",
+                    "-D",
+                    "PUCK_QUALITY_TIER=1"
+                  ]
+                }
+              ]
+            }
+          ],
+          "binaries": [
+            {
+              "stage": "Compute",
+              "target": "spirv",
+              "path": "binaries/blur.medium.comp.spv",
+              "pin": "sha256/0000000000000000000000000000000000000000000000000000000000000000",
+              "bytes": 1
+            },
+            {
+              "stage": "Compute",
+              "target": "dxil",
+              "path": "binaries/blur.medium.comp.dxil",
+              "pin": "sha256/0000000000000000000000000000000000000000000000000000000000000000",
+              "bytes": 1
+            }
+          ]
+        },
+        {
+          "name": "high",
+          "stages": [
+            {
+              "stage": "Geometry",
+              "entryPoint": "main",
+              "profile": "cs_6_6",
+              "steps": [
+                {
+                  "tool": "dxc",
+                  "options": [
+                    "-T",
+                    "cs_6_6",
+                    "-E",
+                    "main",
+                    "-D",
+                    "PUCK_QUALITY_TIER=2"
+                  ]
+                }
+              ]
+            }
+          ],
+          "binaries": [
+            {
+              "stage": "Compute",
+              "target": "spirv",
+              "path": "binaries/blur.high.comp.spv",
+              "pin": "sha256/0000000000000000000000000000000000000000000000000000000000000000",
+              "bytes": 1
+            },
+            {
+              "stage": "Compute",
+              "target": "dxil",
+              "path": "binaries/blur.high.comp.dxil",
               "pin": "sha256/0000000000000000000000000000000000000000000000000000000000000000",
               "bytes": 1
             }

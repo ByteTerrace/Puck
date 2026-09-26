@@ -42,6 +42,9 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         /// <summary>The currently requested document-relative source.</summary>
         public string Source { get; internal set; } = string.Empty;
 
+        /// <summary>Gets the quality tier the requested source compiles or loads at: the row's <see cref="WorldViewGraph.Tier"/>
+        /// when the compilation was queued, or <see langword="null"/> for the variant no tier names.</summary>
+        public QualityTier? Tier { get; internal set; }
         /// <summary>Gets or sets the non-negative rate the instance's time follows the presentation clock at. A change
         /// takes effect from the frame last presented, so the instance's time never jumps.</summary>
         public float ClockScale {
@@ -774,7 +777,10 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// <summary>Schedules a complete candidate compilation. A newer request supersedes an older result: a compilation
     /// still pending is canceled and never installed, and <see cref="Report"/> says so as <c>superseded: compilation</c>.
     /// A compiled candidate not yet installed, queued for the next frame or with its pipelines still building, is
-    /// likewise replaced when the newer one compiles (<c>superseded: compiled candidate</c>).</summary>
+    /// likewise replaced when the newer one compiles (<c>superseded: compiled candidate</c>). The source compiles or
+    /// loads at the tier the instance's row names (<see cref="WorldViewGraph.Tier"/>).</summary>
+    /// <param name="name">The instance.</param>
+    /// <param name="source">The document-relative source.</param>
     public void QueueCompile(string name, string source) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
@@ -791,6 +797,10 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             );
         }
         entry.Source = source;
+        entry.Tier = entry.Row?.Tier;
+
+        var tier = entry.Tier;
+
         if (!WorldDocumentPaths.TryResolve(
             documentDirectory: DocumentDirectory,
             path: source,
@@ -829,7 +839,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                 var loaded = Packager.LoadSource(
                     cancellationToken: token,
                     name: name,
-                    path: resolved
+                    path: resolved,
+                    tier: tier
                 );
 
                 if (loaded.Status != ShaderPipelineLoadStatus.Compiled) {
@@ -1066,11 +1077,14 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
             entry.Adopt(row: row);
 
-            if (!string.Equals(
+            if (
+                !string.Equals(
                 a: entry.Source,
                 b: row.Source,
                 comparisonType: StringComparison.Ordinal
-            )) {
+            ) ||
+                (entry.Tier != row.Tier)
+            ) {
                 QueueCompile(
                     name: row.Name,
                     source: row.Source

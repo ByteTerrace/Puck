@@ -283,8 +283,8 @@ P5 is complete. P8 extended the manifest: each pass entry records its
 interface hash, and the package carries its precompiled binaries.
 
 P7's gate spike has run its build-time half and its GPU half, the `binding`
-parity station. P10's steps 1 to 3 have landed and step 4 is in flight; steps 5
-to 8 remain, and so does step 2's debt of one shared region per bound row. The spike's [pass interface](../reference/shaders.md#pass-interfaces)
+parity station. P10's steps 1 to 4, 6 and 7 have landed; steps 5 and 8
+remain, and so does step 2's debt of one shared region per bound row. The spike's [pass interface](../reference/shaders.md#pass-interfaces)
 lives in `src/Puck.Shaders/Interface/`. It interfaces variants of
 `sdf-film-grain.frag.hlsl` and a pixelate compute pass whose only copy is
 the spike's fixture under `tests/Puck.Shaders.Tests`, each with a frame group
@@ -2803,8 +2803,19 @@ follow it.
    prices and the refusals) and `BrowserParityRecordingTests`, whose baseline
    holds the dimension the Node harness (`engine-wasm.test.cjs`) holds the
    WebAssembly engine's `AnalyzeCosts` to.
-7. Tiers. A package builds its variants beyond `default`, and a row names its
-   tier from `low`, `medium` and `high`.
+7. Done: tiers. A package builds four variants a pass, `default` and one per
+   tier, each tier's compiled with `PUCK_QUALITY_TIER` defined
+   (`QualityTiers`, `ShaderCompiler.StepsOf`, `ShaderPackageVariant`), every
+   variant recording its own stages; a load reads the variant its tier names.
+   A `views.graphs` row names its tier from `low`, `medium` and `high`
+   (`WorldViewGraph.Tier`, `tier: high` in `.puck`, printed back bare), any
+   other spelling refused naming it; the host compiles or loads the row at its
+   tier and recompiles on a change, and `pipeline.status` prints it. Laws:
+   `ShaderPackageLawTests` (every variant built, a load per tier reads its
+   binaries), `WorldViewGraphTierLawTests` (documents differing only in tier
+   compile identical manifests and mirrors and hash equally; an unknown tier
+   refused by name) and `GraphParameterStatementTests` (the round trip). The
+   `pipeline-package` canary captures the package's high variant.
 8. The field lattice as a region kind, replacing `WorldClientFieldLattice`'s
    second path, and the materials a program bakes join the mirror.
 

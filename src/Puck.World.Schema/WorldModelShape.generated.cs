@@ -5376,6 +5376,7 @@ public static partial class WorldModelShape {
                 M("overrides", typeof(global::System.Collections.Generic.IReadOnlyDictionary<global::System.String, global::System.Text.Json.JsonElement>), typeof(global::Puck.World.WorldViewGraph), "Overrides", Read | Write),
                 M("settings", typeof(global::System.Collections.Generic.IReadOnlyDictionary<global::System.String, global::System.Text.Json.JsonElement>), typeof(global::Puck.World.WorldViewGraph), "Settings", Read | Write),
                 M("parameters", typeof(global::System.Collections.Generic.IReadOnlyDictionary<global::System.String, global::System.Collections.Generic.IReadOnlyDictionary<global::System.String, global::Puck.World.BindableScalar>>), typeof(global::Puck.World.WorldViewGraph), "Parameters", Read | Write),
+                M("tier", typeof(global::System.Nullable<global::Puck.Abstractions.Presentation.QualityTier>), typeof(global::Puck.World.WorldViewGraph), "Tier", Read | Write),
             ],
             []),
         T(typeof(global::Puck.World.WorldViewGraphBudget), true, JsonTypeInfoKind.Object, null,

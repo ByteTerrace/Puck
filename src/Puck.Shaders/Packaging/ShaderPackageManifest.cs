@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Puck.Abstractions.Presentation;
 
 namespace Puck.Shaders;
 
@@ -8,8 +9,8 @@ namespace Puck.Shaders;
 /// lists, each at its logical path. The package carries sources rather than bytecode, so loading one compiles it with
 /// the compiler it pins.
 /// <para>The compile facts come from the compiler rather than being assembled beside it: <see cref="Compiler"/>'s
-/// revisions and each pass's <see cref="ShaderPackagePass.Stages"/> are the <see cref="ShaderCompileIdentity"/> the
-/// compiler hashed into the pass's cache key, and every file's pin is the content hash that key hashed.</para>
+/// revisions and each variant's <see cref="ShaderPackageVariant.Stages"/> are the <see cref="ShaderCompileIdentity"/>
+/// the compiler hashed into the pass's cache key, and every file's pin is the content hash that key hashed.</para>
 /// </summary>
 /// <param name="Schema">The document's schema, <see cref="SchemaName"/>.</param>
 /// <param name="Name">The pipeline's name.</param>
@@ -52,28 +53,44 @@ public sealed record ShaderPackageTool(string Name, string Version);
 public sealed record ShaderPackageFile(string Path, string Pin, long Bytes);
 /// <summary>How one pass compiled and what it compiled to.</summary>
 /// <param name="Name">The pass's name.</param>
-/// <param name="Stages">Each stage's entry point, profile, and native tool steps, as the compiler identified
-/// them (<see cref="ShaderCompileIdentity.Stages"/>).</param>
 /// <param name="Interface">The pass's interface as its canonical JSON (<see cref="ShaderInterface.ToJson"/>), whose pin
 /// is the interface's hash (<see cref="ShaderInterface.Hash"/>), which versions the declarations and every
 /// binary.</param>
 /// <param name="Declarations">The declarations generated from the interface, at the path the pass's source includes
 /// them from.</param>
-/// <param name="Variants">The pass's precompiled binaries, one entry per variant. Every variant reads the same
-/// interface; the one the engine builds today is <see cref="ShaderPackageVariant.DefaultName"/>.</param>
+/// <param name="Variants">The pass's precompiled binaries, one entry per variant, named and ordered as
+/// <see cref="ShaderPackageVariant.Names"/>. Every variant reads the same interface, so a tier cannot change what a
+/// pass reads.</param>
 public sealed record ShaderPackagePass(
     string Name,
-    IReadOnlyList<ShaderCompileStage> Stages,
     ShaderPackageFile Interface,
     ShaderPackageFile Declarations,
     IReadOnlyList<ShaderPackageVariant> Variants
 );
-/// <summary>One variant of a pass: its precompiled binaries.</summary>
+/// <summary>One variant of a pass: how it compiled and its precompiled binaries. The variant a <c>views.graphs</c>
+/// row naming no tier loads is <see cref="DefaultName"/>, compiled with no tier defined; each other variant is named for
+/// its <see cref="QualityTier"/> (<see cref="QualityTiers.Name"/>) and compiled with that tier defined
+/// (<see cref="ShaderCompiler.StepsOf"/>).</summary>
 /// <param name="Name">The variant's name.</param>
+/// <param name="Stages">Each stage's entry point, profile, and native tool steps, as the compiler identified
+/// them (<see cref="ShaderCompileIdentity.Stages"/>).</param>
 /// <param name="Binaries">One SPIR-V module and one DXIL container per stage, in stage order, SPIR-V first.</param>
-public sealed record ShaderPackageVariant(string Name, IReadOnlyList<ShaderPackageBinary> Binaries) {
-    /// <summary>The name of the variant every pass carries.</summary>
+public sealed record ShaderPackageVariant(string Name, IReadOnlyList<ShaderCompileStage> Stages, IReadOnlyList<ShaderPackageBinary> Binaries) {
+    /// <summary>The name of the variant compiled for no tier.</summary>
     public const string DefaultName = "default";
+
+    /// <summary>Gets the tier of every variant a package carries, in the order its passes list them: no tier, then each
+    /// tier, cheapest first.</summary>
+    public static IReadOnlyList<QualityTier?> Tiers { get; } = [null, .. QualityTiers.All.Select(selector: static tier => ((QualityTier?)tier))];
+    /// <summary>Gets the name of every variant a package carries, in the order of <see cref="Tiers"/>.</summary>
+    public static IReadOnlyList<string> Names { get; } = [.. Tiers.Select(selector: NameOf)];
+
+    /// <summary>Returns the name of the variant a tier loads.</summary>
+    /// <param name="tier">The tier, or <see langword="null"/> for none.</param>
+    /// <returns><see cref="DefaultName"/> for no tier, and the tier's name otherwise.</returns>
+    public static string NameOf(QualityTier? tier) => ((tier is { } named)
+        ? QualityTiers.Name(tier: named)
+        : DefaultName);
 }
 /// <summary>One precompiled binary of a package.</summary>
 /// <param name="Stage">The stage it runs.</param>

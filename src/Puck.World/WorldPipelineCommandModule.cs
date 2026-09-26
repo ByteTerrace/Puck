@@ -733,7 +733,7 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
         );
         yield return Immediate(
             "pipeline.status",
-            "pipeline.status — show authored sources, pending compilation, last results, watches, clocks and each instance's work counters.",
+            "pipeline.status — show authored sources and quality tiers, pending compilation, last results, watches, clocks and each instance's work counters.",
             (_, args) => {
                 if (args.Count != 0) {
                     return CommandResult.Usage(
@@ -749,7 +749,7 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
                         result.Append(handler: $"\n  {row.Name} package={package}");
                         continue;
                     }
-                    result.Append(handler: $"\n  {row.Name} source={row.Source}");
+                    result.Append(handler: $"\n  {row.Name} source={row.Source} tier={ShaderPackageVariant.NameOf(tier: row.Tier)}");
                     if (FindEntry(name: row.Name) is not { } entry) { result.Append(value: " unrendered"); continue; }
                     result.Append(handler: $" {(entry.IsCompiling
                         ? "compiling"

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Puck.Abstractions;
+using Puck.Abstractions.Presentation;
 
 namespace Puck.Shaders;
 
@@ -93,7 +94,13 @@ public sealed class ShaderPipelineLoader {
     }
 
     /// <summary>Loads and compiles every planned pass. A failure in any pass refuses the entire candidate.</summary>
-    public ShaderPipelineLoadResult Load(string name, string path, CancellationToken cancellationToken = default) {
+    /// <param name="name">The instance name, which names a one-off shader's pipeline and its one pass.</param>
+    /// <param name="path">The path of the graph document or one-off shader.</param>
+    /// <param name="cancellationToken">The token that cancels the compile.</param>
+    /// <param name="tier">The quality tier every pass compiles for, or <see langword="null"/> for the variant no tier
+    /// names.</param>
+    /// <returns>The outcome.</returns>
+    public ShaderPipelineLoadResult Load(string name, string path, CancellationToken cancellationToken = default, QualityTier? tier = null) {
         path = Path.GetFullPath(path: path);
         var dependencies = new HashSet<string>(comparer: PuckPaths.Comparer) { path };
         var sourceTexts = new Dictionary<string, string>(comparer: PuckPaths.Comparer);
@@ -182,7 +189,8 @@ public sealed class ShaderPipelineLoader {
                         pass: pass,
                         source: sourceTexts[sourcePath],
                         sourcePath: sourcePath
-                    )
+                    ),
+                    tier: tier
                 );
                 var shader = m_compiler.CompileAsync(
                     cancellationToken: cancellationToken,

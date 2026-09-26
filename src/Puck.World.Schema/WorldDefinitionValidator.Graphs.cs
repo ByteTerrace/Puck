@@ -51,9 +51,10 @@ public static partial class WorldDefinitionValidator {
                     (graph.TimeScale != 1f) ||
                     (graph.Output is not null) ||
                     (graph.Overrides is not null) ||
-                    (graph.Parameters is not null)
+                    (graph.Parameters is not null) ||
+                    (graph.Tier is not null)
                 ) {
-                    errors.Add(item: $"{path}: package instance '{graph.Name}' takes no timeScale, output, overrides or parameters.");
+                    errors.Add(item: $"{path}: package instance '{graph.Name}' takes no timeScale, output, overrides, parameters or tier.");
                 }
                 // A source package names a producer by id and opens it from the row's settings, as a screen's producer
                 // source does.

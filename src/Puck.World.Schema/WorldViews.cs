@@ -74,6 +74,10 @@ public sealed record WorldViewGraphInput(string Resource, string Instance, bool 
 /// through its state mirror slot, eased by default. A field a row names both here and in <see cref="Overrides"/> is
 /// refused by name, and a binding that does not resolve leaves the field at its source's default.
 /// <see langword="null"/> binds nothing.</param>
+/// <param name="Tier">The quality tier the instance renders at, from the authored quality vocabulary: the variant of
+/// its source's package it loads, or the tier its source compiles for where no package holds it. A tier selects how
+/// the passes compute and never what they read, so two documents differing only in a row's tier present the same
+/// state. <see langword="null"/> loads the variant no tier names.</param>
 /// <param name="Settings">A source package row's producer settings, which its producer opens the image with and its
 /// shape validates, as a screen's <c>producer</c> source's settings are, or <see langword="null"/> for the producer's
 /// defaults. Only a row naming a source package (<c>source.&lt;producer id&gt;</c>) takes settings.</param>
@@ -87,7 +91,8 @@ public sealed record WorldViewGraph(string Name,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Output = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, System.Text.Json.JsonElement>? Overrides = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, System.Text.Json.JsonElement>? Settings = null,
-    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, IReadOnlyDictionary<string, BindableScalar>>? Parameters = null);
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, IReadOnlyDictionary<string, BindableScalar>>? Parameters = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] Puck.Abstractions.Presentation.QualityTier? Tier = null);
 /// <summary>One pass the render graph composition synthesizes runs over the composed frame: a post-process package pass
 /// of the root graph (<c>WorldViewGraphs.MainInstance</c>), written as a <c>puck.render.graph.v1</c> document's
 /// <c>packages</c> row is, less its ports. The rows run in order after every view and pane is placed and before the

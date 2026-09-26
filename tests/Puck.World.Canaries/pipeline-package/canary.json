@@ -1,7 +1,7 @@
 {
   "id": "pipeline-package",
-  "title": "A pipeline row naming a relocated shader package renders its saved override, and an altered package file is refused by its pin",
-  "binding": "Once per run, the runner copies this canary's files into a scratch directory, packages the copied tint pipeline with the candidate CLI's own shaders package, and deletes the copy, so the package's source tree is gone; before each leg boots it copies that package to {run}/tint. The tint pass writes (gain, 1 - gain, 0.5, 1) to every pixel of an offscreen 256x256 image, with gain defaulting to 1. The positive leg commits gain 0.25 on the source row and captures (0.25, 0.75, 0.5); points the same instance at the package with that override, which the server binds against the package's config schema, and captures the same value; saves; and the relaunch on the saved document, whose row names the package, captures it a third time. The discriminating leg commits nothing, so its source capture reads the default (1, 0, 0.5), and the runner appends a line to the package's tint.hlsl after the move, so naming the package fails with SHADERPKG_FILE_PIN and no package or relaunch capture exists: every positive observation turns red.",
+  "title": "A pipeline row naming a relocated shader package renders its saved override and its tier's variant, and an altered package file is refused by its pin",
+  "binding": "Once per run, the runner copies this canary's files into a scratch directory, packages the copied tint pipeline with the candidate CLI's own shaders package, and deletes the copy, so the package's source tree is gone; before each leg boots it copies that package to {run}/tint. The tint pass writes (gain, 1 - gain, blue, 1) to every pixel of an offscreen 256x256 image, with gain defaulting to 1 and blue 0.5 in the variant no tier names and 0.25 (tier + 1) in each tier's, which compiles with PUCK_QUALITY_TIER defined. The positive leg commits gain 0.25 on the source row and captures (0.25, 0.75, 0.5); points the same instance at the package with that override, which the server binds against the package's config schema, and captures the same value; saves; names the high tier on the row, which pipeline.status reads back, and captures the package's high variant as (0.25, 0.75, 0.75); and the relaunch on the saved document, whose row names the package and no tier, captures (0.25, 0.75, 0.5) a third time. The discriminating leg commits nothing, so its source capture reads the default (1, 0, 0.5), which is not the high variant's blue, and the runner appends a line to the package's tint.hlsl after the move, so naming the package fails with SHADERPKG_FILE_PIN and no package or relaunch capture exists: every positive observation turns red.",
   "bootShape": "offscreen",
   "backends": ["vulkan", "directx"],
   "requirements": ["gpu"],
@@ -33,7 +33,16 @@
       { "verb": "pipeline.wait", "occurrence": 7, "outcome": "accepted" },
       { "verb": "pipeline.capture", "occurrence": 2, "outcome": "accepted" },
       { "verb": "pipeline.wait", "occurrence": 8, "outcome": "accepted" },
-      { "verb": "world.save", "occurrence": 1, "outcome": "accepted" }
+      { "verb": "world.save", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.row.set", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.reload", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 9, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 10, "outcome": "accepted" },
+      { "verb": "pipeline.status", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.reset", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 11, "outcome": "accepted" },
+      { "verb": "pipeline.capture", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 12, "outcome": "accepted" }
     ],
     "relaunch": {
       "world": "package.world.json",
@@ -54,7 +63,9 @@
       { "type": "line", "name": "no package is refused", "stream": "stderr", "match": "contains", "text": "[SHADERPKG_", "present": false },
       { "type": "imageRegion", "name": "source-row-renders-the-override", "capture": "source.png", "extent": [256, 256], "region": [0, 0, 1, 1], "reduce": "every", "minimum": [0.25, 0.75, 0.5, 1], "maximum": [0.25, 0.75, 0.5, 1], "toleranceCodes": 1, "holds": true },
       { "type": "imageRegion", "name": "package-row-renders-the-override", "capture": "package.png", "extent": [256, 256], "region": [0, 0, 1, 1], "reduce": "every", "minimum": [0.25, 0.75, 0.5, 1], "maximum": [0.25, 0.75, 0.5, 1], "toleranceCodes": 1, "holds": true },
-      { "type": "imageRegion", "name": "relaunched-package-renders-the-saved-override", "capture": "relaunched.png", "extent": [256, 256], "region": [0, 0, 1, 1], "reduce": "every", "minimum": [0.25, 0.75, 0.5, 1], "maximum": [0.25, 0.75, 0.5, 1], "toleranceCodes": 1, "holds": true }
+      { "type": "imageRegion", "name": "relaunched-package-renders-the-saved-override", "capture": "relaunched.png", "extent": [256, 256], "region": [0, 0, 1, 1], "reduce": "every", "minimum": [0.25, 0.75, 0.5, 1], "maximum": [0.25, 0.75, 0.5, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "line", "name": "the row reads back its tier", "stream": "stdout", "match": "contains", "text": "/tint tier=high ", "present": true },
+      { "type": "imageRegion", "name": "high-tier-row-renders-the-high-variant", "capture": "tiered.png", "extent": [256, 256], "region": [0, 0, 1, 1], "reduce": "every", "minimum": [0.25, 0.75, 0.75, 1], "maximum": [0.25, 0.75, 0.75, 1], "toleranceCodes": 1, "holds": true }
     ]
   },
   "discriminating": {
@@ -77,7 +88,8 @@
       { "type": "line", "name": "nothing is committed", "stream": "stderr", "match": "contains", "text": "CommitViewGraph", "present": false },
       { "type": "line", "name": "the altered package is refused by its pin", "stream": "stderr", "match": "contains", "text": "[SHADERPKG_FILE_PIN]", "present": true },
       { "type": "imageRegion", "name": "source-row-renders-the-default", "capture": "source.png", "extent": [256, 256], "region": [0, 0, 1, 1], "reduce": "every", "minimum": [1, 0, 0.5, 1], "maximum": [1, 0, 0.5, 1], "toleranceCodes": 1, "holds": true },
-      { "type": "imageRegion", "name": "default-is-not-the-override", "capture": "source.png", "extent": [256, 256], "region": [0, 0, 1, 1], "reduce": "every", "minimum": [0.25, 0.75, 0.5, 1], "maximum": [0.25, 0.75, 0.5, 1], "toleranceCodes": 1, "holds": false }
+      { "type": "imageRegion", "name": "default-is-not-the-override", "capture": "source.png", "extent": [256, 256], "region": [0, 0, 1, 1], "reduce": "every", "minimum": [0.25, 0.75, 0.5, 1], "maximum": [0.25, 0.75, 0.5, 1], "toleranceCodes": 1, "holds": false },
+      { "type": "imageRegion", "name": "the-untiered-variant-is-not-the-high-variant", "capture": "source.png", "extent": [256, 256], "region": [0, 0, 1, 1], "reduce": "every", "minimum": [1, 0, 0.75, 1], "maximum": [1, 0, 0.75, 1], "toleranceCodes": 1, "holds": false }
     ]
   }
 }
