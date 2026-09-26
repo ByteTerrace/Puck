@@ -361,8 +361,8 @@ project's `GlobalUsings.cs`.
 
 The [shared test suite](../../../tests/Puck.GamingBricks.Tests/README.md) owns its
 run instructions. QueuedHostContractProbe exercises backpressure, frame and
-audio publication, coherent hardware access, time travel, upload leases, device
-loss, and disposal against real adapters. Both the [HGB Post battery](../../../src/Puck.HumbleGamingBrick.Post/README.md)
+audio publication, coherent hardware access, time travel, and whole frames written
+into an uploaded source's region against real adapters. Both the [HGB Post battery](../../../src/Puck.HumbleGamingBrick.Post/README.md)
 and [AGB Post battery](../../../src/Puck.AdvancedGamingBrick.Post/README.md) use it;
 their fork-determinism stages also exercise pooled instance ownership.
 

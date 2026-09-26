@@ -1829,8 +1829,9 @@ miss)—offline replay reconstructs a FRESH host from the tape's embedded
 definition, so a machine's accumulated core state (or a screen op's effect)
 from before recording began can never be re-established, and the population
 hash covers no machine state to catch the divergence. `Puck.World.WorldScreenBinder`
-is a pure reader of this type's outputs for presentation (framebuffer
-handle/light, `PublishFrame`) and still owns the genuinely presentation
+is a pure reader of this type's outputs for presentation (a machine source
+instance's upload writes an output's frames, `WriteFrame`, and the light
+lights the room) and still owns the genuinely presentation
 screen sources (test pattern, authored QR, webcam, compositor capture,
 jumbotron view) that are not this type's concern. See
 `Puck.World.Addons/README.md` for the concrete host's own shipped-engine

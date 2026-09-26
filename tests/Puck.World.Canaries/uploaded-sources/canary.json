@@ -1,12 +1,12 @@
 {
   "id": "uploaded-sources",
-  "title": "An uploaded test pattern and QR code convert through their source graphs and show in their panes",
-  "binding": "The positive leg boots an offscreen 64x64 world whose views.graphs rows are two uploaded source instances, a 32x64 test pattern (source.testPattern) and a QR code of 'puck' with a four-module quiet zone (source.qr), each an instance of the render-graph runtime whose one pass is the shipped source-rgba conversion reading the region its producer writes, placed in the left and right halves of the display by the one layout. A captures row captures the test pattern's source instance at tick 60, before composition: its bars are the pattern's own yellow, red and blue, in the columns WorldTestPatternProducer draws them, so the conversion swapped the producer's BGRA into RGBA. The root's screenshot shows the red and blue bars in the left pane, and in the right pane the code's white quiet zone and the dark center of its top-left finder pattern. The discriminating leg authors the code with no quiet zone and captures the pattern at tick 448, where the pattern's sweep covers the yellow bar's columns: the yellow observation turns red because the source converts the image of the tick it presents, and the quiet-zone and finder observations turn red because the right pane shows the changed code, while the bars that neither change moves hold.",
+  "title": "Uploaded sources convert through their source graphs, show in their panes, and hold exactly to the images they state",
+  "binding": "The positive leg boots an offscreen 64x64 world whose views.graphs rows are two uploaded source instances, a 32x64 test pattern (source.testPattern) and a QR code of 'puck' with a four-module quiet zone (source.qr), each an instance of the render-graph runtime whose one pass is the shipped source-rgba conversion reading the region its producer writes, placed in the left and right halves of the display by the one layout, and a world-space screen showing a tune instrument's video output, a machine source instance whose upload writes the output's latest frame into its region once per completed tick. A captures row captures the test pattern's source instance at tick 60, before composition: its bars are the pattern's own yellow, red and blue, in the columns WorldTestPatternProducer draws them, so the conversion swapped the producer's BGRA into RGBA, and the capture holds exactly to the pattern the producer states for tick 60 (ImageSourceVerdict, narrated as the capture's verdict). A second row captures screen 0's source, the machine source instance, at tick 90, and it holds exactly to the frame the upload wrote for that tick. The root's screenshot shows the red and blue bars in the left pane, and in the right pane the code's white quiet zone and the dark center of its top-left finder pattern. The discriminating leg authors the code with no quiet zone and captures the pattern at tick 448, where the pattern's sweep covers the yellow bar's columns: the yellow observation turns red because the source converts the image of the tick it presents, and the quiet-zone and finder observations turn red because the right pane shows the changed code, while the bars that neither change moves hold. Both of its source captures still hold exactly to their references, since a conversion is exact at every tick.",
   "bootShape": "offscreen",
   "backends": ["vulkan", "directx"],
   "requirements": ["gpu"],
   "timeoutSeconds": 60,
-  "fixtures": [],
+  "fixtures": ["instrument.audio.json"],
   "positive": {
     "world": "tests/Puck.World.Canaries/uploaded-sources/fixture.world.json",
     "script": "sources.script.txt",
@@ -17,6 +17,10 @@
       { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" }
     ],
     "expect": [
+      { "type": "line", "name": "the-pattern-capture-holds-exactly-to-its-reference", "stream": "stderr", "match": "contains", "text": "[captures] pattern tick 60: verdict testPattern 32x64 exact.", "present": true },
+      { "type": "line", "name": "the-machine-capture-holds-exactly-to-its-reference", "stream": "stderr", "match": "contains", "text": "[captures] machine tick 90: verdict machine 160x144 exact.", "present": true },
+      { "type": "line", "name": "no-source-capture-differs-from-its-reference", "stream": "stderr", "match": "contains", "text": "pixel(s) differ", "present": false },
+      { "type": "line", "name": "no-source-reference-states-another-tick", "stream": "stderr", "match": "contains", "text": "states the image of tick", "present": false },
       { "type": "imageRegion", "name": "the-source-instance-shows-its-yellow-bar", "capture": "state/captures/pattern~60.png", "extent": [32, 64], "region": [0.19, 0.07, 0.27, 0.56], "reduce": "every", "minimum": [1, 1, 0, 1], "maximum": [1, 1, 0, 1], "toleranceCodes": 1, "holds": true },
       { "type": "imageRegion", "name": "the-source-instance-shows-its-red-bar", "capture": "state/captures/pattern~60.png", "extent": [32, 64], "region": [0.76, 0.07, 0.83, 0.56], "reduce": "every", "minimum": [1, 0, 0, 1], "maximum": [1, 0, 0, 1], "toleranceCodes": 1, "holds": true },
       { "type": "imageRegion", "name": "the-source-instance-shows-its-blue-bar", "capture": "state/captures/pattern~60.png", "extent": [32, 64], "region": [0.91, 0.07, 0.96, 0.56], "reduce": "every", "minimum": [0, 0, 1, 1], "maximum": [0, 0, 1, 1], "toleranceCodes": 1, "holds": true },
@@ -36,6 +40,10 @@
       { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" }
     ],
     "expect": [
+      { "type": "line", "name": "the-pattern-capture-holds-exactly-to-its-reference", "stream": "stderr", "match": "contains", "text": "[captures] pattern tick 448: verdict testPattern 32x64 exact.", "present": true },
+      { "type": "line", "name": "the-machine-capture-holds-exactly-to-its-reference", "stream": "stderr", "match": "contains", "text": "[captures] machine tick 90: verdict machine 160x144 exact.", "present": true },
+      { "type": "line", "name": "no-source-capture-differs-from-its-reference", "stream": "stderr", "match": "contains", "text": "pixel(s) differ", "present": false },
+      { "type": "line", "name": "no-source-reference-states-another-tick", "stream": "stderr", "match": "contains", "text": "states the image of tick", "present": false },
       { "type": "imageRegion", "name": "the-source-instance-shows-its-yellow-bar", "capture": "state/captures/pattern~448.png", "extent": [32, 64], "region": [0.19, 0.07, 0.27, 0.56], "reduce": "every", "minimum": [1, 1, 0, 1], "maximum": [1, 1, 0, 1], "toleranceCodes": 1, "holds": false },
       { "type": "imageRegion", "name": "the-source-instance-shows-its-red-bar", "capture": "state/captures/pattern~448.png", "extent": [32, 64], "region": [0.76, 0.07, 0.83, 0.56], "reduce": "every", "minimum": [1, 0, 0, 1], "maximum": [1, 0, 0, 1], "toleranceCodes": 1, "holds": true },
       { "type": "imageRegion", "name": "the-source-instance-shows-its-blue-bar", "capture": "state/captures/pattern~448.png", "extent": [32, 64], "region": [0.91, 0.07, 0.96, 0.56], "reduce": "every", "minimum": [0, 0, 1, 1], "maximum": [0, 0, 1, 1], "toleranceCodes": 1, "holds": true },
