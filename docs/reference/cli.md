@@ -585,7 +585,7 @@ regenerates each include in memory and exits 1 naming each file that differs
 from the model and its first differing line; CI runs it beside
 `puck schema --check`.
 
-`interface` prints the [frame-block](shaders.md#the-frame-block) declarations
+`interface` prints the [frame-block](shaders.md#frame-values-extent-and-ports) declarations
 each pass of a graph document or one-off shader reads, or those a shader-set
 manifest's stages read; `--write` writes each as `<interface>.interface.hlsli`
 beside its source instead, which a shader set, compiled at build, checks in, and
@@ -655,8 +655,11 @@ break, and nothing wider:
   is due for a fresh recording.
 - A file deleted since `--since` can never be recorded, so it is never
   `unmapped`. The index as the base revision recorded it places it, choosing
-  the canaries that executed it; one neither index names is listed as
-  `deleted`, and its project's suites still run. Nothing reads a deleted file.
+  the canaries that executed it, directly or through the stand-ins the base's
+  own tree gave it: a deleted shader stands for the loader of each base kernel
+  whose closure reached it, read through `git show <since>:<path>` and never
+  from the working tree. One neither places is listed as `deleted`, and its
+  project's suites still run. Nothing reads a deleted file from disk.
 
 - Build infrastructure (`build/`, `Directory.Build.*`, `global.json`,
   `Puck.slnx`) chooses every suite. Prose, `.claude/`, `.github/`, `editors/`

@@ -9,12 +9,11 @@ namespace Puck.Shaders.Tests;
 /// <summary>
 /// Laws of the <c>post.&lt;id&gt;</c> package (<see cref="PostProcessPackage"/>) on <see cref="FakePipelineGpu"/>: the
 /// shipped film-grain set run as a package pass of a graph records a pinned recording over its input (the render pass
-/// and graphics pipeline it is created for, the vertex buffer and the draw, the input written at the set's binding, and
-/// the frame block pushed byte for byte, bound config and live changes included), the one the fullscreen pass node it
-/// replaced recorded for the same set; it is handed its input shader-readable and its target in render-target layout by
-/// the node's planned
-/// barriers and records none of its own; its pipeline is built off the frame thread and released with its graph on
-/// replacement, device loss and disposal; a config that does not bind is refused by the graph compiler by name; and a
+/// and graphics pipeline it is created for, the vertex buffer and the draw, the input written at the set's source
+/// binding, and the frame group and pass blocks the draw reads byte for byte, bound config and live changes included,
+/// with nothing pushed); it is handed its input shader-readable and its target in render-target layout by the node's
+/// planned barriers and records none of its own; its pipeline is built off the frame thread and released with its graph
+/// on replacement, device loss and disposal; a config that does not bind is refused by the graph compiler by name; and a
 /// steady frame allocates nothing.
 /// </summary>
 public sealed class PostProcessPackageLawTests {
@@ -102,16 +101,17 @@ public sealed class PostProcessPackageLawTests {
 
         return node;
     }
-    // The recording the law pins for four frames: the fullscreen pass the set is drawn by, the input at the set's binding,
-    // and each frame's pushed frame block, whose frame counter counts from one and whose tail is the bound config
-    // (intensity, seed, then the set's remaining fields) in hex.
+    // The recording the law pins for four frames: the fullscreen pass the set is drawn by, with no push and no combined
+    // sampler; the input written at the set's source binding; and the two blocks each draw reads, in hex. The frame group
+    // block holds the frame counter, counting from one, and the tick rate; the pass block holds the 64x64 extent, the
+    // default flicker rate of 24, then the bound config (intensity, seed, then the set's remaining fields).
     private static Recorded Pinned(string configHex) => new(
+        Blocks: [.. Enumerable.Range(count: 4, start: 1).Select(selector: frame => $"{new string(c: '0', count: 48)}{frame:X2}000000E0C40000{new string(c: '0', count: 128)} 400000004000000018000000{configHex}00000000")],
         Commands: [.. Enumerable.Repeat(count: 4, element: new[] { "vertices 24 8", "draw 0 3" }).SelectMany(selector: static pair => pair)],
-        Pipeline: "sdf-film-grain 1 False  112 Fragment, Compute 8 GpuVertexAttribute { Location = 0, Format = R32G32Float, OffsetBytes = 0 }",
-        Pushes: [.. Enumerable.Range(count: 4, start: 1).Select(selector: frame => $"Graphics Fragment, Compute 4000000040000000{new string(c: '0', count: 48)}{frame:X2}000000E0C4{new string(c: '0', count: 108)}18000000{configHex}")],
+        Pipeline: "sdf-film-grain 0 False    8 GpuVertexAttribute { Location = 0, Format = R32G32Float, OffsetBytes = 0 }",
         RenderPass: "GpuColorAttachment { Format = R8G8B8A8Unorm, Load = Clear, Store = Store, FinalLayout = RenderTarget } ",
         RenderPasses: 4,
-        Writes: [.. Enumerable.Repeat(count: 4, element: $"0 {Input.ImageViewHandle}")]
+        Writes: [.. Enumerable.Repeat(count: 4, element: $"1 {Input.ImageViewHandle}")]
     );
     private static void ProduceUntilPublished(IRenderNode node) => Assert.True(
         condition: SpinWait.SpinUntil(
@@ -121,14 +121,33 @@ public sealed class PostProcessPackageLawTests {
         userMessage: "The pass never published a frame."
     );
     // What a law compares of one pass's recording: the render pass and pipeline it was created for, the graphics
-    // commands, the input written at a binding, and every frame block pushed.
+    // commands, the input written at a binding, and the frame and pass blocks each frame's draw reads, read from the
+    // constant buffers of the sets it bound as the frame is recorded.
     private static Recorded Record(FakePipelineGpu gpu, IRenderNode node, Action<int>? before = null) {
+        var blocks = new List<string>();
+        var layout = FilmGrain().FrameLayout;
+
         ProduceUntilPublished(node: node);
         gpu.Recording = true;
 
         for (var frame = 0; (frame < 4); frame++) {
             before?.Invoke(obj: frame);
+
+            var bound = gpu.BoundSets.Count;
+
             _ = node.ProduceFrame(context: default);
+
+            var sets = gpu.BoundSets.Skip(count: bound).ToArray();
+            var frameBlock = gpu.ConstantBlock(
+                set: sets.Last(predicate: static set => (set.Group == 0U)).Set,
+                sizeBytes: ((int)layout.FrameBlockSizeBytes)
+            );
+            var passBlock = gpu.ConstantBlock(
+                set: sets.Last(predicate: static set => (set.Group == 3U)).Set,
+                sizeBytes: ((int)layout.SizeBytes)
+            );
+
+            blocks.Add(item: $"{Convert.ToHexString(inArray: frameBlock)} {Convert.ToHexString(inArray: passBlock)}");
         }
 
         gpu.Recording = false;
@@ -136,13 +155,15 @@ public sealed class PostProcessPackageLawTests {
         var (pass, description) = Assert.Single(collection: gpu.GraphicsPipelines);
 
         return new Recorded(
+            Blocks: blocks,
             Commands: [.. gpu.GraphicsCommands.Select(selector: static command => $"{command.Command} {command.SizeBytes} {command.Count}")],
             Pipeline: $"{description.Name} {description.TextureSamplerCount} {description.EnableStorageBuffer} {description.DepthCompare} {description.PushConstantBinding?.Size} {description.PushConstantBinding?.StageFlags} {description.VertexInput.StrideBytes} {string.Join(separator: ",", values: description.VertexInput.Attributes)}",
-            Pushes: [.. gpu.PushedConstants.Select(selector: static push => $"{push.BindPoint} {push.Stages} {Convert.ToHexString(inArray: push.Data)}")],
             RenderPass: $"{string.Join(separator: ",", values: pass.Colors)} {pass.Depth}",
             RenderPasses: gpu.RenderPasses.Count,
             Writes: [.. gpu.DescriptorWrites.Select(selector: static write => $"{write.Binding} {write.Handle}")]
-        );
+        ) {
+            Pushes = [.. gpu.PushedConstants.Select(selector: static push => Convert.ToHexString(inArray: push.Data))],
+        };
     }
     private static void AssertSameRecording(Recorded expected, Recorded package) {
         Assert.Equal(
@@ -162,9 +183,10 @@ public sealed class PostProcessPackageLawTests {
             actual: package.Writes
         );
         Assert.Equal(
-            expected: expected.Pushes,
-            actual: package.Pushes
+            expected: expected.Blocks,
+            actual: package.Blocks
         );
+        Assert.Empty(collection: package.Pushes);
         Assert.Equal(
             expected: expected.RenderPasses,
             actual: package.RenderPasses
@@ -196,7 +218,7 @@ public sealed class PostProcessPackageLawTests {
         );
     }
     [Fact]
-    public void ALiveConfigChangeReachesThePushedFrameBlockFromTheNextFrame() {
+    public void ALiveConfigChangeReachesThePassBlockFromTheNextFrame() {
         var gpu = new FakePipelineGpu();
         using var package = PackageNode(
             config: null,
@@ -216,7 +238,7 @@ public sealed class PostProcessPackageLawTests {
 
         AssertSameRecording(
             expected: (before with {
-                Pushes = [.. before.Pushes.Take(count: 2), .. after.Pushes.Skip(count: 2)],
+                Blocks = [.. before.Blocks.Take(count: 2), .. after.Blocks.Skip(count: 2)],
             }),
             package: recorded
         );
@@ -361,5 +383,8 @@ public sealed class PostProcessPackageLawTests {
         );
     }
 
-    private sealed record Recorded(string RenderPass, string Pipeline, IReadOnlyList<string> Commands, IReadOnlyList<string> Writes, IReadOnlyList<string> Pushes, int RenderPasses);
+    private sealed record Recorded(string RenderPass, string Pipeline, IReadOnlyList<string> Commands, IReadOnlyList<string> Writes, IReadOnlyList<string> Blocks, int RenderPasses) {
+        // Every push-constant write, which a post pass never makes.
+        public IReadOnlyList<string> Pushes { get; init; } = [];
+    }
 }

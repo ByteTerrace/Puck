@@ -230,7 +230,15 @@ These are one-line cautions; the owning pages hold the derivations.
   transport; it never adds a source kind. Every feed it opens declares that
   id, class and transport, or `WorldImageProducers.TryOpen` disposes it and
   refuses it by name. An import's CPU staged-copy fallback (the camera and
-  capture CPU tiers) is still `Imported`. An external image (camera, capture,
+  capture CPU tiers) is still `Imported`. A source is a render-graph instance:
+  `WorldSourceInstances` makes one external instance per distinct producer,
+  machine or probe source the screens show (`source$<screen>`, package
+  `source.<producer id>`, carrying the settings), and
+  `WorldImageProducers.RegisterPackages` registers one external-producer factory
+  per producer id that opens the instance's feed through `TryOpen`. A typed
+  arm's source takes the reserved id `machine` or `probe`, which the vocabulary
+  refuses to a document producer. Its `RenderGraphInstance.Handle` is its
+  identity, never the producer id. An external image (camera, capture,
   probe output) is resolved through the binder's `WorldCaptureGate`, never
   directly: a new path that samples one without the gate leaks it into
   captures. An uploaded source's region layout and the conversion kernels are a
@@ -303,11 +311,7 @@ These are one-line cautions; the owning pages hold the derivations.
   refusal reads it. It is never retried
   because a frame arrived and never on a clock; a new input to a build joins
   its `inputsOf`. The node has no previous engine then and presents nothing
-  new; a view serves the image it served before. `UnifiedOverlayNode`, which
-  no World composes any longer (the overlay package draws the live overlay),
-  refuses its resources the same way (`ResourceRefusal`), presents the inner
-  frame unchanged, forwards captures to it, and retries after `OnDeviceLost`,
-  or, for a heap refusal, once the release revision moves. `SdfWorldEngine`'s
+  new; a view serves the image it served before. `SdfWorldEngine`'s
   constructor owns its creations through one `GpuCreationScope`, which
   releases them newest first when a later step throws, so a refusal leaks
   nothing (`SdfWorldEngineCreationFaultLawTests`,
@@ -823,7 +827,15 @@ leaves the schedule unchanged, and a host alternating two schedules allocates
 nothing in a steady frame. `RenderGraphSchedulerLawTests` pins demand, extent,
 refresh, self-reads, cycles, the pass-pixel budget, buffer reads (demanded by
 every rendering reader, no extent, no pass-pixels), kind mismatches and that
-zero-allocation steady frame with a buffer edge in it. A world's instances are
+zero-allocation steady frame with a buffer edge in it. A source instance
+(`RenderGraphInstance.IsSource`, package `source.<producer id>`) is scheduled
+by demand at most once a frame, but at the cadence and negotiated extent its
+producer declares in the frame's `RenderGraphSourceState` list (static once,
+tick once per `RenderGraphFrame.Tick`, rate at most its hertz in frames at the
+display's rate), never a refresh or a footprint; cadence is never the wall
+clock, and the scheduler's `.Sources` laws pin each. The runtime withdraws a
+render an external producer could not produce (`RenderGraphHistory.Withdraw`),
+so a static source is asked again. A world's instances are
 `views.graphs` rows, validated through `RenderGraphInstanceSet.TryCreate` and
 priced by `WorldPresentationCost` in the cost report and `world.budget`.
 `RenderGraphRuntime` (`src/Puck.Shaders/Graph`, since `Puck.Hosting` cannot
@@ -856,8 +868,10 @@ it in shows only as Vulkan validation errors, since the Direct3D 12 recorder
 corrects a stated old layout from its tracked resource state. A Direct3D 12
 device created with the debug layer says so on stderr (`[d3d12] debug layer
 live`). `PostProcessPackage` serves every `post.<id>` and
-`OverlayPackage` serves `overlay`, which shares `OverlayFrameComposer` with
-`UnifiedOverlayNode`; a package pass's `config` binds against its package's
+`OverlayPackage` serves `overlay`; each binds the frame and pass groups its catalog
+entry declares (`RenderGraphPackage.Members`), allocating its sets from the node's
+pool through `RenderGraphPackageSets` and writing its values into the pass block
+the node seeds (`RenderGraphPackageRecording.PassBlock`). A package pass's `config` binds against its package's
 schema in the graph compiler (`RENDERGRAPH_PACKAGE_CONFIG`). A graph naming an
 unserved package is refused at install, as
 is an input whose format differs from what its producer publishes or whose
@@ -960,16 +974,20 @@ draws from a mapping until P13b.
 
 HLSL is the one source language, and `ShaderCompiler` runs DXC alone: no pass
 declares a language, and a one-off source is an `.hlsl` compute pass read as a
-one-pass graph. A pass
-reads its frame values and config only through its frame block
-([the frame block](../../../docs/reference/shaders.md#the-frame-block)): the
-`ShaderFrameInterface` members, then its config fields in ordinal name order,
+one-pass graph. A document pass reads its frame values, extent, config and ports
+only through its generated interface
+([frame values, extent and ports](../../../docs/reference/shaders.md#frame-values-extent-and-ports)):
+the frame group at set 0 (`frameGroup`), then its pass group at set 3
+(`passGroup`: extent, config in ordinal name order) followed by its ports, each
+reading as its resource's name in camel case or its `"as"`. The declarations are
 generated into `<interface>.interface.hlsli`, which the loader supplies in memory
 (`ShaderPipelineLoader.GeneratedIncludeOf`) and a shader set checks in
-(`puck shaders interface --write`). Never hand-declare a frame struct. The host
-writes the block through `ShaderPipelineParameterLayout.WriteFrame` alone, so a
-new frame member is a row in `ShaderFrameInterface.Members` and a write there,
-nothing else. `ShaderFrameBlockLawTests` compiles every shipped pipeline source
+(`puck shaders interface --write`). Never hand-declare a frame struct or a port
+binding: a load refuses a module whose reflected bindings differ from its layout
+(`SHADERPIPE_INTERFACE`). The host writes the frame group through
+`ShaderPipelineParameterLayout.WriteFrame` and the extent through `WriteExtent`
+alone, so a new frame value is a row in `ShaderFrameInterface.FrameGroupMembers`
+and a write there, nothing else. `ShaderFrameBlockLawTests` compiles every shipped pipeline source
 and holds the offsets DXC assigned in both bytecodes to the host writer's, so a
 new shipped pass joins its data; `ShaderInterfaceEcho` generates the echo pass
 the `pipeline-echo` canary runs with `pipeline.sentinels` on.
@@ -1063,8 +1081,8 @@ an edit whose second image `gpu.faults` fails on the real device, refused with
 `GPU_CREATION_FAULT` while the instance's owned bytes return to its installed
 graph's and a clean retry installs, two indexed, depth-tested geometry passes continuing one color and one depth
 attachment, with a fullscreen pass sampling by UV the right way up,
-a generated echo pass reading back every frame-block sentinel (a hand-perturbed
-offset turns its pixels red), and, in a World with `dxc` hidden from its path,
+a generated echo pass reading back every frame-block sentinel (an echo expecting
+two members to hold each other's sentinel turns their pixels red), and, in a World with `dxc` hidden from its path,
 the shipped ink pipeline rendering from its stored package and a relocated
 package from its binaries while an unpackaged source row is refused by
 `SHADERPKG_ABSENT`.

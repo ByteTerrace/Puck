@@ -127,7 +127,7 @@ separate constraint on dense populations; reusable appearances do not remove it.
   `WorldBodiesLimits.LocalSeatCount`, `WorldHudCapacity`,
   `WorldBindingBarCapacity`, `WorldMarkerCapacity`, and the
   `BindingWheelDefinition` ring/sector bounds to the
-  `Puck.Overlays.OverlayCapacity` a host constructs `UnifiedOverlayNode` with;
+  `Puck.Overlays.OverlayCapacity` a host constructs `OverlayPackage` with;
   the numbers cross the layering as constructor data, never restated.
 - `WorldSeatCameraPose.cs`—one seat's resolved listener-policy camera pose,
   the frame source's own input to the audio director's `Publish`.
@@ -200,7 +200,8 @@ separate constraint on dense populations; reusable appearances do not remove it.
   text.
 - `Sources/`—the runtime half of an image producer: `IWorldImageProducer` and
   `IWorldImageFeed`, the `WorldImageProducers` registry a screen's `producer`
-  source opens through, the shipped `WorldTestPatternProducer` and
+  source opens through, `WorldSourceInstances` (the render-graph source
+  instances a world's screens read), the shipped `WorldTestPatternProducer` and
   `WorldQrProducer`, `WorldImageLight` (a frame's room glow), and
   `WorldCaptureGate`, which resolves every external image to its capture fill
   while a capture is armed. The [World guide](../Puck.World/README.md#image-producers)

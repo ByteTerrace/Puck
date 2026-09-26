@@ -48,4 +48,21 @@ public static class WorldScreenMappings {
             )
         );
     }
+    /// <summary>Creates the mapping the simulation maps a seat's pointer ray through: the row's mapping against a
+    /// one-by-one source, so a hit's <see cref="SourceHit.Coordinate"/> is the source-normalized fraction of the image,
+    /// in <c>[0, 1)</c> on the source. The row holds no source extent, so a rule that wants pixels multiplies by a
+    /// resolution it knows.</summary>
+    /// <param name="screen">The screen row.</param>
+    /// <returns>The mapping.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="screen"/> is <see langword="null"/>.</exception>
+    public static SourceMapping Normalized(WorldScreen screen) {
+        ArgumentNullException.ThrowIfNull(argument: screen);
+
+        return Of(
+            screen: screen,
+            source: SourceHandle.Producer(name: $"screens[{screen.Index}]"),
+            sourceHeight: 1,
+            sourceWidth: 1
+        );
+    }
 }

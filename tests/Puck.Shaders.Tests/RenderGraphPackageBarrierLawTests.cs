@@ -68,13 +68,11 @@ public sealed class RenderGraphPackageBarrierLawTests {
         Passes: [new ShaderPipelinePass(
             EntryPoint: "main",
             Inputs: [new ResourceReference(
-                Binding: 0,
                 Name: "world"
             )],
             Kind: ShaderPipelineDocumentPassKind.Compute,
             Name: "tone",
             Outputs: [new ResourceReference(
-                Binding: 1,
                 Name: "toned"
             )],
             Source: "tone.hlsl"

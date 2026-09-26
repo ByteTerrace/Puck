@@ -29,31 +29,26 @@ public sealed partial class ShaderPipelineRenderNode {
         }
     }
 
-    /// <summary>States the descriptor pools a node creates for an installed <paramref name="plan"/>: one pool holding a
-    /// set per in-flight frame for every pass that binds a descriptor, when any does, then the float preview's one pool
-    /// (<see cref="PreviewDescriptorPool"/>) when it has a preview. A package pass's sets are the ones its factory
-    /// states (<see cref="IRenderGraphPackageFactory.SetBindings"/>), which its recorder allocates from the same pool.
+    /// <summary>States the descriptor pools a node creates for an installed <paramref name="plan"/>: one pool holding
+    /// every pass's frame group and pass group sets once per in-flight frame, then the float preview's one pool
+    /// (<see cref="PreviewDescriptorPool"/>) when it has a preview. A package pass's sets are laid out by the plan as a
+    /// document pass's are, and its recorder allocates them from the same pool (<see cref="RenderGraphPackageSets"/>).
     /// The node's own pool creation reads the same statement, so an admission computed from it before anything is
     /// allocated is what the node requests.</summary>
     /// <param name="plan">The pipeline plan the node installs.</param>
     /// <param name="inFlight">The node's frames in flight.</param>
     /// <param name="preview">Whether the node presents a float preview.</param>
-    /// <param name="packages">The recorders the node's package passes run through.</param>
     /// <returns>Each pool's sizes, in creation order.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="plan"/> or <paramref name="packages"/> is
-    /// <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="plan"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="inFlight"/> is zero.</exception>
-    /// <exception cref="InvalidDataException">A package pass names a package no recorder serves.</exception>
-    public static IReadOnlyList<GpuDescriptorPoolSizes> DescriptorPools(ShaderPipelinePlan plan, uint inFlight, bool preview, RenderGraphPackageRecorders packages) {
+    public static IReadOnlyList<GpuDescriptorPoolSizes> DescriptorPools(ShaderPipelinePlan plan, uint inFlight, bool preview) {
         ArgumentNullException.ThrowIfNull(argument: plan);
-        ArgumentNullException.ThrowIfNull(argument: packages);
         ArgumentOutOfRangeException.ThrowIfZero(value: inFlight);
 
         var pools = new List<GpuDescriptorPoolSizes>(capacity: 2);
 
         if (GraphDescriptorPool(
             inFlight: inFlight,
-            packages: packages,
             plan: plan
         ) is { } graph) {
             pools.Add(item: graph);
@@ -65,53 +60,34 @@ public sealed partial class ShaderPipelineRenderNode {
         return pools;
     }
 
-    // The graph's one descriptor pool: a set per in-flight frame for each pass that binds a descriptor, or none when no
-    // pass does.
-    private static GpuDescriptorPoolSizes? GraphDescriptorPool(ShaderPipelinePlan plan, uint inFlight, RenderGraphPackageRecorders packages) {
-        var specs = VersionSpecs(plan: plan);
-        var sets = new List<IReadOnlyList<GpuComputeBinding>>();
+    // The graph's one descriptor pool: a frame set and a pass set per in-flight frame for each pass; none for a graph with
+    // no pass.
+    private static GpuDescriptorPoolSizes? GraphDescriptorPool(ShaderPipelinePlan plan, uint inFlight) {
+        var groups = default(GpuDescriptorPoolSizes);
 
         foreach (var planned in plan.Passes) {
-            // A package pass has no declaration; its recorder allocates the sets its factory states.
-            var bindings = ((planned.Declaration is { } declaration)
-                ? Descriptors(
-                    pass: declaration,
-                    specs: specs
-                )
-                : packages.FactoryFor(
-                    instance: plan.Definition.Name,
-                    package: planned.Package!.Package,
-                    pass: planned.Name
-                ).SetBindings);
-
-            if (bindings.Count == 0) {
-                continue;
-            }
-            for (var slot = 0u; (slot < inFlight); slot++) {
-                sets.Add(item: bindings);
-            }
+            groups += GroupPoolSizes(
+                inFlight: inFlight,
+                planned: planned
+            );
         }
 
-        return ((sets.Count == 0)
+        return ((groups.MaxSets == 0)
             ? null
-            : GpuDescriptorPoolSizes.ForSets([.. sets])
-        );
+            : groups);
     }
-    // Allocates every per-slot object a built pass needs: its descriptor set and sampler, and its command pools (one per
-    // slot for a compute pass; the pre-barrier and draw pools for a fullscreen pass). They are allocated on the frame
+    // Allocates every per-slot object a built pass needs: its pass region, its sets and sampler, and its command pools
+    // (one per slot for a compute pass; the pre-barrier and draw pools for a fullscreen pass). They are allocated on the frame
     // thread when the built candidate installs, so an allocation failure refuses the candidate before the installed graph
     // retires, and a steady-state frame creates nothing. The graph holds one descriptor pool, owned by the pass that binds
     // a descriptor ahead of every other, and each pass allocates its sets from it. Each object is stored in
     // the pass as soon as it exists, so a failure partway leaves every created object where RuntimePass.Dispose releases
-    // it exactly once. A pass that binds no descriptor, a geometry pass with no input among them, has no descriptor set
-    // layout, so it gets no set or sampler, and its set stays zero.
+    // it exactly once. A document pass allocates its frame group and pass group sets (AllocateGroupSets); a package pass
+    // allocates its own sets through its recorder.
     private void AllocateSlotObjects(RuntimePass pass, GpuDescriptorPoolSizes? graphPool, ref nint descriptorPool) {
         var bindings = m_gpu.Bindings;
 
-        if (
-            ((pass.Bindings.Count != 0) || (pass.PackageSetBindings != 0)) &&
-            (descriptorPool == 0)
-        ) {
+        if (descriptorPool == 0) {
             descriptorPool = bindings.CreatePool(
                 name: new GpuObjectName(
                     owner: m_descriptor.Name,
@@ -121,22 +97,14 @@ public sealed partial class ShaderPipelineRenderNode {
             );
             pass.DescriptorPool = descriptorPool;
         }
+        CreatePassRegion(pass: pass);
+        if (pass.Grouped) {
+            AllocateGroupSets(
+                descriptorPool: descriptorPool,
+                pass: pass
+            );
+        }
         for (var slot = 0; (slot < m_inFlight); slot++) {
-            if (pass.Bindings.Count != 0) {
-                pass.Sets![slot] = bindings.AllocateSet(
-                    descriptorPool,
-                    ((pass.Kind == ShaderPipelinePassKind.Compute)
-                    ? pass.Compute!.DescriptorSetLayoutHandle
-                    : pass.Graphics!.DescriptorSetLayoutHandle),
-                    name: new GpuObjectName(
-                        index: slot,
-                        owner: m_descriptor.Name,
-                        part: pass.Name
-                    )
-                );
-                pass.Samplers![slot] = bindings.CreateSampler();
-            }
-
             if (pass.Kind is ShaderPipelinePassKind.Compute or ShaderPipelinePassKind.Package) {
                 pass.Pools![slot] = m_gpu.CommandPoolFactory.Create(name: new GpuObjectName(
                     index: slot,

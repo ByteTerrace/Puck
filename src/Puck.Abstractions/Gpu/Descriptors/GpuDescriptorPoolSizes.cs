@@ -32,6 +32,21 @@ public readonly record struct GpuDescriptorPoolSizes(
     /// of their own: <see cref="SamplerCount"/>.</summary>
     public uint SamplerHeapDescriptors => SamplerCount;
 
+    /// <summary>Sums two pools' demand kind by kind, sets included, as one pool backing both sets of sets.</summary>
+    /// <param name="left">One pool's sizes.</param>
+    /// <param name="right">The other's.</param>
+    /// <returns>The sizes of a pool backing both.</returns>
+    /// <exception cref="OverflowException">A count overflows.</exception>
+    public static GpuDescriptorPoolSizes operator +(GpuDescriptorPoolSizes left, GpuDescriptorPoolSizes right) =>
+        new(
+            CombinedImageSamplerCount: checked((left.CombinedImageSamplerCount + right.CombinedImageSamplerCount)),
+            ConstantBufferCount: checked((left.ConstantBufferCount + right.ConstantBufferCount)),
+            MaxSets: checked((left.MaxSets + right.MaxSets)),
+            SampledImageCount: checked((left.SampledImageCount + right.SampledImageCount)),
+            SamplerCount: checked((left.SamplerCount + right.SamplerCount)),
+            StorageBufferCount: checked((left.StorageBufferCount + right.StorageBufferCount)),
+            StorageImageCount: checked((left.StorageImageCount + right.StorageImageCount))
+        );
     /// <summary>Sums the per-kind descriptor demand of one set of each group, as a pipeline created from a
     /// <see cref="GpuPipelineLayoutDescription"/> allocates them: <see cref="MaxSets"/> is the number of groups, and an
     /// array binding contributes its full count. A Vulkan pool consumes the per-kind counts directly; a Direct3D 12 pool

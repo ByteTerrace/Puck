@@ -61,6 +61,11 @@ public sealed partial class ShaderPipelineRenderNode {
             if (pass?.GeometryBuffer is { } geometry) {
                 bytes = checked((bytes + geometry.SizeBytes));
             }
+            foreach (var region in (ReadOnlySpan<GpuRegion?>)[pass?.PassRegion, pass?.FrameRegion]) {
+                if (region is not null) {
+                    bytes = checked((bytes + (((ulong)region.ByteCount) * ((ulong)region.SlotCount))));
+                }
+            }
         }
 
         foreach (var resource in resources) {

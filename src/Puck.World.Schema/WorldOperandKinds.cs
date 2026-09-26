@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.Physics.Motion;
 namespace Puck.World;
 
@@ -135,6 +136,61 @@ public sealed class ChannelOperand : WorldOperandFact {
     public int ChannelOrdinal { get; }
     /// <summary>Gets the zero-based seat.</summary>
     public int Seat { get; }
+}
+/// <summary>What a <see cref="WorldRuleFacts.PointerPrefix"/> read reports of a seat's mapped pointer ray.</summary>
+public enum PointerFacet : byte {
+    /// <summary>The source-normalized horizontal fraction, <c>x</c> right, in <c>[0, 1)</c> while the ray is on the source.</summary>
+    X,
+    /// <summary>The source-normalized vertical fraction, <c>y</c> down, in <c>[0, 1)</c> while the ray is on the source.</summary>
+    Y,
+    /// <summary><c>1</c> while the ray lands on the source, <c>0</c> otherwise.</summary>
+    On,
+}
+/// <summary>A seat's pointer ray mapped through one <c>Simulation</c> screen (<see cref="WorldRuleFacts.PointerPrefix"/>).
+/// The mapping is built from the screen row alone when the rule compiles, so every read maps in fixed point from
+/// document data.</summary>
+public sealed class PointerOperand : WorldOperandFact {
+    /// <summary>Initializes a new instance of the <see cref="PointerOperand"/> class.</summary>
+    /// <param name="seat">The zero-based seat.</param>
+    /// <param name="mapping">The screen row's source-normalized mapping (<see cref="WorldScreenMappings.Normalized"/>),
+    /// already validated.</param>
+    /// <param name="facet">The facet the read reports.</param>
+    public PointerOperand(int seat, SourceMapping mapping, PointerFacet facet) : base(((facet == PointerFacet.On)
+        ? CellKind.Int
+        : CellKind.Fixed)) {
+        Seat = seat;
+        Mapping = mapping;
+        Facet = facet;
+    }
+
+    /// <summary>Gets the facet the read reports.</summary>
+    public PointerFacet Facet { get; }
+    /// <summary>Gets the screen row's source-normalized mapping.</summary>
+    public SourceMapping Mapping { get; }
+    /// <summary>Gets the zero-based seat.</summary>
+    public int Seat { get; }
+
+    /// <summary>Returns the fact a mapped hit reads as: the facet's value while the hit lies on the source, and zero
+    /// otherwise, including for no ray at all.</summary>
+    /// <param name="ray">The seat's pointer ray this tick, or <see langword="null"/> for none.</param>
+    /// <returns>The raw value, in <see cref="WorldOperandFact.ValueKind"/>'s encoding.</returns>
+    public long Read(SourceRay? ray) {
+        if (ray is not { } pointer) {
+            return 0L;
+        }
+
+        var hit = Mapping.MapRay(ray: pointer);
+
+        if (!hit.IsOnSource) {
+            return 0L;
+        }
+
+        return Facet switch {
+            PointerFacet.X => hit.Coordinate.X.Value,
+            PointerFacet.Y => hit.Coordinate.Y.Value,
+            _ => 1L,
+        };
+    }
 }
 /// <summary>The nearest body carrying a tag-row cell (<see cref="WorldRuleFacts.NearestPrefix"/>); scans every
 /// population slot.</summary>

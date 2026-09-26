@@ -399,7 +399,7 @@ compiles in the background, which needs `dxc`; without `dxc` it is refused by
 [the build's package store](../../docs/reference/shaders.md#the-builds-package-store)).
 Every pass is HLSL; it reads its
 time, pointer, camera and config from the generated frame block the
-[shader reference](../../docs/reference/shaders.md#the-frame-block)
+[shader reference](../../docs/reference/shaders.md#frame-values-extent-and-ports)
 describes. A relative
 source resolves against the CURRENTLY LOADED document's own directory, on
 both the server's override gate and the rendering host: a `world.load` of a
@@ -1111,10 +1111,26 @@ change. A producer registers twice, once per half:
   The validator refuses an id no shape is registered under, and a settings
   member the shape does not declare, by name.
 - its runtime, an `IWorldImageProducer` in `WorldImageProducers`
-  (`Puck.World.Client`), which opens an `IWorldImageFeed` for each screen that
+  (`Puck.World.Client`), which opens an `IWorldImageFeed` for each source that
   names it. A registration is refused unless its id, content class and
-  transport match the shape's. The binder registers the shipped four; a host
-  adds its own as `IWorldImageProducer` services.
+  transport match the shape's, and a feed that declares another producer,
+  content class or transport than its registration is disposed and refused by
+  name when it opens. The binder registers the shipped four; a host adds its
+  own as `IWorldImageProducer` services. The ids `machine` and `probe` are
+  closed to document producers: they name the typed arms' source instances.
+
+A source is a render-graph instance. `WorldSourceInstances` derives one
+external instance for each distinct `producer`, `machine` or `probe` source the
+screens show, named `source$<screen>` after the first screen showing it, whose
+package is `source.<producer id>` and which carries the source's settings (a
+machine's `instance` and `output`, a probe's `id`). Screens showing equal
+sources read one instance, which the scheduler renders at most once a frame, at
+its producer's cadence and negotiated extent, and the instance's `SourceHandle`
+is its identity. `WorldImageProducers.RegisterPackages` registers one
+external-producer factory per producer under its source package, which opens
+the instance's feed from the instance's settings. Screens still bind their
+images through the binder's slots until the runtime binds sources (P12b-2 in
+[the rendering plan](../../docs/plans/rendering.md#p12--image-sources)).
 
 The engine ships four producers, each with its settings record in
 `WorldImageProducerSettings`:
@@ -1124,7 +1140,7 @@ The engine ships four producers, each with its settings record in
 | `testPattern` | `width`, `height` | uploaded | deterministic |
 | `qr` | `payload`, `ecLevel` (`M`), `quietZoneModules` (4) | uploaded | deterministic |
 | `camera` | `sensor` (`Color`), `seat`, `profile`, `controls` | imported | external |
-| `capture` | `windowTitle` or `monitorIndex`, `profile` | imported (Direct3D 12) or uploaded (Vulkan) | external |
+| `capture` | `windowTitle` or `monitorIndex`, `profile` | imported (a staged copy under Vulkan) | external |
 
 Every feed carries an `ImageSourceDescriptor` (`Puck.Abstractions.Sources`),
 the one contract for an image entering rendering from outside a pass: its
@@ -1164,8 +1180,12 @@ command values is mapped in fixed point from the row alone
 validator refuses `Passthrough` by name, because only a source the local user
 opened may send input to a host window. `world.screens` echoes each screen's
 destination as `input:<destination>`. The mapping and its laws are described in
-[the rendering plan's P13](../../docs/plans/rendering.md#p13--hit-to-source-mapping-and-input-destinations);
-nothing reads the ray from a live pointer yet.
+[the rendering plan's P13](../../docs/plans/rendering.md#p13--hit-to-source-mapping-and-input-destinations).
+On a windowed host, `WorldPointerRayCapture` casts the OS pointer through its
+seat's camera each frame and holds the two commands on that seat's lane, the
+seat folds them into its intent's `SourceRay`, and a rule reads the mapped hit
+as `$pointer:<seat>:<screenIndex>:x|y|on`. `body.channels` echoes the ray and
+its hit on every `Simulation` screen.
 
 **A physical camera is an input device, seated like a gamepad, never named by
 hardware.** Each enumerated device gets a reconnect-stable `InputDeviceId`

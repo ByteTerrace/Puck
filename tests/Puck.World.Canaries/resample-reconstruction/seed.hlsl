@@ -5,15 +5,11 @@
 //   texels, so the neighbourhood clamp decides the value.
 // - Rows 32..47, a step from 0.25 to 0.75 between columns 0 and 1: the cubic's left tap falls off the image, so the
 //   edge clamp decides the value.
-[[vk::binding(0, 0)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> step : register(u0);
+#include "seed.interface.hlsli"
 
 [numthreads(8, 8, 1)]
 void main(uint3 id : SV_DispatchThreadID) {
-    uint width;
-    uint height;
-
-    step.GetDimensions(width, height);
-    if ((id.x >= width) || (id.y >= height)) {
+    if (any(id.xy >= passGroup.extent)) {
         return;
     }
     float value;

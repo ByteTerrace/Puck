@@ -7,8 +7,9 @@ public enum RenderGraphInstanceStatus : byte {
     /// <summary>Neither the display nor any instance rendering this frame shows or reads it, so it does not
     /// render.</summary>
     Unread = 1,
-    /// <summary>Something shows or reads it, but it does not render this frame: its refresh is not due, or no consumer
-    /// that shows or reads it renders. Its consumers read its latest completed output.</summary>
+    /// <summary>Something shows or reads it, but it does not render this frame: its refresh or a source's cadence is not
+    /// due, a source's producer declares no extent, or no consumer that shows or reads it renders. Its consumers read its
+    /// latest completed output.</summary>
     Waiting = 2,
     /// <summary>It renders this frame.</summary>
     Rendered = 3,
@@ -21,9 +22,12 @@ public enum RenderGraphInstanceStatus : byte {
 /// <param name="Status">What the scheduler decided.</param>
 /// <param name="IsRoot">Whether the display shows it directly.</param>
 /// <param name="Width">The width it renders at, in pixels, or its allocated width when it does not render this frame;
-/// zero when it has never been allocated.</param>
-/// <param name="Height">The height it renders at, in pixels, or its allocated height; zero when never allocated.</param>
-/// <param name="Divisor">Its refresh resolved to a frame divisor.</param>
+/// zero when it has never been allocated. A source's is its producer's negotiated width this frame, or zero when it
+/// declares none.</param>
+/// <param name="Height">The height it renders at, in pixels, or its allocated height; zero when never allocated. A
+/// source's is its negotiated height.</param>
+/// <param name="Divisor">Its refresh resolved to a frame divisor; a source's is its rate's divisor, and 1 for a static or
+/// tick cadence, which its render history paces instead.</param>
 /// <param name="Passes">The passes one render records.</param>
 /// <param name="PassPixels">Its price this frame: passes times pixels when it renders, otherwise zero.</param>
 /// <param name="LatestFrame">The frame its latest completed output belongs to once this frame's renders complete, or -1
@@ -56,6 +60,7 @@ public sealed class RenderGraphHistory {
         Frame = -1;
         Height = new double[count];
         Latest = new long[count];
+        Ticks = new long[count];
         Width = new double[count];
 
         Array.Fill(
@@ -71,6 +76,7 @@ public sealed class RenderGraphHistory {
 
     internal double[] Height { get; }
     internal long[] Latest { get; }
+    internal long[] Ticks { get; }
     internal double[] Width { get; }
 
     internal static RenderGraphHistory Of(int count) => new(count: count);
@@ -88,6 +94,31 @@ public sealed class RenderGraphHistory {
     /// <param name="index">The instance's index in its set.</param>
     /// <returns>The frame, or -1 when it has never rendered.</returns>
     public long LatestFrame(int index) => Latest[index];
+    /// <summary>Returns the simulation tick of the frame an instance last rendered.</summary>
+    /// <param name="index">The instance's index in its set.</param>
+    /// <returns>The tick, or zero when it has never rendered.</returns>
+    public long LatestTick(int index) => Ticks[index];
+    /// <summary>Withdraws a render the schedule admitted but the instance did not complete, such as an external producer
+    /// that could not produce yet: the instance's latest frame and tick go back to what <paramref name="previous"/>
+    /// recorded, so its cadence counts from its last completed render and a source that renders once is due again on the
+    /// next frame.</summary>
+    /// <param name="index">The instance's index in its set.</param>
+    /// <param name="previous">The history this one's frame was scheduled against.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="previous"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="previous"/> covers a different number of instances.</exception>
+    public void Withdraw(int index, RenderGraphHistory previous) {
+        ArgumentNullException.ThrowIfNull(argument: previous);
+
+        if (previous.Count != Count) {
+            throw new ArgumentException(
+                message: $"The previous history covers {previous.Count} instances; this one covers {Count}.",
+                paramName: nameof(previous)
+            );
+        }
+
+        Latest[index] = previous.Latest[index];
+        Ticks[index] = previous.Ticks[index];
+    }
     /// <summary>Returns the extent an instance's targets are allocated at, as quantized fractions of the display.</summary>
     /// <param name="index">The instance's index in its set.</param>
     /// <returns>The width and height fractions, zero when never allocated.</returns>

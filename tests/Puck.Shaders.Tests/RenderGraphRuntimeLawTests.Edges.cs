@@ -167,7 +167,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 expected: (true, (frames.Index - 2))
             );
             Assert.Equal(
-                actual: gpu.DescriptorWrites.Single(predicate: static write => (write.Binding == 0)).Handle,
+                actual: gpu.DescriptorWrites.Single(predicate: static write => (write.Binding == 1)).Handle,
                 expected: previous.ImageViewHandle
             );
             Assert.NotEqual(
@@ -209,7 +209,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
             gpu.Recording = false;
 
             Assert.Equal(
-                actual: gpu.DescriptorWrites.Single(predicate: static write => (write.Binding == 0)).Handle,
+                actual: gpu.DescriptorWrites.Single(predicate: static write => (write.Binding == 1)).Handle,
                 expected: previous.ImageViewHandle
             );
         }
@@ -326,7 +326,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 expected: 0
             );
             Assert.Equal(
-                actual: gpu.DescriptorWrites.Single(predicate: static write => (write.Binding == 0)).Handle,
+                actual: gpu.DescriptorWrites.Single(predicate: static write => (write.Binding == 1)).Handle,
                 expected: counter.OutputBuffer
             );
             written.Add(item: counter.OutputBuffer);

@@ -141,13 +141,15 @@ public enum WorldRuleRefusal : byte {
     ParkedChannelMalformed,
     [Refusal(door: "world.rule.compile", condition: "an 'upsertPlacement'/'removePlacement' effect carries no placement id", kind: RefusalKind.Verdict)]
     PlacementInvalid,
+    [Refusal(door: "world.rule.compile", condition: "a '$pointer:' channel does not spell '$pointer:<seat>:<screenIndex>:x|y|on' with seat in 1..population.localSeats, or names a screen whose route input is not Simulation or whose row maps no ray", kind: RefusalKind.Verdict)]
+    PointerMalformed,
     [Refusal(door: "world.rule.compile", condition: "a 'pose' effect authors both or neither of 'spawnPoint' and 'position'", kind: RefusalKind.Verdict)]
     PoseAmbiguous,
     [Refusal(door: "world.interaction.compile", condition: "an interaction's 'left'/'right' property reference names a value the declared 'properties' registry does not carry", kind: RefusalKind.Verdict)]
     PropertyUnknown,
     [Refusal(door: "world.rule.compile", condition: "a '$region:<placementId>' channel names no placement carrying a region facet", kind: RefusalKind.Verdict)]
     RegionUnknown,
-    [Refusal(door: "world.rule.compile", condition: "a '$machine:' channel names a screen index the document does not declare", kind: RefusalKind.Verdict)]
+    [Refusal(door: "world.rule.compile", condition: "a '$machine:' or '$pointer:' channel names a screen index the document does not declare", kind: RefusalKind.Verdict)]
     ScreenUnknown,
     [Refusal(door: "world.rule.compile", condition: "a '$distance:'/'$los:' channel does not spell exactly two body-reference tokens ('body:<n>' or 'argmax:<row>'/'argmin:<row>') each", kind: RefusalKind.Verdict)]
     SpatialChannelMalformed,

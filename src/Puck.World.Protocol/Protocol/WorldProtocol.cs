@@ -4,7 +4,7 @@ namespace Puck.World.Protocol;
 public static class WorldProtocol {
     /// <summary>The first World application contract, distinguished from federation, replay, and guest messages.
     /// Its shape is still developed in place; there is no compatibility reader for earlier development builds.</summary>
-    public const ulong WireProtocolKey = 0x314C52574B435550UL; // "PUCKWRL1"
+    public const ulong WireProtocolKey = 0x324C52574B435550UL; // "PUCKWRL2"
 }
 /// <summary>A Hello-door refusal. The name is the stable protocol diagnostic; detail is narration only. This is the
 /// version-compatibility door only — checked first, over the wire-protocol key alone, before any identity is asked

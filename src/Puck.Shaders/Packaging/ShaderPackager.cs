@@ -728,7 +728,7 @@ public sealed partial class ShaderPackager {
             void Check(string what, ShaderInterfaceLayout layout, CompiledShader shader) {
                 foreach (var (stage, module) in shader.SpirvByStage) {
                     Refuse(
-                        mismatch: layout.PushedBlockMismatch(reflected: SpirvInterfaceReader.Read(module: module.Span)),
+                        mismatch: layout.Mismatch(reflected: SpirvInterfaceReader.Read(module: module.Span)),
                         what: $"{what} {stage} SPIR-V"
                     );
                 }
@@ -739,7 +739,7 @@ public sealed partial class ShaderPackager {
                 ) {
                     foreach (var (stage, container) in shader.DxilByStage) {
                         Refuse(
-                            mismatch: layout.PushedBlockMismatch(reflected: dxil.Read(container: container.Span)),
+                            mismatch: layout.Mismatch(reflected: dxil.Read(container: container.Span)),
                             what: $"{what} {stage} DXIL"
                         );
                     }
@@ -762,10 +762,12 @@ public sealed partial class ShaderPackager {
                     continue;
                 }
 
+                var echoInterface = ShaderInterfaceEcho.InterfaceOf(shaderInterface: layout.Interface);
+
                 var echo = await m_compiler.CompileAsync(
                     cancellationToken: cancellationToken,
                     descriptor: new ShaderCompilationRequest(
-                        generatedIncludes: new Dictionary<string, string>(comparer: PuckPaths.Comparer) { [generated.DeclarationsPath] = generated.DeclarationsText },
+                        generatedIncludes: new Dictionary<string, string>(comparer: PuckPaths.Comparer) { [generated.DeclarationsPath] = ShaderInterfaceHlsl.Generate(shaderInterface: echoInterface) },
                         name: $"{layout.Interface.Name}.echo",
                         stages: [new ShaderStageSource(
                             EntryPoint: "main",
@@ -773,7 +775,7 @@ public sealed partial class ShaderPackager {
                                 path1: Path.GetDirectoryName(path: generated.DeclarationsPath)!,
                                 path2: (layout.Interface.Name + ".echo.hlsl")
                             ),
-                            Source: ShaderInterfaceEcho.Generate(shaderInterface: layout.Interface),
+                            Source: ShaderInterfaceEcho.Generate(shaderInterface: echoInterface),
                             Stage: ShaderStage.Compute
                         )]
                     )
@@ -787,7 +789,7 @@ public sealed partial class ShaderPackager {
                 }
 
                 Check(
-                    layout: layout,
+                    layout: echoInterface.Layout(),
                     shader: echo,
                     what: $"the echo pass of interface '{layout.Interface.Name}'"
                 );

@@ -26,34 +26,23 @@ public interface IRenderGraphPlacements {
 }
 /// <summary>The <c>place</c> package (<see cref="RenderGraphPackageCatalog.Place"/>): one compute dispatch of the
 /// build-compiled <c>place.comp</c> kernel over the output's extent, writing the base outside a destination rect and
-/// the source reconstructed inside it, with the pass's frame block pushed as its push constants.
+/// the source reconstructed inside it.
 /// <para>
-/// The rect and sharpness are the pass's config, bound like any package pass's. A host that places the source per frame
-/// (<see cref="IRenderGraphPlacements"/>) overrides both in the pushed block without rebinding anything, and one that
-/// shows the source nowhere this frame has the pass draw nothing, so the output stands for the base. Its build creates
-/// the shader module and the compute pipeline on the thread pool; its recorder allocates one descriptor set and one
-/// sampler per frame slot from the instance's pool. Its ports are compute reads and a compute write, so the node's
-/// planned barriers leave the inputs shader-readable and the output in the storage layout; it records no
-/// barrier.</para>
+/// The kernel reads the frame group and a pass group holding the extent, the config (the rect and sharpness) and the
+/// images the catalog declares (<see cref="RenderGraphPackageCatalog.PlaceMembers"/>). A host that places the source
+/// per frame (<see cref="IRenderGraphPlacements"/>) overrides the rect and sharpness in the pass block without rebinding
+/// anything, and one that shows the source nowhere this frame has the pass draw nothing, so the output stands for the
+/// base. Its build creates the shader module and the compute pipeline on the thread pool; its recorder allocates its
+/// sets from the instance's pool and one sampler, which the kernel never reads through but its interface binds. Its
+/// ports are compute reads and a compute write, so the node's planned barriers leave the inputs shader-readable and the
+/// output in the storage layout; it records no barrier.</para>
 /// </summary>
 public sealed class PlacePackage : IRenderGraphPackageFactory {
-    /// <summary>The binding of the output storage image, register <c>u0</c>.</summary>
-    public const uint OutputBinding = 0;
-    /// <summary>The binding of the base image, register <c>t1</c>.</summary>
-    public const uint BaseBinding = 1;
-    /// <summary>The binding of the source image, register <c>t2</c>.</summary>
-    public const uint SourceBinding = 2;
     /// <summary>The file stem of the deployed kernel beside <c>Assets/Shaders/Graph</c>, completed by the backend's
     /// extension.</summary>
     public const string KernelStem = "place.comp";
 
     private const uint GroupSize = 8;
-
-    private static readonly GpuComputeBinding[] Bindings = [
-        new GpuComputeBinding(OutputBinding, GpuComputeBindingKind.StorageImage),
-        new GpuComputeBinding(BaseBinding, GpuComputeBindingKind.SampledImage),
-        new GpuComputeBinding(SourceBinding, GpuComputeBindingKind.SampledImage),
-    ];
 
     private readonly string m_directory;
     private readonly IRenderGraphPlacements? m_placements;
@@ -72,10 +61,6 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
         ));
         m_placements = placements;
     }
-
-    /// <inheritdoc/>
-    /// <remarks>The output storage image, then the base and the source as sampled images.</remarks>
-    public IReadOnlyList<GpuComputeBinding> SetBindings => Bindings;
 
     /// <inheritdoc/>
     /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
@@ -110,13 +95,13 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
             built.Pipeline = context.Services.PipelineFactory.Create(
                 computeShaderModule: built.Module,
                 description: new GpuComputePipelineDescription(
-                    RenderGraphPackageCatalog.Place,
-                    Bindings,
-                    new GpuPushConstantBinding(
-                        data: new byte[context.Parameters.SizeBytes],
-                        offset: 0,
-                        stageFlags: ShaderPipelineRenderNode.FrameBlockStages
-                    )
+                    Bindings: [],
+                    Layout: context.Parameters.Layout.PipelineLayout(
+                        pushesIndex: false,
+                        stages: GpuShaderStage.Compute
+                    ),
+                    Name: RenderGraphPackageCatalog.Place,
+                    PushConstantBinding: null
                 ),
                 name: new GpuObjectName(
                     owner: context.Instance,
@@ -132,11 +117,13 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
         return built;
     }
     /// <inheritdoc/>
-    /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="context"/> or <paramref name="groups"/> is
+    /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="built"/> is not this package's build, or
-    /// <paramref name="descriptorPool"/> is zero.</exception>
-    public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, nint descriptorPool) {
+    /// <paramref name="groups"/> holds no pool or no block buffer per frame slot.</exception>
+    public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) {
         ArgumentNullException.ThrowIfNull(argument: context);
+        ArgumentNullException.ThrowIfNull(argument: groups);
 
         if (built is not Built objects) {
             built?.Dispose();
@@ -146,19 +133,11 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
                 paramName: nameof(built)
             );
         }
-        if (descriptorPool == 0) {
-            objects.Dispose();
-
-            throw new ArgumentException(
-                message: $"Package '{RenderGraphPackageCatalog.Place}' allocates its sets from the instance's pool, and none was created.",
-                paramName: nameof(descriptorPool)
-            );
-        }
 
         return new Recorder(
             built: objects,
             context: context,
-            descriptorPool: descriptorPool,
+            groups: groups,
             placements: m_placements
         );
     }
@@ -178,51 +157,52 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
     // Records one place pass. Everything a frame slot binds is per slot, since the instance waits only that slot's
     // previous submission before recording into it.
     private sealed class Recorder : IRenderGraphPackageRecorder {
-        private readonly byte[] m_block;
+        private readonly uint m_base;
         private readonly Built m_built;
+        private readonly uint m_destination;
         private readonly string m_instance;
         private readonly string m_pass;
         private readonly IRenderGraphPlacements? m_placements;
-        private readonly uint m_rectOffset;
-        private readonly nint[] m_samplers;
+        private readonly int m_rectOffset;
         private readonly GpuDeviceServices m_services;
-        private readonly nint[] m_sets;
-        private readonly uint m_sharpnessOffset;
+        private readonly RenderGraphPackageSets m_sets = null!;
+        private readonly int m_sharpnessOffset;
+        private readonly uint m_source;
 
         private bool m_disposed;
+        private nint m_sampler;
 
-        public Recorder(RenderGraphPackageRecorderContext context, Built built, nint descriptorPool, IRenderGraphPlacements? placements) {
-            var inFlight = context.InFlightFrames;
+        public Recorder(RenderGraphPackageRecorderContext context, Built built, RenderGraphPackageGroups groups, IRenderGraphPlacements? placements) {
+            var parameters = context.Parameters;
 
-            m_block = new byte[context.Parameters.SizeBytes];
             m_built = built;
             m_instance = context.Instance;
             m_pass = context.Pass;
             m_placements = placements;
-            m_rectOffset = OffsetOf(
-                context: context,
-                field: RenderGraphPackageCatalog.PlaceRect
-            );
-            m_samplers = new nint[inFlight];
             m_services = context.Services;
-            m_sets = new nint[inFlight];
-            m_sharpnessOffset = OffsetOf(
-                context: context,
-                field: RenderGraphPackageCatalog.PlaceSharpness
-            );
 
             try {
-                for (var slot = 0; (slot < inFlight); slot++) {
-                    m_sets[slot] = m_services.Bindings.AllocateSet(
-                        descriptorPool,
-                        built.Pipeline!.DescriptorSetLayoutHandle,
-                        name: new GpuObjectName(
-                            index: slot,
-                            owner: context.Instance,
-                            part: context.Pass
-                        )
-                    );
-                    m_samplers[slot] = m_services.Bindings.CreateSampler();
+                m_rectOffset = ((int)parameters.BlockOffsetOf(member: RenderGraphPackageCatalog.PlaceRect));
+                m_sharpnessOffset = ((int)parameters.BlockOffsetOf(member: RenderGraphPackageCatalog.PlaceSharpness));
+                m_sets = new RenderGraphPackageSets(
+                    context: context,
+                    groupLayoutHandles: built.Pipeline!.GroupLayoutHandles,
+                    groups: groups
+                );
+                m_base = m_sets.BindingOf(member: RenderGraphPackageCatalog.PlaceBase);
+                m_source = m_sets.BindingOf(member: RenderGraphPackageCatalog.PlaceSource);
+                m_destination = m_sets.BindingOf(member: RenderGraphPackageCatalog.PlaceDestination);
+                m_sampler = m_services.Bindings.CreateSampler();
+
+                for (var slot = 0; (slot < context.InFlightFrames); slot++) {
+                    foreach (var image in (ReadOnlySpan<string>)[RenderGraphPackageCatalog.PlaceBase, RenderGraphPackageCatalog.PlaceSource]) {
+                        m_services.Bindings.WriteSampler(
+                            arrayElement: 0,
+                            binding: m_sets.BindingOf(member: (image + ShaderPipelinePassPorts.SamplerSuffix)),
+                            descriptorSetHandle: m_sets.PassSet(slot: slot),
+                            samplerHandle: m_sampler
+                        );
+                    }
                 }
             } catch {
                 Dispose();
@@ -231,12 +211,6 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
             }
         }
 
-        private static uint OffsetOf(RenderGraphPackageRecorderContext context, string field) => (context.Parameters.Slots.FirstOrDefault(predicate: slot => string.Equals(
-            a: slot.Name,
-            b: field,
-            comparisonType: StringComparison.Ordinal
-        ))?.Offset ?? throw new InvalidDataException(message: $"Pass '{context.Pass}' of package '{RenderGraphPackageCatalog.Place}' has no '{field}' in its frame block."));
-
         public void Dispose() {
             if (m_disposed) {
                 return;
@@ -244,17 +218,14 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
 
             m_disposed = true;
 
-            foreach (var sampler in m_samplers) {
-                if (sampler != 0) {
-                    m_services.Bindings.DestroySampler(samplerHandle: sampler);
-                }
+            if (m_sampler != 0) {
+                m_services.Bindings.DestroySampler(samplerHandle: m_sampler);
+                m_sampler = 0;
             }
 
             m_built.Dispose();
         }
         public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
-            recording.FrameBlock.CopyTo(destination: m_block);
-
             if (
                 (m_placements is not null) &&
                 m_placements.TryGet(
@@ -270,14 +241,14 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
                     return RenderGraphPackageOutcome.DrewNothing;
                 }
 
-                var rect = m_block.AsSpan(start: ((int)m_rectOffset));
+                var rect = recording.PassBlock[m_rectOffset..];
 
                 BinaryPrimitives.WriteSingleLittleEndian(destination: rect, value: (placement.Shown ? placement.Left : 0f));
                 BinaryPrimitives.WriteSingleLittleEndian(destination: rect[4..], value: (placement.Shown ? placement.Top : 0f));
                 BinaryPrimitives.WriteSingleLittleEndian(destination: rect[8..], value: (placement.Shown ? placement.Width : 0f));
                 BinaryPrimitives.WriteSingleLittleEndian(destination: rect[12..], value: (placement.Shown ? placement.Height : 0f));
                 BinaryPrimitives.WriteSingleLittleEndian(
-                    destination: m_block.AsSpan(start: ((int)m_sharpnessOffset)),
+                    destination: recording.PassBlock[m_sharpnessOffset..],
                     value: placement.Sharpness
                 );
             }
@@ -285,48 +256,37 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
             var command = recording.CommandBuffer;
             var recorder = recording.Recorder;
             var pipeline = m_built.Pipeline!;
-            var set = m_sets[recording.Slot];
-            var sampler = m_samplers[recording.Slot];
+            var set = m_sets.PassSet(slot: recording.Slot);
 
             m_services.Bindings.WriteStorageImage(
                 arrayElement: 0,
-                binding: OutputBinding,
+                binding: m_destination,
                 descriptorSetHandle: set,
                 imageViewHandle: recording.Outputs[0].Image.ImageViewHandle
             );
-            m_services.Bindings.WriteCombinedImageSampler(
+            m_services.Bindings.WriteSampledImage(
                 arrayElement: 0,
-                binding: BaseBinding,
+                binding: m_base,
                 descriptorSetHandle: set,
-                imageViewHandle: recording.Inputs[0].Image.ImageViewHandle,
-                samplerHandle: sampler
+                imageViewHandle: recording.Inputs[0].Image.ImageViewHandle
             );
-            m_services.Bindings.WriteCombinedImageSampler(
+            m_services.Bindings.WriteSampledImage(
                 arrayElement: 0,
-                binding: SourceBinding,
+                binding: m_source,
                 descriptorSetHandle: set,
-                imageViewHandle: recording.Inputs[1].Image.ImageViewHandle,
-                samplerHandle: sampler
+                imageViewHandle: recording.Inputs[1].Image.ImageViewHandle
             );
             recorder.BindPipeline(
                 bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: command,
                 pipelineHandle: pipeline.Handle
             );
-            recorder.BindDescriptorSet(
+            m_sets.Bind(
                 bindPoint: GpuBindPoint.Compute,
-                commandBufferHandle: command,
-                descriptorSetHandle: set,
-                group: 0,
-                pipelineLayoutHandle: pipeline.LayoutHandle
-            );
-            recorder.PushConstants(
-                bindPoint: GpuBindPoint.Compute,
-                commandBufferHandle: command,
-                data: m_block,
-                offset: 0,
-                pipelineLayoutHandle: pipeline.LayoutHandle,
-                stageFlags: ShaderPipelineRenderNode.FrameBlockStages
+                commandBuffer: command,
+                pipelineLayout: pipeline.LayoutHandle,
+                recorder: recorder,
+                slot: recording.Slot
             );
             recorder.Dispatch(
                 commandBufferHandle: command,

@@ -4,7 +4,8 @@
   "description": "Film grain: a per-pixel integer-hashed offset added over the rendered output. The hash is a pure function of pixel cell, grain frame, and seed, so it renders identically on both backends.",
   "stages": { "vertex": "fullscreen.vert", "fragment": "sdf-film-grain.frag" },
   "bindings": [
-    { "kind": "sampledImage", "vulkanBinding": 0, "directXRegister": "t0" }
+    { "kind": "SampledImage", "name": "source" },
+    { "kind": "Sampler", "name": "sourceSampler" }
   ],
   "targetFloor": { "vulkan": "1.3", "shaderModel": "6.6" },
   "config": {

@@ -21,8 +21,7 @@
       "kind": "Compute",
       "outputs": [
         {
-          "name": "image",
-          "binding": 0
+          "name": "image"
         }
       ],
       "config": {

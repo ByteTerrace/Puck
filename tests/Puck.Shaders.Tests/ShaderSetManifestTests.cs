@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Puck.Abstractions.Gpu;
 
 namespace Puck.Shaders.Tests;
 
@@ -238,7 +239,19 @@ public sealed class ShaderSetManifestTests {
             actual: manifest.Stages.Fragment
         );
         Assert.True(condition: manifest.IsGraphics);
-        Assert.Single(collection: manifest.Bindings);
+        Assert.Equal(
+            actual: manifest.Bindings,
+            expected: [
+                new ShaderSetManifestBinding(
+                    Kind: GpuBindingKind.SampledImage,
+                    Name: "source"
+                ),
+                new ShaderSetManifestBinding(
+                    Kind: GpuBindingKind.Sampler,
+                    Name: "sourceSampler"
+                ),
+            ]
+        );
         Assert.Equal(
             expected: Path.GetDirectoryName(path: FilmGrainManifestPath),
             actual: manifest.Directory
@@ -246,17 +259,17 @@ public sealed class ShaderSetManifestTests {
 
         var layout = manifest.FrameLayout;
 
-        // The frame members end at 92; the config follows in ordinal name order, and the block rounds up to a row.
+        // The pass block holds the extent, then the config in ordinal name order, and rounds up to a row.
         Assert.Equal(
             expected: "sdf-film-grain",
             actual: layout.Interface.Name
         );
         Assert.Equal(
-            expected: 112u,
+            expected: 32u,
             actual: layout.SizeBytes
         );
         Assert.Equal(
-            expected: [92u, 96u, 100u, 104u],
+            expected: [8u, 12u, 16u, 20u],
             actual: layout.Slots.Select(selector: slot => slot.Offset).ToArray()
         );
         Assert.Equal(

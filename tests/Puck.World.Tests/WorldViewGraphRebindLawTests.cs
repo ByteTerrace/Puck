@@ -34,7 +34,7 @@ public sealed class WorldViewGraphRebindLawTests : IDisposable {
             reason: "DXC is required to compile the installed graph."
         );
         Directory.CreateDirectory(path: m_directory);
-        Write(name: "pass.hlsl", text: "[numthreads(8,8,1)] void main(uint3 id : SV_DispatchThreadID) { }");
+        Write(name: "pass.hlsl", text: "[numthreads(8,8,1)] void main(uint3 id : SV_DispatchThreadID) { output[id.xy] = 0; }");
         Write(name: "feed.hlsl", text: Convert(input: "feed"));
         Write(name: "other.hlsl", text: Convert(input: "other"));
         Write(name: "feed.graph.json", text: Graph(input: "feed"));
@@ -68,15 +68,12 @@ public sealed class WorldViewGraphRebindLawTests : IDisposable {
 
         return (m_runtime, m_instances);
     }
-
     private static string Convert(string input) => $$"""
-        [[vk::combinedImageSampler]] [[vk::binding(1, 0)]] Texture2D<float4> {{input}}Image : register(t1);
-        [[vk::combinedImageSampler]] [[vk::binding(1, 0)]] SamplerState {{input}}Sampler : register(s1);
-        [[vk::binding(0, 0)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> image : register(u0);
+        #include "{{input}}.interface.hlsli"
 
         [numthreads(8, 8, 1)]
         void main(uint3 id : SV_DispatchThreadID) {
-            image[id.xy] = {{input}}Image.SampleLevel({{input}}Sampler, float2(0.5, 0.5), 0.0);
+            image[id.xy] = {{input}}.SampleLevel({{input}}Sampler, float2(0.5, 0.5), 0.0);
         }
         """;
     private static string Graph(string input) => $$"""
@@ -93,8 +90,8 @@ public sealed class WorldViewGraphRebindLawTests : IDisposable {
               "source": "{{input}}.hlsl",
               "entryPoint": "main",
               "kind": "Compute",
-              "inputs": [ { "name": "{{input}}", "binding": 1 } ],
-              "outputs": [ { "name": "image", "binding": 0 } ]
+              "inputs": [ { "name": "{{input}}" } ],
+              "outputs": [ { "name": "image" } ]
             }
           ],
           "outputs": [ "image" ]
@@ -115,7 +112,6 @@ public sealed class WorldViewGraphRebindLawTests : IDisposable {
         ),
         ink,
     ]);
-
     // Pumps the host until no compile is pending and the latest result is installed. The bound is liveness; it decides
     // nothing.
     private void PumpUntilInstalled() => Assert.True(condition: SpinWait.SpinUntil(
@@ -146,7 +142,6 @@ public sealed class WorldViewGraphRebindLawTests : IDisposable {
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
         }
     }
-
     [Fact]
     public void ARowThatBecomesAPackageIsNotHandedItsInstalledGraph() {
         var (host, instances) = Start();

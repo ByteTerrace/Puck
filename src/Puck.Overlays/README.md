@@ -9,10 +9,10 @@ belongs to the simulation.
 ## Structure
 
 Stores retain the state each overlay needs, writers populate it, and
-`OverlayFrameComposer` runs the writers into `OverlayFrameBuilder` for either
-renderer of the one fragment pass (`OverlayPassLayout`): the
-`UnifiedOverlayNode` decorator, or `OverlayPackage`, the render graph's
-`overlay` package. The project
+`OverlayFrameComposer` runs the writers into `OverlayFrameBuilder` for
+`OverlayPackage`, the render graph's `overlay` package, whose one fragment pass
+reads the package's grouped interface (`RenderGraphPackageCatalog.OverlayMembers`,
+generated into `overlay.interface.hlsli`). The project
 uses [Puck.Text](../Puck.Text/README.md) for the shared font atlas and layout
 data, with a local prepacked glyph artifact for overlay rendering.
 

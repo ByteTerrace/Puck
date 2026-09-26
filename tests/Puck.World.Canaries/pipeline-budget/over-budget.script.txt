@@ -6,13 +6,14 @@ pipeline.reset feedback
 pipeline.wait feedback submitted 1 10
 pipeline.step feedback
 pipeline.wait feedback submitted 2 10
-# A 256 KiB cap. The installed graph holds 49152 bytes: three frame slots of a 32x32 half-float history (24576), the
-# 32x32 RGBA8 gray (12288) and the copy's 32x32 RGBA8 targets (12288).
+# A 256 KiB cap. The installed graph holds 52224 bytes: three frame slots of a 32x32 half-float history (24576), the
+# 32x32 RGBA8 gray (12288), the copy's 32x32 RGBA8 targets (12288), and four 256-byte constant buffers, the frame
+# group's and each pass's (3072).
 pipeline.budget feedback 262144
 pipeline.capture feedback {run}/before.png
 pipeline.wait feedback captured 10
-# The capture gave the readback a 32x32 RGBA8 staging buffer (4096), so the instance owns 53248. The wide edit grows
-# the history to 256x256: 1597440 bytes steady-state, which beside those 53248 peak at 1650688, over the cap, so the
+# The capture gave the readback a 32x32 RGBA8 staging buffer (4096), so the instance owns 56320. The wide edit grows
+# the history to 256x256: 1600512 bytes steady-state, which beside those 56320 peak at 1656832, over the cap, so the
 # candidate is refused before it allocates anything. A reload is not a step, and the
 # paused instance still presents submission 2.
 pipeline.load feedback wide.graph.json
@@ -26,7 +27,7 @@ pipeline.wait feedback submitted 3 10
 pipeline.capture feedback {run}/refused-step.png
 pipeline.wait feedback captured 10
 # An in-budget edit, one minus the history, carries the retained history instead of allocating it, so it peaks at
-# 53248 + 49152 - 24576 = 77824 and installs while paused; the next step renders submission 4 through it over the
+# 56320 + 52224 - 24576 = 83968 and installs while paused; the next step renders submission 4 through it over the
 # retained history as 1 - 4/16.
 pipeline.load feedback ../pipeline-edit/corrected.graph.json
 pipeline.status

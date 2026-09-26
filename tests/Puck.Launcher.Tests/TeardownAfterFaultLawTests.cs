@@ -3,6 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Puck.Abstractions.Gpu;
 using Puck.Overlays;
+using Puck.Shaders;
 using Puck.Testing;
 using Puck.Text;
 using Xunit;
@@ -35,9 +36,9 @@ public sealed class TeardownAfterFaultLawTests {
 
         return (exit, error.ToString().TrimEnd());
     }
-    // The shipped overlay decorator over a producer that renders nothing, on services that must never be called: a
+    // The shipped overlay package drawn by a graph node over the world image, on services that must never be called: a
     // node that never produced a frame acquired nothing, so its teardown reaches none of them.
-    private static UnifiedOverlayNode Overlay(IGpuDeviceContext device, RefusingGpuDevice unused) {
+    private static ShaderPipelineRenderNode Overlay(IGpuDeviceContext device, RefusingGpuDevice unused) {
         var glyphs = OverlayGlyphSdfPack.TryCreate(new FontAtlas(
             FontAtlasKind.Mtsdf,
             "test://fixed-grid",
@@ -68,7 +69,7 @@ public sealed class TeardownAfterFaultLawTests {
             )
         ))!;
 
-        return new UnifiedOverlayNode(
+        var overlay = new OverlayPackage(
             capacity: new OverlayCapacity(
                 BindingBarMaxBanks: 1,
                 BindingBarMaxModifiers: 1,
@@ -83,20 +84,62 @@ public sealed class TeardownAfterFaultLawTests {
                 WheelMaxSectorsPerRing: 1
             ),
             fragmentBytecode: new byte[] { 1 },
-            glyphs: glyphs,
-            height: 32U,
-            inner: new WindowedHostFixture.FakeRenderNode(),
-            deviceContext: device,
             frameSources: new UnusedFrameSources(gpu: unused),
+            glyphs: glyphs,
             sources: new UnifiedOverlaySources(
                 BindingBar: null,
                 Console: null,
                 FeedTick: null,
                 Toast: null
             ),
-            vertexBytecode: new byte[] { 1 },
+            vertexBytecode: new byte[] { 1 }
+        );
+        var packages = new RenderGraphPackageRecorders();
+
+        packages.Register(
+            factory: overlay,
+            package: RenderGraphPackageCatalog.Overlay
+        );
+
+        var node = new ShaderPipelineRenderNode(
+            deviceContext: device,
+            height: 32U,
+            hostsOnDirectX: false,
+            name: "root",
+            outputLayout: GpuImageLayout.ShaderReadOnly,
+            packages: packages,
             width: 32U
         );
+
+        node.Swap(pipeline: new CompiledShaderPipeline(
+            plan: new RenderGraphCompiler(packages: RenderGraphPackageCatalog.Engine).Compile(definition: new RenderGraphDefinition(
+                Name: "root",
+                Outputs: ["composed"],
+                Packages: [new RenderGraphPackagePass(
+                    Inputs: ["world"],
+                    Name: "overlay",
+                    Outputs: ["composed"],
+                    Package: RenderGraphPackageCatalog.Overlay
+                )],
+                Resources: [
+                    new ShaderPipelineResource(
+                        Dimensions: ShaderPipelineDimensions.Relative(),
+                        Format: "R8G8B8A8Unorm",
+                        Initialization: ShaderPipelineInitialization.External,
+                        Name: "world"
+                    ),
+                    new ShaderPipelineResource(
+                        Dimensions: ShaderPipelineDimensions.Relative(),
+                        Format: "R8G8B8A8Unorm",
+                        Name: "composed"
+                    ),
+                ],
+                Schema: RenderGraphSchemas.Graph
+            )).Pipeline,
+            shaders: new Dictionary<string, CompiledShader>(comparer: StringComparer.Ordinal)
+        ));
+
+        return node;
     }
 
     [Fact]

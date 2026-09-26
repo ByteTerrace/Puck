@@ -33,7 +33,7 @@ public sealed class AffectedDocumentsLawTests {
                       "$schema": "puck.render.graph.v1",
                       "name": "fill",
                       "resources": [ { "name": "out", "format": "R8G8B8A8Unorm", "dimensions": { "mode": "relative", "width": 1, "height": 1 } } ],
-                      "passes": [ { "name": "fill", "kind": "compute", "source": "passes/fill.hlsl", "entryPoint": "main", "outputs": [ { "name": "out", "binding": 0 } ] } ],
+                      "passes": [ { "name": "fill", "kind": "compute", "source": "passes/fill.hlsl", "entryPoint": "main", "outputs": [ { "name": "out" } ] } ],
                       "outputs": [ "out" ]
                     }
                     """,
@@ -87,7 +87,7 @@ public sealed class AffectedDocumentsLawTests {
 
         var kernels = AffectedStandIns.Kernels(
             projects: AffectedCommand.Projects(model: ArchitectureModel.Load(repositoryRoot: repositoryRoot), repositoryRoot: repositoryRoot),
-            repositoryRoot: repositoryRoot
+            tree: new AffectedWorkingTree(root: repositoryRoot)
         );
 
         Assert.Contains(collection: kernels, filter: static kernel => (kernel.Path == "src/Puck.Platform.Windows/Assets/Shaders/camera-conversion.hlsl"));

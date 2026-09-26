@@ -4,15 +4,10 @@
 // to the central four texels' range so its negative lobes cannot ring; a sharpness between blends the two. A rect of the
 // whole destination resamples the whole source. Every tap is a formatted load clamped to its image's edge, so no sampler
 // state decides the filter and both backends compute the same arithmetic.
-// The frame block is the pass's interface: the frame values and the pass's config (rect, sharpness). rect is the
-// destination rect as fractions of the destination's extent: left, top, width, height.
+// The generated interface declares the frame group and the pass group: the extent, the config (rect, sharpness) and
+// the images base, source and destination, each image input with a sampler it never reads. rect is the destination
+// rect as fractions of the destination's extent: left, top, width, height.
 #include "place.interface.hlsli"
-
-[[vk::binding(0, 0)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> destination : register(u0);
-[[vk::combinedImageSampler]] [[vk::binding(1, 0)]] Texture2D<float4> base : register(t1);
-[[vk::combinedImageSampler]] [[vk::binding(1, 0)]] SamplerState baseSampler : register(s1);
-[[vk::combinedImageSampler]] [[vk::binding(2, 0)]] Texture2D<float4> source : register(t2);
-[[vk::combinedImageSampler]] [[vk::binding(2, 0)]] SamplerState sourceSampler : register(s2);
 
 float4 catmullRomWeights(float t) {
     float t2 = (t * t);
@@ -44,7 +39,7 @@ float3 reconstruct(uint2 pixel, uint2 rectDims, uint2 sourceDims) {
     float3 c01 = tap((origin + int2(0, 1)), sourceDims);
     float3 c11 = tap((origin + int2(1, 1)), sourceDims);
     float3 bilinear = lerp(lerp(c00, c10, f.x), lerp(c01, c11, f.x), f.y);
-    float sharpness = saturate(frameGroup.sharpness);
+    float sharpness = saturate(passGroup.sharpness);
 
     if (sharpness == 0.0) {
         return bilinear;
@@ -93,7 +88,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     }
 
     // The rect's pixel edges, each fraction rounded to the nearest pixel edge and clamped to the destination.
-    float4 rect = frameGroup.rect;
+    float4 rect = passGroup.rect;
     uint2 rectMin = (uint2)clamp(floor((rect.xy * float2(destinationDims)) + 0.5), float2(0.0, 0.0), float2(destinationDims));
     uint2 rectMax = (uint2)clamp(floor(((rect.xy + rect.zw) * float2(destinationDims)) + 0.5), float2(rectMin), float2(destinationDims));
 

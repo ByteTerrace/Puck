@@ -182,11 +182,12 @@ public sealed class ShaderPipelinePlan {
     public RenderGraphDefinition Definition { get; }
     /// <summary>Gets the public versions.</summary>
     public IReadOnlyList<string> Outputs { get; }
-    /// <summary>Gets every pass's parameter block together, in bytes: each pass's frame prefix and config. It is the
-    /// pipeline instance's parameter region, the bytes whose residency <c>pipeline.inspect</c> reports.</summary>
+    /// <summary>Gets every block the passes read together, in bytes: the frame group's block once, when the graph has a
+    /// pass, and each pass's pass block. It is the pipeline instance's parameter region, the bytes whose residency
+    /// <c>pipeline.inspect</c> reports.</summary>
     public ulong ParameterBytes => Passes.Aggregate(
         func: static (total, pass) => (total + pass.Parameters.SizeBytes),
-        seed: 0UL
+        seed: (Passes.FirstOrDefault()?.Parameters.FrameBlockSizeBytes ?? 0UL)
     );
     /// <summary>Gets the pass names in execution order.</summary>
     public IReadOnlyList<string> PassOrder => Passes.Select(selector: static pass => pass.Name).ToArray();

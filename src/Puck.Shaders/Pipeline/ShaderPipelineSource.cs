@@ -185,7 +185,13 @@ public sealed class ShaderPipelineSource {
             ShaderPipelineParameterLayout layout;
 
             try {
-                layout = ShaderPipelineParameterLayout.Resolve(pass: pass);
+                layout = ShaderPipelineParameterLayout.Resolve(
+                    pass: pass,
+                    resources: Definition.Resources.ToDictionary(
+                        comparer: StringComparer.Ordinal,
+                        keySelector: static resource => resource.Name
+                    )
+                );
             } catch (InvalidDataException exception) {
                 reason = $"pass '{passName}': {exception.Message}";
 
