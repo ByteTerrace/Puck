@@ -3083,7 +3083,15 @@ except step 8.
       `INativeImageCaptureFeed.LatestGpuSlot` and `GpuSlotFenceValue` go. Law:
       `LatestSlotPublicationTests.A_lapping_producer_never_writes_a_slot_a_lease_holds`.
    6. The offscreen views bind acquired leases rather than
-      `ScreenSlot.Handle()` until P11b-13 deletes `ViewStack`.
+      `ScreenSlot.Handle()` until P11b-13 deletes `ViewStack`. Landed: the
+      node binds every screen reading a source instance before `ISdfFrameSource.RenderViews`,
+      and a view resolves such a screen to the image the node bound for it
+      (`WorldScreenBinder.CurrentHandle` over `SdfEngineNode.BoundScreenSource`),
+      under the lease the node holds past its own submission, which the
+      views' submissions precede on the queue. `ScreenSlot.Handle()` serves only
+      a view's or a session's own offscreen output, which no other thread or
+      device writes. Law:
+      `SdfEngineNodeLeaseLawTests.AnOffscreenViewSamplesTheLeaseTheNodeHoldsForAScreensSource`.
    7. The capture and camera CPU tiers go through `source-rgba`, each capture
       fill is a static source, and `CpuSurfaceSource`'s screen role goes with
       its last caller.

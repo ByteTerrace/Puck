@@ -268,9 +268,10 @@ public sealed class SdfEngineNodeLeaseLawTests {
         );
     }
 
-    private sealed class FixedFrameSource(SdfFrame frame) : ISdfFrameSource {
+    private sealed class FixedFrameSource(SdfFrame frame, Action? onRenderViews) : ISdfFrameSource {
         public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) =>
             frame;
+        public void RenderViews(in FrameContext context) => onRenderViews?.Invoke();
     }
 
     // An image another device writes is sampled only after that device's fence reaches the value its write signals:
@@ -371,6 +372,64 @@ public sealed class SdfEngineNodeLeaseLawTests {
             expected: new[] { 0 }
         );
     }
+    // The offscreen views render inside the frame the node produces, after the screens reading source instances are bound:
+    // a view filming a screen samples the image the node bound for it this frame, whose lease the node holds past the
+    // frame's own submission, which the views' submissions precede. A screen the host renders itself binds after the
+    // views, so a view's own image is fresh when it binds.
+    [Fact]
+    public void AnOffscreenViewSamplesTheLeaseTheNodeHoldsForAScreensSource() {
+        const string Source = "source$capture$0";
+        var released = 0;
+        var renders = 0;
+        var atViews = new List<(nint Read, nint Rendered)>();
+        SdfEngineNode? node = null;
+        var reads = new RenderGraphExternalReads(producers: [Source]);
+
+        using var rig = new Rig(
+            onRenderViews: () => atViews.Add(item: (node!.BoundScreenSource(screen: 0), node.BoundScreenSource(screen: 1))),
+            screenSources: new ScreenSources(
+                readOf: static screen => ((screen == 0)
+                    ? Source
+                    : null),
+                rendered: _ => ((nint)(0x70 + (++renders))),
+                screens: [0, 1]
+            )
+        );
+
+        node = rig.Node;
+        rig.ProduceFirst();
+        atViews.Clear();
+
+        var before = renders;
+
+        reads.Bind(
+            image: default,
+            index: 0,
+            layout: GpuImageLayout.ShaderReadOnly,
+            lease: new GpuImageLease(
+                ImageViewHandle: 0x61,
+                Release: _ => released++
+            )
+        );
+        Assert.True(condition: rig.Node.Produce(
+            context: rig.Context,
+            height: Extent,
+            reads: reads,
+            width: Extent
+        ));
+        reads.RetireUntaken();
+
+        // At the views, the read is this frame's and the rendered screen still the frame before's; after, both this frame's.
+        Assert.Equal(
+            actual: Assert.Single(collection: atViews),
+            expected: (((nint)0x61), ((nint)(0x70 + before)))
+        );
+        Assert.Equal(
+            actual: rig.Node.BoundScreenSource(screen: 1),
+            expected: ((nint)((0x70 + before) + 1))
+        );
+        Assert.Equal(actual: released, expected: 0);
+    }
 
     private sealed class ScreenSources(IReadOnlyList<int> screens, Func<int, string?> readOf, Func<int, GpuImageLease> rendered) : ISdfScreenSources {
         public IReadOnlyList<int> Screens => screens;
@@ -385,7 +444,7 @@ public sealed class SdfEngineNodeLeaseLawTests {
         public void Dispose() { }
     }
     private sealed class Rig : IDisposable {
-        public Rig(bool trackObjects = false, ISdfScreenSources? screenSources = null) {
+        public Rig(bool trackObjects = false, ISdfScreenSources? screenSources = null, Action? onRenderViews = null) {
             var gpu = new FakeGpuDevice(
                 reportVersion: SdfIsa.Version,
                 trackObjects: trackObjects
@@ -422,7 +481,10 @@ public sealed class SdfEngineNodeLeaseLawTests {
 
             Node = new SdfEngineNode(
                 brickPoolVoxelCapacity: 0,
-                frameSource: new FixedFrameSource(frame: frame),
+                frameSource: new FixedFrameSource(
+                    frame: frame,
+                    onRenderViews: onRenderViews
+                ),
                 height: Extent,
                 kernels: SdfTestPipelines.Kernels(),
                 pipelines: SdfTestPipelines.Cache(),
