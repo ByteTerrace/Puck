@@ -279,6 +279,31 @@ public sealed partial class RenderGraphRuntimeLawTests {
             userMessage: "The staged source never converted three times."
         );
         Assert.True(condition: (gpu.UploadCopies > 1));
+
+        // The region is the graph's host buffer port: its copy sets are the graph's one copy pool, stated and admitted
+        // with the graph, and its buffers are the node's region bytes, which the live budget reports.
+        var node = runtime.Node(instance: 0);
+        var regionBytes = GpuRegion.BytesOf(
+            byteCount: byteCount,
+            policy: GpuResidencyPolicy.Staged,
+            slotCount: ((int)RenderGraphRuntime.DefaultInFlightFrames)
+        );
+
+        Assert.Equal(
+            actual: gpu.PoolsCreated,
+            expected: ShaderPipelineRenderNode.DescriptorPools(
+                inFlight: RenderGraphRuntime.DefaultInFlightFrames,
+                plan: node.Plan!,
+                preview: false,
+                stagedRegions: 1
+            )
+        );
+        Assert.Equal(expected: regionBytes, actual: node.RegionBytes);
+        Assert.True(condition: (node.InstalledAccount.SteadyBytes >= regionBytes));
+        Assert.Contains(
+            actualString: LiveBudget(budget: new RenderGraphLiveBudget(), runtime: runtime),
+            expectedSubstring: $" regions {regionBytes} bytes"
+        );
     }
     [Fact]
     public void ARefusedUploadRendersNothingAndNamesItsFault() {

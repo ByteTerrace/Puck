@@ -24,6 +24,10 @@ public enum ShaderPipelineInitialization {
     Zero,
     /// <summary>The resource is supplied by the host.</summary>
     External,
+    /// <summary>The resource is a fixed-size buffer the host writes, a host buffer port: the node running the graph owns
+    /// its region (<c>ShaderPipelineRenderNode.BindRegion</c>), and its copy sets are reserved when the graph is
+    /// admitted.</summary>
+    Host,
 }
 /// <summary>Dimensions for an image resource.</summary>
 public sealed record ShaderPipelineDimensions(
@@ -145,7 +149,10 @@ public sealed record ShaderPipelineResource(
 ) {
     /// <summary>Gets whether the host supplies the resource rather than a pass producing it.</summary>
     [JsonIgnore]
-    public bool IsExternal => (Initialization == ShaderPipelineInitialization.External);
+    public bool IsExternal => (Initialization is ShaderPipelineInitialization.External or ShaderPipelineInitialization.Host);
+    /// <summary>Gets whether the resource is a host buffer port (<see cref="ShaderPipelineInitialization.Host"/>).</summary>
+    [JsonIgnore]
+    public bool IsHostBuffer => (Initialization == ShaderPipelineInitialization.Host);
     /// <summary>Gets the bytes of one buffer element: a structured buffer's stride, or one 32-bit word of a raw
     /// buffer.</summary>
     [JsonIgnore]

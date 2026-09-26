@@ -1,12 +1,12 @@
 using Puck.Vulkan.Interfaces;
 using Puck.Vulkan.Interop;
-using Puck.Vulkan.Messages;
 
 namespace Puck.Vulkan.Factories;
 
 /// <summary>
-/// The default <see cref="IVulkanRenderPassFactory"/>: it builds a present-oriented, single-color-attachment
-/// render pass matching the swapchain's format and returns an owning <see cref="VulkanRenderPass"/>.
+/// The default <see cref="IVulkanRenderPassFactory"/>: it builds the swapchain's render pass
+/// (<see cref="VulkanGpuRenderPass.PresentRequestOf"/>), one color attachment in the swapchain's format ending in the
+/// present layout, and returns an owning <see cref="VulkanRenderPass"/>.
 /// </summary>
 public sealed class VulkanRenderPassFactory : IVulkanRenderPassFactory {
     private readonly IVulkanRenderPassApi m_renderPassApi;
@@ -28,9 +28,9 @@ public sealed class VulkanRenderPassFactory : IVulkanRenderPassFactory {
         ArgumentNullException.ThrowIfNull(argument: logicalDevice);
         ArgumentNullException.ThrowIfNull(argument: swapchain);
 
-        var request = VulkanRenderPassRequests.Present(
-            colorFormat: swapchain.ImageFormat,
-            device: logicalDevice.Commands
+        var request = VulkanGpuRenderPass.PresentRequestOf(
+            device: logicalDevice.Commands,
+            swapchainFormat: swapchain.ImageFormat
         );
         var result = m_renderPassApi.CreateRenderPass(
             renderPassHandle: out var renderPassHandle,

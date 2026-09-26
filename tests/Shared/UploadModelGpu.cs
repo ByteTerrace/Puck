@@ -93,6 +93,11 @@ internal sealed class UploadModelGpu :
     /// <summary>Gets the host-visible buffers created in the device-local aperture
     /// (<see cref="IGpuBufferFactory.CreateHostVisibleDeviceLocal"/>) and still live.</summary>
     public int ApertureBuffers => m_buffers.Values.Count(predicate: static buffer => buffer.Aperture);
+    /// <summary>Gets the bytes of every live buffer, at each buffer's created size.</summary>
+    public ulong BufferBytes => m_buffers.Values.Aggregate(
+        func: static (total, buffer) => (total + buffer.SizeBytes),
+        seed: 0UL
+    );
     /// <summary>Gets the host-visible buffers created in host memory and still live.</summary>
     public int HostBuffers => m_buffers.Values.Count(predicate: static buffer => (buffer.HostVisible && !buffer.Aperture));
 

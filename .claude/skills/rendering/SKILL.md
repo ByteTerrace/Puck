@@ -577,15 +577,21 @@ These are one-line cautions; the owning pages hold the derivations.
   with that pipeline (its holder leases it beside the set, and the engine takes
   it at construction). A `ShaderPipelineRenderNode` owns every host-written
   region its graph reads: a package states the regions its recorder writes
-  (`IRenderGraphPackageFactory.Regions`, the overlay's buffer) and a host buffer
-  port takes one from `BindRegion` (an uploaded source's); the node creates each
-  under `GpuResidency.Select` with a reader in flight, takes the copy pipeline in
-  the candidate's build (`GpuBuildLease.Wait` on its `GpuRegionCopyPass` entry), states and admits a
-  reserved copy pool per staged package pass in `DescriptorPools`
-  (`regionCopies`), and records every owed copy in one command buffer ahead of the
-  frame's passes, behind a memory barrier and followed by a buffer barrier per
-  copied buffer to the compute and fragment stages. A new host upload is a
-  region, never a hand-written buffer. On Direct3D 12 a buffer the fragment stage
+  (`IRenderGraphPackageFactory.Regions`, the overlay's buffer) and a graph
+  declares its host buffer ports (`ShaderPipelineInitialization.Host`, a
+  fixed-size buffer), whose region a host takes from `BindRegion` (an uploaded
+  source's); the node creates each under `GpuResidency.Select` with a reader in
+  flight, takes the copy pipeline in the candidate's build (`GpuBuildLease.Wait`
+  on its `GpuRegionCopyPass` entry), states one `GpuRegionCopyPool` per graph
+  reserving every staged package region's and port's sets in `DescriptorPools`
+  (`stagedRegions`, admitted with the graph, owned by its first pass), moves a
+  bound port to each later graph's share (`GpuRegion.MoveCopySets`), and records
+  every owed copy in one command buffer ahead of the frame's passes, behind a
+  memory barrier and followed by a buffer barrier per copied buffer to the compute
+  and fragment stages. Every region counts in the node's account
+  (`GpuRegion.BytesOf`, `RegionBytes`, a replaced graph's `LiveBytes`) and in
+  `world.budget`'s live rows. A new host upload is a region, never a hand-written
+  buffer, and a new host-written port is a host buffer port. On Direct3D 12 a buffer the fragment stage
   reads is in `ALL_SHADER_RESOURCE` (`DirectXBufferStates.RequiredState` reads the
   barrier's stages). A ring's
   buffers live where `GpuResidency.RingMemory(profile)` says: in the
@@ -1160,7 +1166,12 @@ frame converter's conversion kernels compile at build too
 `ProbeKindManifest.KernelBytecodePath`, `Win32D3D11CameraFrameConverter.KernelPath`);
 a camera device only creates them, and the colorimetry is constant-buffer data.
 The Direct3D 12 surface compositor's blit is build DXIL
-(`surface-blit.*.hlsl`, `PuckShaderSpirvEnabled` false). No Puck assembly may
+(`surface-blit.*.hlsl`, `PuckShaderSpirvEnabled` false). Both surface
+compositors bind `SurfaceBlitLayout` (the pass group, `t0` and `s1` in space 3)
+and lease their blit from the device's `GpuPassPipelineCache` for a render pass
+in the swapchain's format, so no presentation pipeline is created outside a
+build cache; the Direct3D 12 one keeps its own one-SRV and one-sampler
+shader-visible heaps until P16. No Puck assembly may
 import `d3dcompiler_*.dll` (`NoDeviceShaderCompileLawTests`).
 
 ## Verifying
