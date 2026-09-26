@@ -1,13 +1,10 @@
 using Puck.Input;
+using Puck.World.Client;
 
 namespace Puck.World;
 
-internal sealed partial class WorldScreenBinder {
-    /// <summary>Finds the window a running source instance captures, the one a passthrough source delivers to.</summary>
-    /// <param name="instance">The source instance's name.</param>
-    /// <param name="fault">Why there is no window, when this returns <see langword="null"/>.</param>
-    /// <returns>The window its capture feed shows now, or <see langword="null"/> when the instance is not running, is no
-    /// window capture, captures a whole monitor, or has not opened its window yet.</returns>
+internal sealed partial class WorldScreenBinder : IWorldPassthroughWindows {
+    /// <inheritdoc/>
     public ISourcePassthroughWindow? PassthroughWindowOf(string instance, out string? fault) {
         switch (FeedOf(instance: instance)) {
             case null:

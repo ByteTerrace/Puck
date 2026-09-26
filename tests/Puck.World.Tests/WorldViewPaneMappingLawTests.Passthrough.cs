@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using Puck.Commands;
 using Puck.Input;
+using Puck.World.Client;
 
 using Xunit;
 
@@ -86,7 +87,105 @@ public sealed partial class WorldViewPaneMappingLawTests {
             expected: SourceDestination.Presentation
         );
     }
+    // THE LAW: a passthrough grant follows its pane's instance, not one frame's publication. A pane left unpublished
+    // for a frame takes no input while it is unshown and keeps its grant, so its republished pane reaches the window
+    // again; the local user's explicit close ends the grant, and so does the instance really going away.
+    [Fact]
+    public void AGrantHoldsAcrossAFrameItsPaneIsNotPublishedAndAnExplicitCloseEndsIt() {
+        Frame(pane: Left);
+        Frame(pane: Left);
 
+        var window = new PassthroughWindow();
+        var windows = new InstanceWindows(
+            name: Pane,
+            window: window
+        );
+        var passthrough = new WorldSourcePassthrough(
+            graphs: m_host,
+            viewports: new WorldSeatViewports(),
+            windows: windows
+        );
+
+        Assert.True(
+            condition: passthrough.TryOpen(
+                instance: Pane,
+                message: out var message,
+                windowTitle: window.Title
+            ),
+            userMessage: message
+        );
+        Prepare(pane: Left);
+        Assert.True(condition: Click(passthrough: passthrough));
+        Assert.Single(collection: window.Presses);
+
+        // One frame with the pane unpublished: nothing reaches the window, and the grant is still held.
+        Prepare(pane: null);
+        Assert.False(condition: Click(passthrough: passthrough));
+        Assert.Single(collection: window.Presses);
+        Assert.Null(@object: passthrough.Router.Focus.Focused);
+        Assert.Contains(
+            expectedSubstring: "(pane not shown)",
+            actualString: passthrough.Describe()
+        );
+
+        // Republished: the same instance's pane is a passthrough source again, and a click reaches the window.
+        Prepare(pane: Left);
+        Assert.Equal(
+            actual: Assert.Single(collection: m_host.Panes).Destination,
+            expected: SourceDestination.Passthrough
+        );
+        Assert.True(condition: Click(passthrough: passthrough));
+        Assert.Equal(
+            actual: window.Presses.Count,
+            expected: 2
+        );
+
+        // The explicit close ends the grant: the pane is the game's again.
+        Assert.True(condition: passthrough.Close(instance: Pane));
+        Prepare(pane: Left);
+        Assert.Equal(
+            actual: Assert.Single(collection: m_host.Panes).Destination,
+            expected: SourceDestination.Presentation
+        );
+        Assert.False(condition: Click(passthrough: passthrough));
+        Assert.Equal(
+            actual: window.Presses.Count,
+            expected: 2
+        );
+
+        // A real removal ends a grant too: once the instance stops, the next event closes its source.
+        Assert.True(condition: passthrough.TryOpen(
+            instance: Pane,
+            message: out _,
+            windowTitle: window.Title
+        ));
+        windows.Window = null;
+        _ = passthrough.Intercept(inputEvent: WindowInputEvent.PointerAbsolute(position: Vector2.Zero));
+        Assert.EndsWith(
+            actualString: passthrough.Describe(),
+            expectedEndString: "none opened"
+        );
+    }
+
+    // A press and release on the left pane's window area, through the host's filter as the window pump offers them.
+    private static bool Click(WorldSourcePassthrough passthrough) {
+        _ = passthrough.Intercept(inputEvent: WindowInputEvent.PointerAbsolute(position: new Vector2(
+            x: 8.5f,
+            y: 40.5f
+        )));
+
+        var pressed = passthrough.Intercept(inputEvent: WindowInputEvent.PointerButton(
+            button: 0,
+            phase: CommandPhase.Started
+        ));
+
+        _ = passthrough.Intercept(inputEvent: WindowInputEvent.PointerButton(
+            button: 0,
+            phase: CommandPhase.Completed
+        ));
+
+        return pressed;
+    }
     private bool Press(SourcePassthroughRouter router, float x, float y) {
         router.Publish(
             displayHeight: m_host.DisplayHeight,
@@ -112,7 +211,11 @@ public sealed partial class WorldViewPaneMappingLawTests {
         public void DeliverKey(in WindowInputEvent inputEvent) {
         }
         public void DeliverPointer(in WindowInputEvent inputEvent, SourcePassthroughPoint point) {
-            if (inputEvent.Kind == WindowInputKind.PointerButton) {
+            // Presses only: a release follows its press to the same window.
+            if (
+                (inputEvent.Kind == WindowInputKind.PointerButton) &&
+                (inputEvent.Phase == CommandPhase.Started)
+            ) {
                 Presses.Add(item: point.Logical);
             }
         }
@@ -128,6 +231,26 @@ public sealed partial class WorldViewPaneMappingLawTests {
             );
 
             return true;
+        }
+    }
+    // The window one running instance captures, until the law stops the instance by clearing it.
+    private sealed class InstanceWindows(string name, PassthroughWindow window) : IWorldPassthroughWindows {
+        public PassthroughWindow? Window { get; set; } = window;
+
+        public ISourcePassthroughWindow? PassthroughWindowOf(string instance, out string? fault) {
+            var running = (string.Equals(
+                a: instance,
+                b: name,
+                comparisonType: StringComparison.Ordinal
+            )
+                ? Window
+                : null);
+
+            fault = ((running is null)
+                ? $"no source instance '{instance}' is running"
+                : null);
+
+            return running;
         }
     }
     private sealed class PassthroughWindows(string instance, PassthroughWindow shown) : ISourcePassthroughWindows {

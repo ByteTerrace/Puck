@@ -1209,9 +1209,12 @@ client area sits inside it at an offset, and gives the point in the window's own
 coordinates, DPI included. `Win32PassthroughWindow`, which a window capture's
 feed supplies, sends the window messages. A source whose pane is no longer
 published is revoked: its window hears the release of what it holds, and focus
-returns to the game. The laws are
+returns to the game. The grant itself holds until the local user closes the
+source or its instance or window really goes away, so the same instance's
+republished pane takes input again. The laws are
 `SourcePassthroughRouterLawTests`,
-`WorldViewPaneMappingLawTests.APaneTheLocalUserOpenedTakesThePassthroughDestination`
+`WorldViewPaneMappingLawTests.APaneTheLocalUserOpenedTakesThePassthroughDestination`,
+`WorldViewPaneMappingLawTests.AGrantHoldsAcrossAFrameItsPaneIsNotPublishedAndAnExplicitCloseEndsIt`
 and `Win32PassthroughWindowTests`.
 
 P13b owes the rest. The screen shading still reads its own bezel constant,
