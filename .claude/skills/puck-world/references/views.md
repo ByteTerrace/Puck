@@ -301,6 +301,15 @@ and the host (`WorldViewGraphHost`).
 
 ## Pointer, cursor, Free Cam
 
+`WorldSourcePassthrough` is the one window input filter (`IWindowInputFilter`):
+the pump offers it every raw event before the observer, and an event it
+consumes (a key a focused passthrough source takes, a click or wheel over a
+passthrough pane) never reaches the observer or the command router. Only
+`source.passthrough open`, run as typed text from the host's own console, makes
+a pane a passthrough source; never add a document field, binding or other
+principal's door to it. A new raw-event consumer that must withhold events from
+the game joins that filter rather than adding a second one.
+
 `WorldPointerSink` is the one window observer. `WorldSeatViewInput` drains
 motion only for camera steering and asks the active preference whether the
 pointer is armed. `WorldCursorFeed` asks that same adapter whether steering is

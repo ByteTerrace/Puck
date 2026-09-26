@@ -1214,6 +1214,32 @@ seat folds them into its intent's `SourceRay`, and a rule reads the mapped hit
 as `$pointer:<seat>:<screenIndex>:x|y|on`. `body.channels` echoes the ray and
 its hit on every `Simulation` screen.
 
+**A window captured into a pane takes input only when the local user opens it.**
+`source.passthrough open <instance> <windowTitle...>` opens the window capture a
+shown `views.graphs` pane draws (a `source.capture` row naming a window) as a
+passthrough source, once the captured window's title contains the title the
+user typed, so the user names the window that will take their input. The pane's
+published mapping then takes the `Passthrough` destination with the local-user
+opener, which `world.view.panes` shows. On a windowed host,
+`WorldSourcePassthrough` offers every raw window event to its
+`SourcePassthroughRouter` before the game sees it: pointer events over the pane
+reach the window at the pane's mapped client point, a click there gives the
+window the keyboard, keys and text then go to it instead of the game, every
+release goes where its press went, and Control+Alt+Escape returns the keyboard
+to the game. `source.passthrough close <instance>` closes one, and
+`source.passthrough` with no argument echoes where the keyboard is and each
+open source's window, captured frame, client area and DPI scale. Only the
+host's own console may run the verb, as typed text; the local operator
+attachment (`world.control`) is that console too. No binding, seat, peer,
+addon, schedule or world document can open a passthrough source or send it
+input. A source whose pane stops showing the window it was opened on (its
+instance stops, its capture reopens onto another window, or a row of the same
+name replaces it) is closed the next time input would reach it. Delivery is
+Windows-only: the capture feed's `Win32PassthroughWindow` posts window
+messages to the captured window, described in
+[Device input](../../docs/reference/input.md#keyboard-focus-and-passthrough-sources).
+A headless or offscreen boot has no window and no such verb.
+
 **A physical camera is an input device, seated like a gamepad, never named by
 hardware.** Each enumerated device gets a reconnect-stable `InputDeviceId`
 (`InputDeviceId.FromKey` over the platform's device id) and a roster token

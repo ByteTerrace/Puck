@@ -211,10 +211,47 @@ A world document never creates a passthrough source: the world validator
 refuses a screen whose `input` is `Passthrough`. Focus sits inside the input the
 engine already holds, so it is separate from `IInputFocus` in `Puck.Hosting`,
 which decides whether the terminal routes a device to the engine at all.
-Nothing hosts `SourceFocus` yet. Delivering a focused source's keys and
-pointer events to its window through Windows messages, in the window's client
-coordinates (`SourcePassthrough.ToClient`, DPI included), is P13b in
-[the rendering programme](../plans/rendering.md#p13--hit-to-source-mapping-and-input-destinations).
+
+`SourcePassthroughRouter` hosts `SourceFocus` for a window. The host publishes
+the pane mappings its display shows, and the router reads each raw window event
+in order:
+
+- A pointer event over a pane whose mapping takes `Passthrough`, was opened by
+  the local user and lands on its source goes to that source's window at
+  `SourcePassthrough.ToClient`'s client point. A button press there also
+  focuses the source. A press on the captured frame's border or title bar
+  focuses it without reaching the client area.
+- Keys and text follow `SourceFocus`. A key released after focus moved to
+  another source still reaches the window its press did, and a button pressed
+  on a source is released there at the point its drag reached.
+- Losing the window's own focus releases every key and button a source's
+  window holds.
+
+The router tells the pump which events the game must not see. The window pump
+in `Puck.Launcher` offers every raw event to an optional `IWindowInputFilter`
+before the `IWindowInputObserver` and the command router. An event the filter
+consumes reaches neither of them. A pointer position is never consumed, so the
+game keeps drawing its cursor over a passthrough pane.
+
+A source's window is an `ISourcePassthroughWindow`. On Windows a window
+capture's feed supplies it (`INativeImageCaptureFeed.Window`,
+`Win32PassthroughWindow`), and it posts window messages to the captured window,
+so the window need not be in the foreground. A pointer message goes to the
+deepest visible, enabled child window under the point, in that child's client
+coordinates. A key or text message goes to the window thread's keyboard focus.
+Coordinates are read in physical pixels for the captured frame and in the
+window's own DPI context for the client point, so a DPI-unaware, system-aware
+or per-monitor-aware window each receives its own units. A key whose press
+types text is posted as a key only while Control or Alt is held; otherwise the
+window receives its text as `WM_CHAR`. Keys outside `KeyCode`, such as Delete
+or Home, never reach the engine, so they never reach a source either.
+
+The World host opens a passthrough source only through `source.passthrough`,
+which only its own console may run as typed text (see
+[the World guide](../../src/Puck.World/README.md)). A recorded run on real
+hardware, in which a click reaches a captured editor window at the mapped point,
+is [deferred to the end](../plans/rendering.md#deferred-to-the-end) of the
+rendering programme.
 
 ## Output and haptics
 
@@ -310,6 +347,7 @@ feature framing. Triton feature messages use report id 1 and
 | `InputSources` / `WindowInputMapper` | Own physical source names and neutral keyboard/mouse/text mapping. |
 | `HeldDigitalInputState` | Retains edge-reported held controls in press order and produces safe per-frame reassertions. |
 | `SourceFocus` | Routes keys and text between the game and a focused passthrough source, and holds the reserved focus chord. |
+| `SourcePassthroughRouter` / `IWindowInputFilter` | Host `SourceFocus` for a window: deliver a passthrough source's pointer and keys to its window and withhold them from the game. |
 | `IGamepadOutput` / `TriggerEffectSpec` | Expose capability-gated controller output. |
 | `LightLegendComposer` / `LightLegendDriver` | Compose and deliver presentation-side LampArray legends. |
 

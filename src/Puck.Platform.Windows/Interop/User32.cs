@@ -168,4 +168,24 @@ internal static partial class User32 {
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool ClientToScreen(nint windowHandle, ref Point point);
+    [LibraryImport("user32.dll", EntryPoint = "PostMessageW", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool PostMessage(nint windowHandle, uint message, nint wParam, nint lParam);
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool GetClientRect(nint windowHandle, out Rectangle rectangle);
+    [LibraryImport("user32.dll")]
+    public static partial nint ChildWindowFromPointEx(nint parentHandle, Point point, uint flags);
+    [LibraryImport("user32.dll", SetLastError = true)]
+    public static partial int MapWindowPoints(nint fromHandle, nint toHandle, ref Point points, uint count);
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool IsChild(nint parentHandle, nint windowHandle);
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool GetGUIThreadInfo(uint threadId, ref GuiThreadInfo info);
+    [LibraryImport("user32.dll")]
+    public static partial nint GetWindowDpiAwarenessContext(nint windowHandle);
+    [LibraryImport("user32.dll")]
+    public static partial nint SetThreadDpiAwarenessContext(nint context);
 }

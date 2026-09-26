@@ -618,7 +618,7 @@ A mapped point goes to one `SourceDestination`:
 |---|---|
 | `Presentation` | Hover and highlight. `ISourcePicker` is the seam, and a host may answer it by GPU picking because nothing reaches state. `SourcePanePicker` answers it on the CPU from published pane mappings: the topmost pane under the point, by `SourcePanes.Topmost`, the last in drawing order whose face holds it. |
 | `Simulation` | A pointer ray, named by the `source.pointer.origin` and `source.pointer.direction` Axis3D commands (`SourcePointerCommands`), quantized by `CommandValueQuantization.QuantizeAxis3D` and mapped from document data. A World server integrates seat intents, not command snapshots, so a seat folds the two commands into its `PlayerIntent.SourceRay`, the intent carries the ray through the wire and the replay tape, and the server maps it through the screen row in the tick for the `$pointer:` rule read. On a windowed World host, `WorldPointerRayCapture` casts the OS pointer through its seat's camera with `SourceRay.Through` each host frame and holds both commands on that seat's lane with `InputRouter.Sustain`, so every tick of the frame carries the ray. `TryValidate` refuses a pane here, because a pane's aspect ratio depends on the host's display. |
-| `Passthrough` | An external window on the host. `SourcePassthrough.ToClient` scales a source pixel into the window's client area in physical and logical pixels. Only a source whose `SourceOpener` is the local user may take this destination, and `TryValidate` refuses it by name for a source a document opened. |
+| `Passthrough` | An external window on the host. A window capture shows the window's whole frame, so `SourcePassthrough.ToClient` scales a source pixel into the captured frame and takes off the client area's offset inside it, giving the client point in physical pixels, in the window's own coordinates (divided by its DPI scale), and whether it lies inside the client area. Only a source whose `SourceOpener` is the local user may take this destination, and `TryValidate` refuses it by name for a source a document opened. `SourcePassthroughRouter` in `Puck.Input` delivers the input ([Device input](input.md#keyboard-focus-and-passthrough-sources)). |
 
 `SourceHandle` names the source shown by its render-graph instance: a source
 instance a registered producer supplies, whose hit ends at its pixels, or a
@@ -661,9 +661,14 @@ Each view's world producer reports the screens as the placements standing in
 its world, so the walk continues from a view's pane through a screen: it ends
 on a producer source's pixel, or, for a screen showing another view, on that
 view, which is not yet an instance of the live set. The GPU does not yet draw
-from a mapping, and delivery of passthrough input to a window is
-Windows-specific host work. These are open in
+from a mapping; that is open in
 [the rendering programme](../plans/rendering.md#p13--hit-to-source-mapping-and-input-destinations).
+
+A pane the local user opens with the World's `source.passthrough` publishes
+its mapping with the `Passthrough` destination and the local-user opener, and
+the windowed World host routes its pointer and keys to the captured window
+through `SourcePassthroughRouter`. Delivery to a window is Windows-only
+(`Win32PassthroughWindow`).
 
 ## Core types
 
