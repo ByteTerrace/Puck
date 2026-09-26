@@ -32,6 +32,18 @@ contract: a completed sample carries identity, labels, pass states, and counts
 together, there is no parallel pipeline-only counting interface, and no label
 is borrowed from the currently installed graph.
 
+**P14 and P15 are gated by counted-cost ceilings.** Each of their passes'
+deterministic counters, dispatches, march steps, texels written and bytes
+uploaded, is recorded over one pinned workload, `puck counters`' world with its
+camera and views, at the floor tier and the resolution the RTX 2060 runs, and
+held as a calibrated ceiling that workload may not exceed; other content is
+free to cost more, since its counts gate nothing. P14 adds the march-step and
+texel counters, and per-pass upload bytes, that the ledger lacks today. A ceiling is
+re-recorded only in the change that explains why the count moved, so a cost
+increase is always a stated decision; wall-clock and GPU timing never set or
+move one. The floor device is where a missed budget first shows, so its counts
+bound the programme's rendering cost before any timing is taken.
+
 **Attachment ownership belongs to the pipeline plan.** A backend executes a
 plan it does not own. Outputs are versioned, each version has one writer, and
 forwarding transfers ownership rather than permitting multiple writers; a
@@ -106,13 +118,18 @@ unified-memory devices included.
 fields, and baked distant content may each fit a scene, and no broad shadow or
 ambient-occlusion speedup is assumed without a scene and fidelity comparison.
 
-**P6's three representation experiments are in the programme's scope.** They
+**P6's five representation experiments are in the programme's scope.** They
 are a per-placement choice between the field, a bake and a mesh, decided by
-counted cost; shadows and ambient occlusion on meshes; and capsule or ellipsoid
+counted cost; shadows and ambient occlusion on meshes; capsule or ellipsoid
 proxies on a character's bones for approximate shadows and ambient occlusion
-that never silently become the contact surface. Each is scoped on its own and
-becomes a default only once it shows a useful scene, its fidelity limits and
-its measured cost. The other representations
+that never silently become the contact surface; glossy reflections marched
+through the field, one bounce; and short-range soft global illumination
+gathered from the field. Each is scoped on its own and becomes a default only
+once it shows a useful scene, its fidelity limits and its measured cost. The
+reflection and global illumination experiments start after P14-5 puts the SDF
+passes on their declared interfaces and stay off the critical path; each lands
+with a counted-cost report and a quality-tier switch that turns it off, so the
+floor tier never pays for it. The other representations
 [P6](../plans/rendering.md#p6--representation-experiments) names, such as
 destructible fields, mesh import and skinning, stay out until a scene shows
 the need.
