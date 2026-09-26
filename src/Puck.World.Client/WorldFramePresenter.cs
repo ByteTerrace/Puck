@@ -1157,7 +1157,8 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     /// in its rect at its render scale and the live upscale sharpness, and, for each graph instance a slot of the last
     /// composed layout shows, places it in its slot's rect, advances its clock, and hands it this frame's camera, pointer
     /// and time. A lone view covering the whole display at native scale is not shown: the root then stands for the world
-    /// itself. The views and slots are the ones the last captured frame composed, since the world producer captures its
+    /// itself. Whether a pane covers the whole display decides whether pixels no view covers owe the letterbox color
+    /// (<see cref="WorldViewGraphHost.PlaceViews"/>). The views and slots are the ones the last captured frame composed, since the world producer captures its
     /// frame inside the runtime's schedule, so a layout change places its views and panes one frame later.</summary>
     /// <param name="context">The host's frame context.</param>
     public void PrepareGraph(in FrameContext context) {
@@ -1170,8 +1171,17 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         var width = m_displayWidth;
         var height = m_displayHeight;
         var deltaSeconds = ((float)context.FrameDeltaSeconds);
+        var panesCover = false;
+
+        foreach (var composed in m_composer.Slots) {
+            panesCover |= (
+                (composed.Instance is not null) &&
+                (composed.Region == new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f))
+            );
+        }
 
         graphs.PlaceViews(
+            panesCover: panesCover,
             rendered: ViewRendered,
             sharpness: m_settings.UpscaleSharpness,
             views: m_views

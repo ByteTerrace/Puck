@@ -135,9 +135,63 @@ public sealed partial class RenderGraphRuntime {
             return false;
         }
 
-        Retire(kept: kept);
-
+        // Everything that can fail is prepared before anything of the running set changes: the new graph instances'
+        // nodes, a check of every graph a node will be handed, and the holds the retired instances need. A failure
+        // disposes what was prepared, retires what it acquired, and leaves the running set as it was.
         var nodes = new ShaderPipelineRenderNode?[count];
+        var retired = RetiredBy(kept: kept);
+        var holds = new List<PlannedHold>();
+        var retiring = new RetiredProducer?[retired.Length];
+
+        try {
+            for (var index = 0; (index < count); index++) {
+                if (set.Instances[index].Kind != RenderGraphInstanceKind.Graph) {
+                    continue;
+                }
+
+                nodes[index] = ((kept[index] >= 0)
+                    ? m_nodes[kept[index]]
+                    : CreateNode(
+                        deviceContext: m_device,
+                        hostsOnDirectX: m_hostsOnDirectX,
+                        inFlightFrames: m_inFlightFrames,
+                        name: set.Instances[index].Name,
+                        packages: m_packages
+                    ));
+
+                if (SwappedIn(
+                    graph: effective[index],
+                    old: kept[index]
+                ) is { } pipeline) {
+                    nodes[index]!.RequireSwappable(pipeline: pipeline);
+                }
+            }
+
+            PlanHolds(
+                holds: holds,
+                kept: kept,
+                retired: retired,
+                retiring: retiring
+            );
+        } catch {
+            foreach (var hold in holds) {
+                hold.Abandon();
+            }
+            for (var index = 0; (index < count); index++) {
+                if (kept[index] < 0) {
+                    nodes[index]?.Dispose();
+                }
+            }
+
+            DisposeAll(
+                nodes: [],
+                producers: created
+            );
+
+            throw;
+        }
+
+        // Nothing below fails before the new set runs.
         var current = new Output[count];
         var previous = new Output[count];
 
@@ -151,34 +205,21 @@ public sealed partial class RenderGraphRuntime {
                 ? m_previous[old]
                 : Output.None);
 
-            if (set.Instances[index].Kind != RenderGraphInstanceKind.Graph) {
-                continue;
-            }
-
-            nodes[index] = ((old >= 0)
-                ? m_nodes[old]
-                : CreateNode(
-                    deviceContext: m_device,
-                    hostsOnDirectX: m_hostsOnDirectX,
-                    inFlightFrames: m_inFlightFrames,
-                    name: set.Instances[index].Name,
-                    packages: m_packages
-                ));
-
             // A graph that keeps the instance's pipeline and moves only its inputs rebinds them and builds nothing.
-            if (
-                (effective[index] is { } graph) &&
-                !ReferenceEquals(
-                    objA: graph.Pipeline,
-                    objB: ((old >= 0)
-                        ? m_graphs[old]?.Pipeline
-                        : null)
-                )
-            ) {
-                nodes[index]!.Swap(pipeline: graph.Pipeline);
+            if (SwappedIn(
+                graph: effective[index],
+                old: old
+            ) is { } pipeline) {
+                nodes[index]!.Swap(pipeline: pipeline);
             }
         }
 
+        foreach (var hold in holds) {
+            hold.Apply();
+        }
+
+        var oldNodes = m_nodes;
+        var oldProducers = m_producers;
         var captured = m_set.Instances[m_captureInstance].Name;
 
         m_captureInstance = set.IndexOf(name: captured);
@@ -205,6 +246,13 @@ public sealed partial class RenderGraphRuntime {
         m_standInReads = new string?[count];
         m_unproduced = 0;
         refusal = null;
+
+        Retire(
+            nodes: oldNodes,
+            producers: oldProducers,
+            retired: retired,
+            retiring: retiring
+        );
 
         return true;
     }
@@ -290,12 +338,8 @@ public sealed partial class RenderGraphRuntime {
             right: old.Settings
         )
     );
-    // Disposes every old instance the new set does not keep, after the device has finished every submission that may
-    // sample its output, since a kept consumer's frame in flight may still read it. A kept consumer keeps presenting its
-    // installed graph while a replacement builds, and that graph still reads what it last bound, so a retired instance a
-    // kept consumer bound is held (HoldBinding) and disposed only once every consumer holding it has released it: on
-    // installing a graph that no longer reads it, on a newer binding, or at the consumer's release.
-    private void Retire(int[] kept) {
+    // Which old instances the new set does not keep.
+    private bool[] RetiredBy(int[] kept) {
         var retired = new bool[m_set.Instances.Count];
 
         Array.Fill(
@@ -309,14 +353,26 @@ public sealed partial class RenderGraphRuntime {
             }
         }
 
-        if (!retired.Contains(value: true)) {
-            return;
-        }
-
-        m_device.TryWaitIdle();
-
-        var held = new RetiredProducer?[retired.Length];
-
+        return retired;
+    }
+    // The pipeline a new instance's node is handed: its graph's, unless the node it keeps already has that pipeline.
+    private CompiledShaderPipeline? SwappedIn(RenderGraphRuntimeGraph? graph, int old) => (((graph is { } next) && !ReferenceEquals(
+        objA: next.Pipeline,
+        objB: ((old >= 0)
+            ? m_graphs[old]?.Pipeline
+            : null)
+    ))
+        ? next.Pipeline
+        : null);
+    // Plans the holds a reconfiguration's retired instances need, without changing anything of the running set. A kept
+    // consumer keeps presenting its installed graph while a replacement builds, and that graph samples what the consumer
+    // last bound, so each retired instance a kept consumer has bound is held (HoldBinding) until every consumer holding
+    // it releases it: on installing a graph that no longer reads it, on a newer binding, or at the consumer's release. A
+    // consumer that never bound the name (one that has not rendered) samples nothing of it and holds nothing. A retired
+    // external producer's binding was leased for one frame, so the consumer is handed its latest output once more, bound
+    // for every frame until the hold releases, and the hold retires that acquisition first; a producer with no output
+    // leaves the consumer on a stand-in, as a frame binding it would, and holds nothing.
+    private void PlanHolds(List<PlannedHold> holds, int[] kept, bool[] retired, RetiredProducer?[] retiring) {
         foreach (var consumer in kept) {
             if (
                 (consumer < 0) ||
@@ -326,92 +382,145 @@ public sealed partial class RenderGraphRuntime {
             }
 
             foreach (var binding in m_inputs[consumer]) {
-                if (!retired[binding.Producer]) {
+                if (
+                    !retired[binding.Producer] ||
+                    !node.IsBound(name: binding.Version)
+                ) {
                     continue;
                 }
 
                 if (m_producers[binding.Producer] is { } external) {
-                    HoldExternal(
-                        binding: binding,
+                    if (binding.Kind == ShaderPipelineResourceKind.Buffer) {
+                        continue;
+                    }
+                    if (
+                        !external.TryAcquireOutput(output: out var output) ||
+                        (output.Image.ImageHandle == 0) ||
+                        (output.Image.ImageViewHandle == 0)
+                    ) {
+                        output.Lease.Retire();
+                        holds.Add(item: new PlannedHold(
+                            acquired: default,
+                            consumer: node,
+                            image: StandInFor(format: binding.Format),
+                            name: binding.Version,
+                            producer: null
+                        ));
+
+                        continue;
+                    }
+
+                    var hold = (retiring[binding.Producer] ??= new RetiredProducer(
+                        dispose: external.Dispose,
+                        lost: external.OnDeviceLost,
+                        release: m_retiredProducers
+                    ));
+
+                    hold.Holds++;
+                    holds.Add(item: new PlannedHold(
+                        acquired: output.Lease,
                         consumer: node,
-                        hold: (held[binding.Producer] ??= new RetiredProducer(
-                            dispose: external.Dispose,
-                            lost: external.OnDeviceLost,
-                            release: m_retiredProducers
-                        )),
-                        producer: external
-                    );
+                        image: new ShaderPipelineExternalImage(
+                            Format: PixelFormatOf(format: output.Image.Format),
+                            Height: output.Image.Height,
+                            ImageHandle: output.Image.ImageHandle,
+                            ImageViewHandle: output.Image.ImageViewHandle,
+                            Layout: output.Layout,
+                            Width: output.Image.Width
+                        ),
+                        name: binding.Version,
+                        producer: hold
+                    ));
                 } else if (m_nodes[binding.Producer] is { } producer) {
-                    var hold = (held[binding.Producer] ??= new RetiredProducer(
+                    var hold = (retiring[binding.Producer] ??= new RetiredProducer(
                         dispose: producer.DisposeRetired,
                         lost: null,
                         release: m_retiredProducers
                     ));
 
                     hold.Holds++;
-                    node.HoldBinding(
-                        lease: new GpuImageLease(
-                            ImageViewHandle: 0,
-                            Release: hold.Release
-                        ),
-                        name: binding.Version
-                    );
+                    holds.Add(item: new PlannedHold(
+                        acquired: default,
+                        consumer: node,
+                        image: null,
+                        name: binding.Version,
+                        producer: hold
+                    ));
                 }
             }
         }
+    }
+    // Retires the old set's instances the new set does not keep, once the new set runs: a held one waits for its last
+    // hold, and the rest are disposed after the device has finished every submission that may sample their outputs,
+    // since a kept consumer's frame in flight may still read them. Every disposal is attempted, and the failures are
+    // thrown together after the last.
+    private void Retire(ShaderPipelineRenderNode?[] nodes, IRenderGraphExternalProducer?[] producers, bool[] retired, RetiredProducer?[] retiring) {
+        if (!retired.Contains(value: true)) {
+            return;
+        }
+
+        m_device.TryWaitIdle();
+
+        List<Exception>? failures = null;
 
         for (var old = 0; (old < retired.Length); old++) {
             if (!retired[old]) {
                 continue;
             }
-
-            if (held[old] is { Holds: > 0 } hold) {
+            if (retiring[old] is { Holds: > 0 } hold) {
                 m_retiredProducers.Add(item: hold);
-            } else {
-                m_nodes[old]?.Dispose();
-                m_producers[old]?.Dispose();
+
+                continue;
+            }
+
+            try {
+                nodes[old]?.Dispose();
+                producers[old]?.Dispose();
+            } catch (Exception error) {
+                (failures ??= []).Add(item: error);
             }
         }
-    }
-    // Holds a retired external producer for a kept consumer whose installed graph reads it. Its binding was leased for
-    // one frame, so the consumer is handed the producer's latest output once more, bound for every frame until the hold
-    // releases, and the hold retires that acquisition before the producer is disposed. A producer with no output leaves
-    // the consumer on a stand-in, as a frame binding it would, and holds nothing.
-    private void HoldExternal(Binding binding, ShaderPipelineRenderNode consumer, RetiredProducer hold, IRenderGraphExternalProducer producer) {
-        if (binding.Kind == ShaderPipelineResourceKind.Buffer) {
-            return;
-        }
-        if (!producer.TryAcquireOutput(output: out var output)) {
-            consumer.HoldBinding(
-                image: StandInFor(format: binding.Format),
-                lease: default,
-                name: binding.Version
+
+        if (failures is not null) {
+            throw new AggregateException(
+                innerExceptions: failures,
+                message: "The render graph's new instance set runs, but retiring an old instance failed."
             );
-
-            return;
         }
+    }
 
-        var acquired = output.Lease;
+    // A hold planned for a kept consumer, applied once the new set runs or abandoned with it.
+    private sealed class PlannedHold(ShaderPipelineRenderNode consumer, string name, RetiredProducer? producer, ShaderPipelineExternalImage? image, GpuImageLease acquired) {
+        // Hands the consumer the hold: its binding held as it is, or rebound to the image acquired for it.
+        public void Apply() {
+            if (image is not { } bound) {
+                consumer.HoldBinding(
+                    lease: new GpuImageLease(
+                        ImageViewHandle: 0,
+                        Release: producer!.Release
+                    ),
+                    name: name
+                );
 
-        hold.Holds++;
-        consumer.HoldBinding(
-            image: new ShaderPipelineExternalImage(
-                Format: PixelFormatOf(format: output.Image.Format),
-                Height: output.Image.Height,
-                ImageHandle: output.Image.ImageHandle,
-                ImageViewHandle: output.Image.ImageViewHandle,
-                Layout: output.Layout,
-                Width: output.Image.Width
-            ),
-            lease: new GpuImageLease(
-                ImageViewHandle: output.Image.ImageViewHandle,
-                Release: token => {
-                    acquired.Retire();
-                    hold.Release(token: token);
-                }
-            ),
-            name: binding.Version
-        );
+                return;
+            }
+
+            consumer.HoldBinding(
+                image: bound,
+                lease: ((producer is { } held)
+                    ? new GpuImageLease(
+                        ImageViewHandle: bound.ImageViewHandle,
+                        Release: token => {
+                            acquired.Retire();
+                            held.Release(token: token);
+                        }
+                    )
+                    : default),
+                name: name
+            );
+        }
+        // Retires the acquisition made for a hold that is never applied.
+        public void Abandon() => acquired.Retire();
     }
 
     /// <summary>Gets the instances a reconfiguration retired that are not yet disposed, because a kept consumer's
