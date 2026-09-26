@@ -307,8 +307,9 @@ The capability report has been read too: each backend fills
 `IGpuDeviceContext.Capabilities` (`GpuDeviceCapabilities`) at device creation,
 `world.counters gpu` prints it on a `capabilities` line and in its JSON, and the
 floor and ceiling devices' readings on both backends are recorded under step 14.
-One leg stays open: one build on Linux compared byte for byte, which needs the
-pinned DXC that `setup-dxc` installs.
+One leg stays open, and is not yet proven: one build on Linux compared byte for
+byte with the Windows build of the same commit. CI runs it as `verify.yml`'s
+`shader-bytecode` job (see P7's gate).
 
 P8 is complete but for one item of its check: the generated echo runs on both
 backends for one interface, the `pipeline-echo` canary's own, rather than for
@@ -1787,8 +1788,17 @@ compute pass, each with two frequency groups, has passed its build-time half,
 as the [implementation status](#implementation-status) records, and its GPU
 half has passed: the two-group layout runs on Direct3D 12 and Vulkan inside
 `tests/Puck.Parity/parity.contract.json`'s tolerances, as the `binding` parity
-station (step 16). One leg remains: one build on Linux is compared byte for byte
-with the two on one host.
+station (step 16). One leg remains, not yet proven: one build on Linux compared
+byte for byte with the Windows build of the same commit. The artifacts job
+collects the Windows build's shaders (`puck shaders collect`, the
+`shader-bytecode-windows` artifact) without rebuilding them, and `verify.yml`'s
+`shader-bytecode` job installs the pinned DXC on Ubuntu through `setup-dxc`,
+compiles every shader through the build's own `CompileShaders` target and holds
+each SPIR-V and DXIL output to the Windows one (`puck shaders compare --build`).
+It runs only in CI: on every pull request and every push to `main`, through
+**Release Azure**, or by dispatching **Verify runtime behavior** by hand. The leg
+is proven when that job passes; a difference it names, such as DXIL the Linux
+compiler hashes or signs differently, is the gate's failure toward Slang.
 Both backends' capability reports, read on the floor and ceiling devices, show that
 neither lacks what the grouped contract assumes. The gate still fails toward
 Slang when DXC output is not byte-stable across hosts, or when the second group
@@ -2317,7 +2327,8 @@ destination. A region's staging buffer states its copy (header, run table,
 words), so the region-copy kernel pushes nothing. The SDF engine's groups are
 P7b-20's; after it the 32 screens bind as 32 bindings and one sampler, and
 P12b-8 makes them an array with per-screen filtering. The test fakes
-consolidate as the surface shrinks. Open: the gate's Linux build.
+consolidate as the surface shrinks. Open: the gate's Linux build, which CI's
+`shader-bytecode` job runs and has not yet proven.
 
 ### P8 — The shader package, and one source language
 

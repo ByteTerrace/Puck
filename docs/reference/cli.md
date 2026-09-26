@@ -102,7 +102,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck scan`](#puck-scansource-sweep) | source sweep over the parsed tree: comments, comment smells, synchronization sites, clones. |
 | [`puck schema`](#puck-schemaworlddef-json-schema) | the generated JSON Schema for `puck.world.definition.v1` and the dashboard portal's TypeScript types derived from it, checked and regenerated. |
 | [`puck search`](#puck-searchcontent-search) | ripgrep-shaped content search over a linear-time symbolic-derivatives regex engine ([RE#](../../ACKNOWLEDGMENTS.md)). |
-| [`puck shaders`](#puck-shadersshader-compilation) | `shaders compile` compiles a source stage; `shaders generate` writes or checks the HLSL includes generated from the C# model, every generated shader interface among them; `shaders interface` prints or writes the frame-block declarations a pipeline or shader set reads; `shaders package` writes a pipeline's package with its binaries; `shaders pipeline` validates or compiles connected passes, or loads a package, for both GPU backends. |
+| [`puck shaders`](#puck-shadersshader-compilation) | `shaders collect` and `shaders compare` hand one host's compiled shaders to another and compare them byte for byte; `shaders compile` compiles a source stage; `shaders generate` writes or checks the HLSL includes generated from the C# model, every generated shader interface among them; `shaders interface` prints or writes the frame-block declarations a pipeline or shader set reads; `shaders package` writes a pipeline's package with its binaries; `shaders pipeline` validates or compiles connected passes, or loads a package, for both GPU backends. |
 | [`puck test`](#puck-testtest-worlds) | compiles a `.puck` source's `test` blocks — a world's own, a module's under the arguments a test gives it, and a module's own at every instantiation — into test worlds, boots each through the real `Puck.World` executable, headless, and reads its verdict rows out of the state export the world writes at its own declared export tick. |
 | [`puck vocabulary`](#puck-vocabularyworld-authoring-vocabulary) | the world authoring vocabulary `docs/reference/world-vocabulary.md`, generated from the one construct table the parser, the printer and the language server read, and checked against it. |
 | [`puck wasm`](../../wasm/README.md) | build and refresh the shipped WASM modules. |
@@ -559,6 +559,8 @@ generated atlases preserve source glyph IDs for it.
 ## `puck shaders`—shader compilation
 
 ```sh
+puck shaders collect <directory>
+puck shaders compare <expected> [<actual>] [--build]
 puck shaders compile <source> --out <directory> [--name <name>] [--toolchain <directory>] [--stage compute|vertex|fragment] [--entry <name>]
 puck shaders generate [--check]
 puck shaders interface <source> [--write] [--echo]
@@ -576,6 +578,22 @@ plan returns exit code 1, and compilation errors identify the source location.
 A missing source, an unknown `--stage`, an unreadable file, a
 missing shader tool, or a source edited while it was read is a refusal: exit 2,
 reported as `puck shaders <verb>: <path>: <why>`.
+
+`compare` holds every compiled shader, each `.spv` and `.dxil`, in one tree to
+the same file in another, byte for byte. Both trees are walked for bytecode,
+skipping `artifacts`, `bin`, `obj`, `.git`, `.tmp` and `node_modules`, and
+matched by relative path; a file only one tree holds, or one whose bytes differ
+(named with its first differing byte), fails with exit 1, and a tree holding no
+bytecode is refused with exit 2. `<actual>` is the repository root when absent.
+`--build` first restores and runs the build's own `CompileShaders` target
+(`build/Shaders.targets`) in every tracked project outside `experimental/` that
+declares a vertex, fragment or compute shader item, with the `dxc` on the path,
+so a second host compiles with exactly the first host's arguments. `collect`
+copies the checkout's compiled shaders into one directory at their repository
+paths, the tree `compare` reads on the other host. CI collects the Windows
+build's shaders and compares a Linux DXC build of the same commit against them
+([CI tooling](../development/ci.md)), the binding contract's cross-host gate
+leg.
 
 `generate` writes the HLSL includes the C# model owns:
 `src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-isa.hlsli`, the SDF instruction set's
