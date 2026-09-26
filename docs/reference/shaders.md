@@ -152,15 +152,27 @@ the name must be lowercase ASCII words joined by hyphens
 |--------|------|-------|
 | `extent` | `uint2` | The pass's width and height in pixels: its first output's, else its first input's, else the frame's. In the pass block. |
 | `pointer` | `float2` | The pointer's position during its most recent press over the instance, in the pass's pixels with the origin at the top-left corner; zero before the first press. |
-| `tick` | `uint2` | The deterministic engine tick the frame presents, low word then high word. |
-| `time` | `float` | The instance's presentation clock, in seconds. |
-| `timeDelta` | `float` | Presentation seconds since the previous frame. |
+| `tick` | `uint2` | The deterministic engine tick the frame presents, low word then high word: the state mirror's delivered engine tick. |
+| `time` | `float` | The instance's time, in seconds: the presentation clock through the instance's time scale, pauses, steps and resets. |
+| `timeDelta` | `float` | The seconds the instance's time moved since its previous frame. |
 | `frame` | `uint` | The frames the pass's node submitted before this one—pacing-dependent, presentation only. |
 | `tickRate` | `uint` | Engine ticks per second, the rate `tick` counts in. |
 | `pointerDown` | `uint` | One while the pointer is pressed. |
 | `pointerPresses` | `uint` | How many presses the pointer has made over the instance. |
 | `cameraPosition`, `cameraTarget`, `cameraUp` | `float3` | The paired camera. |
 | `cameraFov` | `float` | The paired camera's vertical field of view in radians; zero when none is paired. |
+
+A World has one presentation clock, its state mirror
+(`WorldStateMirror.PresentedEngineTick`): the engine tick between the last two
+delivered ticks at the frame's interpolation fraction, the moment every eased
+state read presents at. An offscreen World pins the fraction to one, so its
+frames present exactly the delivered tick. The host hands every instance that
+clock in seconds and the delivered tick (`WorldViewGraphHost.PresentedFrame`),
+so no pass reads a wall clock. A pane's own time follows the clock at its
+row's `timeScale`: `pipeline.time` pauses it, sets it or changes the scale, a
+`pipeline.step` advances it by one sixtieth of a second, and a reset starts it
+from zero, each from the frame last presented, so the time a pane showed never
+jumps. An instance no layout slot shows reads the clock itself.
 
 A pass's ports follow its block in the pass group, in document order: each
 input, then a compute pass's outputs. A graphics pass's outputs are
@@ -1302,8 +1314,8 @@ parameters for its one instance; a `package` row takes no override. `overrides` 
 config object, keyed by field. A field the row does not name keeps the default
 the source declares, and the source file itself is never written, so two rows
 that name one source share its defaults and keep their own overrides. `output`
-names the image version the instance shows, and `timeScale` sets its clock
-rate:
+names the image version the instance shows, and `timeScale` sets the rate its
+time follows the presentation clock at:
 
 ```json
 { "name": "ink", "source": "../pipelines/ink.graph.json", "timeScale": 0,

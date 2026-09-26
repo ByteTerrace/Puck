@@ -373,7 +373,7 @@ on P7's grouped binding, and the worlds under the repository's `worlds/` tree,
 the genesis card among them, are not part of the game's build, so their source
 rows compile where DXC is present. Only the `default` variant is built, which
 is all P8 closes with.
-P9's CPU half has landed; its frame-group half is open. Every presentation
+P9's CPU half and its frame-group half have landed. Every presentation
 read of state goes through one state mirror, `WorldStateMirror` in
 `Puck.World.Protocol`: a flat table of slots, each a row ordinal, a key, a
 target flag, and a conversion. When the mirror installs a document it
@@ -425,8 +425,9 @@ frame's interpolation fraction before the program build and the transform
 pack: an easing or advancing slot presents between its previous and current
 tick samples, a plain or cycling slot steps, and the offscreen presentation
 pins the fraction to one. Presentation time is that fraction and the delivered
-tick, computed on the presentation side; nothing writes it into a frame group
-yet. The same moved set reaches the SDF renderer:
+tick: `WorldStateMirror.PresentedEngineTick` is the engine tick between the last
+two deliveries at the frame's fraction, the moment every eased slot presents
+at, and it is the World's one presentation clock. The same moved set reaches the SDF renderer:
 `SdfCompositionFrameSource` keeps its dynamic-transform table across frames,
 emitters repack only owners whose inputs moved or that are still settling, and
 `SdfMovedTransforms` hands each engine the ranges owed since the frame it last
@@ -435,10 +436,15 @@ consumed, so a still frame packs and stages no transform rows, and
 frame source and the one each session view composes for itself. A material
 color still resolves at program build.
 
-A pipeline row reads no state row. Its frame block carries the frame's engine
-tick from the frame context and presentation time from the entry's own
-presentation clock; P9 fills both from the mirror's delivered tick and
-interpolation fraction. Every shipped shader binding declares descriptor set
+A pipeline row reads no state row. Its frame block's `tick` is the mirror's
+delivered engine tick and its `time` the mirror's presented engine tick in
+seconds (`WorldViewGraphHost.PresentedFrame`), which the host hands every graph
+instance each frame and the node writes whole through
+`ShaderPipelineParameterLayout.WriteFrame`; a pane's own time is that clock
+through its row's `timeScale` and the `pipeline.time` and `pipeline.step`
+controls, re-anchored at the frame last presented, never a clock of its own.
+`WorldPresentedFrameLawTests` pins the tick bytes, low word then high word, and
+the time. Every shipped shader binding declares descriptor set
 zero and no shipped source names a Direct3D register space, so the resource
 layout is one flat set with hand-assigned register numbers documented in
 banner comments.
@@ -2388,8 +2394,7 @@ the shipped-world state baselines unmoved and the `rim-drop` and
 `traveller-kit` canaries green; the parity contract re-recorded in the same
 change when the eased default moves a station's pixels.
 
-**Open:** filling the generated frame group's `tick` and `time` from the
-mirror's delivered tick and interpolation fraction; the consumers reading the
+**Open:** the consumers reading the
 manifest's pre-registered slots rather than registering on first read, with a
 body's lease acquiring its templates when the body arrives, which P10's tier law
 needs; the reads the manifest does not yet record — a seat's binding contexts,
@@ -2400,8 +2405,8 @@ no longer binds; and the materials a program bakes at build, which join the
 mirror when the field lattice becomes a region kind. The
 `WorldStateMirrorLawTests`, `WorldPresentationManifestLawTests`,
 `WorldStateReadRoutingLawTests`, `SeatRouteDeliveryLawTests`,
-`WorldWheelRingsLawTests` and `WorldSceneMovedTransformsLawTests` laws cover the
-landed half.
+`WorldWheelRingsLawTests`, `WorldSceneMovedTransformsLawTests` and
+`WorldPresentedFrameLawTests` laws cover what has landed.
 
 ### P10 — Bound rows reach a pass
 
@@ -3236,8 +3241,8 @@ in this group, needs P14's float working targets. P17's CPU half, the bakes and
 their texture codecs, has landed; drawing a bake follows P4 and choosing
 between a bake and the field follows P6.
 
-**Bound state.** P9's CPU half has landed; its frame-group half fills the
-frame group P8 declares. It is written against the state interface of
+**Bound state.** P9's CPU half and its frame-group half, which fills the
+frame group P8 declares, have landed. It is written against the state interface of
 [the presentation view](runtime-and-delivery.md#the-presentation-view), which
 the runtime and delivery programme owns. P10 is last in this group: a bound
 member and an overridden member have to compose by a stated rule, so it needs

@@ -121,6 +121,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     // offscreen view as the base each derives its own submission from. Null before the first Dress.
     private SdfFrame? m_dressedFrame;
     private float m_elapsedSeconds;
+    private double m_presentedSeconds;
     private SdfProgram? m_lastProgram;
     // The no-local-seats fallback's own narration edge (see Dress's tail): true once the "presenting the world
     // camera" line has fired for the CURRENT empty stretch, cleared the instant a seat's view fills m_views again,
@@ -1153,12 +1154,15 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     public Func<int, bool>? ViewRendered { get; set; }
 
     /// <summary>Prepares the render graph's frame before its runtime schedules it: reconciles the document's
-    /// <c>views.graphs</c> rows onto the runtime, then places each view of the world the last composed frame rendered
-    /// in its rect at its render scale and the live upscale sharpness, and, for each graph instance a slot of the last
-    /// composed layout shows, places it in its slot's rect, advances its clock, and hands it this frame's camera, pointer
-    /// and time. A lone view covering the whole display at native scale is not shown: the root then stands for the world
-    /// itself. The views and slots are the ones the last captured frame composed, since the world producer captures its
-    /// frame inside the runtime's schedule, so a layout change places its views and panes one frame later.</summary>
+    /// <c>views.graphs</c> rows onto the runtime, hands every graph instance this frame's presented tick and
+    /// presentation time, then places each view of the world the last composed frame rendered in its rect at its render
+    /// scale and the live upscale sharpness, and, for each graph instance a slot of the last composed layout shows,
+    /// places it in its slot's rect, advances its clock, and hands it this frame's camera, pointer and its own time. The
+    /// tick is the state mirror's delivered engine tick and the time the mirror's presented engine tick at this frame's
+    /// interpolation fraction (one for an offscreen presentation), in seconds, so a pass reads no wall clock. A lone view
+    /// covering the whole display at native scale is not shown: the root then stands for the world itself. The views and
+    /// slots are the ones the last captured frame composed, since the world producer captures its frame inside the
+    /// runtime's schedule, so a layout change places its views and panes one frame later.</summary>
     /// <param name="context">The host's frame context.</param>
     public void PrepareGraph(in FrameContext context) {
         if (m_graphs is not { } graphs) {
@@ -1170,6 +1174,9 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         var width = m_displayWidth;
         var height = m_displayHeight;
         var deltaSeconds = ((float)context.FrameDeltaSeconds);
+        var presented = PresentedFrame(context: in context);
+
+        graphs.Present(frame: in presented);
 
         graphs.PlaceViews(
             rendered: ViewRendered,
@@ -1195,7 +1202,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
                 continue;
             }
 
-            var instanceDeltaSeconds = entry.AdvanceClock(deltaSeconds: deltaSeconds);
+            var instanceDeltaSeconds = entry.AdvanceClock(presentedSeconds: presented.Time);
             var row = WorldDefinitionRows.FindGraph(
                 graphs: m_client.Definition.Views.Graphs,
                 name: name
@@ -1232,19 +1239,36 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
                 region: region,
                 width: width
             );
-            entry.Node.Frame = new ShaderFrameValues(
-                CameraFov: cameraFov,
-                CameraPosition: cameraPos,
-                CameraTarget: cameraTarget,
-                CameraUp: cameraUp,
-                Pointer: entry.Pointer,
-                PointerDown: entry.PointerWasDown,
-                PointerPresses: entry.PointerPresses,
-                Time: entry.ClockSeconds,
-                TimeDelta: instanceDeltaSeconds
-            );
+            entry.Node.Frame = (presented with {
+                CameraFov = cameraFov,
+                CameraPosition = cameraPos,
+                CameraTarget = cameraTarget,
+                CameraUp = cameraUp,
+                Pointer = entry.Pointer,
+                PointerDown = entry.PointerWasDown,
+                PointerPresses = entry.PointerPresses,
+                Time = entry.ClockSeconds,
+                TimeDelta = instanceDeltaSeconds,
+            });
         }
     }
+
+    // The frame values every graph instance presents this frame, at the frame's interpolation fraction, or one for an
+    // offscreen presentation.
+    private ShaderFrameValues PresentedFrame(in FrameContext context) {
+        var frame = WorldViewGraphHost.PresentedFrame(
+            fraction: (PinsStateFraction
+                ? 1f
+                : ((float)context.InterpolationAlpha)),
+            mirror: m_client.StateMirror,
+            previousSeconds: m_presentedSeconds
+        );
+
+        m_presentedSeconds = frame.Time;
+
+        return frame;
+    }
+
     /// <inheritdoc/>
     public void AdvanceBricks(ISdfBrickBakeService bakes) => m_fields.AdvanceBricks(bakes: bakes);
     /// <inheritdoc/>

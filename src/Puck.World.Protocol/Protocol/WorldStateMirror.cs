@@ -70,6 +70,7 @@ public sealed class WorldStateMirror : IWorkCounterSource {
     private Slot[] m_slots = [];
     private int m_slotCount;
     private ulong m_engineTick;
+    private ulong m_previousEngineTick;
     private ulong m_tick;
     private bool m_ticked;
 
@@ -98,8 +99,11 @@ public sealed class WorldStateMirror : IWorkCounterSource {
     public int SlotCount => (m_slotCount - m_freeCount);
     /// <summary>Gets the tick the slots were last read as of.</summary>
     public ulong Tick => m_tick;
-    /// <summary>Gets the engine tick the slots were last read as of.</summary>
+    /// <summary>Gets the engine tick the slots were last read as of: the delivered engine tick a frame presents.</summary>
     public ulong EngineTick => m_engineTick;
+    /// <summary>Gets the engine tick the slots were read as of at the refresh before the latest one, which a moving
+    /// slot's previous sample holds; it equals <see cref="EngineTick"/> after an install and before any refresh.</summary>
+    public ulong PreviousEngineTick => m_previousEngineTick;
     /// <inheritdoc/>
     public ReadOnlySpan<WorkKind> WorkKinds => Kinds;
 
@@ -205,6 +209,7 @@ public sealed class WorldStateMirror : IWorkCounterSource {
         m_installs++;
         m_tick = tick;
         m_engineTick = engineTick;
+        m_previousEngineTick = engineTick;
         m_ticked = true;
         Array.Fill(
             array: m_firstSlotByOrdinal,
@@ -243,8 +248,7 @@ public sealed class WorldStateMirror : IWorkCounterSource {
     /// <param name="stamp">The delivery's stamp.</param>
     public void Refresh(in WorldStateStamp stamp) {
         m_tick = stamp.Tick;
-        m_engineTick = stamp.EngineTick;
-        m_ticked = true;
+        MoveEngineTick(engineTick: stamp.EngineTick);
         RefreshSlots(
             everything: stamp.Everything,
             moved: stamp.MovedRows.Span
@@ -263,8 +267,7 @@ public sealed class WorldStateMirror : IWorkCounterSource {
         }
 
         m_tick = tick;
-        m_engineTick = engineTick;
-        m_ticked = true;
+        MoveEngineTick(engineTick: engineTick);
         RefreshSlots(everything: false, moved: default);
     }
     /// <summary>Presents every moving slot at the frame's position between the previous tick and the current one.</summary>
@@ -281,6 +284,23 @@ public sealed class WorldStateMirror : IWorkCounterSource {
 
             slot.Presented = (slot.Previous + ((slot.Current - slot.Previous) * clamped));
         }
+    }
+    /// <summary>Returns the engine tick a frame presents at a fraction between the previous refresh and the latest one,
+    /// the moment <see cref="Apply"/> presents every moving slot at: <see cref="PreviousEngineTick"/> at zero and
+    /// <see cref="EngineTick"/> at one. It is the one presentation clock a frame's time is read from, a function of
+    /// the delivered ticks and the frame's fraction alone, so an offscreen capture, which pins the fraction to one,
+    /// presents exactly the delivered engine tick.</summary>
+    /// <param name="fraction">The frame's interpolation fraction in <c>[0, 1]</c>; a value outside it is
+    /// clamped.</param>
+    /// <returns>The presented engine tick, fractional between refreshes.</returns>
+    public double PresentedEngineTick(float fraction) {
+        var clamped = Math.Clamp(
+            max: 1f,
+            min: 0f,
+            value: fraction
+        );
+
+        return (m_previousEngineTick + ((m_engineTick - m_previousEngineTick) * ((double)clamped)));
     }
     /// <summary>Returns the value <see cref="Revision"/> held when a slot's current sample last changed, so a consumer
     /// that derived something from a known set of slots re-derives it only when one of them moved since the revision it
@@ -397,6 +417,16 @@ public sealed class WorldStateMirror : IWorkCounterSource {
         value: out value
     );
 
+    // Moves the delivered engine tick forward, keeping the one it replaces as the tick a moving slot's previous sample
+    // holds. An engine tick behind the latest one (a restored checkpoint) starts again from itself.
+    private void MoveEngineTick(ulong engineTick) {
+        m_previousEngineTick = ((m_ticked && (engineTick >= m_engineTick))
+            ? m_engineTick
+            : engineTick
+        );
+        m_engineTick = engineTick;
+        m_ticked = true;
+    }
     private static void Remove(int[] list, ref int count, int slot) {
         for (var index = 0; (index < count); index++) {
             if (list[index] == slot) {

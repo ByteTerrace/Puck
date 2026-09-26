@@ -154,7 +154,8 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
     public (uint Width, uint Height) RequestedExtent => (m_requestedWidth, m_requestedHeight);
     /// <summary>Gets the submitted frame count.</summary>
     public ulong FrameCounter => m_frame;
-    /// <summary>Gets or sets the frame values the host supplies to every pass's frame block.</summary>
+    /// <summary>Gets or sets the frame values the host supplies to every pass's frame block, the presented tick and
+    /// presentation time among them; the node writes them whole each frame it renders and derives none of them.</summary>
     public ShaderFrameValues Frame { get; set; }
     /// <summary>Gets whether a compiled graph has allocated all of its GPU resources.</summary>
     public bool IsReady => ((m_pipeline is not null) && m_ready);

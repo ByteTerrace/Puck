@@ -37,9 +37,29 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
         /// <summary>The currently requested document-relative source.</summary>
         public string Source { get; internal set; } = string.Empty;
-        /// <summary>The non-negative presentation rate multiplier.</summary>
-        public float ClockScale { get; set; } = 1f;
 
+        /// <summary>Gets or sets the non-negative rate the instance's time follows the presentation clock at. A change
+        /// takes effect from the frame last presented, so the instance's time never jumps.</summary>
+        public float ClockScale {
+            get => m_clockScale;
+            set {
+                Rebase();
+                m_clockScale = value;
+            }
+        }
+
+        // The instance's time is a function of the host's one presentation clock, never a clock of its own:
+        // m_clockBase + scale × (presented − m_clockAnchor) while running, m_clockBase while paused. Every control
+        // re-anchors the mapping at the frame last presented, so a change never moves the time already shown.
+        private double m_clockAnchor;
+        private bool m_clockAnchored;
+        private double m_clockBase;
+        private bool m_clockPaused;
+
+        private float m_clockScale = 1f;
+
+        private double m_clockSeconds;
+        private double m_presentedSeconds;
         private long m_changedAt;
         private long m_lastPolledAt;
         private long m_retryAt;
@@ -57,10 +77,24 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         public int CapturesRequested { get; private set; }
         /// <summary>The failure of the most recently reported capture, or <see langword="null"/> when it was written.</summary>
         public string? LastCaptureError { get; private set; }
-        /// <summary>Whether time and feedback advancement are paused.</summary>
-        public bool ClockPaused { get; set; }
-        /// <summary>The presentation clock in seconds.</summary>
-        public double ClockSeconds { get; set; }
+        /// <summary>Gets or sets whether time and feedback advancement are paused.</summary>
+        public bool ClockPaused {
+            get => m_clockPaused;
+            set {
+                Rebase();
+                m_clockPaused = value;
+            }
+        }
+        /// <summary>Gets or sets the instance's time in seconds, the value its passes read as <c>frameGroup.time</c>:
+        /// the host's presentation clock mapped through the instance's scale, pauses, steps and resets. Setting it
+        /// moves the time the next frame presents from.</summary>
+        public double ClockSeconds {
+            get => m_clockSeconds;
+            set {
+                m_clockSeconds = value;
+                Rebase();
+            }
+        }
         /// <summary>Whether a background compilation is still pending installation.</summary>
         public bool IsCompiling => Compilation.IsPending;
         /// <summary>The most recently completed compilation, including any diagnostics.</summary>
@@ -152,6 +186,11 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         }
         internal void ScheduleRetry() => m_retryAt = Stopwatch.GetTimestamp();
 
+        // Re-anchors the time mapping at the frame last presented, holding the time it showed.
+        private void Rebase() {
+            m_clockBase = m_clockSeconds;
+            m_clockAnchor = m_presentedSeconds;
+        }
         private static (DateTime, long) ReadStamp(string path) {
             try {
                 var info = new FileInfo(fileName: path);
@@ -167,24 +206,42 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             }
         }
 
-        /// <summary>Advances this instance once for a produced host frame and returns its shader time delta.</summary>
-        public double AdvanceClock(double deltaSeconds) {
-            Node.Paused = (ClockPaused || (ClockScale == 0));
-            if (!Node.IsReady) { return 0; }
-            double delta;
+        /// <summary>Presents this instance once for a produced host frame at the host's presentation clock and returns
+        /// the seconds its time moved since the frame before. A running instance's time follows the clock at its scale;
+        /// a paused one, or one not yet ready, holds, except that a pending step advances it by exactly one
+        /// development frame.</summary>
+        /// <param name="presentedSeconds">The presentation clock the frame presents at, in seconds: the host state
+        /// mirror's presented engine tick.</param>
+        /// <returns>The seconds the instance's time moved, which its passes read as <c>frameGroup.timeDelta</c>.</returns>
+        public double AdvanceClock(double presentedSeconds) {
+            var previous = m_clockSeconds;
 
-            if (PendingSteps > 0) {
-                PendingSteps--;
-                delta = (1.0 / 60.0);
-                Node.Step();
-            } else {
-                delta = (Node.Paused
-                    ? 0
-                    : (deltaSeconds * ClockScale)
-                );
+            Node.Paused = (m_clockPaused || (m_clockScale == 0));
+            if (
+                !m_clockAnchored ||
+                (presentedSeconds < m_clockAnchor)
+            ) {
+                m_clockAnchor = presentedSeconds;
+                m_clockBase = m_clockSeconds;
+                m_clockAnchored = true;
             }
-            ClockSeconds += delta;
-            return delta;
+            if (!Node.IsReady) {
+                m_clockAnchor = presentedSeconds;
+            } else if (PendingSteps > 0) {
+                PendingSteps--;
+                m_clockBase = (m_clockSeconds + StepSeconds);
+                m_clockAnchor = presentedSeconds;
+                m_clockSeconds = m_clockBase;
+                Node.Step();
+            } else if (Node.Paused) {
+                m_clockAnchor = presentedSeconds;
+            } else {
+                m_clockSeconds = (m_clockBase + (m_clockScale * (presentedSeconds - m_clockAnchor)));
+            }
+
+            m_presentedSeconds = presentedSeconds;
+
+            return (m_clockSeconds - previous);
         }
         /// <summary>Resets time, pending steps, and GPU feedback to their initial values.</summary>
         public void Reset() {
@@ -192,6 +249,11 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             PendingSteps = 0;
             Node.Reset();
         }
+
+        /// <summary>The seconds one <see cref="Step"/> advances the instance's time by: one frame at the standard
+        /// development rate of 60 hertz.</summary>
+        public const double StepSeconds = (1.0 / 60.0);
+
         /// <summary>Pauses and schedules exactly one logical frame at the standard development rate.</summary>
         public void Step() {
             ClockPaused = true;
@@ -331,6 +393,61 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         m_runtime = runtime;
         m_synthesized = synthesized;
         ResetFootprints();
+    }
+    /// <summary>Returns the frame values every graph instance presents at a frame before its own pointer, camera and
+    /// clock, read from the state mirror, the one presentation clock: the mirror's delivered engine tick as
+    /// <c>tick</c>, and its presented engine tick at the frame's interpolation fraction, in seconds, as <c>time</c>,
+    /// with the seconds it moved since the frame before as <c>timeDelta</c>. Nothing here reads a wall clock, so a
+    /// frame at a given delivered tick and fraction presents the same bytes on every run.</summary>
+    /// <param name="mirror">The state mirror the frame presents.</param>
+    /// <param name="fraction">The frame's interpolation fraction in <c>[0, 1]</c>; an offscreen presentation passes
+    /// one.</param>
+    /// <param name="previousSeconds">The time the frame before presented, in seconds; a later time never reads a
+    /// negative delta.</param>
+    /// <returns>The frame values, with no pointer and no paired camera.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="mirror"/> is <see langword="null"/>.</exception>
+    public static ShaderFrameValues PresentedFrame(WorldStateMirror mirror, float fraction, double previousSeconds) {
+        ArgumentNullException.ThrowIfNull(argument: mirror);
+
+        var seconds = (mirror.PresentedEngineTick(fraction: fraction) / EngineTicks.PerSecond);
+
+        return new ShaderFrameValues(
+            CameraFov: 0f,
+            CameraPosition: Vector3.Zero,
+            CameraTarget: Vector3.Zero,
+            CameraUp: Vector3.Zero,
+            Pointer: Vector2.Zero,
+            PointerDown: false,
+            PointerPresses: 0,
+            Tick: mirror.EngineTick,
+            Time: seconds,
+            TimeDelta: Math.Max(
+                val1: 0d,
+                val2: (seconds - previousSeconds)
+            )
+        );
+    }
+    /// <summary>Hands every graph instance the runtime renders for this host the frame values the frame presents: each
+    /// synthesized instance's node and each row's. A pane the frame shows is handed its own pointer, camera and clock
+    /// over them afterwards. Does nothing before a runtime is attached.</summary>
+    /// <param name="frame">The frame values: the presented tick and presentation time, with no pointer and no paired
+    /// camera.</param>
+    public void Present(in ShaderFrameValues frame) {
+        if (m_runtime is not { } runtime) {
+            return;
+        }
+
+        if (m_synthesized is { } synthesized) {
+            foreach (var instance in synthesized.Instances) {
+                if (runtime.NodeOf(instance: instance.Name) is { } node) {
+                    node.Frame = frame;
+                }
+            }
+        }
+
+        foreach (var entry in m_entries.Values) {
+            entry.Node.Frame = frame;
+        }
     }
     /// <summary>Starts a frame before the runtime schedules it: reconciles the accepted <c>views</c> section, installs
     /// complete candidates and polls dependency watches, and clears the previous frame's placements, leaving the

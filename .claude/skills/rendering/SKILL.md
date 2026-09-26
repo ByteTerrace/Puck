@@ -1017,7 +1017,12 @@ binding: a load refuses a module whose reflected bindings differ from its layout
 (`SHADERPIPE_INTERFACE`). The host writes the frame group through
 `ShaderPipelineParameterLayout.WriteFrame` and the extent through `WriteExtent`
 alone, so a new frame value is a row in `ShaderFrameInterface.FrameGroupMembers`
-and a write there, nothing else. `ShaderFrameBlockLawTests` compiles every shipped pipeline source
+and a write there, nothing else. The node writes `ShaderPipelineRenderNode.Frame`
+whole and derives no value of it: `tick` and `time` come from the World's one
+presentation clock, the state mirror (`WorldViewGraphHost.PresentedFrame` over
+`WorldStateMirror.PresentedEngineTick`), never the frame context or a wall
+clock, and a pane's time is that clock through its `timeScale` and the
+`pipeline.time` controls (`WorldPresentedFrameLawTests`). `ShaderFrameBlockLawTests` compiles every shipped pipeline source
 and holds the offsets DXC assigned in both bytecodes to the host writer's, so a
 new shipped pass joins its data; `ShaderInterfaceEcho` generates the echo pass
 the `pipeline-echo` canary runs with `pipeline.sentinels` on.
