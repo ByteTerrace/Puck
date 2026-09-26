@@ -294,7 +294,11 @@ These are one-line cautions; the owning pages hold the derivations.
   `MachineSource`, a `MachineVideoSourceUpload` (`Puck.Hosting`) that writes the
   output's latest frame (`IMachineVideoOutput.WriteFrame`, RGBA8 or `Indexed8`)
   into the instance's region once per completed tick; a machine never uploads
-  an image of its own. Such an imported source hands out an
+  an image of its own. An upload's `Descriptor` is what it declares now: when
+  it moves (a machine replaced by one of another extent or format), the runtime
+  rebuilds that source before the frame schedules
+  (`RenderGraphRuntime.RebuildDriftedSources`, the running set reconfigured
+  onto itself, where a drifted source is not kept), never faults the old one. Such an imported source hands out an
   image view alone (an empty `RenderGraphExternalOutput.Image`, the view on the
   lease), so only an external producer samples it, and a graph instance
   reading it draws a stand-in (`RenderGraphRuntime.Bind`).

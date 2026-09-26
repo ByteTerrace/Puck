@@ -14,7 +14,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
     private const string MachineSource = "source.machine";
 
     // A machine source read by two screens, over a fake output.
-    private static (RenderGraphRuntime Runtime, MachineVideoSourceUpload Upload) MachineScene(FakePipelineGpu gpu, FakeMachineOutput output) {
+    private static (RenderGraphRuntime Runtime, MachineVideoSourceUpload Upload) MachineScene(FakePipelineGpu gpu, IMachineVideoOutput output) {
         var recorders = new Recorders();
         MachineVideoSourceUpload? upload = null;
 
@@ -195,6 +195,86 @@ public sealed partial class RenderGraphRuntimeLawTests {
         }
     }
     [Fact]
+    public void ARetainedMachineSourceWhoseOutputChangesExtentRebuildsAndConvertsAtTheNewExtent() {
+        var output = new ResizableMachineOutput {
+            Height = ((int)SourceExtent),
+            Width = ((int)SourceExtent),
+        };
+
+        var (runtime, upload) = MachineScene(
+            gpu: new FakePipelineGpu(),
+            output: output
+        );
+
+        using (runtime) {
+            var source = runtime.Instances.IndexOf(name: "pattern");
+            var index = Settle(runtime: runtime);
+            var before = runtime.Node(instance: source);
+
+            // The machine is replaced by one whose output has another extent; the source keeps its name and settings.
+            output.Width = 24;
+            output.Height = 20;
+
+            var writes = output.Writes;
+
+            Assert.True(
+                condition: SpinWait.SpinUntil(
+                    condition: () => {
+                        Produce(
+                            index: index,
+                            runtime: runtime,
+                            tick: index
+                        );
+                        index++;
+
+                        return (runtime.IsSettled && (output.Writes > writes));
+                    },
+                    timeout: TimeSpan.FromSeconds(value: 30)
+                ),
+                userMessage: "The machine source never converted at its output's new extent."
+            );
+
+            var header = ImageSourceUploadLayout.HeaderOf(
+                color: ImageColorEncoding.Srgb,
+                format: ImagePixelFormat.R8G8B8A8Unorm,
+                height: 20U,
+                width: 24U
+            );
+            var plan = runtime.Graph(instance: source)!.Pipeline.Plan;
+
+            // The source was made again for the new extent under its kept name: a new upload and node, and a region and
+            // image of that extent, converted and read by both screens on the next completed tick.
+            var rebuilt = Assert.IsType<MachineVideoSourceUpload>(@object: runtime.Source(instance: source));
+
+            Assert.NotSame(actual: rebuilt, expected: upload);
+            Assert.NotSame(expected: before, actual: runtime.Node(instance: source));
+            Assert.Equal(expected: (24U, 20U), actual: (rebuilt.Descriptor!.Width, rebuilt.Descriptor.Height));
+            Assert.Null(@object: rebuilt.Fault);
+            Assert.Equal(
+                actual: plan.FindResource(name: RenderGraphPackageCatalog.SourceRegion)!.Declaration.SizeBytes,
+                expected: ((ulong)ImageSourceUploadLayout.ByteCount(header: in header))
+            );
+
+            var submitted = runtime.Node(instance: source).FrameCounter;
+
+            Produce(
+                index: index,
+                runtime: runtime,
+                tick: index
+            );
+            Assert.Equal(expected: 1UL, actual: (runtime.Node(instance: source).FrameCounter - submitted));
+            Assert.Equal(
+                actual: runtime.Latest!.Renders.Count(predicate: rendered => (rendered == source)),
+                expected: 1
+            );
+
+            var rgba = new byte[((24 * 20) * 4)];
+
+            Assert.True(condition: ((IImageSourceReference)rebuilt).TryWriteReference(rgba: rgba, stamp: out _));
+            Assert.Equal(expected: output.Rgba(), actual: rgba);
+        }
+    }
+    [Fact]
     public void AMachineSourceWhoseOutputStopsRunningFaultsByNameAndWritesNothing() {
         var output = new FakeMachineOutput(format: ImagePixelFormat.R8G8B8A8Unorm);
         var running = true;
@@ -238,6 +318,34 @@ public sealed partial class RenderGraphRuntimeLawTests {
         );
     }
 
+    // An RGBA8 machine output whose extent a test changes, as a machine replaced by another would; each pixel carries its
+    // coordinates.
+    private sealed class ResizableMachineOutput : IMachineVideoOutput {
+        public Vector3 EmittedLight => Vector3.Zero;
+        public ImagePixelFormat Format => ImagePixelFormat.R8G8B8A8Unorm;
+        public int Height { get; set; }
+        public int Width { get; set; }
+        public int Writes { get; private set; }
+
+        public byte[] Rgba() {
+            var rgba = new byte[((Width * Height) * 4)];
+
+            for (var pixel = 0; (pixel < (Width * Height)); pixel++) {
+                rgba[(pixel * 4)] = ((byte)(pixel % Width));
+                rgba[((pixel * 4) + 1)] = ((byte)(pixel / Width));
+                rgba[((pixel * 4) + 2)] = ((byte)Width);
+                rgba[((pixel * 4) + 3)] = 0xFF;
+            }
+
+            return rgba;
+        }
+        public long WriteFrame(Span<byte> region) {
+            Writes++;
+            Rgba().CopyTo(destination: region[ImageSourceUploadLayout.HeaderBytes..]);
+
+            return Writes;
+        }
+    }
     // A SourceExtent-square machine output whose frame is a function of its sequence: RGBA8 pixels, or indices into a
     // fixed palette.
     private sealed class FakeMachineOutput(ImagePixelFormat format) : IMachineVideoOutput {

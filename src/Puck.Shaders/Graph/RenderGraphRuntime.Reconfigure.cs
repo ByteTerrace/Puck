@@ -87,10 +87,11 @@ public sealed partial class RenderGraphRuntime {
             var instance = set.Instances[index];
             var old = m_set.IndexOf(name: instance.Name);
 
+            // An uploaded source is kept only while its upload still declares what its graph was made for.
             kept[index] = (((old >= 0) && Keeps(
                 instance: instance,
                 old: m_set.Instances[old]
-            ))
+            ) && !(m_sources[old]?.Drifted ?? false))
                 ? old
                 : -1);
             effective[index] = (graphs[index] ?? ((kept[index] >= 0)

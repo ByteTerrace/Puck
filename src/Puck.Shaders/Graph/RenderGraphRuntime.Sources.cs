@@ -288,11 +288,43 @@ public sealed partial class RenderGraphRuntime {
             Sources = m_sourceStates,
         });
     }
+    // Rebuilds every uploaded source whose upload now declares another descriptor than its graph was made for, before the
+    // frame schedules: the running set reconfigured onto itself, which keeps every other instance and makes the drifted
+    // sources' graphs, regions and nodes again from what their uploads declare now. Nothing allocates while no source
+    // drifted.
+    private void RebuildDriftedSources() {
+        var drifted = false;
+
+        foreach (var source in m_sources) {
+            drifted |= (source?.Drifted ?? false);
+        }
+
+        if (!drifted) {
+            return;
+        }
+
+        if (!TryReconfigure(
+            graphs: new RenderGraphRuntimeGraph?[m_set.Instances.Count],
+            refusal: out var refusal,
+            root: Root,
+            set: m_set
+        )) {
+            throw new InvalidOperationException(message: $"The running set refused its own reconfiguration while rebuilding a drifted source: {refusal.Message}");
+        }
+    }
 
     // One uploaded source: its upload, the graph its descriptor names, and the region the upload writes, which the node
     // owns once it is bound and releases on device loss, when the next render binds a new one.
     private sealed class SourceGraph(IRenderGraphSourceUpload upload, RenderGraphRuntimeGraph? graph, ImageSourceUploadHeader header, string name, string? fault) : IDisposable {
+        // The descriptor the graph and region were made for.
+        private readonly ImageSourceDescriptor? m_built = upload.Descriptor;
         private readonly RenderGraphSourceRegion m_region = new(header: header);
+
+        // Whether the upload declares another descriptor now than the graph was made for, so the source is rebuilt.
+        public bool Drifted => !Equals(
+            objA: Upload.Descriptor,
+            objB: m_built
+        );
 
         public string? Fault { get; } = fault;
         public RenderGraphRuntimeGraph? Graph { get; } = graph;

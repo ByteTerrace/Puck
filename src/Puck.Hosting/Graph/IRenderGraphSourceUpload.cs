@@ -10,9 +10,11 @@ namespace Puck.Hosting;
 /// region, writes its header once, and asks for the planes each time the instance's cadence renders it. Every member
 /// runs on the thread that produces frames.</summary>
 public interface IRenderGraphSourceUpload : IDisposable {
-    /// <summary>Gets what the producer declares for the source: its format, color encoding, extent and cadence, which fix
-    /// the region's layout and the conversion pass for the upload's life, or <see langword="null"/> when the producer
-    /// refused to open it (<see cref="Fault"/>).</summary>
+    /// <summary>Gets what the producer declares for the source now: its format, color encoding, extent and cadence, which
+    /// fix the region's layout and the conversion pass, or <see langword="null"/> while the producer has no image to
+    /// declare (<see cref="Fault"/>). A declaration that changes (a machine replaced by one with another extent) makes the
+    /// runtime rebuild the source's conversion graph and region from the new one before the next frame renders it, so
+    /// reading it is cheap and allocates nothing while it holds.</summary>
     ImageSourceDescriptor? Descriptor { get; }
     /// <summary>Gets why the source has no image, naming its producer, or <see langword="null"/> while it has one.</summary>
     string? Fault { get; }
