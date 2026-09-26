@@ -5,7 +5,7 @@ using Puck.SignedDistance;
 namespace Puck.SdfVm;
 
 public sealed partial class SdfWorldEngine {
-    // upload → sky → mask → beam → cull-args → primary → surface → ambient → views → composite.
+    // upload → (per view: sky → mask → beam → cull-args → primary → surface → ambient → views) → composite.
     // The hit passes share the indirect bbox and have barriers between consumers; output uses its consumer layout.
     private void Record(uint viewportCount) {
         var recorder = m_gpu.Recorder;
@@ -110,14 +110,21 @@ public sealed partial class SdfWorldEngine {
         // which re-reads the RETAINED (single, ring-shared) views source textures the previous frame wrote and
         // re-composites them into the swapchain-bound output. Pixel-identical to a full re-render of these inputs;
         // the top-of-frame cross-frame barrier already orders this read after that previous frame's writes.
-        if (!m_skipThisFrame) {
+        m_pushConstant.AsSpan().CopyTo(destination: m_viewPush);
+
+        var viewPushWords = MemoryMarshal.Cast<byte, uint>(span: m_viewPush.AsSpan());
+
+        // Each view renders through its own dispatch set, sky through views, one deep in Z: the set's push names its view
+        // (CompositeParams.viewBase), and the buffer hazards between one set's reads and the next set's writes are the
+        // frame buffer plan's, recorded by RecordBufferBarriers as for any pass order.
+        for (var view = 0u; ((view < viewportCount) && !m_skipThisFrame); view++) {
+            viewPushWords[ViewBaseWord] = view;
             m_work.EnterPass(pass: SkyPass);
 
-            // Sky pre-pass FIRST, before any tile is culled: fills every pixel of every non-child viewport's
-            // render-dims source texture with the authored sky. Direct (not indirect) over a fixed
-            // (imageExtent.x, imageExtent.y, viewportCapacity) grid — the largest any view's render-dims rect can
-            // reach, per-thread bounds-checked against its own view's actual rectDims, matching the beam/instance-cull
-            // dispatch style. Reuses Stage 1's own descriptor set (m_viewsSets) and push constant; a beam-culled
+            // Sky pre-pass FIRST, before any tile is culled: fills every pixel of the set's view's render-dims source
+            // texture with the authored sky. Direct (not indirect) over a fixed (imageExtent.x, imageExtent.y, 1) grid
+            // — the largest the view's render-dims rect can reach, per-thread bounds-checked against its actual
+            // rectDims, matching the beam/instance-cull dispatch style. Reuses Stage 1's own descriptor set (m_viewsSets) and push constant; a beam-culled
             // tile's pixel is otherwise never touched by any later pass, so this is the only writer that reaches it.
             RecordBufferBarriers(
                 commandBuffer: commandBuffer,
@@ -142,7 +149,7 @@ public sealed partial class SdfWorldEngine {
             recorder.PushConstants(
                 bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
-                data: m_pushConstant,
+                data: m_viewPush,
                 offset: 0,
                 pipelineLayoutHandle: m_skyPipeline.LayoutHandle,
                 stageFlags: GpuShaderStage.Compute
@@ -151,7 +158,7 @@ public sealed partial class SdfWorldEngine {
                 commandBufferHandle: commandBuffer,
                 groupCountX: ((m_width + (WorkgroupEdge - 1)) / WorkgroupEdge),
                 groupCountY: ((m_height + (WorkgroupEdge - 1)) / WorkgroupEdge),
-                groupCountZ: viewportCount
+                groupCountZ: 1
             );
             recorder.EndDebugGroup(
                 commandBufferHandle: commandBuffer
@@ -169,7 +176,7 @@ public sealed partial class SdfWorldEngine {
                 sourceStageMask: GpuStage.ComputeShader
             );
 
-            // Instance-cull pass (mask-first): one invocation per (tile, viewport) — bins the program's instances
+            // Instance-cull pass (mask-first): one invocation per tile of the set's view — bins the program's instances
             // against each tile's cone into the per-tile mask (the uniform-grid walk, or the flat loop when the program
             // packs no grid). Its OWN kernel so its register footprint never taxes the cone march's occupancy.
             RecordBufferBarriers(
@@ -195,7 +202,7 @@ public sealed partial class SdfWorldEngine {
             recorder.PushConstants(
                 bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
-                data: m_pushConstant,
+                data: m_viewPush,
                 offset: 0,
                 pipelineLayoutHandle: m_instanceCullPipeline.LayoutHandle,
                 stageFlags: GpuShaderStage.Compute
@@ -204,7 +211,7 @@ public sealed partial class SdfWorldEngine {
                 commandBufferHandle: commandBuffer,
                 groupCountX: ((m_tileGridX + (WorkgroupEdge - 1)) / WorkgroupEdge),
                 groupCountY: ((m_tileGridY + (WorkgroupEdge - 1)) / WorkgroupEdge),
-                groupCountZ: viewportCount
+                groupCountZ: 1
             );
             recorder.EndDebugGroup(
                 commandBufferHandle: commandBuffer
@@ -213,7 +220,7 @@ public sealed partial class SdfWorldEngine {
             m_work.LeavePass();
             m_work.EnterPass(pass: BeamPass);
 
-            // Tile-cull prepass: one invocation per (tile, viewport), cone-marching the tile-MASKED field.
+            // Tile-cull prepass: one invocation per tile of the set's view, cone-marching the tile-MASKED field.
             RecordBufferBarriers(
                 commandBuffer: commandBuffer,
                 pass: SdfFramePass.Beam
@@ -237,7 +244,7 @@ public sealed partial class SdfWorldEngine {
             recorder.PushConstants(
                 bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
-                data: m_pushConstant,
+                data: m_viewPush,
                 offset: 0,
                 pipelineLayoutHandle: m_beamPipeline.LayoutHandle,
                 stageFlags: GpuShaderStage.Compute
@@ -246,7 +253,7 @@ public sealed partial class SdfWorldEngine {
                 commandBufferHandle: commandBuffer,
                 groupCountX: m_tileGridX,
                 groupCountY: m_tileGridY,
-                groupCountZ: viewportCount
+                groupCountZ: 1
             );
             recorder.EndDebugGroup(
                 commandBufferHandle: commandBuffer
@@ -281,7 +288,7 @@ public sealed partial class SdfWorldEngine {
             recorder.PushConstants(
                 bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
-                data: m_pushConstant,
+                data: m_viewPush,
                 offset: 0,
                 pipelineLayoutHandle: m_cullArgsPipeline.LayoutHandle,
                 stageFlags: GpuShaderStage.Compute
@@ -360,7 +367,7 @@ public sealed partial class SdfWorldEngine {
             recorder.PushConstants(
                 bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
-                data: m_pushConstant,
+                data: m_viewPush,
                 offset: 0,
                 pipelineLayoutHandle: viewsPipeline.LayoutHandle,
                 stageFlags: GpuShaderStage.Compute
@@ -375,6 +382,9 @@ public sealed partial class SdfWorldEngine {
             );
 
             m_work.LeavePass();
+        }
+
+        if (!m_skipThisFrame) {
             m_work.EnterPass(pass: CompositePass);
 
             // Make Stage 1's source-texture writes visible to Stage 2's reads.

@@ -125,6 +125,42 @@ public sealed class SdfWorldEngineWorkLawTests {
             actual: rig.Report()
         );
     }
+    // Each view renders through its own dispatch set: two views record every pass from sky through views twice, each
+    // with its own push, while the upload before them and the composite after them run once.
+    [Fact]
+    public void EachViewRendersThroughItsOwnDispatchSet() {
+        using var rig = new Rig(
+            cadence: false,
+            views: 2
+        );
+
+        _ = rig.Engine.RenderFrame(frame: rig.Frame);
+
+        var lines = rig.Report().Split(separator: '\n');
+
+        foreach (var pass in ((ReadOnlySpan<string>)["sky", "mask", "beam", "cull-args"])) {
+            Assert.StartsWith(
+                actualString: lines.Single(predicate: line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: $"work {pass} executed:")),
+                expectedStartString: $"work {pass} executed: dispatches=2 dispatches.indirect=0"
+            );
+        }
+        foreach (var pass in ((ReadOnlySpan<string>)["primary", "surface", "ambient", "views"])) {
+            Assert.StartsWith(
+                actualString: lines.Single(predicate: line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: $"work {pass} executed:")),
+                expectedStartString: $"work {pass} executed: dispatches=0 dispatches.indirect=2"
+            );
+        }
+        foreach (var pass in ((ReadOnlySpan<string>)["sky", "mask", "beam", "cull-args", "primary", "surface", "ambient", "views"])) {
+            Assert.Contains(
+                expectedSubstring: " push-constants=72 ",
+                actualString: lines.Single(predicate: line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: $"work {pass} executed:"))
+            );
+        }
+        Assert.StartsWith(
+            actualString: lines.Single(predicate: static line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: "work composite executed:")),
+            expectedStartString: "work composite executed: dispatches=0 dispatches.indirect=1"
+        );
+    }
     [Fact]
     public void ACadenceSkippedFrameMarksItsSkippedPassesAndCountsTheRest() {
         using var rig = new Rig(cadence: true);
@@ -227,12 +263,12 @@ public sealed class SdfWorldEngineWorkLawTests {
     // whole first copy (the 820 KB decal table among them), each with its header and one run-table entry; a staged
     // region's device-local buffer is shared by the ring slots, so the second frame writes nothing.
     private const string RenderedFrame =
-        "work submission=7 revision=1\nwork upload executed: dispatches=8 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=8 binds.pipeline=8 binds.descriptor-set=8 push-constants=0 descriptor-writes=0 uploads.host-visible=835056 clears=0\nwork sky executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=1 push-constants=32 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork mask executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=1 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=1 push-constants=32 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork beam executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=1 binds.pipeline=1 binds.descriptor-set=1 push-constants=32 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork cull-args executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=1 binds.pipeline=1 binds.descriptor-set=1 push-constants=32 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork primary executed: dispatches=0 dispatches.indirect=1 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=2 binds.pipeline=1 binds.descriptor-set=1 push-constants=32 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork surface executed: dispatches=0 dispatches.indirect=1 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=1 binds.pipeline=1 binds.descriptor-set=1 push-constants=32 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork ambient executed: dispatches=0 dispatches.indirect=1 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=1 binds.pipeline=1 binds.descriptor-set=1 push-constants=32 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork views executed: dispatches=0 dispatches.indirect=1 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=1 binds.pipeline=1 binds.descriptor-set=1 push-constants=32 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork composite executed: dispatches=0 dispatches.indirect=1 draws=0 render-passes=0 command-buffers=0 barriers.image=1 barriers.memory=1 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=1 push-constants=112 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=3 barriers.memory=1 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=43 uploads.host-visible=0 clears=0\n";
+        "work submission=7 revision=1\nwork upload executed: dispatches=8 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=8 binds.pipeline=8 binds.descriptor-set=8 push-constants=0 descriptor-writes=0 uploads.host-visible=835056 clears=0\nwork sky executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=1 push-constants=36 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork mask executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=1 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=1 push-constants=36 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork beam executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=1 binds.pipeline=1 binds.descriptor-set=1 push-constants=36 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork cull-args executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=1 binds.pipeline=1 binds.descriptor-set=1 push-constants=36 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork primary executed: dispatches=0 dispatches.indirect=1 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=2 binds.pipeline=1 binds.descriptor-set=1 push-constants=36 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork surface executed: dispatches=0 dispatches.indirect=1 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=1 binds.pipeline=1 binds.descriptor-set=1 push-constants=36 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork ambient executed: dispatches=0 dispatches.indirect=1 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=1 binds.pipeline=1 binds.descriptor-set=1 push-constants=36 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork views executed: dispatches=0 dispatches.indirect=1 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=1 binds.pipeline=1 binds.descriptor-set=1 push-constants=36 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork composite executed: dispatches=0 dispatches.indirect=1 draws=0 render-passes=0 command-buffers=0 barriers.image=1 barriers.memory=1 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=1 push-constants=112 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=3 barriers.memory=1 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=43 uploads.host-visible=0 clears=0\n";
     private const string SkippedFrame =
         "work submission=8 revision=1\nwork upload executed: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork sky skipped\nwork mask skipped\nwork beam skipped\nwork cull-args skipped\nwork primary skipped\nwork surface skipped\nwork ambient skipped\nwork views skipped\nwork composite executed: dispatches=0 dispatches.indirect=1 draws=0 render-passes=0 command-buffers=0 barriers.image=1 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=1 push-constants=112 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=1 barriers.memory=1 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=43 uploads.host-visible=0 clears=0\n";
 
     private sealed class Rig : IDisposable {
-        public Rig(bool cadence, GpuWorkLedger? ledger = null, int brickPoolVoxelCapacity = 0) {
+        public Rig(bool cadence, GpuWorkLedger? ledger = null, int brickPoolVoxelCapacity = 0, int views = 1) {
             var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version);
 
             Gpu = gpu;
@@ -275,32 +311,33 @@ public sealed class SdfWorldEngineWorkLawTests {
                 options: new SdfWorldEngineOptions(
                     BrickPoolVoxelCapacity: brickPoolVoxelCapacity,
                     Program: program,
-                    ViewportCapacity: 1,
+                    ViewportCapacity: ((uint)views),
                     WorkLedger: owned
                 ),
                 pipelines: Pipelines,
                 regionCopy: RegionCopy,
                 width: Extent
             );
+            // Side by side: each view takes an equal column of the extent.
             Frame = new SdfFrame(
                 Program: program,
                 ProgramChanged: false,
                 Time: 0f,
-                Views: [new SdfViewSnapshot(
+                Views: [.. Enumerable.Range(count: views, start: 0).Select(selector: view => new SdfViewSnapshot(
                     Camera: CameraSnapshot.LookAt(
                         fieldOfViewRadians: 1f,
                         position: new Vector3(x: 0f, y: 0f, z: -5f),
                         target: Vector3.Zero,
                         viewportHeight: Extent,
-                        viewportWidth: Extent
+                        viewportWidth: (Extent / ((uint)views))
                     ),
                     Region: new NormalizedRect(
                         Height: 1f,
-                        Width: 1f,
-                        X: 0f,
+                        Width: (1f / views),
+                        X: (((float)view) / views),
                         Y: 0f
                     )
-                )]
+                ))]
             ) {
                 EnableCadenceGate = cadence,
             };

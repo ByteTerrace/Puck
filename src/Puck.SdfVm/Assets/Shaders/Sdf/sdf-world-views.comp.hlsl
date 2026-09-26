@@ -59,7 +59,9 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         return;
     }
 
-    if (id.z >= params.viewportCount) {
+    uint viewIndex = worldViewOf(id.z);
+
+    if (viewIndex >= params.viewportCount) {
         return;
     }
 
@@ -67,14 +69,14 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     // pixels) so this invocation addresses the bbox's pixel rather than the frame's top-left.
     uint2 pixel = ((uint2(cullBounds[0], cullBounds[1]) * 8u) + id.xy);
 
-    ViewportData view = viewports[id.z];
+    ViewportData view = viewports[viewIndex];
 
     // The symmetry-LOD origin: this viewport's camera (the per-sample wallpaper LOD rule measures from it).
     sdfLodOrigin = view.position.xyz;
     // The per-invocation program-layout cache (sdf-vm.hlsli): primary/shadow marches, AO taps and normal queries
     // repeatedly call the field evaluators. Decode once for this invocation before renderView runs.
     sdfProgramLayout = sdfLoadProgramLayout();
-    sdfPartBoundsViewport = id.z;
+    sdfPartBoundsViewport = viewIndex;
 
     // The RENDER extent: the output rect reduced by the view's render scale (worldRenderDims — the identical integer
     // derivation the beam/instance-cull tile coverage and Stage 2's upsample use). The ray grid spans the SAME frustum
@@ -91,7 +93,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     float2 localUv = ((float2(pixel) + 0.5) / float2(rectDims));
     uint2 tileCoord = (clampedPixel / WorldTileSize);
-    uint tileIndex = worldTileIndex(id.z, tileCoord, params.tileGrid);
+    uint tileIndex = worldTileIndex(viewIndex, tileCoord, params.tileGrid);
     float marchStart = (active ? tiles[worldTileMarchStartIndex(tileIndex)] : TileEmpty);
     // The four-bound teleport's proven-empty gap for this tile (planes 1/2; sdf-beam wrote them). firstExit = the
     // far distance when no gap was proven — the teleport in renderView is then a dead branch.
@@ -114,7 +116,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     // conservative silhouette, in the same direction as the Lipschitz clamp's bias.
     float pixelFootprint = ((2.0 * view.right.w) / max(float(rectDims.y), 1.0));
 
-    float3 color = renderView(view, localUv, marchStart, firstExit, secondEntry, farBound, instanceMaskBase, pixelFootprint, pixel, id.z, lane, active);
+    float3 color = renderView(view, localUv, marchStart, firstExit, secondEntry, farBound, instanceMaskBase, pixelFootprint, pixel, viewIndex, lane, active);
 
     if (!active) {
         return;
@@ -125,6 +127,6 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     // +-0.5 LSB from the integer R2 dither, so BOTH backends add the identical pattern and cross-backend parity holds.
     color += ((sdfR2Dither(pixel) - 0.5) * DitherQuantum);
 
-    sources[id.z][pixel] = float4(color, 1.0);
+    sources[viewIndex][pixel] = float4(color, 1.0);
 #endif
 }

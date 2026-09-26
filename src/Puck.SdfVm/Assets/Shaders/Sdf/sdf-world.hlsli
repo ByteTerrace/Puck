@@ -45,14 +45,22 @@ uint2 worldRenderDims(uint2 rectDims, float renderScaleQ) {
 struct CompositeParams {
     uint2 imageExtent;   // output image size in pixels
     uint2 tileGrid;      // tiles per viewport (row, column) — the cull buffer's per-viewport stride
-    uint viewportCount;
+    uint viewportCount;  // every view this frame renders; the per-view buffer strides, whichever view one set renders
     uint screenMask;     // bit s set => screen source slot s is bound this frame (Stage 1 only; unused elsewhere)
     uint instanceMaskWordCount; // the LIVE uploaded program's derived per-tile mask width (SdfProgram.InstanceMaskWordCount), pushed per frame
     // The deterministic tick clock star twinkle reads; cloud motion is baked into the environment rows. Stage 1 only.
     // KEEP IN SYNC with SdfFrame.SampleIndex.
     uint sampleIndex;
+    // The view this dispatch set renders. Each view renders through its own set of dispatches, one deep in Z, so a
+    // kernel's view is worldViewOf(id.z). KEEP IN SYNC with SdfWorldEngine.ViewBaseWord.
+    uint viewBase;
 };
 [[vk::push_constant]] ConstantBuffer<CompositeParams> params;
+
+// The view a dispatch-set invocation renders.
+uint worldViewOf(uint z) {
+    return (params.viewBase + z);
+}
 
 #if defined(SDF_PRIMARY_PASS) || defined(SDF_PRIMARY_READ)
 // The per-pixel visibility record the hit passes write and views shades (sdf-visibility.hlsli owns its layout).
