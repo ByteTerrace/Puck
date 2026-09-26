@@ -5,7 +5,7 @@ using Puck.SignedDistance;
 namespace Puck.SdfVm;
 
 public sealed partial class SdfWorldEngine {
-    /// <summary>Reverts screen slot <paramref name="screenIndex"/> to the image/procedural path (clears its decal
+    /// <summary>Reverts screen slot <paramref name="screenIndex"/> to the image or unbound-glass path (clears its decal
     /// descriptor's gridCols to 0 — the shader's "no decal" gate). A no-op if the slot carried no decal.</summary>
     /// <param name="screenIndex">The screen slot (0..<see cref="MaxScreenSurfaces"/>-1).</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is out of range.</exception>
@@ -21,7 +21,7 @@ public sealed partial class SdfWorldEngine {
             return;
         }
 
-        // gridCols 0 => inert (the image/procedural path applies).
+        // gridCols 0 => inert (the image or unbound-glass path applies).
         ReadOnlySpan<uint> cleared = [0u, 0u, 0u, 0u];
 
         _ = m_decalRegion.Write(
@@ -99,7 +99,7 @@ public sealed partial class SdfWorldEngine {
     /// <c>sdfSampleGlyphDecal</c>). The carrier geometry is the same screen-surface frame the image path uses (declared
     /// by <see cref="SdfProgramBuilder.ScreenSlab(Vector3, float, Vector3, Vector3, Vector3, int, SdfBlendOp, float)"/>);
     /// a glyph atlas must be uploaded (<see cref="SetGlyphAtlas"/>) for the letters to resolve. Re-set every frame the
-    /// text changes; <see cref="ClearScreenDecal"/> reverts the slot to the image/procedural path.</summary>
+    /// text changes; <see cref="ClearScreenDecal"/> reverts the slot to the image or unbound-glass path.</summary>
     /// <param name="screenIndex">The screen slot (0..<see cref="MaxScreenSurfaces"/>-1).</param>
     /// <param name="columns">The grid column count (&gt; 0).</param>
     /// <param name="rows">The grid row count (&gt; 0).</param>
@@ -195,7 +195,7 @@ public sealed partial class SdfWorldEngine {
     /// may retire it between any two frames, so a bound slot's descriptor is rewritten every frame instead of being
     /// skipped on an unchanged handle value: a handle value is unique only among live objects, and a retired one can
     /// come back naming a different image (see <c>BindScreenSources</c>). Passing 0 clears the slot: a screen surface
-    /// with no source bound falls back to the flat/procedural screen material, and an unbound slot IS value-skipped
+    /// with no source bound shades as unbound glass, and an unbound slot IS value-skipped
     /// (its filler is engine-owned).</summary>
     /// <param name="screenIndex">The screen source slot (0..31, matching a program's declared
     /// <see cref="SdfScreenSurface.ScreenIndex"/>).</param>

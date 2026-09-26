@@ -1,7 +1,11 @@
+using System.Numerics;
 using Microsoft.Extensions.DependencyInjection;
 using Puck.Abstractions.Counting;
+using Puck.Abstractions.Machines;
+using Puck.Assets.Documents;
 using Puck.Hosting;
 using Puck.Shaders;
+using Puck.SignedDistance;
 using Puck.Testing;
 using Puck.World.Client;
 using Xunit;
@@ -14,12 +18,16 @@ namespace Puck.World.Tests;
 /// views and each instance's pane, pairs an instance with its camera, and hands its node the frame values, all over
 /// storage the host and presenter already hold. The presenter is the one an offscreen boot composes, resolved with its
 /// device sealed, over the counters world with one graph instance, the shipped ink pipeline, paired with the world's
-/// camera beside the camera's own view.
+/// camera beside the camera's own view. A definition delivered between frames reaches the screen binder before the frame
+/// publishes the screens and declares the reads they make, so a screen retargeted to another camera's view reads that view
+/// on the frame of the change.
 /// </summary>
 public sealed class WorldFramePresenterGraphLawTests : IDisposable {
     private const float Delta = (StepTicks / 50400f);
     private const uint Display = 64;
+    private const string FirstCamera = "first";
     private const string Pane = "pane";
+    private const string SecondCamera = "second";
     private const ulong StepTicks = 1680;
     private const string World = "tests/Puck.Counters/counters.world.json";
     // The shipped ink pipeline, relative to the counters world's directory.
@@ -48,6 +56,34 @@ public sealed class WorldFramePresenterGraphLawTests : IDisposable {
             }),
         });
     }
+    // The counters world with two filming cameras and one screen showing the first.
+    private static WorldDefinition WithScreen(WorldDefinition definition) => (definition with {
+        CamerasRaw = [.. definition.Cameras, Filming(name: FirstCamera), Filming(name: SecondCamera)],
+        ScreensRaw = [Showing(camera: FirstCamera)],
+    });
+    private static WorldCamera Filming(string name) => new(
+        Anchor: null,
+        Name: name,
+        RenderHeight: 72U,
+        RenderWidth: 128U,
+        Rig: new WorldCameraProgram(
+            Name: $"{name}-rig",
+            Operations: [new WorldCameraProgramOp.FieldOfView(FieldOfViewRadians: new BindableScalar(literal: 0.9f))],
+            Version: WorldCameraProgram.CurrentVersion
+        )
+    );
+    private static WorldScreen Showing(string camera) => new(
+        HalfDepth: 0.1f,
+        HalfHeight: 0.9f,
+        HalfWidth: 1.2f,
+        Index: 0,
+        Origin: new DocumentVector3(value: new Vector3(x: 0f, y: 1f, z: 0f)),
+        Right: new DocumentVector3(value: Vector3.UnitX),
+        Round: 0f,
+        Route: WorldScreenRoute.Passive,
+        Source: new WorldScreenSource.View(CameraName: camera),
+        Up: new DocumentVector3(value: Vector3.UnitY)
+    );
     // One frame of the counters world's 30 Hz step, in engine ticks.
     private static FrameContext Frame(ulong index) => new(
         AccumulatorTicks: 0,
@@ -74,6 +110,47 @@ public sealed class WorldFramePresenterGraphLawTests : IDisposable {
     }
 
     public void Dispose() => m_stateDirectory.Dispose();
+    [Fact]
+    public void AScreenRetargetedBetweenFramesReachesTheBinderBeforeTheFramePublishes() {
+        var builder = WorldBootHarness.Compose(
+            edit: WithScreen,
+            presentation: WorldHostPresentation.Offscreen,
+            stateDirectory: m_stateDirectory,
+            world: World
+        );
+        var calls = new List<string>();
+        var descriptor = builder.Services.Single(predicate: static descriptor => (descriptor.ServiceType == typeof(IWorldScreenPresenter)));
+        var binder = descriptor.ImplementationFactory!;
+
+        _ = builder.Services.Remove(item: descriptor);
+        _ = builder.Services.AddSingleton<IWorldScreenPresenter>(implementationFactory: sp => new RecordingScreens(
+            calls: calls,
+            inner: ((IWorldScreenPresenter)binder(arg: sp))
+        ));
+
+        using var host = builder.Build();
+        var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
+        var client = host.Services.GetRequiredService<WorldClient>();
+        var index = 0UL;
+
+        for (var settle = 0; (settle < 3); settle++) {
+            Present(index: index++, presenter: presenter);
+        }
+
+        calls.Clear();
+        client.DeliverDefinition(definition: (client.Definition with { ScreensRaw = [Showing(camera: SecondCamera)] }));
+
+        // The host prepares a frame before its runtime captures the world's, so the change frame publishes the screens,
+        // and declares the views they read, before any capture has seen the delivery.
+        var change = Frame(index: index);
+
+        presenter.PrepareGraph(context: in change);
+
+        Assert.Equal(
+            actual: calls,
+            expected: ["cameras", $"screens {SecondCamera}", "publish"]
+        );
+    }
     [Fact]
     public void ASteadyGraphFrameIsPreparedWithoutAllocating() {
         Assert.SkipWhen(
@@ -136,5 +213,32 @@ public sealed class WorldFramePresenterGraphLawTests : IDisposable {
             actual: instances.NodeOf(instance: Pane)!.Frame.CameraFov,
             expected: 0f
         );
+    }
+
+    // The binder's frame slice, recording the deliveries it receives and the frames it publishes, in order.
+    private sealed class RecordingScreens(List<string> calls, IWorldScreenPresenter inner) : IWorldScreenPresenter {
+        public IAudioMachine? AudioMachine(int index) => inner.AudioMachine(index: index);
+        public IAudioMachine? AudioOutput(string instance, string output) => inner.AudioOutput(
+            instance: instance,
+            output: output
+        );
+        public void NotifyDeviceLost() => inner.NotifyDeviceLost();
+        public void PresentFrame(DynamicTransform[] transforms, ulong authoritativeTick) => inner.PresentFrame(
+            authoritativeTick: authoritativeTick,
+            transforms: transforms
+        );
+        public void Publish(in FrameContext context) {
+            calls.Add(item: "publish");
+            inner.Publish(context: in context);
+        }
+        public void ReconcileCameras(IReadOnlyList<WorldCamera> cameras) {
+            calls.Add(item: "cameras");
+            inner.ReconcileCameras(cameras: cameras);
+        }
+        public void ReconcileScreens(IReadOnlyList<WorldScreen> screens) {
+            calls.Add(item: $"screens {string.Join(separator: ' ', values: screens.Select(selector: static screen => (screen.Source as WorldScreenSource.View)?.CameraName))}");
+            inner.ReconcileScreens(screens: screens);
+        }
+        public WorldScreenSource.Text? TextSourceAt(int index) => inner.TextSourceAt(index: index);
     }
 }

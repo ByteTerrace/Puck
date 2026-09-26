@@ -1,6 +1,9 @@
+using System.Diagnostics;
 using System.Numerics;
+using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
+using Puck.Hosting;
 using Puck.SdfVm;
-using Puck.SdfVm.Views;
 using Puck.World.Client;
 using Puck.World.Server;
 
@@ -41,14 +44,13 @@ internal sealed partial class WorldScreenBinder {
             );
         }
 
+        slot.Session = feed;
+
         if (m_viewPipelines is not null) {
-            RegisterSessionView(
-                feed: feed,
-                index: index
-            );
+            RegisterSessionView(feed: feed);
         }
 
-        slot.Session = feed;
+        ReconcileViews();
 
         return (Ok: true, Message: $"screen {index} showing session '{session.Destination}' -> instance '{feed.InstanceName}'");
     }
@@ -76,15 +78,13 @@ internal sealed partial class WorldScreenBinder {
             }
         }
     }
-    // Completes a resolved session's offscreen GPU registration — deferred from ResolveSession because the render
-    // envelope (m_viewPipelines) is not known until the render factory calls ConfigureViews (or a live reconcile runs,
-    // by which point it always is). Mirrors RegisterCameraView's shape: one WorldSessionSceneEmitter composed through
-    // its own SdfCompositionFrameSource, wrapped in a WorldSessionView and registered under the slot's own name — NOT
-    // shared across screens even when two name the same destination+camera (unlike camera views), since the shipped
-    // content never needs that and a shared registration would complicate the per-slot teardown this wave relies on.
-    private void RegisterSessionView(int index, SessionFeed feed) {
-        m_viewStack ??= new ViewStack();
-
+    // Completes a resolved session's view registration — deferred from ResolveSession because the render envelope
+    // (m_viewPipelines) is not known until the render factory calls ConfigureViews (or a live reconcile runs, by which
+    // point it always is): one WorldSessionSceneEmitter composed through its own SdfCompositionFrameSource, which the
+    // session's instance renders under the slot's own name — NOT shared across screens even when two name the same
+    // destination and camera, since the shipped content never needs that and a shared view would complicate the
+    // per-slot teardown.
+    private void RegisterSessionView(SessionFeed feed) {
         var emitter = new WorldSessionSceneEmitter(
             mirror: feed.Mirror,
             effectiveCameraName: feed.EffectiveCamera
@@ -94,44 +94,20 @@ internal sealed partial class WorldScreenBinder {
             emitters: [emitter]
         );
         var isWindow = (feed.Projection == WorldScreenProjection.Window);
-        // A window renders every produced frame (isBudgeted: false — see WorldSessionView's own remarks): a stale
-        // image between ViewStack's round-robin turns would show the destination lagging the viewer's own eye
-        // movement, breaking the parallax the projection exists for. The resolution defaults to the panel size every
-        // OTHER session already renders at, so an unauthored facet is unaffected.
-        var width = ((uint)(feed.Resolution?.Width ?? ((int)WorldSessionView.DefaultWidth)));
-        var height = ((uint)(feed.Resolution?.Height ?? ((int)WorldSessionView.DefaultHeight)));
-        var view = new WorldSessionView(
-            pipelines: m_viewPipelines!,
-            hostsOnDirectX: m_viewHostsOnDirectX,
-            frameSource: frameSource,
-            width: width,
-            height: height,
-            isBudgeted: !isWindow
-        );
+        var width = (feed.Resolution?.Width ?? WorldViewInstances.DefaultSessionWidth);
+        var height = (feed.Resolution?.Height ?? WorldViewInstances.DefaultSessionHeight);
 
-        _ = m_viewStack.Register(
-            name: feed.RegistrationName,
-            content: view,
-            band: ScreenSlotPriority.Ambient
-        );
-        RegisterViewWork(
-            lifetime: view.WorkLifetime,
-            name: feed.RegistrationName,
-            transforms: frameSource.MovedTransforms,
-            work: view.Work
-        );
-        feed.Stack = m_viewStack;
-        feed.View = view;
+        feed.FrameSource = frameSource;
         feed.Emitter = emitter;
 
         if (isWindow) {
             feed.SetWindowLease(lease: WorldSessionWindowLeases.Acquire(
-                height: ((int)height),
-                width: ((int)width)
+                height: height,
+                width: width
             ));
         }
 
-        // The destination instance's own render envelope is not configured for a jumbotron session by default — an
+        // The destination instance's own render envelope is not configured for a session screen by default — an
         // unconfigured envelope admits any document mutation regardless of capacity. Configuring it here closes
         // that gap for ordinary authored session screens. The candidate-aware emitter
         // measurement is load-bearing: returning the construction capacity for every candidate would make
@@ -152,17 +128,31 @@ internal sealed partial class WorldScreenBinder {
             );
         }
     }
-    // Releases one session's GPU registration (ViewStack.Release disposes the WorldSessionView and its offscreen
-    // engine) and its observation lease (WorldServer.AttachSink's disposable — the destination instance itself is
+    // Releases one session's observation lease (WorldServer.AttachSink's disposable — the destination instance itself is
     // NEVER touched here, per docs/architecture/worlds.md: "releasing an observation lease alone never advances the
-    // generation — the resolver owns lifecycle").
+    // generation — the resolver owns lifecycle"); its instance leaves the render graph once no slot holds the feed.
     private void ReleaseSession(SessionFeed feed, int index, string reason) {
-        ReleaseView(name: feed.RegistrationName);
         feed.Dispose();
 
         Console.Error.WriteLine(value: $"[world.screen: session {index} -> destination '{feed.Destination}' released ({reason})]");
     }
-    // Drops a slot's session reference and releases its registration/lease — the symmetric half of TrySession's
+    // The registered session feed a view instance name names, or null.
+    private SessionFeed? SessionFeedOf(string name) {
+        foreach (var slot in m_slots.Values) {
+            if (
+                (slot.Session is { FrameSource: not null } feed) &&
+                string.Equals(
+                    a: feed.RegistrationName,
+                    b: name,
+                    comparisonType: StringComparison.Ordinal
+                )
+            ) {
+                return feed;
+            }
+        }
+
+        return null;
+    }    // Drops a slot's session reference and releases its registration/lease — the symmetric half of TrySession's
     // acquire, run whenever the slot stops observing that destination (a source change away from Session, or a
     // screen removal).
     private void ReleaseSlotSession(ScreenSlot slot) {
@@ -354,14 +344,8 @@ internal sealed partial class WorldScreenBinder {
     // still holding its lease — and reports failure by name rather than silently landing on a torn-down slot while
     // claiming success. Only once the new feed is confirmed does this retire the old registration and hand the name
     // to the new one; single-threaded confinement means no frame is ever produced between the release and the
-    // register below, so a successful re-point still shows no gap.
-    //
-    // Releasing BEFORE registering is what keeps this the compliant caller of ViewStack.Register's documented
-    // contract: Register on an already-held name treats the incoming content as an update to the same logical
-    // registration (see RegisterCameraView, the only other caller, which reuses one persistent instance across
-    // every re-register). RegisterSessionView instead constructs a brand-new WorldSessionView every call, so
-    // registering it under an already-occupied name would silently orphan whatever content currently answers to
-    // that name — releasing the old feed's registration first avoids that.
+    // register below, so a successful re-point still shows no gap: the session's instance keeps its name, and its
+    // producer renders the new feed's frame source from its next frame.
     // The runtime screen.session verb's own narrow surface (destination + optional camera only — it re-points
     // an ordinary camera-projection session live; a WINDOW facet is authored-only, per this lane's own brief, so
     // this verb has no way to spell one). Shares ApplySessionSource's bind/release/register core with the
@@ -518,8 +502,8 @@ internal sealed partial class WorldScreenBinder {
                 LeaseHeld: !feed.InstanceGone,
                 InstanceGone: feed.InstanceGone,
                 Projection: feed.Projection,
-                RenderWidth: (feed.Resolution?.Width ?? ((int)WorldSessionView.DefaultWidth)),
-                RenderHeight: (feed.Resolution?.Height ?? ((int)WorldSessionView.DefaultHeight)),
+                RenderWidth: (feed.Resolution?.Width ?? WorldViewInstances.DefaultSessionWidth),
+                RenderHeight: (feed.Resolution?.Height ?? WorldViewInstances.DefaultSessionHeight),
                 RendersEveryFrame: isWindow
             );
 
@@ -546,9 +530,9 @@ internal sealed partial class WorldScreenBinder {
     /// <param name="RenderWidth">The resolved offscreen render width, pixels — the true cost this session pays every
     /// time it produces a frame (see <see cref="WorldSessionWindowLeases"/> for a window's own accounting).</param>
     /// <param name="RenderHeight">The resolved offscreen render height, pixels.</param>
-    /// <param name="RendersEveryFrame">Whether this session is unbudgeted — a window always is (see
-    /// <c>Puck.SdfVm.Views.WorldSessionView.IsBudgeted</c>): it pays its full render cost on every produced frame,
-    /// never sharing the <c>OffscreenRenderBudget.PerProducedFrame</c> round-robin the way an ordinary camera projection does.</param>
+    /// <param name="RendersEveryFrame">Whether this session renders on every produced frame — a window always does,
+    /// paying its full render cost each frame, where an ordinary camera projection refreshes at the views' divisor
+    /// (<c>world.view-refresh</c>).</param>
     internal readonly record struct WorldSessionDescription(string Destination, string? RequestedCamera, string? EffectiveCamera, string InstanceName, ulong GenerationId, bool LeaseHeld, bool InstanceGone, WorldScreenProjection Projection, int RenderWidth, int RenderHeight, bool RendersEveryFrame);
 
     // One session-sourced screen's live state: which destination it observes, its resolved instance/generation, the
@@ -579,16 +563,15 @@ internal sealed partial class WorldScreenBinder {
         // never needs it.
         public WorldSessionSceneEmitter? Emitter { get; set; }
         public IDisposable? EnvelopeRegistration { get; set; }
+        // The frame source the session's instance renders, set once the views are configured (RegisterSessionView).
+        public SdfCompositionFrameSource? FrameSource { get; set; }
         // Set by ReconcileSessionLifecycles the moment the resolved instance stops running — the projection then
-        // holds its last mirrored image (Resolve keeps re-rendering the mirror's frozen definition; nothing here
+        // holds its last mirrored image (the instance keeps rendering the mirror's frozen definition; nothing here
         // needs to force that, since the mirror simply stops receiving deliveries).
         public bool InstanceGone { get; set; }
-        public ViewStack? Stack { get; set; }
-        public WorldSessionView? View { get; set; }
 
-        // Releases the observation lease ONLY — the GPU registration (Stack.Release) is the caller's job (see
-        // ReleaseSession), because releasing it needs the SHARED m_viewStack this feed does not itself hold a
-        // disposal-owning reference to (Stack here is a read reference for Handle/Light, not an owner).
+        // Releases the observation lease and the envelope and window registrations; the session's instance leaves the
+        // render graph once no slot holds the feed.
         public void Dispose() {
             EnvelopeRegistration?.Dispose();
             EnvelopeRegistration = null;
@@ -596,13 +579,119 @@ internal sealed partial class WorldScreenBinder {
             WindowLease = null;
             Lease?.Dispose();
             Lease = null;
-        }
-        public nint Handle() => (Stack?.Resolve(name: RegistrationName) ?? 0);
-        public Vector3 Light() => (Stack?.ResolveGlow(name: RegistrationName) ?? Vector3.Zero);
-        /// <summary>Acquires (replacing any prior) this feed's window-cost lease.</summary>
+        }        /// <summary>Acquires (replacing any prior) this feed's window-cost lease.</summary>
         public void SetWindowLease(IDisposable lease) {
             WindowLease?.Dispose();
             WindowLease = lease;
+        }
+    }
+    // A session screen's view as the external producer of its sdf.world instance: an engine node of its own rendering the
+    // session feed's frame source, which the producer builds again when a re-point hands the slot another feed.
+    private sealed class SessionViewProducer(WorldScreenBinder binder, string name) : IRenderGraphExternalProducer, IGpuWorkSource {
+        private SdfEngineNode? m_node;
+        private SdfCompositionFrameSource? m_source;
+
+        public GpuPixelFormat Format => GpuPixelFormat.R8G8B8A8Unorm;
+        public string? NotReadyReason => (m_node?.NotReadyReason ?? $"session view '{name}' has rendered nothing");
+        public string? PendingCapturePath => m_node?.PendingCapturePath;
+        public IGpuWorkSource Work => (m_node?.Work ?? this);
+
+        public void Dispose() {
+            binder.UnregisterViewWork(name: name);
+            m_node?.Dispose();
+            m_node = null;
+            m_source = null;
+        }
+        public void OnDeviceLost() => m_node?.OnDeviceLost();
+        public bool Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
+            if (binder.SessionFeedOf(name: name)?.FrameSource is not { } source) {
+                return false;
+            }
+
+            if (!ReferenceEquals(
+                objA: source,
+                objB: m_source
+            )) {
+                m_node?.Dispose();
+                m_source = source;
+                m_node = binder.CreateViewNode(
+                    dynamicTransformCapacity: source.WorstCaseDynamicTransformCapacity,
+                    frameSource: new SessionFrameSource(inner: source),
+                    instanceCapacity: source.WorstCaseInstanceCapacity,
+                    name: name,
+                    programWordCapacity: source.WorstCaseProgramWordCapacity,
+                    screenSources: null,
+                    screenSurfaceTransforms: ((ISdfFrameSource)source).ScreenSurfaceTransforms
+                );
+                binder.RegisterViewWork(
+                    lifetime: m_node.WorkLifetime,
+                    name: name,
+                    transforms: source.MovedTransforms,
+                    work: m_node.Work
+                );
+            }
+
+            return m_node!.Produce(
+                context: in context,
+                height: height,
+                width: width
+            );
+        }
+        public void RequestCapture(FrameCaptureRequest request) {
+            ArgumentNullException.ThrowIfNull(argument: request);
+
+            if (m_node is { } node) {
+                node.RequestCapture(request: request);
+            } else {
+                _ = request.TryFail(error: new InvalidOperationException(message: NotReadyReason));
+            }
+        }
+        public bool TryAcquireOutput(out RenderGraphExternalOutput output) {
+            if (m_node is { } node) {
+                return node.TryAcquireOutput(output: out output);
+            }
+
+            output = default;
+
+            return false;
+        }
+
+        bool IGpuWorkSource.TryReadCompleted(GpuWorkSample sample) => false;
+    }
+    // A session's frame source on its own clock: the destination is independently scheduled, so the view hands its
+    // composition the interval between its own frames rather than the host's frame delta, and no interpolation fraction.
+    // Wall-clock and presentation-only: the away-seat framing it paces is not reproducible run to run.
+    private sealed class SessionFrameSource(SdfCompositionFrameSource inner) : ISdfFrameSource {
+        private bool m_hasProduced;
+        private long m_lastProduceTimestamp;
+
+        public SdfGlyphAtlas? GlyphAtlas => ((ISdfFrameSource)inner).GlyphAtlas;
+        public IReadOnlyDictionary<int, Func<SdfScreenDecalFrame?>>? ScreenDecals => ((ISdfFrameSource)inner).ScreenDecals;
+        public IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>>? ScreenSurfaceTransforms => ((ISdfFrameSource)inner).ScreenSurfaceTransforms;
+
+        public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) {
+            var timestamp = Stopwatch.GetTimestamp();
+            var ownDelta = (m_hasProduced
+                ? ((float)Stopwatch.GetElapsedTime(
+                    endingTimestamp: timestamp,
+                    startingTimestamp: m_lastProduceTimestamp
+                ).TotalSeconds)
+                : 0f);
+
+            m_lastProduceTimestamp = timestamp;
+            m_hasProduced = true;
+
+            return inner.CaptureFrame(
+                deltaSeconds: ownDelta,
+                height: height,
+                interpolationAlpha: 0f,
+                width: width
+            );
+        }
+        // The time a device loss takes to recover must not land as one giant smoothing delta on the next frame.
+        public void NotifyDeviceLost() {
+            ((ISdfFrameSource)inner).NotifyDeviceLost();
+            m_hasProduced = false;
         }
     }
 }

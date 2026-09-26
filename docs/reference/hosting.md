@@ -325,11 +325,9 @@ read lists have grown to the frame's reads, and `RenderGraphFrame` is a value,
 so describing each frame over the same root and footprint lists allocates
 nothing either. The main view and the `views.graphs` panes render through it
 (`RenderGraphRuntime` in `Puck.Shaders`), and so do the source instances the
-screens show, which the SDF world producer reads as leases when it produces;
-screens themselves still render inside the SDF frame, and a screen showing a
-camera view through the offscreen view stack, until the rest of P11b in
-[the rendering programme](../plans/rendering.md#p11--the-frame-graph-document-and-nested-views)
-moves them.
+screens show and the camera and session views, which the SDF world producer
+reads as leases when it produces; screens themselves render inside the SDF
+frame.
 
 `RenderGraphHitWalk` follows a hit through nested instances. Each instance
 reports, through `IRenderGraphHitScene`, the source placements in its world

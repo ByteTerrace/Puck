@@ -57,12 +57,15 @@ internal sealed partial class WorldScreenBinder : IWorldScreenImages {
         return ((width > 0) && (height > 0));
     }
 
-    // Reconciles the mappings, and the source instances they name, with the rows and the live binds over them.
-    private void ReconcileMappings() => Mappings.Reconcile(
-        cameras: m_cameras,
-        live: m_live,
-        screens: m_rows
-    );
+    // Reconciles the mappings, and the source and view instances they name, with the rows and the live binds over them.
+    private void ReconcileMappings() {
+        Mappings.Reconcile(
+            cameras: m_cameras,
+            live: m_live,
+            screens: m_rows
+        );
+        ReconcileViews();
+    }
     // Reconciles the mappings with the rows a screen mutation delivered.
     private void ReconcileMappings(IReadOnlyList<WorldScreen> screens) {
         m_rows = screens;

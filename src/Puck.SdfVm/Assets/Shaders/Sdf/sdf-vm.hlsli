@@ -458,7 +458,7 @@ static const float3 SdfSunDirection = float3(0.51343602, 0.79349202, 0.32673201)
 // (Puck.SignedDistance.SdfBlendOp.)
 
 // Material sentinel range: a SCREEN_SLAB shades as a "screen" rather than a table albedo. The plain sentinel
-// (SdfProgramBuilder.ScreenSlab with no screen index) shades the procedural test-card. SDF_SCREEN_MATERIAL + 1 +
+// (SdfProgramBuilder.ScreenSlab with no screen index) shades as unbound glass. SDF_SCREEN_MATERIAL + 1 +
 // screenIndex (SdfProgramBuilder's screen-surface overload) additionally identifies WHICH declared screen surface —
 // and so which screen source slot (0..31) — the hit belongs to, decoded as (material - SDF_SCREEN_MATERIAL - 1).
 // Every material id in this range is screen shading; test with >= SDF_SCREEN_MATERIAL, never ==.
@@ -1373,8 +1373,8 @@ float sdfBrickVoxel(uint baseWord, uint3 dims, int3 coord) {
 #endif
 float sdfSampledRegion(float3 p, float4 data0, float4 data1) {
 #ifdef SDF_SAMPLED_REGIONS
-    // A POOL-LESS engine (SdfWorldEngineOptions.BrickPoolVoxelCapacity 0 — every offscreen filming view: SdfCameraView,
-    // WorldSessionView) binds a single-float FILLER for sdfBrickPool so the always-present binding stays valid, yet it
+    // A POOL-LESS engine (SdfWorldEngineOptions.BrickPoolVoxelCapacity 0 — every camera or session view) binds a
+    // single-float FILLER for sdfBrickPool so the always-present binding stays valid, yet it
     // never bakes a brick. Sampling that filler would read 0 (its lone/OOB word), and a stored 0 is distance 0 = the box
     // interior sitting entirely on the carve surface, so the Subtraction compose would carve a box-shaped HOLE across the
     // whole region (the same defect an allocated-but-unbaked pool has). Detect the filler by element count and return the

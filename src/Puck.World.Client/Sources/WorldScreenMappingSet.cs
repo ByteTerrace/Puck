@@ -1,6 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
 using Puck.Commands;
-using Puck.SdfVm.Views;
 
 namespace Puck.World.Client;
 
@@ -44,6 +43,10 @@ public sealed class WorldScreenMappingSet {
     /// <summary>Gets the source instances the screens show, a new value on every <see cref="Reconcile"/>: the render graph
     /// runs them, and each screen showing one samples its image.</summary>
     public WorldSourceInstances Sources { get; private set; } = WorldSourceInstances.Of(shown: []);
+    /// <summary>Gets the view instances the world renders beside its own, a new value whenever
+    /// <see cref="ReconcileViews"/> replaces them: the render graph runs them, and each screen showing one samples its
+    /// image.</summary>
+    public WorldViewInstances Views { get; private set; } = WorldViewInstances.Empty;
 
     // The row a screen's source names: its handle and document extent, or why it names none.
     private static Row RowOf(WorldScreen screen, int position, WorldSourceInstances sources, IReadOnlyList<WorldCamera> cameras) {
@@ -77,7 +80,7 @@ public sealed class WorldScreenMappingSet {
                 return new Row(
                     extent: ((session.Resolution is { } resolution)
                         ? (resolution.Width, resolution.Height)
-                        : (((int)WorldSessionView.DefaultWidth), ((int)WorldSessionView.DefaultHeight))),
+                        : (WorldViewInstances.DefaultSessionWidth, WorldViewInstances.DefaultSessionHeight)),
                     handle: SourceHandle.Instance(name: WorldViewNames.Session(screen: screen.Index)),
                     refusal: null,
                     screen: screen
@@ -170,6 +173,15 @@ public sealed class WorldScreenMappingSet {
         m_published.Clear();
         Screens = screens;
         Sources = sources;
+    }
+    /// <summary>Replaces the view instances the world renders beside its own, which the render graph runs from its next
+    /// reconciliation.</summary>
+    /// <param name="views">The views.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="views"/> is <see langword="null"/>.</exception>
+    public void ReconcileViews(WorldViewInstances views) {
+        ArgumentNullException.ThrowIfNull(argument: views);
+
+        Views = views;
     }
     /// <summary>Returns the name of the source instance a screen shows, without allocating.</summary>
     /// <param name="screen">The screen's index.</param>

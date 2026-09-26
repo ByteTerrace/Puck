@@ -8,8 +8,7 @@ namespace Puck.SdfVm;
 /// (the "program uploaded once" seam the dynamic-transform channel rides). A host whose scene later changes calls
 /// <see cref="SdfWorldEngine.UploadProgram"/> — program and instance buffers grow when necessary.</param>
 /// <param name="ViewportCapacity">The number of view slots to provision (each with its views set per frame ring slot, its
-/// output image and its packed viewport row). Frames may carry fewer views than the capacity, never more; at most
-/// <see cref="SdfWorldEngine.MaxViewports"/>.</param>
+/// output image and its packed viewport row), at least one. Frames may carry fewer views than the capacity, never more.</param>
 /// <param name="DynamicTransformCapacity">The number of dynamic entity-transform slots to allocate (at least one slot
 /// is always bound so the binding stays valid for a static scene). The engine automatically raises this floor to the
 /// program's <see cref="SdfProgram.RequiredDynamicTransformCapacity"/>. Each slot costs 48 bytes of the dynamic-transform
@@ -31,7 +30,7 @@ namespace Puck.SdfVm;
 /// resolution). <c>0</c> provisions no pool (a 4-byte filler keeps the always-present shader binding valid). A pool-less
 /// engine still accepts a program declaring a <see cref="SdfShapeType.SampledRegion"/> — baking and rendering are split:
 /// the shader detects the filler (by its element count) and renders the region via the conservative uncarved-hull
-/// fallback (the Subtraction never bites), so a filming view (<c>SdfCameraView</c>/<c>WorldSessionView</c>) shows a
+/// fallback (the Subtraction never bites), so a camera or session view shows a
 /// SampledRegion world uncarved rather than a box-shaped hole. Only <see cref="SdfWorldEngine.RequestBrickBake"/> stays a
 /// loud rejection on a pool-less engine (nothing to bake into). The pool is a persistent device-local buffer the sliced
 /// background bake (<see cref="SdfWorldEngine.RequestBrickBake"/>) writes and the beam + views kernels sample.</param>

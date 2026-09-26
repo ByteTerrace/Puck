@@ -51,7 +51,7 @@ public sealed class WorldCaptureFills : IDisposable {
     /// <summary>Acquires the image of a fill color for one submitted frame, held until that frame's submission has
     /// retired.</summary>
     /// <param name="rgba">The packed RGBA8 fill color.</param>
-    /// <returns>The fill's lease, or an empty lease (the procedural no-signal card, which shows no external pixels either)
+    /// <returns>The fill's lease, or an empty lease (unbound glass, which shows no external pixels either)
     /// before the fill has converted.</returns>
     public GpuImageLease Acquire(uint rgba) => (m_fills.TryGetValue(
         key: rgba,

@@ -58,9 +58,11 @@ public readonly record struct RenderGraphRefresh(int Divisor, int Hertz) {
 /// <summary>One instance's read of another instance's output: an image the consumer shows through a footprint, or a
 /// buffer it reads whenever it renders.</summary>
 /// <param name="Producer">The name of the instance read.</param>
-/// <param name="PreviousFrame">Whether the read takes the producer's previous completed frame instead of this frame's.
-/// A read of the instance's own output is always a previous-frame read, through the planner's history resource,
-/// whether or not it says so.</param>
+/// <param name="PreviousFrame">Whether the read takes the producer's previous completed frame instead of this frame's,
+/// so it orders nothing. A read of the instance's own output is always a previous-frame read, whether or not it says so:
+/// a graph instance's through the planner's history resource, and an external producer's through the latest output it
+/// completed before it renders. A previous-frame read of another external producer binds that producer's latest
+/// completed output when the reader renders.</param>
 /// <param name="Kind">What the consumer's input carries, which must be what the producer's output carries. An image
 /// read demands the producer through the frame's footprints; a buffer read demands it on every frame the consumer
 /// renders.</param>
@@ -75,8 +77,8 @@ public readonly record struct RenderGraphRead(string Producer, bool PreviousFram
 /// <param name="Output">What the output its consumers read carries. An instance whose output is a buffer renders at no
 /// extent and costs no pass-pixels.</param>
 /// <param name="ExternalPackage">The package id of the external producer that renders the instance through its own
-/// submissions, or <see langword="null"/> for an instance that renders a graph. An external producer reads only other
-/// instances' latest completed images, handed to it as it produces, and hands its consumers only its latest completed
+/// submissions, or <see langword="null"/> for an instance that renders a graph. An external producer reads only images,
+/// each instance's latest completed output handed to it as it produces, and hands its consumers its latest completed
 /// output. A package spelled <c>source.&lt;producer id&gt;</c>
 /// (<see cref="SourcePackage"/>) makes the instance an image source (<see cref="IsSource"/>).</param>
 /// <param name="Settings">A source instance's settings object, which its producer opens the image with, or
@@ -165,12 +167,9 @@ public enum RenderGraphInstanceRefusalCode : byte {
     /// <summary>A read's kind is not what its producer's output carries: an image read of a buffer output, or a buffer
     /// read of an image output.</summary>
     KindMismatch = 8,
-    /// <summary>An external producer declares a buffer read, a previous-frame read or a read of itself: it is handed only
-    /// other instances' latest completed images, as leases, when it produces.</summary>
+    /// <summary>An external producer declares a buffer read: it is handed only images, as leases, when it
+    /// produces.</summary>
     ExternalReads = 9,
-    /// <summary>An instance reads an external producer's previous frame: the producer hands out only its latest
-    /// completed output, which its next render overwrites.</summary>
-    ExternalPreviousFrame = 10,
     /// <summary>An instance carries settings but is no source, or a source names no producer id, refreshes other than on
     /// every frame its cadence allows, or declares an output that is not an image.</summary>
     SourceDeclaration = 11,
@@ -179,6 +178,6 @@ public enum RenderGraphInstanceRefusalCode : byte {
 /// <param name="Code">Why it was refused.</param>
 /// <param name="Message">The refusal, naming what it concerns.</param>
 /// <param name="Instances">The instances concerned; for <see cref="RenderGraphInstanceRefusalCode.SameFrameCycle"/>,
-/// every instance in the cycle in read order; for <see cref="RenderGraphInstanceRefusalCode.KindMismatch"/> and
-/// <see cref="RenderGraphInstanceRefusalCode.ExternalPreviousFrame"/>, the consumer, then the producer.</param>
+/// every instance in the cycle in read order; for <see cref="RenderGraphInstanceRefusalCode.KindMismatch"/>, the
+/// consumer, then the producer.</param>
 public sealed record RenderGraphInstanceRefusal(RenderGraphInstanceRefusalCode Code, string Message, IReadOnlyList<string> Instances);
