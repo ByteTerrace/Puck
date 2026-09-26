@@ -25,14 +25,15 @@ public interface IRenderGraphPlacements {
     bool TryGet(string instance, string pass, out RenderGraphPlacement placement);
 }
 /// <summary>The <c>place</c> package (<see cref="RenderGraphPackageCatalog.Place"/>): one compute dispatch of the
-/// build-compiled <c>place.comp</c> kernel over the output's extent, writing the base outside a destination rect and
-/// the source reconstructed inside it.
+/// build-compiled <c>place.comp</c> kernel over the output's extent, writing the base outside a destination rect, or the
+/// letterbox color when the config's <see cref="RenderGraphPackageCatalog.PlaceLetterbox"/> is set, and the source
+/// reconstructed inside it.
 /// <para>
-/// The kernel reads the frame group and a pass group holding the extent, the config (the rect and sharpness) and the
-/// images the catalog declares (<see cref="RenderGraphPackageCatalog.PlaceMembers"/>). A host that places the source
-/// per frame (<see cref="IRenderGraphPlacements"/>) overrides the rect and sharpness in the pass block without rebinding
-/// anything, and one that shows the source nowhere this frame has the pass draw nothing, so the output stands for the
-/// base. Its build creates the shader module and the compute pipeline on the thread pool; its recorder allocates its
+/// The kernel reads the frame group and a pass group holding the extent, the config (the letterbox switch, the rect and
+/// the sharpness) and the images the catalog declares (<see cref="RenderGraphPackageCatalog.PlaceMembers"/>). A host
+/// that places the source per frame (<see cref="IRenderGraphPlacements"/>) overrides the rect and sharpness in the pass
+/// block without rebinding anything, and one that shows the source nowhere this frame has the pass draw nothing, so the
+/// output stands for the base; when the pass may not stand in, it copies the base everywhere, letterbox or not. Its build creates the shader module and the compute pipeline on the thread pool; its recorder allocates its
 /// sets from the instance's pool and one sampler, which the kernel never reads through but its interface binds. Its
 /// ports are compute reads and a compute write, so the node's planned barriers leave the inputs shader-readable and the
 /// output in the storage layout; it records no barrier.</para>
@@ -163,6 +164,7 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
         private readonly string m_instance;
         private readonly string m_pass;
         private readonly IRenderGraphPlacements? m_placements;
+        private readonly int m_letterboxOffset;
         private readonly int m_rectOffset;
         private readonly GpuDeviceServices m_services;
         private readonly RenderGraphPackageSets m_sets = null!;
@@ -182,6 +184,7 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
             m_services = context.Services;
 
             try {
+                m_letterboxOffset = ((int)parameters.BlockOffsetOf(member: RenderGraphPackageCatalog.PlaceLetterbox));
                 m_rectOffset = ((int)parameters.BlockOffsetOf(member: RenderGraphPackageCatalog.PlaceRect));
                 m_sharpnessOffset = ((int)parameters.BlockOffsetOf(member: RenderGraphPackageCatalog.PlaceSharpness));
                 m_sets = new RenderGraphPackageSets(
@@ -195,7 +198,7 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
                 m_sampler = m_services.Bindings.CreateSampler();
 
                 for (var slot = 0; (slot < context.InFlightFrames); slot++) {
-                    foreach (var image in (ReadOnlySpan<string>)[RenderGraphPackageCatalog.PlaceBase, RenderGraphPackageCatalog.PlaceSource]) {
+                    foreach (var image in ((ReadOnlySpan<string>)[RenderGraphPackageCatalog.PlaceBase, RenderGraphPackageCatalog.PlaceSource])) {
                         m_services.Bindings.WriteSampler(
                             arrayElement: 0,
                             binding: m_sets.BindingOf(member: (image + ShaderPipelinePassPorts.SamplerSuffix)),
@@ -251,6 +254,14 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
                     destination: recording.PassBlock[m_sharpnessOffset..],
                     value: placement.Sharpness
                 );
+
+                // A source shown nowhere that must still draw copies its base everywhere, letterboxed or not.
+                if (!placement.Shown) {
+                    BinaryPrimitives.WriteUInt32LittleEndian(
+                        destination: recording.PassBlock[m_letterboxOffset..],
+                        value: 0u
+                    );
+                }
             }
 
             var command = recording.CommandBuffer;

@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Text.Json;
 using Puck.Hosting;
 using Puck.Shaders;
@@ -219,6 +220,31 @@ public sealed class WorldRootGraphLawTests {
         );
         // Each view's footprint follows its rect frame by frame, so the root states none of its own.
         Assert.Empty(collection: graph.Footprints);
+    }
+    /// <summary>The first view's place pass writes the letterbox color outside its rect and every later place pass keeps
+    /// its base there, so pixels no view or pane covers show the letterbox color, never a view's clamped edge.</summary>
+    [Fact]
+    public void OnlyTheFirstViewsPlacePassLetterboxesOutsideItsRect() {
+        var plan = Assert.IsType<RenderGraphPlan>(@object: WorldRootGraph.Compose(
+            extensions: null,
+            overlay: false,
+            packages: RenderGraphPackageCatalog.Shipped,
+            panes: ["pane"],
+            views: 3
+        ).Plan);
+
+        Assert.Equal(
+            actual: plan.Pipeline.Passes.Select(selector: static pass => {
+                Assert.True(condition: pass.Parameters.TryBind(
+                    config: null,
+                    reason: out var reason,
+                    values: out var values
+                ), userMessage: reason);
+
+                return $"{pass.Name}:{BinaryPrimitives.ReadUInt32LittleEndian(source: values.Bytes.Span[((int)pass.Parameters.BlockOffsetOf(member: RenderGraphPackageCatalog.PlaceLetterbox))..])}";
+            }),
+            expected: ["main$view$1:1", "main$view$2:0", "main$view$3:0", "pane:0"]
+        );
     }
     [Fact]
     public void AViewProducersNameReadsBackAsItsView() {

@@ -1,4 +1,4 @@
-// Generated from shader interface 'place' (sha256/71c26220087d60e4a77b084e5e70f400414bced24f5244907efa7967373331a9). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'place' (sha256/48793c20a78b6592c52de4a2a50329522303de941c0e3af9df4835cc5e13970a). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_PLACE
 #define PUCK_SHADER_INTERFACE_PLACE
 
@@ -25,7 +25,7 @@ struct PlaceFrame {
 // The Pass group: descriptor set 3, register space 3.
 struct PlacePass {
     [[vk::offset(0)]] uint2 extent;
-    [[vk::offset(8)]] uint _pad8;
+    [[vk::offset(8)]] uint letterbox;
     [[vk::offset(12)]] uint _pad12;
     [[vk::offset(16)]] float4 rect;
     [[vk::offset(32)]] float sharpness;

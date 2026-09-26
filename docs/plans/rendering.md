@@ -692,8 +692,9 @@ sub-steps, in this order:
     at its position: the node publishes that input's image with no copy, in its
     own layout (`ShaderPipelineRenderNode.PublishedLayout`), a root capture reads
     it, and the runtime binds consumers in the published layout. No recorder
-    copies its input. An output another pass touches, that is history, that
-    would stand for a previous frame's input or for an input a later pass
+    copies its input. A later package pass reading the output is handed the
+    input it stands for. An output any other pass touches, that is history,
+    that would stand for a previous frame's input or for an input a later pass
     overwrites, or that is not an RGBA8 image
     beside an input image of its format is refused by name when its pass draws
     nothing.
@@ -900,12 +901,15 @@ It deletes the SDF engine's composite and has landed in two halves.
   lone full-window view at native scale is not placed, so `main` stands for
   `world` and parity holds. The `split-seats` canary shows two seats of the
   split layout drawing different content.
-- Owed after 10b: only the last pass of a graph may stand for its input when it
-  draws nothing, so every earlier place pass that shows nothing copies its base
-  instead. A one-seat world with K = 4 therefore records three full-extent
-  place copies a frame (`world-counters` shows them on `main`). A chain of
-  passes that draw nothing should resolve to the first input they stand for,
-  so an unshown view costs nothing.
+- 10c: a chain of package passes that draw nothing resolves to the first input
+  it stands for, since a later package pass reading a stand-in's output is
+  handed what it stands for (`ShaderPipelineRenderNode.StandingOf`), so a
+  one-seat world dispatches no place pass on `main` and publishes `world` itself.
+  The first view's place pass writes the letterbox color outside its rect (the
+  `place` config's `letterbox`), so the gaps of a letterboxed layout show that
+  color rather than the base's clamped pixels, with no pass of their own. The
+  `split-seats` canary also captures a letterboxed layout it selects through
+  `view.override`.
 
 P13's CPU half has landed; its second half, P13b, waits on P12b and P11b. The
 published mapping is `SourceMapping` in `src/Puck.Commands/Sources`: a surface

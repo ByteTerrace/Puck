@@ -1,13 +1,16 @@
 // The frame graph's one placement pass: reconstructs its source image into a destination rect over its base image.
-// Outside the rect the destination is the base. Inside it, a source of the rect's own extent is an exact copy; otherwise
+// Outside the rect the destination is the base, or, with letterbox set, the letterbox color. Inside it, a source of the rect's own extent is an exact copy; otherwise
 // sharpness 0 is bilinear over the four nearest texels, and sharpness 1 is Catmull-Rom over the sixteen nearest, clamped
 // to the central four texels' range so its negative lobes cannot ring; a sharpness between blends the two. A rect of the
 // whole destination resamples the whole source. Every tap is a formatted load clamped to its image's edge, so no sampler
 // state decides the filter and both backends compute the same arithmetic.
-// The generated interface declares the frame group and the pass group: the extent, the config (rect, sharpness) and
-// the images base, source and destination, each image input with a sampler it never reads. rect is the destination
-// rect as fractions of the destination's extent: left, top, width, height.
+// The generated interface declares the frame group and the pass group: the extent, the config (letterbox, rect,
+// sharpness) and the images base, source and destination, each image input with a sampler it never reads. rect is the
+// destination rect as fractions of the destination's extent: left, top, width, height.
 #include "place.interface.hlsli"
+
+// What the display shows between placed views: a near-black with a faint blue cast, opaque.
+static const float4 LetterboxColor = float4(0.015, 0.016, 0.02, 1.0);
 
 float4 catmullRomWeights(float t) {
     float t2 = (t * t);
@@ -93,6 +96,11 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     uint2 rectMax = (uint2)clamp(floor(((rect.xy + rect.zw) * float2(destinationDims)) + 0.5), float2(rectMin), float2(destinationDims));
 
     if (any(id.xy < rectMin) || any(id.xy >= rectMax)) {
+        if (passGroup.letterbox != 0u) {
+            destination[id.xy] = LetterboxColor;
+            return;
+        }
+
         base.GetDimensions(baseDims.x, baseDims.y);
         destination[id.xy] = base.Load(int3(min(id.xy, (baseDims - 1)), 0));
         return;
