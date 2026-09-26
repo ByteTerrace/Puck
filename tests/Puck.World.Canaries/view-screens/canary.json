@@ -1,7 +1,7 @@
 {
   "id": "view-screens",
   "title": "One camera shown on two screens registers one view that renders once per refreshed frame, and both screens show its image",
-  "binding": "The positive leg boots a windowed 256x144 world whose two screen placements both show the view of camera 'eye', which looks at a red ball so the ball fills its frame. It sets world.view-refresh to 1, so every produced frame refreshes the views. world.view-refresh then reports one camera view registered, not one per screen, and two reads of world.counters gpu thirty ticks apart show the view:eye node's submission advancing by exactly as many submissions as the world node's: the view renders once per world frame, never once per screen. A captured frame shows the red ball at the centre of both screens. The discriminating leg boots the same world with the right screen showing camera 'sky', which looks up at nothing: two camera views register and the right screen's centre is not red, so both observations turn red, while the eye view still renders once per world frame.",
+  "binding": "The positive leg boots a windowed 256x144 world whose two screen placements both show the view of camera 'eye', which looks at a red ball so the ball fills its frame. It sets world.view-refresh to 1, so every produced frame refreshes the views. world.view-refresh then reports one camera view registered, not one per screen, and two reads of world.counters gpu thirty ticks apart show the view:eye node's submission advancing by exactly as many submissions as the world node's: the view renders once per world frame, never once per screen. A captured frame shows the red ball at the centre of both screens. The discriminating leg boots the same world with the right screen showing camera 'sky', which looks up at nothing: two camera views register and the right screen's centre is not red, so both observations turn red, while the eye view still renders once per world frame. After the capture both legs render the views at three-quarter scale, so the room's view is a pane a display point walks into. world.screens prints the mapping each screen publishes: the view it shows, named by its camera, over the screen's face (0.72x0.48 half extents at z 0.1, the panel's interior) at the camera's 128x72 extent, drawn through the glass warp. A display point at each screen walks through the room camera onto that screen and ends on the camera view it shows (Unread, since camera views are not instances of the live set yet) at the pixel the pose arithmetic predicts: 65,28 on the left and 66,28 on the right. In the discriminating leg the right screen's mapping and walk name sky instead of eye, so those positive observations turn red while the left screen's hold.",
   "bootShape": "windowed",
   "backends": ["vulkan", "directx"],
   "requirements": ["gpu"],
@@ -19,7 +19,12 @@
       { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
       { "verb": "world.counters", "occurrence": 2, "outcome": "accepted" },
       { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" }
+      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "world.render-scale", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 5, "outcome": "accepted" },
+      { "verb": "world.screens", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.view.panes", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.view.panes", "occurrence": 2, "outcome": "accepted" }
     ],
     "expect": [
       { "type": "line", "name": "one-camera-view-registered", "stream": "stdout", "match": "exact", "text": "[world.view-refresh: every 1 produced frame(s); 1 camera view(s) registered]", "present": true },
@@ -40,7 +45,11 @@
       { "type": "relation", "name": "the-world-rendered-between-the-reads", "operator": "greater", "left": { "value": "world-second" }, "right": { "value": "world-first" } },
       { "type": "relation", "name": "the-eye-renders-once-per-world-frame", "operator": "equal", "left": { "value": "eye-second", "minus": "eye-first" }, "right": { "value": "world-second", "minus": "world-first" } },
       { "type": "imageRegion", "name": "the-left-screen-shows-the-eye", "capture": "frame.png", "extent": [256, 144], "region": [0.36, 0.46, 0.39, 0.52], "reduce": "every", "minimum": [0.25, 0, 0, 1], "maximum": [1, 0.25, 0.25, 1], "toleranceCodes": 2, "holds": true },
-      { "type": "imageRegion", "name": "the-right-screen-shows-the-eye", "capture": "frame.png", "extent": [256, 144], "region": [0.61, 0.46, 0.64, 0.52], "reduce": "every", "minimum": [0.25, 0, 0, 1], "maximum": [1, 0.25, 0.25, 1], "toleranceCodes": 2, "holds": true }
+      { "type": "imageRegion", "name": "the-right-screen-shows-the-eye", "capture": "frame.png", "extent": [256, 144], "region": [0.61, 0.46, 0.64, 0.52], "reduce": "every", "minimum": [0.25, 0, 0, 1], "maximum": [1, 0.25, 0.25, 1], "toleranceCodes": 2, "holds": true },
+      { "type": "line", "name": "the-left-screen-publishes-the-eye-over-its-face", "stream": "stdout", "match": "contains", "text": "24 view bound fixed input:Presentation mapping instance:eye surface origin -1.5,1.2,0.1 right 1,0,0 up 0,1,0 half 0.72x0.48 source 128x72 crop 0,0 128x72 layout Identity fit Stretch warp sdf.screen-glass inverse destination Presentation", "present": true },
+      { "type": "line", "name": "the-right-screen-publishes-the-eye-over-its-face", "stream": "stdout", "match": "contains", "text": "25 view bound fixed input:Presentation mapping instance:eye surface origin 1.5,1.2,0.1 right 1,0,0 up 0,1,0 half 0.72x0.48 source 128x72 crop 0,0 128x72 layout Identity fit Stretch warp sdf.screen-glass inverse destination Presentation", "present": true },
+      { "type": "line", "name": "a-walk-through-the-left-screen-lands-on-the-eye", "stream": "stdout", "match": "contains", "text": "at 96.5,70.5 pick=instance:world pixel 96,70 walk=Unread steps=2 in world last instance:eye pixel 65,28", "present": true },
+      { "type": "line", "name": "a-walk-through-the-right-screen-lands-on-the-eye", "stream": "stdout", "match": "contains", "text": "at 160.5,70.5 pick=instance:world pixel 160,70 walk=Unread steps=2 in world last instance:eye pixel 66,28", "present": true }
     ]
   },
   "discriminating": {
@@ -56,7 +65,12 @@
       { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
       { "verb": "world.counters", "occurrence": 2, "outcome": "accepted" },
       { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" }
+      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "world.render-scale", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 5, "outcome": "accepted" },
+      { "verb": "world.screens", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.view.panes", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.view.panes", "occurrence": 2, "outcome": "accepted" }
     ],
     "expect": [
       { "type": "line", "name": "two-camera-views-registered", "stream": "stdout", "match": "exact", "text": "[world.view-refresh: every 1 produced frame(s); 2 camera view(s) registered]", "present": true },
@@ -76,7 +90,13 @@
       },
       { "type": "relation", "name": "the-eye-still-renders-once-per-world-frame", "operator": "equal", "left": { "value": "eye-second", "minus": "eye-first" }, "right": { "value": "world-second", "minus": "world-first" } },
       { "type": "imageRegion", "name": "the-left-screen-shows-the-eye", "capture": "frame.png", "extent": [256, 144], "region": [0.36, 0.46, 0.39, 0.52], "reduce": "every", "minimum": [0.25, 0, 0, 1], "maximum": [1, 0.25, 0.25, 1], "toleranceCodes": 2, "holds": true },
-      { "type": "imageRegion", "name": "the-right-screen-shows-the-sky", "capture": "frame.png", "extent": [256, 144], "region": [0.61, 0.46, 0.64, 0.52], "reduce": "every", "minimum": [0.25, 0, 0, 1], "maximum": [1, 0.25, 0.25, 1], "toleranceCodes": 2, "holds": false }
+      { "type": "imageRegion", "name": "the-right-screen-shows-the-sky", "capture": "frame.png", "extent": [256, 144], "region": [0.61, 0.46, 0.64, 0.52], "reduce": "every", "minimum": [0.25, 0, 0, 1], "maximum": [1, 0.25, 0.25, 1], "toleranceCodes": 2, "holds": false },
+      { "type": "line", "name": "the-left-screen-publishes-the-eye-over-its-face", "stream": "stdout", "match": "contains", "text": "24 view bound fixed input:Presentation mapping instance:eye surface origin -1.5,1.2,0.1 right 1,0,0 up 0,1,0 half 0.72x0.48 source 128x72 crop 0,0 128x72 layout Identity fit Stretch warp sdf.screen-glass inverse destination Presentation", "present": true },
+      { "type": "line", "name": "the-right-screen-publishes-the-eye-over-its-face", "stream": "stdout", "match": "contains", "text": "25 view bound fixed input:Presentation mapping instance:eye surface origin 1.5,1.2,0.1 right 1,0,0 up 0,1,0 half 0.72x0.48 source 128x72 crop 0,0 128x72 layout Identity fit Stretch warp sdf.screen-glass inverse destination Presentation", "present": false },
+      { "type": "line", "name": "the-right-screen-publishes-the-sky-over-its-face", "stream": "stdout", "match": "contains", "text": "25 view bound fixed input:Presentation mapping instance:sky surface origin 1.5,1.2,0.1 right 1,0,0 up 0,1,0 half 0.72x0.48 source 128x72 crop 0,0 128x72 layout Identity fit Stretch warp sdf.screen-glass inverse destination Presentation", "present": true },
+      { "type": "line", "name": "a-walk-through-the-left-screen-lands-on-the-eye", "stream": "stdout", "match": "contains", "text": "at 96.5,70.5 pick=instance:world pixel 96,70 walk=Unread steps=2 in world last instance:eye pixel 65,28", "present": true },
+      { "type": "line", "name": "a-walk-through-the-right-screen-lands-on-the-eye", "stream": "stdout", "match": "contains", "text": "at 160.5,70.5 pick=instance:world pixel 160,70 walk=Unread steps=2 in world last instance:eye pixel 66,28", "present": false },
+      { "type": "line", "name": "a-walk-through-the-right-screen-lands-on-the-sky", "stream": "stdout", "match": "contains", "text": "at 160.5,70.5 pick=instance:world pixel 160,70 walk=Unread steps=2 in world last instance:sky pixel 66,28", "present": true }
     ]
   }
 }

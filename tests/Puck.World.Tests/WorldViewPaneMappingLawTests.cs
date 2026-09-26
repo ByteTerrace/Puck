@@ -315,6 +315,92 @@ public sealed class WorldViewPaneMappingLawTests : IDisposable {
         Frame(pane: null);
         Assert.Empty(collection: m_host.Walk(point: Point(x: 8.5, y: 8.5))!.Steps);
     }
+    // A walk from a view's pane continues through the view's camera into its world, meets a screen the binder published
+    // standing there, and ends on the screen's source instance at the pixel beneath; a view whose camera misses the
+    // screen ends on its world.
+    [Fact]
+    public void TheHitWalkContinuesThroughAScreenIntoItsSource() {
+        const int SourceHeight = 144;
+        const int SourceWidth = 160;
+        var pattern = WorldImageProducerSettings.SourceOf(
+            id: WorldImageProducerSettings.TestPatternId,
+            settings: new WorldTestPatternSettings(
+                Height: SourceHeight,
+                Width: SourceWidth
+            )
+        );
+        // A screen facing the first view's camera from 5 units ahead, 2.4 units wide and 1.8 tall.
+        var screens = new WorldScreenMappingSet();
+
+        screens.Reconcile(
+            cameras: [],
+            screens: [new WorldScreen(
+                HalfDepth: 0.1f,
+                HalfHeight: 0.9f,
+                HalfWidth: 1.2f,
+                Index: 0,
+                Origin: new Puck.Assets.Documents.DocumentVector3(value: new Vector3(x: 0f, y: 1f, z: 0f)),
+                Right: new Puck.Assets.Documents.DocumentVector3(value: Vector3.UnitX),
+                Round: 0f,
+                Route: WorldScreenRoute.Passive,
+                Source: pattern,
+                Up: new Puck.Assets.Documents.DocumentVector3(value: Vector3.UnitY)
+            )]
+        );
+        screens.Publish(images: new PatternImages(Height: SourceHeight, Width: SourceWidth));
+        m_host.Screens = screens;
+        m_views.Add(item: new SdfViewSnapshot(Camera: Camera(x: 0f), Region: Left));
+        m_views.Add(item: new SdfViewSnapshot(Camera: Camera(x: 3f), Region: Right));
+        Frame(pane: null);
+        Frame(pane: null);
+
+        var set = m_instances.Instances;
+        var walk = m_host.Walk(point: Point(x: 20.5, y: 40.5))!;
+
+        Assert.Equal(
+            actual: (walk.End, walk.Instance, walk.Steps.Count),
+            expected: (RenderGraphHitEnd.Producer, set.IndexOf(name: WorldRootGraph.ProducerOf(view: 0)), 2)
+        );
+        Assert.Equal(
+            actual: walk.Steps[1].Mapping,
+            expected: screens.Mappings[0]
+        );
+        Assert.Equal(
+            actual: walk.Steps[1].Mapping.Source,
+            expected: WorldSourceInstances.Of(shown: [pattern]).HandleOf(screen: 0)
+        );
+
+        // The pane's point is the view image's (20.5 / 32, 40.5 / 64); its pinhole ray from (0, 1, 5) meets the face 5
+        // units ahead, and the glass's bezel insets the image inside the face.
+        var tangent = Math.Tan(a: 0.5);
+        var u = (0.5 + ((5.0 * (((2.0 * (20.5 / 32.0)) - 1.0) * tangent)) / 2.4));
+        var v = (0.5 - ((5.0 * ((1.0 - (2.0 * (40.5 / 64.0))) * tangent)) / 1.8));
+        const double Inner = (1.0 - (2.0 * WorldScreenMappings.Bezel));
+
+        Assert.Equal(
+            actual: (walk.Steps[1].Hit.PixelX, walk.Steps[1].Hit.PixelY),
+            expected: (((long)Math.Floor(d: (((u - WorldScreenMappings.Bezel) / Inner) * SourceWidth))), ((long)Math.Floor(d: (((v - WorldScreenMappings.Bezel) / Inner) * SourceHeight))))
+        );
+        Assert.Equal(
+            actual: (walk.Steps[1].Hit.PixelX, walk.Steps[1].Hit.PixelY),
+            expected: (134L, 133L)
+        );
+
+        // The second view's camera, three units to the side, misses the screen.
+        var beside = m_host.Walk(point: Point(x: 52.5, y: 40.5))!;
+
+        Assert.Equal(
+            actual: (beside.End, beside.Instance, beside.Steps.Count),
+            expected: (RenderGraphHitEnd.World, set.IndexOf(name: WorldRootGraph.ProducerOf(view: 1)), 1)
+        );
+
+        // With no screens reported, the first view's walk ends on its world too.
+        m_host.Screens = null;
+        Assert.Equal(
+            actual: m_host.Walk(point: Point(x: 20.5, y: 40.5))!.End,
+            expected: RenderGraphHitEnd.World
+        );
+    }
     // A frame whose placements, extents and instances hold publishes the mappings it published before, and the whole
     // host frame (begin, place, publish) allocates nothing.
     [Fact]
@@ -347,6 +433,16 @@ public sealed class WorldViewPaneMappingLawTests : IDisposable {
                 actual: m_host.Panes[index],
                 expected: published[index]
             );
+        }
+    }
+
+    // Every screen shows its row's source at one known extent.
+    private sealed record PatternImages(int Width, int Height) : IWorldScreenImages {
+        public bool ShowsRow(int screen) => true;
+        public bool TryExtent(int screen, out int width, out int height) {
+            (width, height) = (Width, Height);
+
+            return true;
         }
     }
 }

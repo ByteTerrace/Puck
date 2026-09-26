@@ -98,6 +98,7 @@ internal sealed partial class WorldScreenBinder {
         slot.ClearLive();
         slot.Probe = feed;
         slot.DeclaredFault = null;
+        ShowLive(index: index);
 
         return (Ok: true, Message: $"screen {index} showing probe '{id}'");
     }

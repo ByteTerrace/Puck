@@ -9,6 +9,10 @@ public interface IMachineVideoOutput {
     nint NativeImageViewHandle { get; }
     /// <summary>Gets the frame's average emitted color, normalized to 0..1.</summary>
     Vector3 EmittedLight { get; }
+    /// <summary>Gets the image's height, in pixels; positive and fixed for the output's lifetime.</summary>
+    int Height { get; }
+    /// <summary>Gets the image's width, in pixels; positive and fixed for the output's lifetime.</summary>
+    int Width { get; }
 
     /// <summary>Publishes the most recent complete frame on the selected GPU. Unchanged frames need no upload.</summary>
     /// <param name="deviceContext">The GPU device context, whose services upload the frame.</param>

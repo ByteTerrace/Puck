@@ -351,8 +351,18 @@ Free Cam do not alter the logical movement basis.
   draw, in drawing order, each as its published `SourceMapping`
   (`WorldViewGraphHost.PublishPanes`); given a display point, it echoes the
   presentation picker's answer (`pick=instance:<name> pixel <x>,<y>` or
-  `pick=none`) and how the hit walk through the live instance set ends. It
-  refuses by name in a boot with no GPU presentation.
+  `pick=none`) and how the hit walk through the live instance set ends
+  (`walk=<end> steps=<n> in <instance> last <kind>:<source> pixel <x>,<y>`).
+  Each view's world producer reports the screens standing in the world
+  (`WorldViewGraphHost.Screens`, the binder's `WorldScreenMappingSet`), so a
+  walk from a view's pane continues through a screen: `Producer` on a producer,
+  machine or probe source's pixel, `Unread` on a screen showing a camera view,
+  which is no live instance yet. It refuses by name in a boot with no GPU
+  presentation.
+- `world.screens` — lists the declared screens, then the creation faces showing
+  a source, each ending in `mapping <SourceMapping.Describe()>` (the line
+  `world.view.panes` prints for a pane) or `mapping none (<reason>)`. A boot
+  that presents nothing publishes no screen mapping (`none (not published)`).
 - `view.override camera|layout <name|auto>` — live composition override;
   `layout toggle` and `layout next` cycle the authored layouts. It is
   bindable: a bound dispatch (wheel sector / chord row, no tokens) selects the

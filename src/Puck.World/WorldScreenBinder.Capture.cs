@@ -370,6 +370,7 @@ internal sealed partial class WorldScreenBinder {
             feed: feed
         );
         slot.DeclaredFault = null;
+        ShowLive(index: index);
 
         return (Ok: true, Message: $"screen {index} capturing '{windowTitle}'");
     }
@@ -407,6 +408,7 @@ internal sealed partial class WorldScreenBinder {
             feed: feed
         );
         slot.DeclaredFault = null;
+        ShowLive(index: index);
 
         return (Ok: true, Message: $"screen {index} capturing monitor {monitorIndex}");
     }
