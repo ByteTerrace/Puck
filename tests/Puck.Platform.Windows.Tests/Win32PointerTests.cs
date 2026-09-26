@@ -75,6 +75,38 @@ public sealed partial class Win32PointerTests {
         Assert.Equal(2, events.Count(predicate: x => (x.Kind == WindowInputKind.PointerButton)));
         Assert.Equal(new Vector2(x: 0, y: -.5f), Assert.Single(collection: events, predicate: x => (x.Kind == WindowInputKind.PointerWheel)).Vector);
     }
+    // The window is hidden, so the cursor is never over it: every leave request Windows receives is answered with an
+    // immediate WM_MOUSELEAVE, which the next PollEvents dispatches.
+    [Fact]
+    public void Leaving_the_client_forgets_the_position_and_a_drag_defers_the_leave_to_its_release() {
+        if (!OperatingSystem.IsWindows()) { Assert.Skip(reason: "Requires Win32."); return; }
+        using var services = new ServiceCollection().AddWindowsPlatformWindowing().BuildServiceProvider();
+        using var window = Create(services: services);
+        var handle = window.CreateSurfaceBinding().Win32!.Value.WindowHandle;
+
+        // A move and a leave in one frame report the position before forgetting it; a second leave repeats nothing.
+        SendMessage(handle, 0x0200, 0, Position(x: 40, y: 50));
+        window.PollEvents();
+        SendMessage(lParam: 0, message: 0x02A3, wParam: 0, window: handle);
+        window.PollEvents();
+        var left = Drain(window: window);
+
+        Assert.Equal([WindowInputKind.PointerPosition, WindowInputKind.PointerLeft], left.Select(selector: x => x.Kind));
+        Assert.Equal(new Vector2(x: 40, y: 50), left[0].Vector);
+
+        // A drag holding capture keeps its position through a leave: the release still arrives with coordinates, and
+        // the leave follows it once the capture ends outside the client.
+        SendMessage(handle, 0x0201, 1, Position(x: 60, y: 70));
+        SendMessage(lParam: 0, message: 0x02A3, wParam: 0, window: handle);
+        SendMessage(handle, 0x0202, 0, Position(x: -5, y: 80));
+        window.PollEvents();
+        var dragged = Drain(window: window);
+        var release = dragged.FindIndex(match: x => ((x.Kind == WindowInputKind.PointerButton) && (x.Phase == CommandPhase.Completed)));
+
+        Assert.Equal(new Vector2(x: -5, y: 80), dragged[(release - 1)].Vector);
+        Assert.DoesNotContain(collection: dragged[..release], filter: x => (x.Kind == WindowInputKind.PointerLeft));
+        Assert.Equal(WindowInputKind.PointerLeft, dragged[^1].Kind);
+    }
 
     private static INativeWindow Create(ServiceProvider services) => services.GetServices<INativeWindowBackend>()
         .Single(predicate: x => (x.Kind == NativeDisplayKind.Win32)).Create(options: new NativeWindowOptions { Height = 240, Title = "Puck pointer verification", Width = 320 });

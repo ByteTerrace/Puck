@@ -1,0 +1,7 @@
+# The ray lands a quarter across and a quarter down the screen's face; both halves arrive as typed seat verbs and
+# the reads below are held until the tick that applies them, so they see that tick's intent.
+world.wait 5
+source.pointer.origin -0.5 1.5 5
+source.pointer.direction 0 0 -1
+body.channels 0
+world.state

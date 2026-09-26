@@ -56,12 +56,124 @@ public sealed class WorldSeatViewportsLocateLawTests {
 
         return null;
     }
+    // Client positions along one axis: a coarse sweep past both window edges, plus each of the viewport's two edges in
+    // client pixels exactly and a quarter pixel either side of them, where the inside/outside verdict turns.
+    private static IEnumerable<float> Axis(float start, float extent, uint frame, uint client) {
+        var scale = ((client > 0u)
+            ? (client / ((float)frame))
+            : 1f
+        );
+
+        for (var value = -100f; (value <= 2100f); value += 137.5f) {
+            yield return value;
+        }
+
+        foreach (var edge in new[] { (start * frame), ((start + extent) * frame) }) {
+            var clientEdge = (edge * scale);
+
+            yield return (clientEdge - 0.25f);
+            yield return clientEdge;
+            yield return (clientEdge + 0.25f);
+        }
+    }
     private static string? Word(WorldSeatPointerPlace place) => place switch {
         WorldSeatPointerPlace.NoView => "no-view",
         WorldSeatPointerPlace.OutsideViewport => "outside-viewport",
         _ => null,
     };
 
+    [InlineData(0u, 0u, 800f, 450f)]
+    [InlineData(800u, 450u, 400f, 225f)]
+    [Theory]
+    public void AViewportsEdgesAreInsideAndAQuarterPixelPastThemIsNot(uint clientWidth, uint clientHeight, float leftEdge, float bottomEdge) {
+        // The right half of a 1600 by 900 frame, shown at the frame's own size or stretched over a client half as big.
+        var viewports = new WorldSeatViewports();
+
+        viewports.PublishClientExtent(
+            height: clientHeight,
+            width: clientWidth
+        );
+        viewports.Publish(
+            camera: default(CameraSnapshot),
+            height: 900u,
+            region: new NormalizedRect(
+                Height: 1f,
+                Width: 0.5f,
+                X: 0.5f,
+                Y: 0f
+            ),
+            slot: 0,
+            width: 1600u
+        );
+
+        var view = viewports.Seat(slot: 0);
+        var rightEdge = (leftEdge * 2f);
+
+        WorldSeatPointerPlace Place(float x, float y) => viewports.Locate(
+            framePosition: out _,
+            local: out _,
+            position: new Vector2(
+                x: x,
+                y: y
+            ),
+            view: in view
+        );
+
+        Assert.Equal(
+            actual: Place(
+                x: leftEdge,
+                y: 0f
+            ),
+            expected: WorldSeatPointerPlace.Inside
+        );
+        Assert.Equal(
+            actual: Place(
+                x: rightEdge,
+                y: (bottomEdge * 2f)
+            ),
+            expected: WorldSeatPointerPlace.Inside
+        );
+        Assert.Equal(
+            actual: Place(
+                x: (leftEdge - 0.25f),
+                y: 0f
+            ),
+            expected: WorldSeatPointerPlace.OutsideViewport
+        );
+        Assert.Equal(
+            actual: Place(
+                x: (rightEdge + 0.25f),
+                y: 0f
+            ),
+            expected: WorldSeatPointerPlace.OutsideViewport
+        );
+        Assert.Equal(
+            actual: Place(
+                x: leftEdge,
+                y: ((bottomEdge * 2f) + 0.25f)
+            ),
+            expected: WorldSeatPointerPlace.OutsideViewport
+        );
+        _ = viewports.Locate(
+            framePosition: out var frame,
+            local: out var local,
+            position: new Vector2(
+                x: rightEdge,
+                y: bottomEdge
+            ),
+            view: in view
+        );
+        Assert.Equal(
+            actual: (frame, local),
+            expected: (new Vector2(
+                x: 1600f,
+                y: 450f
+            ), new Vector2(
+                x: 1f,
+                y: 0.5f
+            ))
+        );
+    }
     [Fact]
     public void LocateAnswersWhatTheCursorFeedsOwnMappingAnswered() {
         var regions = new[] {
@@ -95,81 +207,86 @@ public sealed class WorldSeatViewportsLocateLawTests {
         var checkedOutside = 0;
         var checkedNoView = 0;
 
-        foreach (var (clientWidth, clientHeight) in extents) {
-            foreach (var region in regions) {
-                foreach (var present in new[] { true, false }) {
-                    var viewports = new WorldSeatViewports();
+        var frames = new (uint Width, uint Height)[] { (1600u, 900u), (1280u, 1024u) };
 
-                    viewports.PublishClientExtent(
-                        height: clientHeight,
-                        width: clientWidth
-                    );
+        foreach (var (frameWidth, frameHeight) in frames) {
+            foreach (var (clientWidth, clientHeight) in extents) {
+                foreach (var region in regions) {
+                    foreach (var present in new[] { true, false }) {
+                        var viewports = new WorldSeatViewports();
 
-                    if (present) {
-                        viewports.Publish(
-                            camera: default(CameraSnapshot),
-                            height: 900u,
-                            region: region,
-                            slot: 2,
-                            width: 1600u
+                        viewports.PublishClientExtent(
+                            height: clientHeight,
+                            width: clientWidth
                         );
-                    }
 
-                    var view = viewports.Seat(slot: 2);
+                        if (present) {
+                            viewports.Publish(
+                                camera: default(CameraSnapshot),
+                                height: frameHeight,
+                                region: region,
+                                slot: 2,
+                                width: frameWidth
+                            );
+                        }
 
-                    for (var x = -100f; (x <= 2000f); x += 137.5f) {
-                        for (var y = -50f; (y <= 1300f); y += 91.25f) {
-                            var position = new Vector2(
-                                x: x,
-                                y: y
-                            );
-                            var expected = Oracle(
-                                clientHeight: clientHeight,
-                                clientWidth: clientWidth,
-                                framePosition: out var expectedFrame,
-                                localX: out var expectedX,
-                                localY: out var expectedY,
-                                position: position,
-                                view: in view
-                            );
-                            var place = viewports.Locate(
-                                framePosition: out var frame,
-                                local: out var local,
-                                position: position,
-                                view: in view
-                            );
+                        var view = viewports.Seat(slot: 2);
 
-                            Assert.Equal(
-                                actual: Word(place: place),
-                                expected: expected
-                            );
-                            Assert.Equal(
-                                actual: frame,
-                                expected: expectedFrame
-                            );
-                            Assert.Equal(
-                                actual: local,
-                                expected: new Vector2(
-                                    x: expectedX,
-                                    y: expectedY
-                                )
-                            );
+                        foreach (var x in Axis(start: region.X, extent: region.Width, frame: frameWidth, client: clientWidth)) {
+                            foreach (var y in Axis(start: region.Y, extent: region.Height, frame: frameHeight, client: clientHeight)) {
+                                var position = new Vector2(
+                                    x: x,
+                                    y: y
+                                );
+                                var expected = Oracle(
+                                    clientHeight: clientHeight,
+                                    clientWidth: clientWidth,
+                                    framePosition: out var expectedFrame,
+                                    localX: out var expectedX,
+                                    localY: out var expectedY,
+                                    position: position,
+                                    view: in view
+                                );
+                                var place = viewports.Locate(
+                                    framePosition: out var frame,
+                                    local: out var local,
+                                    position: position,
+                                    view: in view
+                                );
 
-                            switch (place) {
-                                case WorldSeatPointerPlace.Inside:
-                                    checkedInside++;
-                                    break;
-                                case WorldSeatPointerPlace.OutsideViewport:
-                                    checkedOutside++;
-                                    break;
-                                default:
-                                    checkedNoView++;
-                                    break;
+                                Assert.Equal(
+                                    actual: Word(place: place),
+                                    expected: expected
+                                );
+                                Assert.Equal(
+                                    actual: frame,
+                                    expected: expectedFrame
+                                );
+                                Assert.Equal(
+                                    actual: local,
+                                    expected: new Vector2(
+                                        x: expectedX,
+                                        y: expectedY
+                                    )
+                                );
+
+                                switch (place) {
+                                    case WorldSeatPointerPlace.Inside:
+                                        checkedInside++;
+                                        break;
+                                    case WorldSeatPointerPlace.OutsideViewport:
+                                        checkedOutside++;
+                                        break;
+                                    default:
+                                        checkedNoView++;
+                                        break;
+                                }
                             }
                         }
                     }
                 }
             }
+
         }
 
         // Every verdict is exercised, so the agreement is not vacuous.
