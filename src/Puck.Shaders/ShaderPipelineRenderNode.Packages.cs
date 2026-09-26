@@ -49,6 +49,7 @@ public sealed partial class ShaderPipelineRenderNode {
         Package: planned.Package!.Package,
         Parameters: planned.Parameters,
         Pass: planned.Name,
+        Pipelines: request.Pipelines,
         Services: request.Gpu,
         Width: extent.Width
     );

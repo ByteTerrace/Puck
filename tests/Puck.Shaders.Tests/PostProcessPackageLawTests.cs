@@ -12,8 +12,8 @@ namespace Puck.Shaders.Tests;
 /// and graphics pipeline it is created for, the vertex buffer and the draw, the input written at the set's source
 /// binding, and the frame group and pass blocks the draw reads byte for byte, bound config and live changes included,
 /// with nothing pushed); it is handed its input shader-readable and its target in render-target layout by the node's
-/// planned barriers and records none of its own; its pipeline is built off the frame thread and released with its graph
-/// on replacement, device loss and disposal; a config that does not bind is refused by the graph compiler by name; and a
+/// planned barriers and records none of its own; its pipeline is built off the frame thread, shared with a graph that
+/// replaces its own, and released on device loss and disposal; a config that does not bind is refused by the graph compiler by name; and a
 /// steady frame allocates nothing.
 /// </summary>
 public sealed class PostProcessPackageLawTests {
@@ -81,6 +81,7 @@ public sealed class PostProcessPackageLawTests {
 
         var plan = new RenderGraphCompiler(packages: Catalog()).Compile(definition: Graph(config: config));
         var node = new ShaderPipelineRenderNode(
+            pipelines: new GpuPassPipelineCache(),
             deviceContext: ((faults is null)
                 ? gpu
                 : new FaultingDevice(
@@ -298,7 +299,7 @@ public sealed class PostProcessPackageLawTests {
         }
     }
     [Fact]
-    public void ThePipelineIsBuiltOffTheFrameThreadAndReleasedWithItsGraphOnReplacementDeviceLossAndDisposal() {
+    public void ThePipelineIsBuiltOffTheFrameThreadSharedWithTheGraphThatReplacesItAndReleasedOnDeviceLossAndDisposal() {
         var gpu = new FakePipelineGpu();
         var node = PackageNode(
             config: null,
@@ -321,6 +322,8 @@ public sealed class PostProcessPackageLawTests {
             actual: first.DisposeCount
         );
 
+        // A resize replaces the graph with the same set's pass, whose pipeline key is unchanged: the replacement joins the
+        // pass-pipeline cache's entry, so the replaced graph's retirement releases its lease and disposes nothing.
         node.Resize(
             height: (Extent / 2),
             width: (Extent / 2)
@@ -339,22 +342,33 @@ public sealed class PostProcessPackageLawTests {
         _ = node.ProduceFrame(context: default);
         _ = node.ProduceFrame(context: default);
         Assert.Equal(
-            expected: 1,
-            actual: first.DisposeCount
+            expected: (Pipelines: 1, Disposed: 0),
+            actual: (Pipelines: gpu.CreatedObjects.Count(predicate: static created => (created.Kind == "graphics pipeline")), Disposed: first.DisposeCount)
         );
 
-        var second = gpu.CreatedObjects.Last(predicate: static created => (created.Kind == "graphics pipeline"));
-
+        // A device loss releases the graph's lease, the entry's last, which disposes the pipeline; the rebuild after it
+        // creates another, off the frame thread again.
         node.OnDeviceLost();
         Assert.Equal(
             expected: 1,
-            actual: second.DisposeCount
+            actual: first.DisposeCount
         );
         node.BindImage(
             image: Input,
             name: "input"
         );
         ProduceUntilPublished(node: node);
+
+        var second = gpu.CreatedObjects.Last(predicate: static created => (created.Kind == "graphics pipeline"));
+
+        Assert.NotSame(
+            actual: second,
+            expected: first
+        );
+        Assert.NotEqual(
+            expected: Environment.CurrentManagedThreadId,
+            actual: second.ThreadId
+        );
         node.Dispose();
         Assert.All(
             action: static created => Assert.True(

@@ -62,6 +62,7 @@ public sealed class WorldPipelineResizedWaitLawTests {
             BeforeComputePipeline = _ => gate.Wait(),
         };
         using var node = new ShaderPipelineRenderNode(
+            pipelines: new GpuPassPipelineCache(),
             deviceContext: gpu,
             height: Extent,
             hostsOnDirectX: false,

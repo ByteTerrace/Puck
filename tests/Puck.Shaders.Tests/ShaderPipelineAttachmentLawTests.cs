@@ -161,6 +161,7 @@ public sealed class ShaderPipelineAttachmentLawTests {
     private static ShaderPipelineRenderNode InstalledNode(FakePipelineGpu gpu, ShaderPipelinePlan plan) {
         const uint InFlight = 3;
         var node = new ShaderPipelineRenderNode(
+            pipelines: new GpuPassPipelineCache(),
             deviceContext: gpu,
             height: Extent,
             hostsOnDirectX: false,

@@ -9,7 +9,8 @@ namespace Puck.Shaders;
 /// <para>
 /// The kernel reads the pass group the catalog declares (<see cref="RenderGraphPackageCatalog.SourceMembers"/>): the
 /// region at binding 1 and the image at binding 2 of set 3, eight by eight threads a group, one thread a pixel. Its build
-/// creates the shader module and the compute pipeline on the thread pool; its recorder allocates its sets from the
+/// leases the compute pipeline, one for every conversion of its kind on the device, from the pass-pipeline cache on the
+/// thread pool; its recorder allocates its sets from the
 /// instance's pool. Its ports are a compute read and a compute write, so the node's planned barriers leave the region
 /// readable and the image in the storage layout; it records no barrier.</para>
 /// </summary>
@@ -84,17 +85,10 @@ public sealed class SourceConversionPackage : IRenderGraphPackageFactory {
                 ? ".comp.dxil"
                 : ".comp.spv"))
         ));
-        var built = new Built();
-
-        try {
-            cancellationToken.ThrowIfCancellationRequested();
-            built.Module = context.Services.ShaderModuleFactory.Create(
+        var lease = context.Pipelines.Acquire(
+            device: context.Device,
+            key: GpuPassPipelineKey.OfCompute(
                 bytecode: bytecode,
-                stage: GpuShaderStage.Compute
-            );
-            cancellationToken.ThrowIfCancellationRequested();
-            built.Pipeline = context.Services.PipelineFactory.Create(
-                computeShaderModule: built.Module,
                 description: new GpuComputePipelineDescription(
                     Bindings: [],
                     Layout: context.Parameters.Layout.PipelineLayout(
@@ -103,19 +97,19 @@ public sealed class SourceConversionPackage : IRenderGraphPackageFactory {
                     ),
                     Name: m_package,
                     PushConstantBinding: null
-                ),
-                name: new GpuObjectName(
-                    owner: context.Instance,
-                    part: context.Pass
                 )
-            );
+            )
+        );
+
+        try {
+            _ = lease.Wait(cancellationToken: cancellationToken);
         } catch {
-            built.Dispose();
+            lease.Release();
 
             throw;
         }
 
-        return built;
+        return new Built(lease: lease);
     }
     /// <inheritdoc/>
     /// <exception cref="ArgumentNullException"><paramref name="context"/> or <paramref name="groups"/> is
@@ -142,16 +136,11 @@ public sealed class SourceConversionPackage : IRenderGraphPackageFactory {
     }
 
     // The module and pipeline one pass's build creates, which its recorder owns once created.
-    private sealed class Built : IDisposable {
-        public IGpuShaderModule? Module;
-        public IGpuComputePipeline? Pipeline;
+    private sealed class Built(GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> lease) : IDisposable {
+        public IGpuComputePipeline Pipeline { get; } = lease.Current!.Compute!;
 
-        public void Dispose() {
-            Pipeline?.Dispose();
-            Pipeline = null;
-            Module?.Dispose();
-            Module = null;
-        }
+        public void Dispose() =>
+            lease.Release();
     }
     // Records one conversion. The pass set is per frame slot, since the instance waits only that slot's previous
     // submission before recording into it, and the region's buffer is the slot's own.
@@ -171,7 +160,7 @@ public sealed class SourceConversionPackage : IRenderGraphPackageFactory {
             try {
                 m_sets = new RenderGraphPackageSets(
                     context: context,
-                    groupLayoutHandles: built.Pipeline!.GroupLayoutHandles,
+                    groupLayoutHandles: built.Pipeline.GroupLayoutHandles,
                     groups: groups
                 );
                 m_region = m_sets.BindingOf(member: RenderGraphPackageCatalog.SourceRegion);
@@ -194,7 +183,7 @@ public sealed class SourceConversionPackage : IRenderGraphPackageFactory {
         public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
             var command = recording.CommandBuffer;
             var recorder = recording.Recorder;
-            var pipeline = m_built.Pipeline!;
+            var pipeline = m_built.Pipeline;
             var set = m_sets.PassSet(slot: recording.Slot);
             var region = recording.Inputs[0].Buffer!;
 

@@ -303,7 +303,7 @@ public sealed partial class OverlayPackageLawTests {
                 },
                 vertexBytecode: new byte[] { 1 }
             );
-            var packages = new RenderGraphPackageRecorders(regionCopy: new GpuRegionCopyPipelineCache(kernel: new byte[] { 1 }));
+            var packages = new RenderGraphPackageRecorders(regionCopy: new GpuRegionCopyPass(kernel: new byte[] { 1 }, pipelines: new GpuPassPipelineCache()));
 
             Observed = new ObservedPackageFactory(
                 barriers: () => ((gpu.Count(key: "IGpuRecorder.TransitionImageLayout") + gpu.Count(key: "IGpuRecorder.MemoryBarrier")) + gpu.Count(key: "IGpuRecorder.TransitionBuffer")),
@@ -314,6 +314,7 @@ public sealed partial class OverlayPackageLawTests {
                 package: RenderGraphPackageCatalog.Overlay
             );
             Node = new ShaderPipelineRenderNode(
+                pipelines: new GpuPassPipelineCache(),
                 deviceContext: ((faults is null)
                     ? gpu
                     : new FaultingDevice(

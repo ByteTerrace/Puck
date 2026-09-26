@@ -143,6 +143,7 @@ public sealed class ShaderPipelineVersionLawTests {
             : barrier);
     private static ShaderPipelineRenderNode InstalledNode(FakePipelineGpu gpu, ShaderPipelinePlan plan) {
         var node = new ShaderPipelineRenderNode(
+            pipelines: new GpuPassPipelineCache(),
             deviceContext: gpu,
             height: Extent,
             hostsOnDirectX: false,

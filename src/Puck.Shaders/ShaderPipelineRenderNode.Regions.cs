@@ -25,8 +25,8 @@ public sealed partial class ShaderPipelineRenderNode {
 
     // The device's region-copy pipeline, leased by the build of the first graph with a staged region, and each slot's
     // command pool the frame's copies are recorded in; all held until a device loss or disposal.
-    private GpuRegionCopyPipelineLease? m_regionCopy;
-    private GpuRegionCopyPipeline? m_copyPipeline;
+    private GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? m_regionCopy;
+    private IGpuComputePipeline? m_copyPipeline;
     private IGpuCommandPool[]? m_copyPools;
     // The installed graph's copy pool, owned by its first pass, and the share each of its staged host buffer ports
     // takes. While a graph allocates, the pool it created belongs to m_regionCopiesOwner until its first pass takes it,
@@ -132,7 +132,7 @@ public sealed partial class ShaderPipelineRenderNode {
             readersInFlight: true
         ) == GpuResidencyPolicy.Staged);
     // The host's region-copy pipelines, which a staged region needs.
-    private static GpuRegionCopyPipelineCache RegionCopyOf(IGpuDeviceContext device, string instance, RenderGraphPackageRecorders packages) =>
+    private static GpuRegionCopyPass RegionCopyOf(IGpuDeviceContext device, string instance, RenderGraphPackageRecorders packages) =>
         (packages.RegionCopy ?? throw new InvalidOperationException(message: $"Instance '{instance}' stages a region on this device ({device.MemoryProfile}), but its host offers no region-copy pipeline."));
     // Takes the finished build's lease on the region-copy pipeline once its graph has installed: the node's own when it
     // holds none, and otherwise released, since both share the one pipeline the device's cache keeps.

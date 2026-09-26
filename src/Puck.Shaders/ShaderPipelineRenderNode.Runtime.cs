@@ -114,6 +114,9 @@ public sealed partial class ShaderPipelineRenderNode {
 
         // Why a package pass's outputs cannot stand for its inputs when it draws nothing, or null when they can.
         public string? PackageAliasRefusal;
+        // The pass's pipeline, leased from the node's pass-pipeline cache and released last, and the pipeline and render
+        // pass it holds; a package pass leases through its own recorder instead.
+        public GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? Pipeline;
         public IGpuComputePipeline? Compute;
         public IGpuCommandPool[]? Draw;
         public IGpuFramebuffer[]? Framebuffers;
@@ -123,10 +126,8 @@ public sealed partial class ShaderPipelineRenderNode {
         // holds, so disposing the graph's passes destroys it once.
         public nint DescriptorPool;
         public IGpuCommandPool[]? Pre;
-        public IGpuShaderModule? Primary;
         public IGpuRenderPass? RenderPass;
         public nint[]? Samplers;
-        public IGpuShaderModule? Secondary;
         public nint[]? Sets;
         public IGpuBuffer? GeometryBuffer;
         public IRenderGraphPackageRecorder? Package;
@@ -138,17 +139,12 @@ public sealed partial class ShaderPipelineRenderNode {
         public void Dispose(GpuDeviceServices gpu, IGpuDeviceContext device) {
             Package?.Dispose();
             Package = null;
-            Compute?.Dispose();
             GeometryBuffer?.Dispose();
             if (Framebuffers is not null) {
                 foreach (var framebuffer in Framebuffers) {
                     framebuffer?.Dispose();
                 }
             }
-            Graphics?.Dispose();
-            RenderPass?.Dispose();
-            Primary?.Dispose();
-            Secondary?.Dispose();
             if (Draw is not null) {
                 foreach (var pool in Draw) {
                     pool?.Dispose();
@@ -188,6 +184,11 @@ public sealed partial class ShaderPipelineRenderNode {
                     }
                 }
             }
+            Compute = null;
+            Graphics = null;
+            RenderPass = null;
+            Pipeline?.Release();
+            Pipeline = null;
         }
     }
 }

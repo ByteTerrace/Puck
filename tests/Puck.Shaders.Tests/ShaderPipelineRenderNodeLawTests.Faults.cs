@@ -27,6 +27,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
     // counts cleared, so the next replacement's creations count from one.
     private static ShaderPipelineRenderNode InstalledFaultingNode(FakePipelineGpu gpu, GpuCreationFaults faults) {
         var node = new ShaderPipelineRenderNode(
+            pipelines: new GpuPassPipelineCache(),
             deviceContext: new FaultingDevice(
                 faults: faults,
                 gpu: gpu
@@ -57,7 +58,9 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         // pipelines and a graphics one; one descriptor pool for the graph's three passes; per slot a command pool
         // for each compute pass and the fullscreen pass's barrier and draw pools; one framebuffer per slot; one render
         // pass; and per slot one host-visible constant buffer for the frame group's block and one for each pass's pass
-        // block. Samplers are the one creation the fake counts that the decorator cannot fail.
+        // block. Its shaders differ from the installed graph's, so its modules, render pass and pipelines are new
+        // pass-pipeline cache entries, created through the node's faulting device. Samplers are the one creation the fake
+        // counts that the decorator cannot fail.
         var expected = new Dictionary<GpuCreationKind, long> {
             [GpuCreationKind.Pipeline] = 3L,
             [GpuCreationKind.Buffer] = (4L * InFlight),
@@ -81,7 +84,10 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             _ = SwapAndProduce(
                 gpu: measuredGpu,
                 node: probe,
-                pipeline: Feedback(historyFormat: "R32G32B32A32Float")
+                pipeline: Feedback(
+                    historyFormat: "R32G32B32A32Float",
+                    revision: 1
+                )
             );
             Assert.Null(@object: probe.LastSwapError);
 
@@ -122,7 +128,10 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
                 var afterRefusal = SwapAndProduce(
                     gpu: gpu,
                     node: node,
-                    pipeline: Feedback(historyFormat: "R32G32B32A32Float")
+                    pipeline: Feedback(
+                        historyFormat: "R32G32B32A32Float",
+                        revision: 1
+                    )
                 );
 
                 // Refused by the fault, which names the creation it failed and fired once.
@@ -188,7 +197,10 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
                 _ = SwapAndProduce(
                     gpu: gpu,
                     node: node,
-                    pipeline: Feedback(historyFormat: "R32G32B32A32Float")
+                    pipeline: Feedback(
+                        historyFormat: "R32G32B32A32Float",
+                        revision: 1
+                    )
                 );
                 Assert.Null(@object: node.LastSwapError);
                 Assert.NotSame(

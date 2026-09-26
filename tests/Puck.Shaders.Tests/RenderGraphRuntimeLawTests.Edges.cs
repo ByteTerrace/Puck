@@ -349,6 +349,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         );
 
         Assert.False(condition: RenderGraphRuntime.TryCreate(
+            pipelines: new GpuPassPipelineCache(),
             deviceContext: new FakePipelineGpu(),
             graphs: [
                 Graph(pipeline: CameraGraph()),
@@ -378,6 +379,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         );
 
         Assert.False(condition: RenderGraphRuntime.TryCreate(
+            pipelines: new GpuPassPipelineCache(),
             deviceContext: new FakePipelineGpu(),
             graphs: [
                 Graph(pipeline: CameraGraph()),
@@ -391,6 +393,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
             set: set
         ));
         Assert.False(condition: RenderGraphRuntime.TryCreate(
+            pipelines: new GpuPassPipelineCache(),
             deviceContext: new FakePipelineGpu(),
             graphs: [
                 Graph(pipeline: CameraGraph()),

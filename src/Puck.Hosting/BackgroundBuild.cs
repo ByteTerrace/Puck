@@ -28,7 +28,9 @@ public sealed class BackgroundBuild<T> where T : class {
     public bool IsPending => (m_task is not null);
     /// <summary>Gets the pending build's task, which completes when the build finishes, successfully or not, or
     /// <see langword="null"/> when none is pending. A waiter on another thread reads it under the owner's lock and waits
-    /// outside it, then takes the result through the owner; it never takes the result from the task itself.</summary>
+    /// outside it, then takes the result through the owner; it never takes the result from the task itself. A wait on a
+    /// pool thread may run a build that has not started yet inline, so a build that waits for another cannot starve the
+    /// pool.</summary>
     public Task? Completion => m_task;
 
     // Faults of a detached build are observed here, so a superseded failure never reaches the unobserved-task handler.

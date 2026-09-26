@@ -13,12 +13,12 @@ namespace Puck.Overlays;
 /// images, the one sampler they are all read through and the storage buffer
 /// (<see cref="RenderGraphPackageCatalog.OverlayMembers"/>).
 /// <para>
-/// Its build creates the two shader modules, the render pass and the graphics pipeline, through the pass's pipeline
-/// layout, on the thread pool. It states one region (<see cref="Regions"/>), the storage buffer the shader reads: the
-/// static prefix (the token slab and the glyph pack), then the frame's packed records at the builder's own bases, which
-/// it writes into the pass block. The instance creates the region under the policy the device's memory selects and
-/// flushes and copies it. The recorder takes the built objects when the graph installs and, since it never waits a fence
-/// of its own, keeps its frame and pass group sets per frame slot from the instance's pool
+/// Its build leases the graphics pipeline, its two shader modules and the render pass it draws in, through the pass's
+/// pipeline layout, from the pass-pipeline cache on the thread pool. It states one region (<see cref="Regions"/>), the
+/// storage buffer the shader reads: the static prefix (the token slab and the glyph pack), then the frame's packed records
+/// at the builder's own bases, which it writes into the pass block. The instance creates the region under the policy the
+/// device's memory selects and flushes and copies it. The recorder takes the built objects when the graph installs and,
+/// since it never waits a fence of its own, keeps its frame and pass group sets per frame slot from the instance's pool
 /// (<see cref="RenderGraphPackageSets"/>); it writes the static prefix into the region once, the token slab again on a
 /// theme change, and each frame's records, so the region owes only the words a frame changes. The <c>Frame</c>
 /// elements' leases go to the frame's lease list, which retires them after the slot's fence. A frame with nothing visible records nothing and
@@ -55,31 +55,9 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
             throw new InvalidDataException(message: $"Pass '{context.Pass}' of package '{RenderGraphPackageCatalog.Overlay}' must read one image and write one.");
         }
 
-        var services = context.Services;
-        var built = new Built();
-
-        try {
-            cancellationToken.ThrowIfCancellationRequested();
-            built.Vertex = services.ShaderModuleFactory.Create(
-                bytecode: vertexBytecode,
-                stage: GpuShaderStage.Vertex
-            );
-            cancellationToken.ThrowIfCancellationRequested();
-            built.Fragment = services.ShaderModuleFactory.Create(
-                bytecode: fragmentBytecode,
-                stage: GpuShaderStage.Fragment
-            );
-            built.RenderPass = services.RenderPassFactory.Create(description: new GpuRenderPassDescription(Colors: [new GpuColorAttachment(
-                FinalLayout: GpuImageLayout.RenderTarget,
-                Format: ShaderPipelineRenderNode.ParseFormat(format: context.Outputs[0].Format),
-                Load: GpuAttachmentLoad.Clear,
-                Store: GpuAttachmentStore.Store
-            )]), name: new GpuObjectName(
-                owner: context.Instance,
-                part: context.Pass
-            ));
-            cancellationToken.ThrowIfCancellationRequested();
-            built.Pipeline = services.PipelineFactory.Create(
+        var lease = context.Pipelines.Acquire(
+            device: context.Device,
+            key: GpuPassPipelineKey.OfGraphics(
                 description: new GpuGraphicsPipelineDescription(
                     Layout: context.Parameters.Layout.PipelineLayout(
                         pushesIndex: false,
@@ -95,21 +73,26 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
                         StrideBytes: FullscreenTriangle.StrideBytes
                     )
                 ),
-                name: new GpuObjectName(
-                    owner: context.Instance,
-                    part: context.Pass
-                ),
-                fragmentShaderModule: built.Fragment,
-                renderPass: built.RenderPass,
-                vertexShaderModule: built.Vertex
-            );
+                fragment: fragmentBytecode,
+                renderPass: new GpuRenderPassDescription(Colors: [new GpuColorAttachment(
+                    FinalLayout: GpuImageLayout.RenderTarget,
+                    Format: ShaderPipelineRenderNode.ParseFormat(format: context.Outputs[0].Format),
+                    Load: GpuAttachmentLoad.Clear,
+                    Store: GpuAttachmentStore.Store
+                )]),
+                vertex: vertexBytecode
+            )
+        );
+
+        try {
+            _ = lease.Wait(cancellationToken: cancellationToken);
         } catch {
-            built.Dispose();
+            lease.Release();
 
             throw;
         }
 
-        return built;
+        return new Built(lease: lease);
     }
     /// <inheritdoc/>
     /// <exception cref="ArgumentNullException"><paramref name="context"/> or <paramref name="groups"/> is
@@ -171,23 +154,13 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
         m_themeRevision++;
     }
 
-    // The modules, render pass and pipeline one pass's build creates, which its recorder owns once created.
-    private sealed class Built : IDisposable {
-        public IGpuShaderModule? Fragment;
-        public IGpuPipeline? Pipeline;
-        public IGpuRenderPass? RenderPass;
-        public IGpuShaderModule? Vertex;
+    // One pass's lease on its pipeline and the render pass it draws in, which its recorder owns once created.
+    private sealed class Built(GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> lease) : IDisposable {
+        public IGpuPipeline Pipeline { get; } = lease.Current!.Graphics!;
+        public IGpuRenderPass RenderPass { get; } = lease.Current!.RenderPass!;
 
-        public void Dispose() {
-            Pipeline?.Dispose();
-            Pipeline = null;
-            RenderPass?.Dispose();
-            RenderPass = null;
-            Fragment?.Dispose();
-            Fragment = null;
-            Vertex?.Dispose();
-            Vertex = null;
-        }
+        public void Dispose() =>
+            lease.Release();
     }
     // Records one overlay pass. Everything a frame rewrites is per frame slot, since the instance waits only that slot's
     // previous submission before recording into it.
@@ -256,7 +229,7 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
                 );
                 m_sets = new RenderGraphPackageSets(
                     context: context,
-                    groupLayoutHandles: built.Pipeline!.GroupLayoutHandles,
+                    groupLayoutHandles: built.Pipeline.GroupLayoutHandles,
                     groups: groups
                 );
                 m_source = m_sets.BindingOf(member: RenderGraphPackageCatalog.OverlaySource);
@@ -272,7 +245,7 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
                             value: m_services.RenderPassFactory.CreateFramebuffer(
                                 colors: [image],
                                 depth: null,
-                                renderPass: built.RenderPass!
+                                renderPass: built.RenderPass
                             )
                         );
                     }
@@ -361,7 +334,7 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
             var target = (output.Owned ?? throw new InvalidDataException(message: $"Output '{output.Version}' is not an image the instance owns, so the overlay cannot draw into it."));
             var command = recording.CommandBuffer;
             var recorder = recording.Recorder;
-            var pipeline = m_built.Pipeline!;
+            var pipeline = m_built.Pipeline;
             var framebuffer = (m_framebuffers.GetValueOrDefault(key: target.ImageHandle) ?? throw new InvalidDataException(message: $"Output '{output.Version}' is an image the overlay was not installed with."));
 
             WriteImages(

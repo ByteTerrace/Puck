@@ -218,7 +218,8 @@ public sealed partial class ShaderPipelineRenderNode {
                 InFlight: m_inFlight,
                 Instance: m_descriptor.Name,
                 Key: default,
-                Packages: m_packages
+                Packages: m_packages,
+                Pipelines: m_pipelines
             );
 
             var factory = m_packages.FactoryFor(
