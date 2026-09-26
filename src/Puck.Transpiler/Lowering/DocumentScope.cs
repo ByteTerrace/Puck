@@ -60,6 +60,13 @@ public interface IDocumentVocabulary {
     /// <remarks>A declared arm at a known position takes precedence over a compile-time builtin of the same name.
     /// Do not return an arm from an unrelated position when <paramref name="context"/> is known.</remarks>
     object? CallContext(object? context, string callName) => null;
+    /// <summary>Returns whether a call's name is one of the vocabulary's document arms at any position: what lowering
+    /// asks of a call that is no compile-time function before it builds the call as an arm.</summary>
+    /// <param name="callName">The call's name as written.</param>
+    /// <returns><see langword="false"/> only when the vocabulary knows its arms and none carries the name, which lowering
+    /// refuses at the call as an unknown compile-time function (<c>PUCK041</c>); <see langword="true"/> otherwise,
+    /// including for a vocabulary that declares no arm table.</returns>
+    bool NamesArm(string callName) => true;
     /// <summary>Returns the position a member's value fills, with a list reduced to its element.</summary>
     /// <param name="context">The position of the object or call holding the member.</param>
     /// <param name="memberName">The member's name.</param>

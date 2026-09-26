@@ -12,8 +12,10 @@ public static class PuckDiagnosticCodes {
     public const string LocalInitializerMissing = "PUCK007";
     /// <summary>A <c>local</c> missing its required kind annotation.</summary>
     public const string LocalKindMissing = "PUCK006";
-    /// <summary>PUCK041: an array builtin (<c>map</c>, <c>filter</c>, <c>reduce</c>, <c>range</c>, <c>length</c>,
-    /// <c>concat</c>) called with arguments it cannot evaluate at compile time.</summary>
+    /// <summary>PUCK041: a compile-time call refused at the call: a collection builtin (<c>map</c>, <c>filter</c>,
+    /// <c>reduce</c>, <c>range</c>, <c>length</c>, <c>concat</c>, ...) or a scalar function called with arguments it
+    /// cannot evaluate at compile time, or a name that is neither a compile-time function nor an arm the vocabulary
+    /// declares (<c>min</c>, where the one spelling is <c>minimum</c>).</summary>
     public const string BuiltinRefused = "PUCK041";
     /// <summary>A chained comparison in one <c>when</c> clause.</summary>
     public const string ChainedComparison = "PUCK004";
