@@ -9,7 +9,7 @@ namespace Puck.World;
 /// installed before any pre-container document parse the validators run during.
 /// </summary>
 /// <remarks>
-/// REQUIRED, not optional — the same shape as <see cref="WorldExtensionVocabularyHook"/>: an UNSET property can only
+/// REQUIRED, not optional — the same shape as <see cref="WorldPostProcessVocabularyHook"/>: an UNSET property can only
 /// mean no composition root installed it. The check itself answers <see langword="bool"/>? — <see langword="true"/>
 /// (registered), <see langword="false"/> (a real catalog exists and refuses the key by name), or
 /// <see langword="null"/> (the installing host carries no probe-kind catalog at all, so

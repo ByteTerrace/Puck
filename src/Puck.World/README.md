@@ -286,7 +286,7 @@ among them, and `WorldBootCompositionLawTests` resolves what it registers
 without a device.
 
 **Offscreen.** The document's `host.presentation: offscreen` boots a real GPU
-device and the composed-frame render pipeline (the world render alone—no post-render extension chain,
+device and the composed-frame render pipeline (the world render and its `views.post` passes—no
 unified overlay/console-mirror/binding-bar, no audio device, no gamepad or
 pointer input) with NO window and NO swap chain ever created, so
 `world.screenshot` writes real PNGs of the composed world with nothing on
@@ -1439,7 +1439,7 @@ each of the kind's typed sockets (`inputs`, by socket name)—or, in place of
 every socket at once, a recorded `puck.probe.track.v1` track—and carry the
 bindings that route one of its channels to a command axis (a `probe.<name>`
 source, an ordinary bindable stick-like input any binding overlay may map), a
-presentation float (a `render.extensions` config field, or another probe's
+presentation float (a `views.post` pass's config field, or another probe's
 kind config field—patched live into its running kernel), or the existing
 camera control surface. A socket's class is `frame` (any one frame source) or
 `strobePair` (a strobing infrared sensor's lit frame and the unlit frame kept
@@ -1573,9 +1573,8 @@ line per kind it counts. The boot server registers its own sources:
 rebuild (`world.reload`, `world.load`, `world.reset`) that replaces the arena
 and search behind them, so a reading never goes down, and `state.rules`. A
 rendering shape adds the shader compiler's `shaders.compiler` (requests, cache
-hits and each native tool's runs) and the process's shader loads,
-`shaders.sdf-kernels` and `shaders.set-manifest`
-(loads and the bytecode bytes they read); each backend adds its
+hits and each native tool's runs) and the process's SDF kernel loads,
+`shaders.sdf-kernels` (loads and the bytecode bytes they read); each backend adds its
 `pipeline-cache.<backend>` and `memory.<backend>` (device-local bytes
 allocated and released at their allocation sizes, and the peak held; swapchain
 images are never counted), and Vulkan adds `procedures.vulkan`. A rendering
@@ -1691,7 +1690,7 @@ confirm the capture completion before reading the file. Its stdout echo says `pe
 precisely because no file exists yet; the resolved path arrives on **stderr**
 when the frame lands, named by whichever node served it: `[capture] main ->
 <path>` from the node of the render graph's root, which draws the
-`render.extensions` passes and the overlay over the world, or `[debug] captured
+`views.post` passes and the overlay over the world, or `[debug] captured
 frame N -> <path>` from the engine node when the world is the root because
 nothing is drawn over it. The root reads the frame the display shows; an
 overlay that draws nothing this frame publishes the world's image in its place,

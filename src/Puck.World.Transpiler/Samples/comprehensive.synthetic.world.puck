@@ -75,6 +75,16 @@ views {
     source: "../pipelines/moth.hlsl"
     timeScale: 1
   }
+
+  post [
+    {
+      name: "grain"
+      package: "sdf.film-grain"
+      config {
+        intensity: 0.05
+      }
+    }
+  ]
 }
 
 // Addon with auto-hashing

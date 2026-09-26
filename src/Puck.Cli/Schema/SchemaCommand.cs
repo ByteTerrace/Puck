@@ -20,9 +20,9 @@ namespace Puck.Cli.Schema;
 // model shape's in WorldModelShapeSource, whose reflective walk no engine process runs; this verb only
 // decides where the text goes and, under --check, whether every file agrees with what is on disk — the same
 // drift-detection shape `puck architecture --map` establishes for docs/project-map.md's layering block. The one input
-// the generator takes from outside the type model is the shipped post-render extension vocabulary: every
-// puck.shader.manifest.v1 manifest under src/*/Assets/Shaders, whose id and config schema splice into
-// render.extensions[] so an entry's config validates by id.
+// the generator takes from outside the type model is the post-process package vocabulary: every post-process package
+// of the engine's render graph catalog, whose id and config schema splice into views.post[] so a row's config validates
+// by package.
 // Exit 0 wrote/matched, 1 check found drift, 2 usage error or missing repository root.
 internal static class SchemaCommand {
     private const string CountersReportRelativePath = "tests/Puck.Counters/puck.counters.report.v1.schema.json";
@@ -95,44 +95,17 @@ internal static class SchemaCommand {
         );
     }
 
-    // Every src/<project>/Assets/Shaders tree is a shipped shader asset tree (the shared shader recipe ships its
-    // manifests beside its bytecode), so their manifests are the extension vocabulary the runtime catalog sees.
-    internal static List<WorldSchema.PostRenderExtensionSchema> LoadPostRenderExtensions(string repositoryRoot) {
-        var extensions = new List<WorldSchema.PostRenderExtensionSchema>();
-        var seen = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
-
-        foreach (var project in Directory.EnumerateDirectories(path: Path.Combine(
-            path1: repositoryRoot,
-            path2: "src"
-        )).Order(comparer: StringComparer.Ordinal)) {
-            var catalog = ShaderSetCatalog.Scan(rootDirectory: Path.Combine(
-                path1: project,
-                path2: "Assets",
-                path3: "Shaders"
-            ));
-
-            foreach (var id in catalog.Ids) {
-                if (!seen.TryAdd(
-                    key: id,
-                    value: project
-                )) {
-                    throw new InvalidDataException(message: $"Shader set '{id}' is shipped by both '{seen[id]}' and '{project}'.");
-                }
-
-                extensions.Add(item: new WorldSchema.PostRenderExtensionSchema(
-                    Id: id,
-                    ConfigSchema: catalog.Load(id: id).ConfigJsonSchema()
-                ));
-            }
-        }
-
-        extensions.Sort(comparison: static (a, b) => string.CompareOrdinal(
-            strA: a.Id,
-            strB: b.Id
-        ));
-
-        return extensions;
-    }
+    // The engine catalog's post-process packages, each with its config schema, the vocabulary views.post[] validates
+    // against.
+    internal static List<WorldSchema.PostProcessPackageSchema> PostProcessPackages() => [.. RenderGraphPackageCatalog.Engine.Packages
+        .Where(predicate: static package => package.IsPostProcess)
+        .Select(selector: static package => new WorldSchema.PostProcessPackageSchema(
+            ConfigSchema: ShaderConfigBinding.JsonSchema(
+                description: package.Summary,
+                schema: package.Config
+            ),
+            Package: package.Id
+        ))];
 
     private static SchemaFile At(string repositoryRoot, string relativePath, string text) => new(
         FullPath: Path.Combine(
@@ -294,8 +267,8 @@ internal static class SchemaCommand {
             return CliExit.Refused;
         }
 
-        var postRenderExtensions = LoadPostRenderExtensions(repositoryRoot: repositoryRoot);
-        var split = WorldSchema.Export(postRenderExtensions: postRenderExtensions);
+        var postProcessPackages = PostProcessPackages();
+        var split = WorldSchema.Export(postProcessPackages: postProcessPackages);
         var bundled = WorldSchema.Bundle(split: split);
 
         if (bundle) {
@@ -318,7 +291,7 @@ internal static class SchemaCommand {
             At(
                 relativePath: ProjectionRelativePath,
                 repositoryRoot: repositoryRoot,
-                text: WorldSchema.ToCanonicalText(node: WorldSchema.ExportProjection(postRenderExtensions: postRenderExtensions))
+                text: WorldSchema.ToCanonicalText(node: WorldSchema.ExportProjection(postProcessPackages: postProcessPackages))
             ),
             At(
                 relativePath: SiloRelativePath,
@@ -459,8 +432,8 @@ internal static class SchemaCommand {
             (System.Text.Json's JsonSchemaExporter), never hand-maintained. Descriptions come from
             the model assemblies' XML documentation files; when one is missing the schema still
             writes, with no descriptions, and this verb says so on standard error.
-            render.extensions[] takes its id vocabulary and per-id config schema from the shipped
-            puck.shader.manifest.v1 manifests under src/*/Assets/Shaders.
+            views.post[] takes its package vocabulary and per-package config schema from the
+            post-process packages of the engine's render graph catalog.
 
             Written to:
               src/Puck.World/Assets/worlds/puck.world.definition.v1.schema.json (the root)

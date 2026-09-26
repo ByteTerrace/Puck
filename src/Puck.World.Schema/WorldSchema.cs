@@ -98,11 +98,11 @@ public static partial class WorldSchema {
     /// subschema referenced from more than one place, named after the CLR type it came from where that is
     /// recoverable.</param>
     public sealed record SplitSchema(JsonObject Root, IReadOnlyList<(string Name, JsonNode Node)> Sections, JsonObject Common);
-    /// <summary>One shipped post-render extension — a shader set's id and its config JSON Schema — spliced into
-    /// <c>render.extensions[]</c> so an entry's <c>config</c> validates by its <c>id</c>.</summary>
-    /// <param name="Id">The extension id a document's <c>render.extensions[].id</c> names.</param>
-    /// <param name="ConfigSchema">The set's config JSON Schema (<c>Puck.Shaders.ShaderSetManifest.ConfigJsonSchema</c>).</param>
-    public sealed record PostRenderExtensionSchema(string Id, JsonObject ConfigSchema);
+    /// <summary>One post-process package the host offers — its render graph package id and its config JSON Schema —
+    /// spliced into <c>views.post[]</c> so a row's <c>config</c> validates by its <c>package</c>.</summary>
+    /// <param name="Package">The package id a document's <c>views.post[].package</c> names.</param>
+    /// <param name="ConfigSchema">The package's config JSON Schema (<c>Puck.Shaders.ShaderConfigBinding.JsonSchema</c>).</param>
+    public sealed record PostProcessPackageSchema(string Package, JsonObject ConfigSchema);
 
     private static void AppendChildren(StringBuilder builder, XElement element) {
         foreach (var child in element.Nodes()) {
@@ -162,44 +162,44 @@ public static partial class WorldSchema {
                 break;
         }
     }
-    // Splices the shipped extension vocabulary into #/properties/render/properties/extensions/items: `id` becomes an
-    // enum over the shipped ids, and one `allOf` arm per id constrains `config` to that set's own schema when `id`
-    // matches. The exporter cannot know the vocabulary — it is a deploy fact (which manifests ship), not a type
-    // fact — so the caller supplies it.
-    private static void ApplyPostRenderExtensions(IReadOnlyList<PostRenderExtensionSchema> extensions, JsonObject root) {
-        if (root["properties"]?["render"]?["properties"]?["extensions"]?["items"] is not JsonObject items) {
+    // Splices the host's post-process vocabulary into #/properties/views/properties/post/items: `package` becomes an
+    // enum over the offered ids, and one `allOf` arm per id constrains `config` to that package's own schema when
+    // `package` matches. The exporter cannot know the vocabulary — it is the host's package catalog, not a type fact —
+    // so the caller supplies it.
+    private static void ApplyPostProcessPackages(IReadOnlyList<PostProcessPackageSchema> packages, JsonObject root) {
+        if (root["properties"]?["views"]?["properties"]?["post"]?["items"] is not JsonObject items) {
             return;
         }
-        if (items["properties"]?["id"] is not JsonObject id) {
+        if (items["properties"]?["package"] is not JsonObject package) {
             return;
         }
         // An empty catalog narrows nothing: an "enum"/"allOf" built from zero entries would validate NO document
-        // rather than every document, the opposite of "nothing shipped yet".
-        if (extensions.Count == 0) {
+        // rather than every document, the opposite of "nothing offered".
+        if (packages.Count == 0) {
             return;
         }
 
         var ids = new JsonArray();
         var arms = new JsonArray();
 
-        foreach (var extension in extensions) {
-            ids.Add(item: ((JsonNode)JsonValue.Create(value: extension.Id)));
+        foreach (var offered in packages) {
+            ids.Add(item: ((JsonNode)JsonValue.Create(value: offered.Package)));
             arms.Add(item: ((JsonNode)new JsonObject {
                 ["if"] = new JsonObject {
                     ["properties"] = new JsonObject {
-                        ["id"] = new JsonObject { ["const"] = extension.Id },
+                        ["package"] = new JsonObject { ["const"] = offered.Package },
                     },
-                    ["required"] = new JsonArray("id"),
+                    ["required"] = new JsonArray("package"),
                 },
                 ["then"] = new JsonObject {
                     ["properties"] = new JsonObject {
-                        ["config"] = extension.ConfigSchema.DeepClone(),
+                        ["config"] = offered.ConfigSchema.DeepClone(),
                     },
                 },
             }));
         }
 
-        id["enum"] = ids;
+        package["enum"] = ids;
         items["allOf"] = arms;
     }
     // DEFECT: the exporter emits no "type"/"enum" for a member whose JsonConverter it cannot introspect (a fully
@@ -222,9 +222,9 @@ public static partial class WorldSchema {
             return;
         }
 
-        // A raw JsonElement slot (render.extensions[].config, probes[].config, metadata.custom's dictionary
+        // A raw JsonElement slot (views.post[].config, probes[].config, metadata.custom's dictionary
         // values) carries no CLR shape this generator could ever describe — its actual contract is decided by an
-        // id this document names elsewhere (a shipped shader manifest, a probe extension) that this generator has
+        // id this document names elsewhere (a render graph package, a probe extension) that this generator has
         // no way to resolve for an as-yet-unauthored id. Left fully permissive, with a $comment naming why, rather
         // than narrowed to a shape that would refuse a legitimate payload.
         if ((Nullable.GetUnderlyingType(nullableType: propertyType) ?? propertyType) == typeof(JsonElement)) {
@@ -1715,20 +1715,20 @@ public static partial class WorldSchema {
         $"T:{FormatDeclaringType(type: type)}";
 
     /// <summary>Exports the split JSON Schema for <see cref="WorldDefinition"/>.</summary>
-    /// <param name="postRenderExtensions">The shipped post-render extensions: <c>render.extensions[].id</c> becomes an
-    /// enum over their ids and each entry's <c>config</c> validates against the schema of the set its id names.</param>
+    /// <param name="postProcessPackages">The post-process packages the host offers: <c>views.post[].package</c> becomes
+    /// an enum over their ids and each row's <c>config</c> validates against the schema of the package it names.</param>
     /// <returns>A split the caller owns and may mutate. The schema is a pure function of the loaded model and the
-    /// extensions, so it is generated once per process and extension set, and every call returns a deep copy.</returns>
-    public static SplitSchema Export(IReadOnlyList<PostRenderExtensionSchema> postRenderExtensions) {
-        ArgumentNullException.ThrowIfNull(postRenderExtensions);
+    /// packages, so it is generated once per process and package set, and every call returns a deep copy.</returns>
+    public static SplitSchema Export(IReadOnlyList<PostProcessPackageSchema> postProcessPackages) {
+        ArgumentNullException.ThrowIfNull(postProcessPackages);
 
         var key = string.Join(
             separator: '\n',
-            values: postRenderExtensions.Select(selector: static extension => $"{extension.Id}\0{extension.ConfigSchema.ToJsonString()}")
+            values: postProcessPackages.Select(selector: static package => $"{package.Package}\0{package.ConfigSchema.ToJsonString()}")
         );
         var split = ExportCache.GetOrAdd(
             key: key,
-            valueFactory: _ => new Lazy<SplitSchema>(valueFactory: () => ExportUncached(postRenderExtensions: postRenderExtensions))
+            valueFactory: _ => new Lazy<SplitSchema>(valueFactory: () => ExportUncached(postProcessPackages: postProcessPackages))
         ).Value;
 
         return new SplitSchema(
@@ -1738,7 +1738,7 @@ public static partial class WorldSchema {
         );
     }
 
-    private static SplitSchema ExportUncached(IReadOnlyList<PostRenderExtensionSchema> postRenderExtensions) {
+    private static SplitSchema ExportUncached(IReadOnlyList<PostProcessPackageSchema> postProcessPackages) {
         var (merged, run) = ExportMergedWithTypes();
 
         ResolveTitleCollisions(typesByNode: run.TypesByNode);
@@ -1750,8 +1750,8 @@ public static partial class WorldSchema {
             schemaVersion: SchemaId
         );
 
-        ApplyPostRenderExtensions(
-            extensions: postRenderExtensions,
+        ApplyPostProcessPackages(
+            packages: postProcessPackages,
             root: merged
         );
 
@@ -1805,10 +1805,10 @@ public static partial class WorldSchema {
     /// <summary>Exports the JSON Schema for <see cref="WorldProjectionDocument"/> as one document. Unsplit,
     /// deliberately: the projection has no top-level section a person opens on its own, so the split
     /// <see cref="WorldDefinition"/> takes buys nothing here.</summary>
-    /// <param name="postRenderExtensions">The shipped post-render extensions, applied as in <see cref="Export"/>.</param>
+    /// <param name="postProcessPackages">The post-process packages the host offers, applied as in <see cref="Export"/>.</param>
     /// <returns>The generated schema root.</returns>
-    public static JsonObject ExportProjection(IReadOnlyList<PostRenderExtensionSchema> postRenderExtensions) {
-        ArgumentNullException.ThrowIfNull(postRenderExtensions);
+    public static JsonObject ExportProjection(IReadOnlyList<PostProcessPackageSchema> postProcessPackages) {
+        ArgumentNullException.ThrowIfNull(postProcessPackages);
 
         var nested = new NestedExports();
         var run = new ExportRun(
@@ -1854,8 +1854,8 @@ public static partial class WorldSchema {
             node: root,
             run: run
         );
-        ApplyPostRenderExtensions(
-            extensions: postRenderExtensions,
+        ApplyPostProcessPackages(
+            packages: postProcessPackages,
             root: root
         );
         ResolveNestedRefs(

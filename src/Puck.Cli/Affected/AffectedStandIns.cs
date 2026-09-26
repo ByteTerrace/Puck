@@ -12,12 +12,13 @@ namespace Puck.Cli.Affected;
 /// <param name="Projects">Where the C# that names it may live: the directory of the project whose build declares it, and of
 /// every project that build references, transitively, repository-relative.</param>
 internal sealed record AffectedKernel(string Path, IReadOnlyList<string> Closure, IReadOnlyList<string> Projects);
-/// <summary>One shader set: its id, its manifest and every file the set is built from.</summary>
-/// <param name="Id">The set's id, its manifest's file stem, which a world document names in <c>render.extensions</c>.</param>
-/// <param name="Manifest">The manifest, repository-relative with forward slashes.</param>
-/// <param name="Files">The manifest, each stage source it names beside it with that source's include closure, and the
-/// frame interface include generated for it, repository-relative with forward slashes.</param>
-internal sealed record AffectedShaderSet(string Id, string Manifest, IReadOnlyList<string> Files);
+/// <summary>One post-process package: its id, its fragment stage source and every file it is built from.</summary>
+/// <param name="Id">The package's id, which a world document's <c>views.post</c> row names.</param>
+/// <param name="Source">The fragment stage source, the one file only the package builds, repository-relative with forward
+/// slashes.</param>
+/// <param name="Files">Each stage source the package names with that source's include closure, and the frame interface
+/// include generated for it beside its fragment stage, repository-relative with forward slashes.</param>
+internal sealed record AffectedPostPackage(string Id, string Source, IReadOnlyList<string> Files);
 /// <summary>
 /// Maps a changed file the coverage index cannot know, because no canary executes it, to the indexed C# sources it
 /// stands for, following an edge the build already states. A project's own build inputs (its project file, its restore
@@ -25,9 +26,9 @@ internal sealed record AffectedShaderSet(string Id, string Manifest, IReadOnlyLi
 /// include stands for the C# that loads each kernel whose include closure reaches it: the stage sources come from the
 /// projects' shader items and their closures from <see cref="ShaderSourceClosure"/>, and a loader names its kernel by
 /// a string literal in the kernel's project or any project its build references, such as a conversion pass named by a
-/// constant. A shader-set manifest, the stage sources it names with their closures, and the frame interface generated
-/// for it are placed through the canaries whose world documents name the set (<see cref="AffectedDocuments"/>), and
-/// stand for the manifest's owner, the C# declaring <see cref="ShaderSetManifest"/>, only when no document does. A
+/// constant. A post-process package's stage sources with their closures, and the frame interface generated for it, are
+/// placed through the canaries whose world documents name the package (<see cref="AffectedDocuments"/>), and stand for
+/// the package's owner, the C# declaring <see cref="PostProcessPackage"/>, only when no document does. A
 /// file <c>puck schema</c> writes stands for the files that declare the types it is generated from. A file none of these
 /// edges reaches has no stand-in and stays unmapped. Every file is read through one
 /// <see cref="IAffectedTree"/>, the working tree or the tree the base recorded, so a file deleted since the base stands
@@ -189,47 +190,45 @@ internal static partial class AffectedStandIns {
 
         return kernels;
     }
-    /// <summary>Reads every shader set the projects ship, from one tree: each shader-set manifest under a project, read
-    /// with its own reader (<see cref="ShaderSetManifest.ReadDeclaration"/>), with the stage sources it names beside it
-    /// (<c>&lt;stage&gt;.hlsl</c>) and their include closures, and the frame interface include generated for it
-    /// (<see cref="ShaderSetManifest.ReadFrameInterface"/>).</summary>
-    /// <param name="tree">The tree the manifests are read from.</param>
-    /// <param name="projects">Every project.</param>
-    /// <param name="kernels">Every stage source the build compiles, whose closures a set's stage sources reach.</param>
-    /// <returns>The sets. A manifest its reader refuses is a set of itself alone.</returns>
-    internal static IReadOnlyList<AffectedShaderSet> ShaderSets(IAffectedTree tree, IReadOnlyList<AffectedProject> projects, IReadOnlyList<AffectedKernel> kernels) {
-        var sets = new List<AffectedShaderSet>();
+    /// <summary>Finds every post-process package a catalog declares among the stage sources a tree builds: each stage
+    /// (<see cref="RenderGraphPackage.Stages"/>) is the kernel whose path ends with its deployed directory and stem, with
+    /// its include closure, and the frame interface include generated for the package
+    /// (<see cref="ShaderPipelineParameterLayout.ForPackage"/>) lies beside its fragment stage.</summary>
+    /// <param name="packages">The catalog whose post-process packages are read.</param>
+    /// <param name="kernels">Every stage source the build compiles.</param>
+    /// <returns>The packages whose fragment stage the tree builds.</returns>
+    internal static IReadOnlyList<AffectedPostPackage> PostPackages(RenderGraphPackageCatalog packages, IReadOnlyList<AffectedKernel> kernels) {
+        var found = new List<AffectedPostPackage>();
 
-        foreach (var project in projects.Where(predicate: static project => !project.IsSuite)) {
-            foreach (var manifest in tree.Files(directory: project.Directory).Where(predicate: static file => file.EndsWith(comparisonType: StringComparison.Ordinal, value: ShaderSetManifest.FileSuffix))) {
-                var files = new SortedSet<string>(comparer: StringComparer.Ordinal) { manifest };
-                var directory = manifest[..(manifest.LastIndexOf(value: '/') + 1)];
-                var full = Path.Combine(path1: tree.Root, path2: manifest);
-                var text = (tree.ReadText(path: manifest) ?? string.Empty);
+        foreach (var package in packages.Packages.Where(predicate: static package => package.IsPostProcess)) {
+            var stages = package.Stages!;
 
-                try {
-                    var stages = ShaderSetManifest.ReadDeclaration(manifestPath: full, text: text).Stages;
+            AffectedKernel? KernelOf(string stem) => kernels.FirstOrDefault(predicate: kernel => kernel.Path.EndsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: $"/{stages.Directory}/{stem}.hlsl"
+            ));
 
-                    foreach (var stage in new[] { stages.Vertex, stages.Fragment, stages.Compute }.OfType<string>()) {
-                        var source = $"{directory}{stage}.hlsl";
-
-                        files.UnionWith(other: (kernels.FirstOrDefault(predicate: kernel => (kernel.Path == source))?.Closure ?? [source]));
-                    }
-
-                    _ = files.Add(item: (directory + ShaderFrameInterface.IncludeFileName(interfaceName: ShaderSetManifest.ReadFrameInterface(manifestPath: full, text: text).Name)));
-                } catch (InvalidDataException) {
-                    // A manifest its reader refuses builds nothing but itself.
-                }
-
-                sets.Add(item: new AffectedShaderSet(
-                    Files: [.. files],
-                    Id: Path.GetFileName(path: manifest)[..^ShaderSetManifest.FileSuffix.Length],
-                    Manifest: manifest
-                ));
+            if (KernelOf(stem: stages.Fragment) is not { } fragment) {
+                continue;
             }
+
+            var files = new SortedSet<string>(comparer: StringComparer.Ordinal);
+
+            files.UnionWith(other: fragment.Closure);
+            files.UnionWith(other: (KernelOf(stem: stages.Vertex)?.Closure ?? []));
+            _ = files.Add(item: (fragment.Path[..(fragment.Path.LastIndexOf(value: '/') + 1)] + ShaderFrameInterface.IncludeFileName(interfaceName: ShaderPipelineParameterLayout.ForPackage(
+                config: package.Config,
+                members: package.Members,
+                package: package.Id
+            ).Interface.Name)));
+            found.Add(item: new AffectedPostPackage(
+                Files: [.. files],
+                Id: package.Id,
+                Source: fragment.Path
+            ));
         }
 
-        return sets;
+        return found;
     }
 
     /// <summary>Creates the stand-in map for one tree of the repository: the working tree for a changed file, or the tree
@@ -239,9 +238,9 @@ internal static partial class AffectedStandIns {
     /// <param name="indexed">Every indexed source.</param>
     /// <param name="shaders">The tree's shaders, shared with document reach, or <see langword="null"/> to read them
     /// here.</param>
-    /// <param name="documented">Whether a canary's documents reach a shader set's manifest (<see cref="AffectedDocuments"/>),
-    /// which places the set's files through those canaries rather than the manifest's owner; <see langword="null"/> when
-    /// no document is read.</param>
+    /// <param name="documented">Whether a canary's documents reach a post-process package's fragment stage
+    /// (<see cref="AffectedDocuments"/>), which places the package's files through those canaries rather than its owner;
+    /// <see langword="null"/> when no document is read.</param>
     /// <returns>The indexed sources a changed file stands for, or none.</returns>
     public static Func<string, IReadOnlyList<string>> Create(IAffectedTree tree, IReadOnlyList<AffectedProject> projects, IReadOnlyCollection<string> indexed, AffectedShaders? shaders = null, Func<string, bool>? documented = null) {
         var owners = projects.OrderByDescending(keySelector: static project => project.Directory.Length).ToArray();
@@ -257,9 +256,9 @@ internal static partial class AffectedStandIns {
             return text;
         }
 
-        // A shader set's owner, the C# that declares the model its manifest is read into, is its fallback: a set a canary's
+        // A post-process package's owner, the C# that draws with its stages, is its fallback: a package a canary's
         // documents name is placed through those canaries instead.
-        var setOwners = new Lazy<IReadOnlyList<string>>(valueFactory: () => Declaring(indexed: indexed, read: Read, types: [typeof(ShaderSetManifest)]));
+        var packageOwners = new Lazy<IReadOnlyList<string>>(valueFactory: () => Declaring(indexed: indexed, read: Read, types: [typeof(PostProcessPackage)]));
 
         return path => {
             if (IsProjectInput(path: path)) {
@@ -273,25 +272,21 @@ internal static partial class AffectedStandIns {
                 path.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".hlsli")
             );
 
-            if (
-                isShader ||
-                path.EndsWith(comparisonType: StringComparison.Ordinal, value: ShaderSetManifest.FileSuffix)
-            ) {
+            if (isShader) {
                 var standIns = new SortedSet<string>(comparer: StringComparer.Ordinal);
 
-                if (isShader) {
-                    standIns.UnionWith(other: ShaderLoaders(
-                        indexed: indexed,
-                        kernels: built.Kernels,
-                        path: path,
-                        read: Read
-                    ));
-                }
-                if (built.Sets.Any(predicate: set => (
-                    set.Files.Contains(value: path, comparer: StringComparer.Ordinal) &&
-                    !(documented?.Invoke(arg: set.Manifest) ?? false)
+                standIns.UnionWith(other: ShaderLoaders(
+                    indexed: indexed,
+                    kernels: built.Kernels,
+                    path: path,
+                    read: Read
+                ));
+
+                if (built.PostPackages.Any(predicate: package => (
+                    package.Files.Contains(value: path, comparer: StringComparer.Ordinal) &&
+                    !(documented?.Invoke(arg: package.Source) ?? false)
                 ))) {
-                    standIns.UnionWith(other: setOwners.Value);
+                    standIns.UnionWith(other: packageOwners.Value);
                 }
 
                 return [.. standIns];

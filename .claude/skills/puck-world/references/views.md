@@ -281,7 +281,15 @@ schedule decided for every instance, with its extent, divisor, passes,
 pass-pixels and its newest completed submission's counts (`RenderGraphLiveBudget`).
 `views.root` names the row the display
 shows; absent, the host synthesizes the root graph (`WorldRootGraph`), which
-places every instance a layout slot names over the SDF world. A pane the
+places every instance a layout slot names over the SDF world, then runs each
+`views.post` row (`WorldViewPostPass`: `name`, `package`, `config`, a graph
+document's package pass less its ports) as a pass of its post-process package
+in order, then the overlay. A post row's `package` must be a post-process
+package the host's catalog offers (`WorldPostProcessVocabularyHook`, such as
+`sdf.film-grain`), its `name` must differ from every `views.graphs` row's, its
+`config` binds at boot (`RENDERGRAPH_PACKAGE_CONFIG`, naming the row), and a
+world naming `views.root` authors none. A probe parameter's `post` target
+writes a row's float config field live (`WorldPostPasses`). A pane the
 active layout does not show is not scheduled, and a layout change places panes
 one frame later. The `rendering` skill owns the graph document, the scheduler
 and the host (`WorldViewGraphHost`).

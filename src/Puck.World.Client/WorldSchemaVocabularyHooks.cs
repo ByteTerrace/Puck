@@ -11,21 +11,19 @@ namespace Puck.World.Client;
 /// </summary>
 /// <remarks>
 /// Machine vocabulary is supplied per validation invocation through
-/// <see cref="Puck.Abstractions.Machines.IMachineValidationCatalog"/>. Post-render and probe checks arrive as
-/// parameters; the remaining hooks resolve against catalogs this project already reaches:
+/// <see cref="Puck.Abstractions.Machines.IMachineValidationCatalog"/>. The probe kind check arrives as a parameter;
+/// the remaining hooks resolve against catalogs this project already reaches:
+/// <see cref="Puck.Shaders.RenderGraphPackageCatalog.Engine"/>'s post-process packages,
 /// <see cref="WorldAffordances.Validate"/>, <see cref="InputSourceVocabulary"/>,
 /// <see cref="GamepadFamilyCatalog"/>, <c>Puck.World.Protocol.WorldMutationKindCatalog</c>, and
 /// <see cref="WorldContextFamilies.Families"/>.
 /// </remarks>
 public static class WorldSchemaVocabularyHooks {
     /// <summary>Installs every Schema vocabulary hook.</summary>
-    /// <param name="postRenderExtensionCheck">Answers whether a document-declared post-render extension key is
-    /// shipped (<c>Puck.World.WorldPostRenderExtensions.IsShipped</c> in a real root).</param>
     /// <param name="probeKindCheck">Answers whether a document-declared <c>probes[].kind</c> key is
     /// shipped (<c>Puck.World.WorldProbeKinds.IsShipped</c> in a real root).</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public static void Install(Func<string, bool> postRenderExtensionCheck, Func<string, bool> probeKindCheck) {
-        ArgumentNullException.ThrowIfNull(argument: postRenderExtensionCheck);
+    public static void Install(Func<string, bool> probeKindCheck) {
         ArgumentNullException.ThrowIfNull(argument: probeKindCheck);
 
         BindingVocabularyHook.VocabularyCheck = WorldAffordances.Validate;
@@ -37,7 +35,10 @@ public static class WorldSchemaVocabularyHooks {
         // These roots always carry a real catalog (never "no catalog at all"), so each wraps its plain bool
         // predicate as the three-way bool? the hook now declares — never answering null itself. Only
         // Puck.World.Browser's own installer answers null.
-        WorldExtensionVocabularyHook.PostRenderExtensionCheck = id => postRenderExtensionCheck(id);
+        WorldPostProcessVocabularyHook.PostProcessPackageCheck = static package => (Puck.Shaders.RenderGraphPackageCatalog.Engine.TryGet(
+            id: package,
+            package: out var offered
+        ) && offered.IsPostProcess);
         WorldProbeVocabularyHook.ProbeKindCheck = id => probeKindCheck(id);
     }
 }

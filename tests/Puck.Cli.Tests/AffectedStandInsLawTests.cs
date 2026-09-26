@@ -10,8 +10,8 @@ namespace Puck.Cli.Tests;
 /// <summary>
 /// Laws for <see cref="AffectedStandIns"/>: a project's own build inputs stand for its indexed sources; a shader source
 /// or include stands for the indexed C#, in the kernel's project or a project its build references, that names by an
-/// exact string literal a kernel whose include closure reaches it; a shader-set manifest, its stage sources and its
-/// frame interface stand for the C# declaring the manifest's model; a file <c>puck schema</c> writes stands for the
+/// exact string literal a kernel whose include closure reaches it; a post-process package's stage sources and its
+/// frame interface stand for the C# declaring <see cref="PostProcessPackage"/>; a file <c>puck schema</c> writes stands for the
 /// indexed sources declaring the type it is generated from; and on the real tree every non-C# source checkpoint 5's
 /// record could not place now has a stand-in the index knows.
 /// </summary>
@@ -96,32 +96,41 @@ public sealed class AffectedStandInsLawTests {
             expected: ["src/Contracts/Passes.cs"]
         );
     }
-    /// <summary>A shader-set manifest, each stage source it names with that source's includes, and the frame interface
-    /// generated for it stand for the manifest's owner, the C# declaring <see cref="ShaderSetManifest"/>; a stage source
-    /// no manifest names does not.</summary>
+    /// <summary>A post-process package's stage sources with their includes, and the frame interface generated for it,
+    /// stand for the package's owner, the C# declaring <see cref="PostProcessPackage"/>; a stage source no package names
+    /// does not.</summary>
     [Fact]
-    public void AShaderSetsManifestSourcesAndInterfaceStandForTheManifestsOwner() {
+    public void APostPackagesSourcesAndInterfaceStandForItsOwner() {
         var tree = new AffectedMemoryTree(files: new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
             ["src/Engine/Engine.csproj"] = """<Project><ItemGroup><VertexShaderSource Include="Assets/**/*.vert.hlsl" /><FragmentShaderSource Include="Assets/**/*.frag.hlsl" /></ItemGroup></Project>""",
-            ["src/Engine/Assets/grain.puck.shader.json"] = """
-                {
-                  "$schema": "puck.shader.manifest.v1",
-                  "name": "grain",
-                  "stages": { "vertex": "fullscreen.vert", "fragment": "grain.frag" },
-                  "bindings": [ { "kind": "SampledImage", "name": "source" } ]
-                }
-                """,
             ["src/Engine/Assets/fullscreen.vert.hlsl"] = "float4 main() : SV_Position { return 0; }",
             ["src/Engine/Assets/grain.frag.hlsl"] = "#include \"grain.common.hlsli\"\nfloat4 main() : SV_Target { return 0; }",
             ["src/Engine/Assets/grain.common.hlsli"] = "static const uint Grain = 1;",
             ["src/Engine/Assets/other.frag.hlsl"] = "float4 main() : SV_Target { return 0; }",
-            ["src/Engine/Sets.cs"] = "public sealed record ShaderSetManifest(string Name);",
+            ["src/Engine/Post.cs"] = "public sealed class PostProcessPackage { }",
         });
         AffectedProject[] projects = [new(Directory: "src/Engine", IsSuite: false, Name: "Engine", References: [])];
-        var standInsFor = AffectedStandIns.Create(indexed: ["src/Engine/Sets.cs"], projects: projects, tree: tree);
+        var packages = new RenderGraphPackageCatalog(packages: [new RenderGraphPackage(
+            Id: "grain",
+            Inputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.FragmentSampled)],
+            Members: [ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: "source", type: ShaderValueType.Float4)],
+            Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ColorAttachmentWrite)],
+            Stages: new RenderGraphPackageStages(
+                Directory: "Assets",
+                Fragment: "grain.frag",
+                Vertex: "fullscreen.vert"
+            ),
+            Summary: "grain"
+        )]);
+        var standInsFor = AffectedStandIns.Create(
+            indexed: ["src/Engine/Post.cs"],
+            projects: projects,
+            shaders: new AffectedShaders(packages: packages, projects: projects, tree: tree),
+            tree: tree
+        );
 
-        foreach (var path in ((string[])["grain.puck.shader.json", "grain.frag.hlsl", "grain.common.hlsli", "fullscreen.vert.hlsl", "grain.interface.hlsli"])) {
-            Assert.Equal(actual: standInsFor(arg: $"src/Engine/Assets/{path}"), expected: ["src/Engine/Sets.cs"]);
+        foreach (var path in ((string[])["grain.frag.hlsl", "grain.common.hlsli", "fullscreen.vert.hlsl", "grain.interface.hlsli"])) {
+            Assert.Equal(actual: standInsFor(arg: $"src/Engine/Assets/{path}"), expected: ["src/Engine/Post.cs"]);
         }
 
         Assert.Empty(collection: standInsFor(arg: "src/Engine/Assets/other.frag.hlsl"));
@@ -147,10 +156,10 @@ public sealed class AffectedStandInsLawTests {
         Assert.Contains(collection: standInsFor(arg: "src/Puck.Shaders/Assets/puck.render.graph.v1.schema.json"), expected: "src/Puck.Shaders/Graph/RenderGraphModel.cs");
         Assert.Contains(collection: standInsFor(arg: "src/Puck.World/Assets/worlds/puck.world.projection.v1.schema.json"), expected: "src/Puck.World.Schema/WorldProjection.cs");
 
-        // A shader set's manifest, stage source and interface stand for the manifest's owner, and a conversion kernel for
+        // A post-process package's stage source and interface stand for the package's owner, and a conversion kernel for
         // the constant that names it in a project the kernel's project references.
-        foreach (var path in ((string[])["sdf-film-grain.puck.shader.json", "sdf-film-grain.frag.hlsl", "sdf-film-grain.interface.hlsli"])) {
-            Assert.Contains(collection: standInsFor(arg: $"src/Puck.SdfVm/Assets/Shaders/Sdf/{path}"), expected: "src/Puck.Shaders/ShaderSetManifest.cs");
+        foreach (var path in ((string[])["sdf-film-grain.frag.hlsl", "sdf-film-grain.interface.hlsli"])) {
+            Assert.Contains(collection: standInsFor(arg: $"src/Puck.SdfVm/Assets/Shaders/Sdf/{path}"), expected: "src/Puck.Shaders/Graph/PostProcessPackage.cs");
         }
         foreach (var path in ((string[])["source-rgba.comp.hlsl", "source-transfer.comp.hlsl"])) {
             Assert.Contains(collection: standInsFor(arg: $"src/Puck.Shaders/Assets/Shaders/Sources/{path}"), expected: "src/Puck.Abstractions/Sources/ImageSourceConversion.cs");

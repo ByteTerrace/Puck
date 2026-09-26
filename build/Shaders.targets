@@ -186,9 +186,6 @@
             <ShaderBytecode Include="Assets\Shaders\**\*.spv" />
             <ShaderBytecode Include="Assets\Shaders\**\*.dxil" />
             <Content Include="@(ShaderBytecode)" CopyToOutputDirectory="PreserveNewest" />
-            <!-- A shader set's puck.shader.v1 manifest ships beside its bytecode: a host's ShaderSetCatalog finds a
-                 set by its manifest, so shipping the manifest IS registering the set. -->
-            <Content Include="Assets\Shaders\**\*.puck.shader.json" CopyToOutputDirectory="PreserveNewest" />
         </ItemGroup>
     </Target>
 

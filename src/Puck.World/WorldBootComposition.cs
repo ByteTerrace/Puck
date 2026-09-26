@@ -995,7 +995,6 @@ public static class WorldBootComposition {
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<SdfWorldPipelineCache>().Work);
         services.TryAddSingleton<GpuPassPipelineCache>();
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<GpuPassPipelineCache>().Work);
-        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: ShaderSetManifest.LoadWork);
     }
     /// <summary>Registers the presentation's bake schedule over the registered <see cref="WorldCacheRoots"/>' bake
     /// cache, the cache a boot's compiled world fills, and its <c>sdf.bakes</c> work source.</summary>
@@ -1007,7 +1006,7 @@ public static class WorldBootComposition {
 
     /// <summary>
     /// Layers a real GPU device and the composed-frame render pipeline over the authoritative core — the default render
-    /// graph without the overlay (the world and its <c>render.extensions</c> passes; no console mirror, binding bar,
+    /// graph without the overlay (the world and its <c>views.post</c> passes; no console mirror, binding bar,
     /// glyph atlas, HUD store, console-session bank, wheel, pointer, cursor, or audio-render-device registration), with NO
     /// window and NO swap chain: see <see cref="WorldOffscreenGpuActivation"/> for the per-backend device bring-up.
     /// Registered only when <c>WorldHostSettings.Offscreen</c> is <see langword="true"/>; <c>world.screenshot</c>
@@ -1114,11 +1113,11 @@ public static class WorldBootComposition {
         }.RetargetTransforms(probe: sp.GetRequiredService<WorldRenderProbe>()));
 
         // The default render graph, touching no GPU, so the boot's pre-flight (WorldPostBuildWiring) refuses a
-        // render.extensions config that does not bind as a named definition refusal before any hosted service starts.
+        // views.post config that does not bind as a named definition refusal before any hosted service starts.
         services.AddSingleton(implementationFactory: static sp => WorldRootGraph.Compose(
-            extensions: sp.GetRequiredService<WorldDefinition>().Render.Extensions,
             overlay: false,
-            packages: RenderGraphPackageCatalog.Shipped,
+            packages: RenderGraphPackageCatalog.Engine,
+            post: sp.GetRequiredService<WorldDefinition>().Views.Post,
             panes: WorldRootGraph.PanesOf(views: sp.GetRequiredService<WorldDefinition>().Views),
             views: WorldRootGraph.ViewsOf(views: sp.GetRequiredService<WorldDefinition>().Views)
         ));
@@ -1128,7 +1127,7 @@ public static class WorldBootComposition {
             _ = sp.GetRequiredService<WorldOffscreenGpuActivation>();
 
             // The default render graph without the overlay (see this method's own remarks): the world, then its
-            // render.extensions passes, and the world alone as the root when it has none.
+            // views.post passes, and the world alone as the root when it has none.
             return WorldRenderRoot.Build(
                 overlay: null,
                 sp: sp
@@ -1448,13 +1447,13 @@ public static class WorldBootComposition {
         ).RetargetTransforms(probe: sp.GetRequiredService<WorldRenderProbe>()));
 
         // The overlay's glyph pack, loaded once, and the default render graph, which draws the overlay when the pack
-        // loaded. Neither touches the GPU, so the boot's pre-flight (WorldPostBuildWiring) refuses a render.extensions
-        // config that does not bind as a named definition refusal before any hosted service starts.
+        // loaded. Neither touches the GPU, so the boot's pre-flight (WorldPostBuildWiring) refuses a views.post config
+        // that does not bind as a named definition refusal before any hosted service starts.
         services.AddSingleton<WorldOverlayGlyphs>();
         services.AddSingleton(implementationFactory: static sp => WorldRootGraph.Compose(
-            extensions: sp.GetRequiredService<WorldDefinition>().Render.Extensions,
             overlay: (sp.GetRequiredService<WorldOverlayGlyphs>().Pack is not null),
-            packages: RenderGraphPackageCatalog.Shipped,
+            packages: RenderGraphPackageCatalog.Engine,
+            post: sp.GetRequiredService<WorldDefinition>().Views.Post,
             panes: WorldRootGraph.PanesOf(views: sp.GetRequiredService<WorldDefinition>().Views),
             views: WorldRootGraph.ViewsOf(views: sp.GetRequiredService<WorldDefinition>().Views)
         ));
@@ -1490,9 +1489,9 @@ public static class WorldBootComposition {
             );
 
             // The unified overlay (console mirror, per-seat binding bars, HUD, toasts, cursor and wheel) is the default
-            // render graph's last pass, drawn over the world and its render.extensions passes on both backends: neutral
+            // render graph's last pass, drawn over the world and its views.post passes on both backends: neutral
             // services, bytecode selected by the resolved host. Without a usable glyph atlas the graph draws no overlay
-            // (WorldOverlayGlyphs reported it once), and the world and its extensions still render.
+            // (WorldOverlayGlyphs reported it once), and the world and its post passes still render.
             OverlayPackage? overlay = null;
 
             if (sp.GetRequiredService<WorldOverlayGlyphs>().Pack is { } glyphs) {
