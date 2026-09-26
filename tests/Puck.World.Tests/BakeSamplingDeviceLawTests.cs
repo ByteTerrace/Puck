@@ -31,6 +31,12 @@ namespace Puck.World.Tests;
 [SupportedOSPlatform("windows10.0.15063")]
 public sealed class BakeSamplingDeviceLawTests {
     private const string KernelName = "bake-sampling.comp";
+    // The probe kernel's one group and its bindings, each register at its binding in the group's space.
+    private const uint Group = 3U;
+    private const uint OutputBinding = 2U;
+    private const uint ProbesBinding = 3U;
+    private const uint SamplerBinding = 1U;
+    private const uint SourceBinding = 0U;
 
     [Fact]
     public void EveryProbeSampledOnAVulkanDeviceIsWhatTheDecoderReads() {
@@ -75,18 +81,24 @@ public sealed class BakeSamplingDeviceLawTests {
     private static void Probe(string backend, byte[] kernel, GpuDeviceServices services) {
         var fixture = JsonNode.Parse(json: File.ReadAllText(path: Path.Combine(path1: AppContext.BaseDirectory, path2: "Fixtures", path3: "bake-sampling.json")))!;
         var bindings = services.Bindings;
+        // One group, set 3: the source, its sampler, the output and the probe table; each dispatch pushes its probe's index.
         var description = new GpuComputePipelineDescription(
-            Bindings: [
-                new GpuComputeBinding(Binding: 0U, Kind: GpuComputeBindingKind.SampledImage),
-                new GpuComputeBinding(Binding: 1U, Kind: GpuComputeBindingKind.StorageImage),
-            ],
-            Name: KernelName,
-            PushConstantBinding: new GpuPushConstantBinding(
-                data: new byte[(4 * sizeof(uint))],
-                offset: 0U,
-                stageFlags: GpuShaderStage.Compute
+            Bindings: [],
+            Layout: new GpuPipelineLayoutDescription(
+                groups: [new GpuGroupLayoutDescription(
+                    bindings: [
+                        new GpuGroupBinding(binding: SourceBinding, kind: GpuBindingKind.SampledImage),
+                        new GpuGroupBinding(binding: SamplerBinding, kind: GpuBindingKind.Sampler),
+                        new GpuGroupBinding(binding: OutputBinding, kind: GpuBindingKind.StorageImage),
+                        new GpuGroupBinding(binding: ProbesBinding, kind: GpuBindingKind.ReadOnlyBuffer),
+                    ],
+                    ordinal: Group
+                )],
+                pushesIndex: true,
+                stages: GpuShaderStage.Compute
             ),
-            SamplerFilter: GpuSamplerFilter.Nearest
+            Name: KernelName,
+            PushConstantBinding: null
         );
         using var module = services.ShaderModuleFactory.Create(
             bytecode: kernel,
@@ -149,30 +161,51 @@ public sealed class BakeSamplingDeviceLawTests {
             width: ((uint)probes.Count)
         );
         using var commands = services.CommandPoolFactory.Create(name: default);
+        // The probe table: each probe's column, row, level, and the output texel its value lands in.
+        using var probeTable = services.BufferFactory.CreateHostVisible(
+            name: default,
+            sizeBytes: ((ulong)(probes.Count * 4 * sizeof(uint))),
+            usage: GpuBufferUsage.Storage
+        );
+
+        probeTable.Write<uint>(data: [.. probes.SelectMany(selector: static (probe, slot) => (uint[])[probe!["x"]!.GetValue<uint>(), probe["y"]!.GetValue<uint>(), probe["level"]!.GetValue<uint>(), ((uint)slot)])]);
         var pool = bindings.CreatePool(
             name: default,
-            sizes: GpuDescriptorPoolSizes.ForSets(description.Bindings)
+            sizes: GpuDescriptorPoolSizes.ForGroups(groups: description.Layout!.Groups)
         );
         ReadOnlyMemory<byte> values;
 
         try {
             var set = bindings.AllocateSet(
-                descriptorSetLayoutHandle: pipeline.DescriptorSetLayoutHandle,
+                descriptorSetLayoutHandle: pipeline.GroupLayoutHandles[((int)Group)],
                 name: default,
                 poolHandle: pool
             );
             var command = commands.CommandBufferHandle;
 
-            bindings.WriteCombinedImageSampler(
+            bindings.WriteSampledImage(
                 arrayElement: 0U,
-                binding: 0U,
+                binding: SourceBinding,
                 descriptorSetHandle: set,
-                imageViewHandle: view,
+                imageViewHandle: view
+            );
+            bindings.WriteSampler(
+                arrayElement: 0U,
+                binding: SamplerBinding,
+                descriptorSetHandle: set,
                 samplerHandle: sampler
+            );
+            bindings.WriteBuffer(
+                binding: ProbesBinding,
+                bufferHandle: probeTable.BufferHandle,
+                bufferSize: probeTable.SizeBytes,
+                descriptorSetHandle: set,
+                elementStride: (4U * sizeof(uint)),
+                kind: GpuBindingKind.ReadOnlyBuffer
             );
             bindings.WriteStorageImage(
                 arrayElement: 0U,
-                binding: 1U,
+                binding: OutputBinding,
                 descriptorSetHandle: set,
                 imageViewHandle: output.ImageViewHandle
             );
@@ -196,18 +229,17 @@ public sealed class BakeSamplingDeviceLawTests {
                 bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: command,
                 descriptorSetHandle: set,
-                group: 0U,
+                group: Group,
                 pipelineLayoutHandle: pipeline.LayoutHandle
             );
 
             for (var slot = 0; (slot < probes.Count); slot++) {
-                var probe = probes[slot]!;
-                ReadOnlySpan<uint> push = [probe["x"]!.GetValue<uint>(), probe["y"]!.GetValue<uint>(), probe["level"]!.GetValue<uint>(), ((uint)slot)];
+                ReadOnlySpan<uint> index = [((uint)slot)];
 
                 recorder.PushConstants(
                     bindPoint: GpuBindPoint.Compute,
                     commandBufferHandle: command,
-                    data: MemoryMarshal.AsBytes(span: push),
+                    data: MemoryMarshal.AsBytes(span: index),
                     offset: 0U,
                     pipelineLayoutHandle: pipeline.LayoutHandle,
                     stageFlags: GpuShaderStage.Compute

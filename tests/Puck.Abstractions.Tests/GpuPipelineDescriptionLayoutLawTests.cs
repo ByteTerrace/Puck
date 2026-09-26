@@ -53,7 +53,7 @@ public sealed class GpuPipelineDescriptionLayoutLawTests {
         var push = new GpuPushConstantBinding(data: new byte[4], offset: 0, stageFlags: GpuShaderStage.Compute);
 
         foreach (var description in ((GpuComputePipelineDescription[])[
-            new(Bindings: [new GpuComputeBinding(Binding: 0, Kind: GpuComputeBindingKind.StorageImage)], Layout: compute, Name: "compute", PushConstantBinding: null),
+            new(Bindings: [new GpuComputeBinding(Binding: 0, Kind: GpuBindingKind.StorageImage)], Layout: compute, Name: "compute", PushConstantBinding: null),
             new(Bindings: [], Layout: compute, Name: "compute", PushConstantBinding: push),
         ])) {
             Assert.StartsWith(

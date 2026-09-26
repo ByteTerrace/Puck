@@ -92,13 +92,6 @@ public interface IGpuBindings {
     /// <param name="elementStride">The size in bytes of the element the shader declares, or zero for a raw view.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="kind"/> is not a storage-buffer kind.</exception>
     void WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride);
-    /// <summary>Writes a combined image sampler descriptor into a set.</summary>
-    /// <param name="descriptorSetHandle">The descriptor set to write into.</param>
-    /// <param name="binding">The binding index within the set.</param>
-    /// <param name="arrayElement">The element of an arrayed binding.</param>
-    /// <param name="imageViewHandle">The native image view handle.</param>
-    /// <param name="samplerHandle">The native sampler handle, from <see cref="CreateSampler"/>.</param>
-    void WriteCombinedImageSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle);
     /// <summary>Writes a constant buffer descriptor into a group's set: the buffer a <c>ConstantBuffer&lt;T&gt;</c>
     /// declaration of a <see cref="GpuBindingKind.ConstantBuffer"/> binding reads, from its first byte.</summary>
     /// <param name="descriptorSetHandle">The group's set to write into.</param>

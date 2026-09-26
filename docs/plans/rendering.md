@@ -2092,11 +2092,10 @@ Phase 3, the groups, follows phase 2:
     visible to the pipeline's stages. The plans carry everything 14b needs to
     create root signatures and pipeline layouts. `DirectXRootLayoutLawTests`,
     `VulkanGroupLayoutsLawTests` and `GpuGroupLayoutTableLawTests` hold the
-    planners and the spike's interfaces to the same tables. The combined image
-    sampler that `GpuComputeBindingKind` still states is not in the closed
-    set, and no source declares `vk::combinedImageSampler`: every pass reads a
-    separate image and sampler through 14b's sampler tables, and 14b-7 deletes
-    the enum.
+    planners and the spike's interfaces to the same tables. No combined
+    image sampler is in the closed set, and no source declares
+    `vk::combinedImageSampler`: every pass reads a separate image and sampler
+    through 14b's sampler tables.
 14. Direct3D 12 keeps one shader-visible heap per device, and a pool is a range
     of it (14a). Both backends then realize several groups, with sampler
     tables and one 4-byte push range (14b), the riskiest step, which lands as
@@ -2198,8 +2197,7 @@ Phase 3, the groups, follows phase 2:
     to the commit's sources, by text rather than a `puck affected` run, so
     they are unverified; Direct3D 12 files are unmapped, so a commit that
     touches one also runs its canaries on Direct3D 12. Each owner's commit
-    also moves its binding lists from `GpuComputeBindingKind` to
-    `GpuBindingKind`, so the last one leaves the old enum unused.
+    also moved its binding lists onto `GpuBindingKind`.
     - 14b-1, done: layouts from the plans. A pipeline description names its
       groups through `Layout` (`GpuComputePipelineDescription.Layout`,
       `GpuGraphicsPipelineDescription.Layout`), and `RequireLayout` refuses by
@@ -2315,12 +2313,15 @@ Phase 3, the groups, follows phase 2:
       `sdf-visibility-fresh` and `world-counters` among them. The package library's `place.comp.hlsl`,
       which took the SDF-side kernel's place, is a package pass and moved
       onto groups with the other package passes in step 18.
-    - 14b-7, the deletions: `GpuComputeBindingKind`, whose `GpuComputeBinding`
-      then states a `GpuBindingKind`, and
-      `GpuDescriptorPoolSizes.CombinedImageSamplerCount`, with their last
-      users in `GpuRegion`, the backends' pipeline factories and the
-      contract and wire-name laws. Canaries: the 19 `GpuDescriptorPoolSizes`
-      and `GpuRegion` map to.
+    - 14b-7, done: the deletions. `GpuComputeBinding` states a
+      `GpuBindingKind` and refuses any kind but a buffer or a storage image,
+      so a positional binding list holds no sampled image, and neither
+      backend's pipeline factory adds a static or combined sampler for one;
+      a compute description carries no sampler filter.
+      `GpuDescriptorPoolSizes` counts no combined image sampler, and
+      `IGpuBindings` writes none. The bake-sampling device law reads its
+      probe table and image through a pass group and a pushed index.
+      Canaries: the 19 `GpuDescriptorPoolSizes` and `GpuRegion` map to.
 15. Done: pipelines are on groups. `WriteFrame` writes the frame group, set 0,
     into a per-node frame `GpuRegion` of uniform usage, a ring of whole
     constant-buffer views; each pass's extent and config form its pass block at
@@ -3559,8 +3560,8 @@ independent of placed-surface support, and shared GPU and World files have one
 owner at a time.
 
 **Contracts.** P7's memory profile and residency selector have landed, and P7b
-is under way: steps 1 to 13, 14a, 14b-1 to 14b-6 and 15 to 20 have landed, and
-step 22 is in progress. What remains is 14b-7's deletions and step 21. P8 is
+is under way: steps 1 to 13, 14a, 14b-1 to 14b-7 and 15 to 20 have landed, and
+step 22 is in progress. What remains is step 21. P8 is
 complete but for a GPU run of its echo of every shipped interface family, and its frame
 group
 became a descriptor set when step 15 put pipelines on groups. P7 and P8 do not

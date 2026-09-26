@@ -260,7 +260,6 @@ public sealed partial class OverlayPackageLawTests {
         var other = bindings.CreatePool(
             name: default,
             sizes: new GpuDescriptorPoolSizes(
-                CombinedImageSamplerCount: 0,
                 MaxSets: 1,
                 StorageBufferCount: 1,
                 StorageImageCount: 0
