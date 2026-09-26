@@ -6,9 +6,8 @@ namespace Puck.World;
 
 internal sealed partial class WorldProbes {
     // Deep-validates and resolves one declared parameter binding row into its reusable template: its (probe,
-    // channel) reference, and its target — a composed render.extensions entry (already proven at document load)
-    // whose manifest declares the named field as a scalar float, since WorldPostRenderExtensionPasses.TrySetConfig only accepts
-    // one; or another declared probe whose kind declares the named field as a scalar float. The target probe row is
+    // channel) reference, and its target — a views.post row (already proven at document load) whose package declares
+    // the named field as a scalar float, since WorldPostPasses.TrySetConfig only accepts one; or another declared probe whose kind declares the named field as a scalar float. The target probe row is
     // resolved here (m_rowIndexById is complete by the time this runs); the target instance is resolved fresh every
     // ServiceParameters pass — if the target row is seat-relative, against this binding's own instance seat; if
     // single, its one instance — so a target that has not instanced yet (or has retired) is never baked in.
@@ -67,30 +66,31 @@ internal sealed partial class WorldProbes {
             };
         }
 
-        if (parameter.Target is not WorldProbeParameterTarget.Extension extension) {
+        if (parameter.Target is not WorldProbeParameterTarget.Post post) {
             throw new InvalidOperationException(message: $"{path}.target is required.");
         }
-
-        ShaderSetManifest extensionManifest;
-
-        try {
-            extensionManifest = ShaderSetCatalog.Shipped.Load(id: extension.Id);
-        } catch (Exception exception) {
-            throw new InvalidOperationException(
-                message: $"{path}.target.id '{extension.Id}' failed to load: {exception.Message}",
-                innerException: exception
-            );
-        }
-
         if (
-            (extensionManifest.Config is not { } config) ||
+            (m_post.FirstOrDefault(predicate: row => string.Equals(
+                a: row.Name,
+                b: post.Pass,
+                comparisonType: StringComparison.Ordinal
+            )) is not { } row) ||
+            !RenderGraphPackageCatalog.Engine.TryGet(
+                id: row.Package,
+                package: out var package
+            )
+        ) {
+            throw new InvalidOperationException(message: $"{path}.target.pass '{post.Pass}' names no views.post row running a known package.");
+        }
+        if (
+            (package.Config is not { } config) ||
             !config.TryGetValue(
-            key: extension.Field,
+            key: post.Field,
             value: out var field
         ) ||
             (field.Type != ShaderValueType.Float)
         ) {
-            throw new InvalidOperationException(message: $"{path}.target.field '{extension.Field}' names no float config field of extension '{extension.Id}'.");
+            throw new InvalidOperationException(message: $"{path}.target.field '{post.Field}' names no float config field of post pass '{post.Pass}' ('{package.Id}').");
         }
         if (
             !ShaderConfigBinding.InRange(
@@ -102,14 +102,14 @@ internal sealed partial class WorldProbes {
             value: parameter.Range.Y
         )
         ) {
-            throw new InvalidOperationException(message: $"{path}.range [{parameter.Range.X}, {parameter.Range.Y}] leaves the declared range of '{extension.Id}.{extension.Field}' [{field.Min}, {field.Max}].");
+            throw new InvalidOperationException(message: $"{path}.range [{parameter.Range.X}, {parameter.Range.Y}] leaves the declared range of '{post.Pass}.{post.Field}' [{field.Min}, {field.Max}].");
         }
 
         return new ParameterBindingTemplate {
             Channel = channel,
-            ExtensionField = extension.Field,
-            ExtensionId = extension.Id,
             MaxAgeTicks = ((long)(parameter.MaxAgeSeconds * Stopwatch.Frequency)),
+            PostField = post.Field,
+            PostPass = post.Pass,
             Row = parameter,
         };
     }
@@ -119,20 +119,20 @@ internal sealed partial class WorldProbes {
         return new ParameterState {
             Channel = template.Channel,
             ConstantOffset = template.ConstantOffset,
-            ExtensionField = template.ExtensionField,
-            ExtensionId = template.ExtensionId,
             Instance = instance,
             MaxAgeTicks = template.MaxAgeTicks,
+            PostField = template.PostField,
+            PostPass = template.PostPass,
             Row = template.Row,
             TargetRowInfo = template.TargetRowInfo,
         };
     }
-    // Writes every declared parameter binding's conditioned value into its target — a composed extension pass, or
+    // Writes every declared parameter binding's conditioned value into its target — a composed post pass, or
     // another probe's instance (resolved fresh here, at this binding's own instance seat, and patched in place —
     // handed to its running kernel, which adopts them on its next cycle) — skipping a stale reading (older than the
     // binding's own maxAgeSeconds — the write simply stops, never forcing the target back to some other value), a
     // target that is not currently live (a seat-relative target with no instance at this seat), and an unchanged
-    // write. A boot shape that never composed presentation (no pass registered under the extension's id) leaves
+    // write. A boot shape that never composed presentation (no pass composed under the row's name) leaves
     // every binding's Writes at zero — a harmless, honestly-reported no-op, never a fault.
     private void ServiceParameters() {
         var nowTimestamp = Stopwatch.GetTimestamp();
@@ -184,8 +184,8 @@ internal sealed partial class WorldProbes {
                 } else if (
                     (value == parameter.LastValue) ||
                     !m_passes.TrySetConfig(
-                    field: parameter.ExtensionField!,
-                    id: parameter.ExtensionId!,
+                    field: parameter.PostField!,
+                    pass: parameter.PostPass!,
                     value: value
                 )
                 ) {

@@ -168,10 +168,9 @@ one statement.
 **The closed set of binding kinds is one type, `GpuBindingKind`.** The pass
 interface, both backends' layout planners, and `IGpuBindings.WriteBuffer` all
 read it, and whether a buffer is read or written is part of its kind, so it is
-the one statement of buffer access. Keeping `GpuComputeBindingKind` and
-`ShaderSetManifestBindingKind` beside it with translations between them is
-rejected, because each translation is a second statement of the same access
-that can drift from the first. `ShaderSetManifestBindingKind` is deleted, and
+the one statement of buffer access. Keeping another binding-kind type beside it
+with translations between them is rejected, because each translation is a
+second statement of the same access that can drift from the first.
 `GpuComputeBindingKind` goes once the SDF engine's combined image samplers have
 moved to a separate image and sampler.
 
@@ -383,6 +382,18 @@ they have. Today a view that would see itself gets the procedural test card.
 Instead, a self-reference goes through the planner's previous-frame edge, so a
 mirror shows the previous frame. A same-frame cycle is refused because no order
 of passes can satisfy it.
+
+**Post passes are passes of the synthesized root graph.** A world names them in
+`views.post`, each row written the way a graph document's `packages` row is,
+less its ports: the root runs them in order over the composed frame, after
+every view and pane is placed and before the overlay, and each reads the frame
+the pass before it wrote. A `views.graphs` row per post pass was rejected. A
+row is an instance that another instance reads, so a post pass written as one
+would run over the world before placement rather than over the composed frame
+with its panes, and each would cost an image and a node of its own. A
+post-process package is declared once, in the render graph package catalog,
+with its stages, members, config and interface, rather than as a manifest
+beside a package, so it ships the way `place` and `overlay` do.
 
 **Sources are classified by how an image arrives, and producers register by
 id.** The three transports are uploaded, imported, and rendered, and

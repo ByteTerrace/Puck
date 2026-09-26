@@ -475,8 +475,8 @@ internal static class WorldPostBuildWiring {
                 Console.Error.WriteLine(value: $"[world.render] envelope: {composed.InstanceCapacity} instances, {composed.ProgramWordCapacity} program words, {composed.DynamicTransformCapacity} dynamic slots");
             }
 
-            // The default render graph plans here too, off the GPU, so a render.extensions config its set's schema does
-            // not bind is refused by name before the renderer is built.
+            // The default render graph plans here too, off the GPU, so a views.post config its package's schema does not
+            // bind is refused by name before the renderer is built.
             _ = services.GetService<WorldRootGraph>();
         } catch (WorldRenderCapacityRefusedException refusal) {
             Console.Error.WriteLine(value: $"[world] definition refused: {refusal.Message}");

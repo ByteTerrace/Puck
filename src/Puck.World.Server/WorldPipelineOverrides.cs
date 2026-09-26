@@ -112,7 +112,7 @@ public sealed class WorldPipelineSources(string? documentDirectory) {
         }
 
         if (!RenderGraphSource.TryPlan(
-            packages: RenderGraphPackageCatalog.Shipped,
+            packages: RenderGraphPackageCatalog.Engine,
             path: path,
             plan: out var plan,
             reason: out var reason

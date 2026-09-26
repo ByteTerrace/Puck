@@ -544,13 +544,14 @@ seam one process wires and another does not cannot exist:
   (`WorldGrant.KindMask`) by NAME (`verbs:UpsertStateCell,RemoveStateCell`)
   against `WorldMutationKindCatalog`, which lives in `Puck.World.Protocol`,
   downstream of this project.
-- `WorldExtensionVocabularyHook.cs` checks a `screens[]` engine key and a
-  `render.extensions[]` key against the catalogs in `Puck.World.Server`; those
-  two arrive as parameters to the shared installer, since `Puck.World.Client`
-  does not reference `Puck.World.Server` either.
-- `WorldProbeVocabularyHook.cs` checks a `probes[].kind` key
-  against the catalog in `Puck.World.Server`, the same required, arrives-as-a-
-  parameter shape `WorldExtensionVocabularyHook.cs` uses.
+- `WorldPostProcessVocabularyHook.cs` answers whether a `views.post[].package`
+  id names a post-process package in the host's render graph package catalog
+  (`Puck.Shaders.RenderGraphPackageCatalog.Engine`, which `Puck.World.Client`
+  reaches directly).
+- `WorldProbeVocabularyHook.cs` checks a `probes[].kind` key against the
+  catalog in `Puck.World.Server`; that catalog arrives as a parameter to the
+  shared installer, since `Puck.World.Client` does not reference
+  `Puck.World.Server`.
 
 Every validation path is covered without this project ever naming `Puck.Input`,
 `Puck.World.Client`, or `Puck.World.Protocol`.
@@ -2762,13 +2763,14 @@ kind's sockets by name, each bound to a `WorldFrameSource`) or a recorded
 (`WorldProbeBinding`—`axis`, `parameter`, or `control`, each naming one of the
 enclosing probe's channels). A kind is checked against the registered vocabulary at load
 (`WorldProbeVocabularyHook.IsRegisteredProbeKind`, a required hook installed
-the same way `WorldExtensionVocabularyHook`'s post-render check is); a channel
+the same way `WorldPostProcessVocabularyHook`'s package check is); a channel
 name is not—the manifest behind that hook is not reachable here, so a
 binding's `channel` is checked only for presence, and by name once a kind's own
 manifest is consulted at boot. An `axis` binding's `source` mints the bindable
 input source `probe.<source>` (`Puck.Input.InputSources.Probe.Axis`); a
-`parameter` binding's `target` is either an `extension` entry the document's own
-`render.extensions` composes or another declared `probe` row's config field; a
+`parameter` binding's `target` is either a `post` pass's config field, naming
+one of the document's own `views.post` rows, or another declared `probe` row's
+config field; a
 `control` binding's `control` field must name a
 `WorldCameraControls` member. Like `music`, the section is
 boot-authored only—no `WorldMutation` kind targets it and `world.row.set

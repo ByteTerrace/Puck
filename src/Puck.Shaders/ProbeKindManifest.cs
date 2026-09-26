@@ -51,10 +51,9 @@ public sealed record ProbeKindKernel(string Source, string Accumulate, string Fi
 /// <summary>
 /// A <c>puck.probe.manifest.v1</c> probe kind manifest: one <c>&lt;id&gt;.puck.probe.json</c> declaring an probe's
 /// input, its channels, and — for a <see cref="ProbeKindClass.Kernel"/> kind — the HLSL source and entry points a
-/// kernel host compiles and runs. Registered exactly the way a <see cref="ShaderSetManifest"/> registers a shader
-/// set: a document names a kind by id, and shipping the manifest beside its kernel source (when it has one) IS
-/// registering it. Config binds through the same <see cref="ShaderConfigBinding"/> a shader set's config binds
-/// through.
+/// kernel host compiles and runs. A document names a kind by id, and shipping the manifest beside its kernel source
+/// (when it has one) IS registering it. Config binds through the same <see cref="ShaderConfigBinding"/> a render graph
+/// package's config binds through.
 /// </summary>
 /// <param name="Schema">The schema tag; must equal <see cref="SchemaTag"/>.</param>
 /// <param name="Name">The kind's id; must equal the manifest's file stem (the text before <see cref="FileSuffix"/>).</param>

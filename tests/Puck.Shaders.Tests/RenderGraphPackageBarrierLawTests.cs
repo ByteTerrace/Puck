@@ -5,7 +5,7 @@ namespace Puck.Shaders.Tests;
 /// <summary>
 /// Laws of package-pass barriers: the planner plans each package port's barrier and layout from the stage and access
 /// the port declares (<see cref="RenderGraphPortAccess"/>) exactly as it plans a shader pass's, so a graph of a compute
-/// shader pass, a <c>post.&lt;id&gt;</c> pass and the <c>overlay</c> pass plans the hand-derived barrier table below,
+/// shader pass, a post-process package pass and the <c>overlay</c> pass plans the hand-derived barrier table below,
 /// layouts included, and a drawing package's target is created usable as a color attachment while a compute package's
 /// is not.
 /// </summary>
@@ -34,11 +34,7 @@ public sealed class RenderGraphPackageBarrierLawTests {
         Stage: GpuStage.ColorAttachmentOutput
     );
 
-    private static RenderGraphPackageCatalog Catalog() => RenderGraphPackageCatalog.WithPostProcess(postProcess: ShaderSetCatalog.Scan(rootDirectory: Path.Combine(
-        path1: AppContext.BaseDirectory,
-        path2: "Assets",
-        path3: "Shaders"
-    )));
+    private static RenderGraphPackageCatalog Catalog() => RenderGraphPackageCatalog.Engine;
     private static ShaderPipelineResource Image(string name, bool external = false) => new(
         Dimensions: ShaderPipelineDimensions.Relative(),
         Format: "R8G8B8A8Unorm",
@@ -56,7 +52,7 @@ public sealed class RenderGraphPackageBarrierLawTests {
                 Inputs: ["toned"],
                 Name: "grain",
                 Outputs: ["grained"],
-                Package: "post.sdf-film-grain"
+                Package: RenderGraphPackageCatalog.SdfFilmGrain
             ),
             new RenderGraphPackagePass(
                 Inputs: ["grained"],

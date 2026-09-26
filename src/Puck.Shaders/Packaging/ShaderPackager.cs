@@ -81,7 +81,7 @@ public sealed partial class ShaderPackager {
                 .Order(comparer: StringComparer.Ordinal)
                 .ToArray(),
             ParameterBytes: plan.Passes.Select(selector: static pass => pass.Parameters.SizeBytes).DefaultIfEmpty().Max(),
-            TargetFloor: new ShaderSetManifestTargetFloor(
+            TargetFloor: new ShaderTargetFloor(
                 ShaderModel: ShaderCompiler.ShaderModel,
                 Vulkan: ShaderCompiler.VulkanVersion
             ),

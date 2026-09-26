@@ -9,11 +9,11 @@ public static partial class WorldDefinitionValidator {
     };
 
     // Vocabulary and structural shape only — the shallow half of the shallow-then-deep split
-    // WorldRenderExtensionEntry.Config already establishes: a kind naming no registered probe kind, a probe
+    // WorldViewPostPass.Config already establishes: a kind naming no registered probe kind, a probe
     // reference resolving to nothing, or a source colliding with another axis binding refuses here, at load, by name
     // and index. A channel name is never checkable here (the manifest lives behind WorldProbeVocabularyHook, which
     // answers only "is this kind registered", not "what channels does it declare") — the host checks it by name at
-    // boot, the same precedent an extension's own config field follows.
+    // boot, the same precedent a post pass's own config field follows.
     private static void ValidateProbes(WorldDefinition definition, HashSet<string> cameras, List<string> errors, ICollection<string>? deferred) {
         if (definition.ProbesRaw is not { } probes) {
             return;
@@ -218,7 +218,7 @@ public static partial class WorldDefinitionValidator {
         }
     }
     // A probe id reference resolves against the declared rows by name — the same shallow check a parameter target's
-    // extension id gets.
+    // post pass name gets.
     private static bool DeclaresProbe(WorldDefinition definition, string? id) {
         if (
             string.IsNullOrWhiteSpace(value: id) ||
@@ -384,21 +384,20 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.target is required.");
 
                 break;
-            case WorldProbeParameterTarget.Extension extension:
-                if (string.IsNullOrWhiteSpace(value: extension.Field)) {
+            case WorldProbeParameterTarget.Post post:
+                if (string.IsNullOrWhiteSpace(value: post.Field)) {
                     errors.Add(item: $"{path}.target.field is required.");
                 }
 
                 if (
-                    string.IsNullOrWhiteSpace(value: extension.Id) ||
-                    (definition.Render.Extensions is not { } extensions) ||
-                    !extensions.Any(predicate: entry => ((entry is not null) && string.Equals(
-                    a: entry.Id,
-                    b: extension.Id,
+                    string.IsNullOrWhiteSpace(value: post.Pass) ||
+                    !(definition.Views.Post ?? []).Any(predicate: row => ((row is not null) && string.Equals(
+                    a: row.Name,
+                    b: post.Pass,
                     comparisonType: StringComparison.Ordinal
                 )))
                 ) {
-                    errors.Add(item: $"{path}.target.id '{extension.Id}' names no composed render.extensions entry.");
+                    errors.Add(item: $"{path}.target.pass '{post.Pass}' names no views.post row.");
                 }
 
                 break;

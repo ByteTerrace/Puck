@@ -244,6 +244,67 @@ public static partial class WorldDefinitionValidator {
     ) &&
         (row.Kind is CellKind.Int or CellKind.Fixed or CellKind.Bool)
     );
+    // The views.post rows, which the synthesized root runs over the composed frame: each name, and each package against
+    // the host's post-process vocabulary. A row's config is opaque here; the graph compiler binds it against its
+    // package's schema when the root graph is composed (RENDERGRAPH_PACKAGE_CONFIG), and the boot refuses it naming the
+    // row.
+    private static void ValidatePostPasses(WorldViewDefaults views, List<string> errors, ICollection<string>? deferred) {
+        var passes = (views.Post ?? []);
+
+        if (passes.Count == 0) {
+            return;
+        }
+        if (views.Root is not null) {
+            errors.Add(item: "views.post: a world that names views.root authors its whole render graph, and composition synthesizes no root to run post passes in.");
+        }
+
+        // The root names each pane's place pass after its views.graphs row, so a post pass may take no row's name.
+        var rows = (views.Graphs ?? []).Where(predicate: static graph => (graph is not null)).Select(selector: static graph => graph.Name).ToHashSet(comparer: StringComparer.Ordinal);
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        for (var index = 0; (index < passes.Count); index++) {
+            var pass = passes[index];
+            var path = $"views.post[{index}]";
+
+            if (pass is null) {
+                errors.Add(item: $"{path} is required.");
+
+                continue;
+            }
+            if (!SafeName.TryParse(
+                candidate: pass.Name,
+                name: out _,
+                reason: out var nameReason
+            )) {
+                errors.Add(item: $"{path}.name {nameReason}");
+            } else if (!GeneratedName.TryValidateAuthored(
+                name: pass.Name,
+                reason: out var reservedReason
+            )) {
+                errors.Add(item: $"{path}.name {reservedReason}");
+            } else if (!names.Add(item: pass.Name)) {
+                errors.Add(item: $"{path}.name '{pass.Name}' is duplicated.");
+            } else if (rows.Contains(item: pass.Name)) {
+                errors.Add(item: $"{path}.name '{pass.Name}' is a views.graphs row's name, which the root's place pass for that row takes.");
+            }
+            if (string.IsNullOrWhiteSpace(value: pass.Package)) {
+                errors.Add(item: $"{path}.package is required.");
+
+                continue;
+            }
+
+            switch (WorldPostProcessVocabularyHook.IsPostProcessPackage(package: pass.Package)) {
+                case false:
+                    errors.Add(item: $"{path}.package '{pass.Package}' names no post-process package.");
+
+                    break;
+                case null:
+                    deferred?.Add(item: $"{path}.package: post-process package '{pass.Package}' deferred — this host carries no render graph package catalog.");
+
+                    break;
+            }
+        }
+    }
     // A shown instance's presentation values: its clock rate, the output it shows and the shape of its override set;
     // the source's config schema binds the values themselves.
     private static void ValidateInstanceValues(string path, float timeScale, string? output, IReadOnlyDictionary<string, JsonElement>? overrides, List<string> errors) {

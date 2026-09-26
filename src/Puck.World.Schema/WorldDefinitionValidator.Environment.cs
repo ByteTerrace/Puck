@@ -24,7 +24,7 @@ public static partial class WorldDefinitionValidator {
             // These are the existing section validators, including their original diagnostics. Their vocabulary
             // hooks can change answers without changing delegate identity (notably the command registry at boot).
             // Keep every ambient vocabulary consumer in this phase; rule/state validation belongs to the receipt.
-            ValidateRenderExtensions(definition.Render.Extensions, errors, deferred: null);
+            ValidatePostPasses(views: definition.Views, errors: errors, deferred: null);
             ValidateSeatModes(definition: definition, errors: errors);
             var (iconNames, iconsAuthored) = ValidateIconography(definition: definition, errors: errors);
             if (definition.BindingOverlays.Count != 0) {

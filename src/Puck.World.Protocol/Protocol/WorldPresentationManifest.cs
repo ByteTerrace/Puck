@@ -152,16 +152,19 @@ public sealed class WorldPresentationManifest {
     /// (<c>state:&lt;row&gt;</c>, read as stored truth and keyed by the seat's body when the row is keyed), every radial
     /// wheel's label and icon cells keyed by each sector's id and the label row's
     /// <see cref="BindingWheelDefinition.HubLabelKey"/>, the bar's icon cell keyed by every page entry's
-    /// <see cref="BindingPageEntryDefinition.KeyOf"/>, and the bar's layout and model cells. A seat registers them on the
-    /// mirror it reads through (<see cref="WorldStateMirror.Register"/>), so none is first read on a frame.</summary>
+    /// <see cref="BindingPageEntryDefinition.KeyOf"/>, the bar's layout and model cells, and every binding and template
+    /// placeholder of the seat's own player-scope HUD panel. A seat registers them on the mirror it reads through
+    /// (<see cref="WorldStateMirror.Register"/>), so none is first read on a frame.</summary>
     /// <param name="definition">The world the seat presents from, whose rows say which context family is keyed.</param>
     /// <param name="bindings">The seat's composed binding document.</param>
     /// <param name="bar">The seat's resolved binding bar.</param>
     /// <param name="bodyIndex">The seat's controlled body, or -1 for none; a keyed family reads nothing without one.</param>
+    /// <param name="hud">The seat's player-scope HUD panel, its profile's <c>Hud</c>, or <see langword="null"/> for
+    /// none.</param>
     /// <returns>The reads, each once, in document order.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/>, <paramref name="bindings"/> or
     /// <paramref name="bar"/> is <see langword="null"/>.</exception>
-    public static WorldPresentationBinding[] SeatBindings(WorldDefinition definition, BindingProfileDocument bindings, WorldBindingBarAuthoring bar, int bodyIndex) {
+    public static WorldPresentationBinding[] SeatBindings(WorldDefinition definition, BindingProfileDocument bindings, WorldBindingBarAuthoring bar, int bodyIndex, WorldHudPanel? hud) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: bindings);
         ArgumentNullException.ThrowIfNull(argument: bar);
@@ -238,6 +241,12 @@ public sealed class WorldPresentationManifest {
             binding: StateBinding.Parse(token: bar.ModelCell),
             conversion: WorldStateConversion.Number
         );
+
+        foreach (var element in (hud?.Elements ?? [])) {
+            if (element is not null) {
+                builder.AddHud(element: element);
+            }
+        }
 
         return [.. builder.Bindings];
     }
@@ -348,6 +357,29 @@ public sealed class WorldPresentationManifest {
                     Binding: bound,
                     Conversion: conversion
                 ));
+            }
+        }
+        // A HUD element's binding and every placeholder of its template, each read as a number.
+        public void AddHud(WorldHudElement element) {
+            Add(
+                binding: StateBinding.Parse(token: element.Binding),
+                conversion: WorldStateConversion.Number
+            );
+
+            if (
+                (element.Template is { Length: > 0 } template) &&
+                HudTemplate.TryEnumeratePlaceholders(
+                error: out _,
+                placeholders: out var placeholders,
+                template: template
+            )
+            ) {
+                foreach (var placeholder in placeholders) {
+                    Add(
+                        binding: StateBinding.Parse(token: placeholder),
+                        conversion: WorldStateConversion.Number
+                    );
+                }
             }
         }
         // A keyed cell of a row named by a state.<row> reference, read as text through its number slot.
@@ -535,26 +567,7 @@ public sealed class WorldPresentationManifest {
 
                     return false;
                 case WorldHudElement element:
-                    Add(
-                        binding: StateBinding.Parse(token: element.Binding),
-                        conversion: WorldStateConversion.Number
-                    );
-
-                    if (
-                        (element.Template is { Length: > 0 } template) &&
-                        HudTemplate.TryEnumeratePlaceholders(
-                        error: out _,
-                        placeholders: out var placeholders,
-                        template: template
-                    )
-                    ) {
-                        foreach (var placeholder in placeholders) {
-                            Add(
-                                binding: StateBinding.Parse(token: placeholder),
-                                conversion: WorldStateConversion.Number
-                            );
-                        }
-                    }
+                    AddHud(element: element);
 
                     return true;
                 case WorldBindingBarAuthoring bar:

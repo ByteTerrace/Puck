@@ -10,9 +10,6 @@ namespace Puck.World.Silo;
 internal static class WorldSiloDataHookInstaller {
     [ModuleInitializer]
     internal static void Install() {
-        WorldSchemaVocabularyHooks.Install(
-            postRenderExtensionCheck: WorldPostRenderExtensions.IsShipped,
-            probeKindCheck: WorldProbeKinds.IsShipped
-        );
+        WorldSchemaVocabularyHooks.Install(probeKindCheck: WorldProbeKinds.IsShipped);
     }
 }

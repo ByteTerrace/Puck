@@ -182,7 +182,8 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
                     Width: viewport.Width,
                     Height: viewport.Height
                 ),
-                Panel: build.Panel
+                Panel: build.Panel,
+                Seat: slot
             );
         }
 

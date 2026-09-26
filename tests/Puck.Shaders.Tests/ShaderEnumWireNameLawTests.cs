@@ -65,7 +65,7 @@ public sealed class ShaderEnumWireNameLawTests {
 
         AssertWireNames(
             expected: expected,
-            typeInfo: ShaderManifestJsonContext.Default.ShaderValueType
+            typeInfo: ProbeKindManifestJsonContext.Default.ShaderValueType
         );
         // The diagnostic spelling and the wire name are one vocabulary.
         Assert.All(

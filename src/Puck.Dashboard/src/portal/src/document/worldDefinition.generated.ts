@@ -4254,7 +4254,7 @@ export type WorldCaptureRow = {
    */
   palette: (WorldCapturePaletteEntry | null)[];
   /**
-   * The render-graph instance whose output the station captures, or null (the default) for the root, the frame the display shows. WorldInstance captures the SDF world before any render.extensions pass or the overlay is drawn over it.
+   * The render-graph instance whose output the station captures, or null (the default) for the root, the frame the display shows. WorldInstance captures the SDF world before any views.post pass or the overlay is drawn over it.
    */
   instance?: string | null;
 };
@@ -7520,16 +7520,16 @@ export type WorldProbeBindingParameter = {
   maxAgeSeconds?: number;
 };
 
-export type WorldProbeParameterTarget = WorldProbeParameterTargetExtension | WorldProbeParameterTargetProbe | null;
+export type WorldProbeParameterTarget = WorldProbeParameterTargetPost | WorldProbeParameterTargetProbe | null;
 
-export type WorldProbeParameterTargetExtension = {
-  $type?: "extension";
+export type WorldProbeParameterTargetPost = {
+  $type?: "post";
   /**
-   * The render.extensions[].id entry this targets — must name an entry the document itself composes.
+   * The views.post[].name this targets — must name a row of this document.
    */
-  id: string;
+  pass: string;
   /**
-   * The extension's config field name — checked against its manifest at boot, never here (the same shallow-then-deep precedent every kind-vocabulary field follows).
+   * The pass's package config field name — checked against the package's schema at boot, never here (the same shallow-then-deep precedent every kind-vocabulary field follows).
    */
   field: string;
 };
@@ -8755,10 +8755,6 @@ export type WorldRenderDefaults = {
    */
   high?: WorldQualityPreset | null;
   /**
-   * The post-render extension chain, composed over the world's rendered output in list order — e.g. [{ "id": "sdf-film-grain", "config": { "intensity": 0.08 } }]. Optional; an absent or empty list is the byte-identical default path (no extension composed). Every id must name a shipped shader set — a puck.shader.manifest.v1 manifest's file stem (checked at document load); each entry's own config is validated against that manifest's declared config schema at boot and by puck schema.
-   */
-  extensions?: (WorldRenderExtensionEntry | null)[] | null;
-  /**
    * The scene's directional sun and ambient term. Optional, and every field within it is optional individually — an absent section, or an absent field within it, resolves to SdfFrame's pinned default for that field, so a world renders unchanged until it authors one.
    */
   lighting?: WorldRenderLighting | null;
@@ -8793,17 +8789,6 @@ export type WorldRenderEnvironment = {
    * The reflection horizon gradient. Absent is black — contributes nothing.
    */
   horizon?: WorldRenderHorizon | null;
-};
-
-export type WorldRenderExtensionEntry = {
-  /**
-   * The shader set id (its puck.shader.manifest.v1 manifest's file stem) — checked against the shipped vocabulary at document load (IsRegisteredPostRenderExtension), never interpreted here.
-   */
-  id: "sdf-film-grain";
-  /**
-   * The set's config values, or null when the manifest declares none or every field has a default. Not validated at document load — the manifest's declared config schema validates it at boot (matching Machine's Options, the identical shallow-then-deep precedent), refusing boot with the set id and reason on a malformed value.
-   */
-  config?: unknown;
 };
 
 export type WorldRenderHorizon = {
@@ -10875,6 +10860,10 @@ export type WorldViewDefaults = {
    */
   root?: string | null;
   /**
+   * The post-process passes the synthesized root graph runs over the composed frame, in order, before the overlay, or null for none. A world that names Root authors its whole graph and names none.
+   */
+  post?: (WorldViewPostPass | null)[] | null;
+  /**
    * Gets the authored named layouts. The absence-coalesce lives in the accessor for the same reason Elements's does.
    */
   layouts?: (WorldViewLayout | null)[] | null;
@@ -10989,6 +10978,21 @@ export type WorldViewLayout = {
    * Gets the slots, in order. The absence-coalesce lives in the accessor for the same reason Elements's does.
    */
   slots: WorldViewSlot[];
+};
+
+export type WorldViewPostPass = {
+  /**
+   * The pass's name in the root graph (a SafeName, unique within the section and distinct from every views.graphs row, whose place pass the root names after the row), which a probe parameter's post target names.
+   */
+  name: string;
+  /**
+   * The post-process package the pass runs, a render graph package id such as sdf.film-grain, checked against the host's catalog at document load.
+   */
+  package: "sdf.film-grain";
+  /**
+   * The package's config values, each absent field at its default, or null for every default. The graph compiler binds them against the package's schema when the root graph is composed, and a boot refuses a value that does not bind, naming the row.
+   */
+  config?: unknown;
 };
 
 export type WorldViewSlot = {
