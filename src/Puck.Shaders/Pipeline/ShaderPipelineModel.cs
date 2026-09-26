@@ -441,6 +441,8 @@ public sealed record ShaderPipelineGeometry(
 /// <param name="AlphaTest">An alpha-test cutoff. The planner refuses every value by name.</param>
 /// <param name="Dispatch">A compute or package pass's dispatch shape; <see langword="null"/> means
 /// <see cref="ShaderPipelineDispatchKind.Extent"/>. A graphics pass declares none.</param>
+/// <param name="Arrays">Optional arrays in the World group, each an element type and a length, which a world binds to
+/// whole state rows (<see cref="ShaderArrayField"/>).</param>
 public sealed record ShaderPipelinePass(
     string Name,
     string Source,
@@ -457,7 +459,8 @@ public sealed record ShaderPipelinePass(
     ShaderPipelineDepthCompare? DepthCompare = null,
     ShaderPipelineBlend? Blend = null,
     double? AlphaTest = null,
-    ShaderPipelineDispatch? Dispatch = null
+    ShaderPipelineDispatch? Dispatch = null,
+    IReadOnlyDictionary<string, ShaderArrayField>? Arrays = null
 ) {
     /// <summary>Gets the version an indirect dispatch reads its group counts from, or <see langword="null"/>.</summary>
     [JsonIgnore]

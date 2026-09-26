@@ -2677,39 +2677,47 @@ follow it.
    field with the value its pass holds. Laws: `WorldViewGraphParameterLawTests`,
    `PipelineOverrideLawTests.Parameters` and
    `ShaderPipelineRenderNodeLawTests.Parameters`.
-2. Row slots. The mirror gains a slot holding a whole lattice or keyed row as
-   numbers, cell `i` at element `i`, refreshed by the same moved-row stamp and
-   read through `SlotOf` with the row conversion. `IWorldStateView` reads a row
-   at once. The read-count and allocation laws cover it.
-3. Array members and the World group. A pass config field declaring a `length`
-   is an interface array in the World group (set 1), one read-only buffer a
-   member, tightly packed 32-bit elements of the field's scalar type, read
-   through the generated `<name>At(i)` accessor. A parameter binds it to
-   `state.<row>`, which must be a row whose kind and bounds fill the element
-   type and whose cell count fits the length, or the source bind refuses it by
-   name. The node holds one region a bound row and element type, shared by
-   every pass that reads the row the same way, created under
-   `GpuResidency.Select` and filled from the row slot only when it moved; an
-   unbound array reads zeros. Laws: one row's region bytes identical under the
-   three residency policies, one region for two passes, and each refusal.
-4. The forcing case. The rulepush rules keep a `tiles` lattice, each cell the
+2. Done: row slots, array members and the World group. The mirror gains a row
+   slot (`WorldStateConversion.Row`) holding a whole keyed row as numbers, cell
+   `i` at element `i` over the element count its shape states
+   (`WorldBoundRow`: a lattice row's topology cells, any other keyed row's cell
+   ceiling, `IWorldStateView.RowLength`), refreshed by the same moved-row stamp
+   as one read and sized at install, so a refresh allocates nothing. A keyless
+   token naming a keyed row joins the manifest as a row read. A pass declares
+   `arrays` (`ShaderArrayField`: a scalar element type and a length up to
+   4,096), which lay out as the World group's block, set 1, at 16 bytes an
+   element, read through the generated `<name>At(i)` accessor. A parameter
+   binds an array to `state.<row>`; the load gate refuses a row that is not
+   keyed, is longer than the array, or holds values the element type cannot
+   hold exactly (an integer element takes only an Int or Bool row whose
+   declared bounds lie in its range), and a scalar field bound to a keyless
+   keyed row. The node holds each pass's World block in a region per bound set
+   under `GpuResidency.Select` (a staged selection held in a host ring, as a
+   pass block is), writes the row slot's elements into it only when the slot
+   changed (`TryWriteArray`), and an unbound array reads zeros. Laws:
+   `WorldStateMirrorRowLawTests` and `ShaderArrayFieldLawTests`. Open: one
+   region a bound row and element type shared by every pass that reads the row
+   the same way, instead of one World block a pass; a staged World block
+   through the node's region copies; a law holding one row's region bytes under
+   the three residency policies, and a load-gate law per array refusal.
+3. The forcing case. The rulepush rules keep a `tiles` lattice, each cell the
    top token's look, and a board pass package draws it; each level shows the
    board in a pane. A `rulepush-board` GPU canary boots an offscreen level,
    moves the row with `world.row.set`, and holds the captured pixels to the
    change, with a discriminating leg binding the same member to a literal.
-5. The `parameter` statement: `parameter <pass>.<member> = <value>` inside a
+4. The `parameter` statement: `parameter <pass>.<member> = <value>` inside a
    `graph` block lowers to `parameters`, and the decompiler prints it back.
-6. The deterministic tick and the tick verdict. A pass reading a requested tick
+5. The deterministic tick and the tick verdict. A pass reading a requested tick
    rate gets the tick divided by the engine rate over that rate, refused unless
    the rate divides the engine rate exactly; a capture records the tick its
    regions were refreshed at, and `puck parity` holds it to the armed tick
    between the state and pixel verdicts.
-7. The presentation dimension. The cost report prices every binding in bytes
+6. The presentation dimension. The cost report prices every binding in bytes
    per tick and per frame, with a per-document ceiling refusing by pipeline and
    binding; `world.budget` prints it, and the browser report carries it.
-8. Tiers. A package builds its variants beyond `default`, and a row names its
+7. Tiers. A package builds its variants beyond `default`, and a row names its
    tier from `low`, `medium` and `high`.
-9. The field lattice as a region kind, replacing `WorldClientFieldLattice`'s
+8. The field lattice as a region kind, replacing `WorldClientFieldLattice`'s
    second path, and the materials a program bakes join the mirror.
 
 ### P11 — The frame graph document and nested views

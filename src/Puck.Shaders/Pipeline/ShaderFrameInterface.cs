@@ -70,20 +70,38 @@ public static class ShaderFrameInterface {
     /// <param name="name">The interface's name (<see cref="NameOf"/>).</param>
     /// <param name="config">The pass's config schema, or <see langword="null"/> when it has none.</param>
     /// <param name="ports">The pass's port members, each in <see cref="ShaderInterfaceGroup.Pass"/>, in document order.</param>
+    /// <param name="arrays">The pass's arrays, laid out in the World group's block in ordinal name order, or
+    /// <see langword="null"/> for none.</param>
     /// <returns>The interface.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="ports"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidDataException"><paramref name="name"/> is not an interface name, a config field's or
     /// port's name is not an identifier or repeats another member's, or a port is not in the pass group.</exception>
-    public static ShaderInterface ForPass(string name, IReadOnlyDictionary<string, ShaderConfigField>? config, IReadOnlyList<ShaderInterfaceMember> ports) {
+    public static ShaderInterface ForPass(string name, IReadOnlyDictionary<string, ShaderConfigField>? config, IReadOnlyList<ShaderInterfaceMember> ports, IReadOnlyDictionary<string, ShaderArrayField>? arrays = null) {
         ArgumentNullException.ThrowIfNull(argument: ports);
 
-        var members = new List<ShaderInterfaceMember>(collection: FrameGroupMembers) {
+        var members = new List<ShaderInterfaceMember>(collection: FrameGroupMembers);
+
+        // A pass's arrays are the World group's block, in ordinal name order: the rows a world binds change at most once a
+        // tick, so they bind apart from the pass block's config and extent.
+        foreach (var (field, array) in (arrays ?? new Dictionary<string, ShaderArrayField>()).OrderBy(
+            comparer: StringComparer.Ordinal,
+            keySelector: static pair => pair.Key
+        )) {
+            members.Add(item: ShaderInterfaceMember.Array(
+                group: ShaderInterfaceGroup.World,
+                length: array.Length,
+                name: field,
+                type: array.Type
+            ));
+        }
+
+        members.AddRange(collection: [
             ShaderInterfaceMember.Value(
                 group: ShaderInterfaceGroup.Pass,
                 name: Extent,
                 type: ShaderValueType.Uint2
             ),
-        };
+        ]);
 
         AddConfig(
             config: config,

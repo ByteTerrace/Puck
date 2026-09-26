@@ -1467,6 +1467,30 @@ refused at validation naming the row, the pass and the field, and a live
 the row, a parameter naming a pass or field the source does not declare, or a
 vector field, is refused as `pipeline.overrides/ParameterUnbound`.
 
+A pass can also declare `arrays`, each a scalar element type and a length of
+at most 4,096, which a parameter binds to a whole keyed state row:
+
+```json
+"arrays": { "tiles": { "type": "int", "length": 64 } }
+```
+
+```json
+"parameters": { "board": { "tiles": "state.tiles" } }
+```
+
+The arrays are the World group's block, set 1, laid out in ordinal name order
+at 16 bytes an element, and a pass reads element `i` through its generated
+accessor, `tilesAt(i)`. Element `i` holds the row's cell keyed `i`: a lattice
+row presents one element per cell of its topology, any other keyed row its cell
+ceiling, and an absent cell and every element past the row read zero, as an
+unbound array does. The state mirror reads the row whole through one row slot
+when a tick moves it, and the host writes the slot's elements into the pass's
+World block only when the slot changed. The load gate refuses a row that is not
+keyed, one longer than the array, and one whose values the element type cannot
+hold exactly: an integer element takes only an Int or Bool row whose declared
+bounds lie in its range, and a Fixed row fills only a float element. A scalar
+field bound to a keyed row with no key is refused the same way.
+
 A replay tape records the directory the server's source reader resolves rows
 against, and `replay.verify` gives its shadow server a reader over the same
 directory, so a recorded commit binds there as it did live.

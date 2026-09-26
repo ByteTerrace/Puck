@@ -30,6 +30,11 @@ public interface IWorldStateView {
     /// <returns><see langword="true"/> when the row resolves; the sample's value holds no case when the row declares
     /// no cell under <paramref name="key"/>.</returns>
     bool TryRead(int ordinal, string? key, bool target, ulong tick, ulong engineTick, out WorldStateSample sample);
+    /// <summary>Returns how many elements a resolved keyed row presents when it is read whole
+    /// (<c>Puck.World.WorldBoundRow</c>): cell <c>i</c> is read under the decimal key <c>i</c>.</summary>
+    /// <param name="ordinal">The row's state catalog ordinal.</param>
+    /// <returns>The element count, or zero for a slot row or an ordinal the installed layout does not hold.</returns>
+    int RowLength(int ordinal);
 }
 /// <summary>How a cell's read value moves between ticks with no write to its stored value.</summary>
 public enum WorldStateMotion : byte {

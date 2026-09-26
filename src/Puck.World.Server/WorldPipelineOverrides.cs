@@ -153,6 +153,68 @@ public sealed partial class WorldServer {
 }
 public sealed partial class WorldDocument {
     private static string RefuseOverride(WorldPipelineOverrideRefusal refusal, string detail) => $"pipeline.overrides/{refusal}: {detail}";
+    // Whether a parameter's value fills the member it binds. A scalar field reads one cell, so a token naming a keyed row
+    // must name a key. An array reads a whole keyed row (WorldBoundRow): a Bool, Int or Fixed row no longer than the
+    // array, whose values the element type holds exactly; an integer element takes only an Int or Bool row whose declared
+    // bounds lie in its range, and a Fixed row fills only a float element.
+    private static bool TryFitParameter(ShaderArrayField? array, BindableScalar value, WorldDefinition definition, out string reason) {
+        reason = string.Empty;
+
+        if (array is null) {
+            if (
+                (value.State is { Key: null } cell) &&
+                WorldBoundRow.TryResolve(
+                definition: definition,
+                length: out _,
+                row: out _,
+                rowName: cell.Row
+            )
+            ) {
+                reason = $"'{cell.Row}' is a keyed row, and a scalar field reads one cell; name its key, or bind an array.";
+
+                return false;
+            }
+
+            return true;
+        }
+        if (value.State is not { Key: null } binding) {
+            reason = "an array binds a whole row: a state.<row> token naming no key.";
+
+            return false;
+        }
+        if (!WorldBoundRow.TryResolve(
+            definition: definition,
+            length: out var length,
+            row: out var row,
+            rowName: binding.Row
+        )) {
+            reason = $"'{binding.Row}' names no keyed state row.";
+
+            return false;
+        }
+        if (length > array.Length) {
+            reason = $"row '{binding.Row}' presents {length} elements and the array holds {array.Length}.";
+
+            return false;
+        }
+
+        var fits = ((row.Kind, array.Type) switch {
+            (CellKind.Bool, _) => true,
+            (CellKind.Fixed, ShaderValueType.Float) => true,
+            (CellKind.Int, ShaderValueType.Float) => true,
+            (CellKind.Int, ShaderValueType.Int) => ((row.Min is { } min) && (row.Max is { } max) && (min >= int.MinValue) && (max <= int.MaxValue)),
+            (CellKind.Int, ShaderValueType.Uint) => ((row.Min is { } min) && (row.Max is { } max) && (min >= 0L) && (max <= uint.MaxValue)),
+            _ => false,
+        });
+
+        if (!fits) {
+            reason = $"row '{binding.Row}' holds {row.Kind} values{((row.Kind == CellKind.Int) ? $" bounded [{(row.Min?.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) ?? "-")}, {(row.Max?.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) ?? "-")}]" : string.Empty)}, which a {array.Type} element cannot hold exactly; declare the row's bounds within the element's range.";
+
+            return false;
+        }
+
+        return true;
+    }
 
     // The load gate: a whole document's rows that name overrides or an output bind against their sources, the check a
     // mutation applies to the rows it changes. sourcesOverride lets a rebuild validate the CANDIDATE document's rows
@@ -167,6 +229,7 @@ public sealed partial class WorldDocument {
                 ((row.Overrides is not null) || (row.Output is not null) || (row.Parameters is not null)) &&
                 !TryBindPipelineRow(
                 commit: null,
+                definition: candidate,
                 reason: out reason,
                 row: row,
                 sourcesOverride: sourcesOverride
@@ -307,6 +370,7 @@ public sealed partial class WorldDocument {
                 commit: (committing
                     ? commit
                     : null),
+                definition: candidate,
                 reason: out reason,
                 row: row
             )) {
@@ -316,7 +380,7 @@ public sealed partial class WorldDocument {
 
         return true;
     }
-    private bool TryBindPipelineRow(WorldViewGraph row, WorldMutation.CommitViewGraph? commit, out string reason, WorldPipelineSources? sourcesOverride = null) {
+    private bool TryBindPipelineRow(WorldViewGraph row, WorldDefinition definition, WorldMutation.CommitViewGraph? commit, out string reason, WorldPipelineSources? sourcesOverride = null) {
         reason = string.Empty;
 
         if ((sourcesOverride ?? Host.PipelineSources) is not { } sources) {
@@ -377,12 +441,21 @@ public sealed partial class WorldDocument {
             return false;
         }
         foreach (var (pass, fields) in (row.Parameters ?? new Dictionary<string, IReadOnlyDictionary<string, BindableScalar>>())) {
-            foreach (var field in fields.Keys) {
-                if (!source.TryCheckParameter(
+            foreach (var (field, value) in fields) {
+                if (
+                    !source.TryCheckParameter(
+                    array: out var array,
                     field: field,
                     passName: pass,
                     reason: out var parameterReason
-                )) {
+                ) ||
+                    !TryFitParameter(
+                    array: array,
+                    definition: definition,
+                    reason: out parameterReason,
+                    value: value
+                )
+                ) {
                     reason = RefuseOverride(
                         detail: $"'{row.Name}' parameter {pass}.{field}: {parameterReason}",
                         refusal: WorldPipelineOverrideRefusal.ParameterUnbound

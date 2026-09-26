@@ -212,7 +212,13 @@ public static partial class WorldDefinitionValidator {
             foreach (var (field, value) in fields) {
                 if (string.IsNullOrWhiteSpace(value: field)) {
                     errors.Add(item: $"{path}.parameters.{pass} names an empty field.");
-                } else if (!value.IsAuthorable(definition: definition)) {
+                } else if (
+                    !value.IsAuthorable(definition: definition) &&
+                    !BindsWholeRow(
+                    definition: definition,
+                    value: value
+                )
+                ) {
                     errors.Add(item: $"{path}.parameters.{pass}.{field} {BindableScalar.Grammar}.");
                 } else if (
                     (overridden is { } overrideObject) &&
@@ -226,6 +232,18 @@ public static partial class WorldDefinitionValidator {
             }
         }
     }
+    // A token naming a keyed numeric row with no key binds the whole row, which only an array member reads; the server's
+    // source bind holds it to the array it fills.
+    private static bool BindsWholeRow(BindableScalar value, WorldDefinition definition) => (
+        (value.State is { Key: null } binding) &&
+        WorldBoundRow.TryResolve(
+        definition: definition,
+        length: out _,
+        row: out var row,
+        rowName: binding.Row
+    ) &&
+        (row.Kind is CellKind.Int or CellKind.Fixed or CellKind.Bool)
+    );
     // A shown instance's presentation values: its clock rate, the output it shows and the shape of its override set;
     // the source's config schema binds the values themselves.
     private static void ValidateInstanceValues(string path, float timeScale, string? output, IReadOnlyDictionary<string, JsonElement>? overrides, List<string> errors) {

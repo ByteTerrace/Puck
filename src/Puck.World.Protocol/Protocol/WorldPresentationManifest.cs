@@ -118,7 +118,7 @@ public sealed class WorldPresentationManifest {
     public static WorldPresentationManifest Compile(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        var builder = new Builder();
+        var builder = new Builder { Definition = definition };
 
         if (definition.Population.ScaleRow is { } scaleRow) {
             builder.Owner = definition;
@@ -325,6 +325,10 @@ public sealed class WorldPresentationManifest {
         private readonly HashSet<object> m_visited = new(comparer: ReferenceEqualityComparer.Instance);
 
         public List<WorldPresentationBinding> Bindings { get; } = [];
+
+        // The document the walk compiles, which says whether a keyless token names a keyed row; null for a seat's reads.
+        public WorldDefinition? Definition { get; init; }
+
         public List<WorldPresentationBinding> BodyBindings { get; } = [];
 
         // The look or creation whose members the walk is inside, which each template is recorded under.
@@ -502,9 +506,17 @@ public sealed class WorldPresentationManifest {
         private bool Collect(object value) {
             switch (value) {
                 case BindableScalar scalar:
+                    // A token naming a keyed row with no key binds the whole row, which a pass's array reads.
                     Add(
                         binding: scalar.State,
-                        conversion: WorldStateConversion.Number
+                        conversion: (((scalar.State is { Key: null } whole) && (Definition is { } document) && WorldBoundRow.TryResolve(
+                            definition: document,
+                            length: out _,
+                            row: out _,
+                            rowName: whole.Row
+                        ))
+                            ? WorldStateConversion.Row
+                            : WorldStateConversion.Number)
                     );
 
                     return false;

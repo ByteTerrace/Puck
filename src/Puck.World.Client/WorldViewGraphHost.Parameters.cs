@@ -49,20 +49,30 @@ public sealed partial class WorldViewGraphHost {
 
             foreach (var (pass, fields) in parameters.OrderBy(keySelector: static pair => pair.Key, comparer: StringComparer.Ordinal)) {
                 foreach (var (field, value) in fields.OrderBy(keySelector: static pair => pair.Key, comparer: StringComparer.Ordinal)) {
-                    if (!Node.TryReadParameter(
+                    var array = Node.DeclaresArray(
+                        array: field,
+                        passName: pass
+                    );
+                    var fallback = 0d;
+
+                    if (
+                        !array &&
+                        !Node.TryReadParameter(
                         field: field,
                         passName: pass,
-                        value: out var fallback
-                    )) {
+                        value: out fallback
+                    )
+                    ) {
                         Owner?.Report?.Invoke(
                             Name,
-                            $"parameter refused: pass '{pass}' declares no scalar config field '{field}'"
+                            $"parameter refused: pass '{pass}' declares no scalar config field or array '{field}'"
                         );
 
                         continue;
                     }
 
                     bound.Add(item: new BoundParameter(
+                        Array: array,
                         Fallback: fallback,
                         Field: field,
                         Pass: pass,
@@ -76,6 +86,15 @@ public sealed partial class WorldViewGraphHost {
 
         internal void WriteParameters(WorldStateMirror mirror) {
             foreach (var parameter in m_parameters) {
+                if (parameter.Array) {
+                    WriteArray(
+                        mirror: mirror,
+                        parameter: parameter
+                    );
+
+                    continue;
+                }
+
                 var value = parameter.Read(mirror: mirror);
 
                 if (
@@ -94,13 +113,47 @@ public sealed partial class WorldViewGraphHost {
                 }
             }
         }
+
+        // An array takes its row slot's elements whenever the slot changed since the last write: a row read whole, never
+        // a second read of the document. A binding that does not resolve writes zeros.
+        private void WriteArray(WorldStateMirror mirror, BoundParameter parameter) {
+            var slot = ((parameter.Value.State is { } binding)
+                ? mirror.SlotOf(
+                    binding: in binding,
+                    conversion: WorldStateConversion.Row
+                )
+                : -1);
+            var changed = mirror.Changed(slot: slot);
+
+            if (
+                parameter.Written &&
+                (changed == parameter.Changed) &&
+                (mirror.Generation == parameter.Generation)
+            ) {
+                return;
+            }
+            if (Node.TryWriteArray(
+                array: parameter.Field,
+                passName: parameter.Pass,
+                values: mirror.RowValues(slot: slot)
+            )) {
+                parameter.Changed = changed;
+                parameter.Generation = mirror.Generation;
+                parameter.Written = true;
+            }
+        }
     }
 
-    // One bound field and the value last written to it.
-    private sealed class BoundParameter(string Pass, string Field, BindableScalar Value, double Fallback) {
+    // One bound field or array and what was last written to it: a scalar's value, an array's slot revision and the
+    // mirror generation it was read under.
+    private sealed class BoundParameter(string Pass, string Field, BindableScalar Value, double Fallback, bool Array) {
+        public readonly bool Array = Array;
         public readonly string Pass = Pass;
         public readonly string Field = Field;
+        public readonly BindableScalar Value = Value;
 
+        public int Changed;
+        public int Generation;
         public double Last;
         public bool Written;
 

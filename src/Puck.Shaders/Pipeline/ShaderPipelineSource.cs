@@ -151,13 +151,16 @@ public sealed class ShaderPipelineSource {
             comparisonType: StringComparison.Ordinal
         )
     ));
-    /// <summary>Checks that a bound parameter names a scalar config field of one of the definition's passes, the only
-    /// member a state binding fills.</summary>
+    /// <summary>Checks that a bound parameter names a scalar config field or an array of one of the definition's passes,
+    /// the members a state binding fills.</summary>
     /// <param name="passName">The pass the parameter binds.</param>
-    /// <param name="field">The config field it binds.</param>
+    /// <param name="field">The config field or array it binds.</param>
+    /// <param name="array">The array the parameter names, or <see langword="null"/> when it names a scalar field.</param>
     /// <param name="reason">Why the parameter cannot bind, naming the pass and the field, or empty.</param>
-    /// <returns><see langword="true"/> when the pass declares the field as a scalar.</returns>
-    public bool TryCheckParameter(string passName, string field, out string reason) {
+    /// <returns><see langword="true"/> when the pass declares the field as a scalar or an array.</returns>
+    public bool TryCheckParameter(string passName, string field, out ShaderArrayField? array, out string reason) {
+        array = null;
+
         var pass = Definition.ShaderPasses.FirstOrDefault(predicate: candidate => string.Equals(
             a: candidate.Name,
             b: passName,
@@ -170,13 +173,25 @@ public sealed class ShaderPipelineSource {
             return false;
         }
         if (
+            (pass.Arrays is { } arrays) &&
+            arrays.TryGetValue(
+                key: field,
+                value: out var declaredArray
+            )
+        ) {
+            array = declaredArray;
+            reason = string.Empty;
+
+            return true;
+        }
+        if (
             (pass.Config is not { } config) ||
             !config.TryGetValue(
                 key: field,
                 value: out var declared
             )
         ) {
-            reason = $"pass '{passName}' declares no config field '{field}'.";
+            reason = $"pass '{passName}' declares no config field or array '{field}'.";
 
             return false;
         }
