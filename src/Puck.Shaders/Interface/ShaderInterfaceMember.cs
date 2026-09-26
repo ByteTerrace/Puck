@@ -87,7 +87,6 @@ public sealed record ShaderInterfaceMember(
             Name: name,
             Type: type
         );
-
     /// <summary>Creates a raw buffer member a pass reads by byte address.</summary>
     /// <param name="name">The member's name.</param>
     /// <param name="group">The member's frequency group.</param>
@@ -108,6 +107,7 @@ public sealed record ShaderInterfaceMember(
             Kind: ShaderInterfaceMemberKind.ReadWriteBuffer,
             Name: name
         );
+
     /// <summary>Gets a value indicating whether the member lives in its group's constant block.</summary>
     [JsonIgnore]
     public bool IsBlockMember => (Kind is ShaderInterfaceMemberKind.Value or ShaderInterfaceMemberKind.Array);

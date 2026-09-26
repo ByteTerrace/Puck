@@ -23,7 +23,7 @@ public sealed unsafe class DirectXDeviceOwnershipLawTests {
     public void AnUploadOutlivingARecreateRefusesTheReplacementAndItsLateRelease() {
         using var context = WarpDevices.Context();
         var upload = new DirectXSurfaceUpload(deviceContext: context);
-        var pixels = new byte[(Extent * Extent * 4U)];
+        var pixels = new byte[((Extent * Extent) * 4U)];
 
         upload.Upload(
             format: GpuPixelFormat.R8G8B8A8Unorm,
@@ -53,7 +53,7 @@ public sealed unsafe class DirectXDeviceOwnershipLawTests {
     [Fact]
     public void AnUploadReleasedBeforeItsDeviceGoesIsReleasedAndTheNextOneWorksOnTheReplacement() {
         using var context = WarpDevices.Context();
-        var pixels = new byte[(Extent * Extent * 4U)];
+        var pixels = new byte[((Extent * Extent) * 4U)];
 
         using (var upload = new DirectXSurfaceUpload(deviceContext: context)) {
             upload.Upload(
@@ -87,7 +87,7 @@ public sealed unsafe class DirectXDeviceOwnershipLawTests {
                     readback: readback,
                     source: source
                 ),
-                expected: ((int)(Extent * Extent * 4U))
+                expected: ((int)((Extent * Extent) * 4U))
             );
         } finally {
             _ = ((IUnknown*)source)->Release();

@@ -470,6 +470,7 @@ public sealed partial class ShaderPipelineRenderNode {
                         StrideBytes: 0
                     ))
             );
+
             RenderPass = gpu.RenderPassFactory.Create(
                 description: RenderPassOf(
                     planned: planned,

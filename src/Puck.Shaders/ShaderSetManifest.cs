@@ -60,6 +60,7 @@ public sealed partial record ShaderSetManifest(
     /// declarations the set's stages include as <c>&lt;name&gt;.interface.hlsli</c>.</summary>
     [JsonIgnore]
     public ShaderPipelineParameterLayout FrameLayout { get; private init; } = null!;
+
     /// <summary>Gets the pass-group members <see cref="Bindings"/> declare, in order.</summary>
     /// <exception cref="InvalidDataException">A binding's kind is one a manifest does not declare.</exception>
     [JsonIgnore]
@@ -250,6 +251,7 @@ public sealed partial record ShaderSetManifest(
 
         return (manifest with { Bytecode = bytecode, Directory = directory, FrameLayout = layout });
     }
+
     private static void ValidateStage(Dictionary<string, ReadOnlyMemory<byte>> bytecode, string directory, string manifestName, string? stem, string stageName, WorkCounterSet work) {
         if (stem is null) {
             return;

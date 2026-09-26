@@ -39,7 +39,7 @@ public static partial class ShaderPipelinePassPorts {
             return named;
         }
 
-        var words = reference.Name.Split(separator: ['-', '_', '.'], options: StringSplitOptions.RemoveEmptyEntries);
+        var words = reference.Name.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: ['-', '_', '.']);
         var camel = string.Concat(values: words.Select(selector: static (word, index) => ((index == 0)
             ? (char.ToLowerInvariant(c: word[0]) + word[1..])
             : (char.ToUpperInvariant(c: word[0]) + word[1..]))));
@@ -49,7 +49,7 @@ public static partial class ShaderPipelinePassPorts {
         }
 
         return (reference.PreviousFrame
-            ? ("previous" + char.ToUpperInvariant(c: camel[0]) + camel[1..])
+            ? (("previous" + char.ToUpperInvariant(c: camel[0])) + camel[1..])
             : camel);
     }
     /// <summary>Returns a document pass's port members, in document order.</summary>
@@ -174,7 +174,6 @@ public static partial class ShaderPipelinePassPorts {
 
         return members;
     }
-
     /// <summary>Returns why a document pass's source never names one of its ports, or <see langword="null"/> when it names
     /// every one: the refusal a load reports as <c>SHADERPIPE_INTERFACE</c> before it compiles. Renaming a resource
     /// renames the identifier its port generates, so a source still reading the old name would otherwise fail to compile

@@ -80,7 +80,7 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
                     EnableStorageBuffer: false,
                     Layout: context.Parameters.Layout.PipelineLayout(
                         pushesIndex: false,
-                        stages: (GpuShaderStage.Vertex | GpuShaderStage.Fragment)
+                        stages: GpuShaderStage.Vertex | GpuShaderStage.Fragment
                     ),
                     Name: "overlay-unified",
                     PushConstantBinding: null,

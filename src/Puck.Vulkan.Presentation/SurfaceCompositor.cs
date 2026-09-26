@@ -47,7 +47,7 @@ public sealed class SurfaceCompositor : IDisposable {
             ordinal: PassGroup
         )],
         pushesIndex: false,
-        stages: (GpuShaderStage.Vertex | GpuShaderStage.Fragment)
+        stages: GpuShaderStage.Vertex | GpuShaderStage.Fragment
     );
     private static readonly byte[] FullscreenTriangleVertexData = FullscreenTriangle.CreateVertexData();
 

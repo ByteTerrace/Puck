@@ -3,7 +3,6 @@ using System.Numerics;
 namespace Puck.Maths.Tests;
 
 internal static partial class Subjects {
-
     private static readonly BigInteger RawLongMin = long.MinValue;
     private static readonly BigInteger RawLongMax = long.MaxValue;
 

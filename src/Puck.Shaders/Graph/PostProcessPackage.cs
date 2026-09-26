@@ -124,7 +124,7 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
                     EnableStorageBuffer: false,
                     Layout: context.Parameters.Layout.PipelineLayout(
                         pushesIndex: false,
-                        stages: (GpuShaderStage.Vertex | GpuShaderStage.Fragment)
+                        stages: GpuShaderStage.Vertex | GpuShaderStage.Fragment
                     ),
                     Name: Manifest.Name,
                     PushConstantBinding: null,

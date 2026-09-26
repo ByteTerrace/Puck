@@ -249,6 +249,7 @@ public sealed class RenderGraphPackageCatalog {
         ShaderInterfaceMember.Sampler(group: ShaderInterfaceGroup.Pass, name: (PlaceSource + ShaderPipelinePassPorts.SamplerSuffix)),
         ShaderInterfaceMember.StorageImage(format: GpuPixelFormat.R8G8B8A8Unorm, group: ShaderInterfaceGroup.Pass, name: PlaceDestination, type: ShaderValueType.Float4),
     ];
+
     /// <summary>The number of frame slots the overlay samples: images a Frame element draws, such as a face cam.</summary>
     public const int OverlayFrameSlotCount = 8;
     /// <summary>The name of the overlay's input image in its pass group.</summary>
@@ -266,6 +267,7 @@ public sealed class RenderGraphPackageCatalog {
         provider: CultureInfo.InvariantCulture,
         handler: $"frameSlot{slot}"
     );
+
     /// <summary>Gets what <see cref="Overlay"/>'s fragment stage reads from its pass group beside the extent: three
     /// per-frame values its recorder writes (<c>counts</c>: panel and element counts and the atlas cell's width and
     /// height; <c>sdf</c>: the distance range, the outline band and the panel and element bases; <c>misc</c>: the text,

@@ -66,11 +66,13 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
     private RuntimeResource[] m_resources = [];
     private IReadOnlyDictionary<string, RuntimeResource> m_resourceLookup = new Dictionary<string, RuntimeResource>(comparer: StringComparer.Ordinal);
     private RuntimePass[] m_passes = [];
+
     // The installed graph's frame group layout and region, null when no pass binds groups, and the region while it waits
     // for the grouped pass that owns it to install.
     private ShaderPipelineParameterLayout? m_frameLayout;
     private GpuRegion? m_frameRegion;
     private GpuRegion? m_frameRegionOwner;
+
     private readonly CaptureRequestSlot m_capture = new();
     private readonly CapturePngWriter m_capturePng = new();
     private bool m_initializationPending = true;

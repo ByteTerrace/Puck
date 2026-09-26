@@ -31,7 +31,7 @@ public sealed partial class ShaderPipelineRenderNode {
             ordinal: PassGroup
         )],
         pushesIndex: false,
-        stages: (GpuShaderStage.Vertex | GpuShaderStage.Fragment)
+        stages: GpuShaderStage.Vertex | GpuShaderStage.Fragment
     );
 
     /// <summary>Returns the float preview's one descriptor pool: a pass-group set per in-flight frame, each holding the

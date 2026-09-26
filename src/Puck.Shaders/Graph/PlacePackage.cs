@@ -195,7 +195,7 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
                 m_sampler = m_services.Bindings.CreateSampler();
 
                 for (var slot = 0; (slot < context.InFlightFrames); slot++) {
-                    foreach (var image in (ReadOnlySpan<string>)[RenderGraphPackageCatalog.PlaceBase, RenderGraphPackageCatalog.PlaceSource]) {
+                    foreach (var image in ((ReadOnlySpan<string>)[RenderGraphPackageCatalog.PlaceBase, RenderGraphPackageCatalog.PlaceSource])) {
                         m_services.Bindings.WriteSampler(
                             arrayElement: 0,
                             binding: m_sets.BindingOf(member: (image + ShaderPipelinePassPorts.SamplerSuffix)),

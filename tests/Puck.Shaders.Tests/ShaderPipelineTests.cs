@@ -8,6 +8,7 @@ namespace Puck.Shaders.Tests;
 public sealed class ShaderPipelineTests {
     // Where a pass's first config field can start in its pass block: after the extent, a uint2 at 0.
     private const uint ExtentEnd = 8;
+
     // The resources a pass of these tests writes.
     private static readonly IReadOnlyDictionary<string, ShaderPipelineResource> OutResources = new Dictionary<string, ShaderPipelineResource>(comparer: StringComparer.Ordinal) { ["out"] = Image(name: "out") };
 
@@ -686,13 +687,13 @@ public sealed class ShaderPipelineTests {
             "shared-source",
             [Image("a"), Image("b")],
             [Tinted(
-                    "first",
-                    "a",
-                    ShaderValueType.Float
+                    name: "first",
+                    output: "a",
+                    tint: ShaderValueType.Float
                 ), Tinted(
-                    "second",
-                    "b",
-                    second
+                    name: "second",
+                    output: "b",
+                    tint: second
                 )],
             ["a", "b"]
         );

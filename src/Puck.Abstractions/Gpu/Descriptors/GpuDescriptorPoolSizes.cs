@@ -47,6 +47,7 @@ public readonly record struct GpuDescriptorPoolSizes(
             StorageBufferCount: checked((left.StorageBufferCount + right.StorageBufferCount)),
             StorageImageCount: checked((left.StorageImageCount + right.StorageImageCount))
         );
+
     /// <summary>Sums the per-kind descriptor demand of one set of each group, as a pipeline created from a
     /// <see cref="GpuPipelineLayoutDescription"/> allocates them: <see cref="MaxSets"/> is the number of groups, and an
     /// array binding contributes its full count. A Vulkan pool consumes the per-kind counts directly; a Direct3D 12 pool

@@ -120,7 +120,7 @@ public sealed class ShaderPipelineDispatchLawTests {
         );
 
         Assert.Single(collection: new ShaderPipelineCompiler().Compile(definition: definition, packages: [stated]).Passes);
-        foreach (var unstated in (ShaderPipelinePackagePass[])[stated with { OutputAccesses = null! }, stated with { OutputAccesses = [] }, stated with { OutputAccesses = [RenderGraphPortAccess.ComputeRead] }]) {
+        foreach (var unstated in ((ShaderPipelinePackagePass[])[stated with { OutputAccesses = null! }, stated with { OutputAccesses = [] }, stated with { OutputAccesses = [RenderGraphPortAccess.ComputeRead] }])) {
             _ = Assert.Throws<ArgumentException>(testCode: () => new ShaderPipelineCompiler().Compile(definition: definition, packages: [unstated]));
         }
     }

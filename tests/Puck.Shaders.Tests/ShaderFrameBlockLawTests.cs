@@ -122,7 +122,7 @@ public sealed class ShaderFrameBlockLawTests {
 
     [Fact]
     public void The_host_writer_puts_every_frame_member_where_the_layout_places_it() {
-        foreach (var layout in (ShaderPipelineParameterLayout[])[
+        foreach (var layout in ((ShaderPipelineParameterLayout[])[
             ShaderPipelineParameterLayout.ForPackage(
                 config: null,
                 members: [],
@@ -145,7 +145,7 @@ public sealed class ShaderFrameBlockLawTests {
                     ),
                 }
             ),
-        ]) {
+        ])) {
             AssertHostBlocks(
                 blocks: HostBlocks(layout: layout),
                 reflected: layout.Layout.Bindings

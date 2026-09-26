@@ -107,6 +107,7 @@ public sealed class ShaderPipelineParameterLayout {
             message: $"Interface '{Interface.Name}' holds no pass-block member '{member}'.",
             paramName: nameof(member)
         ));
+
     private static Dictionary<string, uint> Offsets(ShaderInterfaceGroupLayout block) =>
         block.BlockMembers.ToDictionary(
             comparer: StringComparer.Ordinal,
