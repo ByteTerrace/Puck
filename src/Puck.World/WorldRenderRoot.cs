@@ -120,6 +120,15 @@ internal static class WorldRenderRoot {
             );
         }
 
+        // An uploaded producer's source instance converts the region its feed writes through the conversion its
+        // descriptor names. An imported producer's instance has no external producer yet, so an instance of one is
+        // refused by name.
+        SourceConversionPackage.RegisterAll(packages: packages);
+        binder.Producers.RegisterPackages(
+            adapt: null,
+            packages: packages
+        );
+
         if (!RenderGraphRuntime.TryCreate(
             deviceContext: device,
             graphs: graphs,

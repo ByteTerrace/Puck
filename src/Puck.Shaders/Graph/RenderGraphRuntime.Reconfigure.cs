@@ -72,6 +72,9 @@ public sealed partial class RenderGraphRuntime {
         var effective = new RenderGraphRuntimeGraph?[count];
         var producers = new IRenderGraphExternalProducer?[count];
         var created = new IRenderGraphExternalProducer?[count];
+        var sources = new SourceGraph?[count];
+        var createdSources = new SourceGraph?[count];
+        var createdSourceNodes = new ShaderPipelineRenderNode?[count];
 
         for (var index = 0; (index < count); index++) {
             var instance = set.Instances[index];
@@ -94,6 +97,25 @@ public sealed partial class RenderGraphRuntime {
                     continue;
                 }
 
+                if (m_packages.ServesSource(package: set.Instances[index].ExternalPackage!)) {
+                    if (kept[index] >= 0) {
+                        sources[index] = m_sources[kept[index]];
+                    } else {
+                        (createdSources[index], createdSourceNodes[index]) = CreateSource(
+                            deviceContext: m_device,
+                            hostsOnDirectX: m_hostsOnDirectX,
+                            inFlightFrames: m_inFlightFrames,
+                            instance: set.Instances[index],
+                            packages: m_packages
+                        );
+                        sources[index] = createdSources[index];
+                    }
+
+                    effective[index] = sources[index]!.Graph;
+
+                    continue;
+                }
+
                 producers[index] = ((kept[index] >= 0)
                     ? m_producers[kept[index]]
                     : (created[index] = CreateProducer(
@@ -105,9 +127,10 @@ public sealed partial class RenderGraphRuntime {
             }
         } catch {
             DisposeAll(
-                nodes: [],
+                nodes: createdSourceNodes,
                 producers: created
             );
+            DisposeSources(sources: createdSources);
 
             throw;
         }
@@ -121,14 +144,24 @@ public sealed partial class RenderGraphRuntime {
             set: set
         )) {
             DisposeAll(
-                nodes: [],
+                nodes: createdSourceNodes,
                 producers: created
             );
+            DisposeSources(sources: createdSources);
 
             return false;
         }
 
         Retire(kept: kept);
+        // An upload holds no device object, so a retired source's upload closes as soon as its node is retired.
+        for (var old = 0; (old < m_sources.Length); old++) {
+            if (
+                (m_sources[old] is { } retired) &&
+                !sources.Contains(value: retired)
+            ) {
+                retired.Dispose();
+            }
+        }
 
         var nodes = new ShaderPipelineRenderNode?[count];
         var current = new Output[count];
@@ -144,6 +177,15 @@ public sealed partial class RenderGraphRuntime {
                 ? m_previous[old]
                 : Output.None);
 
+            if (sources[index] is { } source) {
+                nodes[index] = (createdSourceNodes[index] ?? m_nodes[old]);
+
+                if (createdSourceNodes[index] is { } fresh) {
+                    source.Install(node: fresh);
+                }
+
+                continue;
+            }
             if (set.Instances[index].Kind != RenderGraphInstanceKind.Graph) {
                 continue;
             }
@@ -190,6 +232,7 @@ public sealed partial class RenderGraphRuntime {
         m_previous = previous;
         m_producers = producers;
         m_root = rootIndex;
+        m_sources = sources;
         m_schedules = [
             new RenderGraphSchedule(set: set),
             new RenderGraphSchedule(set: set),
@@ -214,8 +257,8 @@ public sealed partial class RenderGraphRuntime {
     /// <exception cref="ObjectDisposedException">The runtime is disposed.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="instance"/> or <paramref name="graph"/> is
     /// <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">The set has no instance of that name, or it is an external
-    /// instance.</exception>
+    /// <exception cref="ArgumentException">The set has no instance of that name, or it is an external producer's or an
+    /// uploaded source's instance.</exception>
     /// <exception cref="InvalidDataException">The graph cannot be installed on a node: its shader compilation failed, or
     /// its plan is not one a node runs.</exception>
     public bool TryInstall(string instance, RenderGraphRuntimeGraph graph, [NotNullWhen(returnValue: false)] out RenderGraphRuntimeRefusal? refusal) {
@@ -226,6 +269,14 @@ public sealed partial class RenderGraphRuntime {
         ArgumentNullException.ThrowIfNull(argument: graph);
 
         var index = IndexOf(instance: instance);
+
+        if (m_sources[index] is not null) {
+            throw new ArgumentException(
+                message: $"Instance '{instance}' is an uploaded source, which renders the conversion its upload names.",
+                paramName: nameof(instance)
+            );
+        }
+
         var node = Node(instance: index);
         var graphs = ((RenderGraphRuntimeGraph?[])m_graphs.Clone());
 

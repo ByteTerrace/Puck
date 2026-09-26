@@ -105,7 +105,7 @@
             "default": null
           },
           "package": {
-            "description": "The engine package whose producer renders the instance, such as sdf.world, or null for a row that names a Source. A package instance reads no input and takes no time scale, output or override.",
+            "description": "The engine package whose producer renders the instance, such as sdf.world, or an uploaded producer\u0027s source package, source.\u003Cproducer id\u003E, opened from Settings and converted once a frame at most however many instances read it, or null for a row that names a Source. A package instance reads no input and takes no time scale, output or override.",
             "type": [
               "string",
               "null"
@@ -199,6 +199,17 @@
           },
           "overrides": {
             "description": "This instance\u0027s parameter overrides, keyed by pass name; each value is that pass\u0027s config object keyed by field. A field absent here keeps the default the shared source declares, so two instances of one source differ only in what they override. The source\u0027s config schema binds them when a boot, a world.load or world.reload, a commit, or an upsert names them (the server reads the source, and refuses a value by name), and again when a graph installs (the host binds them into its passes). null overrides nothing.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "default": null,
+            "additionalProperties": {
+              "$comment": "Open payload: this member\u0027s shape is decided by an id named elsewhere in the document, never by this generator."
+            }
+          },
+          "settings": {
+            "description": "A source package row\u0027s producer settings, which its producer opens the image with and its shape validates, as a screen\u0027s producer source\u0027s settings are, or null for the producer\u0027s defaults. Only a row naming a source package (source.\u003Cproducer id\u003E) takes settings.",
             "type": [
               "object",
               "null"

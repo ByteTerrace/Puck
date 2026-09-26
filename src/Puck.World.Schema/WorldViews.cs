@@ -48,9 +48,10 @@ public sealed record WorldViewGraphInput(string Resource, string Instance, bool 
 /// one-pass graph, or a <c>puck.shader.package.v1</c> package directory, which loads with its source tree gone. It
 /// resolves beside the document that authors it (<see cref="WorldDocumentPaths"/>), like every relative path a
 /// document authors.</param>
-/// <param name="Package">The engine package whose producer renders the instance, such as <c>sdf.world</c>, or
-/// <see langword="null"/> for a row that names a <see cref="Source"/>. A package instance reads no input and takes no
-/// time scale, output or override.</param>
+/// <param name="Package">The engine package whose producer renders the instance, such as <c>sdf.world</c>, or an
+/// uploaded producer's source package, <c>source.&lt;producer id&gt;</c>, opened from <see cref="Settings"/> and converted
+/// once a frame at most however many instances read it, or <see langword="null"/> for a row that names a
+/// <see cref="Source"/>. A package instance reads no input and takes no time scale, output or override.</param>
 /// <param name="Camera">The authored camera the instance renders from, feeding the frame block's
 /// <c>cameraPosition</c>, <c>cameraTarget</c>, <c>cameraUp</c> and <c>cameraFov</c>, or <see langword="null"/>, which
 /// leaves <c>cameraFov</c> zero so a graph keeps its own pointer orbit.</param>
@@ -68,6 +69,9 @@ public sealed record WorldViewGraphInput(string Resource, string Instance, bool 
 /// <c>world.load</c> or <c>world.reload</c>, a commit, or an upsert names them (the server reads the source, and
 /// refuses a value by name), and again when a graph installs (the host binds them into its passes).
 /// <see langword="null"/> overrides nothing.</param>
+/// <param name="Settings">A source package row's producer settings, which its producer opens the image with and its
+/// shape validates, as a screen's <c>producer</c> source's settings are, or <see langword="null"/> for the producer's
+/// defaults. Only a row naming a source package (<c>source.&lt;producer id&gt;</c>) takes settings.</param>
 public sealed record WorldViewGraph(string Name,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Source = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Package = null,
@@ -76,7 +80,8 @@ public sealed record WorldViewGraph(string Name,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldViewGraphInput>? Inputs = null,
     float TimeScale = 1f,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Output = null,
-    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, System.Text.Json.JsonElement>? Overrides = null);
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, System.Text.Json.JsonElement>? Overrides = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, System.Text.Json.JsonElement>? Settings = null);
 /// <summary>The price ceiling the graph scheduler holds the instances the display does not show directly to.</summary>
 /// <param name="PassPixelsPerFrame">The pass-pixels (passes times rendered pixels) those instances may spend in one
 /// presented frame; the stalest due instance is admitted first and the rest read their latest completed output. 0 sets

@@ -1205,6 +1205,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         );
         ReleaseRetired();
         RetireAllLeases();
+        ReleaseRegions();
         // The published images were the released graph's or held from one, so nothing stays published.
         m_lastSurface = default;
         m_previousSurface = default;
@@ -1486,6 +1487,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
 
         slot.Fence!.Wait();
         slot.Leases.RetireAll();
+        FlushRegions(slot: slotIndex);
         HoldLeases();
         var commands = m_commands;
 

@@ -3,10 +3,10 @@
 // Plane 0 of the region is the 256-entry RGBA8 palette and plane 1 the index rows, one byte a pixel. One thread a pixel;
 // a pixel outside the header's extent writes nothing.
 
+// The generated interface declares the frame group and the pass group: the extent, the region read at binding 1 and the
+// image written at binding 2.
+#include "source-palette.interface.hlsli"
 #include "image-source.hlsli"
-
-[[vk::binding(1, 3)]] ByteAddressBuffer region : register(t1, space3);
-[[vk::binding(2, 3)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> image : register(u2, space3);
 
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {

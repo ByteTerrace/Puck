@@ -1,7 +1,7 @@
 {
   "id": "source-conversion",
-  "title": "The shipped palette and NV12 conversion passes turn uploaded source regions into the pixels the CPU reference computes",
-  "binding": "The positive leg boots an offscreen world whose one pipeline seeds a 32x32 palette-indexed region and a 32x32 NV12 region in the uploaded-source layout, runs the shipped source-palette and source-nv12 kernels from src/Puck.Shaders over them, and captures each converted image paused. Each quadrant of the palette image is the palette entry (i, 255 - i, 3i mod 256) its index selects, and each quadrant of the NV12 image is the BT.709 limited-range conversion of its Y, Cb, Cr sample, clamped; every expectation is the CPU reference ImageSourceConversion applied to the same regions, which SourceConversionCanaryFixtureTests recomputes. The discriminating leg names BT.601 in the NV12 header and raises every palette index by one: the neutral white quadrant holds, and every other quadrant turns to the value the changed header or index predicts.",
+  "title": "The shipped palette, NV12, four-byte and transfer conversion passes turn uploaded source regions into the pixels the CPU reference computes",
+  "binding": "The positive leg boots an offscreen world whose one pipeline seeds four 32x32 regions in the uploaded-source layout, a palette-indexed one, an NV12 one, a BGRA8 one and an sRGB-encoded RGBA8 one, runs the shipped source-palette, source-nv12, source-rgba and source-transfer kernels from src/Puck.Shaders over them, and captures each converted image paused. Each quadrant of the palette image is the palette entry (i, 255 - i, 3i mod 256) its index selects, each quadrant of the NV12 image is the BT.709 limited-range conversion of its Y, Cb, Cr sample, clamped, each quadrant of the four-byte image is its BGRA pixel with red and blue swapped, and each quadrant of the transfer image is its sRGB code decoded to linear light, read through the float preview; every expectation is the CPU reference ImageSourceConversion applied to the same regions, which SourceConversionCanaryFixtureTests recomputes. The discriminating leg names BT.601 in the NV12 header, raises every palette index by one, names R8G8B8A8 over the four-byte region's bytes and the linear transfer function in the transfer region's header: the neutral white quadrants hold, and every other quadrant turns to the value the changed header or index predicts.",
   "bootShape": "offscreen",
   "backends": ["vulkan", "directx"],
   "requirements": ["gpu"],
@@ -60,8 +60,39 @@
         "verb": "pipeline.wait",
         "occurrence": 5,
         "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.output",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.capture",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.output",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.capture",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 7,
+        "outcome": "accepted"
       }
     ],
+
     "expect": [
       {
         "type": "line",
@@ -166,6 +197,102 @@
         "maximum": [0.168627, 0.364706, 0.0, 1],
         "toleranceCodes": 1,
         "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "rgba-top-left-is-its-bgra-pixel-swapped",
+        "capture": "rgba.png",
+        "extent": [32, 32],
+        "region": [0.03125, 0.03125, 0.46875, 0.46875],
+        "reduce": "every",
+        "minimum": [1.0, 0.25098, 0.0, 1],
+        "maximum": [1.0, 0.25098, 0.0, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "rgba-top-right-is-its-bgra-pixel-swapped",
+        "capture": "rgba.png",
+        "extent": [32, 32],
+        "region": [0.53125, 0.03125, 0.96875, 0.46875],
+        "reduce": "every",
+        "minimum": [0.0, 0.501961, 1.0, 1],
+        "maximum": [0.0, 0.501961, 1.0, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "rgba-bottom-left-is-its-bgra-pixel-swapped",
+        "capture": "rgba.png",
+        "extent": [32, 32],
+        "region": [0.03125, 0.53125, 0.46875, 0.96875],
+        "reduce": "every",
+        "minimum": [0.12549, 0.784314, 0.376471, 1],
+        "maximum": [0.12549, 0.784314, 0.376471, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "rgba-bottom-right-is-its-bgra-pixel-swapped",
+        "capture": "rgba.png",
+        "extent": [32, 32],
+        "region": [0.53125, 0.53125, 0.96875, 0.96875],
+        "reduce": "every",
+        "minimum": [0.705882, 0.078431, 0.54902, 1],
+        "maximum": [0.705882, 0.078431, 0.54902, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "transfer-top-left-is-its-srgb-decoded-value",
+        "capture": "transfer.png",
+        "extent": [32, 32],
+        "region": [0.03125, 0.03125, 0.46875, 0.46875],
+        "reduce": "every",
+        "minimum": [1.0, 1.0, 1.0, 1],
+        "maximum": [1.0, 1.0, 1.0, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "transfer-top-right-is-its-srgb-decoded-value",
+        "capture": "transfer.png",
+        "extent": [32, 32],
+        "region": [0.53125, 0.03125, 0.96875, 0.46875],
+        "reduce": "every",
+        "minimum": [0.215686, 0.05098, 0.0, 1],
+        "maximum": [0.215686, 0.05098, 0.0, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "transfer-bottom-left-is-its-srgb-decoded-value",
+        "capture": "transfer.png",
+        "extent": [32, 32],
+        "region": [0.03125, 0.53125, 0.46875, 0.96875],
+        "reduce": "every",
+        "minimum": [0.576471, 0.015686, 0.352941, 1],
+        "maximum": [0.576471, 0.015686, 0.352941, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "transfer-bottom-right-is-its-srgb-decoded-value",
+        "capture": "transfer.png",
+        "extent": [32, 32],
+        "region": [0.53125, 0.53125, 0.96875, 0.96875],
+        "reduce": "every",
+        "minimum": [0.003922, 0.870588, 0.117647, 1],
+        "maximum": [0.003922, 0.870588, 0.117647, 1],
+        "toleranceCodes": 1,
+        "holds": true
       }
     ]
   },
@@ -222,8 +349,39 @@
         "verb": "pipeline.wait",
         "occurrence": 5,
         "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.output",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.capture",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.output",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.capture",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 7,
+        "outcome": "accepted"
       }
     ],
+
     "expect": [
       {
         "type": "imageRegion",
@@ -402,6 +560,186 @@
         "reduce": "every",
         "minimum": [0.184314, 0.411765, 0.0, 1],
         "maximum": [0.184314, 0.411765, 0.0, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "rgba-top-left-is-not-the-positive-pixel",
+        "capture": "rgba.png",
+        "extent": [32, 32],
+        "region": [0.03125, 0.03125, 0.46875, 0.46875],
+        "reduce": "every",
+        "minimum": [1.0, 0.25098, 0.0, 1],
+        "maximum": [1.0, 0.25098, 0.0, 1],
+        "toleranceCodes": 1,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "rgba-top-right-is-not-the-positive-pixel",
+        "capture": "rgba.png",
+        "extent": [32, 32],
+        "region": [0.53125, 0.03125, 0.96875, 0.46875],
+        "reduce": "every",
+        "minimum": [0.0, 0.501961, 1.0, 1],
+        "maximum": [0.0, 0.501961, 1.0, 1],
+        "toleranceCodes": 1,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "rgba-bottom-left-is-not-the-positive-pixel",
+        "capture": "rgba.png",
+        "extent": [32, 32],
+        "region": [0.03125, 0.53125, 0.46875, 0.96875],
+        "reduce": "every",
+        "minimum": [0.12549, 0.784314, 0.376471, 1],
+        "maximum": [0.12549, 0.784314, 0.376471, 1],
+        "toleranceCodes": 1,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "rgba-bottom-right-is-not-the-positive-pixel",
+        "capture": "rgba.png",
+        "extent": [32, 32],
+        "region": [0.53125, 0.53125, 0.96875, 0.96875],
+        "reduce": "every",
+        "minimum": [0.705882, 0.078431, 0.54902, 1],
+        "maximum": [0.705882, 0.078431, 0.54902, 1],
+        "toleranceCodes": 1,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "rgba-top-left-is-the-unswapped-pixel",
+        "capture": "rgba.png",
+        "extent": [32, 32],
+        "region": [0.03125, 0.03125, 0.46875, 0.46875],
+        "reduce": "every",
+        "minimum": [0.0, 0.25098, 1.0, 1],
+        "maximum": [0.0, 0.25098, 1.0, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "rgba-top-right-is-the-unswapped-pixel",
+        "capture": "rgba.png",
+        "extent": [32, 32],
+        "region": [0.53125, 0.03125, 0.96875, 0.46875],
+        "reduce": "every",
+        "minimum": [1.0, 0.501961, 0.0, 1],
+        "maximum": [1.0, 0.501961, 0.0, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "rgba-bottom-left-is-the-unswapped-pixel",
+        "capture": "rgba.png",
+        "extent": [32, 32],
+        "region": [0.03125, 0.53125, 0.46875, 0.96875],
+        "reduce": "every",
+        "minimum": [0.376471, 0.784314, 0.12549, 1],
+        "maximum": [0.376471, 0.784314, 0.12549, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "rgba-bottom-right-is-the-unswapped-pixel",
+        "capture": "rgba.png",
+        "extent": [32, 32],
+        "region": [0.53125, 0.53125, 0.96875, 0.96875],
+        "reduce": "every",
+        "minimum": [0.54902, 0.078431, 0.705882, 1],
+        "maximum": [0.54902, 0.078431, 0.705882, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "transfer-top-left-white-holds-under-either-transfer",
+        "capture": "transfer.png",
+        "extent": [32, 32],
+        "region": [0.03125, 0.03125, 0.46875, 0.46875],
+        "reduce": "every",
+        "minimum": [1.0, 1.0, 1.0, 1],
+        "maximum": [1.0, 1.0, 1.0, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "transfer-top-right-is-not-the-srgb-decoded-value",
+        "capture": "transfer.png",
+        "extent": [32, 32],
+        "region": [0.53125, 0.03125, 0.96875, 0.46875],
+        "reduce": "every",
+        "minimum": [0.215686, 0.05098, 0.0, 1],
+        "maximum": [0.215686, 0.05098, 0.0, 1],
+        "toleranceCodes": 1,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "transfer-bottom-left-is-not-the-srgb-decoded-value",
+        "capture": "transfer.png",
+        "extent": [32, 32],
+        "region": [0.03125, 0.53125, 0.46875, 0.96875],
+        "reduce": "every",
+        "minimum": [0.576471, 0.015686, 0.352941, 1],
+        "maximum": [0.576471, 0.015686, 0.352941, 1],
+        "toleranceCodes": 1,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "transfer-bottom-right-is-not-the-srgb-decoded-value",
+        "capture": "transfer.png",
+        "extent": [32, 32],
+        "region": [0.53125, 0.53125, 0.96875, 0.96875],
+        "reduce": "every",
+        "minimum": [0.003922, 0.870588, 0.117647, 1],
+        "maximum": [0.003922, 0.870588, 0.117647, 1],
+        "toleranceCodes": 1,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "transfer-top-right-is-the-linear-value",
+        "capture": "transfer.png",
+        "extent": [32, 32],
+        "region": [0.53125, 0.03125, 0.96875, 0.46875],
+        "reduce": "every",
+        "minimum": [0.501961, 0.25098, 0.0, 1],
+        "maximum": [0.501961, 0.25098, 0.0, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "transfer-bottom-left-is-the-linear-value",
+        "capture": "transfer.png",
+        "extent": [32, 32],
+        "region": [0.03125, 0.53125, 0.46875, 0.96875],
+        "reduce": "every",
+        "minimum": [0.784314, 0.12549, 0.627451, 1],
+        "maximum": [0.784314, 0.12549, 0.627451, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "transfer-bottom-right-is-the-linear-value",
+        "capture": "transfer.png",
+        "extent": [32, 32],
+        "region": [0.53125, 0.53125, 0.96875, 0.96875],
+        "reduce": "every",
+        "minimum": [0.062745, 0.941176, 0.376471, 1],
+        "maximum": [0.062745, 0.941176, 0.376471, 1],
         "toleranceCodes": 1,
         "holds": true
       }

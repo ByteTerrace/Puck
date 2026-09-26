@@ -1034,11 +1034,12 @@ convert a region into the image a consumer samples. `source-palette` and
 `source-nv12` use a stated matrix and range with co-sited chroma. `source-rgba`
 carries a BGRA swizzle, and `source-transfer` decodes sRGB, linear or PQ into
 linear light. `ImageSourceConversion` is their CPU reference, and the
-`source-conversion` canary holds the palette and NV12 kernels to it on both
-backends. No producer writes a region yet. The emulators still publish through
-`IMachineVideoOutput`'s own `IGpuSurfaceUpload`, and the test pattern, the QR
-code, the capture and camera CPU tiers and the fills through
-`CpuSurfaceSource`. Only the camera's CPU tier hands the screen a counted
+`source-conversion` canary holds all four kernels to it on both backends. The
+test pattern and the QR code write regions, which an uploaded source
+instance's one-pass graph converts in the render-graph runtime; screens still
+show them through `CpuSurfaceSource`. The emulators still publish through
+`IMachineVideoOutput`'s own `IGpuSurfaceUpload`, and the capture and camera CPU
+tiers and the fills through `CpuSurfaceSource`. Only the camera's CPU tier hands the screen a counted
 lease; the others and the machine outputs hand it a bare handle. Each waits
 for P12b to record its region flush and conversion dispatch as a graph source
 node. Desktop capture runs through `Win32GraphicsCaptureFeed` and cameras
@@ -2608,8 +2609,8 @@ source. Four facts shape the order:
   reads or P14-6 makes the engine a package. P12b takes the first path, so it
   does not wait on P14.
 - Two paths sample a shared slot with no lease (see the implementation status).
-- No producer writes an upload region, and no graph runs `source-rgba` or
-  `source-transfer`.
+- Only the test pattern and the QR code write upload regions, which a source
+  instance's graph converts, and no screen reads one yet.
 - Few canaries reach this path. The coverage index maps no canary to the
   capture feed, the camera converter, the QR binder or the descriptor, and the
   62 it maps to `WorldScreenBinder.cs` mostly construct the binder, because the
@@ -2671,29 +2672,52 @@ except step 8.
    `ScreenSlot.Handle()` until P11b deletes `ViewStack`. This deletes
    `ScreenSourceCell`, the binder's per-slot callbacks,
    `SdfEngineNode.SetScreenSourceFrames` and the legacy
-   `SdfWorldRenderSpec.ScreenSources`. Laws on the fake GPU: a screen's lease
+   `SdfWorldRenderSpec.ScreenSources`. An uploaded source (step 3) is already a
+   graph instance whose output the runtime binds like any graph instance's, so
+   for a screen showing the test pattern or a QR code this step connects the
+   screen's slot to its source instance's output (`WorldSourceInstances`
+   installed in the live set, the instance's latest completed image handed to
+   `SdfEngineNode` with the screen's other reads) and then deletes the feed's
+   `CpuSurfaceSource` upload and `IWorldImageFeed.Publish`/`AcquireFrame` for
+   uploaded feeds, leaving `IWorldUploadFeed.TryWrite` their one image path.
+   Laws on the fake GPU: a screen's lease
    retires after the sampling slot's fence; a slot the capture producer is
    lapping is never handed out while leased; a filled external source binds
    its fill and is never acquired. Canaries: `view-screens`,
    `instrument-clock-source`, `hud-frame-slots`, the rest of the binder's 62,
    and `puck parity`.
-3. Uploaded sources write regions, and conversions are planned passes. Can
-   land now over host-visible regions; the device-local residency P7's policy
-   chooses follows P7b-17 and P7b-19. If it lands before P7b-15, its
-   conversion passes move onto groups with 14b-3's pipeline sources. An
-   uploaded source writes `ImageSourceUploadLayout` regions into a
-   `GpuRegion` range per frame slot, which the runtime binds to the source
-   graph's host buffer port. The graph's one pass is the conversion
-   `ImageSourceConversion.PassOf` names, writing the RGBA8 image every
-   consumer reads, so one conversion runs per source however many consumers
-   read it. The test pattern and the QR code move first; the capture and
-   camera CPU tiers follow through `source-rgba`; each capture fill becomes a
-   static source. `CpuSurfaceSource`'s screen role goes with its last caller.
-   Checks: two consumers of one source run one conversion, counted through
-   `IGpuWorkSource`; `source-conversion` gains `source-rgba` and
-   `source-transfer`; a new canary shows a test-pattern screen and a QR
-   screen on both backends.
-4. Fences across devices. Landed. The consumer creates a
+3. Uploaded sources write regions, and conversions are planned passes. The
+   source-graph side has landed. An uploaded producer registers an upload for
+   its source package (`RenderGraphPackageRecorders.RegisterSource`, through
+   `WorldImageProducers.RegisterPackages`), and the runtime renders each
+   instance of it through a node running the one-pass graph its upload's
+   descriptor names (`RenderGraphRuntime.Sources.cs`): the region, an external
+   buffer bound as the node's host buffer port (`ShaderPipelineRenderNode.BindRegion`,
+   which flushes the frame slot's share of a ring `GpuRegion` after that slot's
+   fence), and one package pass, the conversion `ImageSourceConversion.PassOf`
+   names (`SourceConversionPackage`, one catalog package per shipped kernel),
+   writing the image every consumer reads. The runtime declares each upload's
+   cadence and extent to the scheduler, so one conversion runs per source a
+   frame at most however many consumers read it, and a capture armed on a
+   source its cadence did not render is served by one more conversion. The
+   test pattern and the QR code write their regions (`IWorldUploadFeed`); a
+   `views.graphs` row names an uploaded producer's source package with its
+   `settings`, so a pane or a `captures` row reads a source instance. Laws in
+   `RenderGraphRuntimeLawTests.Sources`: two consumers of one source run one
+   conversion per tick, counted through the instance's `IGpuWorkSource`; a
+   source's graph is the conversion its descriptor names over a region of its
+   layout; a refused upload renders nothing and names its fault.
+   `source-conversion` holds `source-rgba` and `source-transfer` beside the
+   palette and NV12 kernels, and `uploaded-sources` captures a test-pattern
+   source instance before composition and shows it and a QR code in panes.
+   Still open: regions are host-visible rings, and the device-local residency
+   P7's policy chooses follows P7b-17 and P7b-19 (a staged region's copy is not
+   recorded, so `BindRegion` refuses one); if this lands before P7b-15, the
+   conversion packages move onto groups with 14b-3's pipeline sources. Screens
+   still read the binder's `CpuSurfaceSource` uploads of the same feeds until
+   step 2 connects them; the capture and camera CPU tiers and the capture fills
+   move onto `source-rgba` and static sources after that, and
+   `CpuSurfaceSource`'s screen role goes with its last caller.4. Fences across devices. Landed. The consumer creates a
    `D3D12_FENCE_FLAG_SHARED` fence beside the shared targets it provisions
    (`DirectXGpuSurfaceExportFactory.CreateExportableFence`, an
    `IGpuExportableFence`) and hands its NT handle to the producer with them
