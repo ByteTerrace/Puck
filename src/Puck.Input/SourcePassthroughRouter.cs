@@ -95,12 +95,141 @@ public sealed class SourcePassthroughRouter(ISourcePassthroughWindows windows) {
         m_displayWidth = displayWidth;
         m_displayHeight = displayHeight;
     }
-    /// <summary>Routes one window input event, delivering it to a passthrough source's window when it is meant for one.</summary>
+    /// <summary>Revokes a source: releases every key and button whose press reached its window, to that window, and
+    /// returns focus to the game when the source had it. The source's later physical releases reach nobody, since the game
+    /// never saw their presses.</summary>
+    /// <param name="source">The source.</param>
+    public void Revoke(SourceHandle source) {
+        ReleaseHeld(source: source);
+
+        if (Focus.Focused == source) {
+            Focus.ReturnToGame();
+        }
+    }
+    /// <summary>Routes one window input event, delivering it to a passthrough source's window when it is meant for one.
+    /// A source that holds focus or a press but no longer has a passthrough pane among the published panes is revoked
+    /// first (<see cref="Revoke"/>), so a pane that stops being shown stops taking input.</summary>
     /// <param name="inputEvent">The event, in the window's order. A <see cref="WindowInputKind.PointerPosition"/> event's
     /// <see cref="WindowInputEvent.Vector"/> is in display pixels from the display's top-left corner.</param>
     /// <returns><see langword="true"/> when the game must not see the event. A pointer position is never withheld, so
     /// the game keeps drawing its cursor over a passthrough pane.</returns>
     public bool Route(in WindowInputEvent inputEvent) {
+        RevokeUnshown();
+
+        return RouteShown(inputEvent: in inputEvent);
+    }
+
+    // Releases every key and button whose press reached a source's window, to that window.
+    private void ReleaseHeld(SourceHandle source) {
+        _ = m_windows.TryGet(
+            source: source,
+            window: out var window
+        );
+
+        while (TryTakeButton(
+            button: out var button,
+            press: out var press,
+            source: source
+        )) {
+            if (press.Delivered) {
+                window?.DeliverPointer(
+                    inputEvent: WindowInputEvent.PointerButton(
+                        button: button,
+                        phase: CommandPhase.Completed
+                    ),
+                    point: press.Point
+                );
+            }
+        }
+        while (TryTakeKey(
+            key: out var key,
+            source: source
+        )) {
+            window?.DeliverKey(inputEvent: new WindowInputEvent(
+                Character: key.Character,
+                Key: key.Key,
+                Kind: WindowInputKind.Key,
+                Phase: CommandPhase.Completed
+            ));
+        }
+    }
+    // Whether a passthrough pane the local user opened shows a source among the published panes.
+    private bool IsShown(SourceHandle source) {
+        for (var index = 0; (index < m_panes.Count); index++) {
+            if (
+                (m_panes[index].Source == source) &&
+                IsPassthrough(mapping: m_panes[index])
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    private void RevokeUnshown() {
+        if (
+            (Focus.Focused is { } focused) &&
+            !IsShown(source: focused)
+        ) {
+            Revoke(source: focused);
+        }
+
+        while (TryHeldUnshown(source: out var source)) {
+            Revoke(source: source);
+        }
+    }
+    // The first source holding a key or a button whose pane is no longer shown.
+    private bool TryHeldUnshown(out SourceHandle source) {
+        foreach (var press in m_buttons.Values) {
+            if (!IsShown(source: press.Source)) {
+                source = press.Source;
+
+                return true;
+            }
+        }
+        foreach (var held in m_keys.Values) {
+            if (!IsShown(source: held)) {
+                source = held;
+
+                return true;
+            }
+        }
+
+        source = default;
+
+        return false;
+    }
+    private bool TryTakeButton(SourceHandle source, out int button, out ButtonPress press) {
+        foreach (var (pressed, candidate) in m_buttons) {
+            if (candidate.Source == source) {
+                _ = m_buttons.Remove(key: pressed);
+                button = pressed;
+                press = candidate;
+
+                return true;
+            }
+        }
+
+        button = -1;
+        press = default;
+
+        return false;
+    }
+    private bool TryTakeKey(SourceHandle source, out (KeyCode Key, char Character) key) {
+        foreach (var (pressed, candidate) in m_keys) {
+            if (candidate == source) {
+                _ = m_keys.Remove(key: pressed);
+                key = pressed;
+
+                return true;
+            }
+        }
+
+        key = default;
+
+        return false;
+    }
+    private bool RouteShown(in WindowInputEvent inputEvent) {
         switch (inputEvent.Kind) {
             case WindowInputKind.PointerPosition:
                 m_pointer = inputEvent.Vector;
@@ -179,7 +308,6 @@ public sealed class SourcePassthroughRouter(ISourcePassthroughWindows windows) {
                 return false;
         }
     }
-
     // The topmost pane under the pointer, when it is a permitted passthrough pane and the pointer lies on its source.
     private bool TryUnderPointer(out SourceHit hit, [NotNullWhen(returnValue: true)] out SourceMapping? mapping) {
         if (
@@ -455,38 +583,24 @@ public sealed class SourcePassthroughRouter(ISourcePassthroughWindows windows) {
     }
     // Losing the window's focus leaves no key or button held on a source's window, as it leaves none held in the game.
     private void ReleaseEverything() {
-        foreach (var (button, press) in m_buttons) {
-            if (
-                press.Delivered &&
-                m_windows.TryGet(
-                    source: press.Source,
-                    window: out var window
-                )
-            ) {
-                window.DeliverPointer(
-                    inputEvent: WindowInputEvent.PointerButton(
-                        button: button,
-                        phase: CommandPhase.Completed
-                    ),
-                    point: press.Point
-                );
-            }
+        while (TryAnyHeld(source: out var source)) {
+            ReleaseHeld(source: source);
         }
-        foreach (var ((key, character), source) in m_keys) {
-            if (m_windows.TryGet(
-                source: source,
-                window: out var window
-            )) {
-                window.DeliverKey(inputEvent: new WindowInputEvent(
-                    Character: character,
-                    Key: key,
-                    Kind: WindowInputKind.Key,
-                    Phase: CommandPhase.Completed
-                ));
-            }
+    }
+    private bool TryAnyHeld(out SourceHandle source) {
+        foreach (var press in m_buttons.Values) {
+            source = press.Source;
+
+            return true;
+        }
+        foreach (var held in m_keys.Values) {
+            source = held;
+
+            return true;
         }
 
-        m_buttons.Clear();
-        m_keys.Clear();
+        source = default;
+
+        return false;
     }
 }

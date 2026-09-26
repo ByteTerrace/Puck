@@ -238,6 +238,96 @@ public sealed class SourcePassthroughRouterLawTests {
         Assert.False(condition: router.Route(inputEvent: WindowInputEvent.KeyUp(key: KeyCode.Escape)));
     }
     [Fact]
+    public void ASourceWhosePaneIsWithdrawnStopsTakingKeysAndReleasesWhatItHolds() {
+        var (router, editor, notes) = Build();
+
+        _ = router.Route(inputEvent: WindowInputEvent.PointerAbsolute(position: OnEditor));
+        Assert.True(condition: router.Route(inputEvent: WindowInputEvent.PointerButton(
+            button: 0,
+            phase: CommandPhase.Started
+        )));
+        Assert.True(condition: router.Route(inputEvent: WindowInputEvent.LetterDown(character: 'x')));
+        editor.Deliveries.Clear();
+
+        // The editor's pane is withdrawn while its capture keeps running: only the notes' pane is published.
+        router.Publish(
+            displayHeight: DisplayHeight,
+            displayWidth: DisplayWidth,
+            panes: [
+                Pane(
+                    source: NotesSource,
+                    x: 0.5f
+                ),
+            ]
+        );
+
+        // The next key is the game's, and before it routed the editor heard the release of what it held.
+        Assert.False(condition: router.Route(inputEvent: WindowInputEvent.LetterDown(character: 'y')));
+        Assert.Null(@object: router.Focus.Focused);
+        Assert.Equal(
+            expected: [
+                Delivery.Pointer(
+                    button: 0,
+                    kind: WindowInputKind.PointerButton,
+                    phase: CommandPhase.Completed,
+                    point: OnEditorClient
+                ),
+                Delivery.OfKey(
+                    character: 'x',
+                    phase: CommandPhase.Completed
+                ),
+            ],
+            actual: editor.Deliveries
+        );
+
+        // The physical release of a key the game never saw pressed reaches nobody; the editor hears nothing more.
+        Assert.True(condition: router.Route(inputEvent: WindowInputEvent.LetterUp(character: 'x')));
+        Assert.False(condition: router.Route(inputEvent: WindowInputEvent.TypedText(text: "z")));
+        Assert.Equal(
+            expected: 2,
+            actual: editor.Deliveries.Count
+        );
+        Assert.Empty(collection: notes.Deliveries);
+    }
+    [Fact]
+    public void RevokingASourceReleasesWhatItsWindowHoldsAndReturnsFocus() {
+        var (router, editor, notes) = Build();
+
+        Assert.True(condition: Click(
+            point: OnNotes,
+            router: router
+        ));
+        Assert.True(condition: Click(
+            point: OnEditor,
+            router: router
+        ));
+        Assert.True(condition: router.Route(inputEvent: WindowInputEvent.KeyDown(key: KeyCode.ShiftLeft)));
+        editor.Deliveries.Clear();
+        notes.Deliveries.Clear();
+
+        // Revoking a source that does not hold focus changes nothing.
+        router.Revoke(source: NotesSource);
+        Assert.Equal(
+            expected: EditorSource,
+            actual: router.Focus.Focused
+        );
+
+        router.Revoke(source: EditorSource);
+        Assert.Null(@object: router.Focus.Focused);
+        Assert.Equal(
+            expected: [
+                Delivery.OfKey(
+                    key: KeyCode.ShiftLeft,
+                    phase: CommandPhase.Completed
+                ),
+            ],
+            actual: editor.Deliveries
+        );
+        Assert.Empty(collection: notes.Deliveries);
+        Assert.True(condition: router.Route(inputEvent: WindowInputEvent.KeyUp(key: KeyCode.ShiftLeft)));
+        Assert.Single(collection: editor.Deliveries);
+    }
+    [Fact]
     public void ADocumentDeclaredSourceNeverFocusesOrReceivesInput() {
         // The resolver holds a window for the source, so only the opener and destination stand between it and input.
         SourceMapping[] declared = [

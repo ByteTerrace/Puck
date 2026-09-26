@@ -227,6 +227,11 @@ in order:
   on a source is released there at the point its drag reached.
 - Losing the window's own focus releases every key and button a source's
   window holds.
+- A source that holds focus, a key or a button but no longer has a
+  passthrough pane among the published panes is revoked before the event
+  routes (`Revoke`): its window receives the release of each key and button it
+  holds, and focus returns to the game. The host revokes a source the same way
+  when it closes it.
 
 The router tells the pump which events the game must not see. The window pump
 in `Puck.Launcher` offers every raw event to an optional `IWindowInputFilter`
@@ -236,15 +241,20 @@ game keeps drawing its cursor over a passthrough pane.
 
 A source's window is an `ISourcePassthroughWindow`. On Windows a window
 capture's feed supplies it (`INativeImageCaptureFeed.Window`,
-`Win32PassthroughWindow`), and it posts window messages to the captured window,
-so the window need not be in the foreground. A pointer message goes to the
-deepest visible, enabled child window under the point, in that child's client
-coordinates. A key or text message goes to the window thread's keyboard focus.
+`Win32PassthroughWindow`), and it sends window messages to the captured window
+with `SendNotifyMessage`, so the window need not be in the foreground and
+receives them in order. A sent message skips the window's `TranslateMessage`,
+so a typed key arrives as a keyboard's would: `WM_KEYDOWN`, then `WM_CHAR` from
+the text event, then `WM_KEYUP`, with no text heard twice. A pointer message
+goes to the deepest visible, enabled child window under the point, in that
+child's client coordinates, and while a button is held the child it was pressed
+on keeps every pointer message until the last release. A key or text message
+goes to the window thread's keyboard focus. Each side of each modifier is
+tracked apart, and Alt counts as held across its own press and release, so an
+Alt chord's press and release are `WM_SYSKEYDOWN` and `WM_SYSKEYUP`.
 Coordinates are read in physical pixels for the captured frame and in the
 window's own DPI context for the client point, so a DPI-unaware, system-aware
-or per-monitor-aware window each receives its own units. A key whose press
-types text is posted as a key only while Control or Alt is held; otherwise the
-window receives its text as `WM_CHAR`. Keys outside `KeyCode`, such as Delete
+or per-monitor-aware window each receives its own units. Keys outside `KeyCode`, such as Delete
 or Home, never reach the engine, so they never reach a source either.
 
 The World host opens a passthrough source only through `source.passthrough`,

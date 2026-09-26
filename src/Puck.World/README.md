@@ -1234,11 +1234,13 @@ open source's window, captured frame, client area and DPI scale. Only the
 host's own console may run the verb, as typed text; the local operator
 attachment (`world.control`) is that console too. No binding, seat, peer,
 addon, schedule or world document can open a passthrough source or send it
-input. A source whose pane stops showing the window it was opened on (its
-instance stops, its capture reopens onto another window, or a row of the same
-name replaces it) is closed the next time input would reach it. Delivery is
-Windows-only: the capture feed's `Win32PassthroughWindow` posts window
-messages to the captured window, described in
+input. A source whose pane is no longer published, or stops showing the window
+it was opened on (its instance stops, its capture reopens onto another window,
+or a row of the same name replaces it), is closed before the next event routes.
+Closing a source, by the verb or this way, releases every key and button its
+window holds and returns the keyboard to the game. Delivery is Windows-only:
+the capture feed's `Win32PassthroughWindow` sends window messages to the
+captured window, described in
 [Device input](../../docs/reference/input.md#keyboard-focus-and-passthrough-sources).
 A headless or offscreen boot has no window and no such verb.
 

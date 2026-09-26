@@ -1122,7 +1122,9 @@ it, keys and text follow focus, every release goes where its press went, and the
 chord returns focus to the game. `ToClient` maps into the captured frame, whose
 client area sits inside it at an offset, and gives the point in the window's own
 coordinates, DPI included. `Win32PassthroughWindow`, which a window capture's
-feed supplies, posts the window messages. The laws are
+feed supplies, sends the window messages. A source whose pane is no longer
+published is revoked: its window hears the release of what it holds, and focus
+returns to the game. The laws are
 `SourcePassthroughRouterLawTests`,
 `WorldViewPaneMappingLawTests.APaneTheLocalUserOpenedTakesThePassthroughDestination`
 and `Win32PassthroughWindowTests`.
@@ -3433,16 +3435,24 @@ Each commit is marked with what it waits on; only step 5 waits on P7b's groups.
    - `ToClient` maps into the captured frame, whose client area sits inside it,
      and gives the point in the window's own coordinates, DPI included.
      `Win32PassthroughWindow`, which a window capture's feed supplies
-     (`INativeImageCaptureFeed.Window`), posts the window messages to the
-     deepest child under the point and to the window thread's keyboard focus.
+     (`INativeImageCaptureFeed.Window`), sends the window messages in order:
+     pointer messages to the deepest child under the point, held by the child
+     a button was pressed on until the last release, and each key as
+     `WM_KEYDOWN`, its text as `WM_CHAR` and `WM_KEYUP` to the window thread's
+     keyboard focus.
+   - A source whose pane is no longer published is revoked before the next
+     event routes, and closing a source revokes it: its window hears the
+     release of every key and button it holds, and focus returns to the game.
    - Laws: `SourcePassthroughRouterLawTests` (a focused source's pointer and
      keys reach a fake window at the mapped client point, the chord returns
      focus and is consumed while a source holds it, its Escape reaches the game
      while none does, a document-declared source never focuses, releases follow
-     presses),
-     `WorldViewPaneMappingLawTests.APaneTheLocalUserOpenedTakesThePassthroughDestination`
-     and `Win32PassthroughWindowTests` (a hidden Puck window reads the posted
-     pointer events back at their client points).
+     presses, a source whose pane is withdrawn stops taking keys and is
+     released), `WorldViewPaneMappingLawTests.APaneTheLocalUserOpenedTakesThePassthroughDestination`
+     and `Win32PassthroughWindowTests` (a hidden Puck window reads the pointer
+     events back at their client points; a recording window reads a key's
+     message sequence, Alt's system messages, each modifier side, and a drag
+     held by the child it was pressed on).
    - Its check, the recorded Windows run on real hardware, is
      [deferred to the end](#deferred-to-the-end).
 5. The GPU draws from the mapping. Waits on P7b-20. The screen shading reads

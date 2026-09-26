@@ -168,9 +168,9 @@ internal static partial class User32 {
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool ClientToScreen(nint windowHandle, ref Point point);
-    [LibraryImport("user32.dll", EntryPoint = "PostMessageW", SetLastError = true)]
+    [LibraryImport("user32.dll", EntryPoint = "SendNotifyMessageW", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    public static partial bool PostMessage(nint windowHandle, uint message, nint wParam, nint lParam);
+    public static partial bool SendNotifyMessage(nint windowHandle, uint message, nint wParam, nint lParam);
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool GetClientRect(nint windowHandle, out Rectangle rectangle);

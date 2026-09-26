@@ -7,18 +7,24 @@ using Puck.Platform.Windows.Interop;
 namespace Puck.Platform.Windows;
 
 /// <summary>
-/// A top-level window a window capture shows, as a passthrough input target: pointer and key events reach it as posted
-/// window messages, the way the window's own message loop reads them, so the window need not be in the foreground.
+/// A top-level window a window capture shows, as a passthrough input target: pointer and key events reach its window
+/// procedures as window messages, so the window need not be in the foreground.
 /// </summary>
 /// <remarks>
+/// <para>Every message is sent with <c>SendNotifyMessage</c>, which returns at once and delivers messages to the window
+/// in the order they were sent, ahead of its posted queue. A sent message never passes through the window's
+/// <c>TranslateMessage</c>, so a key arrives as a keyboard's would, <c>WM_KEYDOWN</c>, then the text it typed as
+/// <c>WM_CHAR</c> from the text event that follows it, then <c>WM_KEYUP</c>, and no text is heard twice.</para>
 /// <para>Coordinates are read in two DPI contexts, switched on the calling thread for each read: physical pixels
 /// (per-monitor aware) for the frame and the client area the capture shows, and the window's own context for the
 /// client coordinates its messages carry, so a DPI-unaware, system-aware or per-monitor-aware window each hears its own
 /// units whatever this process's awareness.</para>
 /// <para>A pointer message goes to the deepest visible, enabled child under the point, in that child's client
-/// coordinates, and a key or text message to the window's thread's keyboard focus when that lies inside the window. A
-/// key whose press types text is posted only while Control or Alt is held, since its text arrives as a text event and
-/// posts as <c>WM_CHAR</c>; a window whose loop translates a posted key into text would otherwise hear it twice.</para>
+/// coordinates. While a button is held the child it was pressed on keeps every pointer message, wherever the pointer
+/// moves, until the last button is released, as a window capturing the mouse would. A key or text message goes to the
+/// window's thread's keyboard focus when that lies inside the window. Each side of each modifier is tracked apart, and
+/// a key's message and context bit read Alt and Control as they stand across its own transition, so Alt's release is a
+/// <c>WM_SYSKEYUP</c> as its press was a <c>WM_SYSKEYDOWN</c>.</para>
 /// <para>Window-pump-thread only. A message to a window that has gone is dropped.</para>
 /// </remarks>
 [SupportedOSPlatform("windows10.0.14393")]
@@ -59,11 +65,11 @@ public sealed class Win32PassthroughWindow : ISourcePassthroughWindow {
 
     private readonly nint m_handle;
 
-    // The buttons and modifiers this window was delivered and not yet released, which every message's key state carries.
+    // The buttons this window was delivered and not yet released, as MK_ flags, and the child they were pressed on.
     private int m_buttons;
-    private bool m_alt;
-    private bool m_control;
-    private bool m_shift;
+    private nint m_captured;
+    // The modifier keys this window was delivered and not yet released, one bit per side.
+    private int m_modifiers;
 
     /// <summary>Initializes a new instance of the <see cref="Win32PassthroughWindow"/> class.</summary>
     /// <param name="windowHandle">The top-level window's handle; nonzero.</param>
@@ -112,10 +118,29 @@ public sealed class Win32PassthroughWindow : ISourcePassthroughWindow {
         }
     }
 
+    private bool Alt => ((m_modifiers & (BitOf(key: KeyCode.AltLeft) | BitOf(key: KeyCode.AltRight))) != 0);
+    private bool Control => ((m_modifiers & (BitOf(key: KeyCode.ControlLeft) | BitOf(key: KeyCode.ControlRight))) != 0);
+    private bool Shift => ((m_modifiers & (BitOf(key: KeyCode.ShiftLeft) | BitOf(key: KeyCode.ShiftRight))) != 0);
+
+    private static int BitOf(KeyCode key) => key switch {
+        KeyCode.ControlLeft => 1,
+        KeyCode.ControlRight => 2,
+        KeyCode.AltLeft => 4,
+        KeyCode.AltRight => 8,
+        KeyCode.ShiftLeft => 16,
+        KeyCode.ShiftRight => 32,
+        _ => 0,
+    };
     private static nint MakePoint(int x, int y) => ((nint)((y << 16) | (x & 0xFFFF)));
+    private static void Send(nint target, uint message, nint wParam, nint lParam) => _ = User32.SendNotifyMessage(
+        lParam: lParam,
+        message: message,
+        wParam: wParam,
+        windowHandle: target
+    );
     private int KeyState() => m_buttons |
-        (m_control ? MkControl : 0) |
-        (m_shift ? MkShift : 0);
+        (Control ? MkControl : 0) |
+        (Shift ? MkShift : 0);
     // Runs a read in a DPI awareness context on this thread, restoring the thread's own afterwards.
     private static T InContext<T>(nint context, Func<T> read) {
         var previous = User32.SetThreadDpiAwarenessContext(context: context);
@@ -128,9 +153,24 @@ public sealed class Win32PassthroughWindow : ISourcePassthroughWindow {
             }
         }
     }
-    // The deepest visible, enabled child under a client point of the window, and the point in its client coordinates;
-    // read in the window's own DPI context.
-    private (nint Target, Point Point) ChildAt(Point point) {
+    // The child a pointer message at a client point of the window goes to, and the point in its client coordinates:
+    // the child a held button was pressed on, else the deepest visible, enabled child under the point. Read in the
+    // window's own DPI context.
+    private (nint Target, Point Point) TargetAt(Point point) {
+        if (
+            (m_captured != 0) &&
+            User32.IsWindow(windowHandle: m_captured)
+        ) {
+            _ = User32.MapWindowPoints(
+                count: 1u,
+                fromHandle: m_handle,
+                points: ref point,
+                toHandle: m_captured
+            );
+
+            return (m_captured, point);
+        }
+
         var target = m_handle;
 
         while (true) {
@@ -181,19 +221,6 @@ public sealed class Win32PassthroughWindow : ISourcePassthroughWindow {
 
         return m_handle;
     }
-    private void TrackModifier(KeyCode key, bool down) {
-        switch (key) {
-            case KeyCode.ControlLeft or KeyCode.ControlRight:
-                m_control = down;
-                break;
-            case KeyCode.AltLeft or KeyCode.AltRight:
-                m_alt = down;
-                break;
-            case KeyCode.ShiftLeft or KeyCode.ShiftRight:
-                m_shift = down;
-                break;
-        }
-    }
 
     /// <inheritdoc/>
     public void DeliverKey(in WindowInputEvent inputEvent) {
@@ -205,11 +232,11 @@ public sealed class Win32PassthroughWindow : ISourcePassthroughWindow {
 
         if (inputEvent.Kind == WindowInputKind.Text) {
             foreach (var unit in (inputEvent.Text ?? string.Empty)) {
-                _ = User32.PostMessage(
+                Send(
                     lParam: 1,
                     message: WmChar,
-                    wParam: unit,
-                    windowHandle: target
+                    target: target,
+                    wParam: unit
                 );
             }
 
@@ -220,37 +247,39 @@ public sealed class Win32PassthroughWindow : ISourcePassthroughWindow {
         }
 
         var down = (inputEvent.Phase is not (CommandPhase.Completed or CommandPhase.Canceled));
+        var bit = BitOf(key: inputEvent.Key);
+        // A modifier counts as held across its own transition: pressed from its press, released after its release.
+        var held = m_modifiers | bit;
 
-        TrackModifier(
-            down: down,
-            key: inputEvent.Key
+        m_modifiers = (down
+            ? m_modifiers | bit
+            : m_modifiers & ~bit
         );
 
-        if (
-            (Win32VirtualKeys.Types(key: inputEvent.Key) && !(m_control || m_alt)) ||
-            !Win32VirtualKeys.TryVirtualKeyOf(
-                character: inputEvent.Character,
-                isExtended: out var extended,
-                key: inputEvent.Key,
-                scanCode: out var scanCode,
-                virtualKey: out var virtualKey
-            )
-        ) {
+        if (!Win32VirtualKeys.TryVirtualKeyOf(
+            character: inputEvent.Character,
+            isExtended: out var extended,
+            key: inputEvent.Key,
+            scanCode: out var scanCode,
+            virtualKey: out var virtualKey
+        )) {
             return;
         }
 
+        var alt = ((held & (BitOf(key: KeyCode.AltLeft) | BitOf(key: KeyCode.AltRight))) != 0);
+        var control = ((held & (BitOf(key: KeyCode.ControlLeft) | BitOf(key: KeyCode.ControlRight))) != 0);
         // An Alt chord without Control is a system key, as the window's own keyboard would report it.
-        var system = (m_alt && !m_control);
-        var lParam = 1 | (scanCode << 16) | (extended ? KeyExtended : 0) | (m_alt ? KeyAlt : 0) | (down ? 0 : KeyPrevious | KeyTransition);
+        var system = (alt && !control);
+        var lParam = 1 | (scanCode << 16) | (extended ? KeyExtended : 0) | (alt ? KeyAlt : 0) | (down ? 0 : KeyPrevious | KeyTransition);
 
-        _ = User32.PostMessage(
+        Send(
             lParam: lParam,
             message: (down
                 ? (system ? WmSysKeyDown : WmKeyDown)
                 : (system ? WmSysKeyUp : WmKeyUp)
             ),
-            wParam: virtualKey,
-            windowHandle: target
+            target: target,
+            wParam: virtualKey
         );
     }
     /// <inheritdoc/>
@@ -268,22 +297,22 @@ public sealed class Win32PassthroughWindow : ISourcePassthroughWindow {
         var down = (inputEvent.Phase == CommandPhase.Started);
         var wheel = inputEvent.Vector;
 
-        // Every read of the window's coordinates, and each message's key state, is in the window's own units.
+        // Every read of the window's coordinates, and each message's point, is in the window's own units.
         _ = InContext(
             context: User32.GetWindowDpiAwarenessContext(windowHandle: m_handle),
             read: () => {
-                var (target, local) = ChildAt(point: client);
+                var (target, local) = TargetAt(point: client);
 
                 switch (kind) {
                     case WindowInputKind.PointerPosition:
-                        _ = User32.PostMessage(
+                        Send(
                             lParam: MakePoint(
                                 x: local.X,
                                 y: local.Y
                             ),
                             message: WmMouseMove,
-                            wParam: KeyState(),
-                            windowHandle: target
+                            target: target,
+                            wParam: KeyState()
                         );
                         break;
                     case WindowInputKind.PointerButton:
@@ -304,14 +333,18 @@ public sealed class Win32PassthroughWindow : ISourcePassthroughWindow {
                             ? m_buttons | flag
                             : m_buttons & ~flag
                         );
-                        _ = User32.PostMessage(
+                        // The first press captures its child; the last release frees it after it is delivered.
+                        m_captured = ((down || (m_buttons != 0))
+                            ? target
+                            : 0);
+                        Send(
                             lParam: MakePoint(
                                 x: local.X,
                                 y: local.Y
                             ),
                             message: message,
-                            wParam: KeyState() | extra,
-                            windowHandle: target
+                            target: target,
+                            wParam: KeyState() | extra
                         );
                         break;
                     case WindowInputKind.PointerWheel:
@@ -329,19 +362,19 @@ public sealed class Win32PassthroughWindow : ISourcePassthroughWindow {
                         );
 
                         if (wheel.Y != 0f) {
-                            _ = User32.PostMessage(
+                            Send(
                                 lParam: at,
                                 message: WmMouseWheel,
-                                wParam: (((int)MathF.Round(x: (wheel.Y * WheelDelta))) << 16) | KeyState(),
-                                windowHandle: target
+                                target: target,
+                                wParam: (((int)MathF.Round(x: (wheel.Y * WheelDelta))) << 16) | KeyState()
                             );
                         }
                         if (wheel.X != 0f) {
-                            _ = User32.PostMessage(
+                            Send(
                                 lParam: at,
                                 message: WmMouseHWheel,
-                                wParam: (((int)MathF.Round(x: (wheel.X * WheelDelta))) << 16) | KeyState(),
-                                windowHandle: target
+                                target: target,
+                                wParam: (((int)MathF.Round(x: (wheel.X * WheelDelta))) << 16) | KeyState()
                             );
                         }
                         break;

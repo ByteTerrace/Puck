@@ -63,15 +63,6 @@ public static class Win32VirtualKeys {
     /// <param name="virtualKey">The virtual-key code.</param>
     /// <returns>The lowercase letter.</returns>
     public static char LetterOf(long virtualKey) => ((char)('a' + (virtualKey - VkA)));
-    /// <summary>Returns whether pressing a key types text, which a window hears as a text event rather than only as a
-    /// key: a letter, a digit, space, minus, equals, the backtick, a numpad digit, and numpad add and subtract.</summary>
-    /// <param name="key">The key.</param>
-    /// <returns><see langword="true"/> for a key whose press types text.</returns>
-    public static bool Types(KeyCode key) => (
-        (key is KeyCode.Letter or KeyCode.Space or KeyCode.Minus or KeyCode.Equals or KeyCode.Backtick or KeyCode.NumpadAdd or KeyCode.NumpadSubtract) ||
-        (key is >= KeyCode.Digit0 and <= KeyCode.Digit9) ||
-        (key is >= KeyCode.Numpad0 and <= KeyCode.Numpad9)
-    );
     /// <summary>Reads a named key from a key message's virtual-key code, extended-key bit and scan code. A side-sensitive
     /// modifier takes its side from the extended-key bit (Control, Alt) or the scan code (Shift). Letters are not named
     /// keys; <see cref="LetterOf"/> reads them.</summary>
