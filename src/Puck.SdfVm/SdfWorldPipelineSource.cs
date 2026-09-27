@@ -7,9 +7,9 @@ namespace Puck.SdfVm;
 
 // One residency's leases on the pipelines its tables record with, from its composition's SdfWorldPipelineCatalog: the
 // kernel variants (SdfWorldPipelines), the region copy and the mesh pass, every one an entry of the pass-pipeline cache.
-// Taking the leases — loading the deployed kernels when the holder supplies none, hashing them, and starting the shared
-// builds — runs on the thread pool, and the pipelines build there too, so a cold driver cache delays the first frame
-// instead of freezing the pump that drains the console. The leases outlive the tables built from them (a capacity or
+// A holder supplying kernels takes its leases on the frame thread; one loading deployed kernels takes them on the
+// thread pool. Every pipeline builds on the pool, so a cold driver cache delays the first frame instead of freezing
+// the pump that drains the console. The leases outlive the tables built from them (a capacity or
 // export rebuild reuses them) and are released on device loss and disposal. The holder builds its tables here
 // (TryBuild), which refuses a failed build by name instead of throwing it, and tries it again only when an input it was
 // built from changes. The set is ready only once the region copy and the mesh pass are too: the tables record their
@@ -39,8 +39,26 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
 
     // Returns the ready set once the region-copy and mesh pass pipelines are ready too; the first call starts taking the
     // leases and every call until all have built returns null. A lease or build that failed rethrows its exception here, on the
-    // frame thread, so a device loss reaches the host's recovery; the next call starts again.
+    // frame thread, so a device loss reaches the host's recovery; the next call starts again. Leases whose kernels are
+    // already loaded are taken on this call: taking one joins the cache's entry or starts its build, and never waits,
+    // so a holder whose pipelines another holder already built has its set in the frame that first asks.
     public SdfWorldPipelines? Poll(IGpuDeviceContext device, SdfWorldKernels? kernels, bool hostsOnDirectX, bool includeBrickPipelines) {
+        if (
+            (m_lease is null) &&
+            (kernels is not null) &&
+            !m_acquire.IsPending
+        ) {
+            var leases = TakeLeases(
+                device: device,
+                hostsOnDirectX: hostsOnDirectX,
+                includeBrickPipelines: includeBrickPipelines,
+                kernels: kernels
+            );
+
+            m_lease = leases.Set;
+            m_regionCopy = leases.RegionCopy;
+            m_meshRaster = leases.MeshRaster;
+        }
         if (m_lease is null) {
             if (!m_acquire.IsPending) {
                 Start(
@@ -212,35 +230,42 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
     // What a build is made from besides the holder's own inputs; a refused build is tried again when any of it changes.
     private readonly record struct BuildKey(IGpuDeviceContext? Device, long FaultsRevision, SdfWorldKernels? Kernels, bool HostsOnDirectX, bool IncludeBrickPipelines, GpuPassPipeline? MeshRaster, IGpuComputePipeline? RegionCopy, SdfWorldPipelines? Set, SdfWorldKernels? SetKernels);
 
-    // Kept apart from Poll so the closure is allocated only when a lease is taken, never on a polled frame. A pass-pipeline
-    // acquire that throws releases the leases taken before it.
+    // Kept apart from Poll so the closure is allocated only when a lease is taken, never on a polled frame. Only loading
+    // the deployed kernels reads files, so only a holder with none of its own takes its leases on the thread pool.
     private void Start(IGpuDeviceContext device, SdfWorldKernels? kernels, bool hostsOnDirectX, bool includeBrickPipelines) =>
-        m_acquire.Start(build: _ => {
-            var set = SdfWorldPipelines.Acquire(
-                cache: catalog.Pipelines,
-                device: device,
-                includeBrickPipelines: includeBrickPipelines,
-                kernels: (kernels ?? catalog.LoadDeployed(bytecodeExtension: SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: hostsOnDirectX)))
+        m_acquire.Start(build: _ => TakeLeases(
+            device: device,
+            hostsOnDirectX: hostsOnDirectX,
+            includeBrickPipelines: includeBrickPipelines,
+            kernels: kernels
+        ));
+    // Takes every lease a holder's engine needs. A pass-pipeline acquire that throws releases the leases taken before it.
+    private Leases TakeLeases(IGpuDeviceContext device, SdfWorldKernels? kernels, bool hostsOnDirectX, bool includeBrickPipelines) {
+        var set = SdfWorldPipelines.Acquire(
+            cache: catalog.Pipelines,
+            device: device,
+            includeBrickPipelines: includeBrickPipelines,
+            kernels: (kernels ?? catalog.LoadDeployed(bytecodeExtension: SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: hostsOnDirectX)))
+        );
+
+        GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? regionCopy = null;
+
+        try {
+            regionCopy = catalog.RegionCopy.Acquire(device: device);
+
+            return new Leases(
+                MeshRaster: catalog.MeshRaster.Acquire(device: device),
+                RegionCopy: regionCopy,
+                Set: set
             );
+        } catch {
+            regionCopy?.Release();
+            set.Dispose();
+            throw;
+        }
+    }
 
-            GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? regionCopy = null;
-
-            try {
-                regionCopy = catalog.RegionCopy.Acquire(device: device);
-
-                return new Leases(
-                    MeshRaster: catalog.MeshRaster.Acquire(device: device),
-                    RegionCopy: regionCopy,
-                    Set: set
-                );
-            } catch {
-                regionCopy?.Release();
-                set.Dispose();
-                throw;
-            }
-        });
-
-    // The leases one background acquire takes.
+    // The leases one acquire takes.
     private sealed record Leases(SdfWorldPipelines Set, GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> RegionCopy, GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> MeshRaster) {
         public void Release() {
             Set.Dispose();

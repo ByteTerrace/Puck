@@ -234,10 +234,19 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <summary>Takes another hold on the residency, which <see cref="Release"/> gives back.</summary>
     /// <exception cref="ObjectDisposedException">Every hold has been released.</exception>
     public void Retain() {
-        ObjectDisposedException.ThrowIf(
-            condition: (Interlocked.Increment(location: ref m_holds) <= 1),
-            instance: this
-        );
+        var holds = Volatile.Read(location: ref m_holds);
+
+        while (true) {
+            ObjectDisposedException.ThrowIf(condition: (holds <= 0), instance: this);
+
+            var observed = Interlocked.CompareExchange(comparand: holds, location1: ref m_holds, value: (holds + 1));
+
+            if (observed == holds) {
+                return;
+            }
+
+            holds = observed;
+        }
     }
     /// <summary>Gives back a hold; the last one releases the residency's tables and its pipeline set, after the device has
     /// finished every submission that reads them.</summary>

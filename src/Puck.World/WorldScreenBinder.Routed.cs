@@ -16,6 +16,9 @@ internal sealed partial class WorldScreenBinder {
     /// <summary>Gets or sets the presenter whose views route a seat presented elsewhere into its world's scene;
     /// <see langword="null"/> in a presentation with no render graph.</summary>
     public WorldFramePresenter? Presenter { get; set; }
+    /// <summary>Gets or sets the capture armed for a seat's crossing, which each presented frame asks whether the seat
+    /// has crossed on it; <see langword="null"/> in a presentation with no render graph.</summary>
+    public WorldCrossingCapture? CrossingCapture { get; set; }
 
     /// <summary>Returns the view a world view instance renders when its seat is presented elsewhere: the view's index in
     /// the residency of the scene of the world the seat is presented in, created the first time a view resolves to
@@ -66,20 +69,29 @@ internal sealed partial class WorldScreenBinder {
     }
 
     // A routed scene's residency: built like the world's own, with its brick pool and the full quality its frame carries,
-    // sized to the scene's worst case, and its work counted under the scene's name in world.counters.
+    // and its work counted under the scene's name in world.counters. Its instances are sized to the world's own (the count
+    // a view's scratch is sized by), so the view the seat renders through follows it in place at the crossing, with no
+    // frame held, whenever the scene fits; a scene that needs more grows its tables, and the view rebuilds against it.
+    // Its tables build in the frame that creates it, from the pipelines the world's own residency already holds.
     private SdfWorldResidency CreateRoutedResidency(SdfWorldResidency host, WorldRoutedScene scene) {
         var source = scene.FrameSource;
         var name = RoutedViewName(scene: scene);
         var residency = new SdfWorldResidency(
-            dynamicTransformCapacity: source.WorstCaseDynamicTransformCapacity,
+            dynamicTransformCapacity: Math.Max(
+                val1: source.WorstCaseDynamicTransformCapacity,
+                val2: m_viewDynamicTransformCapacity
+            ),
             film: context => (host.HostFrame(context: in context) is not null),
             frameSource: source,
             height: ((uint)m_viewDisplayHeight),
-            instanceCapacity: source.WorstCaseInstanceCapacity,
+            instanceCapacity: ((int)host.CapacityRevision),
             kernels: ViewKernels(),
             name: name,
             pipelines: m_viewPipelines!,
-            programWordCapacity: source.WorstCaseProgramWordCapacity,
+            programWordCapacity: Math.Max(
+                val1: source.WorstCaseProgramWordCapacity,
+                val2: m_viewProgramWordCapacity
+            ),
             width: ((uint)m_viewDisplayWidth)
         );
 

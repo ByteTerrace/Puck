@@ -24,7 +24,7 @@ namespace Puck.World.Tests;
 /// destination's <see cref="WorldRoutedScene"/>, emits exactly the program the destination's delivered definition
 /// composes through the session emitter, not the boot world's, and frames it with the seat's own camera.
 /// </summary>
-public sealed class WorldRoutedPresentationLawTests {
+public sealed partial class WorldRoutedPresentationLawTests {
     private const string Away = "north";
     private const string Home = "boot";
 
@@ -259,7 +259,7 @@ public sealed class WorldRoutedPresentationLawTests {
         Assert.Equal(actual: position, expected: AwayPose);
     }
     [Fact]
-    public void ChangingTheViewWithinOneResidencyInvalidatesItsPasses() {
+    public void ChangingTheViewWithinOneResidencyPreservesItsPasses() {
         using var north = Endpoint(definition: AwayDocument(), identity: Away, position: AwayPose);
         var scene = new WorldRoutedScene(bodyColor: north.Mirror.BodyColor, endpoint: north, hostFrame: static () => null);
         using var residency = new SdfWorldResidency(
@@ -276,11 +276,12 @@ public sealed class WorldRoutedPresentationLawTests {
         var counter = passes.CounterOf(instance: "world$2")!;
         var revision = counter.Revision;
 
+        // Another view of the same residency is one the passes record as built: they follow it, so the counter stays
+        // put. SdfWorldPassesLawTests also records both bindings and checks when the instance may stand.
         index = 0;
         passes.BeginFrame(context: default);
         Assert.Same(actual: passes.CounterOf(instance: "world$2"), expected: counter);
-        Assert.NotEqual(actual: counter.Revision, expected: revision);
-        revision = counter.Revision;
+        Assert.Equal(actual: counter.Revision, expected: revision);
         passes.BeginFrame(context: default);
         _ = passes.CounterOf(instance: "world$2");
         Assert.Equal(actual: counter.Revision, expected: revision);

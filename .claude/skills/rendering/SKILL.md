@@ -500,8 +500,9 @@ These are one-line cautions; the owning pages hold the derivations.
   device is created once. A set whose creations fail throws one
   `AggregateException` naming every pipeline that failed, in the set's order
   (a device loss is thrown alone), and `Describe` counts the pipelines built.
-  A holder (`SdfWorldPipelineSource`) takes its leases
-  off the frame thread, builds no tables until the set is ready, and keeps the
+  A holder (`SdfWorldPipelineSource`) takes its leases on the frame thread when
+  kernels are supplied, or on the pool when it must load them. Every pipeline
+  builds on the pool. The holder builds no tables until the set is ready, and keeps the
   leases until a device loss or the residency's last release gives them back.
   A residency builds its tables through `SdfWorldPipelineSource.TryBuild`, only
   when it has none: a failed build (the set's or the tables') is refused, never

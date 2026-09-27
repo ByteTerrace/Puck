@@ -123,6 +123,7 @@ internal static class WorldRenderRoot {
         // the frame every other residency films is captured whether or not a view renders it.
         binder.ViewHost = residency;
         binder.Presenter = frameSource;
+        binder.CrossingCapture = sp.GetService<WorldCrossingCapture>();
         packages.Register(
             factory: new SdfWorldPasses(
                 host: residency,

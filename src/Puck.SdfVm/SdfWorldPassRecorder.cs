@@ -35,7 +35,10 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
     private readonly RenderGraphFragmentPass m_fragmentPass;
     private readonly SdfWorldPasses m_owner;
     private readonly string m_part;
-    private readonly SdfWorldView m_view;
+
+    // The view the pass records, followed in place when the instance resolves another its passes can record
+    // (SdfWorldPasses.CanFollow); one they cannot record rebuilds them instead.
+    private SdfWorldView m_view;
 
     // Which screen indices the residency binds.
     private readonly bool[] m_declaredScreens = new bool[SdfWorldTables.MaxScreenSurfaces];
@@ -67,11 +70,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
             comparisonType: StringComparison.Ordinal
         ));
 
-        if (view.Residency.ScreenSources is { } sources) {
-            foreach (var screen in sources.Screens) {
-                m_declaredScreens[screen] = true;
-            }
-        }
+        DeclareScreens(residency: view.Residency);
 
         var slots = context.InFlightFrames;
         var tables = (view.Residency.Tables ?? throw new InvalidOperationException(message: $"Residency '{view.Residency.Name}' has no tables for pass '{context.Pass}'."));
@@ -194,6 +193,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
             return false;
         }
 
+        Follow();
+
         var residency = m_view.Residency;
 
         m_owner.Begin(residency: residency);
@@ -211,6 +212,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
         return (frame.DisableSoftShadows || (frame.Environment.ShadowLightIndex < 0));
     }
     public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
+        Follow();
+
         var residency = m_view.Residency;
 
         m_owner.Begin(residency: residency);
@@ -262,6 +265,47 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
         return RenderGraphPackageOutcome.Drew;
     }
 
+    // Takes the view the instance resolved this frame when it is another than the one the pass records: the package
+    // decided the pass can record it as built (SdfWorldPasses.CanFollow). A counter change holds recording until matching
+    // passes install. The hold and the retain move with the view; the ports and screens rebind for the
+    // other residency's tables on this recording.
+    private void Follow() {
+        if (
+            (m_owner.ViewOf(instance: m_context.Instance) is not { } current) ||
+            (current == m_view)
+        ) {
+            return;
+        }
+
+        var previous = m_view.Residency;
+
+        if (!ReferenceEquals(
+            objA: previous,
+            objB: current.Residency
+        )) {
+            current.Residency.Retain();
+            m_owner.Hold(residency: current.Residency);
+            m_owner.Unhold(residency: previous);
+            previous.Release();
+            DeclareScreens(residency: current.Residency);
+
+            foreach (var screens in m_screens) {
+                Array.Clear(array: screens);
+            }
+        }
+
+        m_view = current;
+    }
+    // Which screen indices a residency binds.
+    private void DeclareScreens(SdfWorldResidency residency) {
+        Array.Clear(array: m_declaredScreens);
+
+        if (residency.ScreenSources is { } sources) {
+            foreach (var screen in sources.Screens) {
+                m_declaredScreens[screen] = true;
+            }
+        }
+    }
     // Binds the pass set and dispatches the part's kernel: the sky over the extent, the masks over the tile grid in
     // groups, the beam one group a tile, the cull arguments once, and the hit passes indirectly over the surviving tiles.
     private void RecordCompute(in RenderGraphPackageRecording recording, SdfWorldTables tables) {
