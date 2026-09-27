@@ -11,4 +11,7 @@
         <ProjectReference Include="../Puck.HumbleGamingDeck/Puck.HumbleGamingDeck.csproj" />
         <Using Include="Puck.Machines.Post" />
     </ItemGroup>
+    <ItemGroup>
+        <None Include="AccuracyCoinExpectations.json" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
 </Project>

@@ -1,7 +1,7 @@
 using Puck.HumbleGamingDeck.Post;
 
 if (!CommandLineArguments.TryValidateValues(args: args, error: out var error,
-    names: ["--artifacts", "--tier", "--filter", "--sst", "--roms", "--corpus-cache"])) {
+    names: ["--artifacts", "--tier", "--filter", "--sst", "--roms", "--accuracy-coin", "--corpus-cache"])) {
     Console.Error.WriteLine(value: error);
 
     return 2;
@@ -24,8 +24,9 @@ if (fetch) {
 var context = new PostContext(
     ArtifactsDirectory: (CommandLineArguments.Value(args: args, name: "--artifacts") ?? "artifacts/hgd-post"),
     SstRoot: corpora?.Resolve(args: args, flag: "--sst", name: "nes6502-sst"),
-    TestRomRoot: corpora?.Resolve(args: args, flag: "--roms", name: "nes-test-roms"));
-var report = new PostBattery<PostContext>(banner: "Puck.HumbleGamingDeck.Post - CPU and bus power-on self-test", stages: stages).Run(context: context);
+    TestRomRoot: corpora?.Resolve(args: args, flag: "--roms", name: "nes-test-roms"),
+    AccuracyCoinRoot: corpora?.Resolve(args: args, flag: "--accuracy-coin", name: "accuracy-coin"));
+var report = new PostBattery<PostContext>(banner: "Puck.HumbleGamingDeck.Post - Humble Gaming Deck power-on self-test", stages: stages).Run(context: context);
 report.Write(artifactsDirectory: context.ArtifactsDirectory);
 if (report.Abandoned) {
     Environment.Exit(exitCode: report.ExitCode);
