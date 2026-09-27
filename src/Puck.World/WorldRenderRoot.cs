@@ -55,9 +55,28 @@ internal static class WorldRenderRoot {
         var definition = sp.GetRequiredService<WorldDefinition>();
         var graph = sp.GetRequiredService<WorldRootGraph>();
         var host = sp.GetRequiredService<WorldViewGraphHost>();
+        // The composition's one pipeline cache, which the engine node and every view's engine lease their pipeline sets
+        // from; each records through the services of the device context it renders on.
+        var pipelines = sp.GetRequiredService<SdfWorldPipelineCache>();
 
-        // A walk into a view's world continues through the screens standing in it.
+        // Configure the views now the frame source has probed the render envelope: each camera a screen shows and each
+        // session screen registers a view the render graph renders through an engine sized to these worst-case
+        // capacities, using the selected host's bytecode, at its declared extent over the display's.
+        binder.ConfigureViews(
+            displayHeight: hostSettings.Height,
+            displayWidth: hostSettings.Width,
+            dynamicTransformCapacity: frameSource.DynamicTransformCapacity,
+            host: frameSource,
+            hostsOnDirectX: hostSettings.HostsOnDirectX,
+            instanceCapacity: frameSource.InstanceCapacity,
+            pipelines: pipelines,
+            programWordCapacity: frameSource.ProgramWordCapacity
+        );
+
+        // A walk into a view's world continues through the screens standing in it, and into a camera view through the
+        // camera it films from.
         host.Screens = binder.Mappings;
+        host.ViewCameras = binder;
 
         var synthesized = ((definition.Views.Root is null)
             ? graph
@@ -67,6 +86,7 @@ internal static class WorldRenderRoot {
             graphs: out var graphs,
             passes: static _ => 1,
             reason: out var composeReason,
+            rendered: binder.Mappings.Views,
             root: out var rootName,
             set: out var set,
             sources: binder.Mappings.Sources.Instances,
@@ -77,7 +97,7 @@ internal static class WorldRenderRoot {
         }
 
         var engine = SdfWorldRenderBuilder.Build(
-            pipelines: sp.GetRequiredService<SdfWorldPipelineCache>(),
+            pipelines: pipelines,
             spec: new SdfWorldRenderSpec(
                 FrameSource: frameSource,
                 Height: height,
@@ -87,20 +107,27 @@ internal static class WorldRenderRoot {
                 HostsOnDirectX = hostSettings.HostsOnDirectX,
                 InstanceCapacity = frameSource.InstanceCapacity,
                 ProgramWordCapacity = frameSource.ProgramWordCapacity,
-                // The diegetic screens: the source instance each row reads, or the image the binder renders for it, and
-                // the light each casts into the room.
+                // The diegetic screens: the instance each one reads, and the light each casts into the room.
                 ScreenSources = binder,
                 ViewportCapacity = WorldRootGraph.ViewsOf(views: definition.Views),
             }
         );
         var packages = new RenderGraphPackageRecorders(regionCopy: sp.GetRequiredService<GpuRegionCopyPass>());
 
-        // The world's external instances are its views: the first is the engine node, which renders them all, and each
-        // later one the node's producer for that view. The runtime owns the engine node from here on.
+        // The world's external instances are its views: a camera view or a session the binder registered renders through
+        // an engine node of its own, filming the frame the world's node renders; otherwise the first is the engine node,
+        // which renders every split-screen view, and each later one the node's producer for that view. The runtime owns
+        // every producer from here on.
+        binder.ViewHost = engine;
         packages.RegisterProducer(
-            factory: context => ((WorldViewNames.ViewOf(instance: context.Instance) is { } view)
-                ? engine.ViewProducer(view: view)
-                : engine),
+            factory: context => (binder.TryViewProducer(
+                context: context,
+                producer: out var view
+            )
+                ? view
+                : ((WorldViewNames.ViewOf(instance: context.Instance) is { } seat)
+                    ? engine.ViewProducer(view: seat)
+                    : engine)),
             package: RenderGraphPackageCatalog.SdfWorld
         );
         frameSource.ViewRendered = engine.HasViewOutput;
@@ -183,10 +210,11 @@ internal static class WorldRenderRoot {
             runtime: runtime,
             width: width
         ) {
-            // The host rewrites its footprint list in place every frame, so the node reads that list rather than the
-            // copy its constructor takes.
+            // The host rewrites its footprint and root lists in place, so the node reads those lists rather than the copy
+            // its constructor takes.
             Footprints = host.Footprints,
             Prepare = frameSource.PrepareGraph,
+            Roots = host.Roots,
         };
         var probe = sp.GetRequiredService<WorldRenderProbe>();
 
@@ -200,7 +228,7 @@ internal static class WorldRenderRoot {
 
         // The teardown tie: the host loop disposes this root (device alive) before the presenter and long before the
         // container's reverse-creation-order sweep — ride that safe point for the binder's own GPU holdings (camera
-        // feeds, jumbotron view engines), whose container-ordered disposal would otherwise land after device death.
+        // feeds, capture fills), whose container-ordered disposal would otherwise land after device death.
         return new WorldRenderTeardown(
             inner: root,
             binder

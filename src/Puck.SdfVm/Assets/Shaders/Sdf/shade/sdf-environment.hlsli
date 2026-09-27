@@ -51,7 +51,7 @@ static const float3 CrtGrillePhase = float3(0.0, 2.0943951023931953, 4.188790204
 // and SdfProgram. LAYOUT (sdfDecalCells, one uint4 per entry): the first SdfDecalDescriptorCount (== SdfWorldEngine.MaxScreenSurfaces)
 // entries are the PER-SCREEN descriptors, then the shared CELL region.
 //   descriptor[screenIndex] = (gridCols, gridRows, cellBase, asuint(distanceRange)); gridCols == 0 => that screen has
-//                             NO decal this frame (the image/procedural path applies) — an all-zero buffer is inert, so
+//                             NO decal this frame (the image or unbound-glass path applies) — an all-zero buffer is inert, so
 //                             a program that declares no decal renders byte-identically.
 //   cell[i]                 = (packedUvTopLeft, packedUvBottomRight [unorm2x16, sdfGlyphUnpackUv], fgRgba8, bgRgba8);
 //                             a BLANK cell packs uvTopLeft == uvBottomRight (a real glyph never has zero UV extent).
@@ -152,8 +152,8 @@ float4 sampleScreenSource(uint screenIndex, float2 uv) {
 // overload), resolves the surface UV at the hit and shades it. Two tiers, decal-first: a screen slot carrying a GLYPH
 // DECAL (a per-screen cell grid — see sdfSampleGlyphDecal) samples TEXT at the hit (no screenMask bit needed — a decal
 // terminal has no bound image); otherwise, when a source is bound THIS FRAME, samples it (NEAREST) through the CRT
-// glass. outColor is valid only when this returns true; the caller falls back to today's flat/procedural screen
-// shading otherwise (the plain sentinel, or a declared surface with neither a decal nor a bound source this frame).
+// glass. outColor is valid only when this returns true; the caller falls back to the unbound glass
+// otherwise (the plain sentinel, or a declared surface with neither a decal nor a bound source this frame).
 // footprintDiameter = the hit pixel's world diameter (pixelFootprint * traveled) — the decal's analytic AA source.
 bool sampleScreenSurface(int material, float3 hitPoint, float3 rayDirection, float footprintDiameter, out float3 outColor) {
     outColor = float3(0.0, 0.0, 0.0);

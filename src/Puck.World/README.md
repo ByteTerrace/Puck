@@ -671,7 +671,7 @@ Facts a script needs:
   console's tick barrier, `WorldMachineHost` and `WorldScreenBinder`—the
   machine host is core state that boots and steps in every shape, and the
   binder is CORE too, since `world.faces`/`body.engage` read its bound/
-  no-signal state even headless—every server-safe command module including
+  unbound state even headless—every server-safe command module including
   `ScreenCommandModule`, and the camera control application (the `player.mode`
   and `player.camera` verbs)—for command-vocabulary parity: a world's binding document commits
   that vocabulary in every boot shape, and the validator checks it against what
@@ -1184,20 +1184,22 @@ compares a read-back against.
 camera, a desktop capture or a probe's output, resolves through
 `WorldCaptureGate`. While the gate fills, the image resolves to its declared
 capture fill (`ImageSourceDescriptor.CaptureFill`, opaque `#202020` by
-default), a 1×1 upload, and the producer's frame is never acquired. The gate
-covers screen slots, jumbotron renders of those screens, and HUD `Frame`
+default), and the producer's frame is never acquired. A fill is a 1×1 image
+converted through `source-rgba` (`WorldCaptureFills`). Its converter builds
+off the frame thread, so a fill first converted on the frame a capture is
+armed for would have no image on that frame; each fill therefore converts as
+soon as a screen shows or a HUD frame names an external source, before any
+capture is armed, and no fill converts while none does, since the gate then
+resolves nothing to one. The gate
+covers screen slots, camera views filming those screens, and HUD `Frame`
 elements. An offscreen host, which serves scheduled captures and `puck parity`,
 fills every frame. A windowed host fills while a capture is armed on the
 render graph and not yet served. An image resolved outside a fill is tainted,
 and so is every render-graph instance whose latest output read one: a frame
 produced while a capture is armed renders every tainted instance the capture
 reads again, whatever its refresh, and the capture waits for a frame whose
-inputs are all untainted, so a slow view never carries external pixels into
-it. On the first frame the gate fills with an external source bound, the
-jumbotron views render again, so no view shows an image it rendered from that
-source before; a view beyond that frame's offscreen budget
-(`OffscreenRenderBudget`) waits for its round-robin turn and may still show
-its older image. Simulation never
+inputs are all untainted, so a slow view, a camera view among them, never
+carries external pixels into it. Simulation never
 reads the gate, and no external pixel reaches simulation state, a replay or the
 state hash.
 
@@ -1219,8 +1221,11 @@ destination as `input:<destination>`. The mapping and its laws are described in
 On a windowed host, `WorldPointerRayCapture` casts the OS pointer through its
 seat's camera each frame and holds the two commands on that seat's lane, the
 seat folds them into its intent's `SourceRay`, and a rule reads the mapped hit
-as `$pointer:<seat>:<screenIndex>:x|y|on`. `body.channels` echoes the ray and
-its hit on every `Simulation` screen.
+as `$pointer:<seat>:<screenIndex>:x|y|on`. A typed
+`source.pointer.origin <x> <y> <z>` or `source.pointer.direction <x> <y> <z>`
+is held on the seat's lane in the same way, until it is typed again,
+`source.pointer.clear` ends the ray, or the seat is vacated. `body.channels`
+echoes the ray and its hit on every `Simulation` screen.
 
 **A window captured into a pane takes input only when the local user opens it.**
 `source.passthrough open <instance> <windowTitle...>` opens the window capture a
@@ -1240,10 +1245,14 @@ open source's window, captured frame, client area and DPI scale. Only the
 host's own console may run the verb, as typed text; the local operator
 attachment (`world.control`) is that console too. No binding, seat, peer,
 addon, schedule or world document can open a passthrough source or send it
-input. A source whose pane is no longer published, or stops showing the window
-it was opened on (its instance stops, its capture reopens onto another window,
-or a row of the same name replaces it), is closed before the next event routes.
-Closing a source, by the verb or this way, releases every key and button its
+input. A source that stops showing the window it was opened on (its instance
+stops, its capture reopens onto another window, or a row of the same name
+replaces it) is closed before the next event routes. A source whose pane is
+only not published for a while stays open: its window receives nothing while the
+pane is unshown, and an event arriving then first takes the keyboard from it and
+releases what it holds. Once the same instance's pane is published again a click
+on it reaches the window again.
+Closing a source, by the verb or on removal, releases every key and button its
 window holds and returns the keyboard to the game. Delivery is Windows-only:
 the capture feed's `Win32PassthroughWindow` sends window messages to the
 captured window, described in
@@ -1379,7 +1388,7 @@ boot-time load pin, so the code never claims an identity the running world no
 longer has; the echo says `hash-covers=live-definition` and carries the payload
 in full. It is deterministic in the definition alone—same document, same
 payload, every run. An
-unbound slot gets the engine's no-signal card, and a missing device is loud
+unbound slot shows dark glass, and a missing device is loud
 data in `world.screens`/`screen.state`, never a crash. A machine screen is
 engine-neutral (`Puck.Abstractions.Machines`): `WorldBootComposition`
 registers the SM83 family (`gaming-brick`) and the ARM7TDMI machine
@@ -1404,14 +1413,15 @@ simulation reads is a mutation, not a lever). `instrument.state` reads which scr
 with, whether it carries the capability, and its tempo. See
 [`Audio/README.md`](Audio/README.md) for the instrument host itself.
 
-A placeable camera's offscreen view can also be EXPORTED—read as a GPU
-texture by a consumer outside the render engine (a probe kernel, see
-`## Probes` below) rather than only sampled by a jumbotron screen.
+A placeable camera's view can also be EXPORTED—read as a GPU texture by a
+consumer outside the render engine (a probe kernel, see `## Probes` below)
+rather than only sampled by a screen.
 `WorldScreenBinder.TryGetViewExport`/`ReleaseViewExport` register/withdraw a
-named camera's `SdfCameraView` for export, sharing the SAME persistent view a
+named camera's view for export, sharing the SAME view instance a
 `screen.source <index> view` binding uses (so a camera already filmed by a
-jumbotron gains export at no extra render cost) and keeping an export-only
-camera rendering every `ViewStack` refresh even with no screen wired to it.
+screen gains export at no extra render cost); an export-only camera is a view
+the display shows directly, so it renders at its refresh, at its declared
+extent, even with no screen wired to it.
 Export needs the Direct3D 12 host: the exported image is opened by a Direct3D
 11 `OpenSharedResource1` elsewhere in the process, which cannot open a Vulkan
 host's opaque Vulkan-to-Vulkan export handle, so the Vulkan host refuses
@@ -1435,8 +1445,8 @@ source (no authored `seat`) means "this panel's own seat"—the seat argument
 is what resolves that, not a value baked into the source record. They are the
 registry every non-screen consumer of a `WorldFrameSource` shares: the former
 opens a non-camera producer's underlying feed the first time anything asks
-for it (idempotent—a view renders every `ViewStack` refresh with no wired
-screen narrowing its round-robin turn, a probe reads whatever its own kernel
+for it (idempotent—a view a retained frame names is shown directly by the
+display, so it renders at its refresh; a probe reads whatever its own kernel
 publishes, a capture opens through the same ladder a declared screen's capture
 source uses); a `camera` source declares nothing here at all—it instead
 rides `RetainFrameSource`/`ReleaseFrameSource`'s reference-counted table,
@@ -1709,7 +1719,8 @@ state (an advancing `state` row—deterministic, replayed, settable with
   the 65536-instance ceiling. Empty stamp capacity emits no live instances.
   Camera-tile masking is a separate approximation selected by the quality
   policy or `world.shadow-mask camera-tile`.
-- `OffscreenRenderBudget.RegisteredViews = 64`: do not register a rendered view per
+- Every camera a screen, a HUD frame or a probe export shows is a view instance
+  the render graph renders at its refresh: do not show a rendered view per
   population entry.
 - XInput caps at 4 Xbox-family pads locally; HID pads are uncapped.
 

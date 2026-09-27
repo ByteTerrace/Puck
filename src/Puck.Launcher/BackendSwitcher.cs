@@ -47,6 +47,8 @@ public sealed class BackendSwitcher : ISurfacePresenter, IPresentSurfaceReadback
             ? feedback.LastPresentTiming
             : PresentTimingSample.Unavailable
         );
+    /// <inheritdoc/>
+    public DisplayOutput? Output => m_current.Output;
 
     /// <inheritdoc/>
     public void Activate(NativeSurfaceBinding binding, uint width, uint height) {

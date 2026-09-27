@@ -218,6 +218,58 @@ public sealed class SourcePointerCommandLawTests {
             windowEndTick: ulong.MaxValue
         ).Lanes);
     }
+    [Fact]
+    public void AVacatedSlotsSustainedRayEndsWithItsOccupancy() {
+        var registry = new CommandRegistry(modules: [new PointerModule()]);
+        var slots = new VacatingSlots();
+        using var router = new InputRouter(
+            bindings: new UnboundBindings(),
+            principalResolver: new ConsolePrincipal(),
+            registry: registry,
+            slotResolver: slots
+        );
+        var value = CommandValue.Axis(value: Vector3.UnitZ);
+
+        foreach (var slot in ((int[])[1, 2])) {
+            Assert.True(condition: router.Sustain(
+                command: SourcePointerCommands.Origin,
+                slot: slot,
+                value: value
+            ));
+            Assert.True(condition: router.Sustain(
+                command: SourcePointerCommands.Direction,
+                slot: slot,
+                value: value
+            ));
+        }
+
+        // Held across ticks until the slot is vacated: then only the other seat's ray rides, and nothing is left to end.
+        for (var tick = 1UL; (tick <= 3UL); tick++) {
+            Assert.Equal(
+                actual: router.SnapshotForTick(
+                    tick: tick,
+                    windowEndTick: ulong.MaxValue
+                ).Lanes.Length,
+                expected: 2
+            );
+        }
+
+        slots.Vacate(slot: 1);
+
+        var lane = Assert.Single(collection: router.SnapshotForTick(
+            tick: 4UL,
+            windowEndTick: ulong.MaxValue
+        ).Lanes);
+
+        Assert.Equal(
+            actual: lane.Slot,
+            expected: 2
+        );
+        Assert.False(condition: router.EndSustain(
+            command: SourcePointerCommands.Origin,
+            slot: 1
+        ));
+    }
 
     private sealed class PointerModule(List<(int Slot, Vector3 Value)>? dispatched = null) : ICommandModule {
         private CommandResult Record(CommandContext context) {
@@ -255,6 +307,19 @@ public sealed class SourcePointerCommandLawTests {
             DirectionSource => m_direction,
             _ => null,
         };
+    }
+    // Resolves no device and vacates a slot on demand.
+    private sealed class VacatingSlots : IInputSlotResolver {
+        public event Action<InputDeviceId>? DeviceSlotChanging {
+            add { }
+            remove { }
+        }
+
+        public event Action<int>? SlotVacated;
+
+        public bool CommitSlot(InputDeviceId device, int slot) => false;
+        public int ResolveSlot(InputDeviceId device) => -1;
+        public void Vacate(int slot) => SlotVacated?.Invoke(obj: slot);
     }
     private sealed class ConsolePrincipal : IPrincipalResolver {
         public Principal PrincipalOf(int slot) => Principal.Console;

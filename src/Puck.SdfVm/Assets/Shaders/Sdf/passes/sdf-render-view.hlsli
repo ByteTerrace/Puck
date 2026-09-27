@@ -17,7 +17,6 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
     float3 rayOrigin = view.position.xyz;
     float3 rayDirection = cameraRayDirection(view, localUv);
     int viewMode = (int)round(view.forward.w);
-    float time = view.position.w;
     float farDistance = worldFarDistance(view);
 
     // Cone entry is a conservative ray distance; rasterization clips at forward distance ConeNear.
@@ -191,7 +190,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
         bool sampledScreen = false;
 #ifdef SDF_SCREEN_SOURCES
         if (useFinalShading) {
-            // A bound screen source wins over BOTH the flat sentinel and the procedural test-card: emissive/unlit
+            // A bound screen source wins over BOTH the flat sentinel and the unbound glass: emissive/unlit
             // (the diegetic screen is its own light source, like a real display — no scene lighting dims or tints it),
             // but shaped by the CRT glass face (curvature/bezel/scanlines/vignette/glint/bloom in sampleScreenSurface)
             // before the shared distance fog. The screen ALSO lights the room — see the screen-light loop below.
@@ -222,7 +221,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
             // The shadow light's Lambert term under its soft-shadow visibility (the ambient lights still fill shadowed
             // regions, so shadows read soft, not black). The march is skipped where the surface faces away from the
             // light, where no light shadows, or when soft shadows are disabled (world.shadows off; the light then
-            // goes unshadowed). The procedural screen branch below consumes sunDiffuse too, so this march is
+            // goes unshadowed). The unbound-glass branch below consumes sunDiffuse too, so this march is
             // not dead there.
             float3 keyDirection = worldSunDirection();
             float sunDiffuse = max(dot(normal, keyDirection), 0.0);
@@ -278,11 +277,11 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
             }
 
             if (material >= SDF_SCREEN_MATERIAL) {
-                // The procedural test-card face: a declared screen with no source bound this frame (or the plain
-                // sentinel). Unlit apart from a faint sun tint — it is its own emitter, so the radiance accumulation
-                // below would be discarded. Test the whole sentinel RANGE, never `==`: a screen-instance id is
+                // The unbound glass: a declared screen with no source bound this frame (or the plain
+                // sentinel). Unlit apart from a faint sun tint, so it takes no radiance accumulation below. Test the
+                // whole sentinel RANGE, never `==`: a screen-instance id is
                 // SDF_SCREEN_MATERIAL + 1 + screenIndex and must never index the material table.
-                color = (screenContent(surfacePoint, time) * (ScreenCardBase + (ScreenCardSunTint * sunDiffuse)));
+                color = (ScreenGlassColor * (ScreenGlassBase + (ScreenGlassSunTint * sunDiffuse)));
             } else {
                 // DETAIL RE-RESOLVE, moved ahead of AO/lighting (Puck.SignedDistance.SdfMaterial's wrap/soften/eye
                 // lanes need the resolved material before either): one extra hit-only field evaluation, WITH Detail

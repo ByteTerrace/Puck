@@ -1,5 +1,7 @@
 using System.Numerics;
+using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
 using Puck.Shaders;
 using Puck.SignedDistance;
 using Puck.Testing;
@@ -13,7 +15,8 @@ namespace Puck.SdfVm.Tests;
 /// creates: every creation the engine's construction makes, of every kind the decorator can fail, is failed in turn. The
 /// failed construction releases exactly what it created, once each, holds no device-local memory, and leaves the
 /// pipeline set it was handed untouched; the same construction then succeeds. A refusal that is not a creation fault,
-/// the ISA handshake's, releases the same way.
+/// the ISA handshake's, releases the same way, and so does the first frame that draws a mesh, whose mesh pass attachments
+/// no construction creates.
 /// </summary>
 public sealed class SdfWorldEngineCreationFaultLawTests {
     private const uint Extent = 16;
@@ -30,15 +33,15 @@ public sealed class SdfWorldEngineCreationFaultLawTests {
             }
         }
 
-        // The engine creates no pipeline, shader module or render pass: it records with the set and the mesh pass pipeline
-        // it is handed, whose render pass its one framebuffer binds the mesh pass's target and depth attachment for. It
-        // creates buffers, images (the mesh pass's two and the ISA handshake's two included), a command pool per ring slot,
-        // its own descriptor pool, and whatever policy the device selects the one copy pool it reserves for all its
+        // The engine creates no pipeline, shader module, render pass or framebuffer: it records with the set and the mesh
+        // pass pipeline it is handed, and the first frame that draws a mesh creates the mesh pass's attachments and the
+        // framebuffer binding them. It creates buffers, images (the ISA handshake's two included), a command pool per ring
+        // slot, its own descriptor pool, and whatever policy the device selects the one copy pool it reserves for all its
         // regions: the eight tables, the mesh region and the brick staging.
         Assert.Equal(actual: expected[GpuCreationKind.Pipeline], expected: 0L);
         Assert.Equal(actual: expected[GpuCreationKind.ShaderModule], expected: 0L);
         Assert.Equal(actual: expected[GpuCreationKind.RenderPass], expected: 0L);
-        Assert.Equal(actual: expected[GpuCreationKind.Framebuffer], expected: 1L);
+        Assert.Equal(actual: expected[GpuCreationKind.Framebuffer], expected: 0L);
         Assert.Equal(actual: expected[GpuCreationKind.CommandPool], expected: ((long)SdfWorldEngine.FrameRingSize));
         Assert.Equal(actual: expected[GpuCreationKind.BindingsPool], expected: 2L);
         Assert.True(condition: (expected[GpuCreationKind.Buffer] > SdfBrickPoolLayout.MaxBricks));
@@ -80,6 +83,56 @@ public sealed class SdfWorldEngineCreationFaultLawTests {
             expected: expected.Values.Sum()
         );
     }
+    // The first frame that draws a mesh creates the target, the depth attachment and the framebuffer; each faulted in turn
+    // releases what that frame created before it, and a later frame drawing the mesh creates all three.
+    [InlineData(GpuCreationKind.Image, 1)]
+    [InlineData(GpuCreationKind.Image, 2)]
+    [InlineData(GpuCreationKind.Framebuffer, 1)]
+    [Theory]
+    public void EachMeshAttachmentCreationFaultedReleasesWhatTheFrameCreated(GpuCreationKind kind, int nth) {
+        using var rig = new Rig();
+        using var engine = rig.Construct();
+
+        _ = engine.RenderFrame(frame: Frame(meshDraws: []));
+
+        var handed = rig.Gpu.Created.Count;
+
+        rig.Faults.Arm(
+            kind: kind,
+            nth: nth
+        );
+
+        var fault = Assert.Throws<GpuCreationFaultException>(testCode: () => engine.RenderFrame(frame: Frame(meshDraws: MeshDraws)));
+
+        Assert.Equal(
+            actual: fault.Kind,
+            expected: kind
+        );
+        Assert.Equal(expected: 0UL, actual: engine.MeshAttachmentBytes);
+        // The frame's mesh region may grow before the attachments are created; what it grows into is live.
+        var attachments = rig.Gpu.Created.Skip(count: handed).Where(predicate: static created => (created.Kind is "image" or "framebuffer")).ToArray();
+
+        Assert.Equal(
+            actual: attachments.Length,
+            expected: ((kind == GpuCreationKind.Image) ? (nth - 1) : 2)
+        );
+        Assert.All(
+            action: static created => Assert.Equal(
+                actual: created.DisposeCount,
+                expected: 1
+            ),
+            collection: attachments
+        );
+
+        var released = rig.Gpu.Created.Count;
+
+        _ = engine.RenderFrame(frame: Frame(meshDraws: MeshDraws));
+        Assert.Equal(
+            actual: rig.Gpu.Created.Skip(count: released).Count(predicate: static created => (created.Kind == "framebuffer")),
+            expected: 1
+        );
+        Assert.NotEqual(expected: 0UL, actual: engine.MeshAttachmentBytes);
+    }
     [Fact]
     public void AnIsaHandshakeRefusalReleasesEverythingTheConstructionCreated() {
         using var rig = new Rig(reportVersion: unchecked((byte)(SdfIsa.Version + 1)));
@@ -92,6 +145,50 @@ public sealed class SdfWorldEngineCreationFaultLawTests {
         );
         Assert.True(condition: (rig.Gpu.Created.Count > handed));
         rig.AssertReleasedExactly(handed: handed);
+    }
+
+    // One quad at the origin, drawn once.
+    private static readonly SdfMeshDraw[] MeshDraws = [new(
+        Material: 0,
+        Mesh: new SdfMesh(
+            indices: new uint[] { 0, 1, 2, 0, 2, 3 },
+            positions: new Vector3[] { new(x: 0f, y: 0f, z: 0f), new(x: 1f, y: 0f, z: 0f), new(x: 1f, y: 1f, z: 0f), new(x: 0f, y: 1f, z: 0f) }
+        ),
+        ObjectToWorld: Matrix4x4.Identity
+    )];
+
+    // One view over the engine's extent, looking at the origin, drawing the given meshes.
+    private static SdfFrame Frame(SdfMeshDraw[] meshDraws) {
+        var builder = new SdfProgramBuilder();
+
+        builder.Sphere(
+            material: builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One)),
+            radius: 1f
+        );
+
+        return new SdfFrame(
+            Program: builder.Build(),
+            ProgramChanged: false,
+            Time: 0f,
+            Views: [new SdfViewSnapshot(
+                Camera: CameraSnapshot.LookAt(
+                    fieldOfViewRadians: 1f,
+                    position: new Vector3(x: 0f, y: 0f, z: -5f),
+                    target: Vector3.Zero,
+                    viewportHeight: Extent,
+                    viewportWidth: Extent
+                ),
+                Region: new NormalizedRect(
+                    Height: 1f,
+                    Width: 1f,
+                    X: 0f,
+                    Y: 0f
+                )
+            )]
+        ) {
+            EnableCadenceGate = false,
+            MeshDraws = meshDraws,
+        };
     }
 
     // The fake as a device context whose services pass through creation faults, as a backend's do.

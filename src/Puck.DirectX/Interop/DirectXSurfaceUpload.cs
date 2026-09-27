@@ -14,11 +14,11 @@ namespace Puck.DirectX.Interop;
 /// <summary>
 /// Materializes a tightly packed mip chain of CPU pixels, or of 4x4 blocks for a block-compressed format, into a
 /// shader-resource-view-sampled Direct3D 12 texture, against a shared <see cref="IDirectXDeviceContext"/>. It owns the
-/// default-heap texture, an upload-heap staging buffer laid out by the device's copyable footprints, a shader-visible
-/// SRV descriptor heap, and the command resources to drive the copy, rebuilding them when the extent, format or level
-/// count changes. Each <see cref="Upload"/> copies every level into the texture and leaves it in both shader-resource
-/// states, then exposes the descriptor heap and GPU handle a textured
-/// pipeline binds. This is the Direct3D 12 peer of <c>VulkanSurfaceUpload</c> — the consumer/ingest half that
+/// default-heap texture, an upload-heap staging buffer laid out by the device's copyable footprints, and the command
+/// resources to drive the copy, rebuilding the texture and buffer when the extent, format or level count changes. Each
+/// <see cref="Upload"/> copies every level into the texture and leaves it in both shader-resource states; a consumer
+/// binds <see cref="TextureHandle"/> through a set of its own pool, a range of the device's shader-visible heaps, so the
+/// upload holds no descriptor. This is the Direct3D 12 peer of <c>VulkanSurfaceUpload</c> — the consumer/ingest half that
 /// lets a DirectX host sample a surface that arrived as host memory. Single-thread affine.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
@@ -34,7 +34,6 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
     private HANDLE m_fenceEvent;
     private ulong m_fenceValue;
     private DXGI_FORMAT m_format;
-    private ulong m_gpuDescriptorPointer;
     private uint m_height;
     // Each level's placement in the staging buffer, its row count (block rows for a block-compressed format) and its
     // tightly packed row size, as GetCopyableFootprints reports them for the texture.
@@ -42,7 +41,6 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
     private uint m_levels;
     private uint[] m_rowCounts = [];
     private ulong[] m_rowSizes = [];
-    private nint m_srvHeap;
     private nint m_texture;
     private D3D12_RESOURCE_STATES m_textureState;
     private nint m_uploadBuffer;
@@ -97,10 +95,6 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
         }
     }
 
-    /// <summary>Gets the native <c>ID3D12DescriptorHeap</c> handle to bind via <c>SetDescriptorHeaps</c>.</summary>
-    public nint DescriptorHeapHandle => m_srvHeap;
-    /// <summary>Gets the GPU descriptor handle (<c>D3D12_GPU_DESCRIPTOR_HANDLE.ptr</c>) of the texture's SRV.</summary>
-    public ulong GpuDescriptorPointer => m_gpuDescriptorPointer;
     /// <summary>Gets the native <c>ID3D12Resource</c> handle of the uploaded texture, or zero before the first <see cref="Upload"/>.</summary>
     public nint TextureHandle => m_texture;
     /// <summary>Gets the <c>DXGI_FORMAT</c> the texture was last uploaded as.</summary>
@@ -320,37 +314,6 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
             sizeBytes: uploadBytes
         ));
 
-        if (0 == m_srvHeap) {
-            var srvHeap = DirectXDescriptorHeaps.Create(
-                count: 1,
-                device: device,
-                shaderVisible: true,
-                type: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV
-            );
-
-            m_srvHeap = ((nint)srvHeap);
-            m_gpuDescriptorPointer = GetGpuHeapStart(heap: srvHeap).ptr;
-        }
-
-        var srvDesc = new D3D12_SHADER_RESOURCE_VIEW_DESC {
-            Format = dxgiFormat,
-            Shader4ComponentMapping = DefaultShader4ComponentMapping,
-            ViewDimension = D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_TEXTURE2D,
-        };
-
-        srvDesc.Anonymous.Texture2D = new D3D12_TEX2D_SRV {
-            MipLevels = levels,
-            MostDetailedMip = 0,
-            PlaneSlice = 0,
-            ResourceMinLODClamp = 0f,
-        };
-
-        device->CreateShaderResourceView(
-            pResource: ((ID3D12Resource*)m_texture),
-            pDesc: &srvDesc,
-            DestDescriptor: GetCpuHeapStart(heap: ((ID3D12DescriptorHeap*)m_srvHeap))
-        );
-
         m_format = dxgiFormat;
         m_height = height;
         m_levels = levels;
@@ -408,7 +371,7 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
         Release(pointer: ref m_texture);
     }
 
-    /// <summary>Drains the queue, then releases the texture, upload buffer, SRV heap, and command resources. A removed
+    /// <summary>Drains the queue, then releases the texture, upload buffer and command resources. A removed
     /// device counts as drained (<see cref="DirectXCommandCalls.Drain"/>). Safe to call more than once.</summary>
     /// <exception cref="InvalidOperationException">The device went first, disposed with its context or replaced on a loss, so
     /// it has already reported these resources as leaked and the owner's teardown order is wrong.</exception>
@@ -439,7 +402,6 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
         }
 
         DisposeImageResources();
-        Release(pointer: ref m_srvHeap);
         Release(pointer: ref m_fence);
         Release(pointer: ref m_commandList);
         Release(pointer: ref m_commandAllocator);

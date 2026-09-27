@@ -15,7 +15,8 @@ public interface IVulkanSwapchainFactory {
     /// <param name="desiredWidth">The requested swapchain width, in pixels.</param>
     /// <param name="desiredHeight">The requested swapchain height, in pixels.</param>
     /// <param name="preferredPresentMode">The desired present mode, as a <c>VkPresentModeKHR</c> value; used when the surface supports it, otherwise the default mailbox-then-immediate-then-FIFO preference applies. Pass <see langword="null"/> for the default.</param>
-    /// <param name="preferredFormat">The desired swapchain format; used when the surface offers it and it is a swapchain format, otherwise the first swapchain format the surface offers applies. Pass <see langword="null"/> for the default.</param>
+    /// <param name="preferredFormat">The desired swapchain format; used when the surface offers it and it is a swapchain format, otherwise the first SDR format the surface offers applies. Pass <see langword="null"/> for the default.</param>
+    /// <param name="requestedColorSpace">The color space asked for; an HDR color space is used only when the surface offers it in its format, otherwise the output is SDR.</param>
     /// <param name="imageUsage">The swapchain image usage, as a bitmask of <c>VkImageUsageFlagBits</c>; overrides the default of color-attachment plus transfer-source. Pass <see langword="null"/> for the default.</param>
     /// <returns>A new, owning <see cref="VulkanSwapchain"/>.</returns>
     /// <exception cref="NotSupportedException">The surface offers no format a swapchain may be created in.</exception>
@@ -27,6 +28,7 @@ public interface IVulkanSwapchainFactory {
         uint desiredHeight,
         uint? preferredPresentMode = null,
         GpuPixelFormat? preferredFormat = null,
+        DisplayColorSpace requestedColorSpace = DisplayColorSpace.Srgb,
         uint? imageUsage = null
     );
 }

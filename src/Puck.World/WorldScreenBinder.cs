@@ -1,9 +1,7 @@
-using System.Numerics;
 using Puck.Commands;
 using Puck.Platform;
 using Puck.Hosting;
 using Puck.SdfVm;
-using Puck.SdfVm.Views;
 using Puck.SignedDistance;
 using Puck.World.Client;
 using Puck.World.Server;
@@ -14,14 +12,14 @@ namespace Puck.World;
 /// Binds the world's declared <see cref="WorldScreen"/>s to their live GPU sources — the seam between the pure screen
 /// data and the engine's per-index provider maps. Each declared screen owns a slot that can carry a registered image
 /// producer's feed (<see cref="WorldImageProducers"/>: the test pattern, a QR code, the shared webcam, a desktop
-/// capture, or any producer the host registers), a machine output, a jumbotron view, a probe output, a session view,
-/// or nothing (the engine's procedural no-signal fallback). Every external image resolves through the capture gate
+/// capture, or any producer the host registers), a machine output, a camera view, a probe output, a session view,
+/// or nothing. Every external image resolves through the capture gate
 /// (<see cref="WorldCaptureGate"/>), so a capture shows its declared fill and never its pixels. A row's producer, machine
 /// or probe source is a render-graph source instance (<see cref="WorldSourceInstances"/>), opened and published by the
-/// runtime, whose image the engine node binds from the reads the graph hands it (<see cref="ISdfScreenSources.ReadOf"/>);
-/// every other image a screen shows (a view, a session, a live presentation source) the binder hands the node itself
-/// (<see cref="ISdfScreenSources.Rendered"/>). The node binds every screen declared at boot each frame, and a zero handle
-/// reads as unbound, so a runtime <c>screen.source &lt;index&gt; camera</c>/<c>capture</c> binds without rebuilding the
+/// runtime, and a camera view or a session is a view instance (<see cref="WorldViewInstances"/>) whose producer the binder
+/// creates (<see cref="TryViewProducer"/>): the engine node binds every screen's image from the reads the graph hands it
+/// (<see cref="ISdfScreenSources.ReadOf"/>). The node binds every screen declared at boot each frame, and a screen reading
+/// nothing is unbound, so a runtime <c>screen.source &lt;index&gt; camera</c>/<c>capture</c> binds without rebuilding the
 /// engine. A shared singleton so the render factory, the screen verbs, and <c>world.screens</c> read one instance.
 /// </summary>
 /// <remarks>
@@ -37,7 +35,7 @@ namespace Puck.World;
 /// <c>IServerLink.SubmitScreenOp</c> instead, landing in the ordered submission domain (see <c>WorldScreenOp</c>'s
 /// own remarks). Producer, jumbotron-view, probe and session screen sources remain genuinely presentation-owned.
 /// <para>An unbound slot (a <see cref="WorldScreenSource.None"/> screen, or a live feed with no signal) binds 0, so the
-/// engine leaves its surface unbound and lights it with the procedural no-signal fallback — never black. One webcam session is opened engine-wide per sensor and shared by every camera screen
+/// engine leaves its surface unbound. One webcam session is opened engine-wide per sensor and shared by every camera screen
 /// naming that sensor. A capture device may expose both streams while supporting only one at a time; a dual open must
 /// prove both streams live before it replaces the established feed. Thus N camera screens sample at most two feeds. Single-threaded:
 /// <see cref="Publish"/> and simulation-routed screen mutations all run on the launcher's window-pump thread, so no
@@ -80,11 +78,11 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     private readonly Func<WorldOverlayFacts> m_facts;
     // Keeps external images out of captures; see WorldCaptureGate.
     private readonly WorldCaptureGate m_captureGate;
-    // The one delegate the gate resolves fills through (cached so a resolve allocates nothing), and one static converted
+    // The one delegate the gate resolves fills through (cached so a resolve allocates nothing), and the static converted
     // 1x1 image per capture-fill color a filled external source resolves to.
     private readonly Func<uint, GpuImageLease> m_fillImage;
+    private readonly WorldCaptureFills m_fills;
 
-    private readonly Dictionary<uint, ConvertedPixels> m_fills = new();
     // The producers every producer source opens through: the four the engine ships, then any the host registers.
     private readonly WorldImageProducers m_producers = new();
 
@@ -137,16 +135,13 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     private IReadOnlyList<WorldCamera> m_cameras;
     private bool m_disposed;
     private long? m_renderAdapterLuid;
+    // What every view's engine is built with, stashed by ConfigureViews once the render envelope is known, so a runtime
+    // screen.source <index> view registers against the same envelope; the pipelines stay null until then.
     private int m_viewDynamicTransformCapacity;
     private bool m_viewHostsOnDirectX;
     private int m_viewInstanceCapacity;
     private int m_viewProgramWordCapacity;
-    private int m_viewRefreshCountdown;
     private SdfWorldPipelineCache? m_viewPipelines;
-    // The offscreen view pool backing the View (jumbotron) screens — created by ConfigureViews once the render envelope
-    // is known, null until then (and forever when the world declares no View screen). The view config the pool needs is
-    // stashed alongside so a runtime screen.source <index> view can register against the same envelope.
-    private ViewStack? m_viewStack;
 
     private DynamicTransform[] m_viewTransforms = [];
     private readonly Dictionary<int, ScreenSlot> m_slots = new();
@@ -162,17 +157,19 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     // Reused scratch for ReconcileScreens' removal pass, so a screen mutation collects the vanished indices without
     // allocating and never mutates m_slots while enumerating it.
     private readonly List<int> m_reconcileRemovals = new();
-    // Persistent camera-view registrations by camera name — each holds the SdfCameraView (a real GPU resource: its
-    // offscreen engine) plus the WorldCamera row it was built from, so a re-point reuses the SAME instance and a
-    // camera mutation diffs against the row the LIVE view embodies (pose edit = rig property write; dimension/kind
-    // change = release + recreate).
+    // Camera-view registrations by registration name — each holds the WorldCamera row it was built from and the rig
+    // that poses it, so a re-point reuses the same registration and a camera mutation diffs against the row the live view
+    // embodies. The render graph runs each as a view instance of that name.
     private readonly Dictionary<string, CameraRegistration> m_cameraViews = new(comparer: StringComparer.Ordinal);
+    // The registration name each camera renders under per seat, resolved once, so a probe polling a seat-relative
+    // camera's view every frame allocates no name.
+    private readonly WorldViewRegistrationNames m_registrationNames = new();
     private readonly HashSet<string> m_parkedViews = new(comparer: StringComparer.Ordinal);
     // Reused scratch for ReconcileCameras (the registered names snapshot walked while m_cameraViews mutates).
     private readonly List<string> m_cameraReconcileScratch = new();
-    // A jumbotron is a diegetic 160x144 display, not another full-rate player view. ViewStack already persists the last
-    // resolved handle when a budgeted view is skipped; this countdown deliberately spends the offscreen SDF render only
-    // once every N produced frames. Frame-count cadence is deterministic and avoids introducing a wall clock.
+    // A camera screen is a diegetic 160x144 display, not another full-rate player view, so a view refreshes once every N
+    // produced frames and its consumers read its latest completed image in between. Frame-count cadence is deterministic
+    // and introduces no wall clock.
     private int m_viewRefreshDivisor = 4;
 
     /// <summary>Initializes the binder over the world's declared screens. A producer, machine or probe row opens nothing
@@ -245,7 +242,8 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             alwaysFills: alwaysFillsCaptures,
             captureArmed: () => (Runtime?.PendingCapturePath is not null)
         );
-        m_fillImage = FillImage;
+        m_fills = new WorldCaptureFills(consumesExternal: ConsumesExternal);
+        m_fillImage = m_fills.Acquire;
         m_producers.Register(producer: new WorldTestPatternProducer());
         m_producers.Register(producer: new WorldQrProducer());
         m_producers.Register(producer: new CameraProducer(binder: this));
@@ -267,12 +265,11 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
                     // row's index (if it could) at its own construction.
                     break;
                 case WorldScreenSource.View view:
-                    // The declared jumbotron: resolve its camera name against the world's placeable cameras. An unknown
-                    // name is a loud fault (unbound); a known one holds a ViewFeed whose ViewStack registration is
-                    // deferred to ConfigureViews (the offscreen render envelope is not known until the frame source has
-                    // probed it).
+                    // The declared camera screen: resolve its camera name against the world's placeable cameras. An
+                    // unknown name is a loud fault (unbound); a known one holds a ViewFeed whose registration is deferred
+                    // to ConfigureViews (the render envelope is not known until the frame source has probed it).
                     if (ResolveCamera(name: view.CameraName) is { } camera) {
-                        slot.View = new ViewFeed(name: WorldSeatAnchors.RegistrationName(
+                        slot.View = new ViewFeed(Name: m_registrationNames.Of(
                             camera: camera,
                             seat: DefaultViewSeat
                         ));
@@ -283,9 +280,9 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
                     break;
                 case WorldScreenSource.Session session:
                     // Resolution/attachment is headless-safe (no GPU) and runs NOW, at boot, in every shape — the
-                    // observation lease and the destination instance exist regardless of presentation. The offscreen
-                    // GPU view registration is deferred to ConfigureViews (below), exactly like a declared View
-                    // camera's SdfCameraView. A fresh slot has no previous feed to preserve, so a direct assignment
+                    // observation lease and the destination instance exist regardless of presentation. The view
+                    // registration is deferred to ConfigureViews, exactly like a declared View camera's. A fresh slot
+                    // has no previous feed to preserve, so a direct assignment
                     // (null on refusal, the resolved feed on success) is the whole job here.
                     slot.Session = ResolveSession(
                         session: session,
@@ -306,7 +303,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
 
                     break;
                 default:
-                    // None: no producer — the screen binds 0 (procedural fallback).
+                    // None: no producer — the screen binds 0.
                     break;
             }
 
@@ -317,12 +314,11 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         ReconcileMappings(screens: screens);
     }
 
-    /// <summary>Gets the number of camera views registered in the offscreen view pool right now — each one is a live
-    /// <see cref="SdfCameraView"/> spending refresh budget. Zero when no View screen is declared (no pool) or the pool
-    /// has not been configured yet. Removing the last screen wired to a camera releases its view, so this count drops
-    /// (the pipe-observable witness that a removed View screen's offscreen render stopped).</summary>
-    public int ActiveCameraViewCount => (m_viewStack?.ActiveViewCount ?? 0);
-    /// <summary>Gets the current produced-frame divisor for jumbotron offscreen renders.</summary>
+    /// <summary>Gets the number of camera views registered right now, each an instance the render graph runs. Removing the
+    /// last screen wired to a camera releases its view, so this count drops (the pipe-observable witness that a removed
+    /// View screen's render stopped).</summary>
+    public int ActiveCameraViewCount => m_cameraViews.Count;
+    /// <summary>Gets the current produced-frame divisor for camera and session views.</summary>
     public int ViewRefreshDivisor => m_viewRefreshDivisor;
 
     // Apply one NON-MACHINE source through the runtime machinery — shared by the reconcile-side declared-source
@@ -374,6 +370,8 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         if (source is not WorldScreenSource.Text) {
             slot.Text = null;
         }
+
+        ReconcileViews();
 
         return outcome;
     }
@@ -465,11 +463,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             slot.Session?.Dispose();
         }
 
-        foreach (var fill in m_fills.Values) {
-            fill.Retire();
-        }
-
-        m_fills.Clear();
+        m_fills.Dispose();
 
         DisposeCamera();
         ReleaseProbeFeeds();
@@ -478,20 +472,16 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         DisposeParkedCaptures();
         RetireCameraTargetDevice();
         UnregisterAllViewWork();
-        m_viewStack?.Dispose();
-        m_viewStack = null;
     }
-    /// <summary>Drops every device-owned upload, shared target ring and offscreen view while preserving CPU sessions,
-    /// machine simulation, declarations, probe requests and view registrations. The next publish/render recreates
-    /// resources on the replacement device.</summary>
+    /// <summary>Drops every device-owned upload and shared target ring while preserving CPU sessions, machine simulation,
+    /// declarations, probe requests and view registrations; the render graph releases the views' engines itself. The next
+    /// publish/render recreates resources on the replacement device.</summary>
     public void NotifyDeviceLost() {
         if (m_disposed) {
             return;
         }
 
-        foreach (var fill in m_fills.Values) {
-            fill.OnDeviceLost();
-        }
+        m_fills.OnDeviceLost();
 
         CameraDeviceLost();
         ReleaseProbeFeeds();
@@ -503,25 +493,22 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
 
         NotifyFrameCapturesDeviceLost();
         DisposeParkedCaptures();
-
-        m_viewStack?.NotifyDeviceLost();
     }
     /// <summary>Reconciles the binder's runtime source machinery to a mutated screen list — the live-application half of
     /// an <c>UpsertScreen</c>/<c>RemoveScreen</c> world mutation, called by the frame source when the definition
     /// revision moves. Removals are reconciled first: a slot whose index is no longer declared has any engaged player
     /// disengaged (their avatar resumes normal intent), its owned machine/pattern/capture state disposed, and its slot
     /// dropped — so a removed screen stops advancing, publishing, and answering screen commands, and its source instance
-    /// leaves the render graph's set (the shared webcam session and the boot-sized view pool are not
-    /// disposed here — the binder owns their lifetime). A removed <c>View</c> screen additionally releases its camera's
-    /// offscreen render when no surviving slot still films that camera (the orphaned <see cref="ViewStack"/> entry
-    /// is disposed so it stops consuming refresh budget), while a camera two jumbotrons share stays live for the
+    /// leaves the render graph's set (the shared webcam session is not disposed here — the binder owns its lifetime). A
+    /// removed <c>View</c> screen additionally releases its camera's view when no surviving slot, export or HUD frame still
+    /// shows that camera, so its instance leaves the render graph, while a camera two screens share stays live for the
     /// survivor. Then, for a declared index whose source changed, it re-applies
     /// the new source through the same insert/eject/camera/capture/view machinery a <c>screen.*</c> verb uses
     /// (best-effort — a failed bind logs a loud line, never throws). Screen slab geometry (adds/moves/removes) rides the
     /// program rebuild in the frame source, not this method. Capacity honesty, precisely: an index that was declared
     /// at boot (<see cref="m_bootScreenIndices"/>) always gets its slot recreated on re-declaration after a removal — the
     /// render node still binds it, so this is safe. A genuinely new index (never in the boot set) still cannot bind
-    /// live — its slab renders the procedural fallback until the next boot, since the screens the node binds are fixed
+    /// live — its slab stays unbound until the next boot, since the screens the node binds are fixed
     /// at boot.
     /// Not migrated onto <c>Puck.World.Client.KeyedReconciler</c> — the removal, source-change, and boot-index
     /// re-declaration passes interleave lifetime rules the generic shape cannot express.</summary>
@@ -629,7 +616,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     /// <summary>Blanks a screen showing external content (a camera, a capture, a probe output) — the runtime
     /// <c>screen.eject</c> path. Ejecting a machine is <c>ScreenCommandModule</c>'s <c>WorldScreenOp.Eject</c> submission
     /// instead (see this type's own remarks). The screen reverts to its row's source when that is a producer whose
-    /// content is not external (a test pattern, a QR code), or to unbound (the procedural fallback). Fails for an
+    /// content is not external (a test pattern, a QR code), or to unbound. Fails for an
     /// undeclared screen or a screen showing no external content.</summary>
     /// <param name="index">The engine screen-surface index.</param>
     /// <returns>Whether the eject succeeded, and a message describing the outcome.</returns>
@@ -641,13 +628,13 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             return (Ok: false, Message: $"no screen {index} declared");
         }
 
-        if (!IsExternal(source: ShownOf(screen: index))) {
+        if (!WorldCaptureFills.IsExternal(source: ShownOf(screen: index))) {
             return (Ok: false, Message: $"screen {index} has no source to eject");
         }
 
         if (
             (slot.DeclaredSource is WorldScreenSource.Producer declared) &&
-            !IsExternal(source: declared)
+            !WorldCaptureFills.IsExternal(source: declared)
         ) {
             ShowRow(index: index);
         } else {
@@ -677,32 +664,10 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         public WorldScreenSource.Text? Text { get; set; }
         public ViewFeed? View { get; set; }
 
-        // The image the slot shows locally for one submitted frame: the jumbotron view or the session view, else 0.
-        public GpuImageLease AcquireFrame() => Handle();
-        // Drops what this slot references when the slot is removed entirely (a RemoveScreen mutation). The boot-sized
-        // offscreen view pool is not owned by a slot (the binder disposes it once), so only the reference drops.
+        // Drops what this slot references when the slot is removed entirely (a RemoveScreen mutation).
         public void DisposeOwned() => View = null;
-        // The handle of what the slot shows locally.
-        public nint Handle() {
-            if (View is { } view) {
-                return view.Handle();
-            }
 
-            return ((Session is { } session)
-                ? session.Handle()
-                : 0
-            );
-        }
-        // The emitted light of what the slot shows locally, in the same precedence as Handle.
-        public Vector3 Light() {
-            if (View is { } view) {
-                return view.Light();
-            }
-
-            return ((Session is { } session)
-                ? session.Light()
-                : Vector3.Zero
-            );
-        }
+        // The name of the view instance the slot shows: its camera view's registration, or its session's view name.
+        public string? ViewInstance => (View?.Name ?? Session?.RegistrationName);
     }
 }

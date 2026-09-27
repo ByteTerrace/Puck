@@ -3,8 +3,8 @@
 Puck.SdfVm is the SDF GPU engine: the device-explicit render pipeline that
 walks a compiled signed-distance program on the GPU—`SdfWorldEngine` (beam
 cull → per-view render over a viewport table of cameras and regions, each view
-into its own output image) and `SdfEngineNode` (the host-model `IRenderNode`
-that wraps it and publishes each view's output to the render graph). The
+into its own output image) and `SdfEngineNode` (the render graph's `sdf.world`
+external producer that wraps it and publishes each view's output). The
 single-source HLSL kernels (`Assets/Shaders/Sdf`) compile to both SPIR-V
 (Vulkan) and DXIL (Direct3D 12) from one shared source, and the C# side of the
 instruction-set contract they decode lives one project away.
@@ -167,9 +167,9 @@ per-program derived buffer and mask width, called once at construction and
 again whenever a host swaps the live program. Composition probes reserve
 `SdfProgram.PartCompilationWordCapacity` so different part-sharing or admission
 outcomes within the probe's ceilings cannot overrun the program allocation.
-`SdfEngineNode` is the
-`Puck.Hosting.IRenderNode` adapter a generic render tree composes—it owns
-device-loss recovery and forwards `NotifyDeviceLost` to the wrapped engine. It
+`SdfEngineNode` is the render graph's `sdf.world` external producer, which the
+runtime produces through `Produce`—it owns device-loss recovery and forwards
+`NotifyDeviceLost` to the wrapped engine. It
 also records the last uploaded program's word/instance count and Lipschitz
 step scale (`LiveProgramWords`/`LiveProgramInstances`/`LiveProgramStepScale`,
 against the current `ProgramWordCapacity`, including live growth)—the live half of `Puck.World`'s
@@ -198,8 +198,8 @@ carries no per-pass C#.
 Creating a compute pipeline is where the driver translates a kernel to native
 code. With its cache cold, after a kernel or driver change, that can take
 seconds per pipeline, and the engine has about a dozen of them. So the engine
-never creates one. `SdfWorldPipelines.Build` creates the whole set, and
-`SdfEngineNode`, `SdfCameraView`, and `WorldSessionView` lease it from
+never creates one. `SdfWorldPipelines.Build` creates the whole set, and every
+`SdfEngineNode`, the world's and each camera or session view's, leases it from
 `SdfWorldPipelineCache`, which the composition hands each of them; the engine
 records through the services of the device context it renders on
 (`IGpuDeviceContext.Services`). The cache keeps one set per device, kernel set and
@@ -213,7 +213,7 @@ counts the pipelines and shader modules it creates under its own
 
 A holder takes its lease off the frame thread the first time it produces a
 frame. Until the set is ready the node returns an empty surface and a view
-returns its last image, or no signal. The frame thread keeps draining the
+returns its last image, or none. The frame thread keeps draining the
 console and stepping the simulation meanwhile, so a `world.wait` or
 `pipeline.wait` still reaches its deadline. The one exception is the offscreen
 host with a capture armed: it steps no further tick until the capture is served
@@ -318,17 +318,19 @@ repacked, so every engine consuming the frame stages only what moved since it
 last rendered.
 
 `SdfAnchor` is one resolved pose and `ISdfAnchorSource` resolves an anchor id
-to it. `Views.SdfCameraView.Resolve` and `Puck.World`'s `WorldScreenBinder`
-resolve camera anchors through that interface. The live sources are
+to it. `Puck.World`'s `WorldScreenBinder` resolves camera anchors through that
+interface. The live sources are
 `Puck.World.Client`'s `WorldClient` and `FixedAnchorSource`
 (`WorldCameraRigCompiler.cs`) and the entity-part and ranked-candidate sources
 in `WorldScreenBinder.CameraViews.cs`. `SdfAnchorTable`, a name-keyed
 `ISdfAnchorSource`, has no users. `Puck.SdfVm.Views` holds the camera-rig shapes
 (`OrbitRig`/`FollowRig`/`OrientedFollowRig`/`FixedRig`/`FirstPersonRig`) and
-`ViewStack`, the budgeted round-robin registry for offscreen view content
-(`SdfCameraView`/`WorldSessionView`) with the
-self-reference rule that keeps a screen wired to its own view from
-compounding frame over frame. `SdfCameraProgram.cs`'s `dynamics` op names a
+`SdfCameraFrameSource`, the frame source of a camera view: the frame the world's
+node renders (`SdfEngineNode.HostFrame`) filmed from one camera, which an
+`SdfEngineNode` of the view's own renders as an `sdf.world` instance of the
+render graph. A view whose own screen samples its output renders into another
+output, so a mirror shows its previous frame and never compounds the image it
+writes. `SdfCameraProgram.cs`'s `dynamics` op names a
 pole-matched second-order response `SdfCameraBoomFollower` applies as the
 seat-rig boom's ease; `Views/SecondOrderFollower.cs` is the presentation-only
 float twin of `Puck.Maths.SecondOrderDynamics` this and every stamped-part
@@ -345,19 +347,18 @@ legal curve can accumulate arc well past `2^24` units, where a `float` ULP
 already exceeds a legal short segment; `float` appears only at the two public
 seams, the total length and `Sample`'s returned position/yaw.
 
-`SdfCameraView.ExportFactory` puts that view's offscreen engine into export
-mode (`SdfWorldEngineOptions.CreateOutputImage` returning an
-`IGpuExportableImage`): the same rendered image both keeps serving
-`Resolve`'s same-device view handle (a jumbotron still samples it unchanged)
-and exposes `ExportSharedHandle` for a same-adapter, cross-API consumer to
-open. Setting the factory after the engine already exists retires it and keeps
-its last resolved image alive until the replacement engine completes a frame;
-`ExportGeneration` changes identity every rebuild (a late export request, a
-dimension change, device loss).
-An owner that exposes the single exported image to an asynchronous foreign
-reader wires `TryBeginExportWrite`/`EndExportWrite`: `Resolve` then holds the
-last completed image while the reader owns its lease and publishes the next
-image only after export-mode submission drains the producer queue.
+`SdfEngineNode.CreateOutputImage` puts a node's engine into export mode
+(`SdfWorldEngineOptions.CreateOutputImage` returning an
+`IGpuExportableImage`): the same rendered image both keeps serving the node's
+output leases (a screen still samples it unchanged) and exposes
+`ExportSharedHandle` for a same-adapter, cross-API consumer to open. Setting the
+factory replaces the engine at the next produced frame, at that frame's extent,
+and keeps the replaced one alive until every acquisition of its outputs is
+released; `ExportGeneration` changes identity every rebuild (a late export
+request, device loss). A camera view that exposes its exported image to an
+asynchronous foreign reader reserves the write before it produces and publishes
+the image only after export-mode submission drains the producer queue, keeping
+its last completed image while the reader holds it.
 
 ## Debug tooling
 

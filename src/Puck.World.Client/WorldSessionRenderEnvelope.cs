@@ -121,13 +121,10 @@ internal static class WorldSessionRenderEnvelope {
     }
 }
 
-/// <summary>The runtime accounting for <see cref="WorldScreenProjection.Window"/> sessions' true, ALWAYS-PAID render
-/// cost — one live count <c>world.faces</c> reads and echoes, so a decision the document already made
-/// (<c>WorldDefinitionValidator</c> refuses a document authoring more windows than
-/// <see cref="Puck.Abstractions.Presentation.OffscreenRenderBudget.PerProducedFrame"/> BY NAME at boot/mutation
-/// time) is also OBSERVABLE at runtime, not merely asserted. NOT a second gate:
-/// this type never refuses anything — the document validator is the one place a window count is REFUSED, this is
-/// where the accepted count is READ BACK.</summary>
+/// <summary>The runtime accounting for <see cref="WorldScreenProjection.Window"/> sessions' true, always-paid render
+/// cost — one live count <c>world.faces</c> reads and echoes, since a window renders on every produced frame. It refuses
+/// nothing: a window's cost is priced like any view instance's, in the render graph's schedule and
+/// <c>world.budget</c>.</summary>
 /// <remarks>A process-wide static counter, deliberately: exactly one <c>WorldScreenBinder</c> (the boot
 /// world's own presentation) is ever live in one running <c>Puck.World</c> process — the same "no instance-addressed
 /// form" fact <c>world.faces</c>' own description already states (screens are the boot instance's presentation

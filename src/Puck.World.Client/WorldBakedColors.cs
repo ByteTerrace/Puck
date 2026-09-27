@@ -20,6 +20,8 @@ public sealed class WorldBakedColors {
     // The document a mirror is installed over on the first bound color, for colors read on their own (Of).
     private readonly WorldDefinition? m_definition;
 
+    // One resolver a palette entry's layer colors read through, built once rather than per registered palette.
+    private Func<string, Vector3>? m_layerColor;
     private int m_checkedColorRevision;
     private int m_checkedGeneration;
     private int m_count;
@@ -55,6 +57,14 @@ public sealed class WorldBakedColors {
 
         return new WorldBakedColors(definition: definition);
     }
+
+    /// <summary>Gets the resolver a palette entry's layer colors (weathering, inset) read through: <see cref="Resolve"/>
+    /// with a black fallback, one delegate for the life of these colors.</summary>
+    public Func<string, Vector3> LayerColor => (m_layerColor ??= value => Resolve(
+        fallback: Vector3.Zero,
+        value: value
+    ));
+
     /// <summary>Starts a build: forgets the colors the previous build baked.</summary>
     public void Begin() {
         m_count = 0;

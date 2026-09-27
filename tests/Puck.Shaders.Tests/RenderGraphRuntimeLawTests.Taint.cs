@@ -241,6 +241,151 @@ public sealed partial class RenderGraphRuntimeLawTests {
             Assert.Null(@object: runtime.UnservedCaptureReason);
         }
     }
+    // A view that reads itself carries its taint from frame to frame through its previous-frame read, so a capture frame
+    // binds no tainted previous-frame read: the view renders once without its own image, over the camera's fill, and the
+    // capture is served.
+    [Fact]
+    public void ACaptureFrameBindsNoTaintedPreviousFrameReadSoAViewReadingItselfIsServed() {
+        var gpu = new FakePipelineGpu();
+        var camera = new FakeCamera(gpu: gpu);
+        var recorders = new Recorders();
+        var producers = new Producers(gpu: gpu);
+
+        producers.Register(registry: recorders.Registry);
+        recorders.Registry.RegisterProducer(
+            factory: _ => camera,
+            package: Feed
+        );
+
+        var runtime = Runtime(
+            gpu,
+            recorders,
+            Set(
+                new RenderGraphInstance(
+                    ExternalPackage: Feed,
+                    Name: "camera",
+                    Passes: 1,
+                    Reads: [],
+                    Refresh: RenderGraphRefresh.EveryFrame
+                ),
+                External(name: "world") with {
+                    Reads = [
+                        new RenderGraphRead(Producer: "camera"),
+                        new RenderGraphRead(
+                            PreviousFrame: true,
+                            Producer: "world"
+                        ),
+                    ],
+                }
+            ),
+            "world",
+            null!,
+            null!
+        );
+        var frames = new Frames(
+            footprints: [new RenderGraphFootprint(Consumer: "world", Height: 1.0, Producer: "camera", Width: 1.0)],
+            roots: [new RenderGraphRoot(Height: 1.0, Instance: "world", Width: 1.0)],
+            runtime: runtime
+        );
+
+        using (runtime) {
+            var world = producers.Only;
+
+            world.CarriesTaint = true;
+            camera.Filling = static () => false;
+            frames.Settle();
+            frames.Next(count: 2);
+
+            // Outside a capture the view shows its own tainted image.
+            Assert.True(condition: world.WorldReadBound[^1]);
+
+            var request = CaptureRequest();
+
+            runtime.RequestCapture(request: request);
+            camera.Filling = () => (runtime.PendingCapturePath is not null);
+            _ = frames.Next();
+
+            Assert.Equal(
+                actual: (request.Completion.IsCompleted, Assert.Single(collection: world.Captured), world.WorldReadBound[^1]),
+                expected: (true, request.Path, false)
+            );
+            Assert.Null(@object: runtime.UnservedCaptureReason);
+        }
+    }
+    // Two views.graphs panes reading each other's previous frame carry a taint around the loop: the capture frame renders
+    // both again, but the first binds the second's output from before, so it stays tainted and the second reads it again.
+    // A capture frame binds a stand-in for a tainted previous-frame read, so the pane renders over the camera's fill alone
+    // and the capture is served.
+    [Fact]
+    public void ACaptureFrameBindsAStandInForAGraphInstancesTaintedPreviousFrameRead() {
+        var gpu = new FakePipelineGpu { ReadbackSupported = true };
+        var camera = new FakeCamera(gpu: gpu);
+        var recorders = new Recorders();
+
+        recorders.Registry.RegisterProducer(
+            factory: _ => camera,
+            package: Feed
+        );
+
+        var runtime = Runtime(
+            gpu,
+            recorders,
+            Set(
+                new RenderGraphInstance(
+                    ExternalPackage: Feed,
+                    Name: "camera",
+                    Passes: 1,
+                    Reads: [],
+                    Refresh: RenderGraphRefresh.EveryFrame
+                ),
+                Instance(
+                    name: "front",
+                    reads: [
+                        new RenderGraphRead(Producer: "camera"),
+                        new RenderGraphRead(
+                            PreviousFrame: true,
+                            Producer: "back"
+                        ),
+                    ]
+                ),
+                Instance(
+                    name: "back",
+                    reads: new RenderGraphRead(
+                        PreviousFrame: true,
+                        Producer: "front"
+                    )
+                )
+            ),
+            "front",
+            null!,
+            Graph(ScreensGraph(false, "screen", "other"), ("screen", "camera"), ("other", "back")),
+            Graph(ScreensGraph(false, "screen"), ("screen", "front"))
+        );
+        var frames = new Frames(
+            footprints: [
+                new RenderGraphFootprint(Consumer: "front", Height: 1.0, Producer: "camera", Width: 1.0),
+                new RenderGraphFootprint(Consumer: "front", Height: 1.0, Producer: "back", Width: 1.0),
+                new RenderGraphFootprint(Consumer: "back", Height: 1.0, Producer: "front", Width: 1.0),
+            ],
+            roots: [new RenderGraphRoot(Height: 1.0, Instance: "front", Width: 1.0)],
+            runtime: runtime
+        );
+
+        using (runtime) {
+            camera.Filling = static () => false;
+            frames.Settle();
+            frames.Next(count: 3);
+
+            var request = CaptureRequest();
+
+            runtime.RequestCapture(request: request);
+            camera.Filling = () => (runtime.PendingCapturePath is not null);
+            frames.Next(count: 2);
+
+            Assert.Null(@object: Outcome(request: request).Error);
+            Assert.Null(@object: runtime.UnservedCaptureReason);
+        }
+    }
 
     /// <summary>A camera handed out through a capture gate: its own image, tainted, or while the gate fills its fill,
     /// untainted. Both are same-device images, so a graph instance binds them.</summary>

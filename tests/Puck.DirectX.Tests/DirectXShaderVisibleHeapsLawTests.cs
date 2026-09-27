@@ -12,7 +12,7 @@ namespace Puck.DirectX.Tests;
 /// (<see cref="DirectXShaderVisibleHeaps"/>): one pair per device, created at bring-up and recreated by
 /// <see cref="DirectXDeviceContext.Recreate"/>; every pool a range of the view heap, a destroyed pool's range the one the
 /// next equal pool receives; a candidate that does not fit refused whole, by name, allocating nothing; both heaps'
-/// bytes counted under <c>memory.directx</c> and ended at teardown; and a storage clear recorded, submitted and
+/// bytes counted under <c>memory.directx</c> and ended at teardown; no other shader-visible heap created, by a pool or the surface upload (<see cref="DirectXGpuBindings.ShaderVisibleHeapsCreated"/>); and a storage clear recorded, submitted and
 /// completed through a clear slot of the view heap with no heap of its own. Each law runs on a software (WARP) device
 /// without the debug layer and skips when the host has none that meets the device floor.</summary>
 [SupportedOSPlatform("windows10.0.10240")]
@@ -68,6 +68,30 @@ public sealed class DirectXShaderVisibleHeapsLawTests {
         Assert.Equal(
             actual: memory.Held,
             expected: checked((long)(second.ViewHeapBytes + second.SamplerHeapBytes))
+        );
+    }
+    [Fact]
+    public void ADeviceCreatesOnlyItsTwoShaderVisibleHeaps() {
+        using var context = WarpContext(memory: null);
+        var created = context.DescriptorBindings;
+
+        Assert.Equal(
+            actual: created.ShaderVisibleHeapsCreated,
+            expected: 2L
+        );
+
+        // Pools and the surface upload, rebuilt for a second extent, live in the device's pair and create none.
+        UploadTwoExtents(context: context);
+        Assert.Equal(
+            actual: created.ShaderVisibleHeapsCreated,
+            expected: 2L
+        );
+
+        context.Recreate();
+        UploadTwoExtents(context: context);
+        Assert.Equal(
+            actual: created.ShaderVisibleHeapsCreated,
+            expected: 4L
         );
     }
     [Fact]
@@ -183,6 +207,24 @@ public sealed class DirectXShaderVisibleHeapsLawTests {
         );
     }
 
+    private static void UploadTwoExtents(DirectXDeviceContext context) {
+        var bindings = context.Services.Bindings;
+        using var upload = context.Services.SurfaceTransferFactory.CreateUpload();
+
+        bindings.DestroyPool(poolHandle: bindings.CreatePool(sizes: Pool(buffers: 4), name: default));
+
+        foreach (var extent in ((ReadOnlySpan<uint>)[2U, 4U])) {
+            Assert.NotEqual(
+                actual: upload.Upload(
+                    format: GpuPixelFormat.R8G8B8A8Unorm,
+                    height: extent,
+                    pixels: new byte[((extent * extent) * 4U)],
+                    width: extent
+                ),
+                expected: 0
+            );
+        }
+    }
     private static DirectXDeviceContext WarpContext(GpuDeviceMemoryWork? memory) =>
         DirectXTestDevices.Warp(memory: memory);
 }

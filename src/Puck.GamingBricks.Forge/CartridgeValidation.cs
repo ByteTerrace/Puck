@@ -4,7 +4,7 @@ using Puck.Assets.Documents;
 using Puck.State;
 namespace Puck.GamingBricks.Forge;
 
-internal sealed class CartridgeValidation(CartridgeDocument document) {
+internal sealed partial class CartridgeValidation(CartridgeDocument document) {
     private readonly List<DocumentValidationError> m_errors = [];
     private readonly Dictionary<string, int> m_arrays = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<string, (int Width, int Height)> m_screens = new(comparer: StringComparer.Ordinal);
@@ -800,74 +800,6 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
         ActionPredicate.Not not => Reached(gate: not.Predicate),
         _ => 1,
     });
-    private void Read(InstructionPayload.State state, string path, bool wide) {
-        if (state.Key is not null) {
-            Element(
-                array: state.Name.Spelling,
-                key: state.Key.Spelling,
-                path: path
-            );
-
-            return;
-        }
-
-        if (CartridgeExpressions.TryKey(
-            name: state.Name.Spelling,
-            button: out var button,
-            mode: out var mode
-        )) {
-            if (button is not ("a" or "b" or "start" or "select" or "up" or "down" or "left" or "right")) {
-                Error(
-                    message: $"Unknown joypad button '{button}'.",
-                    path: path
-                );
-            }
-
-            if (mode is not ("held" or "pressed" or "released")) {
-                Error(
-                    message: $"Expected held, pressed or released; found '{mode}'.",
-                    path: path
-                );
-            }
-
-            return;
-        }
-
-        if (state.Name.Spelling.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: "$"
-        )) {
-            Error(
-                path: path,
-                message: $"'{state.Name}' is not a channel a cartridge answers; input reads through '{CartridgeExpressions.KeyPrefix}<button>:<mode>'."
-            );
-
-            return;
-        }
-
-        if (!m_variables.Contains(item: state.Name.Spelling)) {
-            Error(
-                path: path,
-                message: $"Unknown state variable '{state.Name}'."
-            );
-
-            return;
-        }
-
-        if (
-            !wide &&
-            m_widths.TryGetValue(
-            key: state.Name.Spelling,
-            value: out var width
-        ) &&
-            (width != 1)
-        ) {
-            Error(
-                path: path,
-                message: $"'{state.Name}' is a wide slot; this field reads a byte."
-            );
-        }
-    }
     // Every field outside the step's own kind must be absent, so a mistyped kind cannot silently drop authored data.
     private void Reject(CartridgeStatement value, string path, string allowed) {
         foreach (var (name, present) in new[] {

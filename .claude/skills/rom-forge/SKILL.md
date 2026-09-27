@@ -12,7 +12,7 @@ in the same change rather than preserving an obsolete workflow.
 
 `.puck` is the cartridge's authorial source; `puck.cartridge.v1` JSON is the derived, engine-consumed
 artifact and stays committed beside it (`tetromino.cgb.puck` / `tetromino.cgb.cartridge.json`, `hgb-mirror.cgb.puck`
-/ `hgb-mirror.cgb.cartridge.json`). The regeneration gate in `tests/Puck.GamingBricks.Transpiler.Tests`
+/ `hgb-mirror.cgb.cartridge.json`, and `light-gun.cgb.puck`, the target the `light-gun` canary aims at). The regeneration gate in `tests/Puck.GamingBricks.Transpiler.Tests`
 (`CartridgeRoundTripTests.TestCommittedSourceCompilesToTheCommittedDocument`) compiles every committed
 source and byte-compares it against its committed document, so the two can never drift apart quietly.
 Never hand-edit the generated JSON: regenerate it from the source. `src/Puck.World/Assets/cartridges/pip.agb.cartridge.json`
@@ -144,7 +144,10 @@ and a gate is a `Puck.State.ActionPredicate`, so `(a + b) * 2`, `field[i + 1]`,
 `any` and `not` are all authorable; `CartridgeExpressions.Reads` is the admitted
 operation subset and everything outside it is refused at its own spelling. A
 button reads through `$key:<button>:<mode>`, which is why input composes under
-`not`. A write target is `{state, key}`, the key being a bare number, a bare cell
+`not`. The light sensor reads through the bare operand `$light` (1 while the
+infrared receiver sees light: a light gun on a lit pixel, or a linked lamp); only
+`cgb` has a receiver, so validation refuses it on `agb` and the advanced profile
+carries no weight for it. It has no gate sugar. A write target is `{state, key}`, the key being a bare number, a bare cell
 read, or `$expr:` plus the index's infix spelling.
 
 The schema does not claim DMG or ROM banking. Common primitives preserve their authored semantics on both

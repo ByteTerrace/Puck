@@ -143,6 +143,12 @@ public sealed class WorldDocumentVocabulary(WorldConstructTable? constructs = nu
     /// model does not declare (a template, a builtin) has no position.</remarks>
     public object? CallContext(object? context, string callName) => WorldCallArguments.ArmType(baseType: (context as Type), discriminator: callName);
     /// <inheritdoc />
+    /// <remarks>An arm is any <c>$type</c> the model declares under any polymorphic base.</remarks>
+    public bool NamesArm(string callName) => (WorldCallArguments.ArmType(
+        baseType: null,
+        discriminator: callName
+    ) is not null);
+    /// <inheritdoc />
     /// <remarks>A member holding a file path (<see cref="WorldArgumentForm.Path"/>) is positioned as a file reference,
     /// so the value written there is re-expressed for the document being lowered.</remarks>
     public object? MemberContext(object? context, string memberName) => ((context is Type owner)

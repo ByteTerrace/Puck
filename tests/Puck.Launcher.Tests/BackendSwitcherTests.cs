@@ -93,6 +93,8 @@ public sealed class BackendSwitcherTests {
         }
     }
     private class PresenterWithoutReadback : ISurfacePresenter {
+        public DisplayOutput? Output => null;
+
         public void Activate(NativeSurfaceBinding binding, uint width, uint height) { }
         public void BeginFrame(uint width, uint height) { }
         public void Deactivate() { }

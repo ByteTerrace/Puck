@@ -333,7 +333,7 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
 
             _ = builder.Append(value: $" {row.PlacementId}/{row.FaceName}[screen={slot} handle={((handle != 0)
                 ? "bound"
-                : "no-signal")}{session}]");
+                : "unbound")}{session}]");
         }
 
         return builder.Append(value: (any
@@ -501,7 +501,7 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
         return string.Empty;
     }
     // The projection/true-cost tail every session line carries: a window projection renders every produced frame,
-    // never sharing ViewStack's round-robin the way an ordinary camera projection does, so its resolved pixel
+    // never refreshing at the views' divisor the way an ordinary camera projection does, so its resolved pixel
     // dimensions are a real, additive per-frame GPU cost. An ordinary camera projection reports its width/height
     // too (the same resolved render target every session pays for), so the line stays one shape for both.
     private static string ProjectionText(WorldScreenProjection projection, int width, int height, bool rendersEveryFrame) =>
@@ -605,7 +605,7 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.faces",
-            description: "Reports the derived-face census (Immediate): one line per derived creation face — placementId, faceName, screenIndex, resolvedSource, and the bound content handle (0 = the no-signal card). No instance-addressed form: screens, the derived-face index space, and session binding are the boot instance's own presentation state — a spawned instance carries an empty machine host and no client perceiving from it (see WorldInstance's remarks).",
+            description: "Reports the derived-face census (Immediate): one line per derived creation face — placementId, faceName, screenIndex, resolvedSource, and the bound content handle (0 = unbound glass). No instance-addressed form: screens, the derived-face index space, and session binding are the boot instance's own presentation state — a spawned instance carries an empty machine host and no client perceiving from it (see WorldInstance's remarks).",
             handler: (_, args) => {
                 if (args.Count == 0) {
                     return new CommandResult(Output: DescribeFaces());

@@ -63,9 +63,10 @@ static const int PrimaryRefineSteps = 8;
 // gradient, the sun weight and the fog density are environment lanes (SdfEnvironment) so a world can author them;
 // their pinned values live on as SdfEnvironment.Default. The fog density's pinned value lives on as
 // SdfEnvironment.DefaultFogDensity.
-// The procedural test-card face (an unbound screen): its own emitter, tinted faintly by the sun.
-static const float ScreenCardBase = 0.85;
-static const float ScreenCardSunTint = 0.15;
+// An unbound screen's face: dark glass with nothing behind it, tinted faintly by the sun.
+static const float3 ScreenGlassColor = float3(0.02, 0.025, 0.03);
+static const float ScreenGlassBase = 0.85;
+static const float ScreenGlassSunTint = 0.15;
 // Keeps a screen light's inverse-square attenuation finite for a surface point on the emitter's own face.
 static const float ScreenLightMinDistanceSquared = 1.0e-4;
 // The 8-bit dither quantum: +-0.5 LSB of R2 noise before the store (see sdfR2Dither).

@@ -254,7 +254,7 @@ public sealed class SdfPassPlanLawTests {
     [InlineData(100U, 37U, 2U, 33)]
     [InlineData(17U, 300U, 3U, 65)]
     [InlineData(1920U, 1080U, 4U, 1000)]
-    [InlineData(2560U, 1440U, SdfWorldEngine.MaxViewports, 4097)]
+    [InlineData(2560U, 1440U, 6U, 4097)]
     [Theory]
     public void ThePlannerSizesEveryBufferAsTheEngineAllocatesIt(uint width, uint height, uint viewports, int instances) {
         var capacity = Capacity(

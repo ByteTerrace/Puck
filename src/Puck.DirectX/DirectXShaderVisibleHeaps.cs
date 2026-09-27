@@ -97,10 +97,12 @@ public sealed unsafe class DirectXShaderVisibleHeaps : IDisposable {
     /// <param name="device">The device; it outlives the heaps.</param>
     /// <param name="capabilities">The device's capability report, read when it was created.</param>
     /// <param name="memory">The backend's memory counts, or <see langword="null"/> to count nothing.</param>
+    /// <param name="shaderVisibleHeapsCreated">The device's count of shader-visible heaps created, raised by one for each
+    /// of the two heaps.</param>
     /// <returns>The heaps, owned by the caller.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="capabilities"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="capabilities"/> reports no shader-visible heap.</exception>
-    public static DirectXShaderVisibleHeaps Create(ID3D12Device* device, GpuDeviceCapabilities capabilities, GpuDeviceMemoryWork? memory) {
+    public static DirectXShaderVisibleHeaps Create(ID3D12Device* device, GpuDeviceCapabilities capabilities, GpuDeviceMemoryWork? memory, ref long shaderVisibleHeapsCreated) {
         var heaps = new DirectXShaderVisibleHeaps(
             budget: new GpuDescriptorHeapBudget(capabilities: capabilities),
             device: ((nint)device),
@@ -108,10 +110,10 @@ public sealed unsafe class DirectXShaderVisibleHeaps : IDisposable {
         );
 
         try {
-            heaps.m_viewHeap = ((nint)DirectXDescriptorHeaps.Create(
+            heaps.m_viewHeap = ((nint)DirectXDescriptorHeaps.CreateShaderVisible(
                 count: heaps.m_budget.ViewDescriptors,
+                created: ref shaderVisibleHeapsCreated,
                 device: device,
-                shaderVisible: true,
                 type: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV
             ));
             heaps.ViewIncrement = device->GetDescriptorHandleIncrementSize(DescriptorHeapType: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
@@ -121,10 +123,10 @@ public sealed unsafe class DirectXShaderVisibleHeaps : IDisposable {
                 bytes: heaps.ViewHeapBytes,
                 heap: heaps.m_viewHeap
             );
-            heaps.m_samplerHeap = ((nint)DirectXDescriptorHeaps.Create(
+            heaps.m_samplerHeap = ((nint)DirectXDescriptorHeaps.CreateShaderVisible(
                 count: heaps.m_budget.SamplerDescriptors,
+                created: ref shaderVisibleHeapsCreated,
                 device: device,
-                shaderVisible: true,
                 type: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER
             ));
             heaps.SamplerIncrement = device->GetDescriptorHandleIncrementSize(DescriptorHeapType: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
@@ -137,7 +139,6 @@ public sealed unsafe class DirectXShaderVisibleHeaps : IDisposable {
             heaps.m_clearHeap = ((nint)DirectXDescriptorHeaps.Create(
                 count: ClearDescriptors,
                 device: device,
-                shaderVisible: false,
                 type: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV
             ));
             heaps.ClearCpuStart = DirectXConstants.GetCpuHeapStart(heap: ((ID3D12DescriptorHeap*)heaps.m_clearHeap)).ptr;

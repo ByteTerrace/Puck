@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Numerics;
 using System.Text.Json;
-using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Machines;
 using Puck.Assets;
 using Puck.Assets.Documents;
@@ -1717,20 +1716,11 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
 
-        // Document-wide, independent of any single placement's own row checks above — see its own remarks.
-        ValidateSessionWindowBudget(
-            placements: definition.Placements,
-            errors: errors
-        );
 
         var cameras = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         {
             var authoredCameras = definition.Cameras;
-
-            if (authoredCameras.Count > OffscreenRenderBudget.RegisteredViews) {
-                errors.Add(item: $"cameras count {authoredCameras.Count} exceeds the maximum of {OffscreenRenderBudget.RegisteredViews} (each camera can carry a persistent offscreen render; the runtime registers no more views than that).");
-            }
 
             for (var index = 0; (index < authoredCameras.Count); index++) {
                 var camera = authoredCameras[index];

@@ -12,7 +12,7 @@ namespace Puck.SdfVm.Tests;
 
 /// <summary>
 /// Laws for the GPU work <see cref="SdfEngineNode"/> reports when a host drives it the way the windowed and offscreen
-/// hosts do: one <see cref="SdfEngineNode.ProduceFrame"/> per produced frame, with the device resolved from the frame
+/// hosts do: one <see cref="SdfEngineNode.Produce"/> per produced frame, with the device resolved from the frame
 /// context, over <see cref="FakeGpuDevice"/>. A frame's submission is fire-and-forget, so it is published by the next
 /// produced frame, which observes its fence; before that, nothing is available.
 /// </summary>
@@ -149,7 +149,7 @@ public sealed class SdfEngineNodeWorkLawTests {
         public SdfEngineNode Node { get; }
 
         public void Dispose() => Node.Dispose();
-        public void Produce() => _ = Node.ProduceFrame(context: in m_context);
+        public void Produce() => _ = Node.Produce(context: in m_context, height: Extent, width: Extent);
         public void ProduceFirst() => _ = Node.ProduceFirstFrame(context: in m_context);
     }
 }

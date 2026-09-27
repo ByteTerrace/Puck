@@ -31,8 +31,8 @@ namespace Puck.World.Client;
 /// mirrors as its catalog avatar, never the vehicle's own geometry, until that seam is opened.
 /// </para>
 /// <para>
-/// <b>The interpolation timebase.</b> <see cref="WorldSessionView"/> calls <c>ISdfFrameSource.CaptureFrame</c> with a
-/// fixed zero delta/alpha on every resolve (see that type's own remarks: "never through the host's own clock") — so
+/// <b>The interpolation timebase.</b> A session's view calls <c>ISdfFrameSource.CaptureFrame</c> with its own
+/// produced-frame interval and a zero alpha on every frame it renders, never through the host's own clock — so
 /// neither <see cref="Dress"/>'s <c>interpolationAlpha</c> parameter nor <see cref="SdfEmitContext.InterpolationAlpha"/>
 /// ever carries anything but 0 for this emitter. <see cref="WorldSessionMirror.InterpolationAlpha"/> derives its own honest
 /// fraction instead, purely from the mirror's (tick, pose) pairs plus this call's own wall-clock arrival: real elapsed
@@ -54,9 +54,17 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     private readonly float m_fieldOfViewRadians;
     private readonly WorldSessionMirror m_mirror;
 
+    // The static placements' palettes, reused across rebuilds (WorldPlacementStamper.EmitStatic).
+    private readonly WorldStaticPalettes m_palettes = new();
+
+    // The bound colors the static build bakes and the mirror they read (BakedColors), and the revision component a
+    // moved baked color bumps (WriteRevision).
+    private WorldBakedColors? m_bakedColors;
+    private WorldStateMirror? m_bakedColorsMirror;
+    private int m_bakedColorRevision;
     private SdfProgram? m_lastProgram;
-    // The WINDOW projection's per-produced-frame override — set by WorldScreenBinder.RenderViews (the one place with
-    // access to both the local eye and the border pair's two face rows) immediately before this view's Resolve.
+    // The WINDOW projection's per-produced-frame override — set by WorldScreenBinder.Publish (the one place with access
+    // to both the local eye and the border pair's two face rows) before the render graph renders this view.
     // Null (the default, and every non-window session's steady state) leaves Dress on the ordinary camera path below.
     private (CameraSnapshot Camera, Vector2 Offset)? m_windowOverride;
 
@@ -304,8 +312,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             DynamicTransforms = transforms,
             MovedTransforms = moved,
             // A budgeted 160x144-class panel image: re-marching full soft shadows/AO/far-bound here costs real GPU
-            // time for a tiny screen-space result no player is closely scrutinizing — the same cost posture
-            // SdfCameraView's own jumbotron rig already takes.
+            // time for a tiny screen-space result no player is closely scrutinizing — the same cost posture a camera
+            // view already takes.
             DisableAmbientOcclusion = true,
             DisableSoftShadows = true,
             DisableFarBound = true,
@@ -332,13 +340,18 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
             return;
         } else {
+            var colors = BakedColors();
+
+            colors.Begin();
             // A remote session mirror carries its document but no font asset origin/bytes. Its creation text stays
             // omitted until session delivery transports pinned assets and this view can share the merged glyph atlas.
             WorldPlacementStamper.EmitStatic(
                 builder: builder,
+                colors: colors,
                 definition: definition,
                 creations: definition.Creations,
-                placements: definition.Placements
+                placements: definition.Placements,
+                palettes: m_palettes
             );
         }
 
@@ -440,8 +453,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     }
     /// <summary>Sets (or clears) this frame's window camera override — the off-axis frustum
     /// <c>WorldWindowFrustumFit.TryFitWindow</c> fit against the border pair's two face rows and the local
-    /// viewer's eye. Called once per produced frame by <c>WorldScreenBinder.RenderViews</c>, immediately
-    /// before this session's <see cref="Puck.SdfVm.Views.WorldSessionView.Resolve"/>; <see langword="null"/> (no
+    /// viewer's eye. Called once per produced frame by <c>WorldScreenBinder.Publish</c>, before the render graph renders
+    /// this session's view; <see langword="null"/> (no
     /// eye/aperture available yet, or the fit refused — see <c>SdfAsymmetricFrustum.TryFit</c>) falls back to
     /// <see cref="ResolveCamera"/>'s ordinary named/default projection for that one frame.</summary>
     /// <param name="camera">The fitted camera apexed at the mapped eye, or <see langword="null"/> to use the
@@ -454,13 +467,41 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             : null
         );
     }
-    /// <summary>Writes two components, never their sum: the definition-delivery revision, and the mirrored
-    /// snapshot's declared-set/palette revision (<see cref="WorldSessionMirror.SnapshotRevision"/>, assigned from the
-    /// wire and able to move down) — the same non-summing rule <see cref="WorldClient.WriteRevision"/> documents for
-    /// the identical reason: a rebuild must never be maskable by two counters moving in opposite directions.</summary>
+    /// <summary>Writes three components, never their sum: the definition-delivery revision, the mirrored snapshot's
+    /// declared-set/palette revision (<see cref="WorldSessionMirror.SnapshotRevision"/>, assigned from the wire and
+    /// able to move down), and a counter that moves when a bound color the live build baked moves in the session's
+    /// state mirror (<see cref="WorldBakedColors.TryTakeMove"/>, as <c>WorldSceneEmitter.WriteRevision</c> does for
+    /// the local world) — the same non-summing rule <see cref="WorldClient.WriteRevision"/> documents for the
+    /// identical reason: a rebuild must never be maskable by two counters moving in opposite directions.</summary>
     public void WriteRevision(Span<int> destination) {
         destination[0] = m_mirror.DefinitionRevision;
         destination[1] = m_mirror.SnapshotRevision;
+
+        if (BakedColors().TryTakeMove()) {
+            m_bakedColorRevision++;
+        }
+
+        destination[2] = m_bakedColorRevision;
+    }
+
+    // The bound colors the static build bakes, over the session's own followed state mirror: the one path the local
+    // scene emitter reads its colors through (WorldBakedColors over WorldClient.StateMirror). Following first brings
+    // the mirror up to the latest delivery, so a state-cell write reaches TryTakeMove.
+    private WorldBakedColors BakedColors() {
+        var mirror = m_mirror.FollowState();
+
+        if (
+            (m_bakedColors is null) ||
+            !ReferenceEquals(
+                objA: m_bakedColorsMirror,
+                objB: mirror
+            )
+        ) {
+            m_bakedColors = new WorldBakedColors(mirror: mirror);
+            m_bakedColorsMirror = mirror;
+        }
+
+        return m_bakedColors;
     }
 
     /// <summary>The frozen transform-slot count this emitter declares: maximum-sized catalog ranges for the detailed
@@ -469,5 +510,5 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// <see cref="WorldBodiesLimits.CapacityCeiling"/>, so a full destination can never outgrow this emitter's probe.</summary>
     public int DynamicSlotCount => WorldRigCatalog.DynamicTransformCapacity;
     /// <inheritdoc/>
-    public int RevisionComponentCount => 2;
+    public int RevisionComponentCount => 3;
 }

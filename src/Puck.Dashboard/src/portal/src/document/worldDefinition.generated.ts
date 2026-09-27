@@ -8238,7 +8238,7 @@ export type WorldPrototype = {
          */
         shapeId?: number | null;
         /**
-         * The feed this face shows when nothing else is wired, as a source token a consuming world resolves through a closed four-token map — none (no signal), test (the test pattern), and camera:<name> / feed:<name> (a View of the named camera, resolved against the placement's derived creation-eye feeds then the world's own camera rows). An unrecognized token (including a bare named:emotes, which named a host registry no world provides) lights the no-signal card. Null = the no-signal card until a world's face override wires a feed.
+         * The feed this face shows when nothing else is wired, as a source token a consuming world resolves through a closed four-token map — none (unbound glass), test (the test pattern), and camera:<name> / feed:<name> (a View of the named camera, resolved against the placement's derived creation-eye feeds then the world's own camera rows). An unrecognized token (including a bare named:emotes, which named a host registry no world provides) shows unbound glass. Null = unbound glass until a world's face override wires a feed.
          */
         defaultSource?: string | null;
       } | null)[] | null;
@@ -9409,7 +9409,7 @@ export type WorldScreenSourceMachine = {
 };
 
 /**
- * No provider is bound — the engine lights the slot with its procedural no-signal fallback (an animated test-card / striped no-signal look, never black).
+ * No provider is bound — the engine shades the slot as dark glass, lit faintly by the sun.
  */
 export type WorldScreenSourceNone = {
   $type?: "none";
@@ -9459,7 +9459,7 @@ export type WorldScreenSourceSession = {
    */
   projection?: WorldScreenProjection;
   /**
-   * The offscreen target's [width, height] in pixels, or null for the engine default (Puck.SdfVm.Views.WorldSessionView.DefaultWidth x DefaultHeight — today's 160x144 panel, unchanged for an unauthored facet). Each axis is validated within 1..WorldDefinitionValidator.MaxSurfaceDimension. Omitted from the wire when null.
+   * The offscreen target's [width, height] in pixels, or null for the default 160x144 panel (Puck.World.Client.WorldViewInstances.DefaultSessionWidth x DefaultSessionHeight). Each axis is validated within 1..WorldDefinitionValidator.MaxSurfaceDimension. Omitted from the wire when null.
    */
   resolution?: WorldScreenResolution | null;
 };

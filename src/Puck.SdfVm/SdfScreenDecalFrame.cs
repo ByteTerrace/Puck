@@ -7,7 +7,7 @@ namespace Puck.SdfVm;
 /// <see cref="SdfShapeType.ScreenSlab"/> face samples at the hit as dense reading text (the material-level text tier —
 /// see <see cref="SdfWorldEngine.SetScreenDecal"/>), instead of a bound image. Supplied per frame through
 /// <see cref="ISdfFrameSource.ScreenDecals"/>; a <see langword="null"/> provider result clears the slot back to the
-/// image/procedural path (<see cref="SdfWorldEngine.ClearScreenDecal"/>) — the documented non-atlas-host degrade.
+/// image or unbound-glass path (<see cref="SdfWorldEngine.ClearScreenDecal"/>) — the documented non-atlas-host degrade.
 /// </summary>
 /// <param name="Columns">The grid column count (&gt; 0).</param>
 /// <param name="Rows">The grid row count (&gt; 0).</param>

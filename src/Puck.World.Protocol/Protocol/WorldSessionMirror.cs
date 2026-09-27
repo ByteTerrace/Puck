@@ -59,6 +59,13 @@ public sealed class WorldSessionMirror : IClientSink {
 
     private int[] m_followedRows = [];
 
+    // The one state view the state mirror reads: the delivered definition's rows, plus the field cells each snapshot
+    // carries, applied on delivery under m_followGate, which every read of the view (FollowState) also holds.
+    private readonly WorldDocumentStateView m_stateView;
+
+    // The field rows one snapshot's cells moved (ApplyFieldCells's output), used only under m_followGate.
+    private readonly int[] m_movedFields = new int[WorldFieldCapacity.MaxFields];
+
     private WorldStateMirror? m_state;
 
     private int m_stateRevision = -1;
@@ -117,6 +124,7 @@ public sealed class WorldSessionMirror : IClientSink {
         ArgumentNullException.ThrowIfNull(argument: placeholder);
 
         m_definition = placeholder;
+        m_stateView = new WorldDocumentStateView(definition: () => Definition);
         m_kitColliders = CompileColliders(definition: placeholder);
         m_kitBodyContacts = CompileBodyContacts(definition: placeholder);
 
@@ -440,6 +448,24 @@ public sealed class WorldSessionMirror : IClientSink {
             );
             _ = Interlocked.Increment(location: ref m_snapshotSequence);
         }
+
+        // A field's cells are state the snapshot carries beside the document. They are applied to the one view the state
+        // mirror reads, and each field row they moved is noted as a state delivery's rows are, so the next follow
+        // refreshes the slots bound to it: the path WorldClient.DeliverSnapshot takes for the local mirror.
+        if (!snapshot.FieldCells.IsEmpty) {
+            lock (m_followGate) {
+                var moved = m_stateView.ApplyFieldCells(
+                    deltas: snapshot.FieldCells.Span,
+                    moved: m_movedFields
+                );
+
+                lock (m_stampGate) {
+                    for (var index = 0; (index < moved); index++) {
+                        NoteRow(ordinal: m_movedFields[index]);
+                    }
+                }
+            }
+        }
     }
     /// <inheritdoc/>
     /// <remarks>The stamp's moved rows are kept until <see cref="FollowState"/> takes them, so the presentation reads
@@ -464,33 +490,40 @@ public sealed class WorldSessionMirror : IClientSink {
             }
 
             foreach (var ordinal in stamp.MovedRows.Span) {
-                if (ordinal < 0) {
-                    continue;
-                }
-
-                if (ordinal >= m_pendingNoted.Length) {
-                    var capacity = Math.Max(
-                        val1: (ordinal + 1),
-                        val2: (m_pendingNoted.Length * 2)
-                    );
-
-                    Array.Resize(
-                        array: ref m_pendingNoted,
-                        newSize: capacity
-                    );
-                    Array.Resize(
-                        array: ref m_pendingRows,
-                        newSize: capacity
-                    );
-                }
-
-                if (!m_pendingNoted[ordinal]) {
-                    m_pendingNoted[ordinal] = true;
-                    m_pendingRows[m_pendingCount++] = ordinal;
-                }
+                NoteRow(ordinal: ordinal);
             }
         }
     }
+
+    // Notes one moved row for the next FollowState to refresh, once however often it moves before then. Called under
+    // m_stampGate; a negative ordinal names no row.
+    private void NoteRow(int ordinal) {
+        if (ordinal < 0) {
+            return;
+        }
+
+        if (ordinal >= m_pendingNoted.Length) {
+            var capacity = Math.Max(
+                val1: (ordinal + 1),
+                val2: (m_pendingNoted.Length * 2)
+            );
+
+            Array.Resize(
+                array: ref m_pendingNoted,
+                newSize: capacity
+            );
+            Array.Resize(
+                array: ref m_pendingRows,
+                newSize: capacity
+            );
+        }
+
+        if (!m_pendingNoted[ordinal]) {
+            m_pendingNoted[ordinal] = true;
+            m_pendingRows[m_pendingCount++] = ordinal;
+        }
+    }
+
     /// <summary>Brings this mirror's state mirror up to the latest delivery and returns it: a definition delivery
     /// installs it, the rows state deliveries moved since the last follow refresh only the slots bound to them, and a
     /// newer tick with nothing moved refreshes only the slots still moving. Called on the thread that presents
@@ -498,7 +531,7 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <returns>The state mirror every presentation read of this destination's rows goes through.</returns>
     public WorldStateMirror FollowState() {
         lock (m_followGate) {
-            var state = (m_state ??= new WorldStateMirror(view: new WorldDocumentStateView(definition: () => Definition)));
+            var state = (m_state ??= new WorldStateMirror(view: m_stateView));
             int count;
             bool everything;
 

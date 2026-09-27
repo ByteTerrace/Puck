@@ -415,6 +415,42 @@ public class CartridgeRoundTripTests {
         );
     }
     [Fact]
+    public void TestTheLightSensorReadsAsAnOperandAndDecompilesToTheSameSpelling() {
+        const string Source = """
+            schema: "puck.cartridge.v1"
+            target: "cgb"
+
+            rule "sense" {
+                when $light == 1 and not key(a, held)
+                seen = $light
+            }
+            """;
+
+        var compiled = Compile(source: Source);
+        var rule = Assert.IsType<JsonObject>(@object: Assert.IsType<JsonArray>(@object: compiled["rules"])[0]);
+        var gate = Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: rule["when"])["predicates"]);
+
+        Assert.Equal(
+            "$light",
+            Assert.IsType<JsonObject>(@object: gate[0])["left"]?.GetValue<string>()
+        );
+        Assert.Equal(
+            "$light",
+            Assert.IsType<JsonObject>(@object: Assert.IsType<JsonArray>(@object: rule["body"])[0])["value"]?.GetValue<string>()
+        );
+
+        var decompiled = CartridgeDecompiler.Decompile(document: compiled);
+
+        Assert.Contains(
+            actualString: decompiled,
+            expectedSubstring: "$light == 1"
+        );
+        Assert.Equal(
+            Canonical(document: compiled),
+            Canonical(document: Compile(source: decompiled))
+        );
+    }
+    [Fact]
     public void TestNestedControlFlowLowersToNestedSteps() {
         const string Source = """
             schema: "puck.cartridge.v1"

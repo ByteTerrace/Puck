@@ -33,8 +33,9 @@ reasoning behind every decision is in
 
 ## Implementation status
 
-P2, P3 and P5 are complete; P1a, P1b, P4 and P6 are not. The programmable compute and
-graphics foundation has functional GPU fixtures on both backends. The
+P2, P3, P5, P7, P9 and P10 are complete; P1a, P1b, P4, P6, P8 and P11 to P17
+are not. The programmable compute and graphics foundation has functional GPU
+fixtures on both backends. The
 work-counting model, the GPU work ledger, and the counting wrappers live in
 `Puck.Abstractions`. The state arena, rules and search, the shader pipeline
 node, the SDF world engine, its views, and the unified overlay all report
@@ -283,8 +284,10 @@ P5 is complete. P8 extended the manifest: each pass entry records its
 interface hash, and the package carries its precompiled binaries.
 
 P7's gate spike has run its build-time half and its GPU half, the `binding`
-parity station. P10 is complete: all eight of its steps have landed, step 2's
-shared row regions and step 8's field rows included. The spike's [pass interface](../reference/shaders.md#pass-interfaces)
+parity station. P10 is complete: all nine of its steps have landed, step 2's
+shared row regions, step 8's field rows and step 9's `bound` parity station
+included. Its one open check is the floor-tier parity leg on floor hardware, a
+deferred hardware check. The spike's [pass interface](../reference/shaders.md#pass-interfaces)
 lives in `src/Puck.Shaders/Interface/`. It interfaces variants of
 `sdf-film-grain.frag.hlsl` and a pixelate compute pass whose only copy is
 the spike's fixture under `tests/Puck.Shaders.Tests`, each with a frame group
@@ -503,8 +506,11 @@ group at set 1 and the pass group at set 3, each register number the Vulkan
 binding and each group's ordinal its register space, so no pass source assigns
 a register by hand.
 
-P7's adapter memory profile, residency selector, consumer migration and binding
-groups have landed. `IGpuDeviceContext`
+P7 is complete: its adapter memory profile, residency selector, consumer
+migration and binding groups have landed, all twenty-two steps of P7b among
+them; its gate's Linux bytecode leg is
+[deferred to the end](#deferred-to-the-end).
+`IGpuDeviceContext`
 reports a `GpuMemoryProfile` beside its identity, filled at device creation
 from `D3D12_FEATURE_DATA_ARCHITECTURE`, `DXGI_ADAPTER_DESC1` and options 16's
 GPU upload heap support on Direct3D 12, and from the device type and
@@ -579,13 +585,18 @@ presentation dimension (`WorldPresentationCost`) and in `world.budget` with its
 extent ceiling, rate and planned passes; the server plans each row's source
 for that price.
 
-P11b owes the rest of the package. The main view, every `views.graphs` pane
-and every split-screen seat run through the graph runtime (commits 6, 9 and 10
-below), but `ViewStack` still renders every screen. Commits 11 and 12, the
+P11b owes the rest of the package. The main view, every `views.graphs` pane,
+every split-screen seat (commits 6, 9 and 10 below) and every camera and
+session a screen shows (commit 13) run through the graph runtime. Commits 11
+and 12, the
 per-device pass-pipeline cache and the live schedule's extents and prices in
-`world.budget`, have landed. Only commits 13 and 14 remain: P11b moves the
-screens onto graph instances fed by the scheduler, runs the parity and
-counted-GPU checks, and makes the rest of the deletions P11 lists. These
+`world.budget`, have landed, and so has commit 13, which moved the screens onto
+graph instances fed by the scheduler and deleted `ViewStack`,
+`OffscreenRenderBudget`, `SdfWorldEngine.MaxViewports` and the procedural test
+card. Only commit 14 remains: the final sweep runs P11's parity and
+counted-GPU checks, makes the rest of the deletions P11 lists, and has the
+owning guides and the `rendering` skill describe the result.
+These
 P11b items have landed: the first-class package pass kind in
 `ShaderPipelineCompiler`, a steady-state schedule that allocates nothing, a
 document pass kind with no package member, so package work enters the
@@ -667,13 +678,10 @@ all four live. The notes below record how each landed.
   commit 6.
   - `RenderGraphInstance` has a kind (`RenderGraphInstanceKind`): a graph it
     renders, or an external producer named by `ExternalPackage`.
-    `RenderGraphInstanceSet.TryCreate` refuses an external instance that
-    declares reads (`ExternalReads`), and a previous-frame read of an external
-    producer (`ExternalPreviousFrame`), each by name. The engine writes each
-    view's output image (`SdfWorldEngine.OutputImageHandle` is view 0's) and
-    its next render overwrites it, so a previous-frame read would sample the current frame, and
-    the output is not double-buffered to allow one; the refusal covers every
-    external producer, and `sdf.world` is the only one until P14-6. The
+    `RenderGraphInstanceSet.TryCreate` refuses an external instance's buffer
+    reads (`ExternalReads`) by name. Each view writes its own output image
+    (`SdfWorldEngine.OutputImageHandle` is view 0's), and a view whose output
+    one of its own screens samples renders into another (commit 13). The
     scheduler is unchanged: demand, divisor, quantized extent, and the price
     the instance declares, `SdfWorldEngine.PassLabels.Length` passes for
     `sdf.world`.
@@ -954,7 +962,7 @@ It deletes the SDF engine's composite, and it has landed.
   `SdfEngineNode.ViewProducer` gives the producers `world$2..world$K`, each
   leasing its own view's output. K is `WorldRootGraph.ViewsOf`: the most
   non-instance slots of any `views.layouts` row or `PlayerRoster.MaxSlots`,
-  capped at `SdfWorldEngine.MaxViewports`. With K above one, the root `main` runs one
+  uncapped since commit 13. With K above one, the root `main` runs one
   `place` pass per view ahead of the pane passes, and
   `WorldFramePresenter.PrepareGraph` sets each view's footprint to its rect at
   its render scale, so `place` also does the render-scale reconstruction. A
@@ -971,7 +979,7 @@ It deletes the SDF engine's composite, and it has landed.
   `split-seats` canary also captures a letterboxed layout it selects through
   `view.override`.
 
-P11b's last four commits are these; 11 and 12 have landed:
+P11b's last four commits are these; 11, 12 and 13 have landed:
 
 11. The per-device pass-pipeline cache, landed. `GpuPassPipelineCache`
     (`src/Puck.Shaders/Pipeline`) is one composition singleton whose entries
@@ -1018,11 +1026,60 @@ P11b's last four commits are these; 11 and 12 have landed:
 13. Screens onto graph instances, after P12b-2: each screen reads a graph
     instance the scheduler feeds, and `ViewStack`, `OffscreenRenderBudget`, the
     procedural test card, `SdfWorldEngine.MaxViewports` and the hand-composed
-    `IRenderNode` tree are deleted.
+    `IRenderNode` tree are deleted. It lands as these commits, in order, each
+    green:
+    1. External producers read previous frames. `RenderGraphInstanceSet`
+       refuses only an external producer's buffer reads: it may read its own
+       output and any instance's previous frame, and any instance may read an
+       external producer's previous frame, so a mirror is a self-read rather
+       than a refusal. The runtime binds such a read to the producer's latest
+       completed output as the reader renders, which for a self-read is the
+       reader's own previous frame. A view whose current output is bound as
+       one of its own screens renders into another output
+       (`SdfWorldEngine.ViewOutputs`), reusing a replaced output of its extent
+       once nothing holds it, so a mirror samples its previous image and never
+       the one it writes. Laws: a mirror facing itself shows the previous
+       frame; a self-reading view never writes the image it samples. Landed.
+    2. Camera views and sessions are `sdf.world` instances. Each camera a
+       screen, a HUD frame or a probe export shows is an external instance of
+       `sdf.world` named by its registration, rendered by an `SdfEngineNode` of
+       its own at the extent its footprint asks (its declared render size over
+       the display) and the refresh `world.view-refresh` sets; it reads every
+       source instance within the frame and every view instance, itself
+       included, at its previous frame. A session screen's view is an
+       `sdf.world` instance too, rendered through the destination's own frame
+       source. The world producer reads every view within the frame, the world
+       node captures its frame before any view renders
+       (`SdfEngineNode.HostFrame`), and a view films that frame. Every screen
+       reads an instance (`ISdfScreenSources.Rendered` goes), and
+       `ViewStack`, `SdfCameraView`, `WorldSessionView`,
+       `SdfFilmingViewEngine`, `ScreenSlotPriority`, `OffscreenRenderBudget`
+       and `ISdfFrameSource.RenderViews` are deleted. A camera-view screen's
+       hit walk continues into the view. Laws: a camera on two screens renders
+       once a frame; an off-view camera renders zero times; a view on a
+       quarter-size screen renders at a quarter extent; a camera-view screen's
+       walk continues into the view. Landed: `WorldViewInstances` states the
+       views, `WorldScreenBinder.TryViewProducer` creates their producers, and
+       the offscreen presentation configures views as the windowed one does,
+       so a camera screen renders in an offscreen capture too. Laws in
+       `WorldViewPaneMappingLawTests.Views` over the host and the scheduler, and
+       `SdfEngineNodeLeaseLawTests.AViewTakesTheFrameTheNodeRendersNext`.
+    3. The view limit goes: `SdfWorldEngine.MaxViewports` is deleted, an
+       engine provisions any viewport capacity, and `WorldRootGraph.ViewsOf`
+       is uncapped. Law: more than five views render. Landed:
+       `SdfWorldEngineWorkLawTests.MoreThanFiveViewsEachRenderIntoTheirOwnOutput`.
+    4. The procedural test card goes: a screen with nothing bound shades as
+       dark glass. Landed: `sdf-world.hlsli`'s unbound branch shades a constant
+       glass color under the faint sun tint, and `screenContent` is deleted.
+    5. The engine node is an external producer only: `SdfEngineNode` is no
+       `IRenderNode`, and harnesses produce it through `Produce`. Landed: its
+       frame render and `Descriptor` are gone from its surface, and the
+       SdfVm and World harnesses produce it at their extent.
 14. The final sweep: the rest of the deletions P11 lists, and the owning guides
     and the `rendering` skill describe the result.
 
-P13's CPU half has landed; its second half, P13b, waits on P12b and P11b. The
+P13's CPU half has landed, and so have P13b's live mappings, simulation
+destination, host passthrough and live hit walk, described below. The
 published mapping is `SourceMapping` in `src/Puck.Commands/Sources`: a surface
 or pane placement, an optional warp pass, a UV layout, a letterboxing fit and a
 crop, as data. A warp declares its exact inverse (`SourceWarpInverse.Affine`)
@@ -1068,7 +1125,11 @@ the row's mapping against a one-by-one source, for the rule operand
 hit on every `Simulation` screen. On a windowed host `WorldPointerRayCapture`
 casts the OS pointer through its seat's published camera with
 `SourceRay.Through` and holds the two commands on the seat's lane with
-`InputRouter.Sustain`, so every tick of a frame carries the ray. The laws are
+`InputRouter.Sustain`, so every tick of a frame carries the ray. A typed
+`source.pointer.origin` or `source.pointer.direction` line is held the same
+way until it is typed again or `source.pointer.clear` ends the ray, and a
+vacated seat's held values end with its occupancy
+(`IInputSlotResolver.SlotVacated`). The laws are
 `IntentRayWireLawTests`, `PointerWorldRuleFactLawTests`,
 `WorldSeatViewportsLocateLawTests` and `SourcePointerCommandLawTests`.
 
@@ -1090,8 +1151,14 @@ as `gun=`. The laws are the Humble battery's `light-gun` stage and
 white and a black half and publishes what it senses: a lit aim reads light in
 the running program, a dark aim, a miss, no ray and no application read dark,
 and a recorded tape of pointer intents replays to the same machine state and
-state hash. No canary drives it: `puck.cartridge.v1` has no light read, so no
-authored cartridge a headless World boots can see the gun.
+state hash. An authored cartridge reads the gun through the `puck.cartridge.v1`
+operand `$light`, 1 while the Color machine's infrared receiver sees light; the
+advanced target has no receiver and refuses it, and its Color weight is measured
+by `puck cartridge-cost`'s `light-condition` shape (`CartridgeLightTests`). The
+`light-gun` canary boots `light-gun.cgb.puck` headless on a `Simulation` screen,
+types the seat's ray once per aim, and reads the cartridge's published light
+bit through a memory binding: 1 aimed at the lit half, 0 at the dark half, the
+gun off once the ray is cleared, and never 1 when aimed dark throughout.
 
 Panes publish their mappings from the live renderer (P13b-1's pane half, P13b-3's
 host half and P13b-6). `WorldFramePresenter.PrepareGraph` ends with
@@ -1127,10 +1194,11 @@ each screen's mapping in `SourceMapping.Describe`'s line or why it has none.
 Every view's world producer reports the published screens as the placements
 standing in its world (`WorldViewGraphHost.Screens`), so a walk from a view's
 pane continues through a screen into its source: it ends `Producer` at a
-producer source's pixel, and `Unread` on a screen showing a camera view, which
-renders through `ViewStack` and is no instance of the live set. The laws are
-`WorldScreenMappingLawTests` and
-`WorldViewPaneMappingLawTests.TheHitWalkContinuesThroughAScreenIntoItsSource`,
+producer source's pixel, and continues into a camera view a screen shows, an
+instance of the live set, through the camera it films from. The laws are
+`WorldScreenMappingLawTests`,
+`WorldViewPaneMappingLawTests.TheHitWalkContinuesThroughAScreenIntoItsSource`
+and `WorldViewPaneMappingLawTests.AHitOnAScreenShowingACameraContinuesIntoTheView`,
 and the `view-screens` canary prints and holds each screen's mapping and a walk
 through each screen.
 
@@ -1149,9 +1217,12 @@ client area sits inside it at an offset, and gives the point in the window's own
 coordinates, DPI included. `Win32PassthroughWindow`, which a window capture's
 feed supplies, sends the window messages. A source whose pane is no longer
 published is revoked: its window hears the release of what it holds, and focus
-returns to the game. The laws are
+returns to the game. The grant itself holds until the local user closes the
+source or its instance or window really goes away, so the same instance's
+republished pane takes input again. The laws are
 `SourcePassthroughRouterLawTests`,
-`WorldViewPaneMappingLawTests.APaneTheLocalUserOpenedTakesThePassthroughDestination`
+`WorldViewPaneMappingLawTests.APaneTheLocalUserOpenedTakesThePassthroughDestination`,
+`WorldViewPaneMappingLawTests.AGrantHoldsAcrossAFrameItsPaneIsNotPublishedAndAnExplicitCloseEndsIt`
 and `Win32PassthroughWindowTests`.
 
 P13b owes the rest. The screen shading still reads its own bezel constant,
@@ -1178,24 +1249,32 @@ root, in both presentation shapes (see P11b commit 6 above):
 3. The launcher, which hands the root's image to a surface compositor that
    blits it to the swapchain.
 
-The SDF engine renders up to `SdfWorldEngine.MaxViewports` (5) views, each into
-its own output image; P11b commit 13 deletes the limit. Diegetic screens are 32
+The SDF engine renders as many views as its viewport capacity provisions, each into
+its own output image. Diegetic screens are 32
 fixed sampler slots
-with a nearest filter. Nested cameras are `ViewStack` entries refreshed
-round-robin under `OffscreenRenderBudget`: 4 per produced frame, 64 registered.
-A view that would see itself reads slot 0 and draws the procedural test card,
-and a chain of different views lags one frame per hop.
+with a nearest filter. Nested cameras and sessions are external `sdf.world`
+instances the scheduler renders by demand at their footprint's extent and the
+`world.view-refresh` divisor. A view that would see itself reads its own
+previous frame, and a chain of different views lags one frame per hop.
 
 `Surface` already distinguishes CPU pixels, a shared handle, and a same-device
 image, but a surface carries only the two 8-bit RGBA formats, the SDF engine's
-internal targets are `R8G8B8A8Unorm`, and no HDR color space is selected
-anywhere. The tonemap is an ACES fit applied at the end of the SDF view pass.
+internal targets are `R8G8B8A8Unorm`. Both swapchains choose a display output
+through `DisplayOutput.TrySelect` and take an HDR one only when it is requested
+and the display reports it, but nothing requests one, so every swapchain
+presents SDR (P16's parts that need no float working target). The tonemap is an ACES fit applied at the end of the SDF view pass.
 There is no jitter, motion vector, or history in the SDF kernels; render scale
 is a bilinear-to-Catmull-Rom upsample in the graph's `place` pass.
 
 P12's source contract, producer registration and conversion passes have
-landed, and so has synchronization across devices; the graph wiring and the
-uploads through P7's residency are owed. The camera and probe GPU tiers, and
+landed, and so have P12b's steps 1 to 6: sources are graph instances,
+feeds are external producers whose every screen image is a lease, uploaded
+sources write regions that a planned conversion pass reads, devices
+synchronize through a shared fence, a capture frame renders every tainted
+instance it reads again, and a machine's output is an uploaded source held to
+its exact verdict. Probe outputs and view exports as sources (step 7),
+consumer-chosen filtering with no slot limit (step 8) and the check's list
+(step 9) remain. The camera and probe GPU tiers, and
 desktop capture on a Direct3D 12 host, share their images without a copy, as
 simultaneous-access Direct3D 12 textures that a Vulkan host imports. A camera
 or capture producer signals the consumer's Direct3D 12 shared fence after each
@@ -1242,17 +1321,21 @@ through the same one-pass graph on a node of their own
 their tier is chosen per device at run time and the HUD reads them outside the
 set, and hand out counted leases. A fill converts as soon as a screen shows or
 a HUD frame names an external source, because a converter's graph builds off
-the frame thread; a camera source's descriptor states the extent its seat's
-sensor delivers, requested until the device negotiates one. A machine's video
-output is an uploaded source too (`MachineVideoSourceUpload`): once per completed
+the frame thread, and never while none does, so a capture of a world showing no
+external content builds no pipeline (`WorldCaptureFills`, held by
+`WorldCaptureFillLawTests`); a
+camera source's descriptor states the extent its seat's sensor delivers,
+requested until the device negotiates one. A machine's video output is an
+uploaded source too (`MachineVideoSourceUpload`): once per completed
 tick it writes the output's latest frame into the instance's region, RGBA8 or an
 indexed image and its palette, and the instance converts it once however many
 screens show it. Desktop capture runs through `Win32GraphicsCaptureFeed` and cameras
 through Media Foundation (`Win32MediaFoundationCameraService`). Linux registers
 null capture services, and there is no POSIX file-descriptor import or
 external semaphore.
-A hit maps back to a source's pixels only through P13's CPU model; no live
-consumer feeds it a world-surface hit yet. The GPU bakes
+A hit maps back to a source's pixels through P13's mapping on the CPU, which
+the simulation destination feeds a seat's pointer ray on a world surface
+(P13b-2). The GPU bakes
 settled carves into 128-cubed bricks (`SdfWorldEngine.BrickBake.cs`).
 
 P17's CPU half and the device half of its sampling check have landed; drawing a
@@ -1891,7 +1974,8 @@ draws. The compact record may move presentation pixels by at most one
 least-significant bit; the state hash and the record's identity stay exact. Mesh
 pixels shade with neutral shadows and ambient occlusion until P6. P4 carries
 zero jitter and previous transforms, which P15 builds on. `world.budget` reports
-the mesh attachments' memory, about 41 MB at 1920×1080. The unbounded reference
+the mesh attachments' memory, about 41 MB at 1920×1080, which an engine holds only
+once a frame draws a mesh. The unbounded reference
 is the fixed-point law and the canary oracle, a fixed-point raycast run to the
 far distance, never to a mesh, beside analytic triangles.
 
@@ -1945,21 +2029,29 @@ passes without P4 or an importer.
 individually scoped.
 
 **Delivers:** representations chosen by editing needs, silhouette, repetition,
-animation, and measured cost, never "all environments are SDFs". Three
+animation, and measured cost, never "all environments are SDFs". Five
 experiments are in scope:
 
 - a per-placement choice between the field, a bake, and a mesh, decided by
   counted cost;
 - shadows and ambient occlusion on meshes, which P4 shades neutral;
 - capsule or ellipsoid proxies on a character's bones for approximate shadows
-  and ambient occlusion that never silently become the contact surface.
+  and ambient occlusion that never silently become the contact surface;
+- glossy reflections marched through the field, one bounce;
+- short-range soft global illumination gathered from the field.
+
+The last two start once P14-5 has put the SDF passes on their declared
+interfaces, and stay off the critical path. Each lands with a counted-cost
+report, the deterministic counters P14's ceilings use, and a quality-tier
+switch that turns it off, so a floor-tier world pays nothing for it.
 
 Distance-field particle collision, destructible fields, mesh import, skinning,
 foliage, and hair stay out until a scene shows the need. When one returns,
 field evaluation is priced as many operations with no zero-penetration
 guarantee assumed, import is a bounded subset that follows the procedural
-geometry proof, and static geometry comes before skinning. Reflections,
-volumes, and transparency remain distinct contracts after opaque visibility,
+geometry proof, and static geometry comes before skinning. Reflections beyond
+one glossy bounce, volumes, and transparency remain distinct contracts after
+opaque visibility,
 and facial deformation and richer materials remain separate measured slices.
 Every representation preserves identity, transforms, authority, and editing
 relationships. Transient aliasing, output-selected specialization,
@@ -1968,7 +2060,9 @@ considered only against a demonstrated need, with simple allocation kept as
 the correctness reference.
 
 **Check:** each addition demonstrates a useful scene, its fidelity limits, and
-its measured cost before becoming a default.
+its measured cost before becoming a default. The reflection and global
+illumination experiments each show their counted-cost report and a capture with
+their tier switch off matching the capture without them.
 
 ### P7 — The binding contract and the adapter memory profile
 
@@ -2283,10 +2377,10 @@ Phase 3, the groups, follows phase 2:
       `VulkanGroupedBindingFloorLawTests`. Its GPU check is `puck parity` and
       every Direct3D 12 canary: the coverage index is recorded on Vulkan and
       does not map Direct3D 12 sources.
-      The surface compositor and the surface upload in
-      `Puck.DirectX.Presentation` still create shader-visible heaps of their
-      own on command lists of their own; P16 folds them into the device's
-      heaps when it makes the compositors the display-transform node's writer.
+      The surface compositor and the surface upload create no shader-visible
+      heap of their own: the compositor's blit set is a pool of the device's
+      heaps, and the upload holds no descriptor
+      ([P16](#p16--display-output)).
 
     14b, the groups. Each commit lands with `puck parity` unchanged, and the
     canaries named are those `tests/Puck.Affected/canary-coverage.json` maps
@@ -2562,16 +2656,16 @@ Phase 3, the groups, follows phase 2:
     sampler at `s1`, space 3), and lease their blit from the device's
     `GpuPassPipelineCache` for a render pass in the swapchain's format, opaque
     and with the neutral dynamic viewport the presenter's recorder sets. A
-    Vulkan swapchain is created only in a `GpuPixelFormat`
-    (`VulkanSwapchain.Format`): `VulkanSwapchainFactory.SelectSurfaceFormat`
-    chooses from `SwapchainFormats` (8-bit unsigned normalized, 8-bit sRGB,
-    10-bit, half float, all mapped by both backends) in its own order, and a
-    surface offering none of them refuses swapchain creation by name, never a
-    frame. The Direct3D 12 compositor's
-    hand-built root signature and pipeline state and `VulkanGpuRenderPass.Borrow`
-    are deleted. The Direct3D 12 compositor keeps a one-SRV and a one-sampler
-    shader-visible heap until P16, and `DirectXDrawCommand` names the group, both
-    heaps and both tables. A graphics description states its groups alone:
+    Vulkan swapchain is created only in a `DisplayOutput`
+    (`VulkanSwapchain.Output`): `VulkanSwapchainFactory.SelectOutput` chooses
+    through `DisplayOutput.TrySelect`, SDR from `DisplayOutput.SdrFormats`
+    (8-bit unsigned normalized, 8-bit sRGB, 10-bit, half float, all mapped by
+    both backends) in its own order, and a surface offering none of them
+    refuses swapchain creation by name, never a frame. The Direct3D 12
+    compositor's hand-built root signature and pipeline state and
+    `VulkanGpuRenderPass.Borrow` are deleted. The Direct3D 12 compositor binds
+    a set of a pool in the device's heaps, and `DirectXDrawCommand` names the
+    group, both heaps and both tables. A graphics description states its groups alone:
     `GpuGraphicsPipelineDescription.Layout` is required, and its
     `TextureSamplerCount`, `EnableStorageBuffer` and push range are deleted with
     both backends' non-layout graphics paths, and
@@ -2961,6 +3055,29 @@ follow it.
    baked colors are in the mirror at install and followed through it) and
    `PipelineOverrideLawTests.Parameters` (the load gate binds a field row to an
    array only as long as its lattice).
+9. Done: the bound-row parity station. `puck parity` runs at one pinned
+   reference tier, `high`: the binding graph declares it and the parity world's
+   `bound` row names it, so the station renders the graph's `high` variant. The
+   row binds the grain pass's `seed` to the `grainSeed` state row, which the
+   world's `toGrainSeed` rule moves from 0 to 13 at tick 1210. Its captures sit
+   on both sides of the move, at ticks 1195 and 1215, and each must equal the
+   binding reference drawn with the value the row holds at that tick, which the
+   contract states as the row's steps (`reference.parameters` in
+   `parity.contract.json`, `ParityBindingReference`). Bound to any literal, the
+   station fails `REFERENCE-FAILED` on both backends at the capture whose value
+   the literal is not (0 fails tick 1215, 13 fails tick 1195), and left
+   unresolved so the graph's default draws, it fails both, while its pixel
+   verdict still holds. A
+   `world.screenshot` writes no manifest entry, so the comparator is the one
+   place a mid-burst capture's skew is judged: `ParityComparatorTests` hands it
+   a capture whose frame refreshed its regions after the armed tick and holds
+   it to `TICK-FAILED` with `PIXEL-OK`. Laws: `ParityBindingReferenceLawTests`
+   (the bound station's reference follows the stated steps, a frame drawn with
+   either literal or the default fails the capture it does not match, and a
+   parameter naming a field the reference does not read, a step key that is not
+   a tick or a value that is not a whole number is refused by name). The floor-tier
+   leg, the same stations at `low` on floor hardware, is a deferred hardware
+   check.
 
 ### P11 — The frame graph document and nested views
 
@@ -3004,8 +3121,9 @@ into `puck.render.graph.v1`, a pipeline being a graph a world names; the
 `SdfEngineNode`'s child map and `RegisterChild` are gone. The hand-composed `IRenderNode` tree
 and its `Children` wiring in `WorldBootComposition` give way to graph
 instances. The SDF composite kernel `sdf-world-composite.comp` and its push
-block are gone; P11b commit 13 deletes the `MaxViewports` limit and `ViewStack`
-itself, not only its budget. The
+block are gone, and P11b commit 13 deleted the `MaxViewports` limit, `ViewStack`
+itself rather than only its budget, `OffscreenRenderBudget` and the procedural
+test card. The
 unified overlay is a package the graph names, and `UnifiedOverlayNode`, its
 hand-built node wiring, is deleted.
 
@@ -3095,9 +3213,9 @@ schema or planner change.
 **P12b, the rest of the package.** P12b moves the source contract into the
 graph. A producer, machine or probe source a screen shows, its row's or a live
 bind's, is a source instance the live set runs, and `SdfEngineNode` binds the
-image the runtime hands it for each through `ISdfScreenSources`; a view and a
-session are still images the binder hands the node itself. Four facts shape
-the order:
+image the runtime hands it for each through `ISdfScreenSources`; since
+P11b-13 a view and a session are `sdf.world` instances the screen reads the
+same way. Four facts shaped the order:
 
 - `sdf.world` is an external producer, which takes image reads (step 2), so a
   screen inside the SDF frame reads a source instance through a graph edge
@@ -3158,7 +3276,7 @@ except step 8.
    external reads narrows to buffer and previous-frame reads. The capture GPU
    route acquires its slot through `LatestSlotPublication` as the
    camera does, and the offscreen views bind acquired leases rather than
-   `ScreenSlot.Handle()` until P11b deletes `ViewStack`. This deletes
+   `ScreenSlot.Handle()`. This deletes
    `ScreenSourceCell`, the binder's per-slot callbacks,
    `SdfEngineNode.SetScreenSourceFrames` and the legacy
    `SdfWorldRenderSpec.ScreenSources`. An uploaded source (step 3) is already a
@@ -3246,15 +3364,9 @@ except step 8.
       `INativeImageCaptureFeed.LatestGpuSlot` and `GpuSlotFenceValue` go. Law:
       `LatestSlotPublicationTests.A_lapping_producer_never_writes_a_slot_a_lease_holds`.
    6. The offscreen views bind acquired leases rather than
-      `ScreenSlot.Handle()` until P11b-13 deletes `ViewStack`. Landed: the
-      node binds every screen reading a source instance before `ISdfFrameSource.RenderViews`,
-      and a view resolves such a screen to the image the node bound for it
-      (`WorldScreenBinder.CurrentHandle` over `SdfEngineNode.BoundScreenSource`),
-      under the lease the node holds past its own submission, which the
-      views' submissions precede on the queue. `ScreenSlot.Handle()` serves only
-      a view's or a session's own offscreen output, which no other thread or
-      device writes. Law:
-      `SdfEngineNodeLeaseLawTests.AnOffscreenViewSamplesTheLeaseTheNodeHoldsForAScreensSource`.
+      `ScreenSlot.Handle()`. Landed, and eclipsed by P11b-13: every view is an
+      instance whose own engine node binds each screen's read under its own
+      lease.
    7. The capture and camera CPU tiers go through `source-rgba`, each capture
       fill is a static source, and `CpuSurfaceSource`'s screen role goes with
       its last caller. Landed: the conversion an uploaded source instance
@@ -3266,8 +3378,16 @@ except step 8.
       and each capture fill once as a static 1x1 source, hands the image out
       under a counted lease, and disposes a converter a new extent replaced, or
       its owner retired, after the last lease. `CpuSurfaceSource` is deleted,
-      and publishing takes the frame context. Law:
-      `RenderGraphRuntimeLawTests.AConverterConvertsPixelsOutsideTheSetThroughItsDescriptorsConversion`.
+      and publishing takes the frame context. A capture fill
+      (`WorldCaptureFills`) converts whenever a screen shows or a HUD frame
+      names an external source, whether or not the gate fills, since a
+      converter's graph builds off the frame thread and a fill first converted
+      on the arming frame has no image on that frame, and only then, since the
+      gate resolves no other read to a fill. Laws:
+      `RenderGraphRuntimeLawTests.AConverterConvertsPixelsOutsideTheSetThroughItsDescriptorsConversion`,
+      `WorldCaptureFillLawTests.AScreenShowingAnExternalSourceHasItsFillConvertedBeforeTheCaptureIsArmed`,
+      `WorldCaptureFillLawTests.AFillFirstConvertedOnTheArmingFrameHasNoImageUntilALaterFrame`
+      and `WorldCaptureFillLawTests.ACaptureWhileNothingShowsExternalContentConvertsNoFillAndBuildsNoPipeline`.
 3. Uploaded sources write regions, and conversions are planned passes. The
    source-graph side has landed. An uploaded producer registers an upload for
    its source package (`RenderGraphPackageRecorders.RegisterSource`, through
@@ -3390,12 +3510,12 @@ except step 8.
    or linear, and the 32 fixed slots give way to the engine's group arrays.
    Until then every screen samples through the one nearest sampler the glyph
    atlas shares.
-9. The check's list and the deletions, last. Every `WorldScreenSource` arm
+9. The check's list, last. Every `WorldScreenSource` arm
    (`none`, `machine`, the four shipped producer ids, `view`, `session`,
    `text` and `probe`) is listed with the producer or instance that reproduces
-   it and the check that holds it, and then `ScreenSlot.AcquireFrame`'s
-   per-kind resolution is deleted. The `view` and `session` arms are rendered
-   instances, which P11b's `ViewStack` deletion owns. A law registers a third,
+   it and the check that holds it. The per-kind resolution this step was to
+   delete, `ScreenSlot.AcquireFrame`, went with P11b-13, which made the `view`
+   and `session` arms rendered view instances. A law registers a third,
    fake producer with no schema or planner change. Linux producers and POSIX
    file-descriptor import stay open.
 
@@ -3466,8 +3586,8 @@ Each commit is marked with what it waits on; only step 5 waits on P7b's groups.
    the binder's rows (a screen at an arbitrary pose maps known points to known
    pixels, identically on every run) and
    `WorldViewPaneMappingLawTests.TheHitWalkContinuesThroughAScreenIntoItsSource`;
-   the `view-screens` canary. A screen showing a camera view ends its walk
-   `Unread` until camera views render as live instances (P11b). A live
+   the `view-screens` canary. A walk through a screen showing a camera view
+   continues into the view, a live instance since P11b-13. A live
    `screen.source` bind publishes the bound source's mapping (P12b-2).
 2. The simulation destination, landed. A tick's command snapshot never reaches
    the server, which integrates each seat's `PlayerIntent`, so the intent
@@ -3484,7 +3604,9 @@ Each commit is marked with what it waits on; only step 5 waits on P7b's groups.
      `WorldFederationCodec.WireKey` `PUCKFED3`. No tape is checked in.
    - `PlayerCommandModule` registers `source.pointer.origin` and
      `source.pointer.direction` as Axis3D seat verbs, the seat keeps them for
-     the tick, and `SeatController.HeldIntent` folds them into the intent.
+     the tick, and `SeatController.HeldIntent` folds them into the intent. A
+     typed line holds its half through `InputRouter.Sustain` until it is typed
+     again or `source.pointer.clear` ends the ray.
    - The server keeps each body's tick ray on its composed intent and maps it in
      the tick, in fixed point, from document data only: a `$pointer:` read
      compiles the screen row's `WorldScreenMappings.Normalized` mapping and runs
@@ -3508,17 +3630,17 @@ Each commit is marked with what it waits on; only step 5 waits on P7b's groups.
      the wire and the tape bit for bit and an absent one costs one byte; a
      three-tick burst gives three snapshots, each carrying the ray; and
      `Locate` answers what the cursor's own mapping answered.
-   - A machine reads the pointer as a light gun, landed:
+   - A machine reads the pointer as a light gun:
      `MachinePadState.Pointer` carries the aim through the one pad path,
      `WorldEngagement.Aim` maps the applied body's ray through the row's
      normalized mapping, and the Humble brick's `LightGunComponent` puts the
-     aimed LCD pixel's brightness on the infrared receive line. Laws: the
-     `light-gun` Post stage and `LightGunLawTests` (a lit aim changes the
-     running program's state, a dark aim, a miss, no ray and no application
-     read dark, and a tape replays to the same machine state and hash).
-     Remaining: a `puck.cartridge.v1` light read, with its measured cost
-     weight, so an authored cartridge can see the gun and a headless canary
-     can drive one.
+     aimed LCD pixel's brightness on the infrared receive line. An authored
+     cartridge reads it through the `puck.cartridge.v1` operand `$light`
+     (cgb only, with a measured cost weight). Laws: the `light-gun` Post
+     stage, `LightGunLawTests` (a lit aim changes the running program's
+     state, a dark aim, a miss, no ray and no application read dark, and a
+     tape replays to the same machine state and hash), `CartridgeLightTests`,
+     and the headless `light-gun` canary.
 3. The presentation destination. The CPU half has landed: the World host
    publishes its panes to its `SourcePanePicker` every frame, from the
    placements `place` draws, and the drawn cursor's feed (`WorldCursorFeed`)
@@ -3562,24 +3684,29 @@ Each commit is marked with what it waits on; only step 5 waits on P7b's groups.
    - A source whose pane is no longer published is revoked before the next
      event routes, and closing a source revokes it: its window hears the
      release of every key and button it holds, and focus returns to the game.
+     The grant outlives an unpublished pane: it ends only on the verb's
+     `close`, or when the instance stops, its capture reopens onto another
+     window, or a published pane gives its name a different source, so the
+     same instance's republished pane takes input again.
    - Laws: `SourcePassthroughRouterLawTests` (a focused source's pointer and
      keys reach a fake window at the mapped client point, the chord returns
      focus and is consumed while a source holds it, its Escape reaches the game
      while none does, a document-declared source never focuses, releases follow
      presses, a source whose pane is withdrawn stops taking keys and is
-     released), `WorldViewPaneMappingLawTests.APaneTheLocalUserOpenedTakesThePassthroughDestination`
+     released), `WorldViewPaneMappingLawTests.APaneTheLocalUserOpenedTakesThePassthroughDestination`,
+     `WorldViewPaneMappingLawTests.AGrantHoldsAcrossAFrameItsPaneIsNotPublishedAndAnExplicitCloseEndsIt`
      and `Win32PassthroughWindowTests` (a hidden Puck window reads the pointer
      events back at their client points; a recording window reads a key's
      message sequence, Alt's system messages, each modifier side, and a drag
      held by the child it was pressed on).
    - Its check, the recorded Windows run on real hardware, is
      [deferred to the end](#deferred-to-the-end).
-5. The GPU draws from the mapping. Waits on P7b-20. The screen shading reads
+5. The GPU draws from the mapping. Can land now: P7b-20, the engine's groups,
+   has landed. The screen shading reads
    each screen's UV layout, crop, letterbox and warp inset from the published
    mapping instead of `CrtBezel` in `shade/sdf-environment.hlsli`, and its mirror,
    `WorldScreenMappings.Bezel`, is deleted. It adds a per-screen buffer to the
-   SDF engine, so it waits for the engine's groups rather than adding a
-   binding P7b-20 would move again.
+   SDF engine as a member of the engine's groups.
 6. Hits continue through live instances. Landed, except the portal check:
    `WorldViewGraphHost.Walk` runs `RenderGraphHitWalk` over the runtime's
    instance set from the published panes, with each view's seat camera and each
@@ -3632,8 +3759,8 @@ Then:
   commit 9 deleted the engine's child path.
 
 A post-process pass is a pass of the synthesized root graph, which a world
-names in `views.post` (step 12). P14 also retires `ViewStack`'s fixed budget
-and the shaders README lines that name consumers which no longer exist. Every internal caller and world
+names in `views.post` (step 12). P14 also retires the shaders README lines that
+name consumers which no longer exist. Every internal caller and world
 document is updated in the same change.
 
 The engine's own pass and hazard model is deleted once its passes are graph
@@ -3654,7 +3781,30 @@ per-pass work counts recorded on both backends before and after the move, with
 every changed count explained in the change and no speedup promised; the
 layering check shown failing once on a deliberate upward include; `puck search
 -M 0` finding no consumer of any retired type, including `SdfWorldEngine`
-itself.
+itself. Each pass is held under a counted-cost ceiling: its deterministic
+counters (dispatches, march steps, texels written and bytes uploaded) are
+recorded over `puck counters`' pinned workload
+(`tests/Puck.Counters/counters.world.json`, its camera and views) at the floor
+tier and the resolution the RTX 2060 runs, and held as calibrated ceilings that
+workload may not exceed. A ceiling is re-recorded only in the change that
+explains why the count moved, and never from wall-clock or GPU timing. Two of
+those counters do not exist yet, and P14 adds them as `GpuWork` kinds the
+ledger reports per pass: march steps and texels written. Its uploads count per
+pass too, the brick uploads included under the pass that records them, since
+`gpu.uploads.host-visible` counts only CPU writes to host-visible buffers
+today. The ledger counts host-side API calls, and a march's step count is
+decided inside the shader's data-dependent loop, so the kernels count their own
+steps into a per-pass counter buffer that the completed sample reads back. The
+march runs in floats, so that kind is `PerBackendDeterministic`, held per
+backend like the SDF engine's `upload` pass. Texels written come from the same
+kernel counters, not from host extents, because an indirectly dispatched pass
+writes only the tiles culling leaves it. The workload does not run at the floor tier
+yet: its script selects no quality and its world authors no render preset, so
+it renders at native scale. `world.quality` applies a preset from the world's
+own render table, which the counters world does not author, so P14 pins the
+floor tier by authoring its `low` preset in `tests/Puck.Counters/counters.world.json`
+and selecting it with `world.quality low` in
+`tests/Puck.Counters/counters.script.txt`, before any ceiling is recorded.
 
 **Target shape.** `sdf.world` is a package fragment that `RenderGraphCompiler`
 splices into the graph, so `ShaderPipelineCompiler` orders, versions and
@@ -3692,9 +3842,10 @@ generates the frame block into `frame/`.
    in `Puck.World`, which the SDF tests do not reach. The members nothing
    called are gone: the pipelined preview path, the node's cadence diagnostics
    and the engine's diagnostics hashing behind them, `SdfFrame.WarpAmount`, and
-   the world node's output-image factory with its shared-handle branch. An
-   offscreen camera view still selects export mode through
-   `SdfCameraView.ExportFactory`, so the engine's export path stays.
+   the world node's output-image factory with its shared-handle branch. A
+   camera view still selects export mode through
+   `SdfEngineNode.CreateOutputImage` for a probe export, so the engine's export
+   path stays.
 2. Landed, the HLSL module split: the kernels live in layer directories under
    `src/Puck.SdfVm/Assets/Shaders/Sdf`, lowest first `isa/` (the generated
    declarations and interfaces), `field/`, `frame/`, `march/`, `surface/`,
@@ -3851,7 +4002,12 @@ alternative pass.
 stated tolerance; an object moving across SDF tile boundaries stays under a
 stated ghosting metric; a set of disocclusion scenes; history reset on a cut;
 parity captures pin the jitter index so pixel verdicts stay meaningful; P2's
-work counts recorded on both reference machines. The recorded Steam Deck run,
+work counts recorded on both reference machines. The reconstruction passes are
+held under counted-cost ceilings as P14's are, over the same pinned workload
+and with the counters P14 adds: each pass's dispatches, march steps, texels
+written and bytes uploaded, recorded at the floor tier and the resolution the
+RTX 2060 runs, re-recorded only in the change that explains the move, never
+from wall-clock timing. The recorded Steam Deck run,
 with dynamic resolution on and render scale responding to the pacing signal,
 is [deferred to the end](#deferred-to-the-end). Whether the run holds its
 frame-time target is not checked while wall-clock and GPU timing are deferred.
@@ -3861,26 +4017,52 @@ and P14.
 
 ### P16 — Display output
 
-**Starts from:** 8-bit UNORM swapchains in the default color space on both
-backends, no HDR selection, and the tonemap inside the SDF view pass.
+**Starts from:** 8-bit UNORM SDR swapchains on both backends and the tonemap
+inside the SDF view pass. The pieces that need no float working target are in
+place:
+
+- The Direct3D 12 compositor and surface upload keep their descriptors in the
+  device's heaps (P7b-14a). The compositor admits one pool for the
+  `SurfaceBlitLayout` group through `IGpuBindings.CanAdmit` and binds its one
+  set; a CPU surface reaches the blit through the device's `IGpuSurfaceUpload`,
+  which holds no descriptor. `DirectXDescriptorHeaps.Create` makes only CPU-only
+  heaps, and `DirectXGpuBindings.ShaderVisibleHeapsCreated` counts the
+  device's pair, two per device (`DirectXShaderVisibleHeapsLawTests`). A
+  steady upload reuses its texture's image view and allocates nothing, and
+  replaces the view only when a new extent, format or level count rebuilds the
+  texture (`DirectXSurfaceUploadLawTests`).
+- HDR swapchain selection. `DisplayOutput`, a `GpuPixelFormat` and a
+  `DisplayColorSpace` (`Srgb`, `Hdr10`, `ScRgb`), is the one description of
+  what a swapchain presents, `DisplayOutput.TrySelect` the one choice, and
+  `ISurfacePresenter.Output` the chosen one on either backend. Vulkan reads the
+  surface's format and color-space pairs with `VK_EXT_swapchain_colorspace`
+  enabled when the loader has it (`VulkanSwapchainFactory.SelectOutput`);
+  Direct3D 12 reports HDR10 and scRGB when the containing `IDXGIOutput6`
+  reports `G2084_NONE_P2020`, and moves the swap chain into a chosen HDR output
+  only when `CheckColorSpaceSupport` allows presenting it. HDR is chosen only
+  when requested and reported; `PresentationOptions.ColorSpace` requests
+  `Srgb`, and no host or document setting requests anything else
+  (`DisplayOutputLawTests`, `VulkanSwapchainFormatLawTests`).
+- Paper white. `PresentationOptions.PaperWhiteNits`, 80 to 10,000 nits and
+  `DisplayOutput.SdrWhiteNits` by default, is the level the HUD and overlays
+  compose at once they read it, and `DisplayOutput.WhiteScale` turns it into an
+  output's UI white: one in SDR at every level.
 
 **Owns:** the scene-linear working space, the display-transform node, HDR
 swapchain selection, and paper white for UI.
 
 **Delivers:** the smallest HDR path that exercises the contracts. That means a
 scene-linear working space and one display-transform node at the end of the
-graph, which tonemaps and encodes for the target. The swapchain compositors,
-`SurfaceCompositor` on Vulkan and `DirectXSurfaceCompositor` on Direct3D 12,
-become that node's writer rather than a blit after it, and the Direct3D 12
-compositor and surface upload, which create shader-visible heaps of their own,
-fold into the device's heaps (P7b-14a). On Windows it adds an
-HDR10 or scRGB swapchain on both backends, chosen from what the display
-reports. The HUD and overlays
-use a paper-white level, and one HDR source, desktop capture on an HDR display,
-converts through P12. SDR stays the default and the fallback. Calibration UI,
-per-display metadata, and HDR on the Steam Deck OLED under Linux are later work
-and stay listed in open items until scheduled.
-
+graph, which tonemaps and encodes for the target; both wait on P14-10's float
+working targets. The swapchain compositors, `SurfaceCompositor` on Vulkan and
+`DirectXSurfaceCompositor` on Direct3D 12, become that node's writer rather
+than a blit after it. On Windows a host setting, named once, then requests
+HDR10 or scRGB, which the selection above takes when the display reports it.
+The HUD and overlays read the paper-white level through
+`DisplayOutput.WhiteScale`, and one HDR source, desktop capture on an HDR
+display, converts through P12. SDR stays the default and the fallback.
+Calibration UI, per-display metadata, and HDR on the Steam Deck OLED under
+Linux are later work and stay listed in open items until scheduled.
 **Check:** on an SDR display the same graph produces the previous image within
 the parity contract. The HDR-display checks, the swapchain reporting an HDR
 color space, a test ramp exceeding SDR white, an HDR desktop capture displayed
@@ -3948,43 +4130,52 @@ Image-only packaging stays
 independent of placed-surface support, and shared GPU and World files have one
 owner at a time.
 
-**Contracts.** P7's memory profile and residency selector have landed, and so
-has every step of P7b; the gate's Linux bytecode leg is
+**Contracts.** P7 is complete: its memory profile, its residency selector and
+every step of P7b have landed, and the gate's Linux bytecode leg is
 [deferred to the end](#deferred-to-the-end). P8 is complete but for its echo of
 the SDF engine's two interfaces, which P14-5 adds, and that canary's GPU run;
-its frame group became a descriptor set when step 15 put pipelines on groups. P7 and P8 do not
-read simulation state, so they do not wait on the state rebuild.
+its frame group became a descriptor set when step 15 put pipelines on groups.
+P7 and P8 do not read simulation state, so they do not wait on the state
+rebuild.
 
 **The frame graph and nesting.** P11's CPU half has landed, and so have the
 P11b items its implementation status lists, the main view through the graph
-runtime among them. The rest of P11b, commits 13 and 14, waits on nothing from
-P7b, whose groups have landed for every pass; commit 13, the screens, follows
-P12b-2, which has landed. P12's
-source contract, producers and conversion passes have landed, and so has P12b-2;
-the rest of P12b, the graph wiring, follows P11b, and P13b follows P12b and P11b. P14 follows P4, P7b, P8,
-P11b and P12b, because the engine's composition and screens need somewhere to
-go before it moves; its capability matrix (P14-1), module split (P14-2), generated
-instruction-set declarations (P14-3) and the planner's vocabulary with
-multi-basis counts (P14-4) needed none of them and have landed. P4-2's mesh
-work follows P4-1 and P7b's services. P15 and P16 both follow P14: P15 also needs P4, and P16, the smallest package
-in this group, needs P14's float working targets. P17's CPU half, the bakes and
-their texture codecs, has landed, and so has their block-compressed upload and
-sampling check on both backends; drawing a bake follows P4 and choosing
-between a bake and the field follows P6.
+runtime among them, and commit 13, the screens as graph instances, which
+deleted `ViewStack`, `MaxViewports` and the test card. The rest of P11b is
+commit 14, the final sweep, which waits on nothing. P12's source contract,
+producers and conversion passes have landed, and so have P12b's steps 1 to 6,
+the capture gate over the graph among them. Of the rest, step 7 can land now,
+step 8 can too since P7b-14b-6 and P7b-20 have landed, and step 9 comes last;
+its `view` and `session` arms already went with P11b-13. P13b's live mappings
+(step 1), simulation destination (step 2, with the light gun that authored
+cartridges read through `$light`), host passthrough (step 4) and live hit walk (step 6)
+have landed, with step 3's CPU half; step 5, the GPU drawing from the
+mapping, waited only on P7b-20 and can land now, and GPU picking follows P4.
+P14 follows P4, P7b, P8, P11b and P12b, because the engine's composition and
+screens need somewhere to go before it moves. Its capability matrix (P14-1),
+module split (P14-2), generated instruction-set declarations (P14-3), the
+planner's vocabulary with multi-basis counts (P14-4) and post passes as the
+root graph's own passes (P14-12) needed none of them and have landed. P15 and P16 both follow P14: P15 also needs P4, and
+P16, the smallest package in this group, needs P14's float working targets for
+its display transform; its heap fold, HDR swapchain selection and paper-white
+setting needed none and have landed.
+P17's CPU half, the bakes and their texture codecs, has landed, and so have
+their block-compressed upload and sampling check on both backends and the one
+pixel-format vocabulary, `GpuPixelFormat`; drawing a bake follows P4 and
+choosing between a bake and the field follows P6.
 
-**Bound state.** P9, which also fills the frame group P8 declares, has
-landed. It is written against the state interface of
+**Bound state.** P9 and P10 have landed. P9, which also fills the frame group
+P8 declares, is written against the state interface of
 [the presentation view](runtime-and-delivery.md#the-presentation-view), which
-the runtime and delivery programme owns. P10 is last in this group: a bound
-member and an overridden member have to compose by a stated rule, so it needs
-P7's residency policies and P9's mirror as well as P5-1 and P8's interface,
-which have landed. It also follows P11b's graph wiring, because the rows it
-binds are `views.graphs` rows.
+the runtime and delivery programme owns. P10 binds the pass members of
+`views.graphs` rows to state through P9's mirror and P7's residency policies,
+and a bound member and an overridden member compose by the rule
+[the decisions register](../decisions/rendering.md) states.
 
-The SDF engine's groups (P7b-20), P12b-2 and P4-2c have landed, so the longest
-remaining chain now runs P11b-13, P14-5, then P14-6, P14-7 to P14-13,
-and ends with P15. P16 follows P14-10's float working targets, and drawing a
-bake (P17) comes before P6's choice between a bake and the field.
+The SDF engine's groups (P7b-20), P12b-2, P4-2c and P11b-13 have landed, so the
+longest remaining chain runs P14-2, which is in progress, then P14-5, P14-6,
+P14-7 to P14-11 and P14-13, and ends with P15. P16 follows P14-10's float working targets, and
+drawing a bake (P17) comes before P6's choice between a bake and the field.
 
 ## Deferred to the end
 

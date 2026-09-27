@@ -33,22 +33,10 @@ public sealed partial class SdfWorldEngine {
             label: DebugLabel
         );
 
-        // Every descriptor-reachable image must have a defined layout before the first dispatch: screen content may
-        // sample the filler in the first frame's views.
-        if (!m_fillerInitialized) {
-            recorder.TransitionImageLayout(
-                commandBufferHandle: commandBuffer,
-                destinationAccessMask: GpuAccess.ShaderRead,
-                destinationStageMask: GpuStage.ComputeShader,
-                imageHandle: m_screenSourceFiller.ImageHandle,
-                newLayout: GpuImageLayout.ShaderReadOnly,
-                oldLayout: GpuImageLayout.Undefined,
-                sourceAccessMask: GpuAccess.None,
-                sourceStageMask: GpuStage.TopOfPipe
-            );
-            m_fillerInitialized = true;
-        }
-
+        // Every descriptor-reachable image must have a defined layout before the first dispatch: screen content and the
+        // mesh visibility binding may sample the filler in the first frame's views, and a mesh visibility target the
+        // frame created rests shader-readable before its mesh pass.
+        InitializeFiller(commandBuffer: commandBuffer);
         InitializeMeshTarget(commandBuffer: commandBuffer);
 
         // FRAME-RING cross-frame gate: the GPU-written device-local scratch (tile / instance-mask / indirect-args /

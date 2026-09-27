@@ -1,14 +1,6 @@
-// The procedural screen card, the star field, the cloud layer and the sky gradient.
+// The star field, the cloud layer and the sky gradient.
 #ifndef SHADE_SDF_SKY_HLSLI
 #define SHADE_SDF_SKY_HLSLI
-// Procedural placeholder for a SCREEN_SLAB face: an animated test-card.
-float3 screenContent(float3 p, float time) {
-    float bars = (0.5 + (0.5 * sin((p.y * 26.0) - (time * 5.0))));
-    float3 baseColor = lerp(float3(0.02, 0.04, 0.09), float3(0.10, 0.80, 1.00), bars);
-    float sweep = smoothstep(0.49, 0.5, frac((p.x * 1.3) + (time * 0.4)));
-
-    return (baseColor + (0.35 * float3(0.95, 0.45, 0.12) * sweep));
-}
 // The star field's cell-grid domain is the octahedral sky projection (sdf-octahedral.hlsli).
 #include "../field/sdf-octahedral.hlsli"
 // The procedural star field: a per-cell PCG3D hash (seed folded in) over the octahedral sky projection picks

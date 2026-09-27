@@ -10,11 +10,11 @@ using Puck.World.Client;
 
 namespace Puck.World;
 
-// The screens as the engine node binds them, and the source instances their rows read. A row's producer, machine or probe
-// source is a render-graph source instance: the runtime opens it through the registered producers (and the machine
-// upload and probe producer below, of the reserved ids), renders it at its cadence, and hands the world producer its
-// latest image, which the node binds to every screen whose row reads it. Every other image a screen shows the binder
-// renders or holds itself.
+// The screens as the engine node binds them, and the instances they read. A row's producer, machine or probe source is a
+// render-graph source instance: the runtime opens it through the registered producers (and the machine upload and probe
+// producer below, of the reserved ids), renders it at its cadence, and hands the world producer its latest image, which
+// the node binds to every screen whose row reads it. A camera view or a session is a view instance the runtime hands the
+// node the same way.
 internal sealed partial class WorldScreenBinder : ISdfScreenSources {
     /// <summary>Gets or sets the render-graph runtime the world renders through, whose source instances this binder reads
     /// a screen's feed, fault and light from; <see langword="null"/> in a presentation with no render graph, which runs no
@@ -34,16 +34,13 @@ internal sealed partial class WorldScreenBinder : ISdfScreenSources {
     );
     /// <inheritdoc/>
     /// <remarks>A screen reading a source instance lights the room with its source's light, resolved through the capture
-    /// gate; any other with what it shows locally.</remarks>
+    /// gate; a view films an already-lit world and lights nothing.</remarks>
     public Vector3 Light(int screen) {
-        if (!m_slots.TryGetValue(
-            key: screen,
-            value: out var slot
-        )) {
+        if (
+            !m_slots.ContainsKey(key: screen) ||
+            (Mappings.InstanceOf(screen: screen) is not { } instance)
+        ) {
             return Vector3.Zero;
-        }
-        if (ReadOf(screen: screen) is not { } instance) {
-            return slot.Light();
         }
 
         return ShownOf(screen: screen) switch {
@@ -93,17 +90,16 @@ internal sealed partial class WorldScreenBinder : ISdfScreenSources {
         instance: context.Instance
     );
     /// <inheritdoc/>
-    /// <remarks>A screen reads the source instance of the source it shows: its row's, or the one a live presentation
-    /// verb bound over the row.</remarks>
-    public string? ReadOf(int screen) => Mappings.InstanceOf(screen: screen);
-    /// <inheritdoc/>
-    public GpuImageLease Rendered(int screen) => (m_slots.TryGetValue(
+    /// <remarks>A screen reads the instance of the source it shows: its row's, or the one a live presentation verb bound
+    /// over the row; the source instance of a producer, machine or probe source, and the view instance of a camera view
+    /// or a session.</remarks>
+    public string? ReadOf(int screen) => (Mappings.InstanceOf(screen: screen) ?? (m_slots.TryGetValue(
         key: screen,
         value: out var slot
     )
-        ? slot.AcquireFrame()
-        : 0
-    );
+        ? slot.ViewInstance
+        : null
+    ));
 
     // The screen source a source instance's settings name.
     private static WorldScreenSource? SourceOf(RenderGraphExternalProducerContext context) => WorldSourceInstances.SourceOf(instance: RenderGraphInstance.Source(
@@ -218,7 +214,7 @@ internal sealed partial class WorldScreenBinder : ISdfScreenSources {
 
             var fills = binder.FillsExternal;
             var lease = (fills
-                ? binder.FillImage(rgba: ImageSourceDescriptor.DefaultCaptureFill)
+                ? binder.m_fills.Acquire(rgba: ImageSourceDescriptor.DefaultCaptureFill)
                 : feed.AcquireFrame());
 
             if (lease.ImageViewHandle == 0) {

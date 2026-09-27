@@ -20,6 +20,10 @@ public static class CartridgeExpressions {
     /// <summary>The reserved operand prefix a held or edged button reads through: <c>$key:&lt;button&gt;:&lt;mode&gt;</c>,
     /// yielding 1 while the button satisfies the mode and 0 otherwise.</summary>
     public const string KeyPrefix = "$key:";
+    /// <summary>The reserved operand the light sensor reads through: <c>$light</c>, yielding 1 while the machine's
+    /// infrared receiver sees light — a light gun aimed at a lit pixel, or a linked peer's lamp — and 0 otherwise. Only
+    /// the cgb target has a receiver; validation refuses the read on any other.</summary>
+    public const string Light = "$light";
     /// <summary>The deepest value stack an expression may need. A machine spends its own stack on the operands in
     /// flight, so this bounds what one expression can hold rather than how many tokens it carries.</summary>
     public const int MaxDepth = 8;
@@ -70,6 +74,14 @@ public static class CartridgeExpressions {
     /// <param name="mode">held, pressed or released.</param>
     /// <returns>The expression.</returns>
     public static ExpressionProgram Button(string button, string mode) => Of(state: $"{KeyPrefix}{button}:{mode}");
+    /// <summary>Returns a value indicating whether an operand reads the light sensor.</summary>
+    /// <param name="state">The operand.</param>
+    /// <returns><see langword="true"/> for an unkeyed <see cref="Light"/> read.</returns>
+    public static bool IsLight(InstructionPayload.State state) {
+        ArgumentNullException.ThrowIfNull(argument: state);
+
+        return ((state.Key is null) && (state.Name.Spelling == Light));
+    }
     /// <summary>Returns the deepest value stack <paramref name="expression"/> needs.</summary>
     /// <param name="expression">The expression.</param>
     /// <returns>The maximum number of values in flight at once.</returns>

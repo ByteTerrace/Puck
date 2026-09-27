@@ -506,8 +506,8 @@ public static class SdfCameraProgramEvaluator {
     }
 }
 /// <summary>
-/// A compiled camera program wearing the <see cref="ISdfCameraRig"/> seam, so a program frames a
-/// <see cref="ViewStack"/> view exactly where an <see cref="OrbitRig"/> or a <see cref="FollowRig"/> would. The rig
+/// A compiled camera program wearing the <see cref="ISdfCameraRig"/> seam, so a program frames a camera view exactly
+/// where an <see cref="OrbitRig"/> or a <see cref="FollowRig"/> would. The rig
 /// owns the per-frame buffers the evaluator reads: a host writes <see cref="Subjects"/>, <see cref="Scalars"/>, and
 /// <see cref="Look"/> for the coming frame, then resolves.
 /// </summary>

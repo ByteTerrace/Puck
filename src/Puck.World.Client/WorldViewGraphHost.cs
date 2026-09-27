@@ -24,6 +24,10 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// <summary>Gets this frame's footprints: the synthesized root showing the world, then each pane at its slot's
     /// extent. The render root reads this list, which the host rewrites in place every frame.</summary>
     public IReadOnlyList<RenderGraphFootprint> Footprints => m_footprints;
+    /// <summary>Gets the views the display shows directly beside the root, a HUD frame's or a probe export's camera, each
+    /// at the fraction of the display its declared extent covers. The host rewrites the list in place whenever the set is
+    /// composed again.</summary>
+    public IReadOnlyList<RenderGraphRoot> Roots => m_roots;
     /// <summary>The source loader used by both boot and live authoring: a row naming a package directory loads through
     /// the package, and any other row through the ordinary pipeline loader.</summary>
     public ShaderPackager Packager { get; }
@@ -296,11 +300,13 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
     private Func<IReadOnlyList<string>, int, IReadOnlyList<WorldViewPostPass>?, WorldRootGraph>? m_compose;
     private bool m_disposed;
-    // The source instances the running set was composed with, and the footprints its screen-rendering instance shows
-    // them through.
+    // The source and view instances the running set was composed with, the footprints its screen-rendering instance shows
+    // them through, and the views the display shows directly.
     private WorldSourceInstances? m_lastSources;
+    private WorldViewInstances? m_lastRendered;
 
-    private List<RenderGraphFootprint> m_sourceFootprints = [];
+    private readonly List<RenderGraphRoot> m_roots = [];
+    private List<RenderGraphFootprint> m_screenFootprints = [];
 
     private WorldViewDefaults? m_lastViews;
     // The last refusal Reconcile reported, so a section it keeps retrying reports each refusal once.
@@ -316,15 +322,17 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         DocumentDirectory = Path.GetFullPath(path: documentDirectory);
     }
 
-    /// <summary>Composes a runtime's instance set from a document's <c>views</c> section and the source instances its
-    /// screens read: the sources, then the synthesized default graph (the world producer, then every row, then the root
-    /// that reads the world and the panes) when the section names no <c>views.root</c>, or the rows alone, rooted where
-    /// <c>views.root</c> says, when it does. The instance the SDF engine renders its first view through (the synthesized
-    /// world producer, or every <c>sdf.world</c> row of an authored root that names no later view) reads every source,
+    /// <summary>Composes a runtime's instance set from a document's <c>views</c> section, the source instances its
+    /// screens read and the views the world renders beside its own: the sources, then the views, then the synthesized
+    /// default graph (the world producer, then every row, then the root that reads the world and the panes) when the
+    /// section names no <c>views.root</c>, or the rows alone, rooted where <c>views.root</c> says, when it does. The
+    /// instance the SDF engine renders its first view through (the synthesized world producer, or every
+    /// <c>sdf.world</c> row of an authored root that names no later view) reads every source and every view a screen shows,
     /// so its screens sample them.</summary>
     /// <param name="views">The document's <c>views</c> section.</param>
     /// <param name="synthesized">The default graph, or <see langword="null"/> when the section names its own root.</param>
     /// <param name="sources">The source instances the world's screens read (<see cref="WorldScreenMappingSet.Sources"/>).</param>
+    /// <param name="rendered">The views the world renders beside its own (<see cref="WorldScreenMappingSet.Views"/>).</param>
     /// <param name="passes">The passes one render of a row's graph records.</param>
     /// <param name="set">The instances, when this returns <see langword="true"/>.</param>
     /// <param name="graphs">Each instance's graph, parallel to <paramref name="set"/>: the synthesized root's, and
@@ -332,29 +340,33 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// <param name="root">The instance the display shows.</param>
     /// <param name="reason">Why the instances were refused.</param>
     /// <returns><see langword="true"/> when the instances form a valid set.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="views"/>, <paramref name="sources"/> or
-    /// <paramref name="passes"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="views"/>, <paramref name="sources"/>,
+    /// <paramref name="rendered"/> or <paramref name="passes"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="synthesized"/> is <see langword="null"/> and the section names
     /// no root.</exception>
-    public static bool TryCompose(WorldViewDefaults views, WorldRootGraph? synthesized, IReadOnlyList<RenderGraphInstance> sources, Func<WorldViewGraph, int> passes, [NotNullWhen(returnValue: true)] out RenderGraphInstanceSet? set, out IReadOnlyList<RenderGraphRuntimeGraph?> graphs, out string root, out string reason) {
+    public static bool TryCompose(WorldViewDefaults views, WorldRootGraph? synthesized, IReadOnlyList<RenderGraphInstance> sources, WorldViewInstances rendered, Func<WorldViewGraph, int> passes, [NotNullWhen(returnValue: true)] out RenderGraphInstanceSet? set, out IReadOnlyList<RenderGraphRuntimeGraph?> graphs, out string root, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: views);
         ArgumentNullException.ThrowIfNull(argument: sources);
+        ArgumentNullException.ThrowIfNull(argument: rendered);
         ArgumentNullException.ThrowIfNull(argument: passes);
 
         var rows = WorldViewGraphs.Instances(
             graphs: (views.Graphs ?? []),
             passes: passes
         );
+        var viewInstances = rendered.Instances(sources: sources);
         List<RenderGraphInstance> instances;
         var composed = new List<RenderGraphRuntimeGraph?>();
 
-        composed.AddRange(collection: Enumerable.Repeat<RenderGraphRuntimeGraph?>(count: sources.Count, element: null));
+        composed.AddRange(collection: Enumerable.Repeat<RenderGraphRuntimeGraph?>(count: (sources.Count + viewInstances.Count), element: null));
 
         if (views.Root is { } authored) {
             instances = [
                 .. sources,
-                .. rows.Select(selector: row => ReadingSources(
+                .. viewInstances,
+                .. rows.Select(selector: row => ReadingScreens(
                     instance: row,
+                    rendered: rendered,
                     sources: sources
                 )),
             ];
@@ -376,8 +388,10 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
             instances = [
                 .. sources,
-                .. synthesized.Producers.Select(selector: producer => ReadingSources(
+                .. viewInstances,
+                .. synthesized.Producers.Select(selector: producer => ReadingScreens(
                     instance: producer,
+                    rendered: rendered,
                     sources: sources
                 )),
                 .. rows,
@@ -406,31 +420,36 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         return true;
     }
 
-    // Whether an instance is one the SDF engine renders its first view through, whose screens sample the sources.
-    private static bool RendersScreens(RenderGraphInstance instance) => (
+    // Whether an instance is one the SDF engine renders its first view through, whose screens sample the sources and the
+    // views: an sdf.world instance that renders no later view of the world and is no view of its own.
+    private static bool RendersScreens(RenderGraphInstance instance, WorldViewInstances rendered) => (
         string.Equals(
             a: instance.ExternalPackage,
             b: RenderGraphPackageCatalog.SdfWorld,
             comparisonType: StringComparison.Ordinal
         ) &&
-        (WorldViewNames.ViewOf(instance: instance.Name) is null)
+        (WorldViewNames.ViewOf(instance: instance.Name) is null) &&
+        !rendered.Contains(name: instance.Name)
     );
-    // The instance with a read of every source added when the SDF engine renders its screens through it.
-    private static RenderGraphInstance ReadingSources(RenderGraphInstance instance, IReadOnlyList<RenderGraphInstance> sources) => (((sources.Count == 0) || !RendersScreens(instance: instance))
+    // The instance with a read of every source and every view a screen shows added, within the frame, when the SDF engine
+    // renders its screens through it.
+    private static RenderGraphInstance ReadingScreens(RenderGraphInstance instance, IReadOnlyList<RenderGraphInstance> sources, WorldViewInstances rendered) => ((((sources.Count == 0) && (rendered.Views.Count == 0)) || !RendersScreens(instance: instance, rendered: rendered))
         ? instance
         : (instance with {
             Reads = [
                 .. instance.Reads,
                 .. sources.Select(selector: static source => new RenderGraphRead(Producer: source.Name)),
+                .. rendered.Views.Where(predicate: static view => view.Demand.HasFlag(flag: WorldViewDemand.Screen)).Select(selector: static view => new RenderGraphRead(Producer: view.Name)),
             ],
         }));
-    // One footprint per source a screen-rendering instance reads: a source renders at its producer's negotiated extent, so
-    // any fraction demands it without sizing it.
-    private static List<RenderGraphFootprint> SourceFootprints(RenderGraphInstanceSet set) {
+    // The footprints a screen-rendering instance shows its reads through: a source renders at its producer's negotiated
+    // extent, so any fraction demands it without sizing it, and a view a screen shows at the fraction of the display its
+    // declared extent covers.
+    private static List<RenderGraphFootprint> ScreenFootprints(RenderGraphInstanceSet set, WorldViewInstances rendered) {
         var footprints = new List<RenderGraphFootprint>();
 
         foreach (var instance in set.Instances) {
-            if (!RendersScreens(instance: instance)) {
+            if (!RendersScreens(instance: instance, rendered: rendered)) {
                 continue;
             }
 
@@ -442,6 +461,24 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                         Producer: read.Producer,
                         Width: 1.0
                     ));
+                }
+
+                foreach (var view in rendered.Views) {
+                    if (
+                        view.Demand.HasFlag(flag: WorldViewDemand.Screen) &&
+                        string.Equals(
+                            a: view.Name,
+                            b: read.Producer,
+                            comparisonType: StringComparison.Ordinal
+                        )
+                    ) {
+                        footprints.Add(item: new RenderGraphFootprint(
+                            Consumer: instance.Name,
+                            Height: view.Height,
+                            Producer: view.Name,
+                            Width: view.Width
+                        ));
+                    }
                 }
             }
         }
@@ -465,10 +502,12 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
         m_compose = compose;
         m_lastSources = null;
+        m_lastRendered = null;
         m_lastViews = null;
         m_runtime = runtime;
-        // The first Reconcile composes the set again and derives the source footprints from it.
-        m_sourceFootprints = [];
+        // The first Reconcile composes the set again and derives the screens' footprints and the views' roots from it.
+        m_screenFootprints = [];
+        m_roots.Clear();
         m_synthesized = synthesized;
         ResetFootprints();
     }
@@ -1005,6 +1044,10 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                 ReferenceEquals(
                     objA: m_lastSources,
                     objB: Screens?.Sources
+                ) &&
+                ReferenceEquals(
+                    objA: m_lastRendered,
+                    objB: Screens?.Views
                 )
             )
         ) {
@@ -1027,6 +1070,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     private void ReconcileChanged(IRenderGraphInstances runtime, WorldViewDefaults views) {
         var synthesized = m_synthesized;
         var sources = Screens?.Sources;
+        var rendered = (Screens?.Views ?? WorldViewInstances.Empty);
 
         if (views.Root is null) {
             var panes = WorldRootGraph.PanesOf(views: views);
@@ -1054,6 +1098,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             graphs: out var graphs,
             passes: PassesOf,
             reason: out var reason,
+            rendered: rendered,
             root: out var root,
             set: out var set,
             sources: (sources?.Instances ?? []),
@@ -1115,10 +1160,25 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         }
 
         m_lastSources = sources;
+        m_lastRendered = Screens?.Views;
         m_lastViews = views;
         m_refusal = null;
-        m_sourceFootprints = SourceFootprints(set: set);
+        m_screenFootprints = ScreenFootprints(
+            rendered: rendered,
+            set: set
+        );
         m_synthesized = synthesized;
+        m_roots.Clear();
+
+        foreach (var view in rendered.Views) {
+            if (view.Demand.HasFlag(flag: WorldViewDemand.Root)) {
+                m_roots.Add(item: new RenderGraphRoot(
+                    Height: view.Height,
+                    Instance: view.Name,
+                    Width: view.Width
+                ));
+            }
+        }
 
         for (var index = 0; (index < graphs.Count); index++) {
             if (
@@ -1273,6 +1333,6 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             m_footprints.AddRange(collection: synthesized.Footprints);
         }
 
-        m_footprints.AddRange(collection: m_sourceFootprints);
+        m_footprints.AddRange(collection: m_screenFootprints);
     }
 }

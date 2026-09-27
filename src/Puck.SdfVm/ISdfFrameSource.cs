@@ -24,18 +24,6 @@ public interface ISdfFrameSource {
     /// <see cref="ScreenDecals"/>) so a host node's type coupling doesn't grow to thread it.</summary>
     /// <param name="bakes">The engine's brick-bake service (poll/request), never null.</param>
     void AdvanceBricks(ISdfBrickBakeService bakes) { }
-    /// <summary>Hands the frame source this frame's full <see cref="Puck.Hosting.FrameContext"/> once per produced frame,
-    /// right AFTER <see cref="CaptureFrame"/> and the binding of every screen that reads a source instance, and BEFORE the
-    /// host binds the screens it renders itself (<see cref="ISdfScreenSources.Rendered"/>) — the seam a source that hosts
-    /// its own offscreen view pool (a <see cref="Views.ViewStack"/> of diegetic camera / nested-world renders) uses to
-    /// render those views against the live device this frame, so a screen showing a view reads a freshly-rendered image.
-    /// An offscreen view render resolves its own device from the frame context's host and renders the SAME world program
-    /// the host is composing. Default no-op: a source with no view pool (the vast majority) need not override it.
-    /// Mirrors <see cref="AdvanceBricks"/>: an engine seam handed an engine-frame capability, not a host-shaped
-    /// hook.</summary>
-    /// <param name="context">This frame's host frame context (its <see cref="Puck.Hosting.FrameContext.Host"/> resolves
-    /// the live GPU device the offscreen views render on).</param>
-    void RenderViews(in Puck.Hosting.FrameContext context) { }
 
     /// <summary>Screen-surface TRANSFORM providers keyed by the program-declared screen index (see
     /// <see cref="SdfEngineNode"/>'s <c>screenSurfaceTransforms</c> constructor parameter): a screen riding a dynamic
@@ -54,7 +42,7 @@ public interface ISdfFrameSource {
     /// <summary>Per-frame GLYPH DECAL providers keyed by the program-declared screen index — a screen slot showing dense
     /// reading text (the material-level text tier, <see cref="SdfWorldEngine.SetScreenDecal"/>) instead of a bound
     /// image. Each provider returns this frame's cell grid, or <see langword="null"/> to leave the slot on the
-    /// image/procedural path (the atlas-unavailable degrade). Default null (no decal screens) — a source with none need
+    /// image or unbound-glass path (the atlas-unavailable degrade). Default null (no decal screens) — a source with none need
     /// not override it. Mirrors <see cref="ScreenSurfaceTransforms"/>/<see cref="GlyphAtlas"/>: read straight off the
     /// frame source so a host node's type coupling doesn't grow to thread it.</summary>
     IReadOnlyDictionary<int, Func<SdfScreenDecalFrame?>>? ScreenDecals => null;

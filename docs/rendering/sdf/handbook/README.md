@@ -14,7 +14,7 @@ course, but each chapter can also be revisited on its own.
 | [SDF frame rendering](frame-rendering.md) | Frame assembly, culling, primary marching, shading dispatches, render scale, and frame rings. |
 | [Lighting and shading](lighting-and-shading.md) | Normals, ambient occlusion, shadows, materials, and screen surfaces. |
 | [Authoring SDF scenes](authoring-scenes.md) | `SdfProgramBuilder`, coordinate spaces, composition, capacity checks, and authoring pitfalls. |
-| [Motion and views](motion-and-views.md) | Presentation anchors, camera rigs, `ViewStack`, transitions, and screen views. |
+| [Motion and views](motion-and-views.md) | Presentation anchors, camera rigs, views as render-graph instances, transitions, and screen views. |
 | [Queries and determinism](queries-and-determinism.md) | `IWorldQuery`, exact fixed-point evaluation, probes, raycasts, and derived gravity. |
 | [SDF performance](performance.md) | Live cost measurement, occupancy, culling, and render-scale choices. |
 | [Bricks and baking](bricks-and-baking.md) | Sampled distance bricks, march safety, and cache lifecycle; prototype meshes, textures, and impostors baked from the field. |

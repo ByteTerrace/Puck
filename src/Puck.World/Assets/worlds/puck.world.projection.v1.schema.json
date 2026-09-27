@@ -1409,7 +1409,7 @@
       "description": "The screen surfaces.",
       "type": "array",
       "items": {
-        "description": "One diegetic screen in the world \u2014 a screen slab emitted by SdfProgramBuilder whose lit face samples a bound source (or the procedural fallback when unbound). The frame (Origin/Right/ Up \u002B HalfWidth/HalfHeight) is the sampled surface frame and must match the slab\u0027s placement; the frame source bakes the geometry translate from it.",
+        "description": "One diegetic screen in the world \u2014 a screen slab emitted by SdfProgramBuilder whose lit face samples a bound source (or shades as dark glass when unbound). The frame (Origin/Right/ Up \u002B HalfWidth/HalfHeight) is the sampled surface frame and must match the slab\u0027s placement; the frame source bakes the geometry translate from it.",
         "type": [
           "object",
           "null"
@@ -1500,7 +1500,7 @@
             ],
             "anyOf": [
               {
-                "description": "No provider is bound \u2014 the engine lights the slot with its procedural no-signal fallback (an animated test-card / striped no-signal look, never black).",
+                "description": "No provider is bound \u2014 the engine shades the slot as dark glass, lit faintly by the sun.",
                 "properties": {
                   "$type": {
                     "const": "none"
@@ -1604,7 +1604,7 @@
                     "title": "WorldScreenProjection"
                   },
                   "resolution": {
-                    "description": "The offscreen target\u0027s [width, height] in pixels, or null for the engine default (Puck.SdfVm.Views.WorldSessionView.DefaultWidth x DefaultHeight \u2014 today\u0027s 160x144 panel, unchanged for an unauthored facet). Each axis is validated within 1..WorldDefinitionValidator.MaxSurfaceDimension. Omitted from the wire when null.",
+                    "description": "The offscreen target\u0027s [width, height] in pixels, or null for the default 160x144 panel (Puck.World.Client.WorldViewInstances.DefaultSessionWidth x DefaultSessionHeight). Each axis is validated within 1..WorldDefinitionValidator.MaxSurfaceDimension. Omitted from the wire when null.",
                     "default": null,
                     "title": "WorldScreenResolution"
                   }
@@ -1802,7 +1802,7 @@
                   ],
                   "anyOf": [
                     {
-                      "description": "No provider is bound \u2014 the engine lights the slot with its procedural no-signal fallback (an animated test-card / striped no-signal look, never black).",
+                      "description": "No provider is bound \u2014 the engine shades the slot as dark glass, lit faintly by the sun.",
                       "properties": {
                         "$type": {
                           "const": "none"
@@ -1899,7 +1899,7 @@
                           "title": "WorldScreenProjection"
                         },
                         "resolution": {
-                          "description": "The offscreen target\u0027s [width, height] in pixels, or null for the engine default (Puck.SdfVm.Views.WorldSessionView.DefaultWidth x DefaultHeight \u2014 today\u0027s 160x144 panel, unchanged for an unauthored facet). Each axis is validated within 1..WorldDefinitionValidator.MaxSurfaceDimension. Omitted from the wire when null.",
+                          "description": "The offscreen target\u0027s [width, height] in pixels, or null for the default 160x144 panel (Puck.World.Client.WorldViewInstances.DefaultSessionWidth x DefaultSessionHeight). Each axis is validated within 1..WorldDefinitionValidator.MaxSurfaceDimension. Omitted from the wire when null.",
                           "default": null,
                           "title": "WorldScreenResolution"
                         }
@@ -16508,7 +16508,7 @@
                             "string",
                             "null"
                           ],
-                          "description": "The feed this face shows when nothing else is wired, as a source token a consuming world resolves through a closed four-token map \u2014 none (no signal), test (the test pattern), and camera:\u003Cname\u003E / feed:\u003Cname\u003E (a View of the named camera, resolved against the placement\u0027s derived creation-eye feeds then the world\u0027s own camera rows). An unrecognized token (including a bare named:emotes, which named a host registry no world provides) lights the no-signal card. Null = the no-signal card until a world\u0027s face override wires a feed."
+                          "description": "The feed this face shows when nothing else is wired, as a source token a consuming world resolves through a closed four-token map \u2014 none (unbound glass), test (the test pattern), and camera:\u003Cname\u003E / feed:\u003Cname\u003E (a View of the named camera, resolved against the placement\u0027s derived creation-eye feeds then the world\u0027s own camera rows). An unrecognized token (including a bare named:emotes, which named a host registry no world provides) shows unbound glass. Null = unbound glass until a world\u0027s face override wires a feed."
                         }
                       },
                       "required": [
@@ -17559,7 +17559,7 @@
                   ],
                   "anyOf": [
                     {
-                      "description": "No provider is bound \u2014 the engine lights the slot with its procedural no-signal fallback (an animated test-card / striped no-signal look, never black).",
+                      "description": "No provider is bound \u2014 the engine shades the slot as dark glass, lit faintly by the sun.",
                       "properties": {
                         "$type": {
                           "const": "none"
@@ -17656,7 +17656,7 @@
                           "title": "WorldScreenProjection"
                         },
                         "resolution": {
-                          "description": "The offscreen target\u0027s [width, height] in pixels, or null for the engine default (Puck.SdfVm.Views.WorldSessionView.DefaultWidth x DefaultHeight \u2014 today\u0027s 160x144 panel, unchanged for an unauthored facet). Each axis is validated within 1..WorldDefinitionValidator.MaxSurfaceDimension. Omitted from the wire when null.",
+                          "description": "The offscreen target\u0027s [width, height] in pixels, or null for the default 160x144 panel (Puck.World.Client.WorldViewInstances.DefaultSessionWidth x DefaultSessionHeight). Each axis is validated within 1..WorldDefinitionValidator.MaxSurfaceDimension. Omitted from the wire when null.",
                           "default": null,
                           "title": "WorldScreenResolution"
                         }

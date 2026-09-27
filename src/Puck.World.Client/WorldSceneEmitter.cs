@@ -50,6 +50,10 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // possession anchor swap moves the crowd bound with the seat's perceived body. The always-cast/footstep gates
     // below stay keyed on the raw body index band instead — see their own comments for why.
     private readonly WorldPerceptionAnchor m_anchor;
+
+    // The static placements' palettes, reused across rebuilds (WorldPlacementStamper.EmitStatic).
+    private readonly WorldStaticPalettes m_palettes = new();
+
     private readonly WorldStampPool m_animator;
     private readonly IWorldAudioCueSink m_audio;
     private readonly int m_authoringHeadroomPlacements;
@@ -160,8 +164,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             avatarAccentMaterials[index] = builder.AddMaterial(material: new SdfMaterial(Albedo: (bodyColor * m_noseFactor)));
         }
 
-        // The diegetic screens: each a sampled ScreenSlab whose lit face samples its bound source (or the engine's
-        // procedural no-signal fallback when unbound). STATIC data — emitted every build (probe and live), so the
+        // The diegetic screens: each a sampled ScreenSlab whose lit face samples its bound source (or shades as dark
+        // glass when unbound). STATIC data — emitted every build (probe and live), so the
         // capacity floors cover them by construction (no probe-only branch). The sampled overload takes the explicit
         // world frame (Origin/Right/Up) baked into the surface table for UV mapping; the geometry rounded box is
         // placed by translating to its CENTER, which sits one HalfDepth behind the face along the face normal
@@ -222,7 +226,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 tintFor: null,
                 volumes: m_staticVolumes,
                 meshDraws: meshDraws,
-                colors: m_bakedColors
+                colors: m_bakedColors,
+                palettes: m_palettes
             );
             m_staticMeshDraws = meshDraws;
         }
