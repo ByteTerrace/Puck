@@ -24,9 +24,9 @@ public sealed class SdfWorldPipelines : IDisposable {
     private readonly Slot?[] m_slots;
 
     private bool m_disposed;
-    private SdfWorldKernels m_kernels;
+    private SdfKernelSet m_kernels;
 
-    private SdfWorldPipelines(SdfWorldKernels kernels, bool includesBrickPipelines, Slot?[] slots) {
+    private SdfWorldPipelines(SdfKernelSet kernels, bool includesBrickPipelines, Slot?[] slots) {
         m_kernels = kernels;
         m_slots = slots;
         IncludesBrickPipelines = includesBrickPipelines;
@@ -38,7 +38,7 @@ public sealed class SdfWorldPipelines : IDisposable {
     /// <summary>Gets whether the set has been disposed.</summary>
     public bool IsDisposed => m_disposed;
     /// <summary>Gets the kernel set the installed pipelines were created from; a committed reload replaces it.</summary>
-    public SdfWorldKernels Kernels => m_kernels;
+    public SdfKernelSet Kernels => m_kernels;
 
     /// <summary>Takes a lease on every engine pipeline for a kernel set, each an entry of the pass-pipeline cache, joining
     /// the entries other holders lease and starting the rest building on the thread pool. Safe on any thread.</summary>
@@ -50,7 +50,7 @@ public sealed class SdfWorldPipelines : IDisposable {
     /// <returns>The set, owned by the caller, which disposes it to release its leases.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="cache"/> or <paramref name="device"/> is
     /// <see langword="null"/>.</exception>
-    public static SdfWorldPipelines Acquire(GpuPassPipelineCache cache, IGpuDeviceContext device, SdfWorldKernels kernels, bool includeBrickPipelines) {
+    public static SdfWorldPipelines Acquire(GpuPassPipelineCache cache, IGpuDeviceContext device, SdfKernelSet kernels, bool includeBrickPipelines) {
         ArgumentNullException.ThrowIfNull(argument: cache);
         ArgumentNullException.ThrowIfNull(argument: device);
 
@@ -59,18 +59,15 @@ public sealed class SdfWorldPipelines : IDisposable {
 
         try {
             // The views variants, the longest driver translations, start last, so the others install first.
-            foreach (var index in SdfWorldTables.PipelineLayouts.BuildOrder) {
-                var spec = specs[index];
-                var bytecode = KernelBytes(
-                    kernels: kernels,
-                    name: spec.Description.Name
-                );
+            foreach (var kernel in SdfWorldTables.PipelineLayouts.BuildOrder) {
+                var spec = specs[((int)kernel)];
+                var bytecode = kernels[kernel];
 
                 if (spec.Brick && (!includeBrickPipelines || bytecode.IsEmpty)) {
                     continue;
                 }
 
-                slots[index] = new Slot(
+                slots[((int)kernel)] = new Slot(
                     description: spec.Description,
                     lease: cache.Acquire(
                         device: device,
@@ -175,7 +172,7 @@ public sealed class SdfWorldPipelines : IDisposable {
     /// <exception cref="ArgumentNullException"><paramref name="cache"/> or <paramref name="device"/> is
     /// <see langword="null"/>.</exception>
     /// <exception cref="ObjectDisposedException">The set has been disposed.</exception>
-    public SdfWorldPipelineReload PrepareReload(GpuPassPipelineCache cache, IGpuDeviceContext device, SdfWorldKernels kernels) {
+    public SdfWorldPipelineReload PrepareReload(GpuPassPipelineCache cache, IGpuDeviceContext device, SdfKernelSet kernels) {
         ArgumentNullException.ThrowIfNull(argument: cache);
         ArgumentNullException.ThrowIfNull(argument: device);
         ObjectDisposedException.ThrowIf(
@@ -192,15 +189,9 @@ public sealed class SdfWorldPipelines : IDisposable {
                     continue;
                 }
 
-                var bytecode = KernelBytes(
-                    kernels: kernels,
-                    name: slot.Description.Name
-                );
+                var bytecode = kernels[((SdfKernel)index)];
 
-                if (bytecode.Span.SequenceEqual(other: KernelBytes(
-                    kernels: baseline,
-                    name: slot.Description.Name
-                ).Span)) {
+                if (bytecode.Span.SequenceEqual(other: baseline[((SdfKernel)index)].Span)) {
                     continue;
                 }
 
@@ -232,12 +223,10 @@ public sealed class SdfWorldPipelines : IDisposable {
     }
     internal void Exchange(SdfWorldPipelineReload reload) =>
         reload.Exchange(slots: m_slots);
-    internal IGpuComputePipeline? OptionalPipeline(int index) =>
-        m_slots[index];
-    internal IGpuComputePipeline Pipeline(int index) =>
-        (m_slots[index] ?? throw new InvalidOperationException(message: $"The pipeline set has no '{SdfWorldTables.PipelineLayouts.Specs[index].Description.Name}' pipeline."));
-    internal void Rollback(SdfWorldPipelineReload reload) =>
-        reload.Rollback(slots: m_slots);
+    internal IGpuComputePipeline? OptionalPipeline(SdfKernel kernel) =>
+        m_slots[((int)kernel)];
+    internal IGpuComputePipeline Pipeline(SdfKernel kernel) =>
+        (m_slots[((int)kernel)] ?? throw new InvalidOperationException(message: $"The pipeline set has no '{SdfKernelSet.StemOf(kernel: kernel)}' pipeline."));
     internal void ThrowIfNotCurrent(SdfWorldPipelineReload reload) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
@@ -251,30 +240,10 @@ public sealed class SdfWorldPipelines : IDisposable {
             throw new InvalidOperationException(message: "The reload was prepared for a different pipeline set.");
         }
 
-        if (!reload.Baseline.Equals(other: m_kernels)) {
+        if (!ReferenceEquals(objA: reload.Baseline, objB: m_kernels)) {
             throw new InvalidOperationException(message: "The reload was prepared against kernels that are no longer installed.");
         }
     }
-
-    private static ReadOnlyMemory<byte> KernelBytes(in SdfWorldKernels kernels, string name) => name switch {
-        "sdf-beam" => kernels.Beam,
-        "sdf-instance-cull" => kernels.InstanceCull,
-        "sdf-cull-args" => kernels.CullArgs,
-        "sdf-world-primary" => kernels.Primary,
-        "sdf-world-surface" => kernels.Surface,
-        "sdf-world-ambient" => kernels.Ambient,
-        "sdf-world-shadow" => kernels.Shadow,
-        "sdf-world-views" => kernels.Views,
-        "sdf-world-views-core" => kernels.ViewsCore,
-        "sdf-world-views-folds" => kernels.ViewsFolds,
-        "sdf-sky" => kernels.Sky,
-        "sdf-brick-bake" => kernels.BrickBake,
-        _ => throw new ArgumentException(
-            message: $"Unknown SDF kernel '{name}'.",
-            paramName: nameof(name)
-        ),
-    };
-
     // Polls every lease, so each build that failed is named, in the set's order; a device loss is thrown alone.
     internal static bool PollAll(IReadOnlyList<Slot?> slots) {
         var ready = true;
@@ -366,7 +335,7 @@ public sealed class SdfWorldPipelineReload : IDisposable {
 
     private State m_state;
 
-    internal SdfWorldPipelineReload(SdfWorldPipelines target, SdfWorldKernels baseline, SdfWorldKernels kernels, (int Index, GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> Lease)[] replacements) {
+    internal SdfWorldPipelineReload(SdfWorldPipelines target, SdfKernelSet baseline, SdfKernelSet kernels, (int Index, GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> Lease)[] replacements) {
         Baseline = baseline;
         Kernels = kernels;
         Target = target;
@@ -377,9 +346,9 @@ public sealed class SdfWorldPipelineReload : IDisposable {
     /// <summary>Gets the number of pipelines whose bytecode changed and that the reload replaces.</summary>
     public int ChangedPipelines => m_replacements.Length;
     /// <summary>Gets the kernel set the reload installs.</summary>
-    public SdfWorldKernels Kernels { get; }
+    public SdfKernelSet Kernels { get; }
 
-    internal SdfWorldKernels Baseline { get; }
+    internal SdfKernelSet Baseline { get; }
     internal SdfWorldPipelines Target { get; }
 
     /// <summary>Blocks until every replacement is built, for the holder's own background build.</summary>
@@ -423,14 +392,6 @@ public sealed class SdfWorldPipelineReload : IDisposable {
         }
 
         m_state = State.Exchanged;
-    }
-    internal void Rollback(SdfWorldPipelines.Slot?[] slots) {
-        for (var index = 0; (index < m_replacements.Length); index++) {
-            _ = slots[m_replacements[index].Index]!.Exchange(replacement: m_retired[index]!);
-            m_retired[index] = null;
-        }
-
-        m_state = State.Prepared;
     }
 
     private enum State : byte {

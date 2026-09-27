@@ -35,13 +35,13 @@ public sealed partial class SdfWorldResidency {
 
     /// <summary>Queues a compiled-kernel reload. The next produced frame starts loading the bytecode and creating the
     /// changed pipelines off the frame thread; a later frame installs them. Does not rebuild or reset the world.</summary>
-    /// <param name="tree">The kernel tree whose passes directory (<see cref="SdfWorldKernels.PassesDirectory"/>) holds the
+    /// <param name="tree">The kernel tree whose passes directory (<see cref="SdfKernelSet.PassesDirectory"/>) holds the
     /// bytecode: a source checkout's <c>src/Puck.SdfVm/Assets/Shaders/Sdf</c>, or null for the deployed tree
-    /// (<see cref="SdfWorldKernels.DeployedTree"/>). Relative paths resolve against the process working directory.</param>
+    /// (<see cref="SdfKernelSet.DeployedTree"/>). Relative paths resolve against the process working directory.</param>
     /// <returns>False if another request is still pending; otherwise true. Read <see cref="ShaderReloadStatus"/> for completion.</returns>
     /// <exception cref="ArgumentException">The directory path is invalid.</exception>
     public bool RequestShaderReload(string? tree = null) {
-        var resolved = Path.GetFullPath(path: SdfWorldKernels.PassesDirectory(tree: (tree ?? SdfWorldKernels.DeployedTree)));
+        var resolved = Path.GetFullPath(path: SdfKernelSet.PassesDirectory(tree: (tree ?? SdfKernelSet.DeployedTree)));
 
         lock (m_shaderReloadGate) {
             var previous = ShaderReloadStatus;
@@ -71,8 +71,8 @@ public sealed partial class SdfWorldResidency {
     }
 
     // Starts a queued reload, or installs the one whose pipelines finished building. Loading the bytecode and creating
-    // the changed pipelines run on the thread pool; only the install — a device drain, the swap, and the ISA
-    // handshake — runs here, so the request stays pending while the driver compiles.
+    // the changed pipelines run on the thread pool; only the install, a device drain and the swap, runs here, so the
+    // request stays pending while the driver compiles.
     private void ApplyPendingShaderReload() {
         if (m_reloadBuild.TryTake(
             error: out var error,
@@ -98,7 +98,7 @@ public sealed partial class SdfWorldResidency {
             device: m_deviceContext!,
             directory: request.Directory!,
             // Use the format already loaded into this residency, never an OS guess or a mutable host preference.
-            extension: (m_kernels.Beam.Span.StartsWith(value: "DXBC"u8)
+            extension: (m_kernels[SdfKernel.Beam].Span.StartsWith(value: "DXBC"u8)
                 ? ".dxil"
                 : ".spv"
             ),
@@ -178,7 +178,7 @@ public sealed partial class SdfWorldResidency {
             var reload = pipelines.PrepareReload(
                 cache: cache,
                 device: device,
-                kernels: SdfWorldKernels.Load(
+                kernels: SdfKernelSet.Load(
                     bytecodeExtension: extension,
                     directory: directory
                 )

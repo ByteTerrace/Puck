@@ -10,7 +10,7 @@ namespace Puck.Testing;
 // directly, or the frames a node produces while its build runs on the thread pool.
 internal static class SdfTestPipelines {
     // Leases a set from a pass-pipeline cache and waits for it on the calling thread; the cache counts what it creates.
-    public static SdfWorldPipelines Build(IGpuDeviceContext device, SdfWorldKernels kernels, GpuPassPipelineCache cache, bool includeBrickPipelines = false) {
+    public static SdfWorldPipelines Build(IGpuDeviceContext device, SdfKernelSet kernels, GpuPassPipelineCache cache, bool includeBrickPipelines = false) {
         var set = SdfWorldPipelines.Acquire(
             cache: cache,
             device: device,
@@ -67,23 +67,14 @@ internal static class SdfTestPipelines {
         );
     // A kernel set whose every kernel is one byte, the beam's chosen by the caller so two sets can differ by one kernel,
     // and whose brick kernels are empty, so no set built from it has brick pipelines.
-    public static SdfWorldKernels Kernels(byte beam = 1) {
+    public static SdfKernelSet Kernels(byte beam = 1) {
         ReadOnlyMemory<byte> code = new byte[] { 1 };
 
-        return new SdfWorldKernels(
-            Ambient: code,
-            Beam: new byte[] { beam },
-            BrickBake: ReadOnlyMemory<byte>.Empty,
-            CullArgs: code,
-            InstanceCull: code,
-            Primary: code,
-            Shadow: code,
-            Sky: code,
-            Surface: code,
-            Views: code,
-            ViewsCore: code,
-            ViewsFolds: code
-        );
+        return new SdfKernelSet(bytecode: [.. SdfKernelSet.Kernels.Select(selector: kernel => kernel switch {
+            SdfKernel.Beam => new byte[] { beam },
+            SdfKernel.BrickBake => ReadOnlyMemory<byte>.Empty,
+            _ => code,
+        })]);
     }
     // Produces frames until the residency's pipeline build has built its tables, then submits that frame's upload, as a
     // view's first pass of the frame does. The bound is liveness for a build over a fake device; it decides nothing.

@@ -6,8 +6,8 @@ using Puck.SignedDistance;
 namespace Puck.SdfVm;
 
 /// <summary>
-/// Generates <see cref="FileName"/>, the kernels' declarations of the SDF instruction set: its version handshake, every
-/// enum an instruction word carries, the packed-layout constants the interpreter decodes words with, the screen count,
+/// Generates <see cref="FileName"/>, the kernels' declarations of the SDF instruction set: every enum an instruction word
+/// carries, the packed-layout constants the interpreter decodes words with, the screen count,
 /// the sampler filters a screen's row indexes the engine's samplers by, and where each row of the environment lies in a
 /// pass block's environment array, with its light kinds. Every value is read from the C# model, never
 /// transcribed, and an enum member's name is its C# name in upper snake case after the enum's prefix (<see cref="SdfOp.ResetPoint"/> is <c>SDF_OP_RESET_POINT</c>), so a new member reaches the kernels by
@@ -28,15 +28,6 @@ public static class SdfIsaHlsl {
     public static string Generate() {
         var declarations = new Declarations();
 
-        declarations.Section(title: "The instruction-set version and the report word the version handshake dispatches with.");
-        declarations.Count(
-            name: "SDF_ISA_VERSION",
-            value: SdfIsa.Version
-        );
-        declarations.Bits(
-            name: "SDF_ISA_REPORT_REQUEST",
-            value: SdfShaderSetVerification.ReportRequest
-        );
         declarations.Members<SdfOp>(prefix: "SDF_OP");
         declarations.Members<SdfShapeType>(prefix: "SDF_SHAPE");
         declarations.Members<SdfBlendOp>(prefix: "SDF_BLEND");

@@ -26,7 +26,7 @@ public sealed class SdfWorldResidencyBuildRefusalLawTests {
 
     [Fact]
     public void AFaultedFirstBuildIsRefusedByNameAndBuildsOnceTheProgramChanges() {
-        using var rig = new Rig(reportVersion: SdfIsa.Version);
+        using var rig = new Rig();
 
         // The pipeline set's build creates no command pool, so the second one created is the engine's last: the refused
         // construction had created nearly everything else first.
@@ -62,7 +62,7 @@ public sealed class SdfWorldResidencyBuildRefusalLawTests {
     }
     [Fact]
     public void AFaultedRebuildAfterADeviceLossIsRefusedByNameAndTheNextDeviceLossRebuilds() {
-        using var rig = new Rig(reportVersion: SdfIsa.Version);
+        using var rig = new Rig();
 
         rig.Node.ProduceFirstFrame(context: in rig.Context);
         rig.Node.OnDeviceLost();
@@ -95,7 +95,7 @@ public sealed class SdfWorldResidencyBuildRefusalLawTests {
     }
     [Fact]
     public void AnEngineTheHeapCannotAdmitIsRefusedByNameAllocatesNothingAndRetriesOnlyOnAChangedInput() {
-        using var rig = new Rig(reportVersion: SdfIsa.Version);
+        using var rig = new Rig();
         var demand = SdfWorldTables.DescriptorPools(brickPool: false).Aggregate(
             func: static (sum, pool) => (sum + pool.HeapDescriptors),
             seed: 0U
@@ -159,7 +159,7 @@ public sealed class SdfWorldResidencyBuildRefusalLawTests {
     }
     [Fact]
     public void AHeapRefusedEngineRetriesExactlyOnceAfterAnotherOwnerReleasesItsPool() {
-        using var rig = new Rig(reportVersion: SdfIsa.Version);
+        using var rig = new Rig();
         IGpuBindings bindings = rig.Gpu;
         var demand = SdfWorldTables.DescriptorPools(brickPool: false).Aggregate(
             func: static (sum, pool) => (sum + pool.HeapDescriptors),
@@ -209,16 +209,22 @@ public sealed class SdfWorldResidencyBuildRefusalLawTests {
     }
     [Fact]
     public void APersistentRefusalBuildsOnceAndEachChangedInputRetriesOnce() {
-        using var rig = new Rig(reportVersion: unchecked((byte)(SdfIsa.Version + 1)));
+        using var rig = new Rig();
+        var demand = SdfWorldTables.DescriptorPools(brickPool: false).Aggregate(
+            func: static (sum, pool) => (sum + pool.HeapDescriptors),
+            seed: 0U
+        );
 
+        // A heap one descriptor short of the engine refuses every build the same way.
+        rig.Gpu.DescriptorHeap = Heap(views: (demand - 1U));
         _ = rig.ProduceUntilRefused();
         rig.ProduceUnchanged(frames: Frames);
         Assert.Equal(
-            actual: rig.EngineAttempts,
+            actual: rig.Gpu.Admissions,
             expected: 1
         );
         Assert.Contains(
-            expectedSubstring: "SDF ISA version mismatch",
+            expectedSubstring: GpuDescriptorHeapBudget.RefusalCode,
             actualString: rig.Node.NotReadyReason
         );
 
@@ -226,7 +232,7 @@ public sealed class SdfWorldResidencyBuildRefusalLawTests {
         rig.ChangeProgram();
         rig.ProduceUnchanged(frames: Frames);
         Assert.Equal(
-            actual: rig.EngineAttempts,
+            actual: rig.Gpu.Admissions,
             expected: 2
         );
 
@@ -234,7 +240,7 @@ public sealed class SdfWorldResidencyBuildRefusalLawTests {
         Assert.True(condition: rig.Node.RequestShaderReload());
         rig.ProduceUnchanged(frames: Frames);
         Assert.Equal(
-            actual: rig.EngineAttempts,
+            actual: rig.Gpu.Admissions,
             expected: 3
         );
         Assert.False(condition: rig.Node.IsReady);
@@ -246,7 +252,7 @@ public sealed class SdfWorldResidencyBuildRefusalLawTests {
     /// rebuilds it exactly once.</summary>
     [Fact]
     public void ArmingAFaultRetriesARefusedBuildOnceAndDisarmingRebuildsItOnce() {
-        using var rig = new Rig(reportVersion: SdfIsa.Version);
+        using var rig = new Rig();
 
         rig.Faults.Arm(
             kind: GpuCreationKind.CommandPool,
@@ -320,7 +326,7 @@ public sealed class SdfWorldResidencyBuildRefusalLawTests {
         private readonly FrameContext m_context;
         private readonly FixedFrameSource m_source;
 
-        public Rig(byte reportVersion) {
+        public Rig() {
             var builder = new SdfProgramBuilder();
 
             builder.Sphere(
@@ -349,10 +355,7 @@ public sealed class SdfWorldResidencyBuildRefusalLawTests {
                 )]
             );
 
-            Gpu = new FakeGpuDevice(
-                reportVersion: reportVersion,
-                trackObjects: true
-            );
+            Gpu = new FakeGpuDevice(trackObjects: true);
             Faults = new GpuCreationFaults();
             m_source = new FixedFrameSource(frame: frame);
             Node = new SdfWorldResidency(

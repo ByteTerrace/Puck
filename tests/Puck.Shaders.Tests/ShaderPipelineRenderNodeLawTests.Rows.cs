@@ -230,7 +230,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
     [Fact]
     public void AStagedRowRegionReadsTheRingsBytes() {
         static List<byte[]> Readings(GpuMemoryProfile profile) {
-            var gpu = new UploadModelGpu(reportVersion: 0) { MemoryProfile = profile };
+            var gpu = new UploadModelGpu() { MemoryProfile = profile };
             using var node = new ShaderPipelineRenderNode(
                 deviceContext: gpu,
                 height: Extent,

@@ -265,7 +265,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
     /// the bytes the upload wrote, header and image, after every tick, under the model that runs the copy kernel.</summary>
     [Fact]
     public void AStagedSourceRegionReachesItsConversionByteExact() {
-        var gpu = new UploadModelGpu(reportVersion: 0);
+        var gpu = new UploadModelGpu();
         var recorders = new Recorders();
         var header = ImageSourceUploadLayout.HeaderOf(
             color: ImageColorEncoding.Srgb,
@@ -369,7 +369,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
     /// copy the source's region starts from another state than the one the command buffers before it left.</summary>
     [Fact]
     public void AStagedRegionsCopyAndItsReadersAgreeOnItsStateInSubmissionOrder() {
-        var gpu = new UploadModelGpu(reportVersion: 0);
+        var gpu = new UploadModelGpu();
         var recorders = new Recorders();
         var upload = new FakeUpload(format: ImagePixelFormat.B8G8R8A8Unorm);
 
@@ -420,7 +420,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
     [Fact]
     public void AConverterConvertsPixelsOutsideTheSetThroughItsDescriptorsConversion() {
         const uint Extent = 8;
-        var gpu = new UploadModelGpu(reportVersion: 0);
+        var gpu = new UploadModelGpu();
         var recorders = new Recorders();
 
         SourceConversionPackage.RegisterAll(packages: recorders.Registry);

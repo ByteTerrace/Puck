@@ -214,7 +214,7 @@ public sealed class SdfWorldTablesUploadLawTests {
     public void ADeviceLossRebuildsTheResidencysTablesOwingEveryTable() {
         const int Slots = 24;
 
-        var gpu = new UploadModelGpu(reportVersion: SdfIsa.Version);
+        var gpu = new UploadModelGpu();
         var transforms = Transforms(slots: Slots);
         // One produced frame of a still producer: every later render owes nothing but what an engine rebuild owes.
         var moved = new SdfMovedTransforms();
@@ -725,7 +725,7 @@ public sealed class SdfWorldTablesUploadLawTests {
         private GpuPassPipeline m_regionCopy = null!;
 
         public Rig(int slots, int programWordReserve = 0, GpuMemoryProfile profile = default, GpuDescriptorHeapBudget? heap = null) {
-            Gpu = new UploadModelGpu(reportVersion: SdfIsa.Version) {
+            Gpu = new UploadModelGpu() {
                 DescriptorHeap = heap,
                 MemoryProfile = profile,
             };

@@ -31,7 +31,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
         using var directory = new TemporaryDirectory();
         using var gate = new ManualResetEventSlim(initialState: false);
         using var entered = new ManualResetEventSlim(initialState: false);
-        var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version) {
+        var gpu = new FakeGpuDevice() {
             BeforeComputePipeline = _ => {
                 entered.Set();
                 gate.Wait();
@@ -163,7 +163,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
     public void ADeviceLossWaitsOnlyForThePipelinesInTheDriverAndTheNextFrameStartsAnother() {
         using var driver = new HeldDriver();
         var cache = SdfTestPipelines.Cache();
-        var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version) {
+        var gpu = new FakeGpuDevice() {
             BeforeComputePipeline = driver.Enter,
         };
         using var node = new SdfWorldResidency(
@@ -226,7 +226,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
     public void OnlyTheLastReleaseCancelsAndItWaitsOnlyForThePipelinesInTheDriver() {
         using var driver = new HeldDriver();
         var cache = SdfTestPipelines.Cache();
-        var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version) {
+        var gpu = new FakeGpuDevice() {
             BeforeComputePipeline = driver.Enter,
         };
         using var opener = new DriverOpener(driver: driver);

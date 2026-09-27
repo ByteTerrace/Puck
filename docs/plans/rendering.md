@@ -196,7 +196,7 @@ sources, each a `WorkCounterSet`. `shaders.compiler` counts a compiler's
 requests, its cache hits, and each native tool's runs, where
 `ShaderCompiler.StepsOf`'s steps run. `procedures.vulkan` counts the device-
 and instance-level procedures `VulkanProcResolver` resolves.
-`shaders.sdf-kernels` counts the kernel loads in `SdfWorldKernels` and the
+`shaders.sdf-kernels` counts the kernel loads in `SdfKernelSet` and the
 bytecode bytes they read. Requests, tool runs,
 resolutions and loads are per-backend-deterministic; cache hits are pacing,
 because the compile cache under the state root outlives the process. The
@@ -1759,7 +1759,7 @@ build. The catalog reads each backend's deployed kernels once, and the cache
 counts the pipelines and shader modules it creates as its own source,
 `gpu.pass-pipelines`, so no residency's or node's ledger counts them. A kernel
 reload leases the changed kernels' entries for its own residency, so another
-residency sharing the replaced ones keeps them. `SdfWorldKernels` describes the
+residency sharing the replaced ones keeps them. `SdfKernelSet` describes the
 kernel bytecode as the gitignored build product it is.
 `SdfWorldPipelineCatalogLawTests` and `SdfWorldPipelinesLawTests` pin the sharing
 and the counts.
@@ -4034,17 +4034,14 @@ item 2 landed.
 
 **Build sequence.**
 
-1. Landed, the capability matrix as a law: `SdfCapabilityMatrixLawTests`
-   (`tests/Puck.SdfVm.Tests`) assigns every public member of the SDF surface,
+1. Landed, the capability matrix as a law, which held the move until step 13
+   retired it: `SdfCapabilityMatrixLawTests` assigned every public member of the SDF surface,
    `SdfWorldTables`, `SdfWorldResidency`, `SdfWorldPasses`, `SdfWorldView`,
    `SdfFrame`, `SdfViewSnapshot`, `SdfWorldTablesOptions` and
-   `SdfWorldRenderSpec`, to exactly one capability row, names each row's graph
-   equivalent and check, maps every pass label to the graph pass that replaces
-   it, and holds the rows without a check to a named list of gaps: the live
-   program report, render scale, decals, the glyph atlas, volumes, the shading
-   levers, debug views, the grid overlay and brick baking. A row is green once
-   its graph equivalent runs and its check passes, as step 6 made the rows its
-   checks cover. A console verb is covered
+   `SdfWorldRenderSpec`, to exactly one capability row, named each row's graph
+   equivalent and check, mapped every pass label to the graph pass that
+   replaces it, and held the rows without a check to a named list of gaps,
+   which the open items carry. A console verb is covered
    through the member it drives rather than enumerated, because the verbs live
    in `Puck.World`, which the SDF tests do not reach. The members nothing
    called are gone: the pipelined preview path, the cadence diagnostics and the
@@ -4066,8 +4063,8 @@ item 2 landed.
    layer that uses them, and the surface pass asks `sdfScreenSurfaceShades`
    whether a screen covers a hit.
 3. Landed, the generated instruction-set declarations: `puck shaders generate`
-   writes `sdf-isa.hlsli` from the C# model through `SdfIsaHlsl`, covering the
-   version handshake, every ISA enum member and the packed-layout constants,
+   writes `sdf-isa.hlsli` from the C# model through `SdfIsaHlsl`, covering
+   every ISA enum member and the packed-layout constants,
    and `--check` fails CI on a stale file. Item 7 adds the environment's row
    layout to it.
 4. Landed, the planner's vocabulary: a pass's `dispatch` (`Extent`, `Groups`,
@@ -4165,7 +4162,7 @@ item 2 landed.
      mesh atlases are the `sdf.world` interface's World group
      (`SdfWorldPackage.Tables`), bound at group 1 through one set per upload
      ring slot that the tables own and write once (`SdfWorldTables.WorldSet`).
-     Every compute part of every view and the ISA handshake bind it, and it is
+     Every compute part of every view binds it, and it is
      rewritten only when what it binds moves (a region's growth, the glyph
      atlas, the mesh atlases), after the device is idle. A pass set holds only
      the view's own storages, output, screens and mesh target.
@@ -4263,7 +4260,7 @@ item 2 landed.
     members, config and interface, and `PostProcessPackage` serves every
     post-process package, so a post pass ships the way `place` and `overlay`
     do.
-13. The final sweep. Landed with step 6: captures, the view export, readiness
+13. Landed, the final sweep. With step 6: captures, the view export, readiness
     and counted work are the runtime node's
     (`RenderGraphRuntime.CaptureTarget`, `ShaderPipelineRenderNode.Export`,
     `WorldRenderProbe`, each instance's pass counts), and the engine monolith and
@@ -4271,8 +4268,18 @@ item 2 landed.
     renders into its own per-slot outputs, which its screens sample, and copies
     each frame its reader has released into the exported image in its
     `export copy` pass, one copy and three image barriers per exported camera
-    per frame. Still to delete: the matrix law, `SdfShaderSetVerification` and
-    `SdfWorldKernels`; the SDF pipeline set and its cache went with step 8.
+    per frame. The capability matrix law, the ISA version handshake
+    (`SdfShaderSetVerification`, the tables' report dispatch, `SdfIsa.Version`
+    and the kernels' report branch) and the field-per-kernel `SdfWorldKernels`
+    are deleted. The engine's kernels are one table, `SdfKernel`, from which each
+    kernel's stem, pipeline, build order and loaded bytecode (`SdfKernelSet`)
+    derive. A kernel set agrees with the host's instruction set because the
+    build refuses bytecode stale against its sources and every include, the
+    generated `sdf-isa.hlsli` among them, and `puck shaders generate --check`
+    refuses that file stale against the C# model; a kernel reload still needs a
+    host rebuilt from the same C#. The parity world boots with soft shadows at
+    `High` and ambient occlusion on, so every SDF station passes through the
+    shadow and ambient stages under the cross-backend pixel gate.
 
 **Decisions.** P4's visibility record is the surface sample record staged
 shading reads. P7b moves the SDF push blocks and binding constants onto groups;
@@ -4529,7 +4536,9 @@ cutover with the cadence as the scheduler's (P14-6, P14-9), the generated frame
 block (P14-7), and P14-8's kernels as pass-pipeline cache entries, one command
 list per instance per frame slot, the conditional mesh pass, and the world tables
 bound through the group-1 set P17's texture draw added for the bake atlases, one
-per upload ring slot. P15 and P16 both follow P14: P15 also needs P4, and
+per upload ring slot, the float working targets (P14-10), staged shading (P14-11)
+and the final sweep (P14-13): every P14 step has landed, and only its counted-cost
+ceilings remain. P15 and P16 both follow P14: P15 also needs P4, and
 P16's display output landed with P14-10's float working targets; only its HDR
 desktop capture and the HDR-display checks remain.
 P17's CPU half, the bakes and their texture codecs, has landed, and so have

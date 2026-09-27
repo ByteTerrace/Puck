@@ -25,7 +25,7 @@ public sealed class SdfWorldPipelineCatalogLawTests {
 
     [Fact]
     public void TwoResidenciesOverOneCatalogRenderWithOneCreationPerPipeline() {
-        var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version);
+        var gpu = new FakeGpuDevice();
         var pipelines = SdfTestPipelines.Cache();
         var context = Context(gpu: gpu);
 
@@ -52,7 +52,7 @@ public sealed class SdfWorldPipelineCatalogLawTests {
     }
     [Fact]
     public void ASetDifferingByOneKernelSharesEveryOtherEntry() {
-        var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version);
+        var gpu = new FakeGpuDevice();
         var pipelines = SdfTestPipelines.Cache();
 
         using var first = SdfTestPipelines.Build(

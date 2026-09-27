@@ -2,10 +2,6 @@
 #ifndef SDF_ISA_HLSLI
 #define SDF_ISA_HLSLI
 
-// The instruction-set version and the report word the version handshake dispatches with.
-#define SDF_ISA_VERSION        3u
-#define SDF_ISA_REPORT_REQUEST 0x53444656u
-
 // Puck.SignedDistance.SdfOp.
 #define SDF_OP_RESET_POINT       0u
 #define SDF_OP_TRANSLATE         1u

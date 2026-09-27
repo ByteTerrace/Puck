@@ -29,13 +29,13 @@ public sealed class SdfMeshRasterPass {
     public SdfMeshRasterPass(GpuPassPipelineCache pipelines, string bytecodeExtension) : this(
         fragment: Load(
             bytecodeExtension: bytecodeExtension,
-            directory: SdfWorldKernels.DefaultDirectory,
+            directory: SdfKernelSet.DefaultDirectory,
             stage: "frag"
         ),
         pipelines: pipelines,
         vertex: Load(
             bytecodeExtension: bytecodeExtension,
-            directory: SdfWorldKernels.DefaultDirectory,
+            directory: SdfKernelSet.DefaultDirectory,
             stage: "vert"
         )
     ) {

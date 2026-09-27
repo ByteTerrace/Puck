@@ -253,7 +253,6 @@ public sealed partial class OverlayPackageLawTests {
         public Rig(GpuCreationFaults? faults = null, bool trackObjects = false, HudStore? hud = null, IOverlayFrameSources? frameSources = null, bool staged = false) {
             var gpu = new FakeGpuDevice(
                 countCalls: true,
-                reportVersion: 0,
                 trackObjects: trackObjects
             ) {
                 MemoryProfile = (staged

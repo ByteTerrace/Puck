@@ -284,7 +284,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
             producer: "machine"
         );
 
-        var gpu = new FakeGpuDevice(reportVersion: 0);
+        var gpu = new FakeGpuDevice();
 
         using var region = new GpuRegion(
             bindings: gpu.Services.Bindings,

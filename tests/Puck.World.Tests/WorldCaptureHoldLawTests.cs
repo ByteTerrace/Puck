@@ -87,7 +87,7 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
         private readonly ulong m_stepTicks;
 
         public Run(string directory, bool holdsClock) {
-            var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version) {
+            var gpu = new FakeGpuDevice() {
                 BeforeComputePipeline = _ => {
                     m_entered.Set();
                     m_gate.Wait();

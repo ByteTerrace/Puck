@@ -24,7 +24,7 @@ with the fixed-point query evaluator described below and with `maths-usage`.
 
 | Area | Code | Owning explanation |
 |---|---|---|
-| Program model and ISA | `src/Puck.SignedDistance` (`SdfOp`, `SdfShapeType`, `SdfBlendOp`, `SdfDomainOp`, `SdfIsa`, `SdfProgram*.cs`, `SdfProgramBuilder*.cs`) | [program model](../../../docs/rendering/sdf/handbook/program-model.md), [materials and primitives](../../../docs/rendering/sdf/reference/materials-and-primitives.md), [Lipschitz](../../../docs/rendering/sdf/reference/lipschitz-and-field-correctness.md) |
+| Program model and ISA | `src/Puck.SignedDistance` (`SdfOp`, `SdfShapeType`, `SdfBlendOp`, `SdfDomainOp`, `SdfProgram*.cs`, `SdfProgramBuilder*.cs`) | [program model](../../../docs/rendering/sdf/handbook/program-model.md), [materials and primitives](../../../docs/rendering/sdf/reference/materials-and-primitives.md), [Lipschitz](../../../docs/rendering/sdf/reference/lipschitz-and-field-correctness.md) |
 | CPU interpreter and queries | `src/Puck.SignedDistance/Queries` (`SdfFieldEvaluator`, `SdfBandedFieldEvaluator`, `BakedWorldQuery`); seams `IWorldQuery`/`IFieldEvaluator` in `src/Puck.Maths/FixedPoint` | [queries and determinism](../../../docs/rendering/sdf/handbook/queries-and-determinism.md) |
 | Prototype bakes (mesh, textures, impostor) | `src/Puck.SignedDistance/Baking` (`SdfBaker`, `SdfBakeTier`, `SdfBakedTexture`); `src/Puck.Assets/Textures` (BC4/BC5/BC6H/BC7 codecs, `TextureMipChain`, `OctahedralNormal`); `CreationBaker`, `CreationBakeKey`, `CreationBakeCodec` in `src/Puck.World.Authoring/Authoring`; `WorldBakeStore`, `WorldBakeChunk` in `src/Puck.World.Schema`; `WorldBakeSchedule` in `src/Puck.World.Client` | [prototype bakes](../../../docs/rendering/sdf/handbook/bricks-and-baking.md#prototype-bakes), [creation bakes](../../../docs/architecture/worlds.md#creation-bakes) |
 | GPU engine and render assembly | `src/Puck.SdfVm` (`SdfWorldResidency`, `SdfWorldTables.*.cs`, `SdfWorldPasses`, `SdfWorldPassRecorder`, `SdfWorldRenderSpec`/`SdfWorldRenderBuilder`, `SdfCompositionFrameSource`, `ISdfSceneEmitter`); the `sdf.world` fragment `SdfWorldPackage` in `src/Puck.Shaders/Graph` | [`Puck.SdfVm` README](../../../src/Puck.SdfVm/README.md), [frame rendering](../../../docs/rendering/sdf/handbook/frame-rendering.md) |
@@ -75,9 +75,7 @@ over `RotatePlane`). A new instruction touches every partner in one change:
    (its blend switch and `ResolveWinner` included) or refuses it by name. Its
    blend switch falls through to union for an unknown value, so a missing arm
    silently turns the new blend into a union in contact and queries.
-7. **ISA version** — raise `SdfIsa.Version` and regenerate when existing
-   bytecode would misread the new encoding.
-8. **Document surface** — enum values are nameable in creation documents and
+7. **Document surface** — enum values are nameable in creation documents and
    `.puck` as soon as they exist, and their XML docs feed the generated world
    schemas. Either carry the new parameters through `CreationCanonicalizer` and
    the stamp emitters or refuse the value there, then regenerate with
@@ -654,7 +652,7 @@ These are one-line cautions; the owning pages hold the derivations.
   `DirectXDeviceContext.PipelineLibrary` sit under every compute and graphics
   creation; a new pipeline creation site on either backend passes through them.
   The files live under the state root's `pipeline-cache/`, keyed by
-  `GpuDeviceIdentity.CacheKey` and `SdfWorldKernels.ContentKey`. Both
+  `GpuDeviceIdentity.CacheKey` and `SdfKernelSet.ContentKey`. Both
   presentation shapes register the store (`GpuPipelineCacheStore`) in
   `WorldBootComposition`; a backend reads it with `GetService`, so a shape
   that drops it silently caches in memory only, and
@@ -910,7 +908,7 @@ These are one-line cautions; the owning pages hold the derivations.
   (`shaders.compiler`) counts requests, cache hits (`Pacing`) and each tool's
   runs in `RunStepAsync`, the one place `StepsOf`'s steps run; a new tool
   needs its kind in `RunsOf`. The static kernel loader counts into a process set,
-  `SdfWorldKernels.LoadWork` (loads and bytecode bytes), and has an
+  `SdfKernelSet.LoadWork` (loads and bytecode bytes), and has an
   overload or constructor parameter taking a fresh set, which is what a law
   counts into, since sibling tests load shaders in parallel. `VulkanProcResolver`
   is an instance the command tables take through their constructors; its `Work`
@@ -1055,11 +1053,10 @@ between-pass buffer barriers, each buffer's first use of a frame, the indirect
 hit passes and the mesh pass's attachments to its own tables, and the planner's
 size of each counted buffer, at several extents and instance counts, to the
 size the kernels index; a change to the fragment or the kernels moves the law.
-`SdfCapabilityMatrixLawTests` assigns every public member of the SDF surface
-(`SdfWorldTables`, `SdfWorldResidency`, `SdfWorldPasses` and the types they
-publish) to one capability row with its graph equivalent and check, so a new
-public member needs a row, and nothing a row claims is deleted before the row
-is green.
+The engine's kernels are one table, `SdfKernel`: each kernel's stem
+(`SdfKernelSet.StemOf`), pipeline (`SdfWorldTables.PipelineLayouts.Specs`),
+build order and loaded bytecode (`SdfKernelSet`) derive from it, so a new
+kernel is one enum member, one stem and its `.comp.hlsl`.
 The grouped binding contract is the pass interface in `src/Puck.Shaders/Interface`
 ([pass interfaces](../../../docs/reference/shaders.md#pass-interfaces)). Every
 shipped pass binds its groups as sets: each pipeline pass and package pass
