@@ -168,7 +168,7 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
         }
         if (!m_meshes.TryGetValue(key: key, value: out mesh)) {
             mesh = ((CreationBakeCodec.TryDecode(bake: out var bake, content: outcome.Span, refusal: out _) && (bake.Mesh.Indices.Length > 0))
-                ? MeshOf(baked: bake.Mesh)
+                ? MeshOf(bake: bake)
                 : null);
             m_meshes[key] = mesh;
         }
@@ -200,17 +200,48 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
 
     private readonly record struct Outcome(ContentPin Key, bool Baked, bool Refusal, long Evaluations);
 
-    // The drawable mesh of a baked mesh: its positions and triangles.
-    private static SdfMesh MeshOf(SdfBakedMesh baked) {
+    // The drawable mesh of a bake: its positions, normals and texture coordinates, and each triangle's palette entry,
+    // read from the bake's material identity at the triangle's texture-coordinate centroid, which lies inside the
+    // triangle's own tile.
+    private static SdfMesh MeshOf(SdfBake bake) {
+        var baked = bake.Mesh;
         var positions = new System.Numerics.Vector3[baked.Vertices.Length];
+        var normals = new System.Numerics.Vector3[baked.Vertices.Length];
+        var uvs = new System.Numerics.Vector2[baked.Vertices.Length];
 
         for (var index = 0; (index < positions.Length); index++) {
             positions[index] = baked.Vertices[index].Position;
+            normals[index] = baked.Vertices[index].Normal;
+            uvs[index] = baked.Vertices[index].Uv;
+        }
+
+        var identity = bake.Textures.FirstOrDefault(predicate: static texture => (texture.Usage == SdfBakeTextureUsage.Material));
+        var materials = new uint[(baked.Indices.Length / 3)];
+
+        if (identity is { Levels: [var texels, ..] }) {
+            for (var triangle = 0; (triangle < materials.Length); triangle++) {
+                var centroid = (((uvs[baked.Indices[(3 * triangle)]] + uvs[baked.Indices[((3 * triangle) + 1)]]) + uvs[baked.Indices[((3 * triangle) + 2)]]) / 3f);
+                var x = Math.Clamp(
+                    max: (identity.Width - 1),
+                    min: 0,
+                    value: (int)(centroid.X * identity.Width)
+                );
+                var y = Math.Clamp(
+                    max: (identity.Height - 1),
+                    min: 0,
+                    value: (int)(centroid.Y * identity.Height)
+                );
+
+                materials[triangle] = texels[((y * identity.Width) + x)];
+            }
         }
 
         return new SdfMesh(
             indices: baked.Indices,
-            positions: positions
+            normals: normals,
+            positions: positions,
+            triangleMaterials: materials,
+            uvs: uvs
         );
     }
     private static List<Outcome> Resolve(WorldBakeRequest[] batch, WorldBakeStore store, CancellationToken token) {

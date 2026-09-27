@@ -93,7 +93,7 @@ public static class SdfWorldInterfaces {
     /// the positions and indices the mesh pass reads.</summary>
     public const string MeshRegion = "sdfMeshRegion";
     /// <summary>The mesh visibility target the mesh pass draws and the hit passes read: per pixel the ray parameter,
-    /// the draw index plus one (zero where no mesh covers it) and the octahedral normal.</summary>
+    /// the draw index plus one (zero where no mesh covers it) and the triangle.</summary>
     public const string MeshVisibility = "meshVisibility";
     /// <summary>The glyph atlas.</summary>
     public const string GlyphAtlas = "sdfGlyphAtlas";

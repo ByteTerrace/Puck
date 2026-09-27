@@ -1965,7 +1965,7 @@ and the canaries hold every scene the check names.
    attachment's 0. Primary reads the target, bounds its march, and keeps an SDF
    hit only when strictly nearer, otherwise recording a mesh record (the draw as
    its source, the draw's material, a coverage threshold of one); surface
-   writes the rasterized normal with neutral ambient occlusion, and views skips
+   writes the mesh surface's normal with neutral ambient occlusion, and views skips
    the shadow march for a mesh pixel. While a frame draws a mesh (the world
    block's `meshDraws`), cull-args covers the whole tile grid. The cadence
    signature folds a mesh revision, `world.budget` prints the attachments'
@@ -2039,7 +2039,7 @@ and the canaries hold every scene the check names.
     the `Puck.SdfVm` README name the record.
 
 **Decisions.** Meshes rasterize first, into a sampled `RGBA32F` target (ray
-parameter, draw id plus one, octahedral normal) and a reversed-Z `D32Float`
+parameter, draw id plus one, triangle, each a whole number a float holds exactly) and a reversed-Z `D32Float`
 depth cleared to 0, compared `Greater`, with an infinite far plane and the cone
 near distance (0.02) as the near plane. Primary starts no earlier than its ray's
 intersection with that plane, ends at the nearest of the far distance, the tile's

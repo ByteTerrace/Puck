@@ -21,7 +21,7 @@ public sealed class SdfMeshRasterPass {
     /// <summary>The file stem of the pass's two stages: <c>sdf-mesh.vert</c> and <c>sdf-mesh.frag</c>.</summary>
     public const string ShaderStem = "sdf-mesh";
     /// <summary>The format of the mesh visibility target: per pixel the ray parameter, the draw index plus one and the
-    /// octahedral normal.</summary>
+    /// triangle, each a whole number a float holds exactly.</summary>
     public const GpuPixelFormat TargetFormat = GpuPixelFormat.R32G32B32A32Float;
     /// <summary>The format of the pass's reversed-Z depth attachment.</summary>
     public const GpuPixelFormat DepthFormat = GpuPixelFormat.D32Float;

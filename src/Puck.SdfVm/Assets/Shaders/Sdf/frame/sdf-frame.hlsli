@@ -27,7 +27,7 @@ struct SdfMeshSample {
     bool covered;
     float t;
     uint draw;
-    float3 normal;
+    uint triangleIndex;
 };
 
 // Reads the mesh visibility target at a pixel of the view the set renders, whose mesh pass ran just before its hit
@@ -43,7 +43,7 @@ SdfMeshSample sdfMeshSampleAt(uint2 pixel) {
             hit.covered = true;
             hit.t = texel.x;
             hit.draw = ((uint)texel.y - 1u);
-            hit.normal = sdfOctDecode(texel.zw);
+            hit.triangleIndex = (uint)texel.z;
         }
     }
 

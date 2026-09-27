@@ -162,8 +162,9 @@ surface textures, and an octahedral impostor
 keyed by the creation's pin (the prototype row's hash), the baker's version, and
 the quality tier, and one key is one set of bytes. Bakes are presentation only:
 contact, queries and simulation keep reading the field. With `world.bakes` on, an untinted static placement whose prototype's bake is
-ready draws the baked mesh through the mesh pass, in its palette's first
-material while the bake's textures do not draw yet, and keeps its field as
+ready draws the baked mesh through the mesh pass (its vertex normals and each
+triangle's palette entry, read from the bake's material identity) while the
+bake's textures do not draw yet, and keeps its field as
 camera-hidden instances that still cast shadows and occlude; a creation with
 text or noise relief keeps drawing through its field.
 
