@@ -310,10 +310,13 @@ creates replacements for the kernels whose bytecode changed, using the existing
 binding descriptions, off the frame thread. `SdfWorldTables.InstallReload` then
 owns the render-thread transaction: it waits for the device to go idle, swaps the
 pipelines and retires the old ones. A failed load or pipeline build keeps the
-previous kernels. Buffers, images, scene programs, animation, and baked bricks
-remain allocated; only the frame-reuse signature is reset, so the next frame
-renders. A reload loads bytecode built from the same C# the host was: an
-instruction-set, binding or layout change needs a rebuilt host. Unchanged bytecode creates no
+previous kernels, and so do kernels built against another instruction set: the
+tree's generated `isa/sdf-isa.hlsli` records the fingerprint of the instruction
+set its kernels were built against, and `SdfWorldPipelines.PrepareReload` refuses a
+set whose fingerprint is not this host's (`SdfKernelSet.RequireHostInstructionSet`).
+Buffers, images, scene programs, animation, and baked bricks remain allocated; only
+the frame-reuse signature is reset, so the next frame renders. A binding or layout
+change still needs a rebuilt host. Unchanged bytecode creates no
 pipeline and causes no GPU drain. Device-loss recovery uses the last
 successfully loaded set, and a loss during a reload fails that request. A
 reload replaces pipelines in place, so the residency first takes its set out of

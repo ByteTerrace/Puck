@@ -23,8 +23,11 @@ and not checked mechanically. No test reads the `.hlsli` files. A kernel set
 agrees with the instruction set it was built with because the build refuses
 bytecode stale against its sources and every include (the generated
 `sdf-isa.hlsli` among them), and `puck shaders generate --check` refuses a
-stale generated file; nothing at run time checks a reloaded kernel against the
-host, so an instruction-set change needs a rebuilt host. Host-side law tests
+stale generated file. The include opens with `SDF_ISA_FINGERPRINT`, a hash of the
+rest of the file (`SdfIsaHlsl.Fingerprint`), and ships beside the
+bytecode; `SdfKernelSet` reads it from the tree it loads, and
+`SdfKernelSet.RequireHostInstructionSet` refuses, at boot and on a reload, a set
+built against another instruction set. Host-side law tests
 (`PackEnvironmentLawTests`, `SdfViewsKernelVariantLawTests`,
 `WorldRenderEnvelopeLawTests`) pin only their C# half; `SdfFrameBlockLawTests`
 holds the frame block's writer to the generated offsets.

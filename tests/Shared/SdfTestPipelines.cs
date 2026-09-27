@@ -70,11 +70,14 @@ internal static class SdfTestPipelines {
     public static SdfKernelSet Kernels(byte beam = 1) {
         ReadOnlyMemory<byte> code = new byte[] { 1 };
 
-        return new SdfKernelSet(bytecode: [.. SdfKernelSet.Kernels.Select(selector: kernel => kernel switch {
-            SdfKernel.Beam => new byte[] { beam },
-            SdfKernel.BrickBake => ReadOnlyMemory<byte>.Empty,
-            _ => code,
-        })]);
+        return new SdfKernelSet(
+            bytecode: [.. SdfKernelSet.Kernels.Select(selector: kernel => kernel switch {
+                SdfKernel.Beam => new byte[] { beam },
+                SdfKernel.BrickBake => ReadOnlyMemory<byte>.Empty,
+                _ => code,
+            })],
+            fingerprint: SdfIsaHlsl.Fingerprint
+        );
     }
     // Produces frames until the residency's pipeline build has built its tables, then submits that frame's upload, as a
     // view's first pass of the frame does. The bound is liveness for a build over a fake device; it decides nothing.

@@ -48,11 +48,15 @@ public sealed class SdfWorldPipelines : IDisposable {
     /// <param name="includeBrickPipelines">Whether to lease the brick bake pipeline, for an engine with a brick
     /// pool.</param>
     /// <returns>The set, owned by the caller, which disposes it to release its leases.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="cache"/> or <paramref name="device"/> is
-    /// <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="cache"/>, <paramref name="device"/> or
+    /// <paramref name="kernels"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException"><paramref name="kernels"/> were built against another instruction set
+    /// (<see cref="SdfKernelSet.RequireHostInstructionSet"/>).</exception>
     public static SdfWorldPipelines Acquire(GpuPassPipelineCache cache, IGpuDeviceContext device, SdfKernelSet kernels, bool includeBrickPipelines) {
         ArgumentNullException.ThrowIfNull(argument: cache);
         ArgumentNullException.ThrowIfNull(argument: device);
+        ArgumentNullException.ThrowIfNull(argument: kernels);
+        kernels.RequireHostInstructionSet();
 
         var specs = SdfWorldTables.PipelineLayouts.Specs;
         var slots = new Slot?[specs.Length];
@@ -169,16 +173,21 @@ public sealed class SdfWorldPipelines : IDisposable {
     /// <param name="device">The device the set's pipelines were created on.</param>
     /// <param name="kernels">A complete compiled set for the same backend and unchanged host binding ABI.</param>
     /// <returns>The prepared reload, owned by the caller until it is installed or disposed.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="cache"/> or <paramref name="device"/> is
-    /// <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="cache"/>, <paramref name="device"/> or
+    /// <paramref name="kernels"/> is <see langword="null"/>.</exception>
     /// <exception cref="ObjectDisposedException">The set has been disposed.</exception>
+    /// <exception cref="InvalidOperationException"><paramref name="kernels"/> were built against another instruction set
+    /// (<see cref="SdfKernelSet.RequireHostInstructionSet"/>): the reload is refused and the set keeps its
+    /// kernels.</exception>
     public SdfWorldPipelineReload PrepareReload(GpuPassPipelineCache cache, IGpuDeviceContext device, SdfKernelSet kernels) {
         ArgumentNullException.ThrowIfNull(argument: cache);
         ArgumentNullException.ThrowIfNull(argument: device);
+        ArgumentNullException.ThrowIfNull(argument: kernels);
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
         );
+        kernels.RequireHostInstructionSet();
 
         var baseline = m_kernels;
         var replacements = new List<(int Index, GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> Lease)>();

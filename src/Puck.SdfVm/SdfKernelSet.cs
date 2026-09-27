@@ -4,8 +4,11 @@ namespace Puck.SdfVm;
 
 /// <summary>
 /// The compiled SDF kernels of one backend: each <see cref="SdfKernel"/>'s bytecode, SPIR-V for Vulkan or DXIL for
-/// Direct3D 12. <see cref="Load(string)"/> reads the set from the deployed assets, one file a kernel named by
-/// <see cref="StemOf"/>, and counts every load into <see cref="LoadWork"/>.
+/// Direct3D 12, and the fingerprint of the instruction set they were built against. <see cref="Load(string)"/> reads the
+/// set from the deployed assets, one file a kernel named by <see cref="StemOf"/> and the fingerprint from the tree's
+/// generated <c>isa/sdf-isa.hlsli</c> (<see cref="SdfIsaHlsl.ReadFingerprint"/>), and counts every load into
+/// <see cref="LoadWork"/>. An engine installs only a set whose fingerprint is its own
+/// (<see cref="RequireHostInstructionSet"/>).
 /// </summary>
 public sealed class SdfKernelSet {
     /// <summary>The name a counters report heads <see cref="LoadWork"/>'s section with.</summary>
@@ -16,9 +19,11 @@ public sealed class SdfKernelSet {
     /// <summary>Initializes a new instance of the <see cref="SdfKernelSet"/> class from each kernel's bytecode.</summary>
     /// <param name="bytecode">The bytecode of every kernel in <see cref="Kernels"/> order; the brick baker's may be empty
     /// for an engine without a brick pool.</param>
+    /// <param name="fingerprint">The fingerprint of the instruction set the kernels were built against
+    /// (<see cref="SdfIsaHlsl.Fingerprint"/> for this build's).</param>
     /// <exception cref="ArgumentNullException"><paramref name="bytecode"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="bytecode"/> does not hold one entry per kernel.</exception>
-    public SdfKernelSet(IReadOnlyList<ReadOnlyMemory<byte>> bytecode) {
+    public SdfKernelSet(IReadOnlyList<ReadOnlyMemory<byte>> bytecode, uint fingerprint) {
         ArgumentNullException.ThrowIfNull(argument: bytecode);
 
         if (bytecode.Count != Kernels.Count) {
@@ -29,6 +34,7 @@ public sealed class SdfKernelSet {
         }
 
         m_bytecode = [.. bytecode];
+        Fingerprint = fingerprint;
     }
 
     /// <summary>Gets every kernel, in pipeline order.</summary>
@@ -61,6 +67,8 @@ public sealed class SdfKernelSet {
     /// source. Counts only go up, and any thread may load.</summary>
     public static WorkCounterSet LoadWork =>
         LoadCounts.Process;
+    /// <summary>Gets the fingerprint of the instruction set the kernels were built against.</summary>
+    public uint Fingerprint { get; }
 
     /// <summary>Gets a kernel's bytecode.</summary>
     /// <param name="kernel">The kernel.</param>
@@ -87,6 +95,16 @@ public sealed class SdfKernelSet {
         SdfKernel.BrickBake => "sdf-brick-bake",
         _ => throw new ArgumentOutOfRangeException(paramName: nameof(kernel), actualValue: kernel, message: "Not an SDF kernel."),
     };
+    /// <summary>Returns the generated instruction-set include of the kernel tree whose passes directory is given: the file
+    /// a kernel set's fingerprint is read from, which ships beside the bytecode.</summary>
+    /// <param name="passesDirectory">The tree's passes directory (<see cref="PassesDirectory(string)"/>).</param>
+    /// <returns>The include's path.</returns>
+    public static string IsaIncludeOf(string passesDirectory) => Path.GetFullPath(path: Path.Combine(
+        path1: passesDirectory,
+        path2: "..",
+        path3: "isa",
+        path4: SdfIsaHlsl.FileName
+    ));
     /// <summary>Returns the directory of a kernel tree that holds its pass entry points and their bytecode: the one
     /// statement of where, under a tree, a kernel set loads from.</summary>
     /// <param name="tree">The kernel tree: <see cref="DeployedTree"/> or a source checkout's.</param>
@@ -122,7 +140,9 @@ public sealed class SdfKernelSet {
     /// <exception cref="ArgumentException"><paramref name="bytecodeExtension"/> or <paramref name="directory"/> is
     /// empty, or <paramref name="work"/> does not count <see cref="Loads"/> and <see cref="BytecodeBytes"/>.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="work"/> is <see langword="null"/>.</exception>
-    /// <exception cref="IOException">A kernel file is missing or cannot be read.</exception>
+    /// <exception cref="IOException">A kernel file or the tree's instruction-set include is missing or cannot be
+    /// read.</exception>
+    /// <exception cref="InvalidDataException">The tree's instruction-set include records no fingerprint.</exception>
     public static SdfKernelSet Load(string bytecodeExtension, string directory, WorkCounterSet work) {
         ArgumentException.ThrowIfNullOrEmpty(bytecodeExtension);
         ArgumentException.ThrowIfNullOrEmpty(directory);
@@ -145,7 +165,21 @@ public sealed class SdfKernelSet {
             bytecode[((int)kernel)] = bytes;
         }
 
-        return new SdfKernelSet(bytecode: bytecode);
+        return new SdfKernelSet(
+            bytecode: bytecode,
+            fingerprint: SdfIsaHlsl.ReadFingerprint(include: File.ReadAllText(path: IsaIncludeOf(passesDirectory: directory)))
+        );
+    }
+    /// <summary>Refuses a set built against another instruction set than this host's, whose programs and frames its
+    /// kernels would misread.</summary>
+    /// <exception cref="InvalidOperationException"><see cref="Fingerprint"/> is not <see cref="SdfIsaHlsl.Fingerprint"/>.</exception>
+    public void RequireHostInstructionSet() {
+        if (Fingerprint != SdfIsaHlsl.Fingerprint) {
+            throw new InvalidOperationException(message: string.Create(
+                provider: System.Globalization.CultureInfo.InvariantCulture,
+                handler: $"The SDF kernels were built against another instruction set (fingerprint 0x{Fingerprint:X8}; this host's is 0x{SdfIsaHlsl.Fingerprint:X8}). Build the kernels and the host from one source."
+            ));
+        }
     }
     /// <summary>Returns the kernel set's content key: a hash over every kernel's bytecode, in <see cref="Kernels"/> order.
     /// A host keys its persistent pipeline cache by it (<see cref="Puck.Abstractions.Gpu.GpuPipelineCacheStore"/>), so a
@@ -162,7 +196,10 @@ public sealed class SdfKernelSet {
 
         copy[((int)kernel)] = bytecode;
 
-        return new SdfKernelSet(bytecode: copy);
+        return new SdfKernelSet(
+            bytecode: copy,
+            fingerprint: Fingerprint
+        );
     }
 
     // A nested holder initializes after every kind above, whatever order the members are declared in.

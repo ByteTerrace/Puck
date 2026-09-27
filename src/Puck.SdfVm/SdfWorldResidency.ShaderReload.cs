@@ -142,8 +142,9 @@ public sealed partial class SdfWorldResidency {
         } catch (Exception exception) {
             PublishShaderReload(result: request with { State = "failed", Error = exception.Message });
 
-            // A bad directory, bytecode or handshake fails the request, as do several pipelines failing together;
-            // anything else, a device loss above all, continues to the host's recovery.
+            // A bad directory or bytecode, a tree with no instruction-set fingerprint or another instruction set's,
+            // fails the request, as do several pipelines failing together; anything else, a device loss above all,
+            // continues to the host's recovery.
             if (FailsTheRequest(exception: exception)) {
                 return;
             }
@@ -154,7 +155,7 @@ public sealed partial class SdfWorldResidency {
         PublishShaderReload(result: result);
 
         static bool FailsTheRequest(Exception exception) =>
-            ((exception is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.Runtime.InteropServices.ExternalException) ||
+            ((exception is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.Runtime.InteropServices.ExternalException) ||
             ((exception is AggregateException aggregate) && aggregate.InnerExceptions.All(predicate: FailsTheRequest)));
     }
     private void PublishShaderReload(SdfShaderReloadStatus result) {

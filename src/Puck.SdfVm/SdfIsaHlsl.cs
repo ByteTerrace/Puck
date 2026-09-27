@@ -1,5 +1,8 @@
+using System.Buffers.Binary;
 using System.Globalization;
+using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using Puck.Abstractions.Gpu;
 using Puck.SignedDistance;
 
@@ -14,18 +17,66 @@ namespace Puck.SdfVm;
 /// regenerating. <c>puck shaders generate</c> writes the file beside the kernels and <c>--check</c> fails on drift.
 /// <para>The text is a pure function of the model: the same build generates the same bytes, with LF line endings, on
 /// every host.</para>
+/// <para>The file opens with its own fingerprint (<see cref="Fingerprint"/>), a hash of every declaration after it, so a
+/// kernel set carries the instruction set it was built against: <see cref="SdfKernelSet"/> reads it from the tree the
+/// kernels load from, and the engine refuses a set whose fingerprint is not the one its own model generates.</para>
 /// </summary>
-public static class SdfIsaHlsl {
+public static partial class SdfIsaHlsl {
     /// <summary>The file name of the generated include, which sits with the other generated declarations in
     /// <c>Assets/Shaders/Sdf/isa</c>.</summary>
     public const string FileName = "sdf-isa.hlsli";
 
     private const string Guard = "SDF_ISA_HLSLI";
+    private const string FingerprintName = "SDF_ISA_FINGERPRINT";
 
-    /// <summary>Generates the include.</summary>
+    /// <summary>Gets the fingerprint of this build's instruction set: the first four bytes, little-endian, of the SHA-256
+    /// of the include's text without its fingerprint. It moves with any member, value or constant
+    /// the kernels read from the model, so kernels built against another model carry another fingerprint.</summary>
+    public static uint Fingerprint { get; } = FingerprintOf(declarations: Declare());
+
+    /// <summary>Generates the include: its fingerprint, then every declaration.</summary>
     /// <returns>The HLSL text.</returns>
     /// <exception cref="InvalidOperationException">Two declarations would share one HLSL name.</exception>
     public static string Generate() {
+        var declarations = Declare();
+        var header = $"#define {Guard}\n";
+        var at = (declarations.IndexOf(comparisonType: StringComparison.Ordinal, value: header) + header.Length);
+
+        return declarations.Insert(
+            startIndex: at,
+            value: string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"\n// The fingerprint of the rest of this file; a kernel set built from this file installs only in a host whose model generates the same one.\n#define {FingerprintName} 0x{FingerprintOf(declarations: declarations):X8}u\n"
+            )
+        );
+    }
+    /// <summary>Reads the fingerprint a generated include records.</summary>
+    /// <param name="include">The include's text.</param>
+    /// <returns>The fingerprint.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="include"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidDataException">The text records no fingerprint.</exception>
+    public static uint ReadFingerprint(string include) {
+        ArgumentNullException.ThrowIfNull(argument: include);
+
+        var match = FingerprintPattern().Match(input: include);
+
+        if (!match.Success) {
+            throw new InvalidDataException(message: $"The SDF instruction-set include records no {FingerprintName}; regenerate it with puck shaders generate and rebuild the kernels.");
+        }
+
+        return uint.Parse(
+            provider: CultureInfo.InvariantCulture,
+            s: match.Groups[1].Value,
+            style: NumberStyles.AllowHexSpecifier
+        );
+    }
+
+    [GeneratedRegex(pattern: @"^#define SDF_ISA_FINGERPRINT 0x([0-9A-F]{8})u$", options: RegexOptions.Multiline)]
+    private static partial Regex FingerprintPattern();
+    private static uint FingerprintOf(string declarations) =>
+        BinaryPrimitives.ReadUInt32LittleEndian(source: SHA256.HashData(source: Encoding.UTF8.GetBytes(s: declarations)));
+    // Every declaration the include makes, without its fingerprint.
+    private static string Declare() {
         var declarations = new Declarations();
 
         declarations.Members<SdfOp>(prefix: "SDF_OP");
@@ -169,7 +220,6 @@ public static class SdfIsaHlsl {
 
         return declarations.Text();
     }
-
     // A C# member name's HLSL spelling: upper snake case, with a word break before an upper-case letter that follows a
     // lower-case one or that starts a new word after an upper-case run (P4M stays P4M, LogSphere becomes LOG_SPHERE).
     private static string UpperSnake(string name) {

@@ -547,8 +547,10 @@ These are one-line cautions; the owning pages hold the derivations.
   kernels once (`LoadDeployed`). A kernel reload leases the changed kernels'
   entries (`SdfWorldPipelines.PrepareReload`), waits for them off the frame
   thread, and swaps them into the residency's own set after the device is idle,
-  releasing the replaced leases once the handshake passes; another residency
-  leasing the replaced entries keeps them. A new SDF pipeline is a row in
+  releasing the replaced leases; another residency leasing the replaced entries
+  keeps them. A set built against another instruction set (its tree's
+  `isa/sdf-isa.hlsli` fingerprint) is refused before anything is leased, and the
+  residency keeps its kernels. A new SDF pipeline is a row in
   `SdfWorldTables.PipelineLayouts.Specs`, never a create call in the tables. A harness that drives a residency polls
   `SdfWorldResidency.IsReady`
   (`SdfTestPipelines.ProduceFirstFrame` in `tests/Shared`, whose `Kernels` is the one fake kernel set);

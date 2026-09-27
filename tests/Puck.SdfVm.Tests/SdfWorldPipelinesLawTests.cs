@@ -56,6 +56,42 @@ public sealed class SdfWorldPipelinesLawTests {
 
         Assert.Equal(expected: 12L, actual: Created(cache: cache));
     }
+    // A reload of kernels built against another instruction set is refused before it leases anything, and the set keeps
+    // its kernels; the same kernels built against this host's instruction set prepare.
+    [Fact]
+    public void AReloadBuiltAgainstAnotherInstructionSetIsRefusedAndTheSetKeepsItsKernels() {
+        var gpu = new FakeGpuDevice();
+        var cache = new GpuPassPipelineCache();
+        using var pipelines = SdfTestPipelines.Build(
+            cache: cache,
+            device: gpu,
+            kernels: SdfTestPipelines.Kernels(beam: 1)
+        );
+        var installed = pipelines.Kernels;
+        var created = Created(cache: cache);
+        var changed = SdfTestPipelines.Kernels(beam: 2);
+        var foreign = new SdfKernelSet(
+            bytecode: [.. SdfKernelSet.Kernels.Select(selector: kernel => changed[kernel])],
+            fingerprint: SdfIsaHlsl.Fingerprint ^ 1U
+        );
+
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => pipelines.PrepareReload(
+            cache: cache,
+            device: gpu,
+            kernels: foreign
+        ));
+        Assert.Same(expected: installed, actual: pipelines.Kernels);
+        Assert.Equal(expected: created, actual: Created(cache: cache));
+
+        using var reload = pipelines.PrepareReload(
+            cache: cache,
+            device: gpu,
+            kernels: changed
+        );
+
+        reload.Wait(cancellationToken: CancellationToken.None);
+        Assert.Equal(expected: 1, actual: reload.ChangedPipelines);
+    }
     [Fact]
     public void ASetWithABrickPoolAddsTheBrickBakePipelineItsKernelCarries() {
         var gpu = new FakeGpuDevice();

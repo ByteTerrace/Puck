@@ -29,6 +29,7 @@ public sealed class SdfKernelSetLawTests {
         var directory = Directory.CreateTempSubdirectory(prefix: "puck-test-").FullName;
 
         try {
+            var passes = Tree(root: directory, include: SdfIsaHlsl.Generate());
             var expected = 0L;
 
             for (var index = 0; (index < Stems.Length); index++) {
@@ -37,7 +38,7 @@ public sealed class SdfKernelSetLawTests {
                 File.WriteAllBytes(
                     bytes: bytes,
                     path: Path.Combine(
-                        path1: directory,
+                        path1: passes,
                         path2: $"{Stems[index]}.comp.spv"
                     )
                 );
@@ -47,19 +48,20 @@ public sealed class SdfKernelSetLawTests {
             var work = Work();
             var kernels = SdfKernelSet.Load(
                 bytecodeExtension: ".spv",
-                directory: directory,
+                directory: passes,
                 work: work
             );
 
             Assert.Equal(expected: 1L, actual: work.Read(kind: SdfKernelSet.Loads));
             Assert.Equal(expected: expected, actual: work.Read(kind: SdfKernelSet.BytecodeBytes));
-            // Passed through: each kernel is its own file's bytes.
+            // Passed through: each kernel is its own file's bytes, and the fingerprint the tree's include records.
+            Assert.Equal(expected: SdfIsaHlsl.Fingerprint, actual: kernels.Fingerprint);
             Assert.Equal(expected: new byte[] { 0 }, actual: kernels[SdfKernel.Ambient].ToArray());
             Assert.Equal(expected: Enumerable.Repeat(count: 12, element: ((byte)11)), actual: kernels[SdfKernel.ViewsFolds].ToArray());
 
             _ = SdfKernelSet.Load(
                 bytecodeExtension: ".spv",
-                directory: directory,
+                directory: passes,
                 work: work
             );
 
@@ -112,5 +114,50 @@ public sealed class SdfKernelSetLawTests {
 
         Assert.Equal(expected: SdfKernelSet.Kernels.Count, actual: keys.Count);
         Assert.DoesNotContain(collection: keys, expected: baseline.ContentKey());
+    }
+    [Fact]
+    public void ASetBuiltAgainstAnotherInstructionSetIsRefusedByTheHost() {
+        var directory = Directory.CreateTempSubdirectory(prefix: "puck-test-").FullName;
+
+        try {
+            var foreign = SdfIsaHlsl.Fingerprint ^ 1U;
+            var include = SdfIsaHlsl.Generate().Replace(
+                comparisonType: StringComparison.Ordinal,
+                newValue: $"0x{foreign:X8}u",
+                oldValue: $"0x{SdfIsaHlsl.Fingerprint:X8}u"
+            );
+            var passes = Tree(include: include, root: directory);
+
+            foreach (var kernel in SdfKernelSet.Kernels) {
+                File.WriteAllBytes(bytes: [1], path: Path.Combine(path1: passes, path2: $"{SdfKernelSet.StemOf(kernel: kernel)}.comp.spv"));
+            }
+
+            var kernels = SdfKernelSet.Load(bytecodeExtension: ".spv", directory: passes, work: Work());
+
+            Assert.Equal(expected: foreign, actual: kernels.Fingerprint);
+            Assert.Contains(
+                actualString: Assert.Throws<InvalidOperationException>(testCode: kernels.RequireHostInstructionSet).Message,
+                expectedSubstring: "another instruction set"
+            );
+            SdfTestPipelines.Kernels().RequireHostInstructionSet();
+        } finally {
+            Directory.Delete(
+                path: directory,
+                recursive: true
+            );
+        }
+    }
+    [Fact]
+    public void TheGeneratedIncludeRecordsTheHostsFingerprint() =>
+        Assert.Equal(expected: SdfIsaHlsl.Fingerprint, actual: SdfIsaHlsl.ReadFingerprint(include: SdfIsaHlsl.Generate()));
+
+    // A kernel tree under a root: its passes directory, returned, and its instruction-set include beside it.
+    private static string Tree(string root, string include) {
+        var passes = Directory.CreateDirectory(path: SdfKernelSet.PassesDirectory(tree: root)).FullName;
+
+        Directory.CreateDirectory(path: Path.GetDirectoryName(path: SdfKernelSet.IsaIncludeOf(passesDirectory: passes))!);
+        File.WriteAllText(contents: include, path: SdfKernelSet.IsaIncludeOf(passesDirectory: passes));
+
+        return passes;
     }
 }
