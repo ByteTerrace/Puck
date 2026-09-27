@@ -1,6 +1,7 @@
 namespace Puck.HumbleGamingDeck.Post;
 
-/// <summary>Checks header resolution, memory mirroring, and unowned register windows.</summary>
+/// <summary>Checks header resolution, memory mirroring, and the CPU open bus behind undecoded and partly driven
+/// addresses.</summary>
 internal sealed class LoaderStage : IPostStage<PostContext> {
     /// <inheritdoc/>
     public string Name => "loader-headers-bus";
@@ -11,20 +12,24 @@ internal sealed class LoaderStage : IPostStage<PostContext> {
     public PostStageOutcome Run(PostContext context) {
         var image = PostMachine.CreateImage();
         var cartridge = HgdCartridge.Load(image: image);
-        var mapper = cartridge.CreateMapper();
-        var bus = new HgdSystemBus(mapper: mapper, workRamFill: 0xA5);
+        var machine = new HgdMachine(configuration: new HgdMachineConfiguration(
+            cartridge: cartridge,
+            powerOn: new HgdPowerOnProfile(workRamFill: 0xA5)
+        ));
+        var bus = machine.Bus;
+        var mapper = bus.Mapper;
 
         bus.Write(address: 0x0012, value: 0x43);
-        if ((bus.Read(address: 0x1812) != 0x43) || (bus.Read(address: 0x2002) != 0x43)) {
-            return PostStageOutcome.Fail(detail: "work-RAM mirror or undriven PPU window differs");
+        if ((bus.Read(address: 0x1812) != 0x43) || (bus.Read(address: 0x4018) != 0x43)) {
+            return PostStageOutcome.Fail(detail: "work-RAM mirror or the undecoded $4018 window differs");
         }
-        bus.Write(address: 0x4015, value: 0x72);
-        if ((bus.Read(address: 0x4016) != 0x72) || (bus.Peek(address: 0x8000) != bus.Peek(address: 0xC000)) || (bus.OpenBus != 0x72)) {
-            return PostStageOutcome.Fail(detail: "open-bus write, side-effect-free peek, or NROM-128 mirroring differs");
+        bus.Write(address: 0x4018, value: 0x72);
+        if (((bus.Read(address: 0x4016) & 0xE0) != 0x60) || (bus.Peek(address: 0x8000) != bus.Peek(address: 0xC000))) {
+            return PostStageOutcome.Fail(detail: "controller open-bus bits, side-effect-free peek, or NROM-128 mirroring differs");
         }
         bus.Write(address: 0x6000, value: 0x99);
-        mapper.PpuWrite(address: 0x0110, value: 0x28);
-        if ((bus.Read(address: 0x6000) != 0x99) || (mapper.PpuRead(address: 0x0110) != 0x28)) {
+        mapper.PpuWrite(address: 0x0110, value: 0x28, nametables: machine.Nametables);
+        if ((bus.Read(address: 0x6000) != 0x99) || (mapper.PpuRead(address: 0x0110, nametables: machine.Nametables) != 0x28)) {
             return PostStageOutcome.Fail(detail: "NROM PRG/CHR writable memory differs");
         }
         image[4] = (14 << 2);

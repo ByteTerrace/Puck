@@ -14,7 +14,7 @@ namespace Puck.HumbleGamingDeck;
 public readonly record struct HgdMachineIdentity(int Version, HgdConsoleModel Model, HgdPowerOnProfile PowerOn,
     HgdCartridgeHeader Header, ulong ImageHash, ulong PrgHash, ulong ChrHash, int ImageLength) {
     /// <summary>The complete CPU/bus snapshot layout, including sampled NMI recognition state.</summary>
-    public const int CurrentVersion = 3;
+    public const int CurrentVersion = 4;
 
     /// <summary>Computes the stamp from all execution inputs.</summary>
     /// <param name="configuration">The configuration to fingerprint.</param>

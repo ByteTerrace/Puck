@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <Description>The deterministic NES/Famicom CPU and cartridge bus, with an integer master clock and complete mid-instruction snapshots.</Description>
+        <Description>The deterministic NES/Famicom machine on an integer master clock: a per-cycle 2A03 with its DMA unit, a dot-exact 2C02 PPU, the APU, standard controllers, and cartridge boards, with complete mid-instruction snapshots, hosted through the IMachineEngine adapter over Puck.Machines.</Description>
         <IsPackable>true</IsPackable>
         <PackageId>ByteTerrace.Puck.HumbleGamingDeck</PackageId>
         <PackageTags>determinism;emulation;nes;6502</PackageTags>
@@ -11,6 +11,7 @@
     <ItemGroup>
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="[10.*,)" />
         <Using Include="Puck.Machines" />
+        <ProjectReference Include="../Puck.Abstractions/Puck.Abstractions.csproj" />
         <ProjectReference Include="../Puck.Machines/Puck.Machines.csproj" />
         <ProjectReference Include="../Puck.Maths/Puck.Maths.csproj" />
     </ItemGroup>

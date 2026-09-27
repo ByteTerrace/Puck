@@ -85,7 +85,8 @@ Every package below carries its own check on the programme page; tick it there a
 - [x] The shared-layer rename to `Puck.Machines`.
 - [x] Neutral contracts: rational clock rates and multi-port input.
 - [x] The CPU and the bus.
-- [ ] A complete NTSC machine (startable today); NTSC accuracy.
+- [x] A complete NTSC machine.
+- [ ] NTSC accuracy (startable today).
 - [ ] Common boards; regional hardware; long-tail boards; expansion audio.
 - [ ] The Famicom Disk System; peripherals; World cabinets.
 

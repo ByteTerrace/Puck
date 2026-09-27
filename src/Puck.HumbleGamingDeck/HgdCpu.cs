@@ -116,6 +116,9 @@ public sealed partial class HgdCpu<TBus> : ISnapshotable where TBus : struct, IH
     public byte Microcycle => m_step;
     /// <summary>Gets the last byte sampled or driven on the CPU data bus.</summary>
     public byte DataBus => m_data;
+    /// <summary>Gets whether the CPU's next cycle writes. RDY cannot halt a write, so the DMA unit waits for a read cycle
+    /// before it takes the bus.</summary>
+    public bool NextAccessIsWrite => NextAccess().Write;
 
     /// <summary>Begins reset without changing A, X, Y, decimal status, or RAM. The bus performs three stack reads.</summary>
     public void Reset() {

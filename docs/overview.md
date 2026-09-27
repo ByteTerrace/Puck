@@ -21,7 +21,7 @@ The engine includes several systems that can also be studied independently:
   pipelines. Vulkan and Direct3D 12 provide the GPU implementations.
 - **Emulation:** Game Boy/Game Boy Color and Game Boy Advance machine cores
   with cartridge authoring and hosting in World; the Humble Gaming Deck
-  provides the NES/Famicom CPU and cartridge bus without a host adapter.
+  emulates the NTSC NES/Famicom console, not yet placed in World.
 - **World services:** authority, permissions, networking, storage and transfers
   between worlds.
 
