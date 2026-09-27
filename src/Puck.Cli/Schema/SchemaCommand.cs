@@ -98,7 +98,7 @@ internal static class SchemaCommand {
     // The engine catalog's post-process packages, each with its config schema, the vocabulary views.post[] validates
     // against.
     internal static List<WorldSchema.PostProcessPackageSchema> PostProcessPackages() => [.. RenderGraphPackageCatalog.Engine.Packages
-        .Where(predicate: static package => package.IsPostProcess)
+        .Where(predicate: static package => package.IsPostRow)
         .Select(selector: static package => new WorldSchema.PostProcessPackageSchema(
             ConfigSchema: ShaderConfigBinding.JsonSchema(
                 description: package.Summary,

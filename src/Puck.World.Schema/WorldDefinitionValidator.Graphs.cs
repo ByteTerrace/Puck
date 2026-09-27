@@ -314,7 +314,7 @@ public static partial class WorldDefinitionValidator {
 
             switch (WorldPostProcessVocabularyHook.IsPostProcessPackage(package: pass.Package)) {
                 case false:
-                    errors.Add(item: $"{path}.package '{pass.Package}' names no post-process package.");
+                    errors.Add(item: $"{path}.package '{pass.Package}' names no post-process package a views.post row runs.");
 
                     break;
                 case null:

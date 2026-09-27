@@ -298,7 +298,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     private readonly List<RenderGraphFootprint> m_footprints = [];
     private readonly Dictionary<string, RenderGraphPlacement> m_placements = new(comparer: StringComparer.Ordinal);
 
-    private Func<IReadOnlyList<string>, int, IReadOnlyList<WorldViewPostPass>?, WorldRootGraph>? m_compose;
+    private Func<IReadOnlyList<string>, int, IReadOnlyList<WorldViewPostPass>?, WorldTonemap, WorldRootGraph>? m_compose;
     private bool m_disposed;
     // The source and view instances the running set was composed with, the footprints its screen-rendering instance shows
     // them through, and the views the display shows directly.
@@ -309,6 +309,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     private List<RenderGraphFootprint> m_screenFootprints = [];
 
     private WorldViewDefaults? m_lastViews;
+    // The render.tonemap the running set was composed with.
+    private WorldTonemap m_lastTonemap;
     // The last refusal Reconcile reported, so a section it keeps retrying reports each refusal once.
     private string? m_refusal;
     private IRenderGraphInstances? m_runtime;
@@ -491,17 +493,23 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         return footprints;
     }
 
+    /// <summary>Gets or sets whether the world shows a debug view, whose colors the synthesized root shows as they are:
+    /// while it answers <see langword="true"/>, the root runs no tonemap, and it composes the tonemap again once it
+    /// answers <see langword="false"/>. <see langword="null"/> shows no debug view.</summary>
+    public Func<bool>? ShowsDebugView { get; set; }
+
     /// <summary>Drives a runtime from here on: the next <see cref="Reconcile"/> composes the document's instance set
     /// onto it.</summary>
     /// <param name="runtime">The runtime, built from the set <see cref="TryCompose"/> composed for the booted
     /// document.</param>
     /// <param name="compose">Synthesizes the default graph over the panes a document's layouts place, the views they
-    /// compose (<see cref="WorldRootGraph.ViewsOf"/>) and the document's current <c>views.post</c> passes.</param>
+    /// compose (<see cref="WorldRootGraph.ViewsOf"/>), the document's current <c>views.post</c> passes and its current
+    /// <c>render.tonemap</c>.</param>
     /// <param name="synthesized">The default graph the runtime was built with, or <see langword="null"/> when the booted
     /// document names its own root.</param>
     /// <exception cref="ArgumentNullException"><paramref name="runtime"/> or <paramref name="compose"/> is
     /// <see langword="null"/>.</exception>
-    public void Attach(IRenderGraphInstances runtime, Func<IReadOnlyList<string>, int, IReadOnlyList<WorldViewPostPass>?, WorldRootGraph> compose, WorldRootGraph? synthesized) {
+    public void Attach(IRenderGraphInstances runtime, Func<IReadOnlyList<string>, int, IReadOnlyList<WorldViewPostPass>?, WorldTonemap, WorldRootGraph> compose, WorldRootGraph? synthesized) {
         ArgumentNullException.ThrowIfNull(argument: runtime);
         ArgumentNullException.ThrowIfNull(argument: compose);
 
@@ -570,13 +578,17 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             }
         }
     }
-    /// <summary>Starts a frame before the runtime schedules it: reconciles the accepted <c>views</c> section, installs
-    /// complete candidates and polls dependency watches, and clears the previous frame's placements and cameras, leaving
-    /// the footprints the synthesized root always shows. The panes published last stay published until
-    /// <see cref="PublishPanes"/> replaces them.</summary>
+    /// <summary>Starts a frame before the runtime schedules it: reconciles the accepted <c>views</c> section and
+    /// <c>render.tonemap</c>, installs complete candidates and polls dependency watches, and clears the previous frame's
+    /// placements and cameras, leaving the footprints the synthesized root always shows. The panes published last stay
+    /// published until <see cref="PublishPanes"/> replaces them.</summary>
     /// <param name="views">The accepted document's <c>views</c> section.</param>
-    public void BeginFrame(WorldViewDefaults views) {
-        Reconcile(views: views);
+    /// <param name="tonemap">The accepted document's <c>render.tonemap</c>, or <see langword="null"/> for none.</param>
+    public void BeginFrame(WorldViewDefaults views, WorldTonemap? tonemap = null) {
+        Reconcile(
+            tonemap: tonemap,
+            views: views
+        );
         PumpWatches();
         ResetFootprints();
         m_placements.Clear();
@@ -1029,13 +1041,21 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// the runtime refuses leaves the running one in place, reported by name once, and is tried again on the next call.
     /// Does nothing before a runtime is attached.</summary>
     /// <param name="views">The accepted document's <c>views</c> section.</param>
-    public void Reconcile(WorldViewDefaults views) {
+    /// <param name="tonemap">The accepted document's <c>render.tonemap</c>, or <see langword="null"/> for none, which the
+    /// synthesized root runs as a pass before the overlay unless <see cref="ShowsDebugView"/> says a debug view is
+    /// on.</param>
+    public void Reconcile(WorldViewDefaults views, WorldTonemap? tonemap = null) {
         ArgumentNullException.ThrowIfNull(argument: views);
+
+        var curve = ((ShowsDebugView?.Invoke() ?? false)
+            ? WorldTonemap.None
+            : (tonemap ?? WorldTonemap.None));
 
         if (
             m_disposed ||
             (m_runtime is not { } runtime) ||
             (
+                (m_lastTonemap == curve) &&
                 ReferenceEquals(
                     objA: m_lastViews,
                     objB: views
@@ -1055,6 +1075,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
         ReconcileChanged(
             runtime: runtime,
+            tonemap: curve,
             views: views
         );
     }
@@ -1066,7 +1087,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
     // Reconciles a views section that differs from the one last accepted. Apart from Reconcile, so the closures its
     // rebinding captures are allocated only when the section moved, never on a steady frame.
-    private void ReconcileChanged(IRenderGraphInstances runtime, WorldViewDefaults views) {
+    private void ReconcileChanged(IRenderGraphInstances runtime, WorldViewDefaults views, WorldTonemap tonemap) {
         var synthesized = m_synthesized;
         var sources = Screens?.Sources;
         var rendered = (Screens?.Views ?? WorldViewInstances.Empty);
@@ -1078,11 +1099,12 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             if (
                 (synthesized is null) ||
                 (synthesized.Views != composedViews) ||
+                (synthesized.Tonemap != tonemap) ||
                 !synthesized.Panes.SequenceEqual(second: panes, comparer: StringComparer.Ordinal) ||
                 !synthesized.Post.SequenceEqual(second: (views.Post ?? []))
             ) {
                 try {
-                    synthesized = m_compose!(arg1: panes, arg2: composedViews, arg3: views.Post);
+                    synthesized = m_compose!(arg1: panes, arg2: composedViews, arg3: views.Post, arg4: tonemap);
                 } catch (WorldRootGraphRefusedException exception) {
                     ReportRefusal(reason: exception.Message);
 
@@ -1161,6 +1183,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         m_lastSources = sources;
         m_lastRendered = Screens?.Views;
         m_lastViews = views;
+        m_lastTonemap = tonemap;
         m_refusal = null;
         m_screenFootprints = ScreenFootprints(
             rendered: rendered,

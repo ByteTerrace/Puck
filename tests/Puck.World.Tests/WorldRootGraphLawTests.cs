@@ -36,6 +36,56 @@ public sealed class WorldRootGraphLawTests {
         Assert.Null(@object: Assert.Single(collection: graph.Graphs()));
     }
     [Fact]
+    public void AFilmicTonemapRunsAfterThePostPassesAndBeforeTheOverlayAndNoneRunsNothing() {
+        WorldViewPostPass[] post = [new(Name: "grain", Package: FilmGrain)];
+        var filmic = WorldRootGraph.Compose(
+            overlay: true,
+            packages: RenderGraphPackageCatalog.Engine,
+            post: post,
+            tonemap: WorldTonemap.Filmic
+        );
+
+        Assert.Equal(
+            actual: Assert.IsType<RenderGraphPlan>(@object: filmic.Plan).Steps.Select(selector: static step => $"{step.Name}:{step.Package?.Id}"),
+            expected: [$"grain:{FilmGrain}", $"main$tonemap:{RenderGraphPackageCatalog.SdfTonemap}", "main$overlay:overlay"]
+        );
+        Assert.Equal(
+            actual: filmic.Tonemap,
+            expected: WorldTonemap.Filmic
+        );
+
+        // With nothing else over the world, a filmic tonemap alone makes the root graph, which shows the world over its
+        // whole extent.
+        var alone = WorldRootGraph.Compose(
+            overlay: false,
+            packages: RenderGraphPackageCatalog.Engine,
+            post: null,
+            tonemap: WorldTonemap.Filmic
+        );
+
+        Assert.Equal(
+            actual: (alone.Root, Footprint: Assert.Single(collection: alone.Footprints).Producer),
+            expected: (WorldViewGraphs.MainInstance, Footprint: WorldViewGraphs.WorldInstance)
+        );
+        Assert.Equal(
+            actual: Assert.IsType<RenderGraphPlan>(@object: alone.Plan).Steps.Select(selector: static step => step.Name),
+            expected: ["main$tonemap"]
+        );
+
+        // None runs no pass, so a world with nothing to draw over it stays its own root.
+        var none = WorldRootGraph.Compose(
+            overlay: false,
+            packages: RenderGraphPackageCatalog.Engine,
+            post: null,
+            tonemap: WorldTonemap.None
+        );
+
+        Assert.Equal(
+            actual: (none.Root, none.Plan, none.Tonemap),
+            expected: (WorldViewGraphs.WorldInstance, ((RenderGraphPlan?)null), WorldTonemap.None)
+        );
+    }
+    [Fact]
     public void ThePostPassesThenTheOverlayRunInDocumentOrderOverTheWorld() {
         WorldViewPostPass[] post = [
             new(Name: "grain", Package: FilmGrain),

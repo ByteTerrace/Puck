@@ -38,7 +38,7 @@ public static class WorldSchemaVocabularyHooks {
         WorldPostProcessVocabularyHook.PostProcessPackageCheck = static package => (Puck.Shaders.RenderGraphPackageCatalog.Engine.TryGet(
             id: package,
             package: out var offered
-        ) && offered.IsPostProcess);
+        ) && offered.IsPostRow);
         // A post pass's config binds as the graph compiler binds it when the root is composed; a package the check above
         // refuses is reported there, not here.
         WorldPostProcessVocabularyHook.PostProcessConfigCheck = static (package, pass, config) => {

@@ -142,9 +142,15 @@ public sealed record RenderGraphPackagePort(
 /// <param name="Fragment">The passes the package runs as, which the graph compiler splices into a graph in place of a
 /// pass naming it (<see cref="RenderGraphPackageFragment"/>), or <see langword="null"/> for a package that runs as the
 /// one pass naming it.</param>
-public sealed record RenderGraphPackage(string Id, IReadOnlyList<RenderGraphPackagePort> Inputs, IReadOnlyList<RenderGraphPackagePort> Outputs, IReadOnlyList<ShaderInterfaceMember> Members, string Summary, IReadOnlyDictionary<string, ShaderConfigField>? Config = null, RenderGraphPackageStages? Stages = null, bool PushesIndex = false, RenderGraphPackageFragment? Fragment = null) {
+/// <param name="RootPass">Whether only a world's synthesized root runs the post-process package, from the document field
+/// that asks for it (<see cref="RenderGraphPackageCatalog.SdfTonemap"/> from <c>render.tonemap</c>), so no
+/// <c>views.post</c> row names it.</param>
+public sealed record RenderGraphPackage(string Id, IReadOnlyList<RenderGraphPackagePort> Inputs, IReadOnlyList<RenderGraphPackagePort> Outputs, IReadOnlyList<ShaderInterfaceMember> Members, string Summary, IReadOnlyDictionary<string, ShaderConfigField>? Config = null, RenderGraphPackageStages? Stages = null, bool PushesIndex = false, RenderGraphPackageFragment? Fragment = null, bool RootPass = false) {
     /// <summary>Gets whether the package is a post-process package: one with <see cref="Stages"/>.</summary>
     public bool IsPostProcess => (Stages is not null);
+    /// <summary>Gets whether a world's <c>views.post</c> row may name the package: a post-process package that is no
+    /// <see cref="RootPass"/>.</summary>
+    public bool IsPostRow => (IsPostProcess && !RootPass);
 }
 /// <summary>One pass of a package fragment, as the fragment names its versions: its own resources, and the names that
 /// stand for the package's ports (<see cref="RenderGraphPackageFragment.InputVersions"/>,
@@ -206,6 +212,12 @@ public sealed class RenderGraphPackageCatalog {
     /// fragment stage is <c>src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-film-grain.frag.hlsl</c>, compiled at build, and its
     /// interface is <c>sdf-film-grain</c>.</summary>
     public const string SdfFilmGrain = "sdf.film-grain";
+    /// <summary>The id of the tonemap post-process package: the Narkowicz ACES-fit filmic curve over its input, which a
+    /// world's root graph runs when <c>render.tonemap</c> is <c>Filmic</c>, after every view, pane and post pass and
+    /// before the overlay, so the HUD is never tonemapped. Its fragment stage is
+    /// <c>src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-tonemap.frag.hlsl</c>, compiled at build, and its interface is
+    /// <c>sdf-tonemap</c>.</summary>
+    public const string SdfTonemap = "sdf.tonemap";
     /// <summary>The id of the one placement pass: its base image, with its source reconstructed into a destination rect
     /// over it, an exact copy where the rect has the source's extent, otherwise bilinear at sharpness 0 blending to
     /// clamped Catmull-Rom at sharpness 1. A rect of the whole output resamples the whole source. Its kernel is
@@ -344,6 +356,12 @@ public sealed class RenderGraphPackageCatalog {
         ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: "source", type: ShaderValueType.Float4),
         ShaderInterfaceMember.Sampler(group: ShaderInterfaceGroup.Pass, name: "sourceSampler"),
     ];
+    /// <summary>Gets what <see cref="SdfTonemap"/>'s fragment stage reads from its pass group beside the extent: its
+    /// source image and the sampler it reads it through.</summary>
+    public static IReadOnlyList<ShaderInterfaceMember> SdfTonemapMembers { get; } = [
+        ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: "source", type: ShaderValueType.Float4),
+        ShaderInterfaceMember.Sampler(group: ShaderInterfaceGroup.Pass, name: "sourceSampler"),
+    ];
     /// <summary>Gets the config schema of <see cref="Place"/>: the letterbox switch, off by default, the rect, whole by
     /// default, and the sharpness, 0 by default.</summary>
     public static IReadOnlyDictionary<string, ShaderConfigField> PlaceConfig { get; } = new ReadOnlyDictionary<string, ShaderConfigField>(dictionary: new Dictionary<string, ShaderConfigField>(comparer: StringComparer.Ordinal) {
@@ -459,7 +477,8 @@ public sealed class RenderGraphPackageCatalog {
         Puck.Abstractions.Sources.ImageSourceConversion.TransferPass,
     ];
     /// <summary>Gets the engine's own packages: <see cref="SdfWorld"/>, <see cref="SdfBricks"/>, <see cref="Overlay"/>,
-    /// <see cref="Place"/>, the <see cref="SourceConversions"/> and the post-process package <see cref="SdfFilmGrain"/>.</summary>
+    /// <see cref="Place"/>, the <see cref="SourceConversions"/> and the post-process packages <see cref="SdfFilmGrain"/>
+    /// and <see cref="SdfTonemap"/>.</summary>
     public static RenderGraphPackageCatalog Engine { get; } = new(packages: EnginePackages());
     /// <summary>Gets the catalog of a host that offers no package, whose graphs are shader passes alone.</summary>
     public static RenderGraphPackageCatalog None { get; } = new(packages: []);
@@ -526,6 +545,19 @@ public sealed class RenderGraphPackageCatalog {
                 Vertex: "fullscreen.vert"
             ),
             Summary: "Film grain: a per-pixel integer-hashed offset added over the input image, keyed on the engine tick."
+        ),
+        new RenderGraphPackage(
+            Id: SdfTonemap,
+            Inputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.FragmentSampled)],
+            Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ColorAttachmentWrite)],
+            Members: SdfTonemapMembers,
+            RootPass: true,
+            Stages: new RenderGraphPackageStages(
+                Directory: "Assets/Shaders/Sdf/passes",
+                Fragment: "sdf-tonemap.frag",
+                Vertex: "fullscreen.vert"
+            ),
+            Summary: "The filmic tonemap: the Narkowicz ACES-fit curve over the input image."
         ),
     ];
 

@@ -255,6 +255,17 @@ public sealed class RenderGraphDocumentLawTests {
             package: out var grain
         ));
         Assert.True(condition: grain.IsPostProcess);
+        Assert.True(condition: grain.IsPostRow);
+        // The tonemap is a post-process package only the synthesized root runs, from render.tonemap, so no views.post
+        // row names it.
+        Assert.True(condition: catalog.TryGet(
+            id: RenderGraphPackageCatalog.SdfTonemap,
+            package: out var tonemap
+        ));
+        Assert.Equal(
+            actual: (tonemap.IsPostProcess, tonemap.IsPostRow),
+            expected: (true, false)
+        );
         Assert.Equal(expected: RenderGraphPackagePort.Image(access: RenderGraphPortAccess.FragmentSampled), actual: Assert.Single(collection: grain.Inputs));
         Assert.Equal(expected: RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ColorAttachmentWrite), actual: Assert.Single(collection: grain.Outputs));
         Assert.True(condition: catalog.TryGet(

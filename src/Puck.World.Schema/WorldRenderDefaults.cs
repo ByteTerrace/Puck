@@ -96,8 +96,9 @@ public readonly record struct WorldQualityPreset(
 /// Optional; absent leaves <paramref name="Lighting"/>/<paramref name="Sky"/> static.</param>
 /// <param name="Environment">The analytic studio-reflection softboxes and horizon gradient a GGX specular lobe
 /// reflects. Optional; absent (no softboxes, a black horizon) contributes nothing to the shaded color.</param>
-/// <param name="Tonemap">The tonemap applied to the frame's final color. Optional; absent is
-/// <see cref="WorldTonemap.None"/> — the stylized shaded color, unchanged.</param>
+/// <param name="Tonemap">The tonemap the root graph applies to the whole frame, after every view, pane and post pass and
+/// before the HUD, which is never tonemapped. Optional; absent is <see cref="WorldTonemap.None"/> — the stylized shaded
+/// color, unchanged.</param>
 /// <param name="FarDistance">The far distance in world units: the depth at which every camera march ends — the far
 /// plane the renderer's fine march exits at, the reach of the beam's cone proofs, and the depth the fog and depth
 /// ramps are measured against. Geometry beyond it is never marched, so an infinite plane ends on a visible horizon
@@ -355,12 +356,13 @@ public sealed record WorldRenderCycle(string State, IReadOnlyList<WorldRenderCyc
 /// <param name="Lighting">The lighting fields this key moves, or <see langword="null"/>.</param>
 /// <param name="Sky">The sky fields this key moves, or <see langword="null"/>.</param>
 public sealed record WorldRenderCycleKey(float At, WorldRenderLighting? Lighting = null, WorldRenderSky? Sky = null);
-/// <summary>The tonemap applied to the frame's final color — see <see cref="WorldRenderDefaults.Tonemap"/>.</summary>
+/// <summary>The tonemap the root graph applies to the frame before the HUD — see
+/// <see cref="WorldRenderDefaults.Tonemap"/>.</summary>
 [JsonConverter(typeof(StrictEnumConverter<WorldTonemap>))]
 public enum WorldTonemap {
-    /// <summary>No remap: the stylized shaded color, as every world rendered before this field existed.</summary>
+    /// <summary>No remap: the stylized shaded color.</summary>
     None = 0,
-    /// <summary>A filmic (ACES-fit) curve on the frame's final color.</summary>
+    /// <summary>A filmic (ACES-fit) curve over the frame, the root graph's <c>sdf.tonemap</c> pass.</summary>
     Filmic = 1,
 }
 /// <summary>The analytic studio reflections a GGX specular lobe reflects — see

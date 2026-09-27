@@ -42,12 +42,5 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     // this result with its own integration clipped to the surface, so emission is never added twice.
     color = shadeVolumes(color, view.position.xyz, rayDirection, worldFarDistance(view), id.xy, view.position.w);
 
-    // render.tonemap: the SAME curve renderView applies to its own miss-branch sky (passes/sdf-render-view.hlsli), so a
-    // beam-culled tile's sky and a live tile's sky stay bit-identical across the tile seam under Filmic exactly as they
-    // do under None.
-    if (worldTonemapMode() == SDF_TONEMAP_FILMIC) {
-        color = sdfFilmicTonemap(color);
-    }
-
     output[id.xy] = float4(color, 1.0);
 }

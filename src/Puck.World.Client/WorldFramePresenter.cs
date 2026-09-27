@@ -1176,7 +1176,10 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             return;
         }
 
-        graphs.BeginFrame(views: m_client.Definition.Views);
+        graphs.BeginFrame(
+            tonemap: m_client.Definition.Render.Tonemap,
+            views: m_client.Definition.Views
+        );
 
         var width = m_displayWidth;
         var height = m_displayHeight;
@@ -1796,11 +1799,11 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             anchor: anchor,
             animator: animator,
             audio: audio,
+            bakes: bakes,
             client: client,
             continuum: continuum,
             settings: settings,
-            text: text,
-            bakes: bakes
+            text: text
         );
         m_adjacencies = new WorldAdjacencySceneEmitter(
             client: client,

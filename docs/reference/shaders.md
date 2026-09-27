@@ -599,13 +599,20 @@ any other:
   any layout slot names, each pass named after its instance, then one pass per
   `views.post` row in document order, named by the row and running its
   [post-process package](#post-process-packages), each reading the frame the
-  pass before it wrote, then the `overlay` pass in a windowed World that loaded
-  its glyph atlas.
+  pass before it wrote, then, when `render.tonemap` is `Filmic`, the
+  `sdf.tonemap` pass (`main$tonemap`), then the `overlay` pass in a windowed
+  World that loaded its glyph atlas. The tonemap runs once, over the whole
+  frame, before the overlay, so the HUD composes over the tonemapped frame at
+  SDR white, which the display encode shows at the paper-white level, and is
+  never tonemapped itself.
 
-`main` is the root whenever anything is drawn over the world, panes included,
-and whenever the world has more than one view. When neither holds, as in an offscreen World with no panes and no
-`views.post` rows, `world` is the root and the display shows the world's first
-view directly. A world that sets `views.root` authors its whole render graph,
+`main` is the root whenever anything is drawn over the world, panes and the
+tonemap included, and whenever the world has more than one view. When none
+holds, as in an offscreen World with no panes, no `views.post` rows and no
+tonemap, `world` is the root and the display shows the world's first view
+directly. The host composes the root again whenever the document's panes, views,
+`views.post` rows or `render.tonemap` move, and runs no tonemap while a debug
+view (`world.debug-view`) is on, so a debug view shows its own colors. A world that sets `views.root` authors its whole render graph,
 the `sdf.world` package row included, and the runtime runs its rows alone; such
 a world authors no `views.post`.
 `RenderGraphRuntimeNode` is the host's render root, the one `IRenderRoot` the
@@ -614,10 +621,11 @@ configured extent. Nothing wraps it; the screen binder and the world's
 residency, whose GPU holdings must go while the device is alive, are released
 by the root's teardown (`RenderGraphRuntimeNode.Holdings`). A `captures` row reads
 the root, or names `world` to capture the SDF world before its panes, post
-passes and overlay. `world.counters gpu` counts every graph instance under its
+passes, tonemap and overlay: its working image through the SDR display encode,
+untonemapped. `world.counters gpu` counts every graph instance under its
 instance name: `world` is the first view's node, whose passes are
 `sdf.world$sky` through `sdf.world$views`, `main` the root's node, whose passes
-are the place, post and overlay passes, and each pane its own node. It counts
+are the place, post, tonemap and overlay passes, and each pane its own node. It counts
 each residency's upload beside them: the world's as `sdf:world`, and each
 camera or session view's as `sdf:<name>`.
 

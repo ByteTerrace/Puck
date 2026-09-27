@@ -3930,8 +3930,9 @@ Then:
   occlusion, and shadows become stages instead of branches inside one large
   view function.
 - Working targets move to a float format such as `R16G16B16A16Float`, so HDR
-  and temporal accumulation have headroom. The tonemap moves into P16's
-  display transform.
+  and temporal accumulation have headroom. The tonemap leaves the SDF view pass
+  for P16's display output: a root-graph pass before the overlay, with the
+  encode as the compositor's write.
 - Screens read sources through P12. Panes compose in the graph, since P11b
   commit 9 deleted the engine's child path.
 
@@ -3986,8 +3987,8 @@ barriers its passes: sky, mask, beam, cull arguments (indirect arguments and
 bounds), primary (dispatched indirectly, writing visibility version 0), surface
 (version 1), ambient (version 2), then shadow, light and volume shading (color
 versions 0 to 2). Brick upload and brick bake form `sdf.bricks`, a world-scoped
-instance joined to the views by buffer edges. A display pass tonemaps and
-encodes until P16 inherits it. There is no upload pass, because uploads go
+instance joined to the views by buffer edges. The view writes its float working
+color; the root graph tonemaps and the display encode quantizes (step 10). There is no upload pass, because uploads go
 through `GpuRegion`, and no composite, because the engine has none. Group 0 is the
 frame, group 1 the world (program words and every per-world table, screens,
 decals, the glyph atlas, the brick pool), group 2 the instance (empty and
@@ -4140,7 +4141,23 @@ item 2 landed.
    (`IRenderGraphPackageFactory.IsUnchanged`), and the runtime declares that
    instance unchanged (`RenderGraphFrame.Unchanged`), so its latest output
    stands unless a pending capture reads it.
-10. Float working targets and the display pass, with parity re-recorded.
+10. Landed, float working targets and the display output's first half. Every
+    SDF view's color and sky and every version of the synthesized root graph
+    are `RenderGraphPackageCatalog.WorkingFormat` (`R16G16B16A16Float`), and a
+    node publishes an image output as itself, a float one included, so place,
+    screens and exports sample the working image. The tonemap left the views:
+    `render.tonemap` `Filmic` adds the root's `sdf.tonemap` pass after every
+    view, pane and post pass and before the overlay, so the HUD is never
+    tonemapped. The R2 dither left them too, for the display encode
+    (`SurfaceEncoder`), which every swapchain compositor draws as its write and a
+    capture of a float output reads through in SDR. Parity held without a
+    re-record: against the step-9 images every station moved at most one code
+    (the view's color stored in half floats before the encode quantizes it), and
+    the state hashes are unchanged. `puck counters compare` moves only
+    per-backend-deterministic kinds: the device-local bytes allocated grow by
+    about 116 MiB on both backends, the float view color and the root graph's
+    versions taking eight bytes a pixel in each frame slot where they took four,
+    and the SDF kernels' bytecode shrinks by the dither they no longer compile.
 11. Staged shading.
 12. Landed, post passes as the root graph's own passes: a world names them in
     `views.post`, each row a graph document's `packages` row less its ports

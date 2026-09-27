@@ -12,23 +12,27 @@ namespace Puck.World.Client;
 /// rect with one <c>place</c> pass per view (<c>main$view$&lt;n&gt;</c>), the first writing the letterbox color outside
 /// its rect (<see cref="RenderGraphPackageCatalog.PlaceLetterbox"/>) so pixels no view covers show it, each pane over them with one <c>place</c> pass
 /// per <c>views.graphs</c> instance a layout slot names, then runs each <c>views.post</c> row as a pass of its
-/// post-process package, named by the row, in document order, then the <c>overlay</c> package. With one view and nothing to draw
-/// over it, the producer is the root. The graph is a document value planned by <see cref="RenderGraphCompiler"/>, the one path every
+/// post-process package, named by the row, in document order, then, when <c>render.tonemap</c> is <c>Filmic</c>, the
+/// <c>sdf.tonemap</c> package (<c>main$tonemap</c>), then the <c>overlay</c> package, so the HUD composes over the
+/// tonemapped frame and is never tonemapped itself. With one view and nothing to draw or tonemap over it, the producer is
+/// the root. The graph is a document value planned by <see cref="RenderGraphCompiler"/>, the one path every
 /// graph takes, so a pass config that does not bind is the compiler's refusal, named by its row.</summary>
 public sealed class WorldRootGraph {
     // The versions and passes the root declares for itself are generated names (WorldViewNames.Root), so none can equal a
     // pane's version or place pass, which take the pane's authored name.
     private static readonly string FrameVersion = WorldViewNames.Root("frame");
     private static readonly string OverlayPass = WorldViewNames.Root(RenderGraphPackageCatalog.Overlay);
+    private static readonly string TonemapPass = WorldViewNames.Root("tonemap");
     private static readonly string WorldVersion = WorldViewNames.Root(WorldViewGraphs.WorldInstance);
     private static readonly JsonElement FirstViewConfig = JsonDocument.Parse(json: $$"""{ "{{RenderGraphPackageCatalog.PlaceLetterbox}}": 1 }""").RootElement.Clone();
 
     private const string ViewPart = "view";
 
-    private WorldRootGraph(RenderGraphPlan? plan, IReadOnlyList<WorldViewPostPass> post, IReadOnlyList<string> panes, int views) {
+    private WorldRootGraph(RenderGraphPlan? plan, IReadOnlyList<WorldViewPostPass> post, IReadOnlyList<string> panes, int views, WorldTonemap tonemap) {
         Plan = plan;
         Panes = panes;
         Post = post;
+        Tonemap = tonemap;
         Views = views;
         // One view is the world itself, which the root places with no pass of its own.
         ViewPasses = ((views > 1)
@@ -98,6 +102,9 @@ public sealed class WorldRootGraph {
     /// <summary>Gets the <c>views.post</c> rows the root graph runs, in document order, each a pass named by its row;
     /// empty when the root runs none.</summary>
     public IReadOnlyList<WorldViewPostPass> Post { get; }
+    /// <summary>Gets the tonemap the root graph runs: <see cref="WorldTonemap.Filmic"/> runs the <c>sdf.tonemap</c>
+    /// pass before the overlay, <see cref="WorldTonemap.None"/> runs none.</summary>
+    public WorldTonemap Tonemap { get; }
     /// <summary>Gets the name of the instance the display shows and captures read by default: the root graph whenever
     /// there is one, which there always is with more than one view.</summary>
     public string Root => ((Plan is null)
@@ -112,13 +119,14 @@ public sealed class WorldRootGraph {
     /// <see langword="null"/> for none.</param>
     /// <param name="views">The most views a layout composes (<see cref="ViewsOf"/>); with more than one, the root places
     /// each.</param>
+    /// <param name="tonemap">The document's <c>render.tonemap</c>, or <see langword="null"/> for none.</param>
     /// <returns>The graph.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="packages"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="views"/> is below one.</exception>
     /// <exception cref="WorldRootGraphRefusedException">The graph compiler refused the synthesized graph, such as an
     /// row's config that does not bind against its package's schema; the message names the row and the compiler's
     /// code.</exception>
-    public static WorldRootGraph Compose(IReadOnlyList<WorldViewPostPass>? post, bool overlay, RenderGraphPackageCatalog packages, IReadOnlyList<string>? panes = null, int views = 1) {
+    public static WorldRootGraph Compose(IReadOnlyList<WorldViewPostPass>? post, bool overlay, RenderGraphPackageCatalog packages, IReadOnlyList<string>? panes = null, int views = 1, WorldTonemap? tonemap = null) {
         ArgumentNullException.ThrowIfNull(argument: packages);
         ArgumentOutOfRangeException.ThrowIfLessThan(
             other: 1,
@@ -127,17 +135,20 @@ public sealed class WorldRootGraph {
 
         var entries = (post ?? []);
         var placed = (panes ?? []);
+        var curve = (tonemap ?? WorldTonemap.None);
+        var tonemaps = (curve == WorldTonemap.Filmic);
         // One view is the world itself, which needs no place pass of its own.
         var viewCount = ((views > 1)
             ? views
             : 0);
-        var passCount = (((viewCount + placed.Count) + entries.Count) + (overlay ? 1 : 0));
+        var passCount = ((((viewCount + placed.Count) + entries.Count) + (tonemaps ? 1 : 0)) + (overlay ? 1 : 0));
 
         if (passCount == 0) {
             return new WorldRootGraph(
                 panes: placed,
                 plan: null,
                 post: entries,
+                tonemap: curve,
                 views: views
             );
         }
@@ -214,6 +225,13 @@ public sealed class WorldRootGraph {
                     Outputs: [new ResourceReference(Name: output)],
                     Package: entry.Package
                 ));
+            } else if (tonemaps && (index == ((viewCount + placed.Count) + entries.Count))) {
+                passes.Add(item: new RenderGraphPackagePass(
+                    Inputs: [new ResourceReference(Name: input)],
+                    Name: TonemapPass,
+                    Outputs: [new ResourceReference(Name: output)],
+                    Package: RenderGraphPackageCatalog.SdfTonemap
+                ));
             } else {
                 passes.Add(item: new RenderGraphPackagePass(
                     Inputs: [new ResourceReference(Name: input)],
@@ -252,6 +270,7 @@ public sealed class WorldRootGraph {
             panes: placed,
             plan: plan,
             post: entries,
+            tonemap: curve,
             views: views
         );
     }

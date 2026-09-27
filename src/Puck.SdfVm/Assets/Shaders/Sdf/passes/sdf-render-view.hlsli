@@ -528,20 +528,10 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
     }
 
 #ifdef SDF_SCREEN_SOURCES
-    // Bounded emissive volumes composite last, after the surface/sky color is final and before tonemap — so a
-    // volume's own emission rides the same curve as everything else (see the tonemap comment below) and never paints
-    // through solid geometry (clipped to the hit distance, or the far distance on a miss).
+    // Bounded emissive volumes composite last, after the surface/sky color is final, and never paint through solid
+    // geometry (clipped to the hit distance, or the far distance on a miss).
     color = shadeVolumes(color, rayOrigin, rayDirection, (hitSurface ? traveled : farDistance), pixel, view.position.w);
 #endif
-
-    // render.tonemap: applied last, to the frame's actual final color — a hit's shaded color AND a miss's sky alike,
-    // so a silhouette's sky blend and the open sky beside it sit on the same curve (tonemapping hits alone haloed
-    // every silhouette against an un-mapped sky). sdf-sky.comp applies the SAME curve to the sky it writes into a
-    // beam-culled tile, so the tile seam stays bit-identical. Every debug view overwrites viewColor below and never
-    // reads `color` again, so it stays untouched; None (the default) is a no-op.
-    if (worldTonemapMode() == SDF_TONEMAP_FILMIC) {
-        color = sdfFilmicTonemap(color);
-    }
 
     float3 viewColor = color;
 

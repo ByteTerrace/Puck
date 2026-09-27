@@ -1,4 +1,4 @@
-// The environment's horizon and studio reflection, the material layers and the tonemap.
+// The environment's horizon and studio reflection, and the material layers.
 #ifndef SHADE_SDF_LIGHTING_HLSLI
 #define SHADE_SDF_LIGHTING_HLSLI
 // Generic surface coverage, available wherever materials shade.
@@ -38,12 +38,5 @@ float3 worldStudioReflection(float3 direction, float roughness) {
     return result;
 }
 #include "shade-layers.hlsli"
-// render.tonemap: the Narkowicz ACES-fit filmic curve, and ONLY the curve. The study follows it with a gamma-2.2
-// encode because its shading is linear light; this pipeline's stylized shading is already display-referred (the display
-// encode writes it to an SDR display as it is), so a second encode here washes the whole frame out. None (the default)
-// is a no-op.
-float3 sdfFilmicTonemap(float3 color) {
-    return saturate((color * ((2.51 * color) + 0.03)) / (((color * ((2.43 * color) + 0.59)) + 0.14)));
-}
 
 #endif
