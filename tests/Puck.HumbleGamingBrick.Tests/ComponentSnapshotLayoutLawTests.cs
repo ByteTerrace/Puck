@@ -1,6 +1,6 @@
 using System.Reflection;
 using System.Security.Cryptography;
-using Puck.GamingBricks;
+using Puck.Machines;
 
 namespace Puck.HumbleGamingBrick.Tests;
 

@@ -13,13 +13,13 @@
     <ItemGroup>
         <ProjectReference Include="..\Puck.AdvancedGamingBrick\Puck.AdvancedGamingBrick.csproj" />
         <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
-        <ProjectReference Include="..\Puck.GamingBricks\Puck.GamingBricks.csproj" />
-        <ProjectReference Include="..\Puck.GamingBricks.Post\Puck.GamingBricks.Post.csproj" />
+        <ProjectReference Include="..\Puck.Machines\Puck.Machines.csproj" />
+        <ProjectReference Include="..\Puck.Machines.Post\Puck.Machines.Post.csproj" />
         <!-- ChildProcess, which the lockstep diagnostic starts the co-simulation oracle through. -->
         <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
         <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
     </ItemGroup>
     <ItemGroup>
-        <Using Include="Puck.GamingBricks.Post" />
+        <Using Include="Puck.Machines.Post" />
     </ItemGroup>
 </Project>

@@ -44,7 +44,7 @@ public readonly record struct MachineIdentity(int Version, int Model, ulong Boot
 /// machine identity travel with it: a restore repositions the clock exactly and refuses a machine whose model/ROM
 /// identity differs.
 /// </summary>
-public sealed class MachineSnapshot : Puck.GamingBricks.MachineSnapshot<MachineSnapshot, MachineIdentity, Tick> {
+public sealed class MachineSnapshot : Puck.Machines.MachineSnapshot<MachineSnapshot, MachineIdentity, Tick> {
     internal MachineSnapshot(MachineIdentity identity, Tick takenAt, SnapshotImage image)
         : base(
         identity: identity,

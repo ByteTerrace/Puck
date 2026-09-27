@@ -82,8 +82,8 @@ Every package below carries its own check on the programme page; tick it there a
 
 ### [Humble Gaming Deck](humble-gaming-deck.md)
 
-- [ ] The shared-layer rename to `Puck.Machines` (startable today).
-- [ ] Neutral contracts: rational rates, native frames, multi-port input, optional firmware.
+- [x] The shared-layer rename to `Puck.Machines`.
+- [ ] Neutral contracts: rational rates, native frames, multi-port input, optional firmware (startable today).
 - [ ] The CPU and the bus; a complete NTSC machine; NTSC accuracy.
 - [ ] Common boards; regional hardware; long-tail boards; expansion audio.
 - [ ] The Famicom Disk System; peripherals; World cabinets.

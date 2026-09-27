@@ -1,6 +1,6 @@
 using Puck.Abstractions.Machines;
 using Puck.AdvancedGamingBrick;
-using Puck.GamingBricks;
+using Puck.Machines;
 using Puck.HumbleGamingBrick;
 using Xunit;
 

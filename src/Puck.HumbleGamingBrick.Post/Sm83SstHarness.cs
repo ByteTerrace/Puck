@@ -1,5 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
-using Puck.GamingBricks;
+using Puck.Machines;
 using Puck.HumbleGamingBrick.Interfaces;
 
 namespace Puck.HumbleGamingBrick.Post;

@@ -19,10 +19,13 @@ of scope here.
 
 ## Implementation status
 
-- **Landed:** nothing. The shared layer the Deck will stand on exists as
-  `Puck.GamingBricks`; its hosting, pacing, snapshot, fork, and time-travel
-  machinery is hardware-free, and the Advanced Gaming Brick already showed that
-  a very different CPU fits on it.
+- **Landed:** the shared-layer rename. The hardware-free layer the bricks
+  share is `Puck.Machines`, with its scaffold `Puck.Machines.Post` and its tests
+  `Puck.Machines.Tests`; the forge, the transpiler, and their tests keep the
+  `GamingBricks` name because they serve the bricks' cartridge format. Its
+  hosting, pacing, snapshot, fork, and time-travel machinery is hardware-free,
+  and the Advanced Gaming Brick already showed that a very different CPU fits on
+  it.
 - **Not started:** every package below.
 
 ## What state of the art means here
@@ -206,19 +209,7 @@ understood discrepancy becomes an original Tier A regression.
 
 ## Packages
 
-### 1. The shared-layer rename
-
-**Owns:** `Puck.GamingBricks` and `Puck.GamingBricks.Post`, renamed
-`Puck.Machines` and `Puck.Machines.Post`, with every reference, test,
-architecture input, document, and skill. The forge, transpiler, and their tests
-keep the `GamingBricks` name because they serve the bricks' cartridge format.
-
-**Delivers:** a mechanical rename with no behaviour change and no aliases.
-
-**Check:** both brick batteries, the affected link stages, and a semantic
-reference audit showing no remaining use of the old names.
-
-### 2. Neutral contracts
+### 1. Neutral contracts
 
 **Owns:** the shared-layer changes above.
 
@@ -229,7 +220,7 @@ format, and generalised Post probes.
 **Check:** both brick batteries unchanged, plus new fixtures for fractional
 rates, checkpoint round trips at those rates, and multi-port input.
 
-### 3. The CPU and the bus
+### 2. The CPU and the bus
 
 **Owns:** `Puck.HumbleGamingDeck` and its Post battery, CLI registration, the
 NES 2.0 loader, NROM, the bus, the 2A03, and snapshots.
@@ -240,7 +231,7 @@ master-clock scheduler.
 **Check:** every `nes6502` vector at bus-cycle granularity, and the nestest log
 from `$C000`.
 
-### 4. A complete NTSC machine
+### 3. A complete NTSC machine
 
 **Owns:** the PPU, the integer APU, standard controllers, reset, and the video
 and audio host adapter.
@@ -251,7 +242,7 @@ presents picture and sound.
 **Check:** nestest's menu from a normal boot; raw-pixel, integer-audio, and
 replay gates; mid-cycle snapshot and fork replay.
 
-### 5. NTSC accuracy
+### 4. NTSC accuracy
 
 **Owns:** the DMA arbiter, unstable-opcode behaviour, PPU races, open bus and
 decay, and the co-simulation trace.
@@ -261,7 +252,7 @@ decay, and the co-simulation trace.
 **Check:** every applicable AccuracyCoin verdict, the blargg suites, and every
 disagreement with an oracle explained and pinned.
 
-### 6. Common boards
+### 5. Common boards
 
 **Owns:** MMC1, UxROM, CNROM, AxROM, MMC3 and MMC6, board RAM, and bus
 conflicts.
@@ -271,7 +262,7 @@ conflicts.
 **Check:** the board suites, IRQ traces per MMC3 revision, and save and fork
 restoration.
 
-### 7. Regional hardware
+### 6. Regional hardware
 
 **Owns:** PAL and Dendy console models and every supported alignment phase.
 
@@ -280,7 +271,7 @@ restoration.
 **Check:** the regional corpora and clock, pixel, and audio gates; no NTSC
 pass is extrapolated to another region.
 
-### 8. Long-tail boards
+### 7. Long-tail boards
 
 **Owns:** MMC2, MMC4, MMC5, the VRC family, FME-7, Namco boards, Bandai boards,
 and discrete and clone variants.
@@ -289,7 +280,7 @@ and discrete and clone variants.
 
 **Check:** per-board evidence; unsupported boards refused by name.
 
-### 9. Expansion audio
+### 8. Expansion audio
 
 **Owns:** VRC6, VRC7, MMC5, Namco 163, and Sunsoft 5B generators, with
 presentation gains.
@@ -298,7 +289,7 @@ presentation gains.
 
 **Check:** integer transition gates plus independent waveform evidence.
 
-### 10. The Famicom Disk System
+### 9. The Famicom Disk System
 
 **Owns:** the RAM adapter, drive timing, its IRQ, writable disk overlays, FDS
 audio, and a user-supplied BIOS.
@@ -308,7 +299,7 @@ audio, and a user-supplied BIOS.
 **Check:** disk operations and mid-transfer snapshot and fork replay; firmware
 identity checks.
 
-### 11. Peripherals
+### 10. Peripherals
 
 **Owns:** the Four Score, the Zapper, the Famicom microphone, then selected
 paddles, mats, and keyboards.
@@ -320,7 +311,7 @@ sensor response, never from the presented image.
 **Check:** serial-protocol fixtures, beam-response fixtures, and replay across
 attachment changes.
 
-### 12. World cabinets
+### 11. World cabinets
 
 **Owns:** engine and content-provider registration, multi-port routing, ordered
 operations, and replay receipts.

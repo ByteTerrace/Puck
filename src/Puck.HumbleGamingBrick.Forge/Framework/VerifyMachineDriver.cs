@@ -1,6 +1,6 @@
 using Puck.Abstractions.Machines;
 using Puck.HumbleGamingBrick.Interfaces;
-using MachineInstance = Puck.GamingBricks.MachineInstance<Puck.HumbleGamingBrick.Machine, Puck.HumbleGamingBrick.MachineConfiguration>;
+using MachineInstance = Puck.Machines.MachineInstance<Puck.HumbleGamingBrick.Machine, Puck.HumbleGamingBrick.MachineConfiguration>;
 
 namespace Puck.HumbleGamingBrick.Forge.Framework;
 

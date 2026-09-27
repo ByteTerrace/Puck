@@ -1,6 +1,6 @@
 # Machine hosting runtime
 
-`Puck.GamingBricks` supplies state serialization, fork ownership, and queued hosting
+`Puck.Machines` supplies state serialization, fork ownership, and queued hosting
 for the [Humble](../hgb/README.md) and [Advanced](../agb/README.md) emulators.
 The hardware core owns its CPU, picture processing unit (PPU), audio processing
 unit (APU), bus, and cartridge. The shared layer controls how an application
@@ -161,7 +161,7 @@ concrete host has one main job: turn loaded content into an
 This adapter template assumes a `MyMachineCore` implementation of `IQueuedMachineCore`.
 
 ```csharp
-using Puck.GamingBricks;
+using Puck.Machines;
 
 sealed class MyMachineHost : QueuedMachineHost {
     public MyMachineHost(string? savePath = null)
@@ -359,7 +359,7 @@ project's `GlobalUsings.cs`.
 
 ## Verification and further reading
 
-The [shared test suite](../../../tests/Puck.GamingBricks.Tests/README.md) owns its
+The [shared test suite](../../../tests/Puck.Machines.Tests/README.md) owns its
 run instructions. QueuedHostContractProbe exercises backpressure, frame and
 audio publication, coherent hardware access, time travel, and whole frames written
 into an uploaded source's region against real adapters. Both the [HGB Post battery](../../../src/Puck.HumbleGamingBrick.Post/README.md)
@@ -368,4 +368,4 @@ their fork-determinism stages also exercise pooled instance ownership.
 
 - [Shared emulation infrastructure](README.md) — related machine contracts.
 - [Project map](../../project-map.md) — dependency ownership.
-- [GamingBricks license](../../../src/Puck.GamingBricks/LICENSE.md) — the shared legal terms.
+- [GamingBricks license](../../../src/Puck.Machines/LICENSE.md) — the shared legal terms.

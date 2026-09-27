@@ -1,5 +1,5 @@
 using Puck.Abstractions.Machines;
-using Puck.GamingBricks;
+using Puck.Machines;
 using Puck.Hosting;
 using Puck.HumbleGamingBrick.Forge;
 using Puck.HumbleGamingBrick.Interfaces;

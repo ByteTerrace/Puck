@@ -1857,7 +1857,7 @@ into the arena the tick's own rules write, and delivers through `WorldDocument.D
 per-tick cell write in this project (`WorldTick.Fields.cs`). Both memos are
 keyed by (engine screen index, bus address), so an unmoved value costs one
 dictionary lookup and nothing past it: the peek/poke round trip through
-`Puck.GamingBricks.QueuedMachineWorker`'s marshaled worker thread is a real,
+`Puck.Machines.QueuedMachineWorker`'s marshaled worker thread is a real,
 pre-existing cost every memory read/write pays regardless of caller (shared
 by `screen.peek` and an addon's own memory watch)—what a quiet binding
 elides is the mutation/install cost on top of it, not that shared floor.
