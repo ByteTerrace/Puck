@@ -157,6 +157,7 @@ public sealed class WorldBakeChunk(WorldBakeStore? store, string? packReference 
             (keys.Count > 0)
         ) {
             _ = store.HoldFromPack(
+                definition: context.RequireDrawn(),
                 keys: keys,
                 packPath: WorldBakePack.Resolve(documentPath: documentPath, reference: reference)
             );

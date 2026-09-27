@@ -3,9 +3,12 @@ using Puck.Commands;
 namespace Puck.World;
 
 /// <summary>Publishes a <see cref="WorldScreen"/> row as the <see cref="SourceMapping"/> a hit on its face maps through:
-/// the row's face frame as a surface placement, the whole source stretched upright, and the screen glass's bezel as a
-/// warp pass whose inverse is exact. Built from document data alone, so a <c>Simulation</c> screen maps a pointer ray to
-/// the same source pixel on every run, and the screen shading draws the row from the same mapping.</summary>
+/// the row's face frame as a surface placement, the whole source stretched upright, and, on every screen but a window,
+/// the screen glass's bezel as a warp pass whose inverse is exact. A window (a <see cref="WorldScreenSource.Session"/>
+/// with <see cref="WorldScreenProjection.Window"/>) is an opening, not a display: its image is fitted to the face's
+/// aperture, so it fills the face edge to edge with no bezel. Built from document data alone, so a <c>Simulation</c>
+/// screen maps a pointer ray to the same source pixel on every run, and the screen shading draws the row from the same
+/// mapping.</summary>
 public static class WorldScreenMappings {
     /// <summary>The name of the screen glass pass: the SDF view pass's screen shading, which draws every screen from its
     /// mapping.</summary>
@@ -48,7 +51,9 @@ public static class WorldScreenMappings {
             Source: source,
             SourceHeight: sourceHeight,
             SourceWidth: sourceWidth,
-            Warp: Glass
+            Warp: ((screen.Source is WorldScreenSource.Session { Projection: WorldScreenProjection.Window })
+                ? null
+                : Glass)
         );
     }
     /// <summary>Creates the mapping the simulation maps a seat's pointer ray through: the row's mapping against a

@@ -41,7 +41,8 @@ public enum WorldPortalArrival {
 /// A <see cref="WorldPlacementFace"/>'s portal facet — the authored decision that a face is a door: which
 /// <see cref="WorldDestination"/> row it leads to, and under what travel scope. Absent (the default) means the face
 /// is not a door — nothing here fires anything by itself; turning the decision into a diegetic step-into trigger is
-/// <c>WorldInstanceHost.TriggerPortal</c>'s job, never this facet's. Durability, scope, and process-local instance
+/// <c>WorldInstanceHost</c>'s job (its per-tick portal scan, <c>ScanInstancePortals</c>, then
+/// <c>ResolveAndEnqueueCoalescedTransfers</c>), never this facet's. Durability, scope, and process-local instance
 /// selection live on the named <see cref="WorldDestination"/> row this facet points at, not here — a facet composes
 /// one destination selection with a travel scope, never re-authors how that destination is minted. Extensible deliberately (an optional-member
 /// record, the same widen-without-moving-existing-members shape <see cref="WorldLatticeMedium"/>'s own remarks

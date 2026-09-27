@@ -25,8 +25,8 @@ namespace Puck.SdfVm.Views;
 /// function <c>(x - eyeRight) / depth</c> / <c>(y - eyeUp) / depth</c>. Splitting that affine map into a symmetric
 /// half-extent (<see cref="HalfWidthTangent"/>/<see cref="HalfHeightTangent"/>, which the existing
 /// <see cref="CameraSnapshot.TanHalfFieldOfView"/>/<see cref="CameraSnapshot.AspectRatio"/> pair already carries, no
-/// row growth) plus a constant shear (<see cref="CenterOffset"/>, the two render-scale spares
-/// <see cref="Puck.SdfVm.SdfViewSnapshot.AsymmetricFrustumOffset"/> repacks) reproduces the same ray
+/// row growth) plus a constant shear (<see cref="CenterOffset"/>, carried as
+/// <see cref="CameraSnapshot.FrustumOffset"/>) reproduces the same ray
 /// <c>march/sdf-cone.hlsli</c>'s <c>cameraRayDirection</c> already computes for a symmetric camera, plus one trailing
 /// offset term — see that shader function's own remarks for why the offset must be a trailing addition, not a
 /// reassociated one, to keep an ordinary (zero-offset) camera bit-exact.</para>
@@ -48,8 +48,8 @@ public readonly record struct SdfAsymmetricFrustum(
     /// <see cref="CameraSnapshot.TanHalfFieldOfView"/>/<see cref="CameraSnapshot.AspectRatio"/> for the symmetric
     /// half-extent (<see cref="HalfHeightTangent"/> and <see cref="HalfWidthTangent"/>/<see cref="HalfHeightTangent"/>
     /// respectively — the aperture's own physical aspect ratio, independent of the render target's pixel dimensions)
-    /// and returning <see cref="CenterOffset"/> separately for the caller to set on
-    /// <see cref="Puck.SdfVm.SdfViewSnapshot.AsymmetricFrustumOffset"/>.</summary>
+    /// and <see cref="CameraSnapshot.FrustumOffset"/> for <see cref="CenterOffset"/>, so the camera alone casts every
+    /// ray the fit describes.</summary>
     /// <param name="eye">The frustum's apex (the same eye <see cref="TryFit"/> was fitted against).</param>
     public CameraSnapshot ToCameraSnapshot(Vector3 eye) => new(
         Position: eye,
@@ -58,16 +58,17 @@ public readonly record struct SdfAsymmetricFrustum(
         Forward: Forward,
         TanHalfFieldOfView: HalfHeightTangent,
         AspectRatio: (HalfWidthTangent / HalfHeightTangent)
-    );
+    ) { FrustumOffset = CenterOffset };
     /// <summary>Fits an off-axis frustum whose near-plane rectangle is exactly the aperture as seen from
     /// <paramref name="eye"/>.</summary>
     /// <param name="eye">The camera's eye position, in the same space as the aperture (already mapped through any
     /// border-pair isometry the caller applies — this type knows nothing about portals).</param>
     /// <param name="apertureOrigin">The aperture rectangle's world-space center.</param>
-    /// <param name="apertureRight">The aperture's unit Right axis.</param>
+    /// <param name="apertureRight">The aperture's unit Right axis, as the eye sees it: the camera's right.</param>
     /// <param name="apertureUp">The aperture's unit Up axis.</param>
-    /// <param name="apertureNormal">The aperture's unit outward Normal (Right x Up convention) — the frustum looks
-    /// into the scene, i.e. along <c>-apertureNormal</c>.</param>
+    /// <param name="apertureNormal">The aperture's unit Normal toward the eye, <c>Right × Up</c> — the frustum looks
+    /// into the scene, i.e. along <c>-apertureNormal</c>. A basis that is not right-handed renders the scene
+    /// mirrored.</param>
     /// <param name="apertureHalfWidth">The aperture's half-width along <paramref name="apertureRight"/>.</param>
     /// <param name="apertureHalfHeight">The aperture's half-height along <paramref name="apertureUp"/>.</param>
     /// <param name="frustum">The fitted frustum, on success.</param>

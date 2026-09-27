@@ -63,9 +63,11 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
     }
     // The world.far-field echo.
     private static string BakesEcho(WorldRenderSettings settings) =>
-        $"[world.bakes: {(settings.Bakes
-            ? "on"
-            : "off")}]";
+        $"[world.bakes: {settings.Bakes switch {
+            true => "on",
+            false => "off",
+            null => "default: a world's bakes draw when it ships them",
+        }}]";
     private static string FarFieldEcho(WorldRenderSettings settings) {
         return $"[world.far-field: bound {(settings.FarBound
             ? "on"

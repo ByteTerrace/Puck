@@ -81,11 +81,11 @@ public sealed class SdfWorldTablesUploadLawTests {
             UnifiedMemory: true
         );
 
-        // Nine per-frame tables, the mesh region among them, each a ring of one buffer per slot, and nothing staged or
-        // copied.
+        // Eight per-frame tables, each a ring of one buffer per slot, and nothing copied; the mesh region is always staged,
+        // so it takes no aperture buffer.
         using (var rig = new Rig(profile: discrete, slots: 40)) {
             rig.Warm();
-            Assert.Equal(expected: (9 * SdfWorldTables.FrameRingSize), actual: rig.Gpu.ApertureBuffers);
+            Assert.Equal(expected: (8 * SdfWorldTables.FrameRingSize), actual: rig.Gpu.ApertureBuffers);
             rig.Move(slot: 3);
             rig.Render(time: 0f);
             Assert.Equal(expected: 0, actual: rig.Gpu.UploadCopies);

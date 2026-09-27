@@ -225,7 +225,13 @@ These are one-line cautions; the owning pages hold the derivations.
   (`ICompiledWorldChunk.DerivesOnBoot`); a presentation bakes a missing
   prototype through `WorldBakeSchedule`, never on the frame thread, and draws a
   ready one only through `WorldBakeSchedule.TryGetMesh` (which counts the
-  switch, `sdf.bakes.drawn`) while `world.bakes` is on. A baked placement's
+  switch, `sdf.bakes.drawn`) while it draws its bakes: by default exactly when
+  the loaded world's `BAKE` chunk supplies every bake from its pack, else when `world.bakes on`
+  (`WorldRenderSettings.DrawsBakes`); the engine is not ready until the
+  schedule has reconciled and, while it draws them, settled. A baked
+  mesh samples its textures from the mesh atlases, World-group members bound in
+  the tables' one World set (`SdfWorldTables.MeshAtlas.cs`,
+  `frame/sdf-mesh-textures.hlsli`). A baked placement's
   instances are camera-hidden (`SdfInstanceRange.CameraHidden`): the cull keeps
   them out of every camera mask, never out of the shadow or ambient gathers.
 
@@ -1410,7 +1416,12 @@ producer reports those mappings as its placements
 (`WorldViewGraphHost.Screens`), so the walk continues through a screen, and a
 camera view reports them too, so a walk through a screen showing a camera view
 continues into the view through the camera it last filmed from
-(`WorldViewGraphHost.ViewCameras`, the binder); a session reports none. The GPU
+(`WorldViewGraphHost.ViewScenes`, the binder). A session reports no placements
+(the depth-one policy: a projected destination's screens bind dark), and a walk
+through a screen showing one continues through the camera its last frame rendered
+from, a window's fitted camera with its shear, and ends on the surface its ray
+meets among the destination's static placements (`RenderGraphHitPath.Surface`,
+`WorldSessionSceneEmitter.TrySurface`). The GPU
 draws every screen from its mapping: the residency hands each screen's published
 mapping (`ISdfScreenSources.MappingOf`) to `SdfWorldTables.SetScreenMapping`,
 which packs its single-precision draw form (`SourceMapping.Draw`, the warp's

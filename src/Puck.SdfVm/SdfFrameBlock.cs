@@ -109,8 +109,8 @@ public static class SdfFrameBlock {
         WriteVector3(block: block, offset: ViewForward, value: camera.Forward);
         WriteSingle(block: block, offset: TanHalfFieldOfView, value: camera.TanHalfFieldOfView);
         WriteSingle(block: block, offset: AspectRatio, value: camera.AspectRatio);
-        WriteSingle(block: block, offset: FrustumOffset, value: snapshot.AsymmetricFrustumOffset.X);
-        WriteSingle(block: block, offset: (FrustumOffset + sizeof(float)), value: snapshot.AsymmetricFrustumOffset.Y);
+        WriteSingle(block: block, offset: FrustumOffset, value: camera.FrustumOffset.X);
+        WriteSingle(block: block, offset: (FrustumOffset + sizeof(float)), value: camera.FrustumOffset.Y);
         WriteSingle(block: block, offset: FarDistance, value: frame.FarDistance);
         WriteSingle(block: block, offset: SceneTime, value: sceneTime);
         WriteUInt32(block: block, offset: DebugMode, value: ((uint)tables.DebugMode));

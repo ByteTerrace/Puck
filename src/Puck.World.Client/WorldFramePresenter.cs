@@ -1110,14 +1110,14 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             return false;
         }
 
-        var ndcX = (Vector3.Dot(
+        var ndcX = ((Vector3.Dot(
             vector1: delta,
             vector2: camera.Right
-        ) / ((depth * camera.TanHalfFieldOfView) * camera.AspectRatio));
-        var ndcY = (Vector3.Dot(
+        ) - (depth * camera.FrustumOffset.X)) / ((depth * camera.TanHalfFieldOfView) * camera.AspectRatio));
+        var ndcY = ((Vector3.Dot(
             vector1: delta,
             vector2: camera.Up
-        ) / (depth * camera.TanHalfFieldOfView));
+        ) - (depth * camera.FrustumOffset.Y)) / (depth * camera.TanHalfFieldOfView));
 
         if (
             (MathF.Abs(x: ndcX) > 1.5f) ||

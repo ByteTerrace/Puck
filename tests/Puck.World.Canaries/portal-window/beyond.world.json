@@ -1,0 +1,111 @@
+{
+  "documentId": "portal-window-beyond",
+  "placements": {
+    "rows": [
+      {
+        "id": "arch",
+        "position": [0, 1.5, 0],
+        "prototypeId": "arch",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "marker",
+        "position": [0, 1.5, -6],
+        "prototypeId": "marker",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "backdrop",
+        "position": [0, 1.5, -12],
+        "prototypeId": "backdrop",
+        "scale": 1,
+        "yawDegrees": 0
+      }
+    ]
+  },
+  "prototypes": [
+    {
+      "document": {
+        "behavior": {
+          "faces": [ { "defaultSource": null, "name": "glass", "shapeId": 0 } ]
+        },
+        "name": "arch",
+        "palette": [ { "color": "#303030", "roughness": 0.8, "sheen": 0, "specular": 0 } ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "rim",
+            "position": [0, 0, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [1.2, 1, 0.05],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Subtraction",
+            "id": 1,
+            "material": 0,
+            "name": "opening",
+            "position": [0, 0, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [1.15, 0.95, 0.3],
+            "smooth": 0,
+            "type": "Box"
+          }
+        ]
+      },
+      "id": "arch"
+    },
+    {
+      "document": {
+        "name": "marker",
+        "palette": [ { "color": "#20FF40", "emissive": 0.5, "roughness": 0.6, "sheen": 0, "specular": 0 } ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "ball",
+            "position": [0, 0, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.5, 0.5, 0.5],
+            "smooth": 0,
+            "type": "Sphere"
+          }
+        ]
+      },
+      "id": "marker"
+    },
+    {
+      "document": {
+        "name": "backdrop",
+        "palette": [ { "color": "#2040FF", "emissive": 0.5, "roughness": 0.8, "sheen": 0, "specular": 0 } ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "wall",
+            "position": [0, 0, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [12, 8, 0.1],
+            "smooth": 0,
+            "type": "Box"
+          }
+        ]
+      },
+      "id": "backdrop"
+    }
+  ],
+  "schema": "puck.world.definition.v1",
+  "simulation": {
+    "rateHz": 30
+  }
+}

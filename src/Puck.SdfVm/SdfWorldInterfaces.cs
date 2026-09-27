@@ -127,20 +127,27 @@ public static class SdfWorldInterfaces {
 
         return ResourceOf(layout: layout, member: member).Binding;
     }
+    /// <summary>Returns the World-group binding number of a member of <see cref="World"/>: one of the mesh atlases
+    /// (<see cref="SdfWorldPackage.MeshAtlases"/>).</summary>
+    /// <param name="member">The member's name.</param>
+    /// <returns>The binding number.</returns>
+    /// <exception cref="InvalidOperationException">The World group declares no such resource.</exception>
+    public static uint WorldGroupBindingOf(string member) =>
+        ResourceOf(group: ShaderInterfaceGroup.World, layout: WorldLayout, member: member).Binding;
 
-    // The pass-group resource an interface member binds. Binding updates run every frame, so this walks the immutable
-    // layout by index and allocates no predicate or enumerator.
-    internal static ShaderInterfaceResourceLayout ResourceOf(ShaderInterfaceLayout layout, string member) {
+    // The resource an interface member binds in a group, the pass group unless named. Binding updates run every frame, so
+    // this walks the immutable layout by index and allocates no predicate or enumerator.
+    internal static ShaderInterfaceResourceLayout ResourceOf(ShaderInterfaceLayout layout, string member, ShaderInterfaceGroup group = ShaderInterfaceGroup.Pass) {
         var groups = layout.Groups;
 
         for (var groupIndex = 0; (groupIndex < groups.Count); groupIndex++) {
-            var group = groups[groupIndex];
+            var candidate = groups[groupIndex];
 
-            if (group.Group != ShaderInterfaceGroup.Pass) {
+            if (candidate.Group != group) {
                 continue;
             }
 
-            var resources = group.Resources;
+            var resources = candidate.Resources;
 
             for (var index = 0; (index < resources.Count); index++) {
                 var resource = resources[index];
@@ -151,6 +158,6 @@ public static class SdfWorldInterfaces {
             }
         }
 
-        throw new InvalidOperationException(message: $"The pass group declares no resource '{member}'.");
+        throw new InvalidOperationException(message: $"The {group} group declares no resource '{member}'.");
     }
 }

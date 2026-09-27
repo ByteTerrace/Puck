@@ -54,8 +54,17 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
     private readonly HashSet<ContentPin> m_drawn = [];
 
     private long m_revision;
-    // Written at the end of every pump on the presenter's thread, read from any thread (IsSettled).
-    private volatile bool m_settled;
+    // Published together at the end of a pump, so readiness never combines states from different definitions.
+    private volatile Progress m_progress;
+    private bool m_ships;
+
+    [Flags]
+    private enum Progress {
+        None = 0,
+        Reconciled = 1,
+        Ships = 2,
+        Settled = 4,
+    }
 
     private WorldBakeRequest[]? m_inFlight;
     private WorldDefinition? m_definition;
@@ -104,17 +113,41 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
     /// <summary>Gets whether the definition the schedule last pumped has every bake settled: baked, held or refused,
     /// none queued or baking. False before the first pump. Written at the end of each pump and safe to read from any
     /// thread.</summary>
-    public bool IsSettled => m_settled;
+    public bool IsSettled => ((m_progress & Progress.Settled) != 0);
+    /// <summary>Gets whether the schedule has reconciled to a definition: false before the first pump, so a reader waits
+    /// for <see cref="Ships"/> to be known. Safe to read from any thread.</summary>
+    public bool HasReconciled => ((m_progress & Progress.Reconciled) != 0);
+    /// <summary>Gets whether the world ships its bakes: the definition the schedule last reconciled to names at least one
+    /// bake, and a bake pack supplied every one (<see cref="WorldBakeStore.IsShipped"/>), as a compiled world's
+    /// <c>BAKE</c> chunk does when the world loads. A bake this machine made or kept in its cache never counts, so the
+    /// answer is the same on every machine. False before the first pump. Safe to read from any thread.</summary>
+    public bool Ships => ((m_progress & Progress.Ships) != 0);
+    /// <summary>Reads one published pump state to decide whether the draw rule can be served: the schedule has
+    /// reconciled and, when bakes draw, has settled. Safe to read from any thread.</summary>
+    /// <param name="bakes">The render lever, or <see langword="null"/> to draw only shipped bakes.</param>
+    /// <returns>Whether the schedule is ready for this draw rule.</returns>
+    public bool IsReadyForDrawing(bool? bakes) {
+        var progress = m_progress;
+
+        return (
+            ((progress & Progress.Reconciled) != 0) &&
+            (!(bakes ?? ((progress & Progress.Ships) != 0)) || ((progress & Progress.Settled) != 0))
+        );
+    }
     /// <summary>Gets the revision of what the schedule can hand out: one more whenever a bake lands or the definition it
     /// reconciled to changed.</summary>
     public long Revision => m_revision;
 
     /// <summary>Takes a finished bake, reconciles to <paramref name="definition"/> when it changed, and starts the next
-    /// queued bake when none is running. Called once per produced frame, on the presenter's thread.</summary>
+    /// queued bake when none is running. Called on the presenter's thread during graph preparation and frame capture.</summary>
     /// <param name="definition">The live definition.</param>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
     public void Pump(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: definition);
+
+        if (!ReferenceEquals(objA: definition, objB: m_definition)) {
+            m_progress = Progress.None;
+        }
 
         Collect();
 
@@ -134,7 +167,7 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
             m_build.Start(build: token => Resolve(batch: batch, store: store, token: token));
         }
 
-        m_settled = !IsBusy;
+        m_progress = (Progress.Reconciled | (m_ships ? Progress.Ships : Progress.None) | (IsBusy ? Progress.None : Progress.Settled));
     }
     /// <summary>Returns where a prototype of the definition last pumped stands.</summary>
     /// <param name="prototypeId">The prototype row's id.</param>
@@ -200,9 +233,9 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
 
     private readonly record struct Outcome(ContentPin Key, bool Baked, bool Refusal, long Evaluations);
 
-    // The drawable mesh of a bake: its positions, normals and texture coordinates, and each triangle's palette entry,
-    // read from the bake's material identity at the triangle's texture-coordinate centroid, which lies inside the
-    // triangle's own tile.
+    // The drawable mesh of a bake: its positions, normals and texture coordinates, each triangle's palette entry, read
+    // from the bake's material identity at the triangle's texture-coordinate centroid, which lies inside the triangle's
+    // own tile, and its five surface textures.
     private static SdfMesh MeshOf(SdfBake bake) {
         var baked = bake.Mesh;
         var positions = new System.Numerics.Vector3[baked.Vertices.Length];
@@ -240,6 +273,7 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
             indices: baked.Indices,
             normals: normals,
             positions: positions,
+            textures: new SdfMeshTextures(textures: bake.Textures),
             triangleMaterials: materials,
             uvs: uvs
         );
@@ -304,12 +338,22 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
         m_prototypes.Clear();
         m_current.Clear();
 
-        foreach (var request in WorldBakeStore.RequestsOf(definition: definition, quality: Quality)) {
+        var shipped = 0;
+        var named = 0;
+
+        var requests = WorldBakeStore.RequestsOf(definition: definition, quality: Quality);
+
+        for (var index = 0; (index < requests.Count); index++) {
+            var request = requests[index];
             var key = request.Key.Pin;
 
             m_prototypes[request.PrototypeId] = key;
             m_current.Add(item: key);
+            named++;
 
+            if (m_store.IsShipped(key: key, prototype: definition.Creations[index])) {
+                shipped++;
+            }
             if (m_store.TryGetHeld(key: key, outcome: out _)) {
                 if (m_counted.Add(item: key)) {
                     m_counts.Count(kind: Held);
@@ -338,6 +382,7 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
         }
 
         _ = m_queue.RemoveAll(match: request => !m_current.Contains(item: request.Key.Pin));
+        m_ships = ((named > 0) && (shipped == named));
     }
 
     // A nested holder initializes after every kind above, whatever order the members are declared in.

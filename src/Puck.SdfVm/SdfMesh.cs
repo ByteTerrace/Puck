@@ -6,7 +6,7 @@ namespace Puck.SdfVm;
 /// <remarks>Triangles wind counter-clockwise seen from their front, in the right-handed convention of
 /// <see cref="Puck.Abstractions.Cameras.ViewProjection"/>. A world prototype's inline mesh becomes one, placed by its
 /// placements and stamps, and so does a prototype's baked mesh, which also carries each vertex's normal and texture
-/// coordinate and each triangle's palette entry. The mesh pass rasterizes it.</remarks>
+/// coordinate, each triangle's palette entry, and its surface textures. The mesh pass rasterizes it.</remarks>
 public sealed record SdfMesh {
     /// <summary>Creates a mesh, refusing a malformed index list, a non-finite vertex, or a vertex or triangle attribute
     /// of the wrong length.</summary>
@@ -17,11 +17,13 @@ public sealed record SdfMesh {
     /// <param name="uvs">One texture coordinate per vertex, or empty for none.</param>
     /// <param name="triangleMaterials">One palette entry per triangle, added to its draw's material, or empty for the
     /// draw's material on every triangle.</param>
+    /// <param name="textures">The surface textures the texture coordinates address, or <see langword="null"/> for
+    /// none.</param>
     /// <exception cref="ArgumentException">The index count is zero or not a multiple of three, the mesh has more than
     /// <see cref="MaxTriangles"/> triangles, an index names no vertex, a position, normal or texture coordinate is not
-    /// finite, or an attribute is neither empty nor one per vertex (one per triangle for
-    /// <paramref name="triangleMaterials"/>).</exception>
-    public SdfMesh(ReadOnlyMemory<Vector3> positions, ReadOnlyMemory<uint> indices, ReadOnlyMemory<Vector3> normals = default, ReadOnlyMemory<Vector2> uvs = default, ReadOnlyMemory<uint> triangleMaterials = default) {
+    /// finite, an attribute is neither empty nor one per vertex (one per triangle for
+    /// <paramref name="triangleMaterials"/>), or the mesh has textures but no texture coordinates.</exception>
+    public SdfMesh(ReadOnlyMemory<Vector3> positions, ReadOnlyMemory<uint> indices, ReadOnlyMemory<Vector3> normals = default, ReadOnlyMemory<Vector2> uvs = default, ReadOnlyMemory<uint> triangleMaterials = default, SdfMeshTextures? textures = null) {
         if (
             indices.IsEmpty ||
             ((indices.Length % 3) != 0)
@@ -91,11 +93,19 @@ public sealed record SdfMesh {
             }
         }
 
+        if ((textures is not null) && uvs.IsEmpty) {
+            throw new ArgumentException(
+                message: "A mesh with surface textures carries a texture coordinate per vertex to address them.",
+                paramName: nameof(textures)
+            );
+        }
+
         Positions = positions;
         Indices = indices;
         Normals = normals;
         Uvs = uvs;
         TriangleMaterials = triangleMaterials;
+        Textures = textures;
     }
 
     /// <summary>The most triangles a mesh holds: the mesh pass writes a covered pixel's triangle as a float, which holds
@@ -110,6 +120,8 @@ public sealed record SdfMesh {
     public ReadOnlyMemory<Vector3> Positions { get; }
     /// <summary>Gets the triangle count.</summary>
     public int TriangleCount => (Indices.Length / 3);
+    /// <summary>Gets the surface textures the texture coordinates address, or <see langword="null"/>.</summary>
+    public SdfMeshTextures? Textures { get; }
     /// <summary>Gets one palette entry per triangle, added to its draw's material, or none.</summary>
     public ReadOnlyMemory<uint> TriangleMaterials { get; }
     /// <summary>Gets one texture coordinate per vertex, or none.</summary>
@@ -146,14 +158,17 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
 /// <para>
 /// A draw's record is its row-vector object-to-world matrix, row by row (words 0 to 15, <c>M11</c> first), then its
 /// material, then its mesh: the word its first index sits at, its index count, the word its first vertex sits at, its
-/// attribute flags (<see cref="NormalsFlag"/>, <see cref="MaterialsFlag"/>), and the word its first triangle material
+/// attribute flags (<see cref="NormalsFlag"/>, <see cref="MaterialsFlag"/>, <see cref="TexturesFlag"/>), and the word
+/// its first triangle material
 /// sits at (words 16 to 21), then its normal matrix, the inverse transpose of the matrix's upper 3×3, row by row (words
 /// 22 to 30), which carries an object-space normal to world space under any scale, nonuniform and mirrored included
 /// (a singular matrix, which draws no area, writes its own upper 3×3 instead). Its word offsets are counted from the
 /// region's start, so a reader needs nothing but the record to find a draw's triangles: its index <c>k</c> is the word at <c>indexWord + k</c>, and names the vertex whose eight words
 /// start at <c>vertexWord + (8 * index)</c>. A vertex without a normal or texture coordinate holds zeros there, and
-/// the flags say which a mesh has. The record is thirty-one whole words, so it has no padding a structured-buffer
-/// reader could disagree on.
+/// the flags say which a mesh has. A mesh whose textures the mesh atlases hold (<see cref="SdfMeshAtlas"/>) carries
+/// <see cref="TexturesFlag"/>, and its vertices' texture coordinates are written moved into the atlases, so a reader
+/// samples them as they stand. The record is thirty-one whole words, so it has no padding a structured-buffer reader
+/// could disagree on.
 /// </para>
 /// </summary>
 public static class SdfMeshRegion {
@@ -175,6 +190,8 @@ public static class SdfMeshRegion {
     public const uint NormalsFlag = 1u;
     /// <summary>The flag a record carries when its mesh has <see cref="SdfMesh.TriangleMaterials"/>.</summary>
     public const uint MaterialsFlag = 2u;
+    /// <summary>The flag a record carries when the mesh atlases hold its mesh's <see cref="SdfMesh.Textures"/>.</summary>
+    public const uint TexturesFlag = 4u;
 
     /// <summary>Counts the region a list of draws needs.</summary>
     /// <param name="draws">The draws.</param>
@@ -244,10 +261,12 @@ public static class SdfMeshRegion {
     /// <param name="layout">The layout <see cref="Plan"/> returned for the same draws.</param>
     /// <param name="destination">The region's words; at least <see cref="SdfMeshRegionLayout.Words"/> of them, and only
     /// those are written.</param>
+    /// <param name="atlas">The mesh atlases the frame binds, or <see langword="null"/> when it binds none: a mesh whose
+    /// textures they hold is written with <see cref="TexturesFlag"/> and its texture coordinates moved into them.</param>
     /// <exception cref="ArgumentNullException"><paramref name="draws"/> or <paramref name="meshes"/> is
     /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="destination"/> is shorter than the layout.</exception>
-    public static void Write(IReadOnlyList<SdfMeshDraw> draws, Dictionary<SdfMesh, SdfMeshRegionMesh> meshes, SdfMeshRegionLayout layout, Span<uint> destination) {
+    public static void Write(IReadOnlyList<SdfMeshDraw> draws, Dictionary<SdfMesh, SdfMeshRegionMesh> meshes, SdfMeshRegionLayout layout, Span<uint> destination, SdfMeshAtlas? atlas = null) {
         ArgumentNullException.ThrowIfNull(draws);
         ArgumentNullException.ThrowIfNull(meshes);
 
@@ -286,7 +305,7 @@ public static class SdfMeshRegion {
             record[17] = ((uint)(layout.IndexWordOffset + placement.FirstIndex));
             record[18] = ((uint)placement.IndexCount);
             record[19] = ((uint)(layout.VertexWordOffset + (placement.BaseVertex * VertexWords)));
-            record[20] = ((mesh.Normals.IsEmpty ? 0u : NormalsFlag) | (mesh.TriangleMaterials.IsEmpty ? 0u : MaterialsFlag));
+            record[20] = ((mesh.Normals.IsEmpty ? 0u : NormalsFlag) | (mesh.TriangleMaterials.IsEmpty ? 0u : MaterialsFlag) | (Textured(atlas: atlas, mesh: mesh) ? TexturesFlag : 0u));
             record[21] = ((uint)(layout.MaterialWordOffset + placement.FirstMaterial));
             WriteNormalMatrix(
                 matrix: matrix,
@@ -299,6 +318,11 @@ public static class SdfMeshRegion {
             var normals = mesh.Normals.Span;
             var uvs = mesh.Uvs.Span;
             var vertexWords = destination[(layout.VertexWordOffset + (placement.BaseVertex * VertexWords))..];
+            var atlasPlacement = (Textured(atlas: atlas, mesh: mesh)
+                ? atlas!.Placement(textures: mesh.Textures!)
+                : new Vector4(x: 1f, y: 1f, z: 0f, w: 0f));
+            var uvScale = new Vector2(x: atlasPlacement.X, y: atlasPlacement.Y);
+            var uvOffset = new Vector2(x: atlasPlacement.Z, y: atlasPlacement.W);
 
             for (var vertex = 0; (vertex < positions.Length); vertex++) {
                 var words = vertexWords.Slice(
@@ -306,7 +330,7 @@ public static class SdfMeshRegion {
                     start: (vertex * VertexWords)
                 );
                 var normal = (normals.IsEmpty ? Vector3.Zero : normals[vertex]);
-                var uv = (uvs.IsEmpty ? Vector2.Zero : uvs[vertex]);
+                var uv = (uvs.IsEmpty ? Vector2.Zero : ((uvs[vertex] * uvScale) + uvOffset));
 
                 words[0] = BitConverter.SingleToUInt32Bits(value: positions[vertex].X);
                 words[1] = BitConverter.SingleToUInt32Bits(value: positions[vertex].Y);
@@ -322,6 +346,9 @@ public static class SdfMeshRegion {
             mesh.Indices.Span.CopyTo(destination: destination[(layout.IndexWordOffset + placement.FirstIndex)..]);
         }
     }
+    // Whether a mesh's textures are in the atlases a frame binds.
+    private static bool Textured(SdfMesh mesh, SdfMeshAtlas? atlas) =>
+        ((mesh.Textures is not null) && (atlas is not null) && atlas.Holds(textures: mesh.Textures));
     // A draw's normal matrix: the inverse transpose of its matrix's upper 3×3, row by row, in the row-vector convention
     // (n_world = n.x row0 + n.y row1 + n.z row2). A singular matrix writes its own upper 3×3.
     private static void WriteNormalMatrix(Matrix4x4 matrix, Span<uint> record) {

@@ -4,6 +4,7 @@
 #ifdef SDF_PART_RAY_BOUNDS
 #include "../march/sdf-part-bounds.hlsli"
 #endif
+#include "../frame/sdf-mesh-textures.hlsli"
 #include "../march/sdf-primary.hlsli"
 #include "../surface/sdf-surface.hlsli"
 
@@ -123,8 +124,20 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
 #if defined(SDF_SURFACE_PASS)
     if (active && meshPixel) {
         SdfMeshSample meshSurface = sdfMeshSampleAt(pixel);
+        float3 meshPoint = (rayOrigin + (rayDirection * meshSurface.t));
+        float3 meshNormal = sdfMeshSurfaceNormal(meshSurface.draw, meshSurface.triangleIndex, meshPoint, rayDirection);
+        float meshAmbient = 1.0;
 
-        sdfResolveMeshSurface(sdfMeshSurfaceNormal(meshSurface.draw, meshSurface.triangleIndex, (rayOrigin + (rayDirection * meshSurface.t)), rayDirection), worldVisibilityRecord(pixel, viewIndex));
+        // A textured mesh takes its normal and its ambient occlusion from the atlases, facing the camera as the geometric
+        // normal does.
+        if (sdfMeshTextured(meshSurface.draw)) {
+            SdfMeshTexel meshTexel = sdfMeshTexelAt(meshSurface.draw, meshSurface.triangleIndex, meshPoint, (pixelFootprint * meshSurface.t));
+
+            meshNormal = sdfMeshFaceCamera(sdfMeshTexelNormal(meshSurface.draw, meshTexel), sdfMeshFace(sdfMeshRecord(meshSurface.draw), meshSurface.triangleIndex), rayDirection);
+            meshAmbient = sdfMeshTexelOcclusion(meshTexel);
+        }
+
+        sdfResolveMeshSurface(meshNormal, meshAmbient, worldVisibilityRecord(pixel, viewIndex));
     } else if (active) {
         sdfResolveSurface(rayOrigin + rayDirection * traveled, rayDirection, hitSurface, material,
             viewMode, instanceMaskBase, terminalRadius, pixelFootprint * traveled, worldVisibilityRecord(pixel, viewIndex));
@@ -284,7 +297,22 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
                 // lanes need the resolved material before either): one extra hit-only field evaluation, WITH Detail
                 // shapes included, so a rivet or seam's own material wins its footprint. When the host proves
                 // there are no Detail shapes, reuse the visibility record's complete attributes and seam instead.
-                if (!sdfProgramLayout.noDetailShapes) {
+                // A mesh pixel's surface is its triangle's, never the field's, so it re-resolves nothing: a textured mesh
+                // reads its texel's material, albedo and emission from the atlases instead.
+                bool meshTextured = false;
+                SdfMeshTexel meshTexel = (SdfMeshTexel)0;
+                uint meshDraw = 0u;
+
+                if (meshPixel) {
+                    SdfMeshSample meshShade = sdfMeshSampleAt(pixel);
+
+                    if (meshShade.covered && sdfMeshTextured(meshShade.draw)) {
+                        meshTextured = true;
+                        meshDraw = meshShade.draw;
+                        meshTexel = sdfMeshTexelAt(meshShade.draw, meshShade.triangleIndex, surfacePoint, (pixelFootprint * traveled));
+                        material = sdfMeshTexelMaterial(meshDraw, meshTexel);
+                    }
+                } else if (!sdfProgramLayout.noDetailShapes) {
                     sdfDetailShadingActive = true;
                     SdfHit detailHit = mapMasked(surfacePoint, instanceMaskBase);
                     sdfEvalCount += 1.0;
@@ -308,6 +336,16 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
 
                 if (materialBlendWeight > 0.0) {
                     shadeMaterial.albedo = lerp(shadeMaterial.albedo, sdfMaterialAlbedo(materialBlendOther), materialBlendWeight);
+                }
+
+                // A textured mesh's texel carries its albedo and the light it emits; the emission joins the shade below
+                // in place of the material's albedo times its emissive strength, which the bake already multiplied.
+                float3 meshEmission = float3(0.0, 0.0, 0.0);
+
+                if (meshTextured) {
+                    shadeMaterial.albedo = sdfMeshTexelAlbedo(meshTexel);
+                    meshEmission = sdfMeshTexelEmission(meshTexel);
+                    shadeMaterial.emissive = 0.0;
                 }
 
                 float3 layerPoint = surfacePoint;
@@ -400,7 +438,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
                 }
 #endif
 
-                color = sdfMaterialShade(shadeMaterial, radiance, normal, rayDirection, worldSunDirection(), sunScale);
+                color = (sdfMaterialShade(shadeMaterial, radiance, normal, rayDirection, worldSunDirection(), sunScale) + meshEmission);
 
                 // Warm/cool bounce (SdfMaterial.Bounce): a restrained, art-directed fill on the side of the surface
                 // the key (shadow) light does not reach. Black (the default) contributes exactly 0.
@@ -462,7 +500,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
                     float radius = max(field.param, 1.0e-6);
                     attenuation *= 1.0 - saturate(field.weight * exp(-distanceSquared / (radius * radius)) * facing);
                 }
-                float3 selfEmission = shadeMaterial.albedo * shadeMaterial.emissive;
+                float3 selfEmission = ((shadeMaterial.albedo * shadeMaterial.emissive) + meshEmission);
                 color = selfEmission + (color - selfEmission) * attenuation;
 
                 // Stylized curvature enrichment (cavity darken / rim light / ink outline). The compile-time guard strips
