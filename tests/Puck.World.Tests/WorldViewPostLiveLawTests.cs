@@ -120,19 +120,6 @@ public sealed class WorldViewPostLiveLawTests : IDisposable {
             expected: [Grain, Heavy]
         );
 
-        // The tonemap is the root's own pass, which render.tonemap asks for, so no views.post row names it.
-        refusals.Clear();
-        fixture.Server.EnqueueMutation(mutation: new WorldMutation.SetViewPost(
-            Post: [new WorldViewPostPass(Name: "tonemap", Package: RenderGraphPackageCatalog.SdfTonemap)],
-            Principal: Principal.Console
-        ));
-        _ = fixture.Server.DrainAdministrative();
-
-        Assert.Contains(
-            actualString: Assert.Single(collection: refusals),
-            expectedSubstring: $"views.post[0].package '{RenderGraphPackageCatalog.SdfTonemap}' names no post-process package a views.post row runs"
-        );
-
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.SetViewPost(
             Post: [],
             Principal: Principal.Console

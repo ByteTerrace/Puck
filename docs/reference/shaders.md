@@ -320,7 +320,7 @@ offers:
 | `sdf.world` | no input, one image output written by compute | The SDF world as the instance's camera sees it, run as a fragment (`SdfWorldPackage.Fragment`): sky, mask, beam, cull arguments, mesh, then primary, surface, ambient and views dispatched indirectly from the cull arguments, over transient counted scratch. The screens it shows are the instance's reads, not ports. |
 | `sdf.bricks` | no input, one buffer output written by compute | The world's SDF brick pool, written by brick uploads and carve bakes: one float per voxel, stride 4, counted `[{ "per": ["BrickPoolVoxels"] }]`. It is world-scoped, and the views read it across buffer edges. |
 | `overlay` | one fragment-sampled image input, one color-attachment image output | The console, HUD, toasts and cursor drawn over the input. |
-| `place` | two image inputs, a base and a source, read by compute, one image output written by compute | The base with the source reconstructed into a destination rect over it: an exact copy where the rect has the source's extent, otherwise bilinear at sharpness 0 blending to clamped Catmull-Rom at sharpness 1. Its config is `letterbox` (1 writes the letterbox color outside the rect instead of the base, 0 by default), `rect` (left, top, width and height as fractions of the output, the whole output by default, which resamples the whole source) and `sharpness`; a host that places panes per frame (`IRenderGraphPlacements`) overrides the rect and sharpness, and a source it shows nowhere draws nothing, so the base stands for the output, or, when the pass may not stand in, copies the base everywhere, letterbox or not. Its kernel, `src/Puck.Shaders/Assets/Shaders/Graph/place.comp.hlsl`, compiles at build, and `PlacePackage` records it. |
+| `place` | two image inputs, a base and a source, read by compute, one image output written by compute | The base with the source reconstructed into a destination rect over it: an exact copy where the rect has the source's extent, otherwise bilinear at sharpness 0 blending to clamped Catmull-Rom at sharpness 1. Its config is `letterbox` (1 writes the letterbox color outside the rect instead of the base, 0 by default), `rect` (left, top, width and height as fractions of the output, the whole output by default, which resamples the whole source), `sharpness` and `tonemap` (1 puts the reconstructed source through the filmic curve inside the rect, never the base or the letterbox color, 0 by default); a host that places panes per frame (`IRenderGraphPlacements`) overrides the rect and sharpness, and a source it shows nowhere draws nothing, so the base stands for the output, or, when the pass may not stand in, copies the base everywhere, letterbox or not. Its kernel, `src/Puck.Shaders/Assets/Shaders/Graph/place.comp.hlsl`, compiles at build, and `PlacePackage` records it. |
 | `sdf.film-grain` | one fragment-sampled image input, one color-attachment image output | Film grain over the input: the engine's [post-process package](#post-process-packages), a per-pixel integer-hashed offset keyed on the engine tick. Its stages, `fullscreen.vert` and `sdf-film-grain.frag` in `Assets/Shaders/Sdf/passes`, compile at build, and `PostProcessPackage` records it. |
 | `source-palette`, `source-nv12`, `source-rgba`, `source-transfer` | one raw buffer input read by compute, one image output written by compute | An uploaded source's region (`ImageSourceUploadLayout`) converted by the shipped kernel of that name in `src/Puck.Shaders/Assets/Shaders/Sources` into RGBA8, or half-float linear light for `source-transfer`. `SourceConversionPackage` records them; the runtime runs one in the graph it makes for each uploaded source instance, its region bound as a host buffer port (`ShaderPipelineRenderNode.BindRegion`). |
 
@@ -594,17 +594,22 @@ any other:
   residency, when the world's layouts or player roster can compose more than
   one view.
 - `main`: the root graph reading `world`'s output over the whole display and
-  every pane's output. With more than one view it first runs one `place` pass
-  per view. Then, when `render.tonemap` is `Filmic`, it runs the `sdf.tonemap`
-  pass (`main$tonemap`) over the placed views. Then it runs one `place` package
-  pass per `views.graphs` instance any layout slot names, each pass named after
-  its instance, then one pass per `views.post` row in document order, named by
-  the row and running its [post-process package](#post-process-packages), each
+  every pane's output. With more than one view, or with a tonemap, it first
+  runs one `place` pass per view. Then it runs one `place` package pass per
+  `views.graphs` instance any layout slot names, each pass named after its
+  instance, then one pass per `views.post` row in document order, named by the
+  row and running its [post-process package](#post-process-packages), each
   reading the frame the pass before it wrote, then the `overlay` pass in a
-  windowed World that loaded its glyph atlas. The tonemap reads the SDF scene
-  alone and runs once: a pane is display-referred, a pane shader's own tonemap
-  included, so the root never tonemaps it, and the HUD composes over the finished
-  frame at SDR white, which the display encode shows at the paper-white level.
+  windowed World that loaded its glyph atlas.
+
+When `render.tonemap` is `Filmic`, each view's `place` pass sets the `place`
+config's `tonemap`, which puts the view it reconstructs, and nothing else,
+through the filmic curve. The scene is tonemapped once, where it enters the
+frame. The letterbox color the first view's pass writes beside it is display
+framing, not scene light, so it reaches the display exact under every tonemap.
+A pane is display-referred, a pane shader's own tonemap included, so the root
+never tonemaps it, and the HUD composes over the finished frame at SDR white,
+which the display encode shows at the paper-white level.
 
 `main` is the root whenever anything is drawn over the world, panes and the
 tonemap included, and whenever the world has more than one view. When none
@@ -620,12 +625,12 @@ launcher drives: each frame it shows the root over a display of the World's
 configured extent. Nothing wraps it; the screen binder and the world's
 residency, whose GPU holdings must go while the device is alive, are released
 by the root's teardown (`RenderGraphRuntimeNode.Holdings`). A `captures` row reads
-the root, or names `world` to capture the SDF world before its panes, post
-passes, tonemap and overlay: its working image through the SDR display encode,
+the root, or names `world` to capture the SDF world before its tonemap, panes,
+post passes and overlay: its working image through the SDR display encode,
 untonemapped. `world.counters gpu` counts every graph instance under its
 instance name: `world` is the first view's node, whose passes are
 `sdf.world$sky` through `sdf.world$views`, `main` the root's node, whose passes
-are the place, post, tonemap and overlay passes, and each pane its own node. It counts
+are the place, post and overlay passes, and each pane its own node. It counts
 each residency's upload beside them: the world's as `sdf:world`, and each
 camera or session view's as `sdf:<name>`.
 
@@ -679,8 +684,9 @@ passes. `PrepareGraph` places each view at its rect and adds a footprint of
 that rect at the view's render scale, so the scheduler renders the view at the
 reduced extent and `place` reconstructs it with the same sharpness. A view is
 shown only once the engine has rendered it, and a single view covering the
-whole display at native scale is not placed, so `main` passes `world` through
-unchanged. A layout change places its views one frame later, like its panes.
+whole display at native scale with no tonemap is not placed, so `main` passes
+`world` through unchanged; with a tonemap it is placed like any other, since its
+place pass applies the tonemap. A layout change places its views one frame later, like its panes.
 The first view's place pass sets the `place` config's `letterbox`, so outside
 its rect it writes the letterbox color, `(0.015, 0.016, 0.02)`, which the
 kernel states, rather than its base; every later place pass keeps its base

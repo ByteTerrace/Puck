@@ -43,8 +43,6 @@ public sealed class InterfaceEchoCanaryFixtureTests {
         ("ink-finish", "moth.hlsl", static () => PassOf(pass: "moth", relativePath: "src/Puck.World/Assets/pipelines/moth.hlsl")),
         ("tint", "the pipeline-package canary's tint", static () => PassOf(pass: "tint", relativePath: "tests/Puck.World.Canaries/pipeline-package/tint.graph.json")),
         ("sdf-film-grain", "package sdf.film-grain", static () => PackageOf(id: RenderGraphPackageCatalog.SdfFilmGrain)),
-        // The tonemap binds its source beside a pass block of the extent alone, ink finish's.
-        ("ink-finish", $"package {RenderGraphPackageCatalog.SdfTonemap}", static () => PackageOf(id: RenderGraphPackageCatalog.SdfTonemap)),
         ("place", "package place", static () => PackageOf(id: RenderGraphPackageCatalog.Place)),
         ("overlay", "package overlay", static () => PackageOf(id: RenderGraphPackageCatalog.Overlay)),
         // Each source conversion package binds its region and image beside a pass block of the extent alone, ink finish's.

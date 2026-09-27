@@ -9,15 +9,14 @@ namespace Puck.Cli.Tests;
 /// Laws for <c>puck shaders generate</c>: it owns every generated shader interface, not only <c>sdf-isa.hlsli</c>.
 /// Over a tree whose includes match, the check passes; a drifted package include fails by name; an interface include
 /// no package or engine kernel owns fails by name; a package whose include is missing fails by name; a drifted or missing
-/// SDF engine kernel include fails by name; and on the real tree the overlay, place, film-grain, tonemap and SDF engine
-/// interfaces are among the includes it checks.
+/// SDF engine kernel include fails by name; and on the real tree the overlay, place, film-grain and SDF engine interfaces
+/// are among the includes it checks.
 /// </summary>
 public sealed class ShadersGenerateLawTests {
     private const string FilmGrainPath = "src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-film-grain.interface.hlsli";
     private const string IsaPath = "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-isa.hlsli";
     private const string OverlayPath = "src/Puck.Overlays/Assets/Shaders/overlay.interface.hlsli";
     private const string PlacePath = "src/Puck.Shaders/Assets/Shaders/Graph/place.interface.hlsli";
-    private const string TonemapPath = "src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-tonemap.interface.hlsli";
     private const string WorldPath = "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-world.interface.hlsli";
 
     // The SDF engine kernels' includes, each with the text its interface generates: owned whatever the tree holds.
@@ -68,7 +67,6 @@ public sealed class ShadersGenerateLawTests {
         var (exitCode, error) = Check([
             (IsaPath, SdfIsaHlsl.Generate()),
             (FilmGrainPath, InterfaceOf(id: RenderGraphPackageCatalog.SdfFilmGrain)),
-            (TonemapPath, InterfaceOf(id: RenderGraphPackageCatalog.SdfTonemap)),
             (OverlayPath, InterfaceOf(id: RenderGraphPackageCatalog.Overlay)),
             (PlacePath, InterfaceOf(id: RenderGraphPackageCatalog.Place)),
             .. SourceIncludes
@@ -82,7 +80,6 @@ public sealed class ShadersGenerateLawTests {
         var (exitCode, error) = Check([
             (IsaPath, SdfIsaHlsl.Generate()),
             (FilmGrainPath, InterfaceOf(id: RenderGraphPackageCatalog.SdfFilmGrain)),
-            (TonemapPath, InterfaceOf(id: RenderGraphPackageCatalog.SdfTonemap)),
             (OverlayPath, InterfaceOf(id: RenderGraphPackageCatalog.Overlay).Replace(comparisonType: StringComparison.Ordinal, newValue: "staleSampler", oldValue: "linearSampler")),
             (PlacePath, InterfaceOf(id: RenderGraphPackageCatalog.Place)),
             .. SourceIncludes
@@ -126,7 +123,6 @@ public sealed class ShadersGenerateLawTests {
             (IsaPath, SdfIsaHlsl.Generate()),
             (OverlayPath, InterfaceOf(id: RenderGraphPackageCatalog.Overlay)),
             (FilmGrainPath, InterfaceOf(id: RenderGraphPackageCatalog.SdfFilmGrain)),
-            (TonemapPath, InterfaceOf(id: RenderGraphPackageCatalog.SdfTonemap)),
             (PlacePath, InterfaceOf(id: RenderGraphPackageCatalog.Place)),
             (WorldPath, drifted),
             .. SourceIncludes
@@ -143,7 +139,6 @@ public sealed class ShadersGenerateLawTests {
             (IsaPath, SdfIsaHlsl.Generate()),
             (OverlayPath, InterfaceOf(id: RenderGraphPackageCatalog.Overlay)),
             (FilmGrainPath, InterfaceOf(id: RenderGraphPackageCatalog.SdfFilmGrain)),
-            (TonemapPath, InterfaceOf(id: RenderGraphPackageCatalog.SdfTonemap)),
             (PlacePath, InterfaceOf(id: RenderGraphPackageCatalog.Place)),
             .. EngineKernels.Where(predicate: static kernel => !string.Equals(a: kernel.Path, b: WorldPath, comparisonType: StringComparison.Ordinal)),
             .. SourceIncludes,
@@ -169,7 +164,7 @@ public sealed class ShadersGenerateLawTests {
         Assert.Empty(collection: problems);
         Assert.Equal(
             actual: includes.Select(selector: static include => include.Path),
-            expected: [IsaPath, OverlayPath, "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-bricks.interface.hlsli", "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-mesh.interface.hlsli", WorldPath, FilmGrainPath, TonemapPath, PlacePath, .. SourceIncludes.Select(selector: static include => include.Path)]
+            expected: [IsaPath, OverlayPath, "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-bricks.interface.hlsli", "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-mesh.interface.hlsli", WorldPath, FilmGrainPath, PlacePath, .. SourceIncludes.Select(selector: static include => include.Path)]
         );
     }
 }

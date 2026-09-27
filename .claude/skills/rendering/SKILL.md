@@ -1266,19 +1266,24 @@ The main view runs through the runtime. `WorldRootGraph`
 (the first view's `sdf.world` instance) and `world$2..world$K` for K =
 `WorldRootGraph.ViewsOf` (the most non-instance slots of any `views.layouts`
 row or `PlayerRoster.MaxSlots`; each view is an instance of its own), then
-the root `main`, which reads `world` and every pane and runs, when K > 1, one
-`place` pass per view (`main$view$<n>`, n from 1; view 1's reads `world`
-through a second version beside `main$world`), then, when `render.tonemap` is
-`Filmic` and no debug view is on (`WorldViewGraphHost.ShowsDebugView`), the
-`sdf.tonemap` pass (`main$tonemap`) over the placed views, then one `place`
+the root `main`, which reads `world` and every pane and runs, when K > 1 or a
+tonemap is on, one `place` pass per view (`main$view$<n>`, n from 1; view 1's
+reads `world` through a second version beside `main$world`), then one `place`
 package pass per `views.graphs` instance a layout slot names (the pass named
 after the instance), then one pass per `views.post` row in order (named by the
 row, running its package, each reading the frame the pass before it wrote), then
-`overlay` in a windowed World. The tonemap reads the SDF scene alone: a pane is
-display-referred (a pane shader applies its own tonemap, as the moth studio's
-does), so the root never tonemaps a pane, and the HUD is never tonemapped. `main` is the root whenever anything is drawn over the
-world, panes and the tonemap included, and always when K > 1; otherwise `world`
-is the root. With `views.root` set the runtime
+`overlay` in a windowed World. The tonemap is each view's place pass: when
+`render.tonemap` is `Filmic` and no debug view is on
+(`WorldViewGraphHost.ShowsDebugView`), every view pass sets the `place` config's
+`tonemap` (`RenderGraphPackageCatalog.PlaceTonemap`), which puts the view it
+reconstructs, and nothing else, through the curve. The letterbox color is
+framing, written beside the view untonemapped, so it reaches the display exact;
+a pane is display-referred (a pane shader applies its own tonemap, as the moth
+studio's does), so the root never tonemaps a pane; and the HUD is never
+tonemapped. A tonemapped lone whole-display view is shown, never stood in for,
+so its pass runs. `main` is the root whenever anything is drawn over the world,
+panes and the tonemap included, and always when K > 1; otherwise `world` is
+the root. With `views.root` set the runtime
 runs the rows alone, and the document may author no `views.post`. A config that
 does not bind is refused when the document validates, naming the row
 (`views.post[<i>].config`), live edits included; the boot's pre-flight

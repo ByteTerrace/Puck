@@ -17,6 +17,32 @@ public sealed class WorldRootGraphLawTests {
     private const string FilmGrain = RenderGraphPackageCatalog.SdfFilmGrain;
 
     private static JsonElement Json(string text) => JsonDocument.Parse(json: text).RootElement.Clone();
+    // The letterbox and tonemap switches a place pass binds, or zero for any other pass.
+    private static (uint Letterbox, uint Tonemap) Fields(ShaderPipelinePlannedPass pass) {
+        if (pass.Package?.Package != RenderGraphPackageCatalog.Place) {
+            return (0u, 0u);
+        }
+
+        Assert.True(condition: pass.Parameters.TryBind(
+            config: null,
+            reason: out var reason,
+            values: out var values
+        ), userMessage: reason);
+
+        var bytes = values.Bytes.Span;
+
+        return (
+            BinaryPrimitives.ReadUInt32LittleEndian(source: bytes[((int)pass.Parameters.BlockOffsetOf(member: RenderGraphPackageCatalog.PlaceLetterbox))..]),
+            BinaryPrimitives.ReadUInt32LittleEndian(source: bytes[((int)pass.Parameters.BlockOffsetOf(member: RenderGraphPackageCatalog.PlaceTonemap))..])
+        );
+    }
+    private static string[] PlaceFields(RenderGraphPlan plan) => [.. plan.Steps
+        .Where(predicate: static step => (step.Package?.Id == RenderGraphPackageCatalog.Place))
+        .Select(selector: static step => {
+            var (letterbox, tonemap) = Fields(pass: step.Planned);
+
+            return $"{step.Name}:letterbox={letterbox},tonemap={tonemap}";
+        })];
 
     [Fact]
     public void WithNothingToDrawOverItTheWorldIsTheRoot() {
@@ -36,10 +62,9 @@ public sealed class WorldRootGraphLawTests {
         Assert.Null(@object: Assert.Single(collection: graph.Graphs()));
     }
     // A pane is display-referred, its own shader's tonemap included (the moth studio's pane applies its own filmic curve),
-    // so the tonemap reads the placed views alone: every pane, post pass and the overlay draws over its output, and none
-    // is tonemapped by the root.
+    // so the tonemap is each view's place pass, over the view it reconstructs: no pane, post pass or overlay is tonemapped.
     [Fact]
-    public void AFilmicTonemapReadsOnlyThePlacedViewsAndEveryPanePostPassAndTheOverlayDrawOverItsOutput() {
+    public void AFilmicTonemapIsEachViewsPlacePassAndNoPanePostPassOrOverlayIsTonemapped() {
         WorldViewPostPass[] post = [new(Name: "grain", Package: FilmGrain)];
         var filmic = WorldRootGraph.Compose(
             overlay: true,
@@ -49,61 +74,42 @@ public sealed class WorldRootGraphLawTests {
             tonemap: WorldTonemap.Filmic,
             views: 2
         );
-        var steps = Assert.IsType<RenderGraphPlan>(@object: filmic.Plan).Steps;
+        var plan = Assert.IsType<RenderGraphPlan>(@object: filmic.Plan);
 
         Assert.Equal(
-            actual: steps.Select(selector: static step => $"{step.Name}:{step.Package?.Id}"),
-            expected: ["main$view$1:place", "main$view$2:place", $"main$tonemap:{RenderGraphPackageCatalog.SdfTonemap}", "moth-pipeline:place", $"grain:{FilmGrain}", "main$overlay:overlay"]
+            actual: plan.Steps.Select(selector: static step => $"{step.Name}:{step.Package?.Id}"),
+            expected: ["main$view$1:place", "main$view$2:place", "moth-pipeline:place", $"grain:{FilmGrain}", "main$overlay:overlay"]
         );
-
-        // The tonemap reads what the last view's place pass wrote, and the pane's place pass takes the tonemap's output
-        // as its base and the pane's own image, never a tonemapped one, as its source.
-        var tonemap = steps[2].Planned;
-        var pane = steps[3].Planned;
-
         Assert.Equal(
-            actual: (Scene: Assert.Single(collection: tonemap.Inputs).Name, Base: pane.Inputs[0].Name, Source: pane.Inputs[1].Name),
-            expected: (Scene: steps[1].Planned.Outputs.Single().Name, Base: tonemap.Outputs.Single().Name, Source: "moth-pipeline")
+            actual: PlaceFields(plan: plan),
+            expected: ["main$view$1:letterbox=1,tonemap=1", "main$view$2:letterbox=0,tonemap=1", "moth-pipeline:letterbox=0,tonemap=0"]
         );
         Assert.Equal(
             actual: filmic.Tonemap,
             expected: WorldTonemap.Filmic
         );
 
-        // One view has no place pass, so the tonemap reads the world's version.
+        // With one view, a tonemap is the reason the root places it: the view's place pass reads the world's version as its
+        // base and the view's own as its source, and its footprint follows its rect.
         var single = WorldRootGraph.Compose(
-            overlay: true,
-            packages: RenderGraphPackageCatalog.Engine,
-            panes: ["moth-pipeline"],
-            post: null,
-            tonemap: WorldTonemap.Filmic
-        );
-        var first = Assert.IsType<RenderGraphPlan>(@object: single.Plan).Steps[0];
-
-        Assert.Equal(
-            actual: (first.Name, Assert.Single(collection: first.Planned.Inputs).Name),
-            expected: ("main$tonemap", "main$world")
-        );
-
-        // With nothing else over the world, a filmic tonemap alone makes the root graph, which shows the world over its
-        // whole extent.
-        var alone = WorldRootGraph.Compose(
             overlay: false,
             packages: RenderGraphPackageCatalog.Engine,
             post: null,
             tonemap: WorldTonemap.Filmic
         );
+        var singlePlan = Assert.IsType<RenderGraphPlan>(@object: single.Plan);
+        var view = Assert.Single(collection: singlePlan.Steps).Planned;
 
         Assert.Equal(
-            actual: (alone.Root, Footprint: Assert.Single(collection: alone.Footprints).Producer),
-            expected: (WorldViewGraphs.MainInstance, Footprint: WorldViewGraphs.WorldInstance)
+            actual: (single.Root, Views: string.Join(separator: ",", values: single.ViewPasses), Base: view.Inputs[0].Name, Source: view.Inputs[1].Name, Footprints: single.Footprints.Count),
+            expected: (WorldViewGraphs.MainInstance, Views: "main$view$1", Base: "main$world", Source: "main$view$1", Footprints: 0)
         );
         Assert.Equal(
-            actual: Assert.IsType<RenderGraphPlan>(@object: alone.Plan).Steps.Select(selector: static step => step.Name),
-            expected: ["main$tonemap"]
+            actual: PlaceFields(plan: singlePlan),
+            expected: ["main$view$1:letterbox=1,tonemap=1"]
         );
 
-        // None runs no pass, so a world with nothing to draw over it stays its own root.
+        // None tonemaps nothing, so a world with nothing to draw over it stays its own root.
         var none = WorldRootGraph.Compose(
             overlay: false,
             packages: RenderGraphPackageCatalog.Engine,
@@ -115,6 +121,54 @@ public sealed class WorldRootGraphLawTests {
             actual: (none.Root, none.Plan, none.Tonemap),
             expected: (WorldViewGraphs.WorldInstance, ((RenderGraphPlan?)null), WorldTonemap.None)
         );
+    }
+    /// <summary>The letterbox color is display framing, not scene light, so no tonemap reaches it: a pass that tonemaps
+    /// (a place pass with <see cref="RenderGraphPackageCatalog.PlaceTonemap"/> set, which tonemaps the source it
+    /// reconstructs and nothing else) never reconstructs an image the letterbox was written into, so the letterbox code
+    /// reaches the display exact under a filmic tonemap with any number of views.</summary>
+    [Fact]
+    public void NoTonemapReadsTheLetterboxSoAFilmicFrameShowsItsCodeExact() {
+        foreach (var views in ((int[])[2, 4])) {
+            var plan = Assert.IsType<RenderGraphPlan>(@object: WorldRootGraph.Compose(
+                overlay: true,
+                packages: RenderGraphPackageCatalog.Engine,
+                panes: ["pane"],
+                post: [new WorldViewPostPass(Name: "grain", Package: FilmGrain)],
+                tonemap: WorldTonemap.Filmic,
+                views: views
+            ).Plan);
+            // Every version the letterbox color is in: what a letterboxing pass writes, and what any pass reading one of
+            // those writes.
+            var framed = new HashSet<string>(comparer: StringComparer.Ordinal);
+            var letterboxed = 0;
+            var tonemapped = new List<string>();
+
+            foreach (var step in plan.Steps) {
+                var fields = Fields(pass: step.Planned);
+
+                if (fields.Letterbox == 1u) {
+                    letterboxed++;
+                }
+                if (fields.Tonemap == 1u) {
+                    // A tonemapping place pass puts its second input, the source it reconstructs, through the curve.
+                    var source = step.Planned.Inputs[1].Name;
+
+                    Assert.False(
+                        condition: framed.Contains(item: source),
+                        userMessage: $"{views} views: {step.Name} tonemaps {source}, which holds the letterbox color"
+                    );
+                    tonemapped.Add(item: step.Name);
+                }
+                if ((fields.Letterbox == 1u) || step.Planned.Inputs.Any(predicate: input => framed.Contains(item: input.Name))) {
+                    framed.UnionWith(other: step.Planned.Outputs.Select(selector: static output => output.Name));
+                }
+            }
+
+            Assert.Equal(
+                actual: (Letterboxed: letterboxed, Tonemapped: tonemapped.Count),
+                expected: (Letterboxed: 1, Tonemapped: views)
+            );
+        }
     }
     [Fact]
     public void ThePostPassesThenTheOverlayRunInDocumentOrderOverTheWorld() {

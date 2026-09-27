@@ -107,7 +107,6 @@ rendered image beyond `puck parity`, so a kernel change is judged by running
 | Shader | Role | Consumer |
 |---|---|---|
 | `Sdf/passes/fullscreen.vert.hlsl` | Minimal fullscreen triangle vertex shader. | The overlay and `sdf.film-grain` |
-| `Sdf/passes/sdf-tonemap.frag.hlsl` | The Narkowicz ACES-fit filmic curve over the frame the pass before it wrote, the fragment stage of the `sdf.tonemap` render graph package (`RenderGraphPackageCatalog.SdfTonemap`). | A world's root graph when `render.tonemap` is `Filmic`, over the placed views before any pane |
 | `Sdf/passes/sdf-film-grain.frag.hlsl` | Fullscreen integer-hashed film grain over the frame the pass before it wrote, the fragment stage of the `sdf.film-grain` render graph package (`RenderGraphPackageCatalog.SdfFilmGrain`). | A `views.post` row naming `sdf.film-grain` |
 
 ## Validation rule

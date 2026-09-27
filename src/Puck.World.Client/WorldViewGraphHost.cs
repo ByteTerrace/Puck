@@ -682,7 +682,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     }
     /// <summary>Places every view a composed frame of the world rendered (<see cref="PlaceView"/>), each in its rect at
     /// its render scale, and records each view's camera for its producer (<see cref="SetCamera"/>). A view is shown once the world has rendered it, except a lone view covering the whole display at
-    /// native scale, which is never shown, so the root stands for the world itself. Before the world has composed a frame
+    /// native scale with no tonemap, which is never shown, so the root stands for the world itself; a tonemapped lone view
+    /// is shown, since its place pass applies the tonemap. Before the world has composed a frame
     /// there are no views, but the world must still be scheduled, since it composes inside its own frame, so the first
     /// view is placed, not shown, over the whole display at native scale, which it renders at until its first frame names
     /// its views. The display counts as covered only when one rect covers it whole: a lone whole-display view, a shown
@@ -718,13 +719,16 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             !((views[0].RenderScale > 0f) && (views[0].RenderScale < 1f))
         );
         var covered = (panesCover || lone);
+        // The lone view stands for the world itself, unshown, only when its place pass has nothing to do; a tonemap is
+        // applied by the view's place pass, so a tonemapped lone view is shown like any other.
+        var standsFor = (lone && (m_synthesized?.Tonemap != WorldTonemap.Filmic));
 
         for (var view = 0; (view < views.Count); view++) {
             covered |= (
                 (views[view].Region == whole) &&
                 Shows(
-                    lone: lone,
                     rendered: rendered,
+                    standsFor: standsFor,
                     view: view
                 )
             );
@@ -748,8 +752,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                 renderScale: snapshot.RenderScale,
                 sharpness: sharpness,
                 shown: Shows(
-                    lone: lone,
                     rendered: rendered,
+                    standsFor: standsFor,
                     view: view
                 ),
                 view: view
@@ -757,8 +761,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         }
     }
 
-    // Whether a view of a composed frame is shown: once rendered, unless it is the lone whole-display view.
-    private static bool Shows(bool lone, Func<int, bool>? rendered, int view) => (!lone && (rendered?.Invoke(arg: view) ?? false));
+    // Whether a view of a composed frame is shown: once rendered, unless it stands for the world itself.
+    private static bool Shows(bool standsFor, Func<int, bool>? rendered, int view) => (!standsFor && (rendered?.Invoke(arg: view) ?? false));
 
     /// <inheritdoc/>
     /// <remarks>A pane or view of the synthesized root the host did not place this frame is not shown, so its pass
