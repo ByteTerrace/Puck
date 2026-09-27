@@ -33,15 +33,16 @@ reasoning behind every decision is in
 
 ## Implementation status
 
-P2, P3, P4, P5, P7, P8, P9, P10 and P11 are complete; P1a, P1b, P6 and P12 to
-P17 are not. The programmable compute and graphics foundation has functional GPU
+P2, P3, P4, P5, P7, P8, P9, P10, P11 and P12 are complete; P1a, P1b, P6 and P13
+to P17 are not. The programmable compute and graphics foundation has functional GPU
 fixtures on both backends. The
 work-counting model, the GPU work ledger, and the counting wrappers live in
 `Puck.Abstractions`. The state arena, rules and search, the shader pipeline
 node, the SDF residencies and their views, and the unified overlay all report
 through that model, and `world.counters`, `pipeline.inspect`, and
-`puck counters` read it. The SDF engine builds its pipelines off the frame
-thread and keeps a persistent pipeline cache per device. Neutral vertex and
+`puck counters` read it. The SDF kernels build off the frame thread as entries
+of the pass-pipeline cache (P14-8), and each device keeps a persistent pipeline
+cache. Neutral vertex and
 draw infrastructure exists to extend. SDF traversal and rasterized meshes share
 opaque visibility. The live authoring and compiler foundation
 exists, with its relocatable package form and the committed per-instance
@@ -166,15 +167,24 @@ the leg machinery it shares with `puck parity`, writes a
 backends disagree on. `puck counters compare` holds two reports to each other
 by class. Laws over fixture readings and reports cover the classification and
 the comparison, and a server law covers the forwarders across `world.reload`.
-The workload sets `world.cadence off` so every pass runs, pauses the
-simulation, waits for the engine to be ready (`world.wait ready 180`: its
+The workload runs at the floor tier and the RTX 2060's resolution: its world
+presents a 1920x1080 display with its one camera at that extent and authors a
+`low` preset (shadows off, ambient occlusion off, render scale half), which the
+script applies with `world.quality low`, so the view renders 1440x810. It sets
+`world.cadence off` so every pass runs, pauses the simulation, waits for the engine to be ready (`world.wait ready 180`: its
 pipeline set installed and its first frame produced), resumes, and reads 120
 ticks after that. A cold driver cache cannot leave a leg reading a partial
 pipeline set and every world pass as absent, and because the simulation holds
 while the engine builds, both backends read the state counts at the same tick. The render levers (`WorldRenderLeverCommandModule`) are
-composed by the offscreen shape as well as the windowed one. The pipeline-cache counts in a
-report are pacing: each leg boots on a fresh state root, so every run starts
-with a cold cache and reports misses only.
+composed by the offscreen shape as well as the windowed one, and the offscreen
+shape alone answers `world.resize <width> <height>`, which resizes its display
+live, so a capture after it lands at the new extent. The pipeline-cache counts
+in a report are pacing: each leg boots on a fresh state root, so every run
+starts with a cold cache and reports misses only. A `puck canary` GPU selection
+with an offscreen proof instead warms each backend's pipeline cache once, by
+booting that proof's world, and starts every offscreen and windowed leg from a
+copy of it; a leg whose world needs a pipeline the warm did not build writes it
+into its copy, and the runner counts the legs whose copy came back unchanged.
 
 `AllocationWindow` (`Puck.Abstractions.Counting`) is the one managed-allocation
 measurement. A law that sees every window allocate re-runs the body under the
@@ -1256,7 +1266,7 @@ bezel's one statement is `WorldScreenMappings.Glass`. P13b owes the rest. The
 pointer's pane hover reads the
 picker on the CPU (P13b-3, `WorldCursorFeed` through `WorldViewGraphHost.Hover`,
 outlined by the overlay's `CursorWriter` and echoed as `world.view.panes`'
-`hovered=`); GPU picking follows P4. The recorded Windows run, a click reaching
+`hovered=`); P4 is complete, and GPU picking remains. The recorded Windows run, a click reaching
 a captured editor window at the mapped point and the chord returning input to
 the game, is [deferred to the end](#deferred-to-the-end).
 
@@ -1300,8 +1310,9 @@ synchronize through a shared fence, a capture frame renders every tainted
 instance it reads again, a machine's output is an uploaded source held to its
 exact verdict, and a probe's output is an imported source while a view export
 orders its reader by a shared fence of its own, and step 9, the check's list, has
-landed too. Consumer-chosen filtering with
-no slot limit (step 8) remains. The camera and
+landed too, and so has step 8, consumer-chosen filtering with no slot limit: a
+screen row's or a placement face's `filter` names the sampler its screen reads
+through. The camera and
 probe GPU tiers, and
 desktop capture on a Direct3D 12 host, share their images without a copy, as
 simultaneous-access Direct3D 12 textures that a Vulkan host imports. A camera,
@@ -1309,8 +1320,10 @@ capture or probe producer signals the consumer's Direct3D 12 shared fence after
 each Direct3D 11 write and publishes the slot with the value, and the consuming
 submission waits for it on the GPU (a Vulkan host through the fence imported as
 a timeline semaphore); a device that cannot share the fence waits on the CPU
-instead. A view export orders the other direction: the exporting engine signals
-the exported texture's shared fence (on the Vulkan host, a texture and fence it
+instead. A view export orders the other direction: the exporting view renders into its
+own per-slot outputs, which its screens sample, copies each frame its reader
+has released into the exported texture (`ShaderPipelineRenderNode.ExportCopyPass`),
+and signals that texture's shared fence (on the Vulkan host, a texture and fence it
 imports from a headless Direct3D 12 device) and the Direct3D 11 probe waits for
 it on its device. The
 consumer holds a CPU slot lease until its submission retires, the desktop capture's
@@ -1369,8 +1382,8 @@ the simulation destination feeds a seat's pointer ray on a world surface
 (P13b-2). The GPU bakes
 settled carves into 128-cubed bricks (`SdfWorldTables.BrickBake.cs`).
 
-P17's CPU half and the device half of its sampling check have landed; drawing a
-bake is open. `SdfBaker`
+P17's CPU half and the device half of its sampling check have landed, and so
+has drawing a bake's geometry; its textures are open. `SdfBaker`
 (`src/Puck.SignedDistance/Baking`) bakes a program through `SdfFieldEvaluator`
 into an indexed mesh, five surface textures and an octahedral impostor
 ([prototype bakes](../rendering/sdf/handbook/bricks-and-baking.md#prototype-bakes)).
@@ -1420,18 +1433,23 @@ the palette-indexed and NV12 host layouts no GPU image is created in.
 
 P17 still owes:
 
-- the rest of drawing a bake: its geometry draws (a ready bake's mesh in place
-  of its static placements' fields behind `world.bakes`, the field kept
-  camera-hidden, the switch counted as `sdf.bakes.drawn`, held by
-  `CreationBakeLawTests` and the `sdf-bake-switch` canary), while its five
-  textures and its impostor do not, so the lever ships off; the textures decide
-  how an sRGB bake is read (a `Bc7UnormSrgb` view or a decode in the shader).
+- drawing a bake's textures and impostor: its albedo variation, occlusion,
+  emission and impostor do not draw yet, so `world.bakes` ships off, and the
+  textures decide how an sRGB bake is read (a `Bc7UnormSrgb` view or a decode
+  in the shader). This texture draw also stages the mesh region and adds the
+  bake atlases' World-group set. Its geometry already draws: a ready bake's mesh
+  in place of its static placements' fields, the field kept camera-hidden, the
+  switch counted as `sdf.bakes.drawn`, with vertex normals, texture coordinates
+  and per-triangle materials, held by `CreationBakeLawTests` and the
+  `sdf-bake-switch` canary.
   Choosing per placement between a bake and the field by measured cost is P6's;
 - the parity world shipping its bakes, and the check that a missing bake draws
   through its field and then switches.
 
-The SDF engine's frame data is written by hand in three places: an `SdfFrame`
-field, a numbered row in the packed buffer, and an HLSL accessor.
+The SDF frame's values and its environment are members of the generated pass
+block (P14-7): `SdfWorldPackage.Values` declares them, `puck shaders generate`
+writes them into `sdf-world.interface.hlsli`, and `SdfFrameBlock` is their one
+writer.
 
 ## The forcing artifact
 
@@ -3683,9 +3701,10 @@ Each commit is marked with what it waits on.
    `ImageProducerLawTests.AThirdProducersSourceIsAnInstanceTheRuntimeInstallsThroughItsRegistration`
    carries the third producer, beside its document-model law, through its
    `source.<id>` instance, its upload factory and the render-graph runtime.
-   The list names what is still unchecked: no capture inspects the unbound
-   glass, and no canary shows a session screen, opens a capture or checks the
-   drawn text of a `text` screen.
+   The `uploaded-sources` canary checks the arms the list once left unchecked:
+   a capture of the unbound glass, a session screen shown and captured, a
+   capture producer opened on monitor 0 showing its fill, and a `text` screen's
+   drawn glyphs, each against a discriminating leg.
 
 ### P13 — Hit-to-source mapping and input destinations
 
@@ -4178,9 +4197,8 @@ item 2 landed.
     renders into its own per-slot outputs, which its screens sample, and copies
     each frame its reader has released into the exported image in its
     `export copy` pass, one copy and three image barriers per exported camera
-    per frame. Still to delete: the matrix law,
-    `SdfShaderSetVerification`, `SdfWorldKernels`, and the SDF pipeline set and
-    its cache.
+    per frame. Still to delete: the matrix law, `SdfShaderSetVerification` and
+    `SdfWorldKernels`; the SDF pipeline set and its cache went with step 8.
 
 **Decisions.** P4's visibility record is the surface sample record staged
 shading reads. P7b moves the SDF push blocks and binding constants onto groups;
@@ -4399,7 +4417,7 @@ rebuild.
 
 **The frame graph and nesting.** P11 is complete: every view, pane, seat,
 camera and session is a graph instance the runtime schedules by demand, and a
-host drives one render root. P12's source contract,
+host drives one render root. P12 is complete: its source contract,
 producers and conversion passes have landed, and so has every step of P12b,
 the capture gate over the graph, probe outputs and view exports as sources,
 consumer-chosen filtering and the check's list among them; its `view` and
@@ -4408,21 +4426,28 @@ P11b-13. P13b's live mappings
 (step 1), simulation destination (step 2, with the light gun that authored
 cartridges read through `$light`), host passthrough (step 4), the GPU drawing
 from the mapping (step 5) and live hit walk (step 6) have landed, with step 3's
-CPU half, and GPU picking follows P4.
+CPU half, and GPU picking, which P4's completed visibility record allows,
+remains.
 P14 follows P4, P7b, P8, P11b and P12b, because the engine's composition and
 screens need somewhere to go before it moves. Its capability matrix (P14-1),
 module split (P14-2), generated instruction-set declarations (P14-3), the
 planner's vocabulary with multi-basis counts (P14-4) and post passes as the
 root graph's own passes (P14-12) needed none of them and have landed, and so have
-the SDF pass interfaces in the one pass-block spelling (P14-5), and the
-cutover with the cadence as the scheduler's (P14-6, P14-9). P15 and P16 both follow P14: P15 also needs P4, and
+the SDF pass interfaces in the one pass-block spelling (P14-5), the
+cutover with the cadence as the scheduler's (P14-6, P14-9), the generated frame
+block (P14-7), and P14-8's kernels as pass-pipeline cache entries, one command
+list per instance per frame slot and the conditional mesh pass. P14-8's last
+part, the world tables' group-1 set, waits on the bake atlases' World-group set
+that P17's texture draw adds. P15 and P16 both follow P14: P15 also needs P4, and
 P16, the smallest package in this group, needs P14's float working targets for
 its display transform; its heap fold, HDR swapchain selection and paper-white
 setting needed none and have landed.
 P17's CPU half, the bakes and their texture codecs, has landed, and so have
 their block-compressed upload and sampling check on both backends and the one
-pixel-format vocabulary, `GpuPixelFormat`; drawing a bake follows P4 and
-choosing between a bake and the field follows P6.
+pixel-format vocabulary, `GpuPixelFormat`. A ready bake's mesh draws in place
+of its field, with its normals, texture coordinates and triangle materials,
+while its textures and impostor remain; choosing between a bake and the field
+follows P6.
 
 **Bound state.** P9 and P10 have landed. P9, which also fills the frame group
 P8 declares, is written against the state interface of
@@ -4433,9 +4458,10 @@ and a bound member and an overridden member compose by the rule
 [the decisions register](../decisions/rendering.md) states.
 
 The SDF engine's groups (P7b-20), P12b-2, P4-2c, P11b-13, P14-2 and P14-5 have
-landed, and so have P14-6 and P14-9, so the longest remaining chain runs P14-7,
-P14-8, P14-10 and P14-11, then the rest of P14-13, and ends with P15. P16 follows P14-10's float working targets, and
-drawing a bake (P17) comes before P6's choice between a bake and the field.
+landed, and so have P14-6, P14-7, P14-9 and the first parts of P14-8, so the
+longest remaining chain runs P14-8's world set, P14-10 and P14-11, then the rest
+of P14-13, and ends with P15. P16 follows P14-10's float working targets, and a
+bake's textures (P17) come before P6's choice between a bake and the field.
 
 ## Deferred to the end
 

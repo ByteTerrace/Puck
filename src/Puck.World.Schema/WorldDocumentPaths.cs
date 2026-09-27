@@ -150,7 +150,7 @@ public static class WorldDocumentPaths {
         );
     }
     /// <summary>Returns the full path of a directory, reading an empty one as the current directory, which is what a
-    /// file path with no directory part (<c>world.puck</c>) is beside.</summary>
+    /// file path with no directory part (<c>moth.puck</c>) is beside.</summary>
     /// <param name="directory">The directory, absolute, relative to the current directory, or empty.</param>
     /// <returns>The full path.</returns>
     public static string FullDirectory(string directory) {
