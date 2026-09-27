@@ -213,8 +213,8 @@ public sealed class RenderGraphPackageCatalog {
     /// interface is <c>sdf-film-grain</c>.</summary>
     public const string SdfFilmGrain = "sdf.film-grain";
     /// <summary>The id of the tonemap post-process package: the Narkowicz ACES-fit filmic curve over its input, which a
-    /// world's root graph runs when <c>render.tonemap</c> is <c>Filmic</c>, after every view, pane and post pass and
-    /// before the overlay, so the HUD is never tonemapped. Its fragment stage is
+    /// world's root graph runs when <c>render.tonemap</c> is <c>Filmic</c>, over the placed views alone and before any
+    /// pane, post pass or the overlay, so no pane and no HUD is tonemapped. Its fragment stage is
     /// <c>src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-tonemap.frag.hlsl</c>, compiled at build, and its interface is
     /// <c>sdf-tonemap</c>.</summary>
     public const string SdfTonemap = "sdf.tonemap";

@@ -96,9 +96,9 @@ public readonly record struct WorldQualityPreset(
 /// Optional; absent leaves <paramref name="Lighting"/>/<paramref name="Sky"/> static.</param>
 /// <param name="Environment">The analytic studio-reflection softboxes and horizon gradient a GGX specular lobe
 /// reflects. Optional; absent (no softboxes, a black horizon) contributes nothing to the shaded color.</param>
-/// <param name="Tonemap">The tonemap the root graph applies to the whole frame, after every view, pane and post pass and
-/// before the HUD, which is never tonemapped. Optional; absent is <see cref="WorldTonemap.None"/> — the stylized shaded
-/// color, unchanged.</param>
+/// <param name="Tonemap">The tonemap the root graph applies to the SDF scene: the placed views, before any pane, post
+/// pass or the HUD, none of which is tonemapped, since a pane is display-referred. Optional; absent is
+/// <see cref="WorldTonemap.None"/> — the stylized shaded color, unchanged.</param>
 /// <param name="FarDistance">The far distance in world units: the depth at which every camera march ends — the far
 /// plane the renderer's fine march exits at, the reach of the beam's cone proofs, and the depth the fog and depth
 /// ramps are measured against. Geometry beyond it is never marched, so an infinite plane ends on a visible horizon

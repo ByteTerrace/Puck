@@ -1300,7 +1300,7 @@ into (`R16G16B16A16Float`). Both swapchains choose a display output through
 `DisplayOutput.TrySelect` and take an HDR one only when the host section's
 `colorSpace` requests it and the display reports it, and both write the root's
 frame through the display encode in the output they took. The tonemap is the
-root graph's `sdf.tonemap` pass before the overlay.
+root graph's `sdf.tonemap` pass over the placed views, before any pane.
 There is no jitter, motion vector, or history in the SDF kernels; render scale
 is a bilinear-to-Catmull-Rom upsample in the graph's `place` pass.
 
@@ -4167,11 +4167,13 @@ item 2 landed.
     are `RenderGraphPackageCatalog.WorkingFormat` (`R16G16B16A16Float`), and a
     node publishes an image output as itself, a float one included, so place,
     screens and exports sample the working image. The tonemap left the views:
-    `render.tonemap` `Filmic` adds the root's `sdf.tonemap` pass after every
-    view, pane and post pass and before the overlay, so the HUD is never
-    tonemapped. The R2 dither left them too, for the display encode
-    (`SurfaceEncoder`), which every swapchain compositor draws as its write and a
-    capture of a float output reads through in SDR. Parity held without a
+    `render.tonemap` `Filmic` adds the root's `sdf.tonemap` pass over the
+    placed views alone, before any pane, post pass or the overlay, so the scene
+    is tonemapped once and a pane, which is display-referred (the moth studio's
+    applies its own filmic curve), and the HUD never are. The R2 dither left the
+    views too, for the display encode (`SurfaceEncoder`), which every swapchain
+    compositor draws as its write and a capture of a float output reads through
+    in SDR. Parity held without a
     re-record: against the step-9 images every station moved at most one code
     (the view's color stored in half floats before the encode quantizes it), and
     the state hashes are unchanged. `puck counters compare` moves only
@@ -4328,9 +4330,10 @@ and P14.
   one in SDR at every level.
 - The display output, landed with P14-10. The working space is the stylized
   shading's display-referred values in float, one at SDR white with headroom
-  above it. The tonemap is the synthesized root's `sdf.tonemap` pass, after
-  every view, pane and post pass and before the overlay, so the HUD composes
-  over the tonemapped frame at SDR white and is never tonemapped. The encode is
+  above it. The tonemap is the synthesized root's `sdf.tonemap` pass over the
+  placed views alone, before any pane, post pass or the overlay, so no pane is
+  tonemapped twice and the HUD composes over the frame at SDR white, never
+  tonemapped. The encode is
   one shader (`SurfaceEncoder`, `display-encode.frag.hlsl`): SDR adds the R2
   dither and clamps, HDR10 decodes the sRGB transfer to linear light, moves it to
   BT.2020 primaries, scales it by the white scale and encodes it with the ST 2084

@@ -42,8 +42,9 @@ all-default section) contributes exactly 0, byte-identical to a world that
 never authored it. `tonemap` absent is `none` — the stylized shaded color,
 unchanged; `filmic` adds the root graph's `sdf.tonemap` pass, an ACES-fit
 filmic curve (no gamma encode — the shading is already display-referred) over
-the whole frame after every view, pane and `views.post` pass and before the
-HUD, so the HUD is never tonemapped, and no pass while a debug view is on.
+the placed views alone, before any pane, `views.post` pass or the HUD, so a pane
+(display-referred, its shader's own tonemap included) and the HUD are never
+tonemapped, and no pass while a debug view is on.
 Read back with `world.lighting`.
 Renderer contract: `rendering` skill sync pairs, the `SdfEnvironment` rows;
 the tonemap pass is the root graph's, not an environment row.

@@ -10,13 +10,15 @@ namespace Puck.World.Client;
 /// the world can compose (<see cref="WorldViewNames.World"/>) — and, when there is anything to draw over the world, the
 /// root graph (<see cref="WorldViewGraphs.MainInstance"/>) that reads them. The root places each view's output into its
 /// rect with one <c>place</c> pass per view (<c>main$view$&lt;n&gt;</c>), the first writing the letterbox color outside
-/// its rect (<see cref="RenderGraphPackageCatalog.PlaceLetterbox"/>) so pixels no view covers show it, each pane over them with one <c>place</c> pass
-/// per <c>views.graphs</c> instance a layout slot names, then runs each <c>views.post</c> row as a pass of its
-/// post-process package, named by the row, in document order, then, when <c>render.tonemap</c> is <c>Filmic</c>, the
-/// <c>sdf.tonemap</c> package (<c>main$tonemap</c>), then the <c>overlay</c> package, so the HUD composes over the
-/// tonemapped frame and is never tonemapped itself. With one view and nothing to draw or tonemap over it, the producer is
-/// the root. The graph is a document value planned by <see cref="RenderGraphCompiler"/>, the one path every
-/// graph takes, so a pass config that does not bind is the compiler's refusal, named by its row.</summary>
+/// its rect (<see cref="RenderGraphPackageCatalog.PlaceLetterbox"/>) so pixels no view covers show it. That is the scene:
+/// when <c>render.tonemap</c> is <c>Filmic</c>, the <c>sdf.tonemap</c> package (<c>main$tonemap</c>) runs over it and
+/// nothing else. Then the root places each pane over the scene with one <c>place</c> pass per <c>views.graphs</c>
+/// instance a layout slot names, runs each <c>views.post</c> row as a pass of its post-process package, named by the
+/// row, in document order, and runs the <c>overlay</c> package last. A pane is display-referred, its own shader's tonemap
+/// included, so no pane is tonemapped by the root, and the HUD composes over the finished frame and is never tonemapped.
+/// With one view and nothing to draw or tonemap over it, the producer is the root. The graph is a document value planned
+/// by <see cref="RenderGraphCompiler"/>, the one path every graph takes, so a pass config that does not bind is the
+/// compiler's refusal, named by its row.</summary>
 public sealed class WorldRootGraph {
     // The versions and passes the root declares for itself are generated names (WorldViewNames.Root), so none can equal a
     // pane's version or place pass, which take the pane's authored name.
@@ -103,7 +105,8 @@ public sealed class WorldRootGraph {
     /// empty when the root runs none.</summary>
     public IReadOnlyList<WorldViewPostPass> Post { get; }
     /// <summary>Gets the tonemap the root graph runs: <see cref="WorldTonemap.Filmic"/> runs the <c>sdf.tonemap</c>
-    /// pass before the overlay, <see cref="WorldTonemap.None"/> runs none.</summary>
+    /// pass over the placed views, before any pane, post pass or the overlay; <see cref="WorldTonemap.None"/> runs
+    /// none.</summary>
     public WorldTonemap Tonemap { get; }
     /// <summary>Gets the name of the instance the display shows and captures read by default: the root graph whenever
     /// there is one, which there always is with more than one view.</summary>
@@ -141,7 +144,10 @@ public sealed class WorldRootGraph {
         var viewCount = ((views > 1)
             ? views
             : 0);
-        var passCount = ((((viewCount + placed.Count) + entries.Count) + (tonemaps ? 1 : 0)) + (overlay ? 1 : 0));
+        // The scene is the views and, when it runs, the tonemap over them: every pass after it draws display-referred
+        // images, a pane's own tonemap included, which the root never tonemaps again.
+        var sceneCount = (viewCount + (tonemaps ? 1 : 0));
+        var passCount = (((sceneCount + placed.Count) + entries.Count) + (overlay ? 1 : 0));
 
         if (passCount == 0) {
             return new WorldRootGraph(
@@ -197,8 +203,15 @@ public sealed class WorldRootGraph {
                     Outputs: [new ResourceReference(Name: output)],
                     Package: RenderGraphPackageCatalog.Place
                 ));
-            } else if ((index - viewCount) < placed.Count) {
-                var pane = placed[(index - viewCount)];
+            } else if (tonemaps && (index == viewCount)) {
+                passes.Add(item: new RenderGraphPackagePass(
+                    Inputs: [new ResourceReference(Name: input)],
+                    Name: TonemapPass,
+                    Outputs: [new ResourceReference(Name: output)],
+                    Package: RenderGraphPackageCatalog.SdfTonemap
+                ));
+            } else if ((index - sceneCount) < placed.Count) {
+                var pane = placed[(index - sceneCount)];
 
                 resources.Add(item: Image(
                     initialization: ShaderPipelineInitialization.External,
@@ -213,8 +226,8 @@ public sealed class WorldRootGraph {
                     Outputs: [new ResourceReference(Name: output)],
                     Package: RenderGraphPackageCatalog.Place
                 ));
-            } else if ((index - (viewCount + placed.Count)) < entries.Count) {
-                var entryIndex = (index - (viewCount + placed.Count));
+            } else if ((index - (sceneCount + placed.Count)) < entries.Count) {
+                var entryIndex = (index - (sceneCount + placed.Count));
                 var entry = entries[entryIndex];
 
                 entryOf[entry.Name] = entryIndex;
@@ -224,13 +237,6 @@ public sealed class WorldRootGraph {
                     Name: entry.Name,
                     Outputs: [new ResourceReference(Name: output)],
                     Package: entry.Package
-                ));
-            } else if (tonemaps && (index == ((viewCount + placed.Count) + entries.Count))) {
-                passes.Add(item: new RenderGraphPackagePass(
-                    Inputs: [new ResourceReference(Name: input)],
-                    Name: TonemapPass,
-                    Outputs: [new ResourceReference(Name: output)],
-                    Package: RenderGraphPackageCatalog.SdfTonemap
                 ));
             } else {
                 passes.Add(item: new RenderGraphPackagePass(

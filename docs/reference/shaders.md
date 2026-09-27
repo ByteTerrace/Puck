@@ -595,16 +595,16 @@ any other:
   one view.
 - `main`: the root graph reading `world`'s output over the whole display and
   every pane's output. With more than one view it first runs one `place` pass
-  per view. Then it runs one `place` package pass per `views.graphs` instance
-  any layout slot names, each pass named after its instance, then one pass per
-  `views.post` row in document order, named by the row and running its
-  [post-process package](#post-process-packages), each reading the frame the
-  pass before it wrote, then, when `render.tonemap` is `Filmic`, the
-  `sdf.tonemap` pass (`main$tonemap`), then the `overlay` pass in a windowed
-  World that loaded its glyph atlas. The tonemap runs once, over the whole
-  frame, before the overlay, so the HUD composes over the tonemapped frame at
-  SDR white, which the display encode shows at the paper-white level, and is
-  never tonemapped itself.
+  per view. Then, when `render.tonemap` is `Filmic`, it runs the `sdf.tonemap`
+  pass (`main$tonemap`) over the placed views. Then it runs one `place` package
+  pass per `views.graphs` instance any layout slot names, each pass named after
+  its instance, then one pass per `views.post` row in document order, named by
+  the row and running its [post-process package](#post-process-packages), each
+  reading the frame the pass before it wrote, then the `overlay` pass in a
+  windowed World that loaded its glyph atlas. The tonemap reads the SDF scene
+  alone and runs once: a pane is display-referred, a pane shader's own tonemap
+  included, so the root never tonemaps it, and the HUD composes over the finished
+  frame at SDR white, which the display encode shows at the paper-white level.
 
 `main` is the root whenever anything is drawn over the world, panes and the
 tonemap included, and whenever the world has more than one view. When none

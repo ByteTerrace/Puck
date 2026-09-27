@@ -8793,7 +8793,7 @@ export type WorldRenderDefaults = {
    */
   environment?: WorldRenderEnvironment | null;
   /**
-   * The tonemap the root graph applies to the whole frame, after every view, pane and post pass and before the HUD, which is never tonemapped. Optional; absent is None — the stylized shaded color, unchanged.
+   * The tonemap the root graph applies to the SDF scene: the placed views, before any pane, post pass or the HUD, none of which is tonemapped, since a pane is display-referred. Optional; absent is None — the stylized shaded color, unchanged.
    */
   tonemap?: WorldTonemap | null;
   /**

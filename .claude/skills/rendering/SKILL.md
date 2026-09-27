@@ -1268,14 +1268,15 @@ The main view runs through the runtime. `WorldRootGraph`
 row or `PlayerRoster.MaxSlots`; each view is an instance of its own), then
 the root `main`, which reads `world` and every pane and runs, when K > 1, one
 `place` pass per view (`main$view$<n>`, n from 1; view 1's reads `world`
-through a second version beside `main$world`), then one `place` package pass
-per `views.graphs` instance a layout slot names (the pass named after the
-instance), then one pass per `views.post` row in order (named by the row, running
-its package, each reading the frame the pass before it wrote), then, when
-`render.tonemap` is `Filmic` and no debug view is on
-(`WorldViewGraphHost.ShowsDebugView`), the `sdf.tonemap` pass (`main$tonemap`),
-then `overlay` in a windowed World, so the HUD composes over the tonemapped frame
-and is never tonemapped. `main` is the root whenever anything is drawn over the
+through a second version beside `main$world`), then, when `render.tonemap` is
+`Filmic` and no debug view is on (`WorldViewGraphHost.ShowsDebugView`), the
+`sdf.tonemap` pass (`main$tonemap`) over the placed views, then one `place`
+package pass per `views.graphs` instance a layout slot names (the pass named
+after the instance), then one pass per `views.post` row in order (named by the
+row, running its package, each reading the frame the pass before it wrote), then
+`overlay` in a windowed World. The tonemap reads the SDF scene alone: a pane is
+display-referred (a pane shader applies its own tonemap, as the moth studio's
+does), so the root never tonemaps a pane, and the HUD is never tonemapped. `main` is the root whenever anything is drawn over the
 world, panes and the tonemap included, and always when K > 1; otherwise `world`
 is the root. With `views.root` set the runtime
 runs the rows alone, and the document may author no `views.post`. A config that

@@ -35,23 +35,54 @@ public sealed class WorldRootGraphLawTests {
         Assert.Empty(collection: graph.Footprints);
         Assert.Null(@object: Assert.Single(collection: graph.Graphs()));
     }
+    // A pane is display-referred, its own shader's tonemap included (the moth studio's pane applies its own filmic curve),
+    // so the tonemap reads the placed views alone: every pane, post pass and the overlay draws over its output, and none
+    // is tonemapped by the root.
     [Fact]
-    public void AFilmicTonemapRunsAfterThePostPassesAndBeforeTheOverlayAndNoneRunsNothing() {
+    public void AFilmicTonemapReadsOnlyThePlacedViewsAndEveryPanePostPassAndTheOverlayDrawOverItsOutput() {
         WorldViewPostPass[] post = [new(Name: "grain", Package: FilmGrain)];
         var filmic = WorldRootGraph.Compose(
             overlay: true,
             packages: RenderGraphPackageCatalog.Engine,
+            panes: ["moth-pipeline"],
             post: post,
-            tonemap: WorldTonemap.Filmic
+            tonemap: WorldTonemap.Filmic,
+            views: 2
         );
+        var steps = Assert.IsType<RenderGraphPlan>(@object: filmic.Plan).Steps;
 
         Assert.Equal(
-            actual: Assert.IsType<RenderGraphPlan>(@object: filmic.Plan).Steps.Select(selector: static step => $"{step.Name}:{step.Package?.Id}"),
-            expected: [$"grain:{FilmGrain}", $"main$tonemap:{RenderGraphPackageCatalog.SdfTonemap}", "main$overlay:overlay"]
+            actual: steps.Select(selector: static step => $"{step.Name}:{step.Package?.Id}"),
+            expected: ["main$view$1:place", "main$view$2:place", $"main$tonemap:{RenderGraphPackageCatalog.SdfTonemap}", "moth-pipeline:place", $"grain:{FilmGrain}", "main$overlay:overlay"]
+        );
+
+        // The tonemap reads what the last view's place pass wrote, and the pane's place pass takes the tonemap's output
+        // as its base and the pane's own image, never a tonemapped one, as its source.
+        var tonemap = steps[2].Planned;
+        var pane = steps[3].Planned;
+
+        Assert.Equal(
+            actual: (Scene: Assert.Single(collection: tonemap.Inputs).Name, Base: pane.Inputs[0].Name, Source: pane.Inputs[1].Name),
+            expected: (Scene: steps[1].Planned.Outputs.Single().Name, Base: tonemap.Outputs.Single().Name, Source: "moth-pipeline")
         );
         Assert.Equal(
             actual: filmic.Tonemap,
             expected: WorldTonemap.Filmic
+        );
+
+        // One view has no place pass, so the tonemap reads the world's version.
+        var single = WorldRootGraph.Compose(
+            overlay: true,
+            packages: RenderGraphPackageCatalog.Engine,
+            panes: ["moth-pipeline"],
+            post: null,
+            tonemap: WorldTonemap.Filmic
+        );
+        var first = Assert.IsType<RenderGraphPlan>(@object: single.Plan).Steps[0];
+
+        Assert.Equal(
+            actual: (first.Name, Assert.Single(collection: first.Planned.Inputs).Name),
+            expected: ("main$tonemap", "main$world")
         );
 
         // With nothing else over the world, a filmic tonemap alone makes the root graph, which shows the world over its
