@@ -182,9 +182,10 @@ public sealed class WorldStampPoolCompactionLawTests {
             initial.Document with {
                 Frames = [new FrameDocument(
                     Name: "pose",
+                    // The frame lifts the shape off its authored pose, so the creation animates.
                     Transforms: [new FrameTransformDocument(
                             Id: 0,
-                            Position: Vector3.Zero,
+                            Position: Vector3.UnitY,
                             Rotation: Quaternion.Identity,
                             Scale: new Vector3(value: .1f)
                         )]

@@ -24,13 +24,10 @@ namespace Puck.World.Client;
 /// entity index — the same shape <c>WorldClient</c> keeps — so <c>WorldSessionSceneEmitter</c> can
 /// interpolate avatars exactly like the boot avatar path does. It deliberately drops what avatar rendering does not
 /// need: <see cref="EntitySnapshot.Kit"/> (render selection is index/look-keyed only; nothing branches on kit yet,
-/// exactly as <c>WorldClient</c> itself notes), <see cref="EntitySnapshot.PlacementId"/> (a body-rooted
-/// creation stamp — a driven vehicle's own geometry riding the body's pose — needs <c>WorldStampPool</c>, whose
-/// <c>PackTransforms</c>/<c>RootPose</c> are hard-typed against a concrete <c>WorldClient</c> instance rather
-/// than an abstraction this mirror could satisfy; widening that pool's contract is out of this type's owned scope, so
-/// an inhabited/driven body still mirrors — and moves — as its catalog avatar rather than the vehicle's creation
-/// geometry), and the correction-error easer (<see cref="EntityContinuity.Kind"/> still selects snap-vs-interpolate,
-/// it just never arms a decaying offset).</para>
+/// exactly as <c>WorldClient</c> itself notes) and the correction-error easer (<see cref="EntityContinuity.Kind"/>
+/// still selects snap-vs-interpolate, it just never arms a decaying offset). It keeps
+/// <see cref="EntitySnapshot.PlacementId"/> and a pose epoch the two declared discontinuities move, which the
+/// session's stamp pool roots an inhabited body's creation on.</para>
 /// <para><b>Borrowed-snapshot contract.</b> <see cref="DeliverSnapshot"/> is called synchronously on the
 /// destination's own fixed-step thread, and <see cref="WorldSnapshot.Entries"/> wraps a reused server-owned array
 /// (see <c>Server.WorldOutputHub</c>'s own remarks) that the destination's NEXT tick overwrites — every field this
@@ -100,6 +97,8 @@ public sealed class WorldSessionMirror : IClientSink {
     private readonly Vector3[] m_bodyColor = new Vector3[EntityCapacity];
     private readonly byte[] m_look = new byte[EntityCapacity];
     private readonly byte[] m_catalogRig = new byte[EntityCapacity];
+    private readonly string?[] m_placementId = new string?[EntityCapacity];
+    private readonly int[] m_poseEpoch = new int[EntityCapacity];
     private readonly byte[] m_kit = new byte[EntityCapacity];
     private readonly int[] m_generation = new int[EntityCapacity];
     private readonly bool[] m_active = new bool[EntityCapacity];
@@ -370,6 +369,7 @@ public sealed class WorldSessionMirror : IClientSink {
                 m_kit[index] = entry.Kit;
                 m_look[index] = entry.Look;
                 m_catalogRig[index] = entry.CatalogRig;
+                m_placementId[index] = entry.PlacementId;
                 Volatile.Write(
                     location: ref m_generation[index],
                     value: entry.Generation
@@ -381,6 +381,7 @@ public sealed class WorldSessionMirror : IClientSink {
                 ) {
                     m_previousPosition[index] = entry.Position;
                     m_previousOrientation[index] = entry.Orientation;
+                    m_poseEpoch[index]++;
                 } else {
                     m_previousPosition[index] = m_currentPosition[index];
                     m_previousOrientation[index] = m_currentOrientation[index];
@@ -600,6 +601,15 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <summary>Whether the entity at <paramref name="index"/> was active (drawn) in the latest snapshot.</summary>
     /// <param name="index">The 0-based entity index.</param>
     public bool IsActive(int index) => Volatile.Read(location: ref m_active[index]);
+    /// <summary>Gets the placement an entity inhabits (<see cref="EntitySnapshot.PlacementId"/>).</summary>
+    /// <param name="index">The 0-based entity index.</param>
+    /// <returns>The placement id, or <see langword="null"/> when the entity inhabits none.</returns>
+    public string? PlacementId(int index) => m_placementId[index];
+    /// <summary>Gets an entity's pose epoch: it moves each time the entity becomes active or teleports, the two
+    /// discontinuities a snapshot declares, as <c>WorldClient.PoseEpoch</c> does for the local world.</summary>
+    /// <param name="index">The 0-based entity index.</param>
+    /// <returns>The epoch.</returns>
+    public int PoseEpoch(int index) => m_poseEpoch[index];
     /// <summary>The look row an entity wears: the delivered look table indexed by the entity's mirrored look index,
     /// or the implicit single catalog look when the world authors no <c>looks</c> section, and for an index the
     /// delivered table cannot cover. The same resolve <c>WorldClient.Look</c> performs, over this mirror's own

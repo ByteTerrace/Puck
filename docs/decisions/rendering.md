@@ -364,8 +364,9 @@ tier may change how a pass looks and what it costs. It may not change what a
 pass reads, what an array holds, or anything the simulation does, so the
 manifest and the mirror are functions of the document alone, and two documents
 differing only in tier compile identical manifests, identical mirrors, and
-identical state hashes. A tier is named from the authored quality vocabulary
-`WorldQualityPreset` already carries rather than from a second one. The package
+identical state hashes. A tier is named from the one quality vocabulary,
+`QualityTiers` (`low`, `medium`, `high`), which also keys a world's
+`world.quality` presets, rather than from a second one. The package
 format closes with the `default` variant alone, and tiers arrive with bound
 rows in P10, which owns the tier a pipeline names. Building tier variants into
 the package format first was rejected, because nothing would select them and no
@@ -520,8 +521,8 @@ counts call for them.
 
 **`SdfEnvironment` folds into the generated frame block.** A separate
 environment packing is a second hand-kept layout beside the frame data, and
-generating the frame block is how the three hand-written copies of each field
-disappear.
+generating the frame block removed the three hand-written copies of each field
+(P14-7).
 
 **Temporal reconstruction is Puck's own complete implementation.** The Steam
 Deck floor needs render scale to be cheap without looking cheap, and SDF

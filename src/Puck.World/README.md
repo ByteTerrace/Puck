@@ -1187,15 +1187,15 @@ the drawn image, none exists:
 
 | Arm | Reproduced by | Held by |
 |---|---|---|
-| `none` | no instance: `WorldSourceInstances` names none, and the engine shades the screen as unbound glass | `WorldSourceInstanceLawTests`; `world.screens` echoes `unbound`; no capture inspects the glass |
+| `none` | no instance: `WorldSourceInstances` names none, and the engine shades the screen as unbound glass | `WorldSourceInstanceLawTests`; `world.screens` echoes `unbound`; the `uploaded-sources` canary captures the dark glass |
 | `machine` | `source.machine`, an uploaded instance whose `MachineVideoSourceUpload` writes the output's latest frame once per completed tick | `RenderGraphRuntimeLawTests.AMachineSource*`, `WorldCaptureSchedulerLawTests` (the exact verdict), the `uploaded-sources` and `instrument-clock-source` canaries |
 | `producer`, `testPattern` | `WorldTestPatternProducer`, uploaded | `ImageProducerLawTests.ATestPatternFeedStatesTheExactPatternItShowsAndTheVerdictHoldsIt`, `WorldSourceInstanceLawTests`, the `uploaded-sources` canary |
 | `producer`, `qr` | `WorldQrProducer`, uploaded | `ImageProducerLawTests.AQrFeedStatesTheCodeItRasterized`, the `uploaded-sources` canary |
 | `producer`, `camera` | the binder's `CameraProducer`, imported through `WorldCameraSourceFeed` | `ImageProducerLawTests.ACameraSourceDeclaresTheExtentItsSeatsSensorDelivers`, the `hud-frame-slots` canary (offscreen, it opens no device); a recorded camera run is deferred |
-| `producer`, `capture` | the binder's `CaptureProducer`, imported through `CaptureSlotFeed` | `ImageProducerLawTests.ACaptureOfADesktopCaptureSourceShowsTheFillAndNeverTheDesktopPixels` and `AFilledExternalSourceHandsOutItsFillAndNeverAcquiresItsFeed`, `WorldCaptureFillLawTests`; no canary opens a capture |
+| `producer`, `capture` | the binder's `CaptureProducer`, imported through `CaptureSlotFeed` | `ImageProducerLawTests.ACaptureOfADesktopCaptureSourceShowsTheFillAndNeverTheDesktopPixels` and `AFilledExternalSourceHandsOutItsFillAndNeverAcquiresItsFeed`, `WorldCaptureFillLawTests`; the `uploaded-sources` canary opens monitor 0 offscreen and captures its fill |
 | `view` | an `sdf.world` instance of its own, rendering the residency `WorldScreenBinder.TryResolveView` creates for it | `WorldViewPaneMappingLawTests.Views`, the `view-screens` canary |
-| `session` | an `sdf.world` instance (`WorldViewNames.Session`) rendered through the destination's own frame source | `WorldScreenMappingLawTests.EachSourceKindNamesItsInstance`, `WorldSessionFollowLawTests`; no canary shows a session screen |
-| `text` | no image: the decal tier draws its lines (`WorldScreenTextDecal`, through `TextSourceAt`) | `WorldTextAuthoringLawTests` (`TextScreenSourceValidates`, `TextScreenRefusesWithoutCatalogUnknownFontGridAndColor`, `TextCreationFaceSourceValidates`); no law or canary checks the drawn text |
+| `session` | an `sdf.world` instance (`WorldViewNames.Session`) rendered through the destination's own frame source | `WorldScreenMappingLawTests.EachSourceKindNamesItsInstance`, `WorldSessionFollowLawTests`; the `uploaded-sources` canary shows and captures one |
+| `text` | no image: the decal tier draws its lines (`WorldScreenTextDecal`, through `TextSourceAt`) | `WorldTextAuthoringLawTests` (`TextScreenSourceValidates`, `TextScreenRefusesWithoutCatalogUnknownFontGridAndColor`, `TextCreationFaceSourceValidates`); the `uploaded-sources` canary checks its glyphs' ink |
 | `probe` | `source.probe`, an imported instance over the probe's output ring (`ProbeSourceFeed`) | `WorldSourceInstanceLawTests`, `RenderedProbeKernelHostLawTests`, the `probe-sources` canary |
 
 A producer a host adds needs no schema, planner or runtime change:
