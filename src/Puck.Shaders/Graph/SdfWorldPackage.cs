@@ -1,4 +1,3 @@
-using System.Globalization;
 using Puck.Abstractions.Gpu;
 using Puck.Hosting;
 
@@ -24,8 +23,9 @@ public static class SdfWorldPackage {
     public const string TileGrid = "tileGrid";
     /// <summary>The pass-group value holding every view the dispatch set renders.</summary>
     public const string ViewportCount = "viewportCount";
-    /// <summary>The pass-group value whose bit <c>s</c> is set when screen source <c>s</c> is bound this frame.</summary>
-    public const string ScreenMask = "screenMask";
+    /// <summary>The pass-group value holding one past the highest screen whose source is bound this frame, or zero when
+    /// none is: the bound the screen-light loop runs to.</summary>
+    public const string ScreenCount = "screenCount";
     /// <summary>The pass-group value holding the live program's per-tile instance-mask width.</summary>
     public const string InstanceMaskWordCount = "instanceMaskWordCount";
     /// <summary>The pass-group value holding the deterministic tick clock star twinkle reads, or zero for a sky with no
@@ -66,6 +66,10 @@ public static class SdfWorldPackage {
     public const string Output = "output";
     /// <summary>The screen-surface table, three float4 rows per screen slot.</summary>
     public const string ScreenSurfaces = "screenSurfaces";
+    /// <summary>The screen-mapping table, seven float4 rows per screen slot: the draw form of the mapping each screen
+    /// publishes (<c>SourceMapping.Draw</c>), which the screen shading draws its face from, and the screen's state,
+    /// whether its source is bound and the sampler it reads through.</summary>
+    public const string ScreenMappings = "screenMappings";
     /// <summary>The screen-light and environment table.</summary>
     public const string ScreenLights = "sdfScreenLights";
     /// <summary>The glyph decal table.</summary>
@@ -82,12 +86,15 @@ public static class SdfWorldPackage {
     public const string MeshVisibility = "meshVisibility";
     /// <summary>The glyph atlas.</summary>
     public const string GlyphAtlas = "sdfGlyphAtlas";
-    /// <summary>The one nearest sampler the screen sources and the glyph atlas are sampled through.</summary>
-    public const string ScreenSampler = "screenSampler";
-    /// <summary>The screen sources the pass group binds, one sampled image each: the most screen surfaces one program
-    /// declares. The per-frame bound-slot bitmask (<see cref="ScreenMask"/>) is one <c>uint</c>, so it is at most
-    /// 32.</summary>
-    public const int ScreenSources = 32;
+    /// <summary>The screen sources: one sampled image per screen, indexed by screen index.</summary>
+    public const string ScreenSources = "screenSources";
+    /// <summary>The length of <see cref="ScreenSources"/>: the most screen surfaces one program declares.</summary>
+    public const int ScreenSourceCount = 32;
+    /// <summary>The package's samplers, one per filter, indexed by the filter's value (<see cref="GpuSamplerFilter"/>): a
+    /// screen samples its source through the one its row chooses, and the glyph atlas through the nearest one.</summary>
+    public const string Samplers = "samplers";
+    /// <summary>The length of <see cref="Samplers"/>: one sampler per <see cref="GpuSamplerFilter"/>.</summary>
+    public const uint SamplerCount = 2;
     /// <summary>The edge of one screen tile in pixels, the unit the beam, the instance masks and the cull buffer count in.
     /// KEEP IN SYNC with <c>WorldTileSize</c> in <c>frame/sdf-tile.hlsli</c>.</summary>
     public const uint TileSize = 16;
@@ -132,7 +139,7 @@ public static class SdfWorldPackage {
         Value(name: InstanceMaskWordCount, type: ShaderValueType.Uint),
         Value(name: MeshDraws, type: ShaderValueType.Uint),
         Value(name: SampleIndex, type: ShaderValueType.Uint),
-        Value(name: ScreenMask, type: ShaderValueType.Uint),
+        Value(name: ScreenCount, type: ShaderValueType.Uint),
         Value(name: TileGrid, type: ShaderValueType.Uint2),
         Value(name: ViewBase, type: ShaderValueType.Uint),
         Value(name: ViewportCount, type: ShaderValueType.Uint),
@@ -156,16 +163,18 @@ public static class SdfWorldPackage {
             type: ShaderValueType.Float4
         ),
         Read(element: ShaderValueType.Float4, name: ScreenSurfaces),
+        Read(element: ShaderValueType.Float4, name: ScreenMappings),
         Read(element: ShaderValueType.Float4, name: ScreenLights),
         Read(element: ShaderValueType.Uint4, name: DecalCells),
         Read(element: ShaderValueType.Float, name: BrickPool),
         Read(element: ShaderValueType.Float4, name: Volumes),
         Read(element: ShaderValueType.Uint, name: MeshRegion),
-        .. Enumerable.Range(count: ScreenSources, start: 0).Select(selector: static screen => ShaderInterfaceMember.SampledImage(
+        ShaderInterfaceMember.SampledImage(
             group: ShaderInterfaceGroup.Pass,
-            name: ScreenSource(screen: screen),
+            length: ScreenSourceCount,
+            name: ScreenSources,
             type: ShaderValueType.Float4
-        )),
+        ),
         ShaderInterfaceMember.SampledImage(
             group: ShaderInterfaceGroup.Pass,
             name: GlyphAtlas,
@@ -178,7 +187,8 @@ public static class SdfWorldPackage {
         ),
         ShaderInterfaceMember.Sampler(
             group: ShaderInterfaceGroup.Pass,
-            name: ScreenSampler
+            length: SamplerCount,
+            name: Samplers
         ),
     ];
     /// <summary>Gets the fragment the package runs as: one view's dispatch set, its scratch transient and counted, its
@@ -236,14 +246,6 @@ public static class SdfWorldPackage {
             Visibility(from: Parts.Visibility, name: Parts.SurfaceVisibility),
             Visibility(from: Parts.SurfaceVisibility, name: Parts.AmbientVisibility),
         ]
-    );
-
-    /// <summary>Returns the member name of a screen source: <c>screenSource</c> followed by its screen index.</summary>
-    /// <param name="screen">The screen index, below <see cref="ScreenSources"/>.</param>
-    /// <returns>The member name.</returns>
-    public static string ScreenSource(int screen) => string.Create(
-        provider: CultureInfo.InvariantCulture,
-        handler: $"screenSource{screen}"
     );
 
     private static ShaderInterfaceMember Read(string name, ShaderValueType element) => ShaderInterfaceMember.ReadOnlyBuffer(

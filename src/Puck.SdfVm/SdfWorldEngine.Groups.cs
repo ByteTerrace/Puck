@@ -18,14 +18,13 @@ public sealed partial class SdfWorldEngine {
     // every buffer is written through WriteBuffer, which reads its member's binding, kind and stride.
     private static readonly uint GlyphAtlasBinding = WorldBinding(member: SdfWorldPackage.GlyphAtlas);
     private static readonly uint OutputBinding = WorldBinding(member: SdfWorldPackage.Output);
-    private static readonly uint ScreenSamplerBinding = WorldBinding(member: SdfWorldPackage.ScreenSampler);
-    // screenSource{i}'s binding, by screen index.
-    private static readonly uint[] ScreenSourceBindings = [.. Enumerable.Range(count: MaxScreenSurfaces, start: 0).Select(selector: static screen => WorldBinding(member: SdfWorldPackage.ScreenSource(screen: screen)))];
+    private static readonly uint SamplersBinding = WorldBinding(member: SdfWorldPackage.Samplers);
+    private static readonly uint ScreenSourcesBinding = WorldBinding(member: SdfWorldPackage.ScreenSources);
     // Where each world value lies in a views set's block.
     private static readonly int ImageExtentOffset = WorldOffset(member: SdfWorldPackage.ImageExtent);
     private static readonly int InstanceMaskWordCountOffset = WorldOffset(member: SdfWorldPackage.InstanceMaskWordCount);
     private static readonly int SampleIndexOffset = WorldOffset(member: SdfWorldPackage.SampleIndex);
-    private static readonly int ScreenMaskOffset = WorldOffset(member: SdfWorldPackage.ScreenMask);
+    private static readonly int ScreenCountOffset = WorldOffset(member: SdfWorldPackage.ScreenCount);
     private static readonly int TileGridOffset = WorldOffset(member: SdfWorldPackage.TileGrid);
     private static readonly int ViewBaseOffset = WorldOffset(member: SdfWorldPackage.ViewBase);
     private static readonly int ViewportCountOffset = WorldOffset(member: SdfWorldPackage.ViewportCount);
@@ -148,7 +147,7 @@ public sealed partial class SdfWorldEngine {
         BinaryPrimitives.WriteUInt32LittleEndian(destination: block[TileGridOffset..], value: m_tileGridX);
         BinaryPrimitives.WriteUInt32LittleEndian(destination: block[(TileGridOffset + sizeof(uint))..], value: m_tileGridY);
         BinaryPrimitives.WriteUInt32LittleEndian(destination: block[ViewportCountOffset..], value: viewportCount);
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: block[ScreenMaskOffset..], value: m_screenSourceMask);
+        BinaryPrimitives.WriteUInt32LittleEndian(destination: block[ScreenCountOffset..], value: BoundScreenCount());
         BinaryPrimitives.WriteUInt32LittleEndian(destination: block[InstanceMaskWordCountOffset..], value: ((uint)m_liveInstanceMaskWordCount));
         BinaryPrimitives.WriteUInt32LittleEndian(destination: block[SampleIndexOffset..], value: sampleIndex);
         BinaryPrimitives.WriteUInt32LittleEndian(destination: block[MeshDrawsOffset..], value: m_meshDrawCount);

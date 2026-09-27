@@ -13,9 +13,9 @@ namespace Puck.SdfVm;
 /// (<see cref="ShaderFrameInterface.FrameGroupMembers"/>), written once a frame, then a pass block holding the extent and
 /// every value in ordinal name order, so a graph document whose config names the same values reads the same block.</para>
 /// <para><see cref="World"/> serves every per-view dispatch: sky, mask, beam, cull-args, primary, surface, ambient and
-/// the three views variants. Its members are the <c>sdf.world</c> package's (<see cref="SdfWorldPackage.Members"/>), and
-/// its pass group is one set per ring slot and view, whose block holds the view's render extent and the world values,
-/// and names the view the dispatch renders.</para>
+/// the three views variants. Its members are the <c>sdf.world</c> package's (<see cref="SdfWorldPackage.Members"/>),
+/// and its pass group is one set per ring slot and view, whose block holds the view's render extent and the world
+/// values, and names the view the dispatch renders.</para>
 /// <para><see cref="BrickBake"/> serves the carve-bake baker, the <c>sdf.bricks</c> pass: it binds the ring slot's frame
 /// set and one pass set per brick slot binding that slot's request buffer and the brick pool, whose block's extent is one
 /// slice as one row, the voxels one bake dispatch writes at most, with the slice ordinal pushed per dispatch.</para>

@@ -29,7 +29,7 @@
         "instanceMaskWordCount": { "type": "uint", "default": 0, "description": "The sdf.world pass's per-tile instance-mask width." },
         "meshDraws": { "type": "uint", "default": 0, "description": "The sdf.world pass's mesh draw count." },
         "sampleIndex": { "type": "uint", "default": 0, "description": "The sdf.world pass's star twinkle clock." },
-        "screenMask": { "type": "uint", "default": 0, "description": "The sdf.world pass's bound-screen mask." },
+        "screenCount": { "type": "uint", "default": 0, "description": "The sdf.world pass's screen-light bound." },
         "tileGrid": { "type": "uint2", "default": [0, 0], "description": "The sdf.world pass's tiles per viewport." },
         "viewBase": { "type": "uint", "default": 0, "description": "The sdf.world pass's view." },
         "viewportCount": { "type": "uint", "default": 0, "description": "The sdf.world pass's view count." }

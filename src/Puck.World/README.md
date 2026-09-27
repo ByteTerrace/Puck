@@ -1233,6 +1233,12 @@ of the document (a machine instance, a camera, a probe, a destination). A new
 emulator joins as a machine engine in `WorldMachineCatalog`, again with no
 schema change. Text is a decal, not an image.
 
+A screen row's `filter` chooses how its face samples the image: `Nearest`, the
+default and omitted from the document, keeps each source pixel crisp, as an
+emulator wants, and `Linear` blends between them, as a camera or a desktop
+capture wants. The row's mapping carries it, the SDF screen shading draws the
+face from that mapping, and a hit maps to the same source pixel under either.
+
 A route's `input` names where a pointer hit on the screen's source goes:
 `Presentation` (the default: hover and highlight, which only a displayed pane
 receives until GPU picking reaches a screen's surface; see P4) or `Simulation`,

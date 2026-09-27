@@ -9,3 +9,7 @@ world.wait 10
 world.wait 30
 world.screenshot {run}/after.png
 world.wait 10
+# The camera never pans either.
+world.wait 30
+world.screenshot {run}/panned.png
+world.wait 10

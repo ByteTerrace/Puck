@@ -592,8 +592,8 @@ rather than merely asserted.
 
 A source such as an emulator, a captured window or another view can be shown on
 a screen in the world or in a pane on the display. `SourceMapping` is the one
-record of how it is shown: hits map through it, it is the data the GPU is to
-draw with, and nothing ever reads a mapping back from the GPU. It holds the
+record of how it is shown: hits map through it, the SDF screen shading draws
+every screen from it, and nothing ever reads a mapping back from the GPU. It holds the
 chain from the place it is shown to the source's pixels:
 
 - the placement: a `SourcePlacement.Surface` face frame in the world, or a
@@ -655,16 +655,17 @@ producer, machine or probe source by its source instance
 camera's registration and a session by its screen's session view. A view's and
 a session's extent is document data, and a source instance's is the running
 image's. `WorldScreenMappingSet` holds them, republishing a steady frame's
-mappings without allocating. A screen showing no image or text, a live
-presentation source bound with `screen.source` over its row, or an image whose
-extent is not known yet publishes none. `world.screens` prints each screen's
-mapping in the line `world.view.panes` prints for a pane, or why it has none.
-Each view's world producer reports the screens as the placements standing in
-its world, so the walk continues from a view's pane through a screen: it ends
-on a producer source's pixel, or, for a screen showing another view, on that
-view, which is not yet an instance of the live set. The GPU does not yet draw
-from a mapping; that is open in
-[the rendering programme](../plans/rendering.md#p13--hit-to-source-mapping-and-input-destinations).
+mappings without allocating. A live presentation source bound with
+`screen.source` over a row publishes the bound source's mapping. A screen
+showing no image or text, or an image whose extent is not known yet, publishes
+none. `world.screens` prints each screen's mapping in the line
+`world.view.panes` prints for a pane, or why it has none. Each view's world
+producer reports the screens as the placements standing in its world, so the
+walk continues from a view's pane through a screen: it ends on a producer
+source's pixel, or, for a screen showing another view, continues into that view
+through the camera it films from. The SDF screen shading draws each screen from
+the mapping it publishes (`SourceMapping.Draw`, the chain in single precision),
+and a screen that publishes none shades as unbound glass.
 
 A pane the local user opens with the World's `source.passthrough` publishes
 its mapping with the `Passthrough` destination and the local-user opener, and

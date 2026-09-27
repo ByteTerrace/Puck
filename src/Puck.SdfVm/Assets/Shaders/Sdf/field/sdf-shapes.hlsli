@@ -352,7 +352,7 @@ float sdfGlyphTexelAlpha(int2 texel, int2 dims) {
     int2 clamped = clamp(texel, int2(0, 0), (dims - int2(1, 1)));
     float2 uv = ((float2(clamped) + 0.5) / float2(dims));
 
-    return sdfGlyphAtlas.SampleLevel(screenSampler, uv, 0.0).a;
+    return sdfGlyphAtlas.SampleLevel(samplers[SDF_FILTER_NEAREST], uv, 0.0).a;
 }
 // Manual bilinear of the true single-channel field: four point taps + arithmetic lerp, NOT a hardware LINEAR sampler,
 // so the reconstruction is bit-stable across both DXC backends (a driver's bilinear can differ ±1 LSB — the exact
@@ -378,7 +378,7 @@ float3 sdfGlyphTexelRgb(int2 texel, int2 dims) {
     int2 clamped = clamp(texel, int2(0, 0), (dims - int2(1, 1)));
     float2 uv = ((float2(clamped) + 0.5) / float2(dims));
 
-    return sdfGlyphAtlas.SampleLevel(screenSampler, uv, 0.0).rgb;
+    return sdfGlyphAtlas.SampleLevel(samplers[SDF_FILTER_NEAREST], uv, 0.0).rgb;
 }
 // Per-channel manual bilinear then MEDIAN-OF-3 — the classic MSDF reconstruction, for SHADE-TIME consumers ONLY (the
 // GlyphDecal tier): median restores the sharp corners the single channel rounds, and its C0 kinks at channel-crossover

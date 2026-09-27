@@ -12,7 +12,7 @@ public enum ShaderInterfaceMemberKind {
     /// <summary>A fixed-length array of scalars: a read-only <c>StructuredBuffer&lt;T&gt;</c> of its element type, read
     /// through a generated accessor that reads zero past its length.</summary>
     Array,
-    /// <summary>A two-dimensional image read through a sampler.</summary>
+    /// <summary>A two-dimensional image read through a sampler, or an array of them a pass indexes.</summary>
     SampledImage,
     /// <summary>A two-dimensional image loaded and stored by coordinate.</summary>
     StorageImage,
@@ -22,6 +22,6 @@ public enum ShaderInterfaceMemberKind {
     /// <summary>A buffer a pass reads and writes: a <c>RWStructuredBuffer&lt;T&gt;</c> of the member's element type, or,
     /// with no element type, a raw buffer read and written by byte address (<c>RWByteAddressBuffer</c>).</summary>
     ReadWriteBuffer,
-    /// <summary>A sampler.</summary>
+    /// <summary>A sampler, or an array of them a pass indexes.</summary>
     Sampler,
 }
