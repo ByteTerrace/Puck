@@ -6,6 +6,8 @@ public static partial class ExpressionArithmetic {
     // The shell walk z·(z+1)+… over folded components with z = max stays inside a signed 64-bit cell while z ≤
     // 3,037,000,498; a component folds to 2|c| or 2|c| − 1, so a signed component admits this magnitude.
     private const long MaxPairComponent = 1_518_500_249L;
+    // All admitted folded pairs fill complete shells through (2·max + 1)² − 1.
+    private const ulong MaxPairCode = (((2UL * MaxPairComponent) + 1UL) * ((2UL * MaxPairComponent) + 1UL)) - 1UL;
     private const long MaxMortonComponent = ((1L << 31) - 1L);
     private const int MaxHilbertOrder = 31;
     private const int HexDirections = HexagonalCoordinate.NeighborCount;
@@ -116,12 +118,10 @@ public static partial class ExpressionArithmetic {
                         );
                         return true;
                     }
-                case ExpressionOp.PairSwap:
-                    // Folding acts on each component alone, so exchanging the folded components exchanges the signed
-                    // ones and the shell walk's own swap serves the signed pair unchanged.
-                    if (arguments[0] < 0L) { return false; }
-                    value = ((long)((ulong)arguments[0]).ElegantSwap());
-                    return true;
+                case ExpressionOp.PairSwap: {
+                        if (!TryUnpair(pair: arguments[0], x: out var x, y: out var y)) { return false; }
+                        return TryPair(pair: out value, x: y, y: x);
+                    }
                 case ExpressionOp.PairMaximum:
                 case ExpressionOp.PairMinimum:
                 case ExpressionOp.PairSum:
@@ -898,12 +898,31 @@ public static partial class ExpressionArithmetic {
         return true;
     }
     private static bool TryUnpair(long pair, out long x, out long y) {
-        if (pair < 0L) {
+        if (unchecked((ulong)pair) > MaxPairCode) {
             x = 0L;
             y = 0L;
             return false;
         }
-        var (foldedX, foldedY) = ((ulong)pair).ElegantUnpair<ulong, ulong>();
+        // Restoring square root: keep the signed-pair state path entirely integer, including the root seed.
+        var remainder = ((ulong)pair);
+        var shell = 0UL;
+
+        for (var bit = (1UL << 62); (bit != 0UL); bit >>= 2) {
+            var candidate = (shell + bit);
+
+            shell >>= 1;
+            if (remainder >= candidate) {
+                remainder -= candidate;
+                shell += bit;
+            }
+        }
+        // remainder is pair − shell², the offset along this alternating square shell.
+        var (foldedX, foldedY) = ((remainder < shell)
+            ? (shell, remainder)
+            : (((shell << 1) - remainder), shell)
+        );
+
+        if ((shell & 1UL) != 0UL) { (foldedX, foldedY) = (foldedY, foldedX); }
 
         x = Unfold(folded: foldedX);
         y = Unfold(folded: foldedY);

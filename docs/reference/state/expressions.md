@@ -362,10 +362,11 @@ These notes cover the details that affect results:
   factor with it.
 - `extendedGreatestCommonDivisor(a, b)` returns the Bézout coefficients as the
   pair `(x, y)` with `a * x + b * y == greatestCommonDivisor(a, b)`, where `x`
-  is the least-magnitude choice, in `(-|b|/2g, |b|/2g]`. The divisor needs no
-  second call: `a * pairX(p) + b * pairY(p)` is it, whenever those products fit;
-  otherwise call `greatestCommonDivisor(a, b)`. An operand of −2^63 fails, as
-  does a coefficient outside the pair's range.
+  is the least-magnitude choice, in `[-|b|/2g, |b|/2g]`; the tie at `|b|/g = 2`
+  takes `sign(a)` to minimize `|y|`. Read the divisor itself from
+  `greatestCommonDivisor(a, b)`: rebuilding it as `a * pairX(p) + b * pairY(p)`
+  overflows for large operands even when the divisor is small. An operand of
+  −2^63 fails, as does a coefficient outside the pair's range.
 - `floor`, `ceiling`, and `round` are the identity on Int. On Fixed, `round`
   breaks ties to even, the same rule the document language uses.
 - `squareRoot` takes the integer floor root on Int and a fixed root on Fixed; a
@@ -386,7 +387,8 @@ These notes cover the details that affect results:
 - A pair holds two signed components, each −1,518,500,249 to 1,518,500,249:
   each folds onto the naturals (0, −1, 1, −2, … become 0, 1, 2, 3, …) and the
   two folded values are paired by the alternating square-shell walk. Every
-  pair operation reads and returns signed components. Morton components are at
+  pair operation reads and returns signed components; codes outside
+  `0..9,223,372,030,926,249,000` fail. Morton components are at
   most 2^31 − 1, and a Hilbert `order` is 1 to 31.
 
 An argument outside its domain, such as a negative index or a component beyond

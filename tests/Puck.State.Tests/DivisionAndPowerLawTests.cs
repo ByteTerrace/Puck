@@ -278,4 +278,18 @@ public sealed class DivisionAndPowerLawTests {
             actual: Eval(text: "extendedGreatestCommonDivisor(0, 0)")
         );
     }
+    [InlineData(-3L, 2L, -1L, -1L)]
+    [InlineData(-3L, -2L, -1L, 1L)]
+    [InlineData(-6L, 4L, -1L, -1L)]
+    [InlineData(-1L, 2L, -1L, 0L)]
+    [InlineData(3L, 2L, 1L, -1L)]
+    [Theory]
+    public void BezoutTiesMinimizeTheSecondCoefficientAtCompileTimeAndRuntime(long a, long b, long x, long y) {
+        var folded = Eval(text: $"extendedGreatestCommonDivisor({a}, {b})");
+        var live = Eval(text: $"extendedGreatestCommonDivisor({a} + $tick, {b})");
+
+        Assert.Equal(folded, live);
+        Assert.Equal(x, Eval(text: $"pairX({folded})"));
+        Assert.Equal(y, Eval(text: $"pairY({folded})"));
+    }
 }

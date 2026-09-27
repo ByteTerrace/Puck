@@ -10,7 +10,7 @@ namespace Puck.Maths.Tests;
 internal static class WordModularClaims {
     private static readonly ulong[] ModulusSeams = [
         1UL, 2UL, 3UL, 4UL, 8UL, 9UL, 12UL, 65_536UL, 65_537UL, 4_294_967_295UL, 4_294_967_296UL, 4_294_967_297UL,
-        (1UL << 62), ((1UL << 63) - 25UL), (1UL << 63), ((1UL << 63) + 1UL), (ulong.MaxValue - 58UL), (ulong.MaxValue - 1UL), ulong.MaxValue,
+        (1UL << 62), ((1UL << 63) - 25UL), ((1UL << 63) - 1UL), (1UL << 63), ((1UL << 63) + 1UL), (ulong.MaxValue - 58UL), (ulong.MaxValue - 1UL), ulong.MaxValue,
     ];
 
     // A modulus drawn from a lane at every magnitude: the lane's bits shifted down by a lane-chosen amount, so small,
@@ -102,12 +102,12 @@ internal static class WordModularClaims {
             );
         }
 
-        // The least-magnitude coefficient: x lies in (-|b|/2g, |b|/2g].
+        // Minimize |x|, then |y| if the two representatives tie.
         var reach = (BigInteger.Abs(value: other) / expected);
         var twiceX = (2 * ((BigInteger)x));
 
-        return (((twiceX > reach) || (twiceX <= -reach))
-            ? $"ExtendedGreatestCommonDivisor({value}, {other}) gave x = {x}, outside (-|b|/2g, |b|/2g] for |b|/g = {reach}"
+        return (((BigInteger.Abs(value: twiceX) > reach) || ((reach == 2) && (x != Math.Sign(value: value))))
+            ? $"ExtendedGreatestCommonDivisor({value}, {other}) gave x = {x}, outside the least-magnitude representative for |b|/g = {reach}"
             : null
         );
     }

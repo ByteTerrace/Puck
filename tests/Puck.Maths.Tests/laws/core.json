@@ -1318,7 +1318,7 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "NumberTheoryFunctions.ModularPower over swept raw pairs, the modulus drawn from a lane shifted down by a lane-chosen amount so one-bit through full-width moduli, odd and even, all occur, and a seam grid of nineteen moduli (one, two, powers of two to 2^63, 2^32 +- 1, 2^63 - 25, 2^63 + 1, the widest words) by eleven values by six exponents to ulong.MaxValue, plus 2^10 mod 1000 = 24 by hand",
+        "Subject": "NumberTheoryFunctions.ModularPower over swept raw pairs, the modulus drawn from a lane shifted down by a lane-chosen amount so one-bit through full-width moduli, odd and even, all occur, and a seam grid of twenty moduli (one, two, powers of two to 2^63, 2^32 +- 1, 2^63 - 25, 2^63 - 1, 2^63 + 1, the widest words) by eleven values by six exponents to ulong.MaxValue, plus 2^10 mod 1000 = 24 by hand",
         "Against": "BigInteger.ModPow from the runtime library, an arbitrary-width exponentiation that shares no code and no 128-bit reduction with the subject's word-sized square-and-multiply",
         "Shared": "",
         "Citation": "",
@@ -1336,7 +1336,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "NumberTheoryFunctions.ExtendedGreatestCommonDivisor over swept raw pairs and an eleven-value seam square to within one of both long extremes: the divisor equals the runtime's BigInteger.GreatestCommonDivisor, the coefficients satisfy value*X + other*Y = divisor in BigInteger, X lies in (-|b|/2g, |b|/2g] whenever other is non-zero, and (a, 0) gives (|a|, sign(a), 0); plus (240, 46) = (2, -9, 47) by hand",
+        "Subject": "NumberTheoryFunctions.ExtendedGreatestCommonDivisor over swept raw pairs and an eleven-value seam square to within one of both long extremes: the divisor equals the runtime's BigInteger.GreatestCommonDivisor, the coefficients satisfy value*X + other*Y = divisor in BigInteger, X lies in [-|b|/2g, |b|/2g] whenever other is non-zero, with ties taking sign(a) to minimize |Y|, and (a, 0) gives (|a|, sign(a), 0); plus (240, 46) = (2, -9, 47) by hand",
         "Against": "",
         "Shared": "",
         "Citation": "",

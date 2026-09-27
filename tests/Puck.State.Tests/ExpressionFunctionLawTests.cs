@@ -304,6 +304,53 @@ public sealed class ExpressionFunctionLawTests {
             out _
         ));
     }
+    [InlineData("pairX", "")]
+    [InlineData("pairY", "")]
+    [InlineData("pairSwap", "")]
+    [InlineData("pairMaximum", "")]
+    [InlineData("pairMinimum", "")]
+    [InlineData("pairSum", "")]
+    [InlineData("pairDifference", "")]
+    [InlineData("pairTranslate", ", 0")]
+    [InlineData("pairScale", ", 0")]
+    [Theory]
+    public void PairConsumersRefuseCodesOutsideTheDeclaredRange(string function, string tail) {
+        // (2·1,518,500,249 + 1)² is the first code in the next shell. Its folded maximum is 3,037,000,499,
+        // which unfolds to −1,518,500,250, outside the declared signed component range.
+        foreach (var code in new[] { -1L, 9_223_372_030_926_249_001L, long.MaxValue }) {
+            Assert.False(condition: TryEval($"{function}({code}{tail})", out _));
+            // The live tick (zero in this reader) prevents folding the call, exercising the same refusal at runtime.
+            Assert.False(condition: TryEval($"{function}({code} + $tick{tail})", out _));
+        }
+    }
+    [Fact]
+    public void LastPairShellRemainsRepresentable() {
+        const long LastCode = 9_223_372_030_926_249_000L;
+
+        Assert.Equal(LastCode, Eval("pair(0, 1518500249)"));
+        Assert.Equal(0L, Eval($"pairX({LastCode})"));
+        Assert.Equal(1_518_500_249L, Eval($"pairY({LastCode})"));
+        Assert.Equal(LastCode, Eval($"pairSwap(pairSwap({LastCode} + $tick))"));
+    }
+    [InlineData(0L)]
+    [InlineData(1L)]
+    [InlineData(2L)]
+    [InlineData(255L)]
+    [InlineData(65_536L)]
+    [InlineData(3_037_000_497L)]
+    [InlineData(3_037_000_498L)]
+    [Theory]
+    public void PairCodesRoundTripAcrossShellBoundaries(long shell) {
+        foreach (var offset in new[] { 0L, shell, (2L * shell) }) {
+            var code = ((shell * shell) + offset);
+            var x = Eval($"pairX({code} + $tick)");
+            var y = Eval($"pairY({code} + $tick)");
+
+            Assert.Equal(code, Eval($"pair({x}, {y})"));
+            Assert.Equal(x, Eval($"pairX({code})"));
+            Assert.Equal(y, Eval($"pairY({code})"));
+        }
+    }
     [InlineData(0L, 0L)]
     [InlineData(1L, 0L)]
     [InlineData(0L, 1L)]

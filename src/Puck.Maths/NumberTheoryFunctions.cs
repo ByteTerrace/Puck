@@ -172,7 +172,8 @@ public static class NumberTheoryFunctions {
     /// <param name="other">The second integer, <c>b</c>; any sign, but not <see cref="long.MinValue"/>.</param>
     /// <returns>The divisor <c>g = gcd(|a|, |b|)</c> and coefficients with <c>a·X + b·Y = g</c>. When <c>b</c> is zero they
     /// are <c>(|a|, sign(a), 0)</c>, so <c>(0, 0, 0)</c> for two zeros. Otherwise <c>X</c> is the representative of
-    /// <c>(a/g)⁻¹</c> modulo <c>|b|/g</c> in <c>(−|b|/2g, |b|/2g]</c>, the least magnitude that residue class holds, and
+    /// <c>(a/g)⁻¹</c> modulo <c>|b|/g</c> in <c>[−|b|/2g, |b|/2g]</c>, the least magnitude that residue class holds;
+    /// the only tie, <c>|b|/g = 2</c>, takes <c>sign(a)</c> to minimize <c>|Y|</c>. Then
     /// <c>Y = (g − a·X) / b</c>, whose magnitude is at most <c>|a|/2g + 1</c>, so both always fit a
     /// <see cref="long"/>.</returns>
     /// <remarks>The coefficient comes from <see cref="ModularInverse(ulong, ulong)"/> and the divisor from
@@ -203,7 +204,7 @@ public static class NumberTheoryFunctions {
                 value: ((ulong)(value / divisor).FloorModulo(modulus: ((long)modulus)))
             );
 
-            x = ((inverse > (modulus >> 1))
+            x = (((inverse > (modulus >> 1)) || ((modulus == 2UL) && (value < 0L)))
                 ? (((long)inverse) - ((long)modulus))
                 : ((long)inverse)
             );
