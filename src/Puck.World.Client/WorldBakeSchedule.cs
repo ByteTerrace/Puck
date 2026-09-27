@@ -54,6 +54,8 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
     private readonly HashSet<ContentPin> m_drawn = [];
 
     private long m_revision;
+    // Written at the end of every pump on the presenter's thread, read from any thread (IsSettled).
+    private volatile bool m_settled;
 
     private WorldBakeRequest[]? m_inFlight;
     private WorldDefinition? m_definition;
@@ -99,6 +101,10 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
     public SdfBakeQuality Quality { get; }
     /// <summary>Gets whether any bake is queued or baking.</summary>
     public bool IsBusy => ((m_queue.Count > 0) || m_build.IsPending);
+    /// <summary>Gets whether the definition the schedule last pumped has every bake settled: baked, held or refused,
+    /// none queued or baking. False before the first pump. Written at the end of each pump and safe to read from any
+    /// thread.</summary>
+    public bool IsSettled => m_settled;
     /// <summary>Gets the revision of what the schedule can hand out: one more whenever a bake lands or the definition it
     /// reconciled to changed.</summary>
     public long Revision => m_revision;
@@ -127,6 +133,8 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
             m_inFlight = batch;
             m_build.Start(build: token => Resolve(batch: batch, store: store, token: token));
         }
+
+        m_settled = !IsBusy;
     }
     /// <summary>Returns where a prototype of the definition last pumped stands.</summary>
     /// <param name="prototypeId">The prototype row's id.</param>

@@ -633,7 +633,9 @@ Facts a script needs:
   pending simulation traffic applies, so a scripted write-then-read pair
   (`world.row.set` then `world.status`, `player.bind` then
   `player.bindings`) needs no polling. `WorldConsoleWaitGate.cs` and
-  `world.wait` are the explicit waits. `world.wait ready <seconds>` waits for
+  `world.wait` are the explicit waits. `world.wait bakes <seconds>` holds until
+  the presentation's creation bakes are settled (none queued or baking), so a
+  script that reads a drawn bake waits on the bake. `world.wait ready <seconds>` waits for
   the rendering engine instead of a tick count: it holds the session until
   the engine's pipeline set is installed and it has produced its first frame,
   or the deadline passes, and reports which on standard error. A script that

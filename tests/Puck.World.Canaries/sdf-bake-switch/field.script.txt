@@ -1,9 +1,12 @@
 # Every frame renders, so the capture shows the scene as it stands.
 world.cadence off
-world.wait ready 45
+# The wait releases on the engine's readiness, a cold driver cache included; the leg's own timeout bounds it.
+world.wait ready 600
 # The bakes lever stays off: the block keeps drawing through its field.
 world.bakes off
-world.wait 240
+# The wait releases once the presentation has baked the block (or held it from an earlier run); the static scene
+# rebuilds on the next frame.
+world.wait bakes 600
 world.debug-view visibility
 world.wait 30
 world.screenshot {run}/block.png

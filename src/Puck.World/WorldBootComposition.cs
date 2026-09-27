@@ -1018,6 +1018,7 @@ public static class WorldBootComposition {
     /// <param name="services">The service collection a presentation shape composes.</param>
     private static void AddWorldBakes(IServiceCollection services) {
         services.TryAddSingleton(implementationFactory: static sp => new WorldBakeSchedule(store: WorldBakeStore.Open(directory: sp.GetRequiredService<WorldCacheRoots>().Bakes)));
+        services.TryAddSingleton<IWorldBakeReadiness>(implementationFactory: static sp => new WorldBakeReadiness(schedule: sp.GetRequiredService<WorldBakeSchedule>()));
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldBakeSchedule>());
     }
 
