@@ -16,8 +16,8 @@ internal sealed partial class WorldScreenBinder : IWorldScreenImages {
     public WorldScreenMappingSet Mappings { get; } = new();
 
     /// <inheritdoc/>
-    /// <remarks>A machine output's extent is its framebuffer's, a producer feed's its descriptor's (the feed its source
-    /// instance opened), and a probe output's its provisioned ring's.</remarks>
+    /// <remarks>A machine output's extent is its framebuffer's, and a producer's or a probe output's its feed's descriptor's
+    /// (the feed its source instance opened: a probe's states its provisioned ring's).</remarks>
     public bool TryExtent(int screen, out int width, out int height) {
         (width, height) = (0, 0);
 
@@ -28,18 +28,6 @@ internal sealed partial class WorldScreenBinder : IWorldScreenImages {
                     output: machine.Output
                 ) is { } output) {
                     (width, height) = (output.Width, output.Height);
-                }
-
-                break;
-            case WorldScreenSource.Probe probe:
-                if (
-                    m_probeFeeds.TryGetValue(
-                        key: probe.Id,
-                        value: out var feed
-                    ) &&
-                    (feed.Output is { } ring)
-                ) {
-                    (width, height) = (ring.Width, ring.Height);
                 }
 
                 break;

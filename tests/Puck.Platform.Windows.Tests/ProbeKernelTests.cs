@@ -48,7 +48,7 @@ public sealed class ProbeKernelTests {
             ChannelCount: 4,
             RateHz: 240U,
             Inputs: [new ProbeKernelInput.Sensor(Kind: CameraSensor.Infrared)],
-            Trigger: CameraSensor.Infrared
+            Trigger: 0
         );
 
         using var kernel = bench.CreateKernel(
@@ -102,7 +102,7 @@ public sealed class ProbeKernelTests {
             ChannelCount: 4,
             RateHz: 1U,
             Inputs: [new ProbeKernelInput.Sensor(Kind: CameraSensor.Infrared)],
-            Trigger: CameraSensor.Infrared
+            Trigger: 0
         );
 
         using var kernel = bench.CreateKernel(
@@ -165,9 +165,10 @@ public sealed class ProbeKernelTests {
                     Height: FrameHeight,
                     Format: GpuPixelFormat.R8G8B8A8Unorm,
                     SharedTargetHandles: sharedRing.Handles,
-                    Slots: sharedRing.Slots
+                    Slots: sharedRing.Slots,
+                    SharedFenceHandle: 0
                 )],
-            Trigger: CameraSensor.Infrared
+            Trigger: 0
         );
 
         using var kernel = bench.CreateKernel(
@@ -216,7 +217,7 @@ public sealed class ProbeKernelTests {
             ChannelCount: 1,
             RateHz: 240U,
             Inputs: [new ProbeKernelInput.Unbound()],
-            Trigger: CameraSensor.Infrared
+            Trigger: 0
         );
 
         using var kernel = bench.CreateKernel(
@@ -276,13 +277,14 @@ public sealed class ProbeKernelTests {
             ChannelCount: 4,
             RateHz: 240U,
             Inputs: [new ProbeKernelInput.Sensor(Kind: CameraSensor.Color), new ProbeKernelInput.StrobePair(Kind: CameraSensor.Infrared)],
-            Trigger: CameraSensor.Color,
+            Trigger: 0,
             Output: new ProbeKernelOutput(
                 Width: FrameWidth,
                 Height: FrameHeight,
                 TargetFormat: GpuPixelFormat.R8G8B8A8Unorm,
                 SharedTargetHandles: [targets[0].SharedHandle, targets[1].SharedHandle],
-                Slots: slots
+                Slots: slots,
+                SharedFenceHandle: 0
             )
         );
 
@@ -394,13 +396,14 @@ public sealed class ProbeKernelTests {
             ChannelCount: FaerieChannelCount,
             RateHz: 240U,
             Inputs: [new ProbeKernelInput.Sensor(Kind: CameraSensor.Color), new ProbeKernelInput.StrobePair(Kind: CameraSensor.Infrared), new ProbeKernelInput.Unbound()],
-            Trigger: CameraSensor.Color,
+            Trigger: 0,
             Output: new ProbeKernelOutput(
                 Width: FrameWidth,
                 Height: FrameHeight,
                 TargetFormat: GpuPixelFormat.R8G8B8A8Unorm,
                 SharedTargetHandles: [targets[0].SharedHandle, targets[1].SharedHandle],
-                Slots: slots
+                Slots: slots,
+                SharedFenceHandle: 0
             )
         );
 
@@ -564,16 +567,18 @@ public sealed class ProbeKernelTests {
                     Height: FrameHeight,
                     Format: GpuPixelFormat.R8G8B8A8Unorm,
                     SharedTargetHandles: paintingRing.Handles,
-                    Slots: paintingRing.Slots
+                    Slots: paintingRing.Slots,
+                    SharedFenceHandle: 0
                 ),
             ],
-            Trigger: CameraSensor.Color,
+            Trigger: 0,
             Output: new ProbeKernelOutput(
                 Width: FrameWidth,
                 Height: FrameHeight,
                 TargetFormat: GpuPixelFormat.R8G8B8A8Unorm,
                 SharedTargetHandles: [targets[0].SharedHandle, targets[1].SharedHandle],
-                Slots: slots
+                Slots: slots,
+                SharedFenceHandle: 0
             )
         );
 
@@ -671,13 +676,14 @@ public sealed class ProbeKernelTests {
             ChannelCount: FaerieChannelCount,
             RateHz: 240U,
             Inputs: [new ProbeKernelInput.Sensor(Kind: CameraSensor.Color), new ProbeKernelInput.StrobePair(Kind: CameraSensor.Infrared), new ProbeKernelInput.Unbound()],
-            Trigger: CameraSensor.Color,
+            Trigger: 0,
             Output: new ProbeKernelOutput(
                 Width: FrameWidth,
                 Height: FrameHeight,
                 TargetFormat: GpuPixelFormat.R8G8B8A8Unorm,
                 SharedTargetHandles: [targets[0].SharedHandle, targets[1].SharedHandle],
-                Slots: slots
+                Slots: slots,
+                SharedFenceHandle: 0
             )
         );
 
@@ -742,7 +748,7 @@ public sealed class ProbeKernelTests {
             ChannelCount: IrMarkerChannelCount,
             RateHz: 240U,
             Inputs: [new ProbeKernelInput.StrobePair(Kind: CameraSensor.Infrared)],
-            Trigger: CameraSensor.Infrared
+            Trigger: 0
         );
 
         using var kernel = bench.CreateKernel(
@@ -830,7 +836,7 @@ public sealed class ProbeKernelTests {
             ChannelCount: IrMarkerChannelCount,
             RateHz: 240U,
             Inputs: [new ProbeKernelInput.StrobePair(Kind: CameraSensor.Infrared)],
-            Trigger: CameraSensor.Infrared
+            Trigger: 0
         );
 
         using var kernel = bench.CreateKernel(

@@ -357,8 +357,11 @@ and keeps the replaced one alive until every acquisition of its outputs is
 released; `ExportGeneration` changes identity every rebuild (a late export
 request, device loss). A camera view that exposes its exported image to an
 asynchronous foreign reader reserves the write before it produces and publishes
-the image only after export-mode submission drains the producer queue, keeping
-its last completed image while the reader holds it.
+the image with the value the engine signals on the image's shared fence behind
+the submission (`IGpuExportableImage.CompleteWrite`, read back as
+`ExportWrittenValue`; `ExportFenceHandle` is the fence the reader opens), which
+the reader waits for on its own device, and keeps its last completed image while
+the reader holds it. Nothing drains the queue.
 
 ## Debug tooling
 

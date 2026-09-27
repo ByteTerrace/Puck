@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Puck.Abstractions.Recording;
+using Puck.Platform.Probes;
 using Puck.Platform.Recording;
 
 namespace Puck.Platform.Linux;
@@ -14,7 +15,7 @@ namespace Puck.Platform.Linux;
 /// treats an unresolved factory as "no render backend").
 /// </summary>
 public static class LinuxPlatformServiceRegistration {
-    /// <summary>Registers the null camera and desktop-capture services.</summary>
+    /// <summary>Registers the null camera, desktop-capture and probe kernel host services.</summary>
     /// <param name="services">The service collection.</param>
     /// <returns>The same service collection, for chaining.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> is <see langword="null"/>.</exception>
@@ -23,6 +24,7 @@ public static class LinuxPlatformServiceRegistration {
 
         services.TryAddSingleton<ICameraCaptureService, NullCameraCaptureService>();
         services.TryAddSingleton<INativeImageCaptureService, NullNativeImageCaptureService>();
+        services.TryAddSingleton<IProbeKernelHostService, NullProbeKernelHostService>();
 
         return services;
     }

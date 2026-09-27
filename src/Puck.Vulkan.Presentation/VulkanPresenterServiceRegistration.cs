@@ -298,16 +298,6 @@ public static class VulkanPresenterServiceRegistration {
         ));
         services.TryAddSingleton<ISurfacePresenter>(implementationFactory: static sp => sp.GetRequiredService<VulkanSurfacePresenter>());
 
-        // Optional capability: a Vulkan host can export an image in shared device memory (an opaque Win32 NT
-        // handle) for ANOTHER Vulkan instance to import zero-copy. A host resolves this when present and falls back
-        // to the CPU-pixel transport otherwise. Unlike Direct3D 12's export, an opaque-Vulkan handle is not
-        // importable by D3D12 — this is a Vulkan-to-Vulkan capability.
-        services.TryAddSingleton<IGpuSurfaceExportFactory>(implementationFactory: static sp => new VulkanGpuSurfaceExportFactory(
-            deviceContext: sp.GetRequiredService<IVulkanDeviceContext>(),
-            externalMemoryApi: sp.GetRequiredService<IVulkanExternalMemoryApi>(),
-            framebufferSetApi: sp.GetRequiredService<IVulkanFramebufferSetApi>()
-        ));
-
         // Contribute the Vulkan device as an inherited root capability that flows to every node. The host
         // aggregates this with any other contributions into the root host context, so this backend stays free
         // of host- and application-specific concerns.

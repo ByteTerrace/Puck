@@ -157,7 +157,7 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
 
         attachment = new WorldCameraAttachment(
             Controls: device!.Graph?.Controls,
-            Kernels: (device.Shared as ICameraKernelHost),
+            Kernels: (device.Shared as IProbeKernelHost),
             Shared: shared,
             TargetSet: feed.GpuTargets
         );
@@ -933,7 +933,7 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
             return;
         }
 
-        var version = stream.FrameVersion;
+        var version = stream.Version;
 
         if (version == feed.LastFrameVersion) {
             NoteCameraStarvation(
@@ -1358,7 +1358,7 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
     }
     private static bool HasUnpublishedStream(ICameraGraph<ICameraStream> graph) {
         foreach (var stream in graph.Streams) {
-            if (0 == stream.FrameVersion) {
+            if (0 == stream.Version) {
                 return true;
             }
         }
