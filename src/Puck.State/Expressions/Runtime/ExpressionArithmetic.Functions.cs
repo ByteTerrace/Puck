@@ -3,8 +3,9 @@ using Puck.Maths;
 namespace Puck.State;
 
 public static partial class ExpressionArithmetic {
-    // Szudzik's pairing z·(z+1)+… with z = max(x, y) stays inside a signed 64-bit cell while z ≤ this bound.
-    private const long MaxPairComponent = 3_037_000_498L;
+    // The shell walk z·(z+1)+… over folded components with z = max stays inside a signed 64-bit cell while z ≤
+    // 3,037,000,498; a component folds to 2|c| or 2|c| − 1, so a signed component admits this magnitude.
+    private const long MaxPairComponent = 1_518_500_249L;
     private const long MaxMortonComponent = ((1L << 31) - 1L);
     private const int MaxHilbertOrder = 31;
     private const int HexDirections = HexagonalCoordinate.NeighborCount;
@@ -96,80 +97,74 @@ public static partial class ExpressionArithmetic {
                 case ExpressionOp.Cosine:
                     value = FixedQ4816.Cos(angle: FixedQ4816.FromRawBits(value: arguments[0])).Value;
                     return true;
-                case ExpressionOp.Pair: {
-                        var x = arguments[0];
-                        var y = arguments[1];
-
-                        if (
-                            (x < 0L) ||
-                            (y < 0L) ||
-                            (Math.Max(
-                            val1: x,
-                            val2: y
-                        ) > MaxPairComponent)
-                        ) { return false; }
-                        value = ((long)((ulong)x).ElegantPair<ulong, ulong>(other: ((ulong)y)));
-                        return true;
-                    }
+                case ExpressionOp.Pair:
+                    return TryPair(
+                        pair: out value,
+                        x: arguments[0],
+                        y: arguments[1]
+                    );
                 case ExpressionOp.PairX:
                 case ExpressionOp.PairY: {
-                        if (arguments[0] < 0L) { return false; }
-                        var (x, y) = ((ulong)arguments[0]).ElegantUnpair<ulong, ulong>();
-                        value = ((long)((operation == ExpressionOp.PairX)
+                        if (!TryUnpair(
+                            pair: arguments[0],
+                            x: out var x,
+                            y: out var y
+                        )) { return false; }
+                        value = ((operation == ExpressionOp.PairX)
                             ? x
-                            : y));
+                            : y
+                        );
                         return true;
                     }
                 case ExpressionOp.PairSwap:
+                    // Folding acts on each component alone, so exchanging the folded components exchanges the signed
+                    // ones and the shell walk's own swap serves the signed pair unchanged.
                     if (arguments[0] < 0L) { return false; }
                     value = ((long)((ulong)arguments[0]).ElegantSwap());
                     return true;
                 case ExpressionOp.PairMaximum:
-                    if (arguments[0] < 0L) { return false; }
-                    value = ((long)((ulong)arguments[0]).ElegantMaximum());
-                    return true;
                 case ExpressionOp.PairMinimum:
-                    if (arguments[0] < 0L) { return false; }
-                    value = ((long)((ulong)arguments[0]).ElegantMinimum());
-                    return true;
                 case ExpressionOp.PairSum:
-                    if (arguments[0] < 0L) { return false; }
-                    value = ((long)((ulong)arguments[0]).ElegantSum());
-                    return true;
-                case ExpressionOp.PairDifference:
-                    if (arguments[0] < 0L) { return false; }
-                    value = ((long)((ulong)arguments[0]).ElegantDifference());
-                    return true;
-                case ExpressionOp.PairTranslate: {
-                        var pair = arguments[0];
-                        var amount = arguments[1];
-
-                        if (
-                            (pair < 0L) ||
-                            (amount < 0L)
-                        ) { return false; }
-                        var maximum = ((long)((ulong)pair).ElegantMaximum());
-
-                        if (amount > (MaxPairComponent - maximum)) { return false; }
-                        value = ((long)((ulong)pair).ElegantTranslate(amount: ((ulong)amount)));
+                case ExpressionOp.PairDifference: {
+                        if (!TryUnpair(
+                            pair: arguments[0],
+                            x: out var x,
+                            y: out var y
+                        )) { return false; }
+                        value = operation switch {
+                            ExpressionOp.PairMaximum => Math.Max(
+                                val1: x,
+                                val2: y
+                            ),
+                            ExpressionOp.PairMinimum => Math.Min(
+                                val1: x,
+                                val2: y
+                            ),
+                            ExpressionOp.PairSum => (x + y),
+                            _ => Math.Abs(value: (x - y)),
+                        };
                         return true;
                     }
+                case ExpressionOp.PairTranslate:
                 case ExpressionOp.PairScale: {
-                        var pair = arguments[0];
-                        var factor = arguments[1];
+                        if (!TryUnpair(
+                            pair: arguments[0],
+                            x: out var x,
+                            y: out var y
+                        )) { return false; }
+                        var amount = arguments[1];
 
-                        if (
-                            (pair < 0L) ||
-                            (factor < 0L)
-                        ) { return false; }
-                        var maximum = ((long)((ulong)pair).ElegantMaximum());
-
-                        if (
-                            (maximum != 0L) &&
-                            (factor > (MaxPairComponent / maximum))
-                        ) { return false; }
-                        value = ((long)((ulong)pair).ElegantScale(factor: ((ulong)factor)));
-                        return true;
+                        return ((operation == ExpressionOp.PairTranslate)
+                            ? TryPair(
+                                pair: out value,
+                                x: checked((x + amount)),
+                                y: checked((y + amount))
+                            )
+                            : TryPair(
+                                pair: out value,
+                                x: checked((x * amount)),
+                                y: checked((y * amount))
+                            ));
                     }
                 case ExpressionOp.MortonIndex: {
                         var x = arguments[0];
@@ -632,6 +627,81 @@ public static partial class ExpressionArithmetic {
                     ) { return false; }
                     value = arguments[0].FloorModulo(modulus: arguments[1]);
                     return true;
+                case ExpressionOp.FloorDivide:
+                case ExpressionOp.FloorDivideModulo:
+                case ExpressionOp.DivideRemainder: {
+                        var dividend = arguments[0];
+                        var divisor = arguments[1];
+
+                        if (
+                            (divisor == 0L) ||
+                            ((divisor == -1L) && (dividend == long.MinValue))
+                        ) { return false; }
+                        if (operation == ExpressionOp.FloorDivide) {
+                            value = dividend.FloorDivide(divisor: divisor);
+                            return true;
+                        }
+                        var (quotient, remainder) = ((operation == ExpressionOp.FloorDivideModulo)
+                            ? dividend.FloorDivRem(divisor: divisor)
+                            : Math.DivRem(
+                                left: dividend,
+                                right: divisor
+                            )
+                        );
+
+                        return TryPair(
+                            pair: out value,
+                            x: quotient,
+                            y: remainder
+                        );
+                    }
+                case ExpressionOp.Power:
+                    // A negative exponent is refused by the kernel's own guard, which names it.
+                    return arguments[0].TryExponentiate(
+                        exponent: arguments[1],
+                        power: out value
+                    );
+                case ExpressionOp.ModularPower: {
+                        var modulus = arguments[2];
+
+                        if (
+                            (modulus <= 0L) ||
+                            (arguments[1] < 0L)
+                        ) { return false; }
+                        value = ((long)NumberTheoryFunctions.ModularPower(
+                            exponent: ((ulong)arguments[1]),
+                            modulus: ((ulong)modulus),
+                            value: ((ulong)arguments[0].FloorModulo(modulus: modulus))
+                        ));
+                        return true;
+                    }
+                case ExpressionOp.ModularInverse: {
+                        var modulus = arguments[1];
+
+                        if (modulus <= 1L) { return false; }
+                        // A value sharing a factor with the modulus is refused by the kernel's own guard.
+                        value = ((long)NumberTheoryFunctions.ModularInverse(
+                            modulus: ((ulong)modulus),
+                            value: ((ulong)arguments[0].FloorModulo(modulus: modulus))
+                        ));
+                        return true;
+                    }
+                case ExpressionOp.ExtendedGreatestCommonDivisor: {
+                        if (
+                            (arguments[0] == long.MinValue) ||
+                            (arguments[1] == long.MinValue)
+                        ) { return false; }
+                        var (_, x, y) = NumberTheoryFunctions.ExtendedGreatestCommonDivisor(
+                            other: arguments[1],
+                            value: arguments[0]
+                        );
+
+                        return TryPair(
+                            pair: out value,
+                            x: x,
+                            y: y
+                        );
+                    }
                 case ExpressionOp.CycleForward:
                 case ExpressionOp.CycleDistance: {
                         var modulus = arguments[2];
@@ -812,6 +882,33 @@ public static partial class ExpressionArithmetic {
     private const int MaskBits = 64;
     private const int NibbleSlots = 16;
 
+    // The fold 0, −1, 1, −2, 2, … ↦ 0, 1, 2, 3, 4, … that lets the shell walk over the naturals pair signed components.
+    private static ulong Fold(long component) => ((ulong)((component << 1) ^ (component >> 63)));
+    private static long Unfold(ulong folded) => ((long)(folded >> 1)) ^ (-((long)(folded & 1UL)));
+    private static bool TryPair(long x, long y, out long pair) {
+        // Shifting the admitted range [−max, max] onto [0, 2·max] makes one unsigned comparison test both ends.
+        if (
+            (unchecked((ulong)(x + MaxPairComponent)) > (2UL * MaxPairComponent)) ||
+            (unchecked((ulong)(y + MaxPairComponent)) > (2UL * MaxPairComponent))
+        ) {
+            pair = 0L;
+            return false;
+        }
+        pair = ((long)Fold(component: x).ElegantPair<ulong, ulong>(other: Fold(component: y)));
+        return true;
+    }
+    private static bool TryUnpair(long pair, out long x, out long y) {
+        if (pair < 0L) {
+            x = 0L;
+            y = 0L;
+            return false;
+        }
+        var (foldedX, foldedY) = ((ulong)pair).ElegantUnpair<ulong, ulong>();
+
+        x = Unfold(folded: foldedX);
+        y = Unfold(folded: foldedY);
+        return true;
+    }
     private static bool TryLong(ulong count, out long value) {
         value = unchecked((long)count);
         return (count <= long.MaxValue);

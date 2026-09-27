@@ -324,7 +324,7 @@ something else, or nothing, in a document.
 The two evaluators fold a name differently, on purpose:
 
 - A function defined over integers (the bit, lattice, grid, and combinatorial family—
-  `greatestCommonDivisor`, `leastCommonMultiple`, `floorModulo`, `binomialCoefficient`, `primeAt`, `setBitCount`,
+  `greatestCommonDivisor`, `leastCommonMultiple`, `floorDivide`, `floorModulo`, `power`, `modularPower`, `modularInverse`, `binomialCoefficient`, `primeAt`, `setBitCount`,
   `hexIndex`, `mortonIndex`, `hilbertIndex`, `pairMinimum`, `pairMaximum`, and the rest) is evaluated by the engine's
   own `ExpressionArithmetic` rather than reimplemented here. Integers are exact in both evaluators, so delegating
   makes a numeric disagreement between a rule and a document impossible rather than merely unlikely.
@@ -439,16 +439,16 @@ when non-empty, a present container is true, and an absent value is false.
 
 ## Names are spelled out
 
-`absolute`, `squareRoot`, `ceiling`, `minimum`, `maximum`, `floorModulo`, `greatestCommonDivisor`,
-`leastCommonMultiple`, `setBitCount`, `binomialCoefficient`, `primeAt`, `sine`, `cosine`, `hexIndex`, `mortonIndex`,
+`absolute`, `squareRoot`, `ceiling`, `minimum`, `maximum`, `floorModulo`, `floorDivideModulo`, `greatestCommonDivisor`,
+`extendedGreatestCommonDivisor`, `leastCommonMultiple`, `modularInverse`, `setBitCount`, `binomialCoefficient`, `primeAt`, `sine`, `cosine`, `hexIndex`, `mortonIndex`,
 `hilbertIndex`, `pairMinimum`, `pairMaximum`—every name in the shared vocabulary is spelled out in full, never
 abbreviated. Puck prefers function syntax and a verbose, explanatory name over an operator glyph or an
 abbreviation wherever the two would otherwise compete.
 
 This is why there is no `//` integer-division operator: `//` opens a line comment (`PuckWhiteSpaceParser` skips it
-everywhere, not only at statement starts), so `a // b` can only ever read as `a` followed by a comment. `floor(a /
-b)` is the spelling — the same `floor` the rule language has, with the same rounding, rather than a second
-operator invented here for one case.
+everywhere, not only at statement starts), so `a // b` can only ever read as `a` followed by a comment. `floorDivide(a, b)` is the spelling of
+the floored quotient in both languages, and `floorModulo(a, b)` its partner; in an Int rule `a / b` truncates, so
+`floor(a / b)` floors only a document's real quotient and is not the same operation.
 
 ## State engine dependency
 

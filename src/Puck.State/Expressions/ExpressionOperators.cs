@@ -1128,6 +1128,76 @@ public static class ExpressionOperators {
             symbol: null
         ),
         Define(
+            arity: 2,
+            cost: 18L,
+            function: true,
+            name: "floorDivide",
+            operation: ExpressionOp.FloorDivide,
+            payload: PayloadShape.None,
+            signature: ExpressionSignature.Int,
+            symbol: null
+        ),
+        Define(
+            arity: 2,
+            cost: 30L,
+            function: true,
+            name: "floorDivideModulo",
+            operation: ExpressionOp.FloorDivideModulo,
+            payload: PayloadShape.None,
+            signature: ExpressionSignature.Int,
+            symbol: null
+        ),
+        Define(
+            arity: 2,
+            cost: 30L,
+            function: true,
+            name: "divideRemainder",
+            operation: ExpressionOp.DivideRemainder,
+            payload: PayloadShape.None,
+            signature: ExpressionSignature.Int,
+            symbol: null
+        ),
+        Define(
+            arity: 2,
+            cost: 40L,
+            function: true,
+            name: "power",
+            operation: ExpressionOp.Power,
+            payload: PayloadShape.None,
+            signature: ExpressionSignature.Int,
+            symbol: null
+        ),
+        Define(
+            arity: 3,
+            cost: 150L,
+            function: true,
+            name: "modularPower",
+            operation: ExpressionOp.ModularPower,
+            payload: PayloadShape.None,
+            signature: ExpressionSignature.Int,
+            symbol: null
+        ),
+        Define(
+            arity: 2,
+            cost: 60L,
+            function: true,
+            name: "modularInverse",
+            operation: ExpressionOp.ModularInverse,
+            payload: PayloadShape.None,
+            signature: ExpressionSignature.Int,
+            symbol: null
+        ),
+        Define(
+            arity: 2,
+            cost: 90L,
+            function: true,
+            name: "extendedGreatestCommonDivisor",
+            operation: ExpressionOp.ExtendedGreatestCommonDivisor,
+            payload: PayloadShape.None,
+            signature: ExpressionSignature.Int,
+            symbol: null
+        ),
+        Define(
             arity: 3,
             cost: 18L,
             function: true,

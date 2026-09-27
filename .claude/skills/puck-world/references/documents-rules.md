@@ -69,36 +69,39 @@ literals) as
 well as the postfix `{ "tokens": [...] }` object; the string parses to the same
 tokens (`ExpressionSpelling`) and writes back as a string. Beside arithmetic, comparison, bit ops, the conditional
 `c ? a : b`, and the board ops, the call vocabulary carries one Maths family per prefix: `pair(x, y)`/`pairX`/`pairY` and
-the Szudzik algebra (`pairSwap`, `pairMax`, `pairMin`, `pairSum`, `pairDifference`, `pairTranslate`,
-`pairScale`); `morton`/`mortonX`/`mortonY`; `hilbert(order, x, y)`/`hilbertX`/`hilbertY`; the hex family
-over `HexagonalIndex` (`hex(q, r)`, `hexQ`, `hexR`, `hexRadius`, `hexEuclideanSquared`, `hexDistance`, `hexNeighbor`,
+the signed pair algebra (`pairSwap`, `pairMaximum`, `pairMinimum`, `pairSum`, `pairDifference`, `pairTranslate`,
+`pairScale`); `mortonIndex`/`mortonX`/`mortonY`; `hilbertIndex(order, x, y)`/`hilbertX`/`hilbertY`; the hex family
+over `HexagonalIndex` (`hexIndex(q, r)`, `hexQ`, `hexR`, `hexRadius`, `hexEuclideanSquared`, `hexDistance`, `hexNeighbor`,
 `hexRotate`, `hexMirror`, `hexSwap`, `hexAdd`, `hexSubtract`, `hexMultiply`, `hexScale`, `hexTranslate`); the
 square family over `SquareIndex` on the same spellings (`squareIndex(x, y)`, `squareX`/`squareY`, `squareRadius`
 (Chebyshev), `squareLength`/`squareDistance` (Manhattan), `squareChebyshev`, `squareNeighbor` E/N/W/S,
 `squareRotate` quarter turns, …) — a shell-ordered index over Z², not a grid topology's row-major ordinal, so a
-grid cell still bridges through `%`/`/` or `$board:offset`; `gcd`/`lcm` (`gcd(dx, dy) == 1` is a lattice line
-with no interior point); the floored `mod(a, m)` with `cycleForward(a, b, m)`/`cycleDistance(a, b, m)` for
-track and pit races (`%` stays C truncation); `smallestMissing(mask)`, the smallest value missing from a 64-bit set (the Sprague–Grundy value of a set of options); `isPrime(n)` (exact, bounded) and `prime(i)` for
-i in 0..255 (a Gödel multiset in one cell: add is `* prime(k)`, presence is `% prime(k) == 0`) — no next-prime or
-n-th-prime search, which is unbounded and belongs to a generator draw source; `choose(n, k)`, `factorial(n)`
-(n ≤ 20); a subset as a bitmask — `subsetRank(n, mask)` (colex rank below `choose(n, popCount(mask))`, n ≤ 64),
+grid cell still bridges through `%`/`/` or `$board:offset`; `greatestCommonDivisor`/`leastCommonMultiple` (`greatestCommonDivisor(dx, dy) == 1` is a lattice line
+with no interior point) and `extendedGreatestCommonDivisor(a, b)`, the Bézout pair; the floored `floorDivide(a, b)`
+and `floorModulo(a, m)`, both at once as the pair `floorDivideModulo(a, b)` (`divideRemainder(a, b)` is the
+truncating pair), with `cycleForward(a, b, m)`/`cycleDistance(a, b, m)` for track and pit races (`/` and `%` stay C
+truncation); `power(base, exponent)` (exact or refused), `modularPower(base, exponent, modulus)` and
+`modularInverse(value, modulus)`; `smallestMissing(mask)`, the smallest value missing from a 64-bit set (the Sprague–Grundy value of a set of options); `isPrime(n)` (exact, bounded) and `primeAt(i)` for
+i in 0..255 (a Gödel multiset in one cell: add is `* primeAt(k)`, presence is `% primeAt(k) == 0`) — no next-prime or
+n-th-prime search, which is unbounded and belongs to a generator draw source; `binomialCoefficient(n, k)`, `factorial(n)`
+(n ≤ 20); a subset as a bitmask — `subsetRank(n, mask)` (colex rank below `binomialCoefficient(n, setBitCount(mask))`, n ≤ 64),
 `subsetAt(n, k, rank)`, `subsetMember(n, k, rank, i)` — so a poker hand or a drafted set is one cell; a
 permutation of 0..n−1 packed as nibbles (position i in bits 4i..4i+3, n ≤ 16) — `arrangementRank(n, packed)`
 (lexicographic Lehmer code below `factorial(n)`), `arrangementAt(n, rank)`, `arrangementMember(n, rank, i)` — so a
 turn order or a shuffled short deck is one cell, read back with `bitField(packed, 4 * i, 4)`;
 the layer family over `LayerSequence` (`layer`, `layerOffset`, `layerStart`, `layerSize`, each
-`(index-or-layer, start, step, seed)` — `layer(i, 6, 6, 1)` is `hexRadius(i)`); and `sqrt` (both kinds),
+`(index-or-layer, start, step, seed)` — `layer(i, 6, 6, 1)` is `hexRadius(i)`); and `squareRoot` (both kinds),
 a keyed read is `row[key]` or `row.key` (a bare name or number is the literal key), `row[other[k]]` (a `$cell:` indirection), or
 `row[from + 1]` / `row[(from)]` (any other expression as the key — an implicit int binding evaluated before the
 gate, traced as `$key<n>`, one of the rule's locals; identical expression-key spellings share a local within
 the same binding scope, never across rules or pattern-local scopes; parenthesize a bare name to read its row's value);
-`sin`, `cos` (fixed radians). Every other function is int-only, and a domain fault fails the expression the way
+`sine`, `cosine` (fixed radians). Every other function is int-only, and a domain fault fails the expression the way
 an overflow does — and is counted: a faulting binding, effect, or `compareValue` conjunct reports `Arithmetic`
 in `world.rule.failures` (narrated once per category on stderr) and `world.rule.trace` shows the conjunct as
 `refused`, so a rule that "stopped firing" is read there first. Sharp edges an author hits by instinct: `%` is C
-truncation (`(pit - 1) % 14` reads -1), so a circular index is `mod(pit - 1, 14)` or `cycleForward`; `>>` is an
+truncation (`(pit - 1) % 14` reads -1), so a circular index is `floorModulo(pit - 1, 14)` or `cycleForward`; `>>` is an
 arithmetic shift that drags the sign bit through a mask with bit 63 set, so a bitboard shifts with `>>>`;
-`pair(x, y)` admits components up to 3,037,000,498 (a hash or a Q48.16 raw does not pair); a Gödel multiset
+`pair(x, y)` admits signed components in −1,518,500,249..1,518,500,249 (a hash or a Q48.16 raw does not pair); a Gödel multiset
 holds the first 15 primes at count one (their product is 6.1e17) and overflows at the 16th (`* 53`), and every
 count multiplies, so cap the row or the item set; `$board:mask` and `writeSet` from an Int mask stop at 64 cells
 while a topology admits 4,096 — a wider board's set algebra is the `boardCombine` transform (and/or/xor/andNot/not/shift/image
