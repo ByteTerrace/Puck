@@ -222,7 +222,7 @@ public sealed class WorldBootCompositionLawTests : IDisposable {
 
         Assert.Equal(
             actual: registry.Submit(line: "world.resize").Output,
-            expected: "[world.resize: 64x128]"
+            expected: "[world.resize: 64x256]"
         );
 
         var early = registry.Submit(line: "world.resize 1920 1080");
@@ -234,7 +234,7 @@ public sealed class WorldBootCompositionLawTests : IDisposable {
         );
         Assert.Equal(
             actual: registry.Submit(line: "world.resize").Output,
-            expected: "[world.resize: 64x128]"
+            expected: "[world.resize: 64x256]"
         );
         Assert.True(condition: registry.Submit(line: "world.resize 0 1080").IsError);
 

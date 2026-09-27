@@ -33,8 +33,8 @@ reasoning behind every decision is in
 
 ## Implementation status
 
-P2, P3, P4, P5, P7, P8, P9, P10 and P11 are complete; P1a, P1b, P6 and P12 to
-P17 are not. The programmable compute and graphics foundation has functional GPU
+P2, P3, P4, P5, P7, P8, P9, P10, P11 and P12 are complete; P1a, P1b, P6 and P13
+to P17 are not. The programmable compute and graphics foundation has functional GPU
 fixtures on both backends. The
 work-counting model, the GPU work ledger, and the counting wrappers live in
 `Puck.Abstractions`. The state arena, rules and search, the shader pipeline
@@ -3701,9 +3701,10 @@ Each commit is marked with what it waits on.
    `ImageProducerLawTests.AThirdProducersSourceIsAnInstanceTheRuntimeInstallsThroughItsRegistration`
    carries the third producer, beside its document-model law, through its
    `source.<id>` instance, its upload factory and the render-graph runtime.
-   The list names what is still unchecked: no capture inspects the unbound
-   glass, and no canary shows a session screen, opens a capture or checks the
-   drawn text of a `text` screen.
+   The `uploaded-sources` canary checks the arms the list once left unchecked:
+   a capture of the unbound glass, a session screen shown and captured, a
+   capture producer opened on monitor 0 showing its fill, and a `text` screen's
+   drawn glyphs, each against a discriminating leg.
 
 ### P13 — Hit-to-source mapping and input destinations
 
@@ -4179,9 +4180,8 @@ item 2 landed.
     renders into its own per-slot outputs, which its screens sample, and copies
     each frame its reader has released into the exported image in its
     `export copy` pass, one copy and three image barriers per exported camera
-    per frame. Still to delete: the matrix law,
-    `SdfShaderSetVerification`, `SdfWorldKernels`, and the SDF pipeline set and
-    its cache.
+    per frame. Still to delete: the matrix law, `SdfShaderSetVerification` and
+    `SdfWorldKernels`; the SDF pipeline set and its cache went with step 8.
 
 **Decisions.** P4's visibility record is the surface sample record staged
 shading reads. P7b moves the SDF push blocks and binding constants onto groups;
@@ -4400,7 +4400,7 @@ rebuild.
 
 **The frame graph and nesting.** P11 is complete: every view, pane, seat,
 camera and session is a graph instance the runtime schedules by demand, and a
-host drives one render root. P12's source contract,
+host drives one render root. P12 is complete: its source contract,
 producers and conversion passes have landed, and so has every step of P12b,
 the capture gate over the graph, probe outputs and view exports as sources,
 consumer-chosen filtering and the check's list among them; its `view` and
