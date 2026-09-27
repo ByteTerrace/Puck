@@ -299,14 +299,14 @@ public sealed class ShaderPipelineParameterLayout {
             )
         );
     }
-    /// <summary>Resolves the frame data of a named interface: the frame group, and a pass group holding the extent, the
-    /// config fields in ordinal name order and then <paramref name="members"/> in order, as
-    /// <see cref="ShaderFrameInterface.ForPass"/> lays them. It is the layout of every pass whose members are declared
-    /// rather than derived from a document: a package's and a shader set's.</summary>
+    /// <summary>Resolves the frame data of a named interface: the frame group, and a pass group holding the extent, then
+    /// the config fields and the block values of <paramref name="members"/> together in ordinal name order, then the
+    /// resources of <paramref name="members"/> in order, as <see cref="ShaderFrameInterface.ForPass"/> lays them. It is
+    /// the layout of every pass whose members are declared rather than derived from a document: a package's.</summary>
     /// <param name="interfaceName">The interface's name.</param>
     /// <param name="config">The config schema, or <see langword="null"/> when there is none.</param>
-    /// <param name="members">The pass-group members after the config: block values, then or among them the resources the
-    /// pass binds.</param>
+    /// <param name="members">The pass-group members beside the config: block values its recorder writes, which join the
+    /// config in name order, and the resources the pass binds.</param>
     /// <param name="pushesIndex">Whether the pass's pipeline pushes one 4-byte index.</param>
     /// <returns>The layout.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="members"/> is <see langword="null"/>.</exception>

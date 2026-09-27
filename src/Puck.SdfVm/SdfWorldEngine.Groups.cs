@@ -7,8 +7,9 @@ namespace Puck.SdfVm;
 // The engine's frequency groups (SdfWorldInterfaces). Every per-view dispatch binds two sets: the ring slot's frame set
 // (set 0), whose block the engine writes once a frame into its frame region, and the ring slot's views set for the view
 // (set 3), whose block, the view's world values, lives in the view's own block region and whose bindings are every
-// table, buffer, image and sampler the dispatches read. The baker binds one set per brick slot: that slot's request
-// buffer and the brick pool, beside a block the engine writes once, and pushes its slice ordinal.
+// table, buffer, image and sampler the dispatches read. The baker binds the ring slot's frame set too, and one set per
+// brick slot: that slot's request buffer and the brick pool, beside a block the engine writes once, and pushes its slice
+// ordinal.
 public sealed partial class SdfWorldEngine {
     private const uint FrameGroup = ((uint)ShaderInterfaceGroup.Frame);
     private const uint PassGroup = ((uint)ShaderInterfaceGroup.Pass);

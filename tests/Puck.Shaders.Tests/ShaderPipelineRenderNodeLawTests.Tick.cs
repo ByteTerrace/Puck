@@ -109,9 +109,9 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         }
     }
     /// <summary>A capture records the tick of the state the image it reads was rendered from: a paused instance
-    /// republishing an image it rendered at tick 5 serves a capture armed while the host presents tick 9 with tick 5, not
-    /// the request's own source, so the tick verdict holds it to the armed tick 9 and fails; once the node renders
-    /// again, its capture records the tick that frame rendered.</summary>
+    /// republishing an image it rendered at tick 5 serves a capture armed while the host presents tick 9 with tick 5, so
+    /// the tick verdict holds it to the armed tick 9 and fails; once the node renders again, its capture records the tick
+    /// that frame rendered.</summary>
     [Fact]
     public void APausedInstancesCaptureRecordsTheTickItsImageWasRenderedAt() {
         var gpu = new FakePipelineGpu { ReadbackSupported = true };
@@ -119,13 +119,10 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         var hostTick = 5UL;
 
         FrameCaptureResult CaptureAt() {
-            var request = new FrameCaptureRequest(
-                path: Path.Combine(
-                    path1: Path.GetTempPath(),
-                    path2: $"{Guid.NewGuid():N}.png"
-                ),
-                tick: () => hostTick
-            );
+            var request = new FrameCaptureRequest(path: Path.Combine(
+                path1: Path.GetTempPath(),
+                path2: $"{Guid.NewGuid():N}.png"
+            ));
 
             node.RequestCapture(request: request);
             _ = Produce(node: node);

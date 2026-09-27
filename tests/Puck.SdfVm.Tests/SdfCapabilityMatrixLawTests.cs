@@ -245,7 +245,7 @@ public sealed class SdfCapabilityMatrixLawTests {
             Equivalent: "captures from the graph's root output",
             Check: "RenderGraphRuntimeLawTests; WorldCaptureHoldLawTests; WorldCaptureSchedulerLawTests; puck parity",
             Green: true,
-            Members: ["SdfEngineNode.RequestCapture", "SdfEngineNode.PendingCapturePath"]
+            Members: ["SdfEngineNode.RequestCapture", "SdfEngineNode.PendingCapturePath", "SdfFrame.StateTick"]
         ),
         new(
             Capability: "kernel variants and reload",

@@ -9,9 +9,9 @@
 // follow-up that reuses the SAME ISA op when baked content outgrows carve unions.
 //
 // SLICED (async / off the live edit path): the engine advances a voxel cursor across produced frames, dispatching at
-// most passGroup.sliceVoxels voxels per frame. The pushed index is THIS dispatch's slice ordinal, so its window is
-// [ordinal * sliceVoxels, min(total, (ordinal + 1) * sliceVoxels)); slicing changes no value (each voxel is written
-// exactly once, independent of slice boundaries).
+// most one slice of voxels per frame, its pass block's extent as one row (passGroup.extent.x voxels). The pushed index is
+// THIS dispatch's slice ordinal, so its window is [ordinal * extent.x, min(total, (ordinal + 1) * extent.x)); slicing
+// changes no value (each voxel is written exactly once, independent of slice boundaries).
 //
 // Request buffer (StructuredBuffer<float4>): a fixed 3-float4 header, then the carve list.
 //   req[0] = (boxMin.xyz, cellSize)
@@ -21,20 +21,22 @@
 // The linear voxel index is x-fastest: destWordOffset + x + y*dimX + z*dimX*dimY (KEEP IN SYNC with sdfBrickVoxel's
 // fetch ordering in field/sdf-shapes.hlsli and the SdfBrickBake request packing in SdfWorldEngine).
 
-// bakeRequest, brickPool, the slice size and the pushed slice ordinal, generated from SdfWorldInterfaces.BrickBake.
-#include "../isa/sdf-brick-bake.interface.hlsli"
+// The sdf.bricks interface: the frame group, the slice extent, bakeRequest, brickPool and the pushed slice ordinal,
+// generated from SdfWorldInterfaces.BrickBake.
+#include "../isa/sdf-bricks.interface.hlsli"
 
 static const uint BrickBakeHeaderFloat4Count = 3u;
 
 [numthreads(64, 1, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
     uint local = id.x;
+    uint sliceVoxels = passGroup.extent.x;
 
-    if (local >= passGroup.sliceVoxels) {
+    if (local >= sliceVoxels) {
         return;
     }
 
-    uint voxel = ((pushedIndex.index * passGroup.sliceVoxels) + local);
+    uint voxel = ((pushedIndex.index * sliceVoxels) + local);
 
     float4 header0 = bakeRequest[0];
     float4 header1 = bakeRequest[1];

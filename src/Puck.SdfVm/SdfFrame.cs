@@ -61,6 +61,12 @@ public sealed record SdfFrame(
     /// <summary>The frame's opaque triangle meshes: every static placement of a prototype that carries a mesh. Empty by
     /// default; rasterized per view before primary traversal. A producer supplies a new list when its draws change.</summary>
     public IReadOnlyList<SdfMeshDraw> MeshDraws { get; init; } = [];
+
+    /// <summary>The simulation tick of the state the frame shows, or <see langword="null"/> when its producer names none.
+    /// No kernel reads it: each view output of the frame records it, and a capture served from that output records it,
+    /// however many frames later the output is served.</summary>
+    public ulong? StateTick { get; init; }
+
     /// <summary>A per-frame scale on the world path's ambient term (default 1 = unchanged). Below 1 dims the room so
     /// the diegetic screen glow dominates — the overworld sets it low for mood; other scenes leave the default.</summary>
     public float AmbientScale { get; init; } = 1f;
