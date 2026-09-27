@@ -1287,8 +1287,9 @@ sources write regions that a planned conversion pass reads, devices
 synchronize through a shared fence, a capture frame renders every tainted
 instance it reads again, a machine's output is an uploaded source held to its
 exact verdict, and a probe's output is an imported source while a view export
-orders its reader by a shared fence of its own. Consumer-chosen filtering with
-no slot limit (step 8) and the check's list (step 9) remain. The camera and
+orders its reader by a shared fence of its own, and step 9, the check's list, has
+landed too. Consumer-chosen filtering with
+no slot limit (step 8) remains. The camera and
 probe GPU tiers, and
 desktop capture on a Direct3D 12 host, share their images without a copy, as
 simultaneous-access Direct3D 12 textures that a Vulkan host imports. A camera,
@@ -3576,7 +3577,17 @@ except step 8.
    delete, `ScreenSlot.AcquireFrame`, went with P11b-13, which made the `view`
    and `session` arms rendered view instances. A law registers a third,
    fake producer with no schema or planner change. Linux producers and POSIX
-   file-descriptor import stay open.
+   file-descriptor import stay open. Landed: the list is
+   [the World guide's source table](../../src/Puck.World/README.md#image-producers);
+   `ScreenSlot.AcquireFrame` and every per-kind frame resolution are gone, and
+   the binder's remaining per-kind code only declares each kind's producer or
+   view; and
+   `ImageProducerLawTests.AThirdProducersSourceIsAnInstanceTheRuntimeInstallsThroughItsRegistration`
+   carries the third producer, beside its document-model law, through its
+   `source.<id>` instance, its upload factory and the render-graph runtime.
+   The list names what is still unchecked: no capture inspects the unbound
+   glass, and no canary shows a session screen, opens a capture or checks the
+   drawn text of a `text` screen.
 
 ### P13 — Hit-to-source mapping and input destinations
 
@@ -4203,7 +4214,7 @@ host drives one render root. P12's source contract,
 producers and conversion passes have landed, and so have P12b's steps 1 to 7,
 the capture gate over the graph and probe outputs and view exports as sources
 among them. Of the rest, step 8 can land now since P7b-14b-6 and P7b-20 have
-landed, and step 9 comes last; its `view` and `session` arms already went with
+landed, and step 9, the check's list, has landed; its `view` and `session` arms went with
 P11b-13. P13b's live mappings
 (step 1), simulation destination (step 2, with the light gun that authored
 cartridges read through `$light`), host passthrough (step 4) and live hit walk (step 6)
