@@ -225,6 +225,21 @@
           "ByteTerrace.Puck.Networking": "[0.1.0-alpha, )"
         }
       },
+      "ByteTerrace.Puck.HumbleGamingDeck": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Machines": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
+          "Microsoft.Extensions.DependencyInjection": "[10.*, )"
+        }
+      },
+      "ByteTerrace.Puck.HumbleGamingDeck.Post": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.HumbleGamingDeck": "[0.1.0-alpha, )",
+          "Puck.Machines.Post": "[1.0.0, )"
+        }
+      },
       "ByteTerrace.Puck.Machines": {
         "type": "Project",
         "dependencies": {

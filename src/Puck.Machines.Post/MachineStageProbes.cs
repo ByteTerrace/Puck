@@ -8,6 +8,37 @@ namespace Puck.Machines.Post;
 /// construction, frame stepping, snapshot capture, and per-family budgets; the checks and their reported details are
 /// identical across families.</summary>
 public static class MachineStageProbes {
+    /// <summary>Measures throughput from the machine's actual elapsed cycle count, without assuming a fixed frame length.</summary>
+    /// <typeparam name="TMachine">The owning machine handle.</typeparam>
+    /// <param name="build">Creates the measured machine.</param>
+    /// <param name="advance">Advances one caller-defined work batch.</param>
+    /// <param name="readCycles">Reads the completed machine-cycle count.</param>
+    /// <param name="rate">The exact cycle rate used for the realtime multiple.</param>
+    /// <param name="warmBatches">The warm-up batch count.</param>
+    /// <param name="measureBatches">The measured batch count.</param>
+    /// <param name="cycleUnit">The cycle unit label.</param>
+    /// <returns>A passing outcome containing elapsed cycles and measured throughput; timing never gates correctness.</returns>
+    public static PostStageOutcome MeasureThroughput<TMachine>(Func<TMachine> build, Action<TMachine> advance,
+        Func<TMachine, ulong> readCycles, MachineCycleRate rate, int warmBatches, int measureBatches, string cycleUnit)
+        where TMachine : IDisposable {
+        using var machine = build();
+
+        for (var index = 0; (index < warmBatches); ++index) {
+            advance(obj: machine);
+        }
+        var before = readCycles(arg: machine);
+        var stopwatch = Stopwatch.StartNew();
+
+        for (var index = 0; (index < measureBatches); ++index) {
+            advance(obj: machine);
+        }
+        stopwatch.Stop();
+        var elapsed = (readCycles(arg: machine) - before);
+        var megaCycles = ((elapsed / stopwatch.Elapsed.TotalSeconds) / 1e6);
+        var realtime = (rate.ToSeconds(cycles: checked((long)elapsed)) / stopwatch.Elapsed.TotalSeconds);
+
+        return PostStageOutcome.Pass(detail: $"{elapsed} elapsed {cycleUnit}; {megaCycles:F1} million {cycleUnit}/s ({realtime:F1}x realtime)");
+    }
     /// <summary>Measures raw throughput: warm-up, then a stopwatch over a fixed frame span, reported as frames per
     /// second, the multiple of real time, and millions of cycles per second. Always passes — a measurement, not a
     /// gate.</summary>

@@ -7,7 +7,11 @@ description: Guides changes to Puck's deterministic GB, GBC, and GBA GamingBrick
 
 Treat the GamingBricks as one deterministic machine family: a shared SM83
 compatibility core covering every DMG/MGB/SGB/CGB/AGB hardware revision, plus
-the separate ARM7TDMI-based GBA-native core. The current implementation and its
+the separate ARM7TDMI-based GBA-native core. The Humble Gaming Deck adds the
+NES/Famicom CPU and bus on the shared machine substrate; its master tick is
+distinct from either handheld clock. Read its
+[CPU and timing guide](../../../docs/emulation/hgd/cpu-and-timing.md) and run
+`Puck.HumbleGamingDeck.Post` for changes to that core. The current implementation and its
 Post stages are authoritative; update stale skill guidance in the same change.
 
 ## Core invariants

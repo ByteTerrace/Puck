@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PackageId>ByteTerrace.Puck.HumbleGamingDeck.Post</PackageId>
+        <PuckKind>Validation</PuckKind>
+        <PuckLayer>Validation</PuckLayer>
+        <OutputType>Exe</OutputType>
+        <RootNamespace>Puck.HumbleGamingDeck.Post</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="../Puck.Machines.Post/Puck.Machines.Post.csproj" />
+        <ProjectReference Include="../Puck.HumbleGamingDeck/Puck.HumbleGamingDeck.csproj" />
+        <Using Include="Puck.Machines.Post" />
+    </ItemGroup>
+</Project>
