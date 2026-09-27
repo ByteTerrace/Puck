@@ -69,7 +69,7 @@ public sealed class CaptureRequestSlot {
         m_request = null;
     }
     /// <summary>Fails an unserved request with a <see cref="Gpu.DeviceLostException"/> carrying
-    /// <see cref="DeviceLostReason"/> and clears the slot — the device-loss path (<c>IRenderNode.OnDeviceLost</c>),
+    /// <see cref="DeviceLostReason"/> and clears the slot — the device-loss path (<c>IRenderRoot.OnDeviceLost</c>),
     /// where the frame the request was armed for will not be produced on the lost device.</summary>
     public void RefuseForDeviceLoss() =>
         Refuse(error: new Gpu.DeviceLostException(message: DeviceLostReason));

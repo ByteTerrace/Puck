@@ -112,7 +112,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 ? m_regionCopies!.Region(index: share)
                 : null),
             name: new GpuObjectName(
-                owner: m_descriptor.Name,
+                owner: m_name,
                 part: name
             ),
             staged: staged
@@ -184,7 +184,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 m_rowShares[index] = names.Count;
                 names.Add(item: new GpuObjectName(
                     detail: rows[index].Name,
-                    owner: m_descriptor.Name,
+                    owner: m_name,
                     part: "rows"
                 ));
             }
@@ -196,7 +196,7 @@ public sealed partial class ShaderPipelineRenderNode {
                     value: names.Count
                 );
                 names.Add(item: new GpuObjectName(
-                    owner: m_descriptor.Name,
+                    owner: m_name,
                     part: port.Name
                 ));
             }
@@ -208,9 +208,9 @@ public sealed partial class ShaderPipelineRenderNode {
             ? null
             : new GpuRegionCopyPool(
                 bindings: m_gpu.Bindings,
-                copyPipeline: (built.CopyPipeline ?? throw new InvalidOperationException(message: $"Instance '{m_descriptor.Name}' stages a region, but its build holds no region-copy pipeline.")),
+                copyPipeline: (built.CopyPipeline ?? throw new InvalidOperationException(message: $"Instance '{m_name}' stages a region, but its build holds no region-copy pipeline.")),
                 name: new GpuObjectName(
-                    owner: m_descriptor.Name,
+                    owner: m_name,
                     part: "region copies"
                 ),
                 regions: [.. names],
@@ -240,7 +240,7 @@ public sealed partial class ShaderPipelineRenderNode {
             for (var slot = 0; (slot < m_inFlight); slot++) {
                 pools[slot] = m_gpu.CommandPoolFactory.Create(name: new GpuObjectName(
                     index: slot,
-                    owner: m_descriptor.Name,
+                    owner: m_name,
                     part: "region copies"
                 ));
             }
@@ -305,7 +305,7 @@ public sealed partial class ShaderPipelineRenderNode {
     );
     private GpuObjectName NameOf(string pass, RenderGraphPackageRegion region) => new(
         detail: region.Name,
-        owner: m_descriptor.Name,
+        owner: m_name,
         part: pass
     );
     // Flushes every region's share of the slot, now that the frame's passes have written theirs, and records each owed
@@ -366,7 +366,7 @@ public sealed partial class ShaderPipelineRenderNode {
     }
     // Begins the slot's copy command buffer, at the frame's first owed copy.
     private nint BeginRegionCopies() {
-        var command = (m_copyPools ?? throw new InvalidOperationException(message: $"Instance '{m_descriptor.Name}' holds a staged region but no copy command pool."))[m_copySlot].CommandBufferHandle;
+        var command = (m_copyPools ?? throw new InvalidOperationException(message: $"Instance '{m_name}' holds a staged region but no copy command pool."))[m_copySlot].CommandBufferHandle;
         var recorder = m_gpu.Recorder;
 
         recorder.BeginCommandBuffer(commandBufferHandle: command);

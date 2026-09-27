@@ -378,7 +378,7 @@ These are one-line cautions; the owning pages hold the derivations.
   `OnDeviceLost` refuses the capture its slot holds
   (`CaptureRequestSlot.RefuseForDeviceLoss`), which the scheduler writes as a
   `deviceLost` refusal; both hosts recover through `DeviceLossRecovery`
-  (`Puck.Launcher`), which releases the tree before rebuilding the device
+  (`Puck.Launcher`), which releases the render root before rebuilding the device
   through an `IDeviceRebuild`, and before giving up. `gpu.faults lose` injects
   a loss on a real device (`device-loss`, `device-loss-windowed`). On Direct3D 12 every create or
   call a removal reaches on a frame or capture path goes through
@@ -1174,8 +1174,12 @@ host composes it from the document's current rows whenever they move
 (`WorldViewGraphHost.Reconcile`), and `WorldPostPasses` follows the recomposed
 graph. `WorldRenderRoot`
 builds the engine node, the packages and the runtime for both GPU shapes, and
-`RenderGraphRuntimeNode` is the host's render root; `WorldRenderProbe.Root` is
-what captures, `world.screenshot` and readiness read. A `captures` row may name
+`RenderGraphRuntimeNode` is the host's render root, the one `IRenderRoot`
+(`Puck.Hosting`) a launcher produces, presents, releases on device loss and
+disposes: nothing wraps it, a graph instance's `ShaderPipelineRenderNode` is no
+root, and a service that must be released while the device is alive rides its
+`Holdings` (the screen binder) rather than a decorator. `WorldRenderProbe.Root`
+is what captures, `world.screenshot` and readiness read. A `captures` row may name
 `world` (`WorldCaptureRow.Instance`) to capture the world beneath the root's
 passes, or a screen (`WorldCaptureRow.Screen`) to capture the source instance it
 reads; a capture of a source that states its image (`IImageSourceReference`)

@@ -42,10 +42,10 @@ internal static class WorldRenderRoot {
     /// <param name="sp">The composed services.</param>
     /// <param name="overlay">The overlay package the root graph draws, or <see langword="null"/> when it draws
     /// none.</param>
-    /// <returns>The render root, tied to the screen binder's teardown.</returns>
+    /// <returns>The render root, which releases the screen binder at its teardown.</returns>
     /// <exception cref="InvalidOperationException">The document's instances do not form a set, or the runtime refused
     /// them.</exception>
-    public static IRenderNode Build(IServiceProvider sp, OverlayPackage? overlay) {
+    public static IRenderRoot Build(IServiceProvider sp, OverlayPackage? overlay) {
         var hostSettings = sp.GetRequiredService<WorldHostSettings>();
         var width = ((uint)hostSettings.Width);
         var height = ((uint)hostSettings.Height);
@@ -213,6 +213,9 @@ internal static class WorldRenderRoot {
             // The host rewrites its footprint and root lists in place, so the node reads those lists rather than the copy
             // its constructor takes.
             Footprints = host.Footprints,
+            // The binder's GPU holdings (camera feeds, capture fills) are created before the device context, so the
+            // container would dispose them after it; the root's teardown releases them while the device is alive.
+            Holdings = [binder],
             Prepare = frameSource.PrepareGraph,
             Roots = host.Roots,
         };
@@ -226,12 +229,6 @@ internal static class WorldRenderRoot {
             root: () => runtime.NodeOf(instance: WorldViewGraphs.MainInstance)
         );
 
-        // The teardown tie: the host loop disposes this root (device alive) before the presenter and long before the
-        // container's reverse-creation-order sweep — ride that safe point for the binder's own GPU holdings (camera
-        // feeds, capture fills), whose container-ordered disposal would otherwise land after device death.
-        return new WorldRenderTeardown(
-            inner: root,
-            binder
-        );
+        return root;
     }
 }

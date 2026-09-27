@@ -81,7 +81,7 @@ public sealed partial class ShaderPipelineRenderNode {
             memory: GpuResidency.RingMemory(profile: m_device.MemoryProfile),
             name: new GpuObjectName(
                 detail: "pass block",
-                owner: m_descriptor.Name,
+                owner: m_name,
                 part: pass.Name
             ),
             policy: GpuResidencyPolicy.Ring,
@@ -105,7 +105,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 name: new GpuObjectName(
                     detail: "frame group",
                     index: slot,
-                    owner: m_descriptor.Name,
+                    owner: m_name,
                     part: pass.Name
                 )
             );
@@ -115,7 +115,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 name: new GpuObjectName(
                     detail: "pass group",
                     index: slot,
-                    owner: m_descriptor.Name,
+                    owner: m_name,
                     part: pass.Name
                 )
             );
@@ -143,7 +143,7 @@ public sealed partial class ShaderPipelineRenderNode {
                     name: new GpuObjectName(
                         detail: "world group",
                         index: slot,
-                        owner: m_descriptor.Name,
+                        owner: m_name,
                         part: pass.Name
                     )
                 );

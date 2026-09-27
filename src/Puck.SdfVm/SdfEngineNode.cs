@@ -374,7 +374,7 @@ public sealed partial class SdfEngineNode : ICaptureRequestTarget {
             return false;
         }
 
-        // The shared device is an inherited host capability (every node in the tree composites on one device).
+        // The shared device is an inherited host capability: every graph instance renders on one device.
         if (!context.Host.TryResolveCapability<IGpuDeviceContext>(capability: out var gpuDevice)) {
             return false;
         }

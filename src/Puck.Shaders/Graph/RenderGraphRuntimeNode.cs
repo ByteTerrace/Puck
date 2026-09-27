@@ -13,8 +13,7 @@ public delegate void RenderGraphFramePreparer(in FrameContext context);
 /// fixed extent showing the runtime's root over the whole display, beside the other roots and the reads the host shows
 /// that frame, and returns the root's latest completed image. It owns the runtime. A frame whose schedule and extents
 /// repeat an earlier one allocates nothing.</summary>
-public sealed class RenderGraphRuntimeNode : IRenderNode, ICaptureRequestTarget {
-    private readonly NodeDescriptor m_descriptor;
+public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget {
     private readonly int m_displayHeight;
     private readonly int m_displayWidth;
     private readonly List<RenderGraphRoot> m_roots = [];
@@ -38,19 +37,18 @@ public sealed class RenderGraphRuntimeNode : IRenderNode, ICaptureRequestTarget 
         ArgumentOutOfRangeException.ThrowIfZero(value: height);
 
         Runtime = runtime;
-        m_descriptor = new NodeDescriptor(
-            Name: "render-graph",
-            SurfaceId: SurfaceId.New()
-        );
         m_displayHeight = ((int)height);
         m_displayWidth = ((int)width);
         Footprints = [.. footprints];
     }
 
-    /// <inheritdoc/>
-    public NodeDescriptor Descriptor => m_descriptor;
     /// <summary>Gets or sets the reads the display shows inside its rendering instances this frame.</summary>
     public IReadOnlyList<RenderGraphFootprint> Footprints { get; set; }
+    /// <summary>Gets the services the host ties to the root's teardown, disposed in order after the runtime. A host
+    /// disposes its root while the device is still alive, so a service holding GPU objects that its container would
+    /// dispose only after the device context is released here instead; its later disposal by the container is a
+    /// no-op.</summary>
+    public IReadOnlyList<IDisposable> Holdings { get; init; } = [];
     /// <inheritdoc/>
     public string? PendingCapturePath => Runtime.PendingCapturePath;
     /// <summary>Gets or sets the callback that prepares each frame before the runtime schedules it, or
@@ -63,7 +61,13 @@ public sealed class RenderGraphRuntimeNode : IRenderNode, ICaptureRequestTarget 
     public RenderGraphRuntime Runtime { get; }
 
     /// <inheritdoc/>
-    public void Dispose() => Runtime.Dispose();
+    public void Dispose() {
+        Runtime.Dispose();
+
+        foreach (var holding in Holdings) {
+            holding.Dispose();
+        }
+    }
     /// <inheritdoc/>
     public void OnDeviceLost() => Runtime.OnDeviceLost();
     /// <inheritdoc/>

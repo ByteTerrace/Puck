@@ -19,7 +19,7 @@ namespace Puck.Launcher.Tests;
 internal static class WindowedHostFixture {
     public static readonly TimeSpan HostBudget = TimeSpan.FromSeconds(value: 30);
 
-    public static IHost Build(FakePresenter presenter, IGpuDeviceContext device, IRenderNode? root = null, Action<IServiceCollection>? configure = null) {
+    public static IHost Build(FakePresenter presenter, IGpuDeviceContext device, IRenderRoot? root = null, Action<IServiceCollection>? configure = null) {
         var builder = Host.CreateApplicationBuilder(settings: new HostApplicationBuilderSettings {
             DisableDefaults = true,
         });
@@ -27,7 +27,7 @@ internal static class WindowedHostFixture {
         builder.Logging.ClearProviders();
         builder.Services.AddSingleton<ISurfacePresenter>(implementationInstance: presenter);
         builder.Services.AddSingleton<INativeWindowFactory, FakeWindowFactory>();
-        builder.Services.AddSingleton(implementationInstance: (root ?? new FakeRenderNode()));
+        builder.Services.AddSingleton(implementationInstance: (root ?? new FakeRenderRoot()));
         builder.Services.AddSingleton(implementationInstance: new HostCapabilityContribution(
             CapabilityType: typeof(IGpuDeviceContext),
             Instance: device,
@@ -89,12 +89,8 @@ internal static class WindowedHostFixture {
 
         public void WaitIdle() { }
     }
-    /// <summary>A render node that produces nothing, whose <see cref="Dispose"/> throws <c>failure</c> when one is set.</summary>
-    public sealed class FakeRenderNode(Exception? failure = null) : IRenderNode {
-        public NodeDescriptor Descriptor { get; } = new(
-            Name: "windowed-host-fixture",
-            SurfaceId: SurfaceId.New()
-        );
+    /// <summary>A render root that produces nothing, whose <see cref="Dispose"/> throws <c>failure</c> when one is set.</summary>
+    public sealed class FakeRenderRoot(Exception? failure = null) : IRenderRoot {
         public int DisposeCalls { get; private set; }
 
         public void Dispose() {
