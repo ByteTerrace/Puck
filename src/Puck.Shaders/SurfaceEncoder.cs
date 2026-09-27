@@ -20,6 +20,9 @@ public sealed class SurfaceEncoder : IDisposable {
     // The target's usages: drawn into, then copied out by the readback.
     private const GpuImageUsage TargetUsage = GpuImageUsage.ColorAttachment | GpuImageUsage.Sampled;
     private const string FragmentStem = "display-encode.frag";
+    // The writes a published image may have had before a read, and the stages that made them.
+    private const GpuAccess SourceWrites = GpuAccess.ShaderWrite | GpuAccess.ColorAttachmentWrite | GpuAccess.TransferWrite;
+    private const GpuStage SourceStages = GpuStage.ComputeShader | GpuStage.FragmentShader | GpuStage.ColorAttachmentOutput | GpuStage.Transfer;
     private const string VertexStem = "display.vert";
 
     private readonly IGpuDeviceContext m_device;
@@ -130,15 +133,30 @@ public sealed class SurfaceEncoder : IDisposable {
         )
     );
     /// <summary>Encodes a same-device image in SDR and reads the encoded pixels back, blocking until the device has
-    /// written them; the image must be shader-readable and its writes complete in an earlier submission on the device's
-    /// queue.</summary>
+    /// written them; the image's writes must complete in an earlier submission on the device's queue. An image in any
+    /// layout but <see cref="GpuImageLayout.ShaderReadOnly"/> moves into it for the draw, which samples it there, and
+    /// back into its own layout after, in the same submission.</summary>
+    /// <param name="image">The native handle of the image to encode.</param>
     /// <param name="imageView">The native handle of the view of the image to encode.</param>
     /// <param name="width">The image's width, in pixels.</param>
     /// <param name="height">The image's height, in pixels.</param>
+    /// <param name="layout">The layout the image is in: <see cref="GpuImageLayout.ShaderReadOnly"/>,
+    /// <see cref="GpuImageLayout.General"/> or <see cref="GpuImageLayout.External"/>, the layouts a node publishes
+    /// in.</param>
     /// <returns>Tightly packed <see cref="CaptureFormat"/> pixels, four bytes each.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="layout"/> is none of the layouts a node publishes
+    /// in.</exception>
     /// <exception cref="InvalidOperationException">The device's descriptor heaps cannot admit the encoder's pool.</exception>
     /// <exception cref="DeviceLostException">The device was lost.</exception>
-    public ReadOnlyMemory<byte> ReadSdr(nint imageView, uint width, uint height) {
+    public ReadOnlyMemory<byte> ReadSdr(nint image, nint imageView, uint width, uint height, GpuImageLayout layout) {
+        if (layout is not (GpuImageLayout.ShaderReadOnly or GpuImageLayout.General or GpuImageLayout.External)) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: layout,
+                message: "The display encode reads an image published in ShaderReadOnly, General or External.",
+                paramName: nameof(layout)
+            );
+        }
+
         var pass = (m_lease.Poll() ?? m_lease.Wait(cancellationToken: CancellationToken.None));
         var gpu = m_device.Services;
 
@@ -160,13 +178,28 @@ public sealed class SurfaceEncoder : IDisposable {
         var target = m_target!;
 
         recorder.BeginCommandBuffer(commandBufferHandle: command);
-        recorder.MemoryBarrier(
-            commandBufferHandle: command,
-            destinationAccessMask: GpuAccess.ShaderRead,
-            destinationStageMask: GpuStage.FragmentShader,
-            sourceAccessMask: GpuAccess.ShaderWrite | GpuAccess.ColorAttachmentWrite | GpuAccess.TransferWrite,
-            sourceStageMask: GpuStage.ComputeShader | GpuStage.FragmentShader | GpuStage.ColorAttachmentOutput | GpuStage.Transfer
-        );
+        // Every write the image may have had becomes visible to the draw's sampling, and an image published in another
+        // layout moves into the one a sampled image is read in.
+        if (layout == GpuImageLayout.ShaderReadOnly) {
+            recorder.MemoryBarrier(
+                commandBufferHandle: command,
+                destinationAccessMask: GpuAccess.ShaderRead,
+                destinationStageMask: GpuStage.FragmentShader,
+                sourceAccessMask: SourceWrites,
+                sourceStageMask: SourceStages
+            );
+        } else {
+            recorder.TransitionImageLayout(
+                commandBufferHandle: command,
+                destinationAccessMask: GpuAccess.ShaderRead,
+                destinationStageMask: GpuStage.FragmentShader,
+                imageHandle: image,
+                newLayout: GpuImageLayout.ShaderReadOnly,
+                oldLayout: layout,
+                sourceAccessMask: SourceWrites,
+                sourceStageMask: SourceStages
+            );
+        }
         recorder.TransitionImageLayout(
             command,
             target.ImageHandle,
@@ -201,6 +234,19 @@ public sealed class SurfaceEncoder : IDisposable {
             )
         );
         recorder.EndRenderPass(commandBufferHandle: command);
+        // The image goes back to the layout its producer left it in, which its next frame's barriers name.
+        if (layout != GpuImageLayout.ShaderReadOnly) {
+            recorder.TransitionImageLayout(
+                commandBufferHandle: command,
+                destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite,
+                destinationStageMask: SourceStages,
+                imageHandle: image,
+                newLayout: layout,
+                oldLayout: GpuImageLayout.ShaderReadOnly,
+                sourceAccessMask: GpuAccess.ShaderRead,
+                sourceStageMask: GpuStage.FragmentShader
+            );
+        }
         recorder.EndCommandBuffer(commandBufferHandle: command);
         gpu.QueueSubmitter.SubmitAndWait(commandBufferHandles: [command]);
 
@@ -213,7 +259,9 @@ public sealed class SurfaceEncoder : IDisposable {
             width: width
         );
     }
-    /// <summary>Encodes a same-device image surface in SDR into CPU pixels, as <see cref="ReadSdr"/> does.</summary>
+    /// <summary>Encodes a presented same-device image surface in SDR into CPU pixels, as <see cref="ReadSdr"/> does. A
+    /// presented surface is in <see cref="GpuImageLayout.ShaderReadOnly"/>, the layout a compositor samples it
+    /// in.</summary>
     /// <param name="surface">The surface; a same-device image.</param>
     /// <returns>A CPU-pixel surface of the same extent in <see cref="CaptureFormat"/>.</returns>
     /// <exception cref="ArgumentException"><paramref name="surface"/> is not a same-device image.</exception>
@@ -232,7 +280,9 @@ public sealed class SurfaceEncoder : IDisposable {
             height: surface.Height,
             pixels: ReadSdr(
                 height: surface.Height,
+                image: surface.ImageHandle,
                 imageView: surface.ImageViewHandle,
+                layout: GpuImageLayout.ShaderReadOnly,
                 width: surface.Width
             ),
             width: surface.Width

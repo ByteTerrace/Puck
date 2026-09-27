@@ -6,7 +6,8 @@ namespace Puck.Shaders;
 public sealed partial class ShaderPipelineRenderNode {
     // A capture armed after a selection reads that selection: while its preview builds, the published image is still the
     // previous selection's, so the capture waits for the frame that publishes the new one. A published image no surface
-    // carries (a float working image) is captured through the display encode's SDR, which waits while its pipeline builds.
+    // carries (a float working image) is captured through the display encode's SDR, which waits while its pipeline
+    // builds and moves the image out of the layout it was published in to sample it, and back.
     private void CaptureIfPending() {
         if (m_previewRequest is not null) {
             return;
@@ -58,7 +59,9 @@ public sealed partial class ShaderPipelineRenderNode {
                 } else {
                     pixels = m_encoder!.ReadSdr(
                         height: m_lastSurface.Height,
+                        image: m_lastSurface.ImageHandle,
                         imageView: m_lastSurface.ImageViewHandle,
+                        layout: m_publishedLayout,
                         width: m_lastSurface.Width
                     );
                     m_readbackBytes = m_encoder.OwnedBytes;

@@ -146,6 +146,57 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         );
         Assert.IsType<NotSupportedException>(@object: Outcome(request: request).Error);
     }
+    // A barrier cannot change an image's layout, so the capture's encode moves a float output published in General into
+    // the layout its draw samples it in, and hands it back in General for the node's next frame, whose barriers name it.
+    [Fact]
+    public void AFloatCaptureMovesTheImageOutOfThePublishedLayoutToSampleItAndBack() {
+        var gpu = new FakePipelineGpu();
+        using var node = InstalledNode(
+            floatOutput: true,
+            gpu: gpu
+        );
+
+        node.Paused = true;
+
+        var shown = Produce(node: node);
+        var request = new FrameCaptureRequest(path: Path.Combine(
+            path1: Path.GetTempPath(),
+            path2: $"{Guid.NewGuid():N}.png"
+        ));
+
+        Assert.Equal(
+            actual: (shown.Format, node.PublishedLayout),
+            expected: (GpuPixelFormat.R16G16B16A16Float, GpuImageLayout.General)
+        );
+
+        gpu.ReadbackSupported = true;
+        gpu.Recording = true;
+        node.RequestCapture(request: request);
+        Assert.True(
+            condition: SpinWait.SpinUntil(
+                condition: () => {
+                    _ = Produce(node: node);
+
+                    return request.Completion.IsCompleted;
+                },
+                timeout: TimeSpan.FromSeconds(value: 30)
+            ),
+            userMessage: "The capture was never served."
+        );
+
+        Assert.Null(@object: Outcome(request: request).Error);
+        File.Delete(path: request.Path);
+        Assert.Equal(
+            actual: gpu.Barriers.Where(predicate: recorded => (
+                (recorded.Handle == shown.ImageHandle) &&
+                (recorded.Barrier.Kind == ShaderPipelineBarrierKind.Image)
+            )).Select(selector: static recorded => (recorded.Barrier.OldLayout, recorded.Barrier.NewLayout)),
+            expected: [
+                (GpuImageLayout.General, GpuImageLayout.ShaderReadOnly),
+                (GpuImageLayout.ShaderReadOnly, GpuImageLayout.General),
+            ]
+        );
+    }
     [Fact]
     public void APausedCaptureAfterADeviceLossReportsTheImageUnavailableUntilAStepRenders() {
         var gpu = new FakePipelineGpu();

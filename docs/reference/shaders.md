@@ -1084,7 +1084,8 @@ an HDR output and its paper white through its host section's `colorSpace` and
 `paperWhiteNits`, and SDR is the default and the fallback. A node's preview
 of an external output draws it in SDR into RGBA8. And a capture of an image no
 surface carries, a float output of any instance, draws it in SDR into an RGBA8
-target of its own and reads that back (`SurfaceEncoder.ReadSdr`); a presenter's
+target of its own and reads that back (`SurfaceEncoder.ReadSdr`), moving an image
+published in another layout into the one it samples in and back; a presenter's
 frame capture of a float root surface does the same. A capture of an instance
 is therefore its working output through the SDR encode, and a capture of the
 root is what an SDR display shows.
