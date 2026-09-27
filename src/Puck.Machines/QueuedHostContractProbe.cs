@@ -48,7 +48,7 @@ public static class QueuedHostContractProbe {
         for (var step = 0; (step < steps); ++step) {
             _ = host.Step(
                 deltaTicks: budget,
-                input: in input
+                inputs: MachinePads.One(input: in input)
             );
             host.PokeByte(
                 address: scratchAddress,
@@ -63,7 +63,7 @@ public static class QueuedHostContractProbe {
 
             _ = host.Step(
                 deltaTicks: budget,
-                input: in input
+                inputs: MachinePads.One(input: in input)
             );
         }
     }
@@ -137,7 +137,7 @@ public static class QueuedHostContractProbe {
                 while (!stop.IsSet) {
                     if (host.Submit(
                         deltaTicks: budget,
-                        input: in padState
+                        inputs: MachinePads.One(input: in padState)
                     ) == QueuedMachineSubmission.Rejected) {
                         throw new InvalidOperationException(message: "the concurrent step producer was rejected by an assigned host");
                     }
@@ -267,7 +267,7 @@ public static class QueuedHostContractProbe {
 
         _ = host.Step(
             deltaTicks: budget,
-            input: in input
+            inputs: MachinePads.One(input: in input)
         );
 
         if (host.QueueFault is { } fault) {
@@ -289,13 +289,13 @@ public static class QueuedHostContractProbe {
 
             _ = accelerated.Step(
                 deltaTicks: budget,
-                input: in input
+                inputs: MachinePads.One(input: in input)
             );
 
             for (var repeat = 0; (repeat < FastForwardFactor); ++repeat) {
                 _ = baseline.Step(
                     deltaTicks: budget,
-                    input: in input
+                    inputs: MachinePads.One(input: in input)
                 );
             }
 
@@ -349,7 +349,7 @@ public static class QueuedHostContractProbe {
                 for (var step = 0; (step < steps); ++step) {
                     _ = hammered.Step(
                         deltaTicks: budget,
-                        input: in padState
+                        inputs: MachinePads.One(input: in padState)
                     );
                 }
             } finally {
@@ -376,7 +376,7 @@ public static class QueuedHostContractProbe {
             for (var step = 0; (step < steps); ++step) {
                 _ = quiet.Step(
                     deltaTicks: budget,
-                    input: in padState
+                    inputs: MachinePads.One(input: in padState)
                 );
             }
 
@@ -411,7 +411,7 @@ public static class QueuedHostContractProbe {
                 for (var step = 0; (step < WholeFrameSteps); step++) {
                     _ = host.Step(
                         deltaTicks: (EngineTicks.PerSecond / 30UL),
-                        input: in input
+                        inputs: MachinePads.One(input: in input)
                     );
                 }
             } catch (Exception exception) {
@@ -647,7 +647,7 @@ public static class QueuedHostContractProbe {
         for (var frame = 0; (frame < RewindDriveFrames); ++frame) {
             _ = host.Step(
                 deltaTicks: budget,
-                input: in held
+                inputs: MachinePads.One(input: in held)
             );
             timeline[frame] = observe(host);
         }
@@ -671,7 +671,7 @@ public static class QueuedHostContractProbe {
         for (var step = 0; (step < probeSpan); ++step) {
             _ = host.Step(
                 deltaTicks: budget,
-                input: in held
+                inputs: MachinePads.One(input: in held)
             );
 
             var third = observe(host);
@@ -756,7 +756,7 @@ public static class QueuedHostContractProbe {
             for (var frame = 0; (frame < LongHorizon); ++frame) {
                 _ = host.Step(
                     deltaTicks: budget,
-                    input: in held
+                    inputs: MachinePads.One(input: in held)
                 );
 
                 var status = host.TimeTravelStatus;
@@ -784,13 +784,13 @@ public static class QueuedHostContractProbe {
             for (var frame = 0; (frame <= LongHorizon); ++frame) {
                 _ = baseline.Step(
                     deltaTicks: budget,
-                    input: in held
+                    inputs: MachinePads.One(input: in held)
                 );
             }
 
             _ = host.Step(
                 deltaTicks: budget,
-                input: in held
+                inputs: MachinePads.One(input: in held)
             );
 
             if (observe(host) != observe(baseline)) {
@@ -827,7 +827,7 @@ public static class QueuedHostContractProbe {
 
         _ = silentHost.Step(
             deltaTicks: EngineTicks.PerSecond,
-            input: in input
+            inputs: MachinePads.One(input: in input)
         );
 
         Span<short> probe = stackalloc short[256];
@@ -848,7 +848,7 @@ public static class QueuedHostContractProbe {
         // the ring is non-empty once configured, so this proves the drain path itself, not ROM content.
         _ = soundedHost.Step(
             deltaTicks: EngineTicks.PerSecond,
-            input: in input
+            inputs: MachinePads.One(input: in input)
         );
 
         var drained = 0;
@@ -882,7 +882,7 @@ public static class QueuedHostContractProbe {
         for (var index = 0; (index < submissionLimit); ++index) {
             var submission = host.Submit(
                 deltaTicks: EngineTicks.PerSecond,
-                input: in input
+                inputs: MachinePads.One(input: in input)
             );
 
             if (submission == QueuedMachineSubmission.Rejected) {
@@ -936,7 +936,7 @@ public static class QueuedHostContractProbe {
 
         source.SetFastForward(factor: 3);
         for (var index = 0; (index < 18); index++) {
-            source.SetState(state: ScheduledInput(frame: index));
+            source.Seats[0].SetState(state: ScheduledInput(frame: index));
             _ = source.Submit(deltaTicks: budget);
         }
         var checkpoint = source.CaptureCheckpoint();
@@ -955,7 +955,10 @@ public static class QueuedHostContractProbe {
 
         corrupted[^1] ^= 1;
         try { target.RestoreCheckpoint(checkpoint: corrupted); return QueuedHostProbeResult.Fail(detail: "corrupt checkpoint was accepted"); } catch (InvalidDataException) { }
-        var wrongIdentity = (decoded.Checkpoint with { Identity = "different-content" }).Encode(input: decoded.Input);
+        var wrongIdentity = (decoded.Checkpoint with { Identity = "different-content" }).Encode(
+            inputs: decoded.Inputs,
+            seats: decoded.Seats
+        );
 
         try { target.RestoreCheckpoint(checkpoint: wrongIdentity); return QueuedHostProbeResult.Fail(detail: "wrong-content checkpoint was accepted"); } catch (InvalidOperationException) { }
         if (!untouched.AsSpan().SequenceEqual(other: target.CaptureCheckpoint())) {
@@ -970,7 +973,7 @@ public static class QueuedHostContractProbe {
             if (index != 0) {
                 var input = ScheduledInput(frame: (index + 18));
 
-                source.SetState(state: input); target.SetState(state: input);
+                source.Seats[0].SetState(state: input); target.Seats[0].SetState(state: input);
             }
             _ = source.Advance(deltaTicks: (budget + ((ulong)(index % 7))));
             _ = target.Advance(deltaTicks: (budget + ((ulong)(index % 7))));

@@ -7,6 +7,8 @@ world.wait 20
 body.where
 world.screenshot {run}/before.png
 world.wait 10
+# The first frame the seat presents after its route moves is captured apart: the frame a crossing shows first.
+world.screenshot {run}/arrival.png crossing
 # Walking forward carries the body through the arch's aperture; it arrives mapped in the garden and walks on.
 body.fly 1 0 0 0 0 0 1.5
 world.wait 100

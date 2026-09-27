@@ -129,7 +129,7 @@ public sealed class LinkedMachineGroupConcurrentDisposeTests {
         public long NativeFrameIndex => 0L;
         public ulong TrafficFingerprint => 0UL;
 
-        public void ApplyInput(in MachineLinkPads input) { }
+        public void ApplyInput(in MachinePads input) { }
         public int CaptureState(ref byte[] buffer) => 0;
         public void Dispose() { }
         public void RestoreState(byte[] buffer, int length) { }
@@ -180,10 +180,10 @@ public sealed class LinkedMachineGroupConcurrentDisposeTests {
         public ReadOnlySpan<uint> Framebuffer => m_framebuffer;
         public long NativeFrameIndex => 0L;
 
-        public void ApplyInput(in MachinePadState input) { }
+        public void ApplyInput(in MachinePads input) { }
         public int CaptureState(ref byte[] buffer) => 0;
         public void ConfigureAudio(int sampleRate) { }
-        public ITimeTravelLookahead<MachinePadState> CreateLookahead() => throw new NotSupportedException();
+        public ITimeTravelLookahead<MachinePads> CreateLookahead() => throw new NotSupportedException();
         public void Dispose() {
             if (0 != Interlocked.Exchange(
                 location1: ref m_disposed,

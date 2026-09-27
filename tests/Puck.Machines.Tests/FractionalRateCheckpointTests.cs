@@ -1,5 +1,4 @@
 using System.Buffers.Binary;
-using Puck.Abstractions.Machines;
 
 namespace Puck.Machines.Tests;
 
@@ -60,8 +59,8 @@ public sealed class FractionalRateCheckpointTests {
         public ReadOnlySpan<uint> Framebuffer => m_framebuffer;
         public long NativeFrameIndex => (m_cycles / CyclesPerFrame);
 
-        public void ApplyInput(in MachinePadState input) =>
-            m_buttons = ((uint)input.Buttons);
+        public void ApplyInput(in MachinePads input) =>
+            m_buttons = ((uint)input[0].Buttons);
         public int CaptureState(ref byte[] buffer) {
             if (buffer.Length < 12) {
                 buffer = new byte[12];
@@ -79,7 +78,7 @@ public sealed class FractionalRateCheckpointTests {
             return 12;
         }
         public void ConfigureAudio(int sampleRate) { }
-        public ITimeTravelLookahead<MachinePadState> CreateLookahead() => throw new NotSupportedException();
+        public ITimeTravelLookahead<MachinePads> CreateLookahead() => throw new NotSupportedException();
         public void Dispose() { }
         public int DrainAudioSamples(Span<short> destination) => 0;
         public void FlushSave(bool force) { }

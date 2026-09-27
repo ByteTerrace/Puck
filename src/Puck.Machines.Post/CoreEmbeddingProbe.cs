@@ -1,5 +1,3 @@
-using Puck.Abstractions.Machines;
-
 namespace Puck.Machines.Post;
 
 /// <summary>Checks synchronous input, output, replay and lookahead through the public host-neutral core contract.</summary>
@@ -17,7 +15,7 @@ public static class CoreEmbeddingProbe {
         if (core.CycleCount != initialCycles) {
             return PostStageOutcome.Fail(detail: "nonpositive host budget advanced the machine");
         }
-        core.ApplyInput(input: new MachinePadState());
+        core.ApplyInput(input: MachinePads.Neutral);
         core.ConfigureAudio(sampleRate: 48_000);
         core.RunCycles(cycles: cycleBudget);
         if (

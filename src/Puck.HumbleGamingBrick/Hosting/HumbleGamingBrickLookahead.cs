@@ -1,4 +1,3 @@
-using Puck.Abstractions.Machines;
 using Puck.HumbleGamingBrick.Interfaces;
 
 namespace Puck.HumbleGamingBrick;
@@ -9,7 +8,7 @@ namespace Puck.HumbleGamingBrick;
 /// advances on predicted input. It never drives audio, so only the real machine ever opens a speaker; disposing it
 /// returns the fork to the core's bounded instance pool.
 /// </summary>
-internal sealed class HumbleGamingBrickLookahead : ITimeTravelLookahead<MachinePadState> {
+internal sealed class HumbleGamingBrickLookahead : ITimeTravelLookahead<MachinePads> {
     private readonly IFramebuffer m_framebuffer;
     private readonly MachineFork m_instance;
     private readonly IJoypad m_joypad;
@@ -34,11 +33,11 @@ internal sealed class HumbleGamingBrickLookahead : ITimeTravelLookahead<MachineP
         ((long)(m_instance.Machine.Clock.CycleCount / m_oneFrameCycles));
 
     /// <inheritdoc/>
-    public void ApplyInput(in MachinePadState input) =>
+    public void ApplyInput(in MachinePads input) =>
         BrickPad.Apply(
             joypad: m_joypad,
             lightGun: m_lightGun,
-            pad: in input,
+            pad: in input[0],
             tiltSensor: m_tiltSensor
         );
     /// <inheritdoc/>

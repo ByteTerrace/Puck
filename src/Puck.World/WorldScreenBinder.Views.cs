@@ -45,6 +45,7 @@ internal sealed partial class WorldScreenBinder {
         m_viewTransforms = transforms;
         m_viewAuthoritativeTick = authoritativeTick;
         ReconcileRoutedResidencies();
+        CrossingCapture?.Present();
     }
     /// <summary>Returns the view a view instance renders: a camera registration's or a session screen's residency, created
     /// the first time the render graph's package asks for it once the views are configured.</summary>

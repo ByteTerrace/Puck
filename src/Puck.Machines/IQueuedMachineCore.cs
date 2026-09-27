@@ -6,7 +6,7 @@ namespace Puck.Machines;
 /// The slim core adapter a <see cref="QueuedMachineWorker"/> drives — the only seam between the machine-neutral queued
 /// host substrate and a concrete emulator core. The worker owns the worker thread, the bounded FIFO with backpressure,
 /// the triple-buffer publication rotation, the native-frame-keyed save-flush debounce, and the framebuffer repack; a core
-/// only advances itself, exposes its framebuffer and native-frame progress, folds the neutral pad, imports/exports its
+/// only advances itself, exposes its framebuffer and native-frame progress, folds each seat's neutral pad, imports/exports its
 /// battery save, and (through the inherited <see cref="ITimeTravelMachineCore{TInput}"/> surface) serializes/restores its
 /// whole state and forks a lookahead for machine-neutral time-travel. Every member runs on the worker's single execution
 /// thread except construction and disposal, which the host arranges around <see cref="QueuedMachineWorker.Load"/>/
@@ -18,7 +18,7 @@ namespace Puck.Machines;
 /// with no debug memory window keeps the defaults, which read as 0 and ignore pokes.
 /// </para>
 /// </summary>
-public interface IQueuedMachineCore : ITimeTravelMachineCore<MachinePadState>, IMachineMemoryPeek, IDisposable {
+public interface IQueuedMachineCore : ITimeTravelMachineCore<MachinePads>, IMachineMemoryPeek, IDisposable {
     /// <summary>Gets the full identity of the checkpoint encoding, immutable images, and behavioral configuration.
     /// A different identity refuses restoration before changing the core.</summary>
     string CheckpointIdentity { get; }

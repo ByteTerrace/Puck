@@ -1,13 +1,12 @@
 namespace Puck.Shaders.Tests;
 
-// A package instance whose counter moves: an sdf.world instance's counter moves when its residency is replaced
-// (SdfWorldPasses), as it is on the frame a seat's view first renders the scene of the world it has crossed into.
+// A package instance whose counter moves: an sdf.world instance's counter moves when it resolves a residency its passes
+// cannot record as built (SdfWorldPasses.CanFollow), as a seat's view does when the world it crosses into needs more
+// instances than the one it left. A residency its passes can record is followed in place, and its counter never moves.
 public sealed partial class RenderGraphRuntimeLawTests {
-    // The frames a view shows its last image while its passes rebuild against a replaced residency, when each rebuild
-    // has finished before the next frame. The frame the counter moves starts the rebuild and presents the last image
-    // (ShaderPipelineRenderNode's CountsChanged hold), and the next installs and renders it, so a crossing into another
-    // world shows the world it left for this one frame. The rendering plan's P14 step 8 follow-up retargets a recorder
-    // in place when the counts and pipeline layouts agree, which drives this to zero.
+    // The frames a view shows its last image while its passes rebuild against a residency they cannot follow, when each
+    // rebuild has finished before the next frame. The frame the counter moves starts the rebuild and presents the last
+    // image (ShaderPipelineRenderNode's CountsChanged hold), and the next installs and renders it.
     private const int ResidencySwitchHeldFrames = 1;
 
     [Fact]
@@ -68,10 +67,9 @@ public sealed partial class RenderGraphRuntimeLawTests {
             // Every pass has rebuilt before the next frame, so the frames counted are the hold's own, not a slow
             // build's.
             Assert.True(condition: SpinWait.SpinUntil(
-                condition: () => (view.Builds >= (builds + parts)),
+                condition: () => ((view.Builds >= (builds + parts)) && !runtime.Node(instance: 0).IsBuildingCandidate),
                 timeout: TimeSpan.FromSeconds(value: 30)
             ));
-            Thread.Sleep(millisecondsTimeout: 50);
         }
 
         Assert.Equal(

@@ -305,10 +305,10 @@ public sealed class QueuedWorkerLifecycleTests {
 
         private long m_runCycleCalls;
 
-        public void ApplyInput(in MachinePadState input) { }
+        public void ApplyInput(in MachinePads input) { }
         public int CaptureState(ref byte[] buffer) => 0;
         public void ConfigureAudio(int sampleRate) { }
-        public ITimeTravelLookahead<MachinePadState> CreateLookahead() => throw new NotSupportedException();
+        public ITimeTravelLookahead<MachinePads> CreateLookahead() => throw new NotSupportedException();
         public void Dispose() => ++DisposeCount;
         public int DrainAudioSamples(Span<short> destination) => 0;
         public void FlushSave(bool force) { }
@@ -341,7 +341,7 @@ public sealed class QueuedWorkerLifecycleTests {
         public bool ThrowOnRunCycles { get; init; }
         public ulong TrafficFingerprint => 0UL;
 
-        public void ApplyInput(in MachineLinkPads input) { }
+        public void ApplyInput(in MachinePads input) { }
         public int CaptureState(ref byte[] buffer) => 0;
         public void Dispose() { }
         public void RestoreState(byte[] buffer, int length) { }

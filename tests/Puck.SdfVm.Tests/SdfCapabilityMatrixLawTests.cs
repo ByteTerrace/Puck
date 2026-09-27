@@ -219,12 +219,12 @@ public sealed class SdfCapabilityMatrixLawTests {
         new(
             Capability: "cadence",
             Equivalent: "the scheduler's unchanged instance (RenderGraphFrame.Unchanged): a view whose residency saw nothing it renders from change is not due",
-            Check: "RenderGraphSchedulerLawTests (unchanged); RenderGraphRuntimeLawTests (package instances)",
+            Check: "RenderGraphSchedulerLawTests (unchanged); RenderGraphRuntimeLawTests (package instances); SdfWorldPassesLawTests (a view follows another residency in place)",
             Green: true,
             Members: [
                 "SdfFrame.EnableCadenceGate", "SdfWorldTables.ForcesRender", "SdfWorldTables.ViewSignature",
                 "SdfWorldTables.UpdateTablesSignature", "SdfWorldTables.SampleIndex", "SdfWorldResidency.IsUnchanged",
-                "SdfWorldResidency.MarkRendered", "SdfWorldPasses.IsUnchanged",
+                "SdfWorldResidency.MarkRendered", "SdfWorldPasses.IsUnchanged", "SdfWorldPasses.HasRenderedResolvedView",
             ]
         ),
         new(

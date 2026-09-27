@@ -1088,6 +1088,13 @@ public static class WorldBootComposition {
         // per-seat viewport rects, markers, the icon table (the SDF document emitter's material palette reads it),
         // and the SDF document intake itself. None of these touch a window or the GPU.
         services.AddSingleton<WorldRenderProbe>();
+        // The capture world.screenshot <path> crossing arms for the first frame a seat presents after its route moves.
+        services.AddSingleton(implementationFactory: static sp => new WorldCrossingCapture(
+            captureTarget: () => sp.GetRequiredService<WorldRenderProbe>().Root,
+            continuum: sp.GetRequiredService<WorldContinuum>(),
+            routes: sp.GetRequiredService<WorldSeatAuthorityRouter>(),
+            viewports: sp.GetRequiredService<WorldSeatViewports>()
+        ));
         services.AddSingleton<IGpuWorkRegistry>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>());
         // The engine readiness world.wait ready waits on and a scheduled capture's hold reads.
         services.AddSingleton<IWorldEngineReadiness>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>());

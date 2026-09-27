@@ -24,8 +24,11 @@ is synchronous; `IQueuedMachineRuntime` adds asynchronous submission. Video, aud
 input ports, feedback, hardware access, and time travel are optional capabilities.
 The [machine contracts](../../../src/Puck.Abstractions/README.md) own their full API.
 
-`QueuedMachineHost` exposes the bricks' named `video`, `audio`,
-and `controls` capabilities through that contract. `AccessHardware` marshals a
+`QueuedMachineHost` exposes named `video` and `audio` capabilities and one
+input port per seat through that contract. A host declares its ports' names in
+seat order when it is constructed, up to `MachinePads.MaxSeats`; the bricks
+declare the single port `controls`, and `Seats` lists the same ports in seat
+order. `AccessHardware` marshals a
 coherent inspection or a validated patch/bus operation to the owning worker or
 coupled link. Successful state-changing accesses invalidate rewind history in the
 same ordered work item; unavailable or unsupported hardware returns an explicit
@@ -64,7 +67,8 @@ contract; constructing a core starts no worker or rendering infrastructure.
 - Keep stepping, input, output, snapshots and disposal on one owning thread.
   Separate cores can run concurrently. Keep supplied ROM/configuration buffers
   immutable for the lifetime of the core and its forks.
-- Apply `MachinePadState` before advancing. `RunCycles` takes master-clock
+- Apply a `MachinePads` seat image before advancing; a single-port machine reads
+  seat 0. `RunCycles` takes master-clock
   cycles (AGB CPU cycles, HGB LCD dots) and
   completes the instruction in flight, so a call can overshoot its budget.
   Carry fractional pacing remainders in a long-running host. HGB carries
@@ -180,7 +184,7 @@ sealed class MyMachineHost : QueuedMachineHost {
 ```
 
 The core adapter deliberately stays narrow. `IQueuedMachineCore` advances a
-requested cycle budget, applies one held `MachinePadState`, exposes native-frame
+requested cycle budget, applies one held `MachinePads` seat image, exposes native-frame
 progress and packed `0x00RRGGBB` pixels, drains presentation audio, reports
 feedback, flushes its save, and captures/restores complete deterministic state.
 Optional default methods expose coherent worker-thread memory access and live
@@ -195,7 +199,9 @@ The worker applies these policies:
   `AcceptedAfterBackpressure`; work is never dropped or coalesced.
 - `IMachineRuntime.Advance` submits one segment and drains through a barrier
   before returning. Set optional input ports before advancing or submitting;
-  submission captures their state before returning.
+  submission captures every port's state, as one seat image, before returning.
+  A durable checkpoint carries each declared seat and refuses a host that
+  declares a different number of them.
 - A core reports its clock as a `MachineCycleRate`: a whole number of cycles
   every whole number of seconds, so a clock that is not a whole number of
   hertz (the NTSC NES master clock is 236,250,000 cycles every 11 seconds) is
@@ -314,14 +320,16 @@ every member through one shared cycle budget.
   their own workers (`PublishLentStep`): the same framebuffer, audio ring,
   feedback, and completed-step count a host already reads. Nothing above the
   worker changes when a cable goes in.
-- *Per-seat input.* `MachineLinkPads` carries one `MachinePadState` per seat, in
-  cable order, and is the held-input image the group's rewind ring replays.
+- *Per-seat input.* `MachinePads` carries one `MachinePadState` per seat, in
+  cable order, and is the held-input image the group's rewind ring replays. It
+  is the same seat image a single multi-port machine uses, where a seat is a
+  controller port instead of a member.
 - *One unit for the queue.* `Submit` accepts exact (tick budget, seat inputs)
   segments up to a finite pending window and backpressures at capacity;
   `IMachineLink.Step` is the synchronous submit-and-drain path. A lent member's
   own `Advance`/`Submit` refuses work, and its peek/poke/reconfigure/flush marshal
   onto the link thread through `IMachineCoreLender`.
-- *Coupled time travel.* One `MachineTimeTravel<MachineLinkPads>` rides the group
+- *Coupled time travel.* One `MachineTimeTravel<MachinePads>` rides the group
   core, whose state image holds every member's snapshot **and** the medium's own
   pacing state, so a rewind lands the members and the interleave together and
   the resumed future matches the un-rewound run. Fast-forward repeats the exact
@@ -352,7 +360,7 @@ this project reaches beyond the process.
 | Fork lifecycle | `ISnapshotableMachine`, `MachineInstance<TMachine, TConfiguration>`, `MachineFork<TMachine, TConfiguration>`, `MachineInstancePool<TMachine, TConfiguration>` | Pooled, ABA-safe forked-instance rentals |
 | Queued machines | `QueuedMachineHost`, `QueuedMachineWorker`, `IQueuedMachineCore`, `QueuedWorkerLifecycle<TWorkItem>`, `IQueuedWorkItem<TSelf>` | Ordered off-thread emulation and complete-frame publication |
 | Time travel | `MachineTimeTravel<TInput>`, `ITimeTravelMachineCore<TInput>`, `ITimeTravelLookahead<TInput>` | Bounded rewind, persistent runahead, and fast-forward |
-| Cable links | `LinkedMachineGroup`, `IMachineGroupCore`, `IMachineCoreLender`, `MachineLinkPads`, `LinkPacer`, `ILinkPacerParticipants` | Group-owned cores, per-seat input, the shared interleave, and coupled time travel |
+| Cable links | `LinkedMachineGroup`, `IMachineGroupCore`, `IMachineCoreLender`, `MachinePads`, `LinkPacer`, `ILinkPacerParticipants` | Group-owned cores, per-seat input, the shared interleave, and coupled time travel |
 | Rate conversion | `RationalRateAccumulator` | Drift-free integer rate conversion: both audio stages' sample cadence and the host's tick-to-cycle budgets |
 | Audio output | `StereoSampleRing` | The drop-oldest stereo frame ring both cores and the queued worker buffer audio in |
 | Contract proof | `QueuedHostContractProbe`, `QueuedHostProbeResult` | Shared observable checks for concrete queued hosts |
