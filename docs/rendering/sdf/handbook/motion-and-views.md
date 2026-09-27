@@ -146,12 +146,13 @@ another world as a view instance (`WorldViewInstances`).
 - **A session view** is an `sdf.world` instance too, rendering another world's
   own frame source. A screen showing it shows a **world inside the world**.
   A window session (`projection: window`, on a face whose portal facet maps a
-  counterpart) renders each frame through an off-axis camera fitted to the
-  counterpart's aperture from the viewer's eye mapped through the door's
-  isometry (`WorldWindowFrustumFit`): it shows what a traveller standing at
+  counterpart) renders each frame through an off-axis camera fitted, from the
+  viewer's eye mapped through the door's isometry, to the face's glass mapped
+  the same way (`WorldWindowFrustumFit`): it shows what a traveller standing at
   the eye would see through the door, and the image parallaxes as the eye
-  moves. The frustum's shear rides the camera (`CameraSnapshot.FrustumOffset`),
-  which the view pass and a hit through the image both read.
+  moves. The glass shows the image edge to edge, with no bezel. The frustum's
+  shear rides the camera (`CameraSnapshot.FrustumOffset`), which the view pass
+  and a hit through the image both read.
 
 **The scheduler decides what renders.** A view renders only while something
 shows it: a screen, through the footprint of its declared extent inside the

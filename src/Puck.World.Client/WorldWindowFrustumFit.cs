@@ -16,10 +16,10 @@ namespace Puck.World.Client;
 /// </summary>
 /// <remarks>
 /// The fitted camera shows what a traveller standing at the eye would see through the door: the ray it casts through
-/// the image point at the face's <c>(x, y)</c> is the isometry's image of the ray from the eye through that point of
-/// the source face (<c>WorldWindowFrustumFitLawTests</c>). The isometry flips the aperture's Right and Normal together,
-/// so the eye looks into the destination along the destination face's Normal, and the camera's right is the
-/// destination face's Left.
+/// the image point at the glass's <c>(x, y)</c> is the isometry's image of the ray from the eye through that point of
+/// the glass the screen draws (<c>WorldWindowFrustumFitLawTests</c>). The frustum's aperture is the glass itself,
+/// mapped axis by axis through the door's isometry, so the image fills exactly the rectangle the screen shows, and the
+/// mapped frame keeps the glass's handedness.
 /// </remarks>
 public static class WorldWindowFrustumFit {
     /// <summary>Resolves the two apertures of a window screen: the local face that claims <paramref name="screenIndex"/>,
@@ -78,34 +78,69 @@ public static class WorldWindowFrustumFit {
 
         return false;
     }
-    /// <summary>Maps the viewer's eye through the border pair's isometry and fits an off-axis frustum against the
-    /// destination aperture from that mapped position — the one call a window projection needs per produced frame.</summary>
+    /// <summary>Returns the glass a screen row draws, as an aperture: its rectangle, and its Normal
+    /// <c>Right × Up</c>, toward the side it is seen from.</summary>
+    /// <param name="screen">The screen row the window shows on.</param>
+    /// <returns>The glass's aperture geometry.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="screen"/> is <see langword="null"/>.</exception>
+    public static WorldFaceGeometry Glass(WorldScreen screen) {
+        ArgumentNullException.ThrowIfNull(argument: screen);
+
+        Vector3 right = screen.Right;
+        Vector3 up = screen.Up;
+
+        return new WorldFaceGeometry(
+            HalfHeight: screen.HalfHeight,
+            HalfWidth: screen.HalfWidth,
+            Normal: Vector3.Normalize(value: Vector3.Cross(
+                vector1: right,
+                vector2: up
+            )),
+            Origin: screen.Origin,
+            Right: right,
+            Up: up
+        );
+    }
+    /// <summary>Maps the viewer's eye and the glass through the border pair's isometry and fits an off-axis frustum
+    /// against the mapped glass from the mapped eye — the one call a window projection needs per produced frame.</summary>
     /// <param name="localEye">The viewer's eye, in the source world's space.</param>
-    /// <param name="source">The source (local) face's own aperture geometry.</param>
-    /// <param name="destination">The destination counterpart face's own aperture geometry.</param>
+    /// <param name="glass">The glass the window's screen draws (<see cref="Glass"/>), in the source world's space.</param>
+    /// <param name="source">The source (local) face's own aperture geometry, one frame of the isometry.</param>
+    /// <param name="destination">The destination counterpart face's own aperture geometry, the other frame.</param>
     /// <param name="camera">The fitted camera, apexed at the mapped eye, its
     /// <see cref="CameraSnapshot.FrustumOffset"/> the frustum's shear, on success.</param>
-    /// <returns><see langword="true"/> when the mapped eye stands far enough in front of the destination aperture
-    /// plane for a sound frustum to exist (see <see cref="SdfAsymmetricFrustum.MinEyeDepth"/>); <see langword="false"/>
-    /// otherwise — the caller falls back to its ordinary default projection for this frame.</returns>
-    public static bool TryFitWindow(Vector3 localEye, WorldFaceGeometry source, WorldFaceGeometry destination, out CameraSnapshot camera) {
-        var mappedEye = WorldWindowProjectionMath.MapPoint(
-            destination: destination,
-            point: localEye,
-            source: source
-        );
-
-        // The mapped eye stands on the side the destination's Normal faces away from (WorldWindowProjectionMath's
-        // remarks), so the aperture as the eye sees it has Normal -destination.Normal and Right -destination.Right:
-        // the same right-handed (Right, Up, Right x Up) the source face shows its viewer.
+    /// <returns><see langword="true"/> when the eye stands far enough in front of the glass for a sound frustum to
+    /// exist (see <see cref="SdfAsymmetricFrustum.MinEyeDepth"/>); <see langword="false"/> otherwise — the caller falls
+    /// back to its ordinary default projection for this frame.</returns>
+    public static bool TryFitWindow(Vector3 localEye, WorldFaceGeometry glass, WorldFaceGeometry source, WorldFaceGeometry destination, out CameraSnapshot camera) {
         if (!SdfAsymmetricFrustum.TryFit(
-            eye: mappedEye,
-            apertureOrigin: destination.Origin,
-            apertureRight: -destination.Right,
-            apertureUp: destination.Up,
-            apertureNormal: -destination.Normal,
-            apertureHalfWidth: destination.HalfWidth,
-            apertureHalfHeight: destination.HalfHeight,
+            eye: WorldWindowProjectionMath.MapPoint(
+                destination: destination,
+                point: localEye,
+                source: source
+            ),
+            apertureOrigin: WorldWindowProjectionMath.MapPoint(
+                destination: destination,
+                point: glass.Origin,
+                source: source
+            ),
+            apertureRight: WorldWindowProjectionMath.MapVector(
+                destination: destination,
+                source: source,
+                vector: glass.Right
+            ),
+            apertureUp: WorldWindowProjectionMath.MapVector(
+                destination: destination,
+                source: source,
+                vector: glass.Up
+            ),
+            apertureNormal: WorldWindowProjectionMath.MapVector(
+                destination: destination,
+                source: source,
+                vector: glass.Normal
+            ),
+            apertureHalfWidth: glass.HalfWidth,
+            apertureHalfHeight: glass.HalfHeight,
             frustum: out var frustum
         )) {
             camera = default;
@@ -113,7 +148,11 @@ public static class WorldWindowFrustumFit {
             return false;
         }
 
-        camera = frustum.ToCameraSnapshot(eye: mappedEye);
+        camera = frustum.ToCameraSnapshot(eye: WorldWindowProjectionMath.MapPoint(
+            destination: destination,
+            point: localEye,
+            source: source
+        ));
 
         return true;
     }

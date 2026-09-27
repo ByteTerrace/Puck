@@ -326,6 +326,7 @@ internal sealed partial class WorldScreenBinder {
             // rather than freezing or throwing — the fallback WorldSessionSceneEmitter.ResolveCamera takes for an
             // unknown or absent camera name.
             emitter.SetWindowCamera(camera: ((
+                (RowOf(screen: slot.Index) is { } row) &&
                 WorldWindowFrustumFit.TryResolveApertures(
                     counterpart: out var destination,
                     destination: feed.Mirror.Definition,
@@ -336,12 +337,23 @@ internal sealed partial class WorldScreenBinder {
                 WorldWindowFrustumFit.TryFitWindow(
                     camera: out var camera,
                     destination: destination,
+                    glass: WorldWindowFrustumFit.Glass(screen: row),
                     localEye: localEye,
                     source: source
                 ))
                 ? camera
                 : null));
         }
+    }
+    // The screen row ReconcileScreens last applied for an index, or null.
+    private WorldScreen? RowOf(int screen) {
+        for (var index = 0; (index < m_rows.Count); index++) {
+            if (m_rows[index].Index == screen) {
+                return m_rows[index];
+            }
+        }
+
+        return null;
     }
     // A session mirror never processes a destination's own screens/faces at all (WorldSessionSceneEmitter renders
     // static placement geometry only), so recursion is impossible by construction regardless of this check — this

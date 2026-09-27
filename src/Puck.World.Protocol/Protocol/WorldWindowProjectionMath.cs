@@ -84,4 +84,12 @@ public static class WorldWindowProjectionMath {
 
         return (((destination.Origin - (u * destination.Right)) + (v * destination.Up)) - (n * destination.Normal));
     }
+    /// <summary>Maps a world-space direction through the same isometry as <see cref="MapPoint"/>: its rotation alone,
+    /// so a frame mapped axis by axis keeps its handedness.</summary>
+    /// <param name="vector">The direction to map, in source-world space.</param>
+    /// <param name="source">The source face's own aperture geometry.</param>
+    /// <param name="destination">The destination counterpart face's own aperture geometry.</param>
+    /// <returns>The mapped direction, in destination-world space.</returns>
+    public static Vector3 MapVector(Vector3 vector, WorldFaceGeometry source, WorldFaceGeometry destination) =>
+        (((Vector3.Dot(vector1: vector, vector2: source.Up) * destination.Up) - (Vector3.Dot(vector1: vector, vector2: source.Right) * destination.Right)) - (Vector3.Dot(vector1: vector, vector2: source.Normal) * destination.Normal));
 }
