@@ -100,13 +100,13 @@ rendered image beyond `puck parity`, so a kernel change is judged by running
 | `Sdf/field/sdf-ellipse.hlsli` | The 2D ellipse distance. | None |
 | `Sdf/shade/shade-layers.hlsli` | Generic shading layers in the winning instance frame. | None |
 | `Sdf/shade/shade-weathering.hlsli` | Generic coverage masks; every surface color and response comes from the material. | None |
-| `Sdf/shade/shade-volumes.hlsli` | Bounded emissive volumes (participating media—plumes and future kinds): the `sdfVolumes` decode, the volume-local AABB slab test, the per-volume emission/extinction integration, and the one `shadeVolumes` call site `renderView` invokes before tonemap. | `SdfWorldTables.PackVolumes`, `Puck.SignedDistance.SdfVolume` |
+| `Sdf/shade/shade-volumes.hlsli` | Bounded emissive volumes (participating media—plumes and future kinds): the `sdfVolumes` decode, the volume-local AABB slab test, the per-volume emission/extinction integration, and the one `shadeVolumes` call site `renderView` invokes last. | `SdfWorldTables.PackVolumes`, `Puck.SignedDistance.SdfVolume` |
 
 ## Other SDF shaders
 
 | Shader | Role | Consumer |
 |---|---|---|
-| `Sdf/passes/fullscreen.vert.hlsl` | Minimal fullscreen triangle vertex shader. | Overworld overlay, the Vulkan surface compositor, and `sdf.film-grain` |
+| `Sdf/passes/fullscreen.vert.hlsl` | Minimal fullscreen triangle vertex shader. | The overlay and `sdf.film-grain` |
 | `Sdf/passes/sdf-film-grain.frag.hlsl` | Fullscreen integer-hashed film grain over the frame the pass before it wrote, the fragment stage of the `sdf.film-grain` render graph package (`RenderGraphPackageCatalog.SdfFilmGrain`). | A `views.post` row naming `sdf.film-grain` |
 
 ## Validation rule

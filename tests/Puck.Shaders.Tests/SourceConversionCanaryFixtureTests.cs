@@ -165,7 +165,8 @@ public sealed class SourceConversionCanaryFixtureTests {
         2 => (200, 32, 160),
         _ => (16, 240, 96),
     };
-    // The transfer pass's linear light as the float preview reads it back: clamped to 0-1 and alpha opaque.
+    // The transfer pass's linear light as a capture reads it back through the SDR display encode: clamped to 0-1 and
+    // alpha opaque, the encode's dither within one code of it.
     private static byte[] Preview(byte[] region) {
         var linear = new float[((Extent * Extent) * 4)];
         var rgba = new byte[linear.Length];

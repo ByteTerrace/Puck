@@ -187,6 +187,10 @@ public sealed record RenderGraphPackageFragment(IReadOnlyList<ShaderPipelineReso
 public sealed record RenderGraphPackageStages(string Directory, string Vertex, string Fragment);
 /// <summary>The engine packages a host offers graphs, by id.</summary>
 public sealed class RenderGraphPackageCatalog {
+    /// <summary>The format of the engine's working images: every SDF view's color, and every version of a world's root graph
+    /// that the views are placed into and the post passes and the overlay draw over. A float image, one at SDR white with
+    /// headroom above it, which the display encode quantizes for the display or a capture (<see cref="SurfaceEncoder"/>).</summary>
+    public const GpuPixelFormat WorkingFormat = GpuPixelFormat.R16G16B16A16Float;
     /// <summary>The id of the SDF world view: primary traversal, surfaces, ambient occlusion and lighting of one view,
     /// from the instance's camera, run as the fragment <see cref="SdfWorldPackage.Fragment"/> declares. The screens it
     /// shows are the instance's reads, not ports.</summary>
@@ -206,8 +210,9 @@ public sealed class RenderGraphPackageCatalog {
     /// over it, an exact copy where the rect has the source's extent, otherwise bilinear at sharpness 0 blending to
     /// clamped Catmull-Rom at sharpness 1. A rect of the whole output resamples the whole source. Its kernel is
     /// <c>Assets/Shaders/Graph/place.comp.hlsl</c>, compiled at build; its config is the rect (<see cref="PlaceRect"/>),
-    /// the sharpness (<see cref="PlaceSharpness"/>) and whether the destination outside the rect is the letterbox color
-    /// rather than the base (<see cref="PlaceLetterbox"/>).</summary>
+    /// the sharpness (<see cref="PlaceSharpness"/>), whether the destination outside the rect is the letterbox color
+    /// rather than the base (<see cref="PlaceLetterbox"/>) and whether the reconstructed source is tonemapped
+    /// (<see cref="PlaceTonemap"/>).</summary>
     public const string Place = "place";
     /// <summary>The <see cref="Place"/> config field that, at 1, fills the destination outside the rect with the
     /// letterbox color the kernel states rather than the base; 0, the default, keeps the base there.</summary>
@@ -218,6 +223,11 @@ public sealed class RenderGraphPackageCatalog {
     /// <summary>The <see cref="Place"/> config field holding the reconstruction's sharpness, from 0 (bilinear) to 1
     /// (clamped Catmull-Rom).</summary>
     public const string PlaceSharpness = "sharpness";
+    /// <summary>The <see cref="Place"/> config field that, at 1, puts the reconstructed source through the Narkowicz
+    /// ACES-fit filmic curve inside the rect: a world's root sets it on each view's place pass when
+    /// <c>render.tonemap</c> is <c>Filmic</c>, so the scene is tonemapped where it enters the frame and the base, the
+    /// letterbox color and every pane are not; 0, the default, writes the source as it is.</summary>
+    public const string PlaceTonemap = "tonemap";
     /// <summary>The name of <see cref="Place"/>'s base image in its pass group, the first input.</summary>
     public const string PlaceBase = "base";
     /// <summary>The name of <see cref="Place"/>'s source image in its pass group, the second input.</summary>
@@ -341,7 +351,7 @@ public sealed class RenderGraphPackageCatalog {
         ShaderInterfaceMember.Sampler(group: ShaderInterfaceGroup.Pass, name: "sourceSampler"),
     ];
     /// <summary>Gets the config schema of <see cref="Place"/>: the letterbox switch, off by default, the rect, whole by
-    /// default, and the sharpness, 0 by default.</summary>
+    /// default, the sharpness, 0 by default, and the tonemap switch, off by default.</summary>
     public static IReadOnlyDictionary<string, ShaderConfigField> PlaceConfig { get; } = new ReadOnlyDictionary<string, ShaderConfigField>(dictionary: new Dictionary<string, ShaderConfigField>(comparer: StringComparer.Ordinal) {
         [PlaceLetterbox] = new ShaderConfigField(
             Default: System.Text.Json.JsonDocument.Parse(json: "0").RootElement.Clone(),
@@ -364,6 +374,13 @@ public sealed class RenderGraphPackageCatalog {
             Min: 0,
             Type: ShaderValueType.Float
         ),
+        [PlaceTonemap] = new ShaderConfigField(
+            Default: System.Text.Json.JsonDocument.Parse(json: "0").RootElement.Clone(),
+            Description: "1 puts the reconstructed source through the filmic tonemap inside the rect; the base and the letterbox color are never tonemapped.",
+            Max: 1,
+            Min: 0,
+            Type: ShaderValueType.Uint
+        ),
     });
     /// <summary>Gets what <see cref="Place"/>'s kernel reads from its pass group beside the extent and config: its base
     /// image and its sampler, its source image and its sampler, and the destination it writes, each the member a
@@ -374,7 +391,7 @@ public sealed class RenderGraphPackageCatalog {
         ShaderInterfaceMember.Sampler(group: ShaderInterfaceGroup.Pass, name: (PlaceBase + ShaderPipelinePassPorts.SamplerSuffix)),
         ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: PlaceSource, type: ShaderValueType.Float4),
         ShaderInterfaceMember.Sampler(group: ShaderInterfaceGroup.Pass, name: (PlaceSource + ShaderPipelinePassPorts.SamplerSuffix)),
-        ShaderInterfaceMember.StorageImage(format: GpuPixelFormat.R8G8B8A8Unorm, group: ShaderInterfaceGroup.Pass, name: PlaceDestination, type: ShaderValueType.Float4),
+        ShaderInterfaceMember.StorageImage(format: WorkingFormat, group: ShaderInterfaceGroup.Pass, name: PlaceDestination, type: ShaderValueType.Float4),
     ];
 
     /// <summary>The number of frame slots the overlay samples: images a Frame element draws, such as a face cam.</summary>
@@ -455,7 +472,8 @@ public sealed class RenderGraphPackageCatalog {
         Puck.Abstractions.Sources.ImageSourceConversion.TransferPass,
     ];
     /// <summary>Gets the engine's own packages: <see cref="SdfWorld"/>, <see cref="SdfBricks"/>, <see cref="Overlay"/>,
-    /// <see cref="Place"/>, the <see cref="SourceConversions"/> and the post-process package <see cref="SdfFilmGrain"/>.</summary>
+    /// <see cref="Place"/>, the <see cref="SourceConversions"/> and the post-process package
+    /// <see cref="SdfFilmGrain"/>.</summary>
     public static RenderGraphPackageCatalog Engine { get; } = new(packages: EnginePackages());
     /// <summary>Gets the catalog of a host that offers no package, whose graphs are shader passes alone.</summary>
     public static RenderGraphPackageCatalog None { get; } = new(packages: []);
@@ -495,7 +513,7 @@ public sealed class RenderGraphPackageCatalog {
             ],
             Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite)],
             Members: PlaceMembers,
-            Summary: "The base image with the source reconstructed into a rect over it, bilinear to clamped Catmull-Rom by sharpness."
+            Summary: "The base image with the source reconstructed into a rect over it, bilinear to clamped Catmull-Rom by sharpness, and tonemapped when asked."
         ),
         .. SourceConversions.Select(selector: static id => new RenderGraphPackage(
             Id: id,

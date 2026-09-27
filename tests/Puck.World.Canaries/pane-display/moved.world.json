@@ -14,6 +14,9 @@
     "targetHertz": 0,
     "width": 64
   },
+  "render": {
+    "tonemap": "Filmic"
+  },
   "schema": "puck.world.definition.v1",
   "views": {
     "layouts": [

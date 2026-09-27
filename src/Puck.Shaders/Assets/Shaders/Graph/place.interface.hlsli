@@ -1,4 +1,4 @@
-// Generated from shader interface 'place' (sha256/48793c20a78b6592c52de4a2a50329522303de941c0e3af9df4835cc5e13970a). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'place' (sha256/109caf461326fe783d06243a66456f555d11b4d635866447aaa3887788260530). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_PLACE
 #define PUCK_SHADER_INTERFACE_PLACE
 
@@ -29,12 +29,13 @@ struct PlacePass {
     [[vk::offset(12)]] uint _pad12;
     [[vk::offset(16)]] float4 rect;
     [[vk::offset(32)]] float sharpness;
+    [[vk::offset(36)]] uint tonemap;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<PlacePass> passGroup : register(b0, space3);
 [[vk::binding(1, 3)]] Texture2D<float4> base : register(t1, space3);
 [[vk::binding(2, 3)]] SamplerState baseSampler : register(s2, space3);
 [[vk::binding(3, 3)]] Texture2D<float4> source : register(t3, space3);
 [[vk::binding(4, 3)]] SamplerState sourceSampler : register(s4, space3);
-[[vk::binding(5, 3)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> destination : register(u5, space3);
+[[vk::binding(5, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> destination : register(u5, space3);
 
 #endif // PUCK_SHADER_INTERFACE_PLACE

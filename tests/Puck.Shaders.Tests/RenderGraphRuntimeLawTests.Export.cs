@@ -42,6 +42,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
             Graph(pipeline: CameraGraph())
         );
         var export = new FakeOutputExport(
+            format: RenderGraphPackageCatalog.WorkingFormat,
             gpu: gpu,
             height: 16,
             width: 32

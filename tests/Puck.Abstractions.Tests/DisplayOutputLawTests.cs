@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 
@@ -141,6 +142,68 @@ public sealed class DisplayOutputLawTests {
         }
 
         Assert.Throws<ArgumentOutOfRangeException>(testCode: static () => SdrBgra.WhiteScale(paperWhiteNits: 40.0));
+    }
+    [Fact]
+    public void TheEncodeBlockHoldsTheColorSpaceAndItsWhiteScaleAtThePaperWhiteLevel() {
+        Span<byte> block = stackalloc byte[DisplayEncodeLayout.BlockBytes];
+
+        foreach (var (output, level) in ((ReadOnlySpan<(DisplayOutput, double)>)[(SdrRgba, 203.0), (ScRgb, 203.0), (Hdr10, 1_000.0)])) {
+            block.Fill(value: 0xFF);
+            DisplayEncodeLayout.WriteBlock(
+                block: block,
+                output: output,
+                paperWhiteNits: level
+            );
+            Assert.Equal(
+                actual: (ColorSpace: BinaryPrimitives.ReadUInt32LittleEndian(source: block), WhiteScale: BinaryPrimitives.ReadSingleLittleEndian(source: block[4..])),
+                expected: (ColorSpace: ((uint)output.ColorSpace), WhiteScale: ((float)output.WhiteScale(paperWhiteNits: level)))
+            );
+        }
+
+        var shortBlock = new byte[(DisplayEncodeLayout.BlockBytes - 1)];
+
+        Assert.Throws<ArgumentException>(testCode: () => DisplayEncodeLayout.WriteBlock(
+            block: shortBlock,
+            output: SdrRgba,
+            paperWhiteNits: DisplayOutput.SdrWhiteNits
+        ));
+    }
+    // The encode dithers by half a code of the format it writes either side, so the step is one code of a format a write
+    // quantizes, whatever the color space, and zero on a float target, SDR's fallback included; an sRGB format encodes on
+    // write, so the encode writes it linear light.
+    [Fact]
+    public void TheEncodeBlockDithersAtOneCodeOfAQuantizingTargetAndNotAtAllOnAFloatTarget() {
+        Span<byte> block = stackalloc byte[DisplayEncodeLayout.BlockBytes];
+        (DisplayOutput Output, float Step, uint EncodesSrgb)[] cases = [
+            (SdrRgba, (1F / 255F), 0U),
+            (SdrBgra, (1F / 255F), 0U),
+            (DisplayOutput.Sdr(format: GpuPixelFormat.B8G8R8A8Srgb), (1F / 255F), 1U),
+            (DisplayOutput.Sdr(format: GpuPixelFormat.R8G8B8A8Srgb), (1F / 255F), 1U),
+            (DisplayOutput.Sdr(format: GpuPixelFormat.R10G10B10A2Unorm), (1F / 1023F), 0U),
+            (DisplayOutput.Sdr(format: GpuPixelFormat.R16G16B16A16Float), 0F, 0U),
+            (Hdr10, (1F / 1023F), 0U),
+            (ScRgb, 0F, 0U),
+        ];
+
+        foreach (var (output, step, encodesSrgb) in cases) {
+            block.Fill(value: 0xFF);
+            DisplayEncodeLayout.WriteBlock(
+                block: block,
+                output: output,
+                paperWhiteNits: DisplayOutput.SdrWhiteNits
+            );
+            Assert.Equal(
+                actual: (output, Step: BinaryPrimitives.ReadSingleLittleEndian(source: block[8..]), EncodesSrgb: BinaryPrimitives.ReadUInt32LittleEndian(source: block[12..])),
+                expected: (output, Step: step, EncodesSrgb: encodesSrgb)
+            );
+        }
+
+        // A format no color write targets has no step to dither at.
+        Assert.Throws<ArgumentOutOfRangeException>(testCode: () => DisplayEncodeLayout.WriteBlock(
+            block: new byte[DisplayEncodeLayout.BlockBytes],
+            output: DisplayOutput.Sdr(format: GpuPixelFormat.D32Float),
+            paperWhiteNits: DisplayOutput.SdrWhiteNits
+        ));
     }
     [Fact]
     public void ThePresentationOptionsAskForSdr() =>

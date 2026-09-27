@@ -12,8 +12,8 @@ namespace Puck.World.Tests;
 /// Laws for where <see cref="WorldViewGraphHost"/> places the world's views in the synthesized root, the placement
 /// <see cref="WorldFramePresenter.PrepareGraph"/> hands it each frame (<see cref="WorldViewGraphHost.PlaceViews"/>):
 /// the first view's footprint is always added, since it is the base the root draws over, and a later view's only while
-/// it is shown, at its rect at its render scale; a lone view covering the whole display at native scale is never shown,
-/// so the root stands for the world; a view the world has not rendered is not shown; and before the world's first frame
+/// it is shown, at its rect at its render scale; a lone view covering the whole display at native scale with no tonemap
+/// is never shown, so the root stands for the world, and a tonemapped one is shown, since its place pass tonemaps it; a view the world has not rendered is not shown; and before the world's first frame
 /// the first view is placed, not shown, over the whole display so the world is still scheduled.
 /// </summary>
 public sealed class WorldViewPlacementLawTests : IDisposable {
@@ -183,6 +183,43 @@ public sealed class WorldViewPlacementLawTests : IDisposable {
             views: [View(region: new NormalizedRect(Height: 0.8f, Width: 0.8f, X: 0.1f, Y: 0.1f))]
         );
         Assert.True(condition: PlacementOf(view: 0).Shown);
+    }
+    // A filmic tonemap is the view's place pass, so a lone whole-display view is shown once rendered rather than stood in
+    // for, or the world would reach the display untonemapped. Until shown it owes the letterbox, so a source that
+    // completes later in the frame cannot reach the display through the untonemapped base.
+    [Fact]
+    public void ATonemappedLoneWholeDisplayViewIsShownSoItsPlacePassTonemapsIt() {
+        m_host.BeginFrame(
+            tonemap: WorldTonemap.Filmic,
+            views: Views
+        );
+        m_host.PlaceViews(
+            panesCover: false,
+            rendered: static _ => false,
+            sharpness: 0f,
+            views: [View(region: Whole)]
+        );
+
+        Assert.Equal(
+            actual: (PlacementOf(view: 0).Shown, PlacementOf(view: 0).Uncovered),
+            expected: (false, true)
+        );
+
+        m_host.BeginFrame(
+            tonemap: WorldTonemap.Filmic,
+            views: Views
+        );
+        m_host.PlaceViews(
+            panesCover: false,
+            rendered: static _ => true,
+            sharpness: 0f,
+            views: [View(region: Whole)]
+        );
+
+        Assert.Equal(
+            actual: PlacementOf(view: 0),
+            expected: new RenderGraphPlacement(Height: 1f, Left: 0f, Sharpness: 0f, Shown: true, Top: 0f, Uncovered: false, Width: 1f)
+        );
     }
     // The first view's pass owes the letterbox wherever no rect the root shows covers the display, shown or not: a
     // lone whole-display view, a shown whole-display view or a whole-display pane covers it, and anything else leaves

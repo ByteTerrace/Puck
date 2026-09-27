@@ -9,7 +9,7 @@ namespace Puck.SdfVm;
 /// Generates <see cref="FileName"/>, the kernels' declarations of the SDF instruction set: its version handshake, every
 /// enum an instruction word carries, the packed-layout constants the interpreter decodes words with, the screen count,
 /// the sampler filters a screen's row indexes the engine's samplers by, and where each row of the environment lies in a
-/// pass block's environment array, with its light kinds and tonemaps. Every value is read from the C# model, never
+/// pass block's environment array, with its light kinds. Every value is read from the C# model, never
 /// transcribed, and an enum member's name is its C# name in upper snake case after the enum's prefix (<see cref="SdfOp.ResetPoint"/> is <c>SDF_OP_RESET_POINT</c>), so a new member reaches the kernels by
 /// regenerating. <c>puck shaders generate</c> writes the file beside the kernels and <c>--check</c> fails on drift.
 /// <para>The text is a pure function of the model: the same build generates the same bytes, with LF line endings, on
@@ -155,7 +155,7 @@ public static class SdfIsaHlsl {
             value: SdfProgramBuilder.MaxScreenSurfaces
         );
         declarations.Members<GpuSamplerFilter>(prefix: "SDF_FILTER");
-        declarations.Section(title: "The environment's rows in the pass block's environment array (SdfEnvironment), its light kinds and tonemaps.");
+        declarations.Section(title: "The environment's rows in the pass block's environment array (SdfEnvironment) and its light kinds.");
         declarations.Count(name: "SDF_ENV_ROW_COUNT", value: SdfEnvironment.RowCount);
         declarations.Count(name: "SDF_ENV_CONTROL_ROW", value: SdfEnvironment.ControlRow);
         declarations.Count(name: "SDF_ENV_LIGHTS_ROW", value: SdfEnvironment.LightsRow);
@@ -175,7 +175,6 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_ENV_HORIZON_LOW_ROW", value: SdfEnvironment.HorizonLowRow);
         declarations.Count(name: "SDF_ENV_HORIZON_HIGH_ROW", value: SdfEnvironment.HorizonHighRow);
         declarations.Members<SdfLightKind>(prefix: "SDF_LIGHT");
-        declarations.Members<SdfTonemapMode>(prefix: "SDF_TONEMAP");
 
         return declarations.Text();
     }

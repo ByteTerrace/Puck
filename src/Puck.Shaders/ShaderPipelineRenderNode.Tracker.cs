@@ -306,7 +306,7 @@ public sealed partial class ShaderPipelineRenderNode {
             );
         }
     }
-    // The barrier the float preview records before sampling this frame's instance of the selected output.
+    // The barrier the preview records before sampling this frame's instance of the selected output.
     private ShaderPipelineBarrier PreviewSource(RuntimeResource selected, int slot) =>
         Present(
             instance: InstanceIndex(

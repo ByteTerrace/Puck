@@ -26,7 +26,7 @@ public sealed partial class ShaderPipelineRenderNode {
     private IGpuSubmissionFence? m_lastSubmissionFence;
     private Surface m_previousSurface;
 
-    /// <summary>Gets the bytes of every GPU resource the node owns: the installed graph with its float preview, replaced
+    /// <summary>Gets the bytes of every GPU resource the node owns: the installed graph with its preview, replaced
     /// objects waiting for the GPU to finish with them, published images held from a replaced graph, and the staging
     /// buffer the capture readback holds once a capture has been served.</summary>
     public ulong OwnedBytes {
@@ -54,7 +54,7 @@ public sealed partial class ShaderPipelineRenderNode {
         );
     // The bytes the replaced objects still own once any held image has been taken out of them, counted from the objects
     // themselves: the same kinds ShaderPipelineRenderNode.Budget.cs counts from the plan.
-    private static ulong LiveBytes(RuntimePass[] passes, RuntimeResource[] resources, FloatPreviewPass? preview) {
+    private static ulong LiveBytes(RuntimePass[] passes, RuntimeResource[] resources, PreviewPass? preview) {
         var bytes = (preview?.LiveBytes() ?? 0UL);
 
         foreach (var pass in passes) {
@@ -112,7 +112,7 @@ public sealed partial class ShaderPipelineRenderNode {
         return bytes;
     }
     // Takes the image behind a published surface out of replaced objects, when one of them owns it, and holds it.
-    private void Hold(nint imageHandle, RuntimeResource[] resources, FloatPreviewPass? preview) {
+    private void Hold(nint imageHandle, RuntimeResource[] resources, PreviewPass? preview) {
         if (imageHandle == 0) {
             return;
         }
@@ -188,7 +188,7 @@ public sealed partial class ShaderPipelineRenderNode {
     }
     // Retires objects an install or a selection replaced: the images behind the published surfaces are held, and the
     // rest is disposed once the node's latest submission has completed, which may already be true.
-    private void Retire(RuntimePass[] passes, RuntimeResource[] resources, FloatPreviewPass? preview) {
+    private void Retire(RuntimePass[] passes, RuntimeResource[] resources, PreviewPass? preview) {
         if (
             (passes.Length == 0) &&
             (resources.Length == 0) &&
@@ -292,7 +292,7 @@ public sealed partial class ShaderPipelineRenderNode {
     // Objects replaced by an install or a selection, or a held image no longer published, waiting for the submission
     // that retires them: the fence of the node's latest submission when they were replaced, or, for an image, the
     // fence of the submission made RetirementLag submissions after it stopped being published.
-    private sealed class RetiredGraph(RuntimePass[] passes, RuntimeResource[] resources, FloatPreviewPass? preview, IDisposable? image, ulong bytes, IGpuSubmissionFence? fence, long afterSubmission) {
+    private sealed class RetiredGraph(RuntimePass[] passes, RuntimeResource[] resources, PreviewPass? preview, IDisposable? image, ulong bytes, IGpuSubmissionFence? fence, long afterSubmission) {
         public long AfterSubmission { get; } = afterSubmission;
         public ulong Bytes { get; } = bytes;
         public IGpuSubmissionFence? Fence { get; set; } = fence;

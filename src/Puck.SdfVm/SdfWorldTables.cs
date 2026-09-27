@@ -33,7 +33,10 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     private const int DecalDescriptorCount = MaxScreenSurfaces;
     private const int DecalWordsPerCell = 4; // one uint4 per cell/descriptor (KEEP IN SYNC with shade/sdf-environment.hlsli's sdfDecalCells)
     private const int DynamicTransformByteLength = ((sizeof(float) * 4) * 3); // 48-byte rigid transform: float4 position (xyz + .w = soft-shadow participation: 0 casts / 1 shadow-suppressed) + float4 orientation quaternion + float4 anonymous Lanes (DynamicTransform.Lanes) (KEEP IN SYNC with isa/sdf-world.interface.hlsli sdfDynamicTransforms: position.w is read by sdfShadowParticipationActive's per-instance skip in field/sdf-layout.hlsli, the third row by SDF_OP_LANE_ERODE's currentLanes and shade-volumes.hlsli's selected intensity lane)
-    private const GpuPixelFormat Format = GpuPixelFormat.R8G8B8A8Unorm;
+    // The fillers' and the ISA report's format: the views' color format, which the storage image they stand in for declares.
+    private const GpuPixelFormat Format = RenderGraphPackageCatalog.WorkingFormat;
+    // The glyph atlas's format: RGBA8 coverage and color, as the host rasterizes it.
+    private const GpuPixelFormat GlyphAtlasFormat = GpuPixelFormat.R8G8B8A8Unorm;
     private const int MaxBrickBakeVoxelsPerSlice = (256 * 1024); // <= 256K voxels per brick per produced frame: ~1-2 ms background-budget
     private const int MaxBrickCarvesPerBake = 4096; // request-buffer carve capacity per slot (the debug pool's MaxCarves ceiling)
     private const int ScreenLightByteLength = ((sizeof(float) * 4) * MaxScreenSurfaces); // float4 rgb+intensity per screen slot (KEEP IN SYNC with frame/sdf-environment.hlsli sdfScreenLights)

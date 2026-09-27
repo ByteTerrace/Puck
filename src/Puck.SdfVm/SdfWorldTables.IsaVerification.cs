@@ -119,14 +119,26 @@ public sealed partial class SdfWorldTables {
             commandBufferHandles: [commandBuffer]
         );
 
-        return readback.Read(
-            bytesPerPixel: 4,
+        // The report pixel holds four codes over 255 in half floats; each rounds back to its code.
+        var pixel = readback.Read(
+            bytesPerPixel: 8,
             format: Format,
             height: 1,
             sourceImageHandle: reportImage.ImageHandle,
             sourceLayout: GpuImageLayout.ShaderReadOnly,
             width: 1
-        );
+        ).Span;
+        var report = new byte[4];
+
+        for (var channel = 0; (channel < report.Length); channel++) {
+            report[channel] = ((byte)Math.Clamp(
+                max: byte.MaxValue,
+                min: 0,
+                value: ((int)Math.Round(a: (((float)BinaryPrimitives.ReadHalfLittleEndian(source: pixel[(channel * 2)..])) * 255f)))
+            ));
+        }
+
+        return report;
     }
     private void BindIsaSets(nint commandBuffer, IGpuComputePipeline pipeline) {
         var recorder = m_gpu.Recorder;

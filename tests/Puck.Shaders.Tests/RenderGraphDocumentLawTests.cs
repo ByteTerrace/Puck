@@ -18,7 +18,7 @@ public sealed class RenderGraphDocumentLawTests {
           "name": "security-monitor",
           "resources": [
             { "name": "screen", "format": "R8G8B8A8Unorm", "dimensions": { "mode": "Relative", "width": 1, "height": 1 }, "initialization": "External" },
-            { "name": "scene", "format": "R8G8B8A8Unorm", "dimensions": { "mode": "Relative", "width": 1, "height": 1 } },
+            { "name": "scene", "format": "R16G16B16A16Float", "dimensions": { "mode": "Relative", "width": 1, "height": 1 } },
             { "name": "graded", "format": "R8G8B8A8Unorm", "dimensions": { "mode": "Relative", "width": 1, "height": 1 } },
             { "name": "final", "format": "R8G8B8A8Unorm", "dimensions": { "mode": "Relative", "width": 1, "height": 1 } }
           ],

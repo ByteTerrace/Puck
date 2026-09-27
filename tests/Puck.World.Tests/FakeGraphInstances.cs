@@ -43,11 +43,12 @@ internal sealed class FakeGraphInstances(Func<string, ShaderPipelineRenderNode> 
         var fake = new FakeGraphInstances(create: create);
 
         host.Attach(
-            compose: static (panes, views, post) => WorldRootGraph.Compose(
+            compose: static (panes, views, post, tonemap) => WorldRootGraph.Compose(
                 overlay: false,
                 packages: RenderGraphPackageCatalog.Engine,
                 post: post,
                 panes: panes,
+                tonemap: tonemap,
                 views: views
             ),
             runtime: fake,

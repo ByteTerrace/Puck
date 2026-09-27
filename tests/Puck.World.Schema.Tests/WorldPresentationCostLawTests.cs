@@ -153,7 +153,7 @@ public sealed class WorldPresentationCostLawTests {
               "$schema": "puck.render.graph.v1",
               "name": "monitor",
               "resources": [
-                { "name": "scene", "format": "R8G8B8A8Unorm", "dimensions": { "mode": "Relative", "width": 1, "height": 1 } },
+                { "name": "scene", "format": "R16G16B16A16Float", "dimensions": { "mode": "Relative", "width": 1, "height": 1 } },
                 { "name": "final", "format": "R8G8B8A8Unorm", "dimensions": { "mode": "Relative", "width": 1, "height": 1 } }
               ],
               "packages": [

@@ -1,5 +1,5 @@
-// The environment's typed reads: its lights, the sky's parameters, the curvature gains, the softboxes and the tonemap
-// mode, each decoded from the frame's environment rows.
+// The environment's typed reads: its lights, the sky's parameters, the curvature gains and the softboxes, each decoded
+// from the frame's environment rows.
 #ifndef FRAME_SDF_LIGHTS_HLSLI
 #define FRAME_SDF_LIGHTS_HLSLI
 #include "sdf-environment.hlsli"
@@ -99,7 +99,6 @@ struct SdfEnvSoftbox {
     float blur;
 };
 uint worldEnvironmentSoftboxCount() { return min((uint)max(worldEnvRow(SDF_ENV_SOFTBOX_CONTROL_ROW).x + 0.5, 0.0), SDF_ENV_MAX_SOFTBOXES); }
-uint worldTonemapMode() { return (uint)max(worldEnvRow(SDF_ENV_SOFTBOX_CONTROL_ROW).y + 0.5, 0.0); }
 SdfEnvSoftbox worldEnvironmentSoftbox(uint index) {
     uint row = (SDF_ENV_SOFTBOXES_ROW + (index * SDF_ENV_ROWS_PER_SOFTBOX));
     float4 a = worldEnvRow(row);

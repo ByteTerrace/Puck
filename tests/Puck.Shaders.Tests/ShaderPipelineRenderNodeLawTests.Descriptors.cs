@@ -5,7 +5,7 @@ namespace Puck.Shaders.Tests;
 /// <summary>
 /// Descriptor-pool laws for <see cref="ShaderPipelineRenderNode"/>. The node states the pools a plan needs before
 /// anything is allocated, and the fake records, independently, the size of every pool the node actually creates. The
-/// two agree, pool by pool and in creation order, for the graph alone and with a float preview: one pool for all the
+/// two agree, pool by pool and in creation order, for the graph alone and with a preview: one pool for all the
 /// graph's passes and in-flight slots, and one for the preview, so a heap that admits the statement admits what the
 /// node requests. Over a fake device heap, as on Direct3D 12, a candidate the heap cannot hold beside the installed
 /// graph is refused by name at install and nothing grows; one that fits exactly installs, and the replaced graph's range
@@ -39,16 +39,16 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
     [InlineData(false)]
     [InlineData(true)]
     [Theory]
-    public void TheDescriptorPoolsANodeStatesAreThePoolsItCreatesOneForTheGraphAndOneForThePreview(bool floatOutput) {
+    public void TheDescriptorPoolsANodeStatesAreThePoolsItCreatesOneForTheGraphAndOneForThePreview(bool previewOutput) {
         var gpu = new FakePipelineGpu();
         using var node = InstalledNode(
-            floatOutput: floatOutput,
-            gpu: gpu
+            gpu: gpu,
+            previewOutput: previewOutput
         );
         var stated = ShaderPipelineRenderNode.DescriptorPools(
             inFlight: InFlight,
             plan: node.Plan!,
-            preview: floatOutput
+            preview: previewOutput
         );
 
         Assert.Equal(
@@ -58,7 +58,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         Assert.Equal(
             actual: (Pools: stated.Count, GraphSets: stated[0].MaxSets),
             // Each pass binds a frame group set and a pass group set in each slot.
-            expected: (Pools: (floatOutput ? 2 : 1), GraphSets: ((2U * ((uint)node.Plan!.Passes.Count)) * InFlight))
+            expected: (Pools: (previewOutput ? 2 : 1), GraphSets: ((2U * ((uint)node.Plan!.Passes.Count)) * InFlight))
         );
     }
     [Fact]

@@ -83,7 +83,7 @@ public sealed partial class SdfWorldTables {
 
         m_glyphAtlasUpload ??= m_gpu.SurfaceTransferFactory.CreateUpload();
         m_glyphAtlasView = m_glyphAtlasUpload.Upload(
-            format: Format,
+            format: GlyphAtlasFormat,
             height: height,
             pixels: rgbaPixels,
             width: width

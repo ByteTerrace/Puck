@@ -42,7 +42,10 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
         $"paused={entry.ClockPaused.ToString().ToLowerInvariant()} seconds={entry.ClockSeconds:0.###} scale={entry.ClockScale:0.###}"
     );
     private WorldViewGraphHost.Entry? FindEntry(string name) {
-        pipelines?.Reconcile(views: server.Definition.Views);
+        pipelines?.Reconcile(
+            tonemap: server.Definition.Render.Tonemap,
+            views: server.Definition.Views
+        );
         return (((pipelines is not null) && pipelines.TryGet(
             entry: out var entry,
             name: name
@@ -155,7 +158,10 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
                 );
                 }
                 if (pipelines is null) { return CommandResult.Error(output: "[pipeline.reload: requires a rendered host]"); }
-                pipelines.Reconcile(views: server.Definition.Views);
+                pipelines.Reconcile(
+            tonemap: server.Definition.Render.Tonemap,
+            views: server.Definition.Views
+        );
                 if (args.Count == 1) {
                     var name = args[0].ToString();
 

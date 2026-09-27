@@ -111,10 +111,6 @@ public sealed class WorldRenderLightingSkyLawTests {
             expected: Vector3.Zero,
             actual: resolved.HorizonHigh
         );
-        Assert.Equal(
-            expected: SdfTonemapMode.None,
-            actual: resolved.Tonemap
-        );
     }
     [Fact]
     public void AbsentLightingAndSky_ResolveToThePinnedEnvironmentBitExact() {
@@ -478,17 +474,6 @@ public sealed class WorldRenderLightingSkyLawTests {
         Assert.Equal(
             expected: (SdfEnvironment.DefaultSkyZenithColor, 1f),
             actual: resolved.GetSkyStop(index: 1)
-        );
-    }
-    [InlineData(WorldTonemap.None, SdfTonemapMode.None)]
-    [InlineData(WorldTonemap.Filmic, SdfTonemapMode.Filmic)]
-    [Theory]
-    public void AuthoredTonemap_ResolvesToItsMatchingMode(WorldTonemap authored, SdfTonemapMode expected) {
-        var resolved = Resolve(defaults: BaseDefaults() with { Tonemap = authored });
-
-        Assert.Equal(
-            expected: expected,
-            actual: resolved.Tonemap
         );
     }
     [Fact]

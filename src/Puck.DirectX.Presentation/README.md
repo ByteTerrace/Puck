@@ -4,21 +4,22 @@ Puck.DirectX.Presentation connects the Direct3D 12 backend to Puck's rendering
 contracts. It registers the DirectX surface presenter and compute services,
 records draw and command-list work, and composes rendered surfaces for a host.
 The project depends on `Puck.DirectX`, `Puck.Hosting` and `Puck.Shaders`,
-whose pass-pipeline cache holds its blit; it owns presentation integration,
+whose pass-pipeline cache holds its display encode; it owns presentation integration,
 while device and COM bindings remain in the DirectX package.
 
 ## Usage
 
 Register the services from the composition root after selecting a Windows
 surface and Direct3D 12 device. The presenter consumes the neutral surface and
-shader contracts and does not choose a native window. Its blit shaders
-(`Assets/Shaders/surface-blit.*.hlsl`) compile to DXIL at build and ship beside
-the application, so it compiles no shader at run time.
+shader contracts and does not choose a native window. It writes the root's
+surface into the swap chain through the display encode that `Puck.Shaders`
+ships (`SurfaceEncoder`), compiled at build, so it compiles no shader at run
+time.
 
 ## Verification
 
 Build the project with `dotnet build src/Puck.DirectX.Presentation -c Release`;
-the build runs `dxc` from `PATH`.
+the `Puck.Shaders` build it references runs `dxc` from `PATH`.
 Runtime GPU checks belong to the rendering parity workflow in the development
 guide and require a supported Windows device.
 

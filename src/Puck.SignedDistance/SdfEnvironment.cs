@@ -53,15 +53,6 @@ public enum SdfEnvironmentBlend : byte {
     /// <summary>Held from the earlier key (a count, a kind, a seed, a flag).</summary>
     Hold = 2,
 }
-/// <summary>How the frame's final color is remapped before it reaches the store — see
-/// <c>sdfFilmicTonemap</c> in shade/sdf-lighting.hlsli and <c>worldTonemapMode</c> in frame/sdf-lights.hlsli.</summary>
-public enum SdfTonemapMode : byte {
-    /// <summary>No remap: the stylized shaded color, as every world rendered before this field existed.</summary>
-    None = 0,
-    /// <summary>The Narkowicz ACES-fit filmic curve on the display-referred shaded color (no gamma encode: the
-    /// pipeline never linearizes).</summary>
-    Filmic = 1,
-}
 /// <summary>The lit path's per-frame environment — every light, the stylization gains, and the sky — as one lane
 /// table every SDF pass block carries as float4 rows (<c>SdfFrameBlock.BakeEnvironment</c>, which also performs the host
 /// bakes noted per row). The kernels read the row indices generated from these constants (<c>SDF_ENV_*</c> in
@@ -82,7 +73,7 @@ public enum SdfTonemapMode : byte {
 /// <item><term>35 clouds B</term><description>softness, scale, seed, 0</description></item>
 /// <item><term>36 clouds C</term><description>drift.xy, shear.xy — rates in layer units per second (uploaded as offsets integrated on the tick clock)</description></item>
 /// <item><term>37 clouds D</term><description>spin rate in radians per second (uploaded as the integrated angle), curl, 0, 0</description></item>
-/// <item><term>38 softbox control</term><description>x softbox count, y tonemap mode (0 none, 1 filmic), 0, 0</description></item>
+/// <item><term>38 softbox control</term><description>x softbox count, 0, 0, 0</description></item>
 /// <item><term>39 + 3i .. 41 + 3i, i &lt; 4</term><description>softbox i: (direction.xyz, weight) (color.rgb, size.x) (size.y, blur, 0, 0)</description></item>
 /// <item><term>51</term><description>studio reflection horizon low (ground-ward) color.rgb, 0</description></item>
 /// <item><term>52</term><description>studio reflection horizon high (sky-ward) color.rgb, 0</description></item>
@@ -1093,18 +1084,6 @@ public sealed class SdfEnvironment {
         row: SkyControlRow,
         value: value
     );
-    }
-    /// <summary>Gets or sets the tonemap applied to the frame's final color.</summary>
-    public SdfTonemapMode Tonemap {
-        get => ((SdfTonemapMode)((byte)GetLane(
-            lane: 1,
-            row: SoftboxControlRow
-        )));
-        set => SetLane(
-            lane: 1,
-            row: SoftboxControlRow,
-            value: ((float)((byte)value))
-        );
     }
     /// <summary>Gets or sets the twinkle depth.</summary>
     public float TwinkleDepth {

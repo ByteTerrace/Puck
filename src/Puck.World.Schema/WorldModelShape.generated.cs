@@ -3339,6 +3339,8 @@ public static partial class WorldModelShape {
                 M("journalDepth", typeof(global::System.Int32), typeof(global::Puck.World.WorldHostDefaults), "JournalDepth", Read | Write),
                 M("title", typeof(global::System.String), typeof(global::Puck.World.WorldHostDefaults), "Title", Read | Write),
                 M("icon", typeof(global::System.String), typeof(global::Puck.World.WorldHostDefaults), "Icon", Read | Write),
+                M("colorSpace", typeof(global::Puck.Abstractions.Presentation.DisplayColorSpace), typeof(global::Puck.World.WorldHostDefaults), "ColorSpace", Read | Write),
+                M("paperWhiteNits", typeof(global::System.Nullable<global::System.Double>), typeof(global::Puck.World.WorldHostDefaults), "PaperWhiteNits", Read | Write),
             ],
             []),
         T(typeof(global::Puck.World.WorldHudCursor), true, JsonTypeInfoKind.Object, null,

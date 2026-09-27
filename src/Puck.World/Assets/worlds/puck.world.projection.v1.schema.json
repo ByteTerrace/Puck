@@ -1384,7 +1384,7 @@
           "title": "WorldRenderEnvironment"
         },
         "tonemap": {
-          "description": "The tonemap applied to the frame\u0027s final color. Optional; absent is None \u2014 the stylized shaded color, unchanged.",
+          "description": "The tonemap the root graph applies to the SDF scene: each view, as its place pass reconstructs it. The letterbox color, every pane (display-referred) and the HUD are never tonemapped. Optional; absent is None \u2014 the stylized shaded color, unchanged.",
           "enum": [
             "None",
             "Filmic",

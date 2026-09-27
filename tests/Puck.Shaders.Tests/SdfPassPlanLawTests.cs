@@ -50,7 +50,7 @@ public sealed class SdfPassPlanLawTests {
         )],
         Resources: [new ShaderPipelineResource(
             Dimensions: ShaderPipelineDimensions.Relative(),
-            Format: nameof(GpuPixelFormat.R8G8B8A8Unorm),
+            Format: RenderGraphPackageCatalog.WorkingFormat.ToString(),
             Name: SdfWorldPackage.Color
         )],
         Schema: RenderGraphSchemas.Graph

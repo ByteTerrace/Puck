@@ -1,10 +1,10 @@
 // The deterministic hashes' noise and dither: the R2 dither, value, lattice and cellular noise.
 #ifndef FIELD_SDF_NOISE_HLSLI
 #define FIELD_SDF_NOISE_HLSLI
-// One R2 dither sample in [0, 1] from integer pixel coordinates. The spatial pattern is "blue-ish" low-discrepancy, so
-// adding ~1 LSB of it before an 8-bit write turns gradient BANDING (sky, distance fog) into high-frequency noise the
-// eye barely sees. Fixed-point, so both backends add the IDENTICAL pattern (a float frac(x/phi2 + y/phi2^2) would
-// +-1-LSB diverge and break cross-backend parity).
+// One R2 dither sample in [0, 1] from integer pixel coordinates: a "blue-ish" low-discrepancy pattern the volumes jitter
+// their samples with, the same sequence the display encode dithers its quantization with (display-encode.frag.hlsl in
+// Puck.Shaders). Fixed-point, so both backends compute the IDENTICAL pattern (a float frac(x/phi2 + y/phi2^2) would
+// diverge and break cross-backend parity).
 float sdfR2Dither(uint2 pixel) {
     uint h = ((pixel.x * SDF_R2_ALPHA1) + (pixel.y * SDF_R2_ALPHA2));
 

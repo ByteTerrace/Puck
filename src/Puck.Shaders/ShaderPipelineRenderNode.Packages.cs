@@ -1,4 +1,5 @@
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 
 namespace Puck.Shaders;
@@ -134,7 +135,7 @@ public sealed partial class ShaderPipelineRenderNode {
         );
     }
     // Why a pass that draws nothing cannot leave its outputs standing for its inputs, or null when it can: output i
-    // stands for input i, so each output must be an owned RGBA8 image, bound beside an input image of its format, that
+    // stands for input i, so each output must be an owned image a surface carries, bound beside an input image of its format, that
     // no pass of the graph touches except later package passes reading this frame's instance, since a package pass
     // resolves each input through what it stands for (RecordPackage): publishing the input in its place changes nothing
     // any pass reads, and a chain of passes that draw nothing resolves to the first input it stands for. Every read of
@@ -157,8 +158,8 @@ public sealed partial class ShaderPipelineRenderNode {
                        b: m_resourceLookup[pass.Inputs[index].Name].Spec.Format,
                        comparisonType: StringComparison.OrdinalIgnoreCase
                    ) ||
-                   (ParseFormat(format: output.Spec.Format) is not (GpuPixelFormat.R8G8B8A8Unorm or GpuPixelFormat.B8G8R8A8Unorm)))
-                    ? "is not an RGBA8 image bound beside an input image of its format"
+                   !Surface.IsImageFormat(format: ParseFormat(format: output.Spec.Format)))
+                    ? "is not an image a surface carries bound beside an input image of its format"
                     : ((output.History || m_pipeline!.Plan.Passes.Any(predicate: other => (
                         (other.Index != planned.Index) &&
                         other.Accesses.Any(predicate: access => (

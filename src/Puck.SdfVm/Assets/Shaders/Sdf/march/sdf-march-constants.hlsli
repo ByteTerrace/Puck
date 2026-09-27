@@ -69,8 +69,8 @@ static const float ScreenGlassBase = 0.85;
 static const float ScreenGlassSunTint = 0.15;
 // Keeps a screen light's inverse-square attenuation finite for a surface point on the emitter's own face.
 static const float ScreenLightMinDistanceSquared = 1.0e-4;
-// The 8-bit dither quantum: +-0.5 LSB of R2 noise before the store (see sdfR2Dither).
-static const float DitherQuantum = (1.0 / 255.0);
+// One 8-bit display code: a silhouette's sky blend weighing less than it changes no displayed pixel.
+static const float DisplayCode = (1.0 / 255.0);
 // world.debug-view evals calibration: the ramp saturates at this many tallied field evaluations. Worst case for a single
 // lit pixel is bounded by MaxSteps (128, primary march) + ShadowSteps (40, the soft-shadow march) + 3 (calcAO) + 4
 // (the 4-tap normal fallback, worse than the 1-eval analytic default) + 1 (the coverage-AA probe) ~= 176, so 256

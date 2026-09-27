@@ -718,9 +718,9 @@ all four live. The notes below record how each landed.
     released (`RetiringEngines`); the screen-source leases its submissions
     sampled retired with it. The drain in `SdfWorldEngine.Dispose` stayed until
     P14-6 as the backstop.
-  - The runtime also refuses, at install, a consumer whose external image
-    version declares another format than its producer publishes, or whose
-    buffer version is larger than its producer's buffer (`InputFormat`), and a
+  - The runtime also refuses, at install, a consumer whose buffer version is
+    larger than its producer's buffer (`InputSize`); an external image version
+    binds whatever image its producer publishes, since it is only sampled; and a
     package recorder's resolved images carry the layout their planned access
     left them in.
   - The synthesized default composition of two instances, `world` as the
@@ -1282,8 +1282,8 @@ root, in both presentation shapes (see P11b commit 6 above):
    slot names, then one post-process package pass per `views.post` row in
    document order, each reading the frame the pass before it wrote, then `overlay`, which draws the console, HUD, toasts and
    cursor in a windowed World. Otherwise `world` is the root.
-3. The launcher, which hands the root's image to a surface compositor that
-   blits it to the swapchain.
+3. The launcher, which hands the root's float image to a surface compositor that
+   writes it into the swapchain through the display encode.
 
 Every SDF view is an `sdf.world` instance of its own, rendering the package's
 passes over its residency's tables into its own output image. Diegetic screens
@@ -1293,12 +1293,14 @@ instances the scheduler renders by demand at their footprint's extent and the
 `world.view-refresh` divisor. A view that would see itself reads its own
 previous frame, and a chain of different views lags one frame per hop.
 
-`Surface` already distinguishes CPU pixels, a shared handle, and a same-device
-image, but a surface carries only the two 8-bit RGBA formats, the SDF engine's
-internal targets are `R8G8B8A8Unorm`. Both swapchains choose a display output
-through `DisplayOutput.TrySelect` and take an HDR one only when it is requested
-and the display reports it, but nothing requests one, so every swapchain
-presents SDR (P16's parts that need no float working target). The tonemap is an ACES fit applied at the end of the SDF view pass.
+`Surface` distinguishes CPU pixels, a shared handle, and a same-device image; CPU
+pixels and a shared handle carry the two 8-bit RGBA formats, and a same-device
+image also the float working format every SDF view and the root graph render
+into (`R16G16B16A16Float`). Both swapchains choose a display output through
+`DisplayOutput.TrySelect` and take an HDR one only when the host section's
+`colorSpace` requests it and the display reports it, and both write the root's
+frame through the display encode in the output they took. The tonemap is each
+view's place pass in the root graph, over the view it reconstructs.
 There is no jitter, motion vector, or history in the SDF kernels; render scale
 is a bilinear-to-Catmull-Rom upsample in the graph's `place` pass.
 
@@ -3959,8 +3961,9 @@ Then:
   occlusion, and shadows become stages instead of branches inside one large
   view function.
 - Working targets move to a float format such as `R16G16B16A16Float`, so HDR
-  and temporal accumulation have headroom. The tonemap moves into P16's
-  display transform.
+  and temporal accumulation have headroom. The tonemap leaves the SDF view pass
+  for P16's display output: a root-graph pass before the overlay, with the
+  encode as the compositor's write.
 - Screens read sources through P12. Panes compose in the graph, since P11b
   commit 9 deleted the engine's child path.
 
@@ -4015,8 +4018,8 @@ barriers its passes: sky, mask, beam, cull arguments (indirect arguments and
 bounds), primary (dispatched indirectly, writing visibility version 0), surface
 (version 1), ambient (version 2), then shadow, light and volume shading (color
 versions 0 to 2). Brick upload and brick bake form `sdf.bricks`, a world-scoped
-instance joined to the views by buffer edges. A display pass tonemaps and
-encodes until P16 inherits it. There is no upload pass, because uploads go
+instance joined to the views by buffer edges. The view writes its float working
+color; the root graph tonemaps and the display encode quantizes (step 10). There is no upload pass, because uploads go
 through `GpuRegion`, and no composite, because the engine has none. Group 0 is the
 frame, group 1 the world (program words and every per-world table, screens,
 decals, the glyph atlas, the brick pool), group 2 the instance (empty and
@@ -4169,7 +4172,26 @@ item 2 landed.
    (`IRenderGraphPackageFactory.IsUnchanged`), and the runtime declares that
    instance unchanged (`RenderGraphFrame.Unchanged`), so its latest output
    stands unless a pending capture reads it.
-10. Float working targets and the display pass, with parity re-recorded.
+10. Landed, float working targets and the display output's first half. Every
+    SDF view's color and sky and every version of the synthesized root graph
+    are `RenderGraphPackageCatalog.WorkingFormat` (`R16G16B16A16Float`), and a
+    node publishes an image output as itself, a float one included, so place,
+    screens and exports sample the working image. The tonemap left the views:
+    `render.tonemap` `Filmic` sets the `place` config's `tonemap` on each view's
+    place pass in the root, which tonemaps the view it reconstructs and nothing
+    else, so the scene is tonemapped once, and the letterbox color, a pane,
+    which is display-referred (the moth studio's applies its own filmic curve),
+    and the HUD never are. The R2 dither left the
+    views too, for the display encode (`SurfaceEncoder`), which every swapchain
+    compositor draws as its write and a capture of a float output reads through
+    in SDR. Parity held without a
+    re-record: against the step-9 images every station moved at most one code
+    (the view's color stored in half floats before the encode quantizes it), and
+    the state hashes are unchanged. `puck counters compare` moves only
+    per-backend-deterministic kinds: the device-local bytes allocated grow by
+    about 116 MiB on both backends, the float view color and the root graph's
+    versions taking eight bytes a pixel in each frame slot where they took four,
+    and the SDF kernels' bytecode shrinks by the dither they no longer compile.
 11. Staged shading.
 12. Landed, post passes as the root graph's own passes: a world names them in
     `views.post`, each row a graph document's `packages` row less its ports
@@ -4286,14 +4308,12 @@ and P14.
 
 ### P16 — Display output
 
-**Starts from:** 8-bit UNORM SDR swapchains on both backends and the tonemap
-inside the SDF view pass. The pieces that need no float working target are in
-place:
+**Starts from:** P14-10's float working targets. The pieces are in place:
 
 - The Direct3D 12 compositor and surface upload keep their descriptors in the
   device's heaps (P7b-14a). The compositor admits one pool for the
-  `SurfaceBlitLayout` group through `IGpuBindings.CanAdmit` and binds its one
-  set; a CPU surface reaches the blit through the device's `IGpuSurfaceUpload`,
+  `DisplayEncodeLayout` group through `IGpuBindings.CanAdmit` and binds its one
+  set; a CPU surface reaches the encode through the device's `IGpuSurfaceUpload`,
   which holds no descriptor. `DirectXDescriptorHeaps.Create` makes only CPU-only
   heaps, and `DirectXGpuBindings.ShaderVisibleHeapsCreated` counts the
   device's pair, two per device (`DirectXShaderVisibleHeapsLawTests`). A
@@ -4309,27 +4329,46 @@ place:
   Direct3D 12 reports HDR10 and scRGB when the containing `IDXGIOutput6`
   reports `G2084_NONE_P2020`, and moves the swap chain into a chosen HDR output
   only when `CheckColorSpaceSupport` allows presenting it. HDR is chosen only
-  when requested and reported; `PresentationOptions.ColorSpace` requests
-  `Srgb`, and no host or document setting requests anything else
-  (`DisplayOutputLawTests`, `VulkanSwapchainFormatLawTests`).
-- Paper white. `PresentationOptions.PaperWhiteNits`, 80 to 10,000 nits and
-  `DisplayOutput.SdrWhiteNits` by default, is the level the HUD and overlays
-  compose at once they read it, and `DisplayOutput.WhiteScale` turns it into an
-  output's UI white: one in SDR at every level.
+  when requested and reported, and SDR is the default and the fallback
+  (`DisplayOutputLawTests`, `VulkanSwapchainFormatLawTests`). A World requests
+  a color space through its host section's `colorSpace` (`Srgb` by default,
+  `Hdr10` or `ScRgb`), boot-only, which reaches `PresentationOptions.ColorSpace`
+  (`WorldHostDisplayLawTests`).
+- Paper white. The host section's `paperWhiteNits`
+  (`PresentationOptions.PaperWhiteNits`, 80 to 10,000 nits and
+  `DisplayOutput.SdrWhiteNits` by default) is the level SDR white shows at in an
+  HDR output, and `DisplayOutput.WhiteScale` turns it into the output's value:
+  one in SDR at every level.
+- The display output, landed with P14-10. The working space is the stylized
+  shading's display-referred values in float, one at SDR white with headroom
+  above it. The tonemap is each view's place pass in the synthesized root, over
+  the view it reconstructs and nothing else, so the letterbox color reaches the
+  display exact, no pane is tonemapped twice and the HUD composes over the frame
+  at SDR white, never tonemapped. The encode is
+  one shader (`SurfaceEncoder`, `display-encode.frag.hlsl`): SDR adds the R2
+  dither and clamps, HDR10 decodes the sRGB transfer to linear light, moves it to
+  BT.2020 primaries, scales it by the white scale and encodes it with the ST 2084
+  perceptual quantizer, and scRGB decodes and scales. The dither is half a code
+  of the target's format, and none on a float target. Both swapchain
+  compositors draw it as their write into the back buffer, in their output at
+  the host's paper white, so the HUD shows at paper white; a capture of a float
+  output reads through its SDR. On an SDR display the frame matches the previous
+  image within the parity contract (P14-10).
 
-**Owns:** the scene-linear working space, the display-transform node, HDR
-swapchain selection, and paper white for UI.
+**Owns:** the working space, the display transform (the tonemap in each view's
+place pass and the compositors' encode), HDR swapchain selection, and paper white for UI.
 
-**Delivers:** the smallest HDR path that exercises the contracts. That means a
-scene-linear working space and one display-transform node at the end of the
-graph, which tonemaps and encodes for the target; both wait on P14-10's float
-working targets. The swapchain compositors, `SurfaceCompositor` on Vulkan and
-`DirectXSurfaceCompositor` on Direct3D 12, become that node's writer rather
-than a blit after it. On Windows a host setting, named once, then requests
-HDR10 or scRGB, which the selection above takes when the display reports it.
-The HUD and overlays read the paper-white level through
-`DisplayOutput.WhiteScale`, and one HDR source, desktop capture on an HDR
-display, converts through P12. SDR stays the default and the fallback.
+**Delivers:** the smallest HDR path that exercises the contracts: a float
+working space, the tonemap in the root graph's view place passes, over the scene
+alone, since a tonemap over the frame would dim the HUD and the letterbox, and the encode for the target as the
+swapchain compositors' write, `SurfaceCompositor` on Vulkan and
+`DirectXSurfaceCompositor` on Direct3D 12, rather than a blit after it. A host
+setting, named once, requests HDR10 or scRGB, which the selection above takes
+when the display reports it. The HUD and overlays show at the paper-white
+level through the encode's `DisplayOutput.WhiteScale`, and one HDR source,
+desktop capture on an HDR display, converts through P12. SDR stays the default
+and the fallback. Everything but the HDR source landed with P14-10; the HDR
+desktop capture remains.
 Calibration UI, per-display metadata, and HDR on the Steam Deck OLED under
 Linux are later work and stay listed in open items until scheduled.
 **Check:** on an SDR display the same graph produces the previous image within
@@ -4432,9 +4471,8 @@ block (P14-7), and P14-8's kernels as pass-pipeline cache entries, one command
 list per instance per frame slot and the conditional mesh pass. P14-8's last
 part moves the world tables into the group-1 set P17's texture draw added for the
 bake atlases. P15 and P16 both follow P14: P15 also needs P4, and
-P16, the smallest package in this group, needs P14's float working targets for
-its display transform; its heap fold, HDR swapchain selection and paper-white
-setting needed none and have landed.
+P16's display output landed with P14-10's float working targets; only its HDR
+desktop capture and the HDR-display checks remain.
 P17's CPU half, the bakes and their texture codecs, has landed, and so have
 their block-compressed upload and sampling check on both backends and the one
 pixel-format vocabulary, `GpuPixelFormat`. A ready bake's mesh draws in place
@@ -4451,9 +4489,9 @@ and a bound member and an overridden member compose by the rule
 [the decisions register](../decisions/rendering.md) states.
 
 The SDF engine's groups (P7b-20), P12b-2, P4-2c, P11b-13, P14-2 and P14-5 have
-landed, and so have P14-6, P14-7, P14-9 and the first parts of P14-8, so the
-longest remaining chain runs P14-8's world set, P14-10 and P14-11, then the rest
-of P14-13, and ends with P15. P16 follows P14-10's float working targets, and a
+landed, and so have P14-6, P14-7, P14-9, P14-10 and the first parts of P14-8, so the
+longest remaining chain runs P14-8's world set and P14-11, then the rest
+of P14-13, and ends with P15. P16's HDR desktop capture follows P14-10, and a
 bake's textures (P17) come before P6's choice between a bake and the field.
 
 ## Deferred to the end

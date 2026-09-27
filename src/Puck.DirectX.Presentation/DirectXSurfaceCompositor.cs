@@ -21,9 +21,9 @@ namespace Puck.DirectX.Presentation;
 
 /// <summary>
 /// Owns the DXGI flip-model swap chain, back-buffer RTVs, one descriptor pool of the device's shader-visible heaps
-/// (<see cref="DirectXShaderVisibleHeaps"/>) holding the blit group's set, its source image and its sampler, and a lease
-/// on the blit pipeline, the <see cref="GpuPassPipelineCache"/> entry for <see cref="SurfaceBlitLayout"/> in the swap
-/// chain's format. It creates no shader-visible heap of its own: the pool is admitted through
+/// (<see cref="DirectXShaderVisibleHeaps"/>) holding the display encode's set, its source image, its sampler and its
+/// block, and a lease on the encode pipeline, the <see cref="GpuPassPipelineCache"/> entry of <see cref="SurfaceEncoder"/>
+/// in the swap chain's format. It creates no shader-visible heap of its own: the pool is admitted through
 /// <see cref="IGpuBindings.CanAdmit"/> like every other owner's, and a CPU surface is uploaded through the device's
 /// <see cref="IGpuSurfaceUpload"/>. On every frame it:
 /// <list type="bullet">
@@ -32,8 +32,8 @@ namespace Puck.DirectX.Presentation;
 ///   <item>closes, executes, and presents the command list.</item>
 /// </list>
 /// <para>
-/// The blit path (<see cref="Blit"/>) builds a single <see cref="DirectXDrawCommand"/> that blits one
-/// <see cref="Surface"/> fullscreen. The multi-draw path (<see cref="Present"/>) accepts a caller-supplied
+/// The encode path (<see cref="Blit"/>) builds a single <see cref="DirectXDrawCommand"/> that encodes one
+/// <see cref="Surface"/> fullscreen in the swap chain's <see cref="DisplayOutput"/> at the host's paper-white level. The multi-draw path (<see cref="Present"/>) accepts a caller-supplied
 /// list of draw commands so the compositor can be driven for arbitrary compositing scenarios without changing
 /// this class.
 /// </para>
@@ -50,11 +50,8 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     // the waitable instead — the DXGI analogue of Vulkan's vkWaitForPresentKHR.
     private const uint DxgiSwapChainFlagFrameLatencyWaitableObject = 0x00000040; // DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT
     private const uint FrameLatencyWaitTimeoutMilliseconds = 100; // bound so a stalled/occluded present pipeline can never hang the pump
-    // The blit's build-compiled DXIL (Assets/Shaders/surface-blit.*.hlsl), read from the shader directory.
-    private const string BlitPixelFileName = "surface-blit.frag.dxil";
-    private const string BlitVertexFileName = "surface-blit.vert.dxil";
-    // The name the blit's pool is admitted and named under.
-    private const string BlitOwner = "surface-blit";
+    // The name the encode's pool and block are admitted and named under.
+    private const string EncodeOwner = "display-encode";
 
     // The SDR outputs a flip-model swap chain presents on any display: 8-bit unsigned normalized, in either channel order.
     private static readonly DisplayOutput[] SdrOutputs = [
@@ -64,7 +61,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
 
     private readonly IDirectXCommandListRecorder m_commandListRecorder;
     private readonly GpuPassPipelineCache m_pipelines;
-    private readonly string m_shaderDirectory;
+    private readonly double m_paperWhiteNits;
     private readonly GpuPixelFormat m_preferredFormat;
     private readonly DisplayColorSpace m_requestedColorSpace;
     private readonly PresentMode m_presentMode;
@@ -81,13 +78,15 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     private readonly nint[] m_commandLists = new nint[FrameCount];
     private readonly ulong[] m_frameFenceValues = new ulong[FrameCount];
 
-    // The blit pipeline's lease on the device's pass pipelines, held from Initialize to Dispose.
-    private GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? m_blitLease;
+    // The encode pipeline's lease on the device's pass pipelines, held from Initialize to Dispose.
+    private GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? m_encodeLease;
     private IGpuBindings? m_bindings;
-    private DirectXDrawCommand[]? m_blitDrawCommands;
-    // The blit group's pool, a range of the device's heaps, and its one set, whose source image Blit rewrites.
-    private nint m_blitPool;
-    private nint m_blitSet;
+    // The encode block for the chosen output, written once the output is chosen.
+    private IGpuStorageBuffer? m_encodeBlock;
+    private DirectXDrawCommand[]? m_encodeDrawCommands;
+    // The encode group's pool, a range of the device's heaps, and its one set, whose source image Blit rewrites.
+    private nint m_encodePool;
+    private nint m_encodeSet;
     private IGpuSurfaceUpload? m_cpuUpload;
     private nint m_frameFence;
     private HANDLE m_frameFenceEvent;
@@ -96,7 +95,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
 
     private IGpuSurfaceImport? m_surfaceImport;
     private uint m_height;
-    private nint m_lastBlitResource;
+    private nint m_lastEncodedResource;
     // Set when the swap chain is created: the ALLOW_TEARING swap-chain flag (carried into ResizeBuffers too) and the
     // matching Present flag, both non-zero only for Immediate mode on a display that supports tearing.
     private uint m_presentFlags;
@@ -123,25 +122,22 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
 
     /// <summary>Initializes a new instance of the <see cref="DirectXSurfaceCompositor"/> class.</summary>
     /// <param name="commandListRecorder">Records draw commands into the per-frame command list.</param>
-    /// <param name="presentationOptions">The neutral present-mode and surface-format preferences.</param>
-    /// <param name="pipelines">The composition's pass pipelines, which the blit is an entry of.</param>
-    /// <param name="shaderDirectory">The directory holding the blit's DXIL, <c>surface-blit.vert.dxil</c> and
-    /// <c>surface-blit.frag.dxil</c>, which the build compiles; nothing compiles at run time.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="commandListRecorder"/>, <paramref name="presentationOptions"/>, <paramref name="pipelines"/>, or <paramref name="shaderDirectory"/> is <see langword="null"/>.</exception>
+    /// <param name="presentationOptions">The neutral present-mode, surface-format, color-space and paper-white
+    /// preferences.</param>
+    /// <param name="pipelines">The composition's pass pipelines, which the display encode is an entry of.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="commandListRecorder"/>, <paramref name="presentationOptions"/> or <paramref name="pipelines"/> is <see langword="null"/>.</exception>
     public DirectXSurfaceCompositor(
         IDirectXCommandListRecorder commandListRecorder,
         PresentationOptions presentationOptions,
-        GpuPassPipelineCache pipelines,
-        string shaderDirectory
+        GpuPassPipelineCache pipelines
     ) {
         ArgumentNullException.ThrowIfNull(commandListRecorder);
         ArgumentNullException.ThrowIfNull(presentationOptions);
         ArgumentNullException.ThrowIfNull(pipelines);
-        ArgumentNullException.ThrowIfNull(shaderDirectory);
 
         m_commandListRecorder = commandListRecorder;
         m_pipelines = pipelines;
-        m_shaderDirectory = shaderDirectory;
+        m_paperWhiteNits = presentationOptions.PaperWhiteNits;
         m_presentMode = presentationOptions.PresentMode;
         m_preferredFormat = presentationOptions.SurfaceFormat;
         m_requestedColorSpace = presentationOptions.ColorSpace;
@@ -160,7 +156,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     );
 
     /// <summary>
-    /// Creates the DXGI swap chain, blit pipeline, and all supporting D3D12 objects against the shared device.
+    /// Creates the DXGI swap chain, encode pipeline, and all supporting D3D12 objects against the shared device.
     /// Call exactly once when the host has a window handle.
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="deviceContext"/> is <see langword="null"/>.</exception>
@@ -194,30 +190,30 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         SelectOutput();
         CreateRtvHeap(device: device);
         AcquireBackBuffers(device: device);
-        var blitPipeline = AcquireBlitPipeline(deviceContext: deviceContext);
-        var blitSet = AllocateBlitSet(
-            blitPipeline: blitPipeline,
-            deviceContext: deviceContext
+        var encodePipeline = AcquireEncodePipeline(deviceContext: deviceContext);
+        var encodeSet = AllocateEncodeSet(
+            deviceContext: deviceContext,
+            encodePipeline: encodePipeline
         );
         var heaps = deviceContext.DescriptorHeaps;
 
         CreateCommandInfrastructure(device: device);
 
-        // The blit draw command is invariant for the compositor's whole activation lifetime: every field it reads is
+        // The encode draw command is invariant for the compositor's whole activation lifetime: every field it reads is
         // set once, above, and never reassigned. Building it once here (parity with the Vulkan compositor's cached
         // per-set draw-command arrays) removes a per-present heap allocation from Blit.
-        m_blitDrawCommands = [
+        m_encodeDrawCommands = [
             new DirectXDrawCommand(
                 DrawParameters: new DirectXDrawParameters(
                     instanceCount: 1,
                     vertexCount: FullscreenTriangle.VertexCount
                 ),
-                Group: SurfaceBlitLayout.Group,
-                PipelineLayoutHandle: blitPipeline.LayoutHandle,
+                Group: DisplayEncodeLayout.Group,
+                PipelineLayoutHandle: encodePipeline.LayoutHandle,
                 SamplerHeapHandle: heaps.SamplerHeap,
-                SamplerTableGpuHandle: blitSet.SamplerGpuBase,
+                SamplerTableGpuHandle: encodeSet.SamplerGpuBase,
                 ViewHeapHandle: heaps.ViewHeap,
-                ViewTableGpuHandle: blitSet.GpuBase
+                ViewTableGpuHandle: encodeSet.GpuBase
             ),
         ];
     }
@@ -271,7 +267,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         AcquireBackBuffers(device: ((ID3D12Device*)deviceContext.Device.Handle));
     }
     /// <summary>
-    /// Blits <paramref name="surface"/> fullscreen onto the current back buffer and presents. Handles
+    /// Encodes <paramref name="surface"/> fullscreen onto the current back buffer and presents. Handles
     /// GPU-resident surfaces (via <see cref="DirectXImageView"/> token), imported shared textures, and CPU pixel
     /// surfaces (uploaded via <see cref="DirectXSurfaceUpload"/>). A no-op when the surface is empty.
     /// </summary>
@@ -311,23 +307,23 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
 
         // Skip rewriting the set's source image when the source resource is unchanged (parity with the Vulkan
         // compositor's last-written-view cache).
-        if (sourceResource != m_lastBlitResource) {
+        if (sourceResource != m_lastEncodedResource) {
             // The set's view is consumed at command-list execution, so rewriting it while the other ring slot's frame
             // is still in flight would redirect that frame's read mid-execution.
             WaitForAllFrames();
             m_bindings!.WriteSampledImage(
                 arrayElement: 0U,
-                binding: SurfaceBlitLayout.SourceImageBinding,
-                descriptorSetHandle: m_blitSet,
+                binding: DisplayEncodeLayout.SourceImageBinding,
+                descriptorSetHandle: m_encodeSet,
                 imageViewHandle: sourceView
             );
 
-            m_lastBlitResource = sourceResource;
+            m_lastEncodedResource = sourceResource;
         }
 
         Present(
             deviceContext: deviceContext,
-            drawCommands: m_blitDrawCommands!
+            drawCommands: m_encodeDrawCommands!
         );
     }
     /// <summary>
@@ -360,11 +356,11 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             commandList: commandList
         );
 
-        // The present-path fullscreen blit as a GPU-capture debug group (PIX event) — the Direct3D 12 peer of the
-        // Vulkan "surface-blit" debug-utils label.
+        // The present path's display encode as a GPU-capture debug group (PIX event) — the Direct3D 12 peer of the
+        // Vulkan "display-encode" debug-utils label.
         DirectXDebugLabel.Begin(
             commandList: commandList,
-            label: "surface-blit"
+            label: "display-encode"
         );
         m_commandListRecorder.RecordBackBuffer(
             backBufferHandle: ((nint)backBuffer),
@@ -437,7 +433,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         }
     }
     /// <summary>Blocks until every presented frame has fully retired on the GPU — the guard for the resources the
-    /// ring does not duplicate per slot: the single CPU-upload texture, the single blit SRV descriptor, and the
+    /// ring does not duplicate per slot: the single CPU-upload texture, the single encode SRV descriptor, and the
     /// per-slot allocators/lists at teardown. Any write to a cross-slot resource must run behind this, because
     /// <see cref="WaitForFrameSlot"/> only proves one slot idle while the other may still be sampling.</summary>
     private void WaitForAllFrames() {
@@ -545,7 +541,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         m_cpuUpload = null;
         m_surfaceImport?.Dispose();
         m_surfaceImport = null;
-        m_blitDrawCommands = null;
+        m_encodeDrawCommands = null;
         ReleaseBackBuffers();
 
         for (var i = 0; (i < m_commandLists.Length); i++) {
@@ -560,15 +556,17 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             m_frameFenceEvent = HANDLE.Null;
         }
 
-        // The device's pass pipelines dispose the blit once no other lease holds it.
-        m_blitLease?.Release();
-        m_blitLease = null;
+        // The device's pass pipelines dispose the encode once no other lease holds it.
+        m_encodeLease?.Release();
+        m_encodeLease = null;
         // The pool's range returns to the device's heaps, and its set with it.
-        m_bindings?.DestroyPool(poolHandle: m_blitPool);
-        m_blitPool = 0;
-        m_blitSet = 0;
+        m_bindings?.DestroyPool(poolHandle: m_encodePool);
+        m_encodePool = 0;
+        m_encodeSet = 0;
         m_bindings = null;
-        m_lastBlitResource = 0;
+        m_encodeBlock?.Dispose();
+        m_encodeBlock = null;
+        m_lastEncodedResource = 0;
         Release(pointer: ref m_rtvHeap);
         Release(pointer: ref m_swapChain);
 
@@ -849,48 +847,34 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             Release(pointer: ref m_backBuffers[i]);
         }
     }
-    // Takes the blit from the device's pass pipelines: the shared layout, for a render pass of one color attachment in the
-    // swap chain's format, its vertex stage drawing the fullscreen triangle from SV_VertexID so the pipeline reads no
-    // vertex input. The pool builds it, and the compositor waits for it once, here.
-    private GpuPassPipeline AcquireBlitPipeline(DirectXDeviceContext deviceContext) {
-        m_blitLease = m_pipelines.Acquire(
+    // Takes the display encode from the device's pass pipelines, for a render pass of one color attachment in the swap
+    // chain's format; its vertex stage draws the fullscreen triangle from SV_VertexID, so the pipeline reads no vertex
+    // input. The pool builds it, and the compositor waits for it once, here.
+    private GpuPassPipeline AcquireEncodePipeline(DirectXDeviceContext deviceContext) {
+        m_encodeLease = m_pipelines.Acquire(
             device: deviceContext,
-            key: GpuPassPipelineKey.OfGraphics(
-                description: new GpuGraphicsPipelineDescription(
-                    Layout: SurfaceBlitLayout.Layout,
-                    Name: "surface-blit",
-                    VertexInput: new GpuVertexInputLayout(
-                        Attributes: [],
-                        StrideBytes: 0U
-                    )
-                ),
-                fragment: File.ReadAllBytes(path: Path.Combine(
-                    path1: m_shaderDirectory,
-                    path2: BlitPixelFileName
-                )),
+            key: SurfaceEncoder.Key(
+                directX: true,
                 renderPass: new GpuRenderPassDescription(Colors: [new GpuColorAttachment(
                     FinalLayout: GpuImageLayout.RenderTarget,
                     Format: m_surfaceFormat,
                     Load: GpuAttachmentLoad.Clear,
                     Store: GpuAttachmentStore.Store
-                )]),
-                vertex: File.ReadAllBytes(path: Path.Combine(
-                    path1: m_shaderDirectory,
-                    path2: BlitVertexFileName
-                ))
+                )])
             )
         );
 
-        return m_blitLease.Wait(cancellationToken: CancellationToken.None);
+        return m_encodeLease.Wait(cancellationToken: CancellationToken.None);
     }
-    // Creates the blit group's pool as a range of the device's shader-visible heaps, admitted first like every other
-    // owner's so a heap that cannot hold it refuses it by name, and allocates its one set, whose sampler never changes.
-    private DirectXDescriptorSet AllocateBlitSet(DirectXDeviceContext deviceContext, GpuPassPipeline blitPipeline) {
+    // Creates the encode group's pool as a range of the device's shader-visible heaps, admitted first like every other
+    // owner's so a heap that cannot hold it refuses it by name, and allocates its one set, whose sampler and block (the
+    // chosen output's, at the paper-white level) never change.
+    private DirectXDescriptorSet AllocateEncodeSet(DirectXDeviceContext deviceContext, GpuPassPipeline encodePipeline) {
         var bindings = deviceContext.Services.Bindings;
-        GpuDescriptorPoolSizes[] pools = [GpuDescriptorPoolSizes.ForGroups(groups: SurfaceBlitLayout.Layout.Groups)];
+        GpuDescriptorPoolSizes[] pools = [GpuDescriptorPoolSizes.ForGroups(groups: DisplayEncodeLayout.Layout.Groups)];
 
         if (!bindings.CanAdmit(
-            owner: BlitOwner,
+            owner: EncodeOwner,
             pools: pools,
             refusal: out var refusal
         )) {
@@ -898,31 +882,47 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         }
 
         m_bindings = bindings;
-        m_blitPool = bindings.CreatePool(
+        m_encodePool = bindings.CreatePool(
             name: new GpuObjectName(
-                owner: BlitOwner,
+                owner: EncodeOwner,
                 part: "pool"
             ),
             sizes: in pools[0]
         );
-        m_blitSet = bindings.AllocateSet(
-            descriptorSetLayoutHandle: blitPipeline.GroupLayoutHandles[((int)SurfaceBlitLayout.Group)],
+        m_encodeSet = bindings.AllocateSet(
+            descriptorSetLayoutHandle: encodePipeline.GroupLayoutHandles[((int)DisplayEncodeLayout.Group)],
             name: new GpuObjectName(
-                owner: BlitOwner,
+                owner: EncodeOwner,
                 part: "set"
             ),
-            poolHandle: m_blitPool
+            poolHandle: m_encodePool
         );
         bindings.WriteSampler(
             arrayElement: 0U,
-            binding: SurfaceBlitLayout.SamplerBinding,
-            descriptorSetHandle: m_blitSet,
+            binding: DisplayEncodeLayout.SamplerBinding,
+            descriptorSetHandle: m_encodeSet,
             samplerHandle: bindings.CreateSampler(filter: GpuSamplerFilter.Linear)
         );
+        m_encodeBlock = SurfaceEncoder.CreateBlock(
+            gpu: deviceContext.Services,
+            name: new GpuObjectName(
+                owner: EncodeOwner,
+                part: "block"
+            ),
+            output: m_output,
+            paperWhiteNits: m_paperWhiteNits
+        );
+        bindings.WriteConstantBuffer(
+            arrayElement: 0U,
+            binding: DisplayEncodeLayout.BlockBinding,
+            bufferHandle: m_encodeBlock.BufferHandle,
+            bufferSize: m_encodeBlock.SizeBytes,
+            descriptorSetHandle: m_encodeSet
+        );
         // A fresh set has no source written yet; the next Blit writes one.
-        m_lastBlitResource = 0;
+        m_lastEncodedResource = 0;
 
-        return ((DirectXDescriptorSet)GCHandle.FromIntPtr(value: m_blitSet).Target!);
+        return ((DirectXDescriptorSet)GCHandle.FromIntPtr(value: m_encodeSet).Target!);
     }
     private void CreateCommandInfrastructure(ID3D12Device* device) {
         for (var i = 0u; (i < FrameCount); i++) {

@@ -57,8 +57,10 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     private bool m_outputRefreshRequested;
     private CompiledShaderPipeline? m_pending;
     private CompiledShaderPipeline? m_pipeline;
-    private FloatPreviewPass? m_preview;
+    private PreviewPass? m_preview;
     private IGpuSurfaceReadback? m_readback;
+    // The capture of an output a surface cannot carry (a float working image): the display encode's SDR, read back.
+    private SurfaceEncoder? m_encoder;
     private bool m_ready;
     private uint m_requestedHeight;
     private uint m_requestedWidth;
@@ -90,7 +92,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
 
     /// <summary>Creates an initially empty node that records through <paramref name="deviceContext"/>'s services. The
     /// first valid <see cref="Swap"/> installs a graph. Every pass pipeline the node installs, its package passes' and
-    /// float preview's included, is leased from <paramref name="pipelines"/>, which counts what it creates; the node's
+    /// preview's included, is leased from <paramref name="pipelines"/>, which counts what it creates; the node's
     /// own ledger counts none of it. A graph's package passes are recorded by <paramref name="packages"/>' recorders, one
     /// per pass, created when the graph installs and disposed with it; a node without recorders refuses a graph that has
     /// any.</summary>
@@ -144,7 +146,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         outputLayout
     ) => Swap(pipeline: pipeline);
 
-    /// <summary>Gets the bytes the installed graph owns: every frame slot's resources and its float preview. It is the
+    /// <summary>Gets the bytes the installed graph owns: every frame slot's resources and its preview. It is the
     /// installed graph's <see cref="ShaderPipelineMemoryAccount.SteadyBytes"/>.</summary>
     public ulong AllocationBytes => checked((m_allocationBytes + PreviewBytes(
         extent: ((m_preview is { } preview)
@@ -334,56 +336,6 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             throw;
         }
     }
-    // A capture armed after a selection reads that selection: while its float preview builds, the published image is still
-    // the previous selection's, so the capture waits for the frame that publishes the new one.
-    private void CaptureIfPending() {
-        if (m_previewRequest is not null) {
-            return;
-        }
-
-        m_capture.Serve(
-            failureLabel: "[capture] failed",
-            tick: m_publishedStateTick,
-            writer: (m_captureWriter ??= path => {
-                m_capturePng.ThrowIfUnavailable(path: path);
-                if (
-                    m_lastSurface.IsEmpty ||
-                    !m_lastSurface.IsSameDeviceImage
-                ) {
-                    throw new InvalidOperationException(message: "A completed same-device output is required for capture.");
-                }
-                var format = m_lastSurface.Format;
-
-                m_readback ??= m_gpu.SurfaceTransferFactory.CreateReadback();
-                var sourceLayout = m_publishedLayout;
-
-                // The readback sizes its staging buffer to the surface it reads, replacing one of another size.
-                m_readbackBytes = ReadbackBytes(
-                    height: m_lastSurface.Height,
-                    width: m_lastSurface.Width
-                );
-                var pixels = m_readback.Read(
-                    m_lastSurface.ImageHandle,
-                    format,
-                    m_lastSurface.Width,
-                    m_lastSurface.Height,
-                    4,
-                    sourceLayout
-                );
-
-                if (!m_capturePng.TryWrite(
-                    height: ((int)m_lastSurface.Height),
-                    path: path,
-                    rgba: pixels,
-                    width: ((int)m_lastSurface.Width)
-                )) {
-                    throw new NotSupportedException(message: "PNG capture is unavailable.");
-                }
-
-                Console.Error.WriteLine(value: $"[capture] {m_name} -> {path}");
-            })
-        );
-    }
     // Whether history built for the installed graph's frame extent carries into a candidate planned at another unchanged:
     // same declaration shape, and, for an image, the same resolved extent, each resolved against the frame extent it was
     // built for.
@@ -435,7 +387,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     private void Allocate(GraphBuild built, IReadOnlyDictionary<int, CarriedHistory> carried, RowBindings rows, ShaderPipelineStorageCounts counts) {
         var plan = m_pipeline!.Plan;
         var map = new Dictionary<string, RuntimeResource>(comparer: StringComparer.Ordinal);
-        FloatPreviewPass? preview = null;
+        PreviewPass? preview = null;
 
         var storages = new RuntimeResource[plan.Storages.Count];
 
@@ -637,7 +589,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                     planned: plan.Passes[i]
                 );
             }
-            // The preview the selected output publishes through is part of the graph: a float or external selection
+            // The preview the selected output publishes through is part of the graph: an external selection
             // was built with its targets and pipelines, and gets its descriptors and command pools here, before the
             // installed graph retires.
             var selected = (map.TryGetValue(
@@ -649,7 +601,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             );
 
             if (NeedsPreview(spec: selected.Spec)) {
-                var objects = (built.Preview ?? throw new InvalidOperationException(message: "The candidate was built without the float preview its selected output needs."));
+                var objects = (built.Preview ?? throw new InvalidOperationException(message: "The candidate was built without the preview its selected output needs."));
 
                 built.Preview = null;
                 preview = CreatePreview(objects: objects);
@@ -703,7 +655,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             throw;
         }
     }
-    // Begins the slot's one command list, which every pass, the float preview, the export copy and the presentation record
+    // Begins the slot's one command list, which every pass, the preview, the export copy and the presentation record
     // into; only the region copies, which the passes' recordings owe, record in a list of their own, submitted first.
     private nint BeginFrameCommands(int slot) {
         var command = m_slots[slot].Commands!.CommandBufferHandle;
@@ -988,8 +940,9 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         }
         return (plan.FindResource(name: resourceName) is { Declaration.Kind: ShaderPipelineResourceKind.Image, IsConsumed: false });
     }
-    private static bool IsFloatFormat(GpuPixelFormat format) => (format is GpuPixelFormat.R16G16B16A16Float or GpuPixelFormat.R32G32B32A32Float);
-    private static bool NeedsPreview(ShaderPipelineResource spec) => ((spec.Kind == ShaderPipelineResourceKind.Image) && (spec.IsExternal || IsFloatFormat(format: ParseFormat(format: spec.Format))));
+    // Whether a selected output publishes through the preview: an external image, which the node does not own, is
+    // encoded into an RGBA8 image it does. Every other image output publishes itself, a float one included.
+    private static bool NeedsPreview(ShaderPipelineResource spec) => ((spec.Kind == ShaderPipelineResourceKind.Image) && spec.IsExternal);
     private Surface Output(int slot) {
         var selectedName = (m_selectedOutput ?? m_pipeline!.Plan.DefaultOutput);
         var selectedResource = m_resourceLookup[selectedName];
@@ -1002,14 +955,14 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             (selectedResource.Alias.Target is null) &&
             NeedsPreview(spec: selectedResource.Spec)
         ) {
-            var target = (m_preview?.GetTarget(slot: slot) ?? throw new InvalidOperationException(message: "The float preview target is not ready."));
+            var target = (m_preview?.GetTarget(slot: slot) ?? throw new InvalidOperationException(message: "The preview target is not ready."));
 
             return Surface.SameDeviceImage(
                 target.ImageHandle,
                 target.ImageViewHandle,
                 target.Width,
                 target.Height,
-                GpuPixelFormat.R8G8B8A8Unorm
+                SurfaceEncoder.CaptureFormat
             );
         }
         var (published, publishedName, instance) = PublicationOf(
@@ -1027,8 +980,8 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         var height = resolved.Height;
         var format = resolved.Format;
 
-        if (!Surface.IsSurfaceFormat(format: format)) {
-            throw new InvalidDataException(message: "The selected output must use an RGBA8 format.");
+        if (!Surface.IsImageFormat(format: format)) {
+            throw new InvalidDataException(message: $"The selected output is {format}, which no surface carries.");
         }
 
         return Surface.SameDeviceImage(
@@ -1040,10 +993,10 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         );
     }
 
-    // The format of the image a node publishes for an image output: a float or external output through the RGBA8
-    // float preview, any other in its own format (Output).
+    // The format of the image a node publishes for an image output: an external output through the RGBA8 preview, any
+    // other in its own format (Output).
     internal static GpuPixelFormat PublishedFormat(ShaderPipelineResource output) => (NeedsPreview(spec: output)
-        ? GpuPixelFormat.R8G8B8A8Unorm
+        ? SurfaceEncoder.CaptureFormat
         : ParseFormat(format: output.Format));
 
     /// <summary>Parses a resource declaration's format, as every graph image is created and bound by.</summary>
@@ -1103,13 +1056,10 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     private RuntimeResource PresentationResource(RuntimeResource selected) {
         var selectedFormat = ParseFormat(format: selected.Spec.Format);
 
-        if (
-            (selectedFormat == GpuPixelFormat.R8G8B8A8Unorm) ||
-            (selectedFormat == GpuPixelFormat.B8G8R8A8Unorm)
-        ) {
+        if (Surface.IsImageFormat(format: selectedFormat)) {
             return selected;
         }
-        throw new InvalidDataException(message: $"Selected output '{selected.Spec.Name}' must be RGBA8 or a float image with preview conversion.");
+        throw new InvalidDataException(message: $"Selected output '{selected.Spec.Name}' is {selectedFormat}, which no surface carries.");
     }
     // Moves the carried history's instances out of the replaced graph into the installed one. The carried instances keep
     // their contents and the states the replaced graph left them in.
@@ -1341,6 +1291,8 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         m_preview = null;
         m_readback?.Dispose();
         m_readback = null;
+        m_encoder?.Dispose();
+        m_encoder = null;
         m_readbackBytes = 0UL;
         foreach (var slot in m_slots) {
             slot.Commands?.Dispose();
@@ -1452,11 +1404,12 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                 )) {
                     throw new InvalidDataException(message: $"External image '{declaration.Name}' has not been bound.");
                 }
-                // A bound image carries its binder's extent, such as another graph instance's output rendered at its own
-                // footprint's extent: a pass samples it whole, and its declared dimensions only size the passes that
-                // resolve their extent from it.
-                if (image.Format != ParseFormat(format: declaration.Format)) {
-                    throw new InvalidDataException(message: $"External image '{declaration.Name}' has format {image.Format}; expected {declaration.Format}.");
+                // A bound image carries its binder's extent and format, such as another graph instance's output rendered at
+                // its own footprint's extent, in RGBA8 or the float working format: a pass only ever samples an external
+                // image, whole, so its declared dimensions only size the passes that resolve their extent from it and its
+                // declared format only the stand-in's.
+                if (!Surface.IsImageFormat(format: image.Format)) {
+                    throw new InvalidDataException(message: $"External image '{declaration.Name}' has format {image.Format}, which no pass samples.");
                 }
             } else if (!m_externalBuffers.TryGetValue(
                 key: declaration.Name,
@@ -1742,7 +1695,8 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         return m_lastSurface;
     }
 
-    /// <summary>Requests a capture of the next completed RGBA8 output frame.</summary>
+    /// <summary>Requests a capture of the next completed output frame, an image no surface carries through the display
+    /// encode's SDR (<see cref="SurfaceEncoder"/>).</summary>
     public void RequestCapture(FrameCaptureRequest request) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
