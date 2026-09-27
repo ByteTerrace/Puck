@@ -4169,15 +4169,23 @@ item 2 landed.
      rewritten only when what it binds moves (a region's growth, the glyph
      atlas, the mesh atlases), after the device is idle. A pass set holds only
      the view's own storages, output, screens and mesh target.
-   Still to land, written against that set: a recorder retargets its residency
-   in place when the counts and pipeline layouts agree. A seat's view renders
-   the residency of the world the seat is presented in, and replacing an
-   instance's residency moves its counter, so the view's passes rebuild and it
-   holds its last image until the rebuild installs, for at least one frame
-   (`RenderGraphRuntimeLawTests.ResidencySwitchHeldFrames`). Retargeting in
-   place drives that to zero, so a crossing's first frame shows the
-   destination, and a portal window already rendering the destination as a
-   session shares its residency rather than adding a second.
+   - An instance whose resolved residency changes follows it in place,
+     recording the other residency's tables through the passes it has, when
+     they share every layout and the instance count its scratch is sized by
+     (`SdfWorldPasses.CanFollow`). A residency whose kernels are loaded takes
+     its pipeline leases in the frame that first asks, so one a portal
+     crossing creates is ready in that frame, and the seat's first frame after
+     the arrival shows the destination
+     (`SdfWorldPassesLawTests.AViewFollowsAnotherResidencyInPlaceWhenItsPassesCanRecordIt`,
+     the `portal-walk` canary's crossing capture). A change the passes cannot
+     follow still rebuilds them and holds the last image
+     (`RenderGraphRuntimeLawTests.ResidencySwitchHeldFrames`).
+   Still to land: a routed seat view and a portal window's session view of the
+   same destination share one residency. They cannot today: a frame's quality
+   levers (ambient occlusion, soft shadows, the far bound) are the frame's,
+   not each view's, and the window is dressed at the session's reduced cost;
+   and each reads its own mirror of the destination (the endpoint's, and the
+   window's own observation).
 9. Landed with step 6, the cadence as the scheduler's: `SdfWorldPasses` asks
    each residency whether a view's latest render stands
    (`IRenderGraphPackageFactory.IsUnchanged`), and the runtime declares that

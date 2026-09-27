@@ -25,7 +25,7 @@ namespace Puck.World;
 /// cannot is a caller being lied to.
 /// <para>Registered in every boot shape so the command vocabulary stays stable; its presentation dependencies are
 /// optional and handlers refuse by name when unavailable.</para></remarks>
-internal sealed class WorldUiCommandModule(IServerLink link, WorldRenderProbe? renderProbe = null, WorldBindingBarControl? bindingBarControl = null) : ICommandModule {
+internal sealed class WorldUiCommandModule(IServerLink link, WorldRenderProbe? renderProbe = null, WorldBindingBarControl? bindingBarControl = null, WorldCrossingCapture? crossingCapture = null) : ICommandModule {
     /// <summary>The binding-bar visibility and read-back verb.</summary>
     public const string BindingBarCommand = "world.binding-bar";
 
@@ -138,7 +138,7 @@ internal sealed class WorldUiCommandModule(IServerLink link, WorldRenderProbe? r
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.screenshot",
-            description: "Arms a one-shot PNG capture of the next composed frame (the render graph's root: the world, its views.post passes and the overlay): world.screenshot <path.png>. This REQUESTS a capture, it does not take one — the echo reads 'pending <path>' because no file exists yet, and the renderer prints the resolved path on stderr the moment the frame lands, named by the render-graph instance that served it ('[capture] main -> <path>' from the root graph's instance, or '[capture] world -> <path>' when the world's view is the root because nothing is drawn over it). Let rendering progress (world.wait), then confirm the capture completion before reading the file. Arming a second capture while one is still pending REFUSES rather than silently replacing it — the earlier path would never be written. A capture the render chain refuses (one armed when the graphics device is lost, among others) writes no file and prints [capture] refused <path>: <reason> on stderr, and a request still outstanding when the run ends is reported on stderr, instead of leaving the caller believing a file exists. The parent directory is created here.",
+            description: "Arms a one-shot PNG capture of the next composed frame (the render graph's root: the world, its views.post passes and the overlay): world.screenshot <path.png>, or of the first frame a seat presents after its route moves, the frame a crossing shows first: world.screenshot <path.png> crossing [player] (player defaults to 1; the capture waits for the crossing apart from an ordinary one, so another may be armed and land meanwhile). This REQUESTS a capture, it does not take one — the echo reads 'pending <path>' because no file exists yet, and the renderer prints the resolved path on stderr the moment the frame lands, named by the render-graph instance that served it ('[capture] main -> <path>' from the root graph's instance, or '[capture] world -> <path>' when the world's view is the root because nothing is drawn over it). Let rendering progress (world.wait), then confirm the capture completion before reading the file. Arming a second capture while one is still pending REFUSES rather than silently replacing it — the earlier path would never be written. A capture the render chain refuses (one armed when the graphics device is lost, among others) writes no file and prints [capture] refused <path>: <reason> on stderr, and a request still outstanding when the run ends is reported on stderr, instead of leaving the caller believing a file exists. The parent directory is created here.",
             handler: (context, args) => {
                 if (args.Count == 0) {
                     return CommandResult.Error(output: "[world.screenshot: a target path is required — world.screenshot <path.png>]");
@@ -155,7 +155,19 @@ internal sealed class WorldUiCommandModule(IServerLink link, WorldRenderProbe? r
                 // A pending request is UNFINISHED WORK, not a stale value to overwrite: arming over it would drop a
                 // file the caller was already promised, with nothing on either stream to say so. Refusing names both
                 // paths and leaves the first request intact, so the caller fences a frame and asks again.
-                if (render.PendingCapturePath is { } outstanding) {
+                var crossing = (
+                    (args.Count > 1) &&
+                    string.Equals(
+                        a: args[1].ToString(),
+                        b: "crossing",
+                        comparisonType: StringComparison.Ordinal
+                    )
+                );
+
+                if (
+                    !crossing &&
+                    (render.PendingCapturePath is { } outstanding)
+                ) {
                     return CommandResult.Error(output: $"[world.screenshot: a capture of {outstanding} is still pending — arming over it would write no file for it; fence a frame (world.wait) and retry]");
                 }
 
@@ -170,6 +182,33 @@ internal sealed class WorldUiCommandModule(IServerLink link, WorldRenderProbe? r
                 }
 
                 var request = new FrameCaptureRequest(path: path);
+
+                if (crossing) {
+                    var player = 1;
+
+                    if (
+                        (crossingCapture is null) ||
+                        (
+                            (args.Count > 2) &&
+                            (!int.TryParse(
+                                provider: System.Globalization.CultureInfo.InvariantCulture,
+                                result: out player,
+                                s: args[2].ToString()
+                            ) || (player < 1) || (player > PlayerRoster.MaxSlots))
+                        )
+                    ) {
+                        return CommandResult.Error(output: $"[world.screenshot: crossing takes a player 1..{PlayerRoster.MaxSlots} — world.screenshot <path.png> crossing [player]]");
+                    }
+                    if (!crossingCapture.TryArm(
+                        reason: out var armReason,
+                        request: request,
+                        slot: (player - 1)
+                    )) {
+                        return CommandResult.Error(output: $"[world.screenshot: {armReason}]");
+                    }
+
+                    return new CommandResult(Output: $"[world.screenshot: pending {path} — lands on the first frame player {player} presents after crossing]");
+                }
 
                 render.RequestCapture(request: request);
                 // A capture the render chain refuses, such as one armed when the device is lost, writes no file; say so

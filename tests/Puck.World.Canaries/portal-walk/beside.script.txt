@@ -9,6 +9,8 @@ world.wait 10
 body.where
 world.screenshot {run}/before.png
 world.wait 10
+# The capture armed for a crossing never lands, since the seat never crosses.
+world.screenshot {run}/arrival.png crossing
 # The same walk passes beside the arch, so the body never crosses and stays in the lobby.
 body.fly 1 0 0 0 0 0 1.5
 world.wait 100

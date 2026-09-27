@@ -259,7 +259,7 @@ public sealed class WorldRoutedPresentationLawTests {
         Assert.Equal(actual: position, expected: AwayPose);
     }
     [Fact]
-    public void ChangingTheViewWithinOneResidencyInvalidatesItsPasses() {
+    public void ChangingTheViewWithinOneResidencyIsFollowedInPlaceAndRenderedBeforeItStands() {
         using var north = Endpoint(definition: AwayDocument(), identity: Away, position: AwayPose);
         var scene = new WorldRoutedScene(bodyColor: north.Mirror.BodyColor, endpoint: north, hostFrame: static () => null);
         using var residency = new SdfWorldResidency(
@@ -276,11 +276,13 @@ public sealed class WorldRoutedPresentationLawTests {
         var counter = passes.CounterOf(instance: "world$2")!;
         var revision = counter.Revision;
 
+        // Another view of the same residency is one the passes record as built: they follow it, so the counter stays
+        // put, and the instance may not stand on its previous render until its passes render the new view.
         index = 0;
         passes.BeginFrame(context: default);
         Assert.Same(actual: passes.CounterOf(instance: "world$2"), expected: counter);
-        Assert.NotEqual(actual: counter.Revision, expected: revision);
-        revision = counter.Revision;
+        Assert.Equal(actual: counter.Revision, expected: revision);
+        Assert.False(condition: passes.HasRenderedResolvedView(instance: "world$2"));
         passes.BeginFrame(context: default);
         _ = passes.CounterOf(instance: "world$2");
         Assert.Equal(actual: counter.Revision, expected: revision);

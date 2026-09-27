@@ -37,6 +37,24 @@ public sealed partial class SdfWorldTables {
 
     // One of the per-view compute pipelines by its index.
     internal IGpuComputePipeline Pipeline(int index) => m_pipelines.Pipeline(index: index);
+    // Whether a view's passes built against these tables record against the other tables as they are: every compute
+    // part's set layouts agree (the parts share one interface, so the beam's stand for all), and the mesh pass draws
+    // through the same pipeline layout into the same render pass its framebuffers were created for.
+    internal bool SharesLayoutsWith(SdfWorldTables other) =>
+        (
+            ReferenceEquals(
+                objA: this,
+                objB: other
+            ) ||
+            (
+                Pipeline(index: BeamPipelineIndex).GroupLayoutHandles.SequenceEqual(second: other.Pipeline(index: BeamPipelineIndex).GroupLayoutHandles) &&
+                m_meshPipeline.GroupLayoutHandles.SequenceEqual(second: other.m_meshPipeline.GroupLayoutHandles) &&
+                ReferenceEquals(
+                    objA: m_meshRenderPass,
+                    objB: other.m_meshRenderPass
+                )
+            )
+        );
 
     /// <summary>Installs a kernel reload prepared by <see cref="SdfWorldPipelines.PrepareReload"/> at a render-thread
     /// boundary, preserving buffers, images, baked bricks, descriptors and scene state. A reload that changed nothing

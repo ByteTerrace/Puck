@@ -674,9 +674,12 @@ scene from the destination's delivered definition and state mirror, framed by th
 the destination's coordinates, under the destination's sky and lighting and at the presentation's
 own quality. Seats presented through the same endpoint share one residency, with a view each. Split seats in
 different worlds each show their own world. Named boot cameras and the spectator fallback keep
-showing the boot world. A local seat keeps its roster's color wherever it is presented. The first frame a
-view renders from another world's residency rebuilds that view's passes, so a crossing
-holds the image of the world it left until the rebuild installs, for at least one frame.
+showing the boot world. A local seat keeps its roster's color wherever it is presented. A seat's view
+follows the destination's residency in place when the destination's scene fits the boot world's
+instance count: that residency's tables build in the frame the seat crosses, from the pipelines the
+boot world already holds, so the first frame after the arrival shows the destination. A destination
+that needs more instances rebuilds the view's passes, and the crossing holds the image of the world it
+left until they install.
 
 Every body that can travel crosses a portal face and a seam alike: a local seat, an admitted peer's
 traveller, or a body the world's own census authors. A party door entered by a traveller that is not
