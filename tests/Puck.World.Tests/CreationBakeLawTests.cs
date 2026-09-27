@@ -196,7 +196,9 @@ public sealed class CreationBakeLawTests {
         static WorldPlacement Placed(string prototypeId, float x) => new(
             Id: $"{prototypeId}-placed",
             Position: new Puck.Assets.Documents.DocumentVector3(value: new System.Numerics.Vector3(x: x, y: 0f, z: 0f)),
-            PrototypeId: prototypeId
+            PrototypeId: prototypeId,
+            Scale: 1f,
+            YawDegrees: 0f
         );
 
         var definition = (Definition() with { PlacementRowsRaw = [Placed(prototypeId: "block", x: 0f), Placed(prototypeId: "glint", x: 4f)] });
