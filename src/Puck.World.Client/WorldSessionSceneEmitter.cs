@@ -48,7 +48,7 @@ namespace Puck.World.Client;
 public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresser {
     // The BIND-time resolved camera choice: a validated, currently-present camera NAME, or null for "use the
     // destination's default projection" (its first declared camera, else the spawn-centroid overview) — see this
-    // type's own construction site in WorldScreenBinder.TrySession, which is where the "unknown camera refuses at
+    // type's own construction site in WorldScreenBinder.ResolveSession, which is where the "unknown camera refuses at
     // bind with a loud note, falling back to the default projection" decision is made and narrated.
     private readonly string? m_effectiveCameraName;
     private readonly float m_fieldOfViewRadians;

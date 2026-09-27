@@ -7,10 +7,12 @@ using Puck.World.Server;
 namespace Puck.World;
 
 internal sealed partial class WorldScreenBinder {
-    // The document-driven bind: ApplySource's Session arm calls this with the AUTHORED session record VERBATIM —
-    // carrying Projection/Resolution, which TrySession's narrower (destination, camera)-only verb surface cannot
-    // express. Reusing this ONE core keeps a live re-point (TrySession) and a document delivery (ApplySource) from
-    // ever disagreeing about what "session {index}" is.
+    // The session bind: ApplySource's Session arm calls this with the authored session record verbatim, projection and
+    // resolution included, at boot and whenever a live document mutation (world.row.set screens/placements) replaces a
+    // face's declared source. It resolves and attaches into a local candidate first, so a re-point that fails to
+    // resolve leaves the slot's previous feed registered, rendering and holding its lease, and reports the failure by
+    // name. Only a live candidate retires the old registration and takes the name; no frame is produced between the
+    // release and the register, so a re-point shows no gap.
     private (bool Ok, string Message) ApplySessionSource(int index, WorldScreenSource.Session session) {
         if (m_disposed) {
             return (Ok: false, Message: "binder disposed");
@@ -149,9 +151,10 @@ internal sealed partial class WorldScreenBinder {
         }
 
         return null;
-    }    // Drops a slot's session reference and releases its registration/lease — the symmetric half of TrySession's
-    // acquire, run whenever the slot stops observing that destination (a source change away from Session, or a
-    // screen removal).
+    }
+    // Drops a slot's session reference and releases its registration/lease — the symmetric half of
+    // ApplySessionSource's acquire, run whenever the slot stops observing that destination (a source change away from
+    // Session, or a screen removal).
     private void ReleaseSlotSession(ScreenSlot slot) {
         if (slot.Session is not { } feed) {
             return;
@@ -186,12 +189,12 @@ internal sealed partial class WorldScreenBinder {
 
         return null;
     }
-    // Resolves (and headless-safely attaches) a session-sourced face's destination — the boot-loop and the runtime
-    // TrySession path both call this, so a resolve at boot and a resolve triggered by a live document mutation take
+    // Resolves (and headless-safely attaches) a session-sourced face's destination — the boot loop and
+    // ApplySessionSource both call this, so a resolve at boot and a resolve triggered by a live document mutation take
     // the identical route. Returns the newly attached feed on success (slot.DeclaredFault cleared); returns null on
     // failure (slot.DeclaredFault set to the refusal reason). Deliberately never touches slot.Session itself either
-    // way — the boot-loop caller assigns it directly (a fresh slot has nothing to preserve), while TrySession's
-    // re-point caller must be able to inspect a failed resolve without losing the slot's previous feed reference.
+    // way — the boot-loop caller assigns it directly (a fresh slot has nothing to preserve), while a re-point must be
+    // able to inspect a failed resolve without losing the slot's previous feed reference.
     // GPU view registration is a separate step (RegisterSessionView), since GPU services may not exist yet
     // (headless, or boot before the render factory runs).
     private SessionFeed? ResolveSession(ScreenSlot slot, WorldScreenSource.Session session) {
@@ -334,27 +337,6 @@ internal sealed partial class WorldScreenBinder {
 
         return true;
     }
-    // The runtime session bind — the ApplySource switch's Session arm, reached by a live document mutation
-    // (world.row.set screens/placements) replacing a face's declared source. Resolves/attaches (headless-safe) into
-    // a local candidate first — slot.Session is never touched until the new feed is proven live: a re-point that
-    // fails to resolve leaves the slot's previous feed completely untouched — still registered, still rendering,
-    // still holding its lease — and reports failure by name rather than silently landing on a torn-down slot while
-    // claiming success. Only once the new feed is confirmed does this retire the old registration and hand the name
-    // to the new one; single-threaded confinement means no frame is ever produced between the release and the
-    // register below, so a successful re-point still shows no gap: the session's instance keeps its name, and its
-    // producer renders the new feed's frame source from its next frame.
-    // The runtime screen.session verb's own narrow surface (destination + optional camera only — it re-points
-    // an ordinary camera-projection session live; a WINDOW facet is authored-only, per this lane's own brief, so
-    // this verb has no way to spell one). Shares ApplySessionSource's bind/release/register core with the
-    // document-reconcile path below rather than duplicating it.
-    private (bool Ok, string Message) TrySession(int index, string destinationName, string? cameraName) =>
-        ApplySessionSource(
-            index: index,
-            session: new WorldScreenSource.Session(
-                Destination: destinationName,
-                CameraName: cameraName
-            )
-        );
     // Recomputes every live WINDOW session's off-axis camera from this frame's local eye and the border pair's two
     // face rows — fresh every call, never cached across frames, so a placement mutation reaches the render the very
     // next produced frame.
@@ -536,7 +518,7 @@ internal sealed partial class WorldScreenBinder {
     // attached observation lease + client-side mirror, and (once GPU services are configured) its registered
     // offscreen view. A mutable class so a lifecycle transition (re-point, teardown, instance-retired) updates it in
     // place; the constructor parameters are immutable facts about ONE resolution (a re-point builds a fresh instance
-    // rather than mutating this one — see TrySession).
+    // rather than mutating this one — see ApplySessionSource).
     private sealed class SessionFeed(string destination, string? requestedCamera, string? effectiveCamera, string instanceName, ulong generationId, WorldSessionMirror mirror, IDisposable lease, string registrationName, WorldScreenProjection projection, WorldScreenResolution? resolution) : IDisposable {
         public string Destination { get; } = destination;
         public string? RequestedCamera { get; } = requestedCamera;
