@@ -106,8 +106,8 @@ public sealed class WorldBootCompositionLawTests : IDisposable {
             expected: 1
         );
         Assert.Equal(
-            actual: Assert.Single(collection: UnansweredWorkloadVerbs(builder: builder)),
-            expected: "world.cadence"
+            actual: UnansweredWorkloadVerbs(builder: builder),
+            expected: ["world.cadence", "world.quality"]
         );
     }
     [InlineData(WorldHostPresentation.Offscreen)]
@@ -222,7 +222,7 @@ public sealed class WorldBootCompositionLawTests : IDisposable {
 
         Assert.Equal(
             actual: registry.Submit(line: "world.resize").Output,
-            expected: "[world.resize: 64x64]"
+            expected: "[world.resize: 64x128]"
         );
 
         var early = registry.Submit(line: "world.resize 1920 1080");
@@ -234,7 +234,7 @@ public sealed class WorldBootCompositionLawTests : IDisposable {
         );
         Assert.Equal(
             actual: registry.Submit(line: "world.resize").Output,
-            expected: "[world.resize: 64x64]"
+            expected: "[world.resize: 64x128]"
         );
         Assert.True(condition: registry.Submit(line: "world.resize 0 1080").IsError);
 

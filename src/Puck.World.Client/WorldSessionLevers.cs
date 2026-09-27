@@ -20,6 +20,8 @@ public static partial class WorldSessionLevers {
     /// <summary>The <see cref="WorldSessionLever.A"/> value <see cref="BindingBar"/> carries to clear a seat's
     /// override and return it to authored behavior; a non-negative value forces the bar off (0) or on (1).</summary>
     public const double BindingBarAuto = -1.0;
+    /// <summary>Whether ready bakes draw in place of their fields (<c>world.bakes</c>).</summary>
+    public const string Bakes = "bakes";
     /// <summary>The unchanged-frame cadence gate (<c>world.cadence</c>).</summary>
     public const string CadenceGate = "cadence";
     /// <summary>The per-tile far-bound cull (<c>world.far-field bound</c>).</summary>
@@ -76,6 +78,10 @@ public static partial class WorldSessionLevers {
         sink.Register(
             name: AmbientOcclusionQuality,
             setter: lever => settings.AmbientOcclusionQuality = ((AmbientOcclusionMode)((int)lever.A))
+        );
+        sink.Register(
+            name: Bakes,
+            setter: lever => settings.Bakes = Flag(lever: lever)
         );
         sink.Register(
             name: CadenceGate,

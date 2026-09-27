@@ -3,8 +3,8 @@
     {
       "anchor": null,
       "name": "counters-cam",
-      "renderHeight": 144,
-      "renderWidth": 256,
+      "renderHeight": 1080,
+      "renderWidth": 1920,
       "rig": {
         "name": "counters-cam",
         "operations": [
@@ -46,14 +46,14 @@
     "exitAfterSeconds": 0,
     "fullscreen": false,
     "genlock": null,
-    "height": 144,
+    "height": 1080,
     "journalDepth": 2000,
     "listen": null,
     "presentMode": "Immediate",
     "presentation": "offscreen",
     "surfaceFormat": "r8g8b8a8",
     "targetHertz": 0,
-    "width": 256
+    "width": 1920
   },
   "placements": {
     "rows": [
@@ -161,6 +161,13 @@
       "id": "block"
     }
   ],
+  "render": {
+    "low": {
+      "shadows": "Off",
+      "ambientOcclusion": false,
+      "renderScale": "Half"
+    }
+  },
   "rules": [
     {
       "effects": [

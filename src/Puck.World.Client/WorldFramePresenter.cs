@@ -1369,7 +1369,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     public bool PinsStateFraction { get; init; }
 
     /// <inheritdoc/>
-    public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
+    public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, long meshDrawsRevision, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
         ArgumentNullException.ThrowIfNull(argument: program);
         ArgumentNullException.ThrowIfNull(argument: transforms);
 
@@ -1643,6 +1643,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             Volumes = m_volumes,
             // Every emitter's mesh draws: the static placements' and the stamp pool's, then the neighbour worlds'.
             MeshDraws = meshDraws,
+            MeshDrawsRevision = meshDrawsRevision,
             // The far plane every march ends at: render.farDistance off the LIVE definition (a world.row.set render
             // lands on the next frame, like the lighting below), or the engine's pinned default when unauthored.
             FarDistance = WorldRenderFarDistance.Resolve(defaults: m_client.Definition.Render),
@@ -1798,7 +1799,8 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             client: client,
             continuum: continuum,
             settings: settings,
-            text: text
+            text: text,
+            bakes: bakes
         );
         m_adjacencies = new WorldAdjacencySceneEmitter(
             client: client,

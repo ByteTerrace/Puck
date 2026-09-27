@@ -1,4 +1,4 @@
-// The instance table's bounds and shadow participation flags.
+// The instance table's bounds, and its shadow participation and camera visibility flags.
 #ifndef FIELD_SDF_INSTANCE_FLAGS_HLSLI
 #define FIELD_SDF_INSTANCE_FLAGS_HLSLI
 // Instance `index`'s bound within the directory at `instanceOffset` (the caller resolves
@@ -27,6 +27,15 @@ bool sdfInstanceShadowTransparent(uint instanceOffset, uint index) {
     uint entryBase = sdfInstanceEntryOffset(instanceOffset, index);
 
     return (0u != (sdfWords[entryBase + 1u].w & SDF_INSTANCE_SHADOW_TRANSPARENT_BIT));
+}
+
+// Whether instance `index` is CAMERA-HIDDEN (SDF_INSTANCE_CAMERA_HIDDEN_BIT, i1.w's second-highest bit): the tile
+// cull leaves it out of every camera mask, so primary never marches it, while the shadow and ambient gathers, which
+// collect their own occluders, still read it. A placement whose baked mesh draws in its place is declared so.
+bool sdfInstanceCameraHidden(uint instanceOffset, uint index) {
+    uint entryBase = sdfInstanceEntryOffset(instanceOffset, index);
+
+    return (0u != (sdfWords[entryBase + 1u].w & SDF_INSTANCE_CAMERA_HIDDEN_BIT));
 }
 
 #ifdef SDF_DYNAMIC_TRANSFORMS

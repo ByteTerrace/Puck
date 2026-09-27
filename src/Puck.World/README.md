@@ -633,7 +633,9 @@ Facts a script needs:
   pending simulation traffic applies, so a scripted write-then-read pair
   (`world.row.set` then `world.status`, `player.bind` then
   `player.bindings`) needs no polling. `WorldConsoleWaitGate.cs` and
-  `world.wait` are the explicit waits. `world.wait ready <seconds>` waits for
+  `world.wait` are the explicit waits. `world.wait bakes <seconds>` holds until
+  the presentation's creation bakes are settled (none queued or baking), so a
+  script that reads a drawn bake waits on the bake. `world.wait ready <seconds>` waits for
   the rendering engine instead of a tick count: it holds the session until
   the world's SDF residency has built its tables (its pipeline set installed
   and its first frame captured) and the render graph's root has rendered over
@@ -1654,7 +1656,14 @@ All render levers are live verbs with no-arg echoes of the current value:
 `world.quality`, `world.shadows`, `world.ao`, `world.render-scale`,
 `world.upscale-sharpness`, `world.target`, `world.shadow-mask`,
 `world.shadow-march`, `world.ao-quality`, `world.view-refresh`,
-`world.debug-view`, `world.fps`. Render scale applies
+`world.debug-view`, `world.fps`. `world.quality low|medium|high` applies the
+world's own `render.low`, `render.medium` or `render.high` preset, each a
+shadow tier, an ambient-occlusion switch and a render-scale tier; the names are
+the engine's one quality vocabulary (`QualityTiers`), and a preset the world
+does not author is refused by name. The shipped worlds share one table,
+`Assets/worlds/quality.puck`: the standard world imports it, and a world on
+another basis imports it by name, so every presenting world answers each tier
+without moving its own boot levers (`ShippedWorldQualityLawTests`). Render scale applies
 to both seat views and named cameras, multiplied by any layout-transition scale.
 Named tiers are
 facades over continuous values. Do not assume a lower render scale is

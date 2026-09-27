@@ -221,9 +221,13 @@ These are one-line cautions; the owning pages hold the derivations.
   here with a row in each backend's map (`VulkanGpuFormats`, `DirectXGpuFormats`).
   `ImagePixelFormat` is not a pixel format of an image: it is an uploaded
   source's region-header code (a sync pair with `image-source.hlsli`).
-- **Bakes are presentation only** and nothing draws one yet. `BAKE` does not
-  derive on boot (`ICompiledWorldChunk.DerivesOnBoot`); a presentation bakes a
-  missing prototype through `WorldBakeSchedule`, never on the frame thread.
+- **Bakes are presentation only.** `BAKE` does not derive on boot
+  (`ICompiledWorldChunk.DerivesOnBoot`); a presentation bakes a missing
+  prototype through `WorldBakeSchedule`, never on the frame thread, and draws a
+  ready one only through `WorldBakeSchedule.TryGetMesh` (which counts the
+  switch, `sdf.bakes.drawn`) while `world.bakes` is on. A baked placement's
+  instances are camera-hidden (`SdfInstanceRange.CameraHidden`): the cull keeps
+  them out of every camera mask, never out of the shadow or ambient gathers.
 
 ## Engine seams that bite
 
@@ -1389,7 +1393,7 @@ inverse and one affine map folding the layout, fit and crop) into the
 `screenMappings` table of the `sdf-world` interface, and the screen shading draws
 the bezel, the letterbox and the sample from it, through the sampler its row's
 filter names (`WorldScreen.Filter`, `Nearest` or `Linear`, carried as
-`SourceMapping.Filter`). A screen with no mapping shades as unbound glass. The
+`SourceMapping.Filter`; a derived face takes its `faceSources` row's `filter`). A screen with no mapping shades as unbound glass. The
 screens are one `screenSources` array beside one `samplers` array, one sampler
 per `GpuSamplerFilter`, whose length is `SdfProgramBuilder.MaxScreenSurfaces`
 and nothing else. A shader interface's image or sampler array

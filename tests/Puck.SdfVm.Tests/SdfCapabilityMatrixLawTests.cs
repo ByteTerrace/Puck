@@ -262,7 +262,7 @@ public sealed class SdfCapabilityMatrixLawTests {
             Check: "SdfWorldTablesUploadLawTests; SdfPassPlanLawTests; puck canary sdf-mesh-visibility sdf-mesh-motion",
             Green: true,
             Members: [
-                "SdfFrame.MeshDraws", "SdfWorldResidency.MeshRegionBytes", "SdfWorldResidency.MeshDrawCount",
+                "SdfFrame.MeshDraws", "SdfFrame.MeshDrawsRevision", "SdfWorldResidency.MeshRegionBytes", "SdfWorldResidency.MeshDrawCount",
                 "SdfWorldTables.MeshRegionBytes", "SdfWorldTables.MeshRegionLayout", "SdfWorldTables.MeshDrawCount",
             ]
         ),

@@ -2,6 +2,11 @@
   "bodies": {
     "sleepAfterSeconds": 1
   },
+  "imports": [
+    {
+      "document": "quality"
+    }
+  ],
   "placements": {
     "rows": [
       {

@@ -5,15 +5,16 @@ namespace Puck.SdfVm;
 
 // The mesh region: the frame's mesh draws (SdfFrame.MeshDraws) laid out by SdfMeshRegion in one GpuRegion, created like
 // every other table (SdfWorldTables.Regions.cs) and copied with them in the upload. A frame whose draw list is the one
-// last packed repacks nothing; a new list is packed into the host copy and owes only the words that changed. The region
-// is created with the tables, one draw record long so every set that binds it binds a buffer, and grows, once the
-// device is idle, like program capacity; a frame without draws keeps it. A view's mesh pass reads the draws' triangles
-// from it, and primary a mesh hit's material.
+// last packed, at the revision last packed (SdfFrame.MeshDrawsRevision), repacks nothing; any other is packed into the
+// host copy and owes only the words that changed. The region is created with the tables, one draw record long so every
+// set that binds it binds a buffer, and grows, once the device is idle, like program capacity; a frame without draws
+// keeps it. A view's mesh pass reads the draws' triangles from it, and primary a mesh hit's material.
 public sealed partial class SdfWorldTables {
     private readonly Dictionary<SdfMesh, SdfMeshRegionMesh> m_meshPlacements = new(comparer: ReferenceEqualityComparer.Instance);
 
     // The draw list last packed, the words it packed into and their layout.
     private IReadOnlyList<SdfMeshDraw>? m_meshDraws;
+    private long m_meshDrawsRevision;
     private SdfMeshRegionLayout m_meshLayout;
     private GpuRegion m_meshRegion;
     // One more for every new draw list the region packs: the cadence signature folds it, so a frame whose draws moved
@@ -37,13 +38,16 @@ public sealed partial class SdfWorldTables {
     // The draw list the latest frame staged, whose draws a view's mesh pass records one call each.
     internal IReadOnlyList<SdfMeshDraw>? MeshDraws => m_meshDraws;
 
-    // Packs a new draw list into the region, growing it first when the list needs more bytes; the upload sends the slot
-    // what it owes.
-    private void StageMeshRegion(IReadOnlyList<SdfMeshDraw> draws) {
-        if (!ReferenceEquals(
-            objA: draws,
-            objB: m_meshDraws
-        )) {
+    // Packs a new draw list, or the list at a new revision, into the region, growing it first when the list needs more
+    // bytes; the upload sends the slot what it owes.
+    private void StageMeshRegion(IReadOnlyList<SdfMeshDraw> draws, long revision) {
+        if (
+            !ReferenceEquals(
+                objA: draws,
+                objB: m_meshDraws
+            ) ||
+            (revision != m_meshDrawsRevision)
+        ) {
             var layout = SdfMeshRegion.Plan(
                 draws: draws,
                 meshes: m_meshPlacements
@@ -73,6 +77,7 @@ public sealed partial class SdfWorldTables {
             }
 
             m_meshDraws = draws;
+            m_meshDrawsRevision = revision;
             m_meshLayout = layout;
             m_meshRevision++;
         }

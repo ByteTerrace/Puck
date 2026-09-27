@@ -40,7 +40,8 @@ void sdfResolveSurface(float3 surfacePoint, float3 ray, bool hit, int material, 
     sdfStoreVisibilitySurface(record, surface);
 }
 
-// A mesh pixel's N and S rows: the normal the mesh pass rasterized, no curvature and neutral ambient occlusion. Its lit
+// A mesh pixel's N and S rows: its triangle's surface normal (sdfMeshSurfaceNormal), no curvature and neutral ambient
+// occlusion. Its lit
 // flag stays clear, so the ambient pass leaves the occlusion at one; mesh pixels shade with neutral shadows and ambient
 // occlusion, and views skips their shadow march.
 void sdfResolveMeshSurface(float3 normal, uint record) {

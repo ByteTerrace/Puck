@@ -15,15 +15,20 @@ internal static partial class CompileCommand {
 
         return (catalog, CliWorldVocabulary.Fingerprint(catalog: catalog));
     });
+    // The bakes of a run without a tree: every document it compiles fills one memory-only cache, so a creation they
+    // share is baked once per process.
+    private static readonly WorldBakeStore ProcessBakes = new();
 
-    // The bake pack a run writes: where it lies, whether it keeps what an earlier run left there, and the keys this run's
-    // compiled worlds name. A tree run writes one at the root of its output holding exactly its keys; a run without a
-    // tree writes one beside each compiled world and keeps the outcomes an earlier compile into that directory left, so
-    // compiling documents one at a time into one directory loses none of them.
-    internal sealed class BakePackPlan(string path, bool keepsEarlier) {
+    // The bake pack a run writes: where it lies, whether it keeps what an earlier run left there, the cache its compiled
+    // worlds' bakes are read from and baked into, and the keys they name. A tree run writes one at the root of its output
+    // holding exactly its keys; a run without a tree writes one beside each compiled world and keeps the outcomes an
+    // earlier compile into that directory left, so compiling documents one at a time into one directory loses none of
+    // them.
+    internal sealed class BakePackPlan(string path, bool keepsEarlier, WorldBakeStore store) {
         public HashSet<ContentPin> Keys { get; } = [];
         public bool KeepsEarlier { get; } = keepsEarlier;
         public string Path { get; } = System.IO.Path.GetFullPath(path: path);
+        public WorldBakeStore Store { get; } = store;
     }
 
     // `puck compile <name>.world.json`: a document has nothing to lower, so compiling it writes only its compiled
@@ -47,9 +52,8 @@ internal static partial class CompileCommand {
             written: written
         );
     }
-    // Writes the bake pack holding every key the plan names, from the outcomes this process's compiled worlds left in
-    // WorldSourceLoader.Bakes, with the outcomes an earlier run left when the plan keeps them. A plan naming no key
-    // writes nothing.
+    // Writes the bake pack holding every key the plan names, read from the store its compiled worlds' derivations
+    // filled, with the outcomes an earlier run left when the plan keeps them. A plan naming no key writes nothing.
     private static int WriteBakePack(BakePackPlan pack, IDictionary<string, string>? written, string owner) {
         if (pack.Keys.Count == 0) {
             return 0;
@@ -70,7 +74,7 @@ internal static partial class CompileCommand {
             }
 
             foreach (var key in pack.Keys) {
-                if (!WorldSourceLoader.Bakes.TryGetHeld(key: key, outcome: out var outcome)) {
+                if (!pack.Store.TryGetHeld(key: key, outcome: out var outcome)) {
                     Console.Error.WriteLine(value: $"error: no outcome for bake key {key.Hex} was derived in this run, so the bake pack '{pack.Path}' cannot hold it.");
                     return 2;
                 }
@@ -90,7 +94,7 @@ internal static partial class CompileCommand {
                 written[pack.Path] = owner;
             }
 
-            Console.WriteLine(value: $"Wrote bake pack '{pack.Path}' ({outcomes.Count:N0} outcomes, {bytes.Length:N0} bytes; this process baked {WorldSourceLoader.Bakes.Baked:N0} creations and refused {WorldSourceLoader.Bakes.Refused:N0} in {WorldSourceLoader.Bakes.FieldEvaluations:N0} field evaluations).");
+            Console.WriteLine(value: $"Wrote bake pack '{pack.Path}' ({outcomes.Count:N0} outcomes, {bytes.Length:N0} bytes; its bake cache baked {pack.Store.Baked:N0} creations and refused {pack.Store.Refused:N0} in {pack.Store.FieldEvaluations:N0} field evaluations).");
             return 0;
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             Console.Error.WriteLine(value: $"error: Could not write bake pack '{pack.Path}': {exception.Message}");
@@ -109,11 +113,13 @@ internal static partial class CompileCommand {
             path: Path.Combine(
                 path1: Path.GetDirectoryName(path: destination)!,
                 path2: WorldBakePack.FileName
-            )
+            ),
+            store: ProcessBakes
         ));
 
         if (!WorldSourceLoader.TryCompileWorld(
             bakePack: WorldBakePack.Reference(documentPath: destination, packPath: plan.Path),
+            bakes: plan.Store,
             catalog: catalog,
             catalogFingerprint: fingerprint,
             compiledWorld: out var bytes,

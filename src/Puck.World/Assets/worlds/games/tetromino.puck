@@ -21,6 +21,7 @@
 
 schema: "puck.world.definition.v1"
 documentId: "tetromino"
+import "../quality"
 
 host {
   presentation: Windowed

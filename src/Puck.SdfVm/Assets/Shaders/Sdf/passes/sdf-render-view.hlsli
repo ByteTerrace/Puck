@@ -110,7 +110,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
         meshPixel = true;
         hitSurface = true;
         traveled = meshHit.t;
-        material = sdfMeshMaterial(meshHit.draw);
+        material = sdfMeshMaterial(meshHit.draw, meshHit.triangleIndex);
         hitLanes = float4(0.0, 0.0, 0.0, 0.0);
         hitFrameSlot = -1;
         materialBlendWeight = 0.0;
@@ -122,7 +122,9 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
 
 #if defined(SDF_SURFACE_PASS)
     if (active && meshPixel) {
-        sdfResolveMeshSurface(sdfMeshSampleAt(pixel).normal, worldVisibilityRecord(pixel, viewIndex));
+        SdfMeshSample meshSurface = sdfMeshSampleAt(pixel);
+
+        sdfResolveMeshSurface(sdfMeshSurfaceNormal(meshSurface.draw, meshSurface.triangleIndex, (rayOrigin + (rayDirection * meshSurface.t)), rayDirection), worldVisibilityRecord(pixel, viewIndex));
     } else if (active) {
         sdfResolveSurface(rayOrigin + rayDirection * traveled, rayDirection, hitSurface, material,
             viewMode, instanceMaskBase, terminalRadius, pixelFootprint * traveled, worldVisibilityRecord(pixel, viewIndex));

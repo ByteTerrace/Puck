@@ -1421,10 +1421,13 @@ the palette-indexed and NV12 host layouts no GPU image is created in.
 
 P17 still owes:
 
-- drawing a bake, which needs P4's shared visibility, and choosing per
-  placement between a bake and the field by P6's measured cost; the draw also
-  decides how an sRGB bake is read (a `Bc7UnormSrgb` view or a decode in the
-  shader);
+- the rest of drawing a bake: its geometry draws (a ready bake's mesh in place
+  of its static placements' fields behind `world.bakes`, the field kept
+  camera-hidden, the switch counted as `sdf.bakes.drawn`, held by
+  `CreationBakeLawTests` and the `sdf-bake-switch` canary), while its five
+  textures and its impostor do not, so the lever ships off; the textures decide
+  how an sRGB bake is read (a `Bc7UnormSrgb` view or a decode in the shader).
+  Choosing per placement between a bake and the field by measured cost is P6's;
 - the parity world shipping its bakes, and the check that a missing bake draws
   through its field and then switches.
 
@@ -1973,7 +1976,7 @@ and the canaries hold every scene the check names.
    attachment's 0. Primary reads the target, bounds its march, and keeps an SDF
    hit only when strictly nearer, otherwise recording a mesh record (the draw as
    its source, the draw's material, a coverage threshold of one); surface
-   writes the rasterized normal with neutral ambient occlusion, and views skips
+   writes the mesh surface's normal with neutral ambient occlusion, and views skips
    the shadow march for a mesh pixel. While a frame draws a mesh (the world
    block's `meshDraws`), cull-args covers the whole tile grid. The cadence
    signature folds a mesh revision, `world.budget` prints the attachments'
@@ -2049,7 +2052,7 @@ and the canaries hold every scene the check names.
     the `Puck.SdfVm` README name the record.
 
 **Decisions.** Meshes rasterize first, into a sampled `RGBA32F` target (ray
-parameter, draw id plus one, octahedral normal) and a reversed-Z `D32Float`
+parameter, draw id plus one, triangle, each a whole number a float holds exactly) and a reversed-Z `D32Float`
 depth cleared to 0, compared `Greater`, with an infinite far plane and the cone
 near distance (0.02) as the near plane. Primary starts no earlier than its ray's
 intersection with that plane, ends at the nearest of the far distance, the tile's
@@ -3639,7 +3642,9 @@ Each commit is marked with what it waits on.
    `filter` (`GpuSamplerFilter`: `Nearest`, the default and omitted, or
    `Linear`; the validator refuses any other value) reaches its mapping
    (`SourceMapping.Filter`) and the draw form the engine packs, whose state row
-   names the sampler. The `sdf-world` interface binds the screens as one
+   names the sampler. A placement's `faceSources` row carries the same `filter`,
+   validated the same way, onto the screen `WorldPrototypeFacets` derives for
+   that face. The `sdf-world` interface binds the screens as one
    `screenSources` image array and a `samplers` array, one sampler per filter,
    which a shader interface now declares through an arrayed sampled image or
    sampler (`ShaderInterfaceMember.Length`, taking its length in registers, its
@@ -3655,9 +3660,14 @@ Each commit is marked with what it waits on.
    `ShaderInterfaceLawTests.An_image_or_sampler_array_takes_its_length_in_registers`,
    `WorldScreenMappingLawTests.ARowsFilterReachesItsMappingAndItsDrawFormAndMovesNoHit`,
    `SourceMappingLawTests.TheDrawFormsLetterboxIsHalfOpenAtTheCropsEdgesAsTheHitsIs`,
-   `VulkanGroupedBindingFloorLawTests.ADeviceWithoutSampledImageArrayDynamicIndexingIsRefusedByName`
+   `VulkanGroupedBindingFloorLawTests.ADeviceWithoutSampledImageArrayDynamicIndexingIsRefusedByName`,
+   `WorldFaceCatalogLawTests.AFaceRowsFilterReachesItsDerivedScreenAndAnUndefinedOneIsRefused`
    and the sampler lane of
    `SdfWorldTablesUploadLawTests.TheScreenMappingTableHoldsEachScreensDrawFormAndAnUnchangedMappingOwesNothing`.
+   Canary: `uploaded-sources`, on both backends, where a camera looks square
+   onto a `Linear` screen showing a 7x3 test pattern and a pixel column's
+   green and magenta blend by its place between two texel centres; its
+   discriminating leg samples the screen `Nearest`.
 9. The check's list, last. Every `WorldScreenSource` arm
    (`none`, `machine`, the four shipped producer ids, `view`, `session`,
    `text` and `probe`) is listed with the producer or instance that reproduces
@@ -3948,7 +3958,7 @@ Each pass is held under a counted-cost ceiling: its deterministic
 counters (dispatches, march steps, texels written and bytes uploaded) are
 recorded over `puck counters`' pinned workload
 (`tests/Puck.Counters/counters.world.json`, its camera and views) at the floor
-tier and the resolution the RTX 2060 runs, and held as calibrated ceilings that
+tier and the RTX 2060's 1920x1080, and held as calibrated ceilings that
 workload may not exceed. A ceiling is re-recorded only in the change that
 explains why the count moved, and never from wall-clock or GPU timing. Two of
 those counters do not exist yet, and P14 adds them as `GpuWork` kinds the
@@ -3961,13 +3971,14 @@ steps into a per-pass counter buffer that the completed sample reads back. The
 march runs in floats, so that kind is `PerBackendDeterministic`, held per
 backend like the residency's `upload` pass. Texels written come from the same
 kernel counters, not from host extents, because an indirectly dispatched pass
-writes only the tiles culling leaves it. The workload does not run at the floor tier
-yet: its script selects no quality and its world authors no render preset, so
-it renders at native scale. `world.quality` applies a preset from the world's
-own render table, which the counters world does not author, so P14 pins the
-floor tier by authoring its `low` preset in `tests/Puck.Counters/counters.world.json`
-and selecting it with `world.quality low` in
-`tests/Puck.Counters/counters.script.txt`, before any ceiling is recorded.
+writes only the tiles culling leaves it. The workload is pinned: the RTX 2060
+floor runs a 1920x1080 display, which `tests/Puck.Counters/counters.world.json`
+presents offscreen with its one camera at that extent, and the floor tier is the
+world's own `low` preset (shadows off, ambient occlusion off, render scale
+`half`), which `tests/Puck.Counters/counters.script.txt` selects with
+`world.quality low` before anything is read. Half is 181/255 of each axis, which
+the extent quantization rounds up to 0.75, so the view renders 1440x810 and
+`place` reconstructs it to 1920x1080.
 
 **Target shape.** `sdf.world` is a package fragment that `RenderGraphCompiler`
 splices into the graph, so `ShaderPipelineCompiler` orders, versions and
@@ -4211,8 +4222,8 @@ parity captures pin the jitter index so pixel verdicts stay meaningful; P2's
 work counts recorded on both reference machines. The reconstruction passes are
 held under counted-cost ceilings as P14's are, over the same pinned workload
 and with the counters P14 adds: each pass's dispatches, march steps, texels
-written and bytes uploaded, recorded at the floor tier and the resolution the
-RTX 2060 runs, re-recorded only in the change that explains the move, never
+written and bytes uploaded, recorded at the floor tier and the RTX 2060's
+1920x1080, re-recorded only in the change that explains the move, never
 from wall-clock timing. The recorded Steam Deck run,
 with dynamic resolution on and render scale responding to the pacing signal,
 is [deferred to the end](#deferred-to-the-end). Whether the run holds its

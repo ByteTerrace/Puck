@@ -14,9 +14,9 @@ public readonly record struct WorldBakeRequest(string PrototypeId, CreationBakeK
 /// <summary>
 /// The one cache of creation bakes, keyed by <see cref="CreationBakeKey.Pin"/> and filled two ways. A compiled world's
 /// <c>BAKE</c> chunk (<see cref="WorldBakeChunk"/>) holds, in memory for the process's life, each outcome it names that
-/// the build's bake pack (<see cref="WorldBakePack"/>) carries, without copying it; a bake made on the device is kept in
-/// memory and written under <see cref="Directory"/> as a <see cref="ContentAddressedStore"/> derived entry of kind
-/// <see cref="DerivedKind"/>, so a later boot finds it without baking again. An outcome is either a bake or the refusal of
+/// the build's bake pack (<see cref="WorldBakePack"/>) carries, without copying it; a bake made on the device or by a
+/// compile is kept in memory and written under <see cref="Directory"/> as a <see cref="ContentAddressedStore"/> derived
+/// entry of kind <see cref="DerivedKind"/>, so a later boot or compile finds it without baking again. An outcome is either a bake or the refusal of
 /// a creation that has none (<see cref="CreationBakeCodec"/>). A store or pack that cannot be read or written costs a bake
 /// and nothing else. Every member is safe to call from several threads.
 /// </summary>
@@ -125,9 +125,10 @@ public sealed class WorldBakeStore {
         work = bake.Work;
         return CreationBakeCodec.Encode(bake: bake);
     }
-    /// <summary>Returns a request's outcome, from the store (<see cref="TryGet"/>) when it has one, else baked and held in
-    /// memory without writing it anywhere, counted in <see cref="Baked"/> and <see cref="FieldEvaluations"/>: how a
-    /// compiled world's derivation gathers the outcomes its build's pack ships.</summary>
+    /// <summary>Returns a request's outcome, from the store (<see cref="TryGet"/>) when it has one, else baked, counted in
+    /// <see cref="Baked"/> or <see cref="Refused"/> and in <see cref="FieldEvaluations"/>, and kept (<see cref="Keep"/>):
+    /// how a compiled world's derivation gathers the outcomes its build's pack ships, so a compile over a store with a
+    /// <see cref="Directory"/> bakes an unchanged creation once across runs.</summary>
     /// <param name="request">The request.</param>
     /// <returns>The encoded outcome.</returns>
     public ReadOnlyMemory<byte> GetOrBake(WorldBakeRequest request) {
@@ -144,8 +145,10 @@ public sealed class WorldBakeStore {
             ? Interlocked.Increment(location: ref m_refused)
             : Interlocked.Increment(location: ref m_baked));
         _ = Interlocked.Add(location1: ref m_fieldEvaluations, value: work.FieldEvaluations);
+        // A store that cannot write still holds the outcome in memory; only a later run pays for it again.
+        _ = Keep(key: key, outcome: baked);
 
-        return m_held.GetOrAdd(key: key, value: baked);
+        return baked;
     }
     /// <summary>Holds in memory each of <paramref name="keys"/> the pack at <paramref name="packPath"/> carries, without
     /// copying it: how a compiled world's <c>BAKE</c> chunk fills the cache on load. The pack is read once per store and
@@ -195,7 +198,7 @@ public sealed class WorldBakeStore {
     }
 
     /// <summary>Holds an outcome in memory and writes it under <see cref="Directory"/>: how a bake made on the device
-    /// fills the cache.</summary>
+    /// or by a compile (<see cref="GetOrBake"/>) fills the cache.</summary>
     /// <param name="key">The bake's key pin.</param>
     /// <param name="outcome">The encoded outcome; the store keeps the array, which the caller must not change.</param>
     /// <returns><see langword="true"/> when the outcome was written, or the store is memory-only.</returns>

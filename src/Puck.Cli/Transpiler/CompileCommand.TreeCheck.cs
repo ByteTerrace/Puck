@@ -23,7 +23,9 @@ internal static partial class CompileCommand {
         try {
             var fresh = Path.Combine(path1: scratch, path2: "output");
             var report = Path.Combine(path1: scratch, path2: "written");
+            // The comparison is with a fresh run, so the check bakes every creation rather than reading a cache.
             var ran = RunTree(
+                bakeCache: null,
                 bundle: bundle,
                 output: fresh,
                 paths: paths,

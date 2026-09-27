@@ -81,8 +81,9 @@ public sealed partial class SdfWorldResidency : IDisposable {
     private bool m_disposed;
     private bool m_glyphAtlasInitialized;
     private SdfGlyphAtlas? m_uploadedGlyphAtlas;
-    // The last captured frame's mesh draw list, which MeshDrawCount reads from another thread.
-    private IReadOnlyList<SdfMeshDraw>? m_meshRegionDraws;
+    // The last captured frame's mesh draw count, which MeshDrawCount reads from another thread: the count, never the list,
+    // which its producer may rewrite in place for the next frame.
+    private int m_meshDrawCount;
 
     // Each view's signature at its latest render, or null before one: the cadence compares this frame's against it.
     private ulong?[] m_renderedSignatures = [];
@@ -185,7 +186,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     public ulong MeshRegionBytes => (m_tables?.MeshRegionBytes ?? 0UL);
     /// <summary>Gets the mesh draws of the last captured frame, the ones the mesh region holds once the frame
     /// renders.</summary>
-    public int MeshDrawCount => (Volatile.Read(location: ref m_meshRegionDraws)?.Count ?? 0);
+    public int MeshDrawCount => Volatile.Read(location: ref m_meshDrawCount);
     /// <summary>Gets whether the residency's tables are built: its pipeline set is installed and its first frame captured
     /// and packed. It is false again after a device loss until the rebuilt tables are.</summary>
     public bool IsReady => (m_tables is not null);
@@ -556,8 +557,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
         m_frame = frame;
         m_programPending |= frame.ProgramChanged;
         Volatile.Write(
-            location: ref m_meshRegionDraws,
-            value: frame.MeshDraws
+            location: ref m_meshDrawCount,
+            value: frame.MeshDraws.Count
         );
     }
     // Builds the tables once the pipelines are ready. The first call starts the pipeline build on the thread pool; until

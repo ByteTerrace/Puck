@@ -1,21 +1,13 @@
 // The mesh pass's fragment stage: the nearest mesh surface of each covered pixel, which the reversed-Z depth test kept,
 // as the ray parameter the SDF march records (the Euclidean distance from the camera, so the hit passes compare the two
-// directly), the draw index plus one, and the octahedral normal. The pipeline culls nothing, so the face normal is turned
-// toward the camera: a mirrored copy, whose matrix reverses its winding, and an open mesh seen from behind both shade the
-// side the camera sees.
+// directly), the draw index plus one, and the triangle, whose surface the hit passes resolve (sdfMeshSurfaceNormal,
+// sdfMeshMaterial). Each is a whole number a float holds exactly.
 #include "../isa/sdf-mesh.interface.hlsli"
 #include "../frame/sdf-viewport.hlsli"
 #include "../frame/sdf-mesh.hlsli"
-#include "../field/sdf-octahedral.hlsli"
 
 float4 PSMain(MeshVertex input) : SV_Target0 {
     ViewportData view = worldViewport((pushedIndex.index >> SdfMeshViewShift));
-    float3 toSurface = (input.world - view.position.xyz);
-    float3 normal = normalize(input.normal);
 
-    if (dot(normal, toSurface) > 0.0) {
-        normal = -normal;
-    }
-
-    return float4(length(toSurface), float(((pushedIndex.index & SdfMeshDrawMask) + 1u)), sdfOctEncode(normal));
+    return float4(length((input.world - view.position.xyz)), float(((pushedIndex.index & SdfMeshDrawMask) + 1u)), float(input.triangleIndex), 0.0);
 }

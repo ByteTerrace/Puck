@@ -2,6 +2,7 @@ using Puck.Commands;
 using System.Globalization;
 using System.Numerics;
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 using Puck.World.Protocol;
 
 namespace Puck.World.Addons;
@@ -13,8 +14,9 @@ namespace Puck.World.Addons;
 /// discipline <c>Puck.World.Client.Sdf.SdfDocumentDecoder</c> uses for its own untrusted-shaped door: every object's
 /// members are collected once (a repeated key refuses, never silently resolves to whichever <c>JsonSerializer</c>
 /// would have picked), checked against a per-kind allowed-member list (an unrecognized key refuses by name, never
-/// ignored), and every scalar is finite-and-signedness-checked before it is trusted. Never source-gen POCO
-/// deserialization — see the seam's own doc for why.
+/// ignored), and every scalar is finite-and-signedness-checked before it is trusted. The one exception is a placement
+/// face, which reads through the document's own contract with repeated keys refused, so the face shape has one
+/// spelling on both doors.
 /// </summary>
 /// <remarks>Wires the 5 HUD kinds
 /// (<see cref="WorldMutation.UpsertHudPanel"/>/<see cref="WorldMutation.RemoveHudPanel"/>/
@@ -82,13 +84,12 @@ public static class WorldAddonMutationDecoder {
     private static readonly string[] RegionMembers = ["radius"];
     private static readonly string[] AttachMembers = ["bodyIndex", "localOffset", "localYawDegrees"];
     private static readonly string[] InhabitMembers = ["kit", "look", "source", "count", "distribution"];
-    private static readonly string[] FaceSourceMembers = ["face", "source"];
-    // WorldScreenSource's eight $type-discriminated variants (FaceSources[].source) — each variant's own allowed-
-    // member list includes "$type" itself, since UniqueMembers keeps it in the same dictionary the field reads walk.
-    private static readonly string[] ScreenSourceNoneMembers = ["$type"];
-    private static readonly string[] ScreenSourceMachineMembers = ["$type", "instance", "output"];
-    private static readonly string[] ScreenSourceProducerMembers = ["$type", "id", "settings"];
-    private static readonly string[] ScreenSourceViewMembers = ["$type", "cameraName"];
+    // A face is read through the document's own contract, so this door decodes exactly the face shape a document row
+    // carries: every source arm, the portal and the filter. The copy refuses a repeated key, which the document path
+    // would resolve to its last occurrence, so a repeat is refused here as it is everywhere else on this seam.
+    private static readonly JsonTypeInfo<WorldPlacementFace> FaceContract = ((JsonTypeInfo<WorldPlacementFace>)new JsonSerializerOptions(options: WorldJsonContext.Default.Options) {
+        AllowDuplicateProperties = false,
+    }.GetTypeInfo(type: typeof(WorldPlacementFace)));
     private static readonly Dictionary<string, WorldHudElementKind> ElementKinds = new(comparer: StringComparer.Ordinal) {
         ["rect"] = WorldHudElementKind.Rect,
         ["text"] = WorldHudElementKind.Text,
@@ -452,42 +453,11 @@ public static class WorldAddonMutationDecoder {
             throw new AddonMutationDecodeException(message: $"{context}: must be an object");
         }
 
-        var members = UniqueMembers(
-            context: context,
-            element: element
-        );
-
-        RequireNoUnknownMembers(
-            allowed: FaceSourceMembers,
-            context: context,
-            members: members
-        );
-
-        var face = RequireString(
-            context: context,
-            members: members,
-            name: "face"
-        );
-
-        if (
-            !members.TryGetValue(
-            key: "source",
-            value: out var sourceElement
-        ) ||
-            (sourceElement.ValueKind != JsonValueKind.Object)
-        ) {
-            throw new AddonMutationDecodeException(message: $"{context}: 'source' must be an object");
+        try {
+            return (element.Deserialize(jsonTypeInfo: FaceContract) ?? throw new AddonMutationDecodeException(message: $"{context}: must be an object"));
+        } catch (Exception exception) when (WorldJsonPayload.IsParseFailure(exception: exception)) {
+            throw new AddonMutationDecodeException(message: $"{context}: {WorldJsonPayload.Reason(exception: exception)}");
         }
-
-        var source = DecodeScreenSource(
-            context: $"{context}.source",
-            element: sourceElement
-        );
-
-        return new WorldPlacementFace(
-            Face: face,
-            Source: source
-        );
     }
     // Kit/look name resolution and population-wide bounds stay with the document validator. An addon-authored
     // count is always a literal — the cell-reference shape (Puck.World.WorldPlacementInhabitCount.Row) is not part
@@ -700,127 +670,6 @@ public static class WorldAddonMutationDecoder {
                 Principal: actor
             )
         );
-    }
-    // WorldScreenSource's $type discriminators are the SAME strings the document's own JsonDerivedType attributes
-    // declare (fixed regardless of naming policy) — the one place this decoder's own token vocabulary intentionally
-    // matches the document wire exactly, because these are type discriminators, not enum values.
-    private static WorldScreenSource DecodeScreenSource(JsonElement element, string context) {
-        var members = UniqueMembers(
-            context: context,
-            element: element
-        );
-        var type = RequireString(
-            context: context,
-            members: members,
-            name: "$type"
-        );
-
-        return type switch {
-            "none" => DecodeScreenSourceNone(
-            context: context,
-            members: members
-        ),
-            "machine" => DecodeScreenSourceMachine(
-            context: context,
-            members: members
-        ),
-            "producer" => DecodeScreenSourceProducer(
-            context: context,
-            members: members
-        ),
-            "view" => DecodeScreenSourceView(
-            context: context,
-            members: members
-        ),
-            _ => throw new AddonMutationDecodeException(message: $"{context}: '$type' names '{type}', which is not one of {{none, machine, producer, view}}"),
-        };
-    }
-    private static WorldScreenSource DecodeScreenSourceMachine(Dictionary<string, JsonElement> members, string context) {
-        RequireNoUnknownMembers(
-            allowed: ScreenSourceMachineMembers,
-            context: context,
-            members: members
-        );
-
-        var instance = RequireString(
-            context: context,
-            members: members,
-            name: "instance"
-        );
-        var output = RequireString(
-            context: context,
-            members: members,
-            name: "output"
-        );
-
-        return new WorldScreenSource.Machine(
-            Instance: instance,
-            Output: output
-        );
-    }
-    private static WorldScreenSource DecodeScreenSourceNone(Dictionary<string, JsonElement> members, string context) {
-        RequireNoUnknownMembers(
-            allowed: ScreenSourceNoneMembers,
-            context: context,
-            members: members
-        );
-
-        return new WorldScreenSource.None();
-    }
-    // A producer's settings object is carried whole: the producer's registered shape binds and checks it when the
-    // validator gates the composed candidate, exactly as a document row's is, so this decoder only shapes the row.
-    private static WorldScreenSource DecodeScreenSourceProducer(Dictionary<string, JsonElement> members, string context) {
-        RequireNoUnknownMembers(
-            allowed: ScreenSourceProducerMembers,
-            context: context,
-            members: members
-        );
-
-        var id = RequireString(
-            context: context,
-            members: members,
-            name: "id"
-        );
-
-        if (!members.TryGetValue(
-            key: "settings",
-            value: out var settingsElement
-        )) {
-            return new WorldScreenSource.Producer(Id: id);
-        }
-
-        if (settingsElement.ValueKind != JsonValueKind.Object) {
-            throw new AddonMutationDecodeException(message: $"{context}: 'settings' must be an object");
-        }
-
-        var settings = new Dictionary<string, JsonElement>(comparer: StringComparer.Ordinal);
-
-        foreach (var (name, value) in UniqueMembers(
-            context: $"{context}.settings",
-            element: settingsElement
-        )) {
-            settings[name] = value.Clone();
-        }
-
-        return new WorldScreenSource.Producer(
-            Id: id,
-            Settings: settings
-        );
-    }
-    private static WorldScreenSource DecodeScreenSourceView(Dictionary<string, JsonElement> members, string context) {
-        RequireNoUnknownMembers(
-            allowed: ScreenSourceViewMembers,
-            context: context,
-            members: members
-        );
-
-        var cameraName = RequireString(
-            context: context,
-            members: members,
-            name: "cameraName"
-        );
-
-        return new WorldScreenSource.View(CameraName: cameraName);
     }
     private static WorldSequence DecodeSequence(JsonElement element, string context) {
         if (element.ValueKind != JsonValueKind.Object) {

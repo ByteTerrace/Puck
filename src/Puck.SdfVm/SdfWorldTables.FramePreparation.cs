@@ -493,7 +493,10 @@ public sealed partial class SdfWorldTables {
             bytes: m_volumeScratch,
             offset: 0
         );
-        StageMeshRegion(draws: frame.MeshDraws);
+        StageMeshRegion(
+            draws: frame.MeshDraws,
+            revision: frame.MeshDrawsRevision
+        );
 
         // The deterministic tick clock star twinkle reads (cloud motion is baked into the environment rows). It rides
         // every pass block and the signature folds it, so the cadence never stands a frame whose tick moved; a sky with no

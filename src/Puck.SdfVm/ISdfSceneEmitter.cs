@@ -143,10 +143,13 @@ public interface ISdfSceneEmitter {
     /// its last live <see cref="Emit"/> fixed, and any its last <see cref="PackDynamicTransforms"/> posed. The host reads
     /// it after packing, every frame, and composes every emitter's draws in list order.
     /// <para>
-    /// Return the same list instance while the draws are unchanged and a new one when any changes: the host recomposes,
-    /// and the engine repacks its mesh region, only for a list it has not seen (<see cref="SdfWorldTables"/> compares by
-    /// reference). Never mutate a list after returning it. The default, an empty list, is correct for an emitter that
-    /// draws no mesh.
+    /// The host recomposes, and a residency's tables repack their mesh region, only when the list is a different one or
+    /// <see cref="MeshDrawsRevision"/> moved, so an emitter may keep one list and rewrite it in place: it moves the
+    /// revision whenever the content changes, and never while the host is reading it. The default, an empty list, is
+    /// correct for an emitter that draws no mesh.
     /// </para></summary>
     IReadOnlyList<SdfMeshDraw> MeshDraws => [];
+    /// <summary>Gets the revision of <see cref="MeshDraws"/>' content: moved whenever the emitter rewrote its list in
+    /// place. An emitter that supplies a new list instead may leave it 0.</summary>
+    long MeshDrawsRevision => 0;
 }

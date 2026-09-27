@@ -6992,6 +6992,10 @@ export type WorldPlacementFace = {
    * The face's portal facet (see WorldPlacementPortal) — absent (the default) means this face is not a door. Optional and trailing deliberately: a face authored before this facet existed round-trips unchanged, and it composes freely with Source — the door and the screen it shows are independent facts about the same face.
    */
   portal?: WorldPlacementPortal | null;
+  /**
+   * How the face's screen samples its source's image, as a screen row's Filter does: Nearest, the default, keeps each source pixel crisp; Linear blends between source pixels. Omitted from the wire when Nearest.
+   */
+  filter?: GpuSamplerFilter;
 };
 
 export type WorldPlacementFaceList = (WorldPlacementFace | null)[];

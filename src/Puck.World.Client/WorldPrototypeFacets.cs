@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Numerics;
+using Puck.Abstractions.Gpu;
 
 namespace Puck.World.Client;
 
@@ -45,7 +46,7 @@ public static class WorldPrototypeFacets {
     // the portal trigger it also feeds is simulation state; fixed-to-float is exactly rounded, so every machine draws
     // the slab it collides with. Everything applied here — proud epsilon, interior fraction, the round radius, the
     // minimum half-depth — is render policy over that one geometry, never part of it.
-    private static WorldScreen FaceScreen(int index, WorldFaceFrame frame, WorldScreenSource source) {
+    private static WorldScreen FaceScreen(int index, WorldFaceFrame frame, WorldScreenSource source, GpuSamplerFilter filter) {
         var normal = frame.Normal.ToVector3();
         var halfDepth = ((float)((double)frame.HalfDepth));
 
@@ -62,7 +63,8 @@ public static class WorldPrototypeFacets {
             ),
             Round: FaceRound,
             Source: source,
-            Route: WorldScreenRoute.Passive
+            Route: WorldScreenRoute.Passive,
+            Filter: filter
         );
     }
     private static WorldScreen PlaceholderScreen(int index) => new(
@@ -156,8 +158,9 @@ public static class WorldPrototypeFacets {
 
             _ = seated.Add(item: row.ScreenIndex);
             faces.Add(item: FaceScreen(
-                index: row.ScreenIndex,
+                filter: row.Filter,
                 frame: row.Frame,
+                index: row.ScreenIndex,
                 source: row.Source
             ));
         }
