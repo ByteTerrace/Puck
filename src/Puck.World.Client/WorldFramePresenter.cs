@@ -1361,7 +1361,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     public bool PinsStateFraction { get; init; }
 
     /// <inheritdoc/>
-    public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
+    public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
         ArgumentNullException.ThrowIfNull(argument: program);
         ArgumentNullException.ThrowIfNull(argument: transforms);
 
@@ -1633,8 +1633,8 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             // re-marching it; any camera, program, pose, lever or twinkle change renders.
             EnableCadenceGate = m_settings.CadenceGate,
             Volumes = m_volumes,
-            // A prototype's inline mesh at each static placement; no pass draws it yet.
-            MeshDraws = m_emitter.StaticMeshDraws,
+            // Every emitter's mesh draws: the static placements' and the stamp pool's, then the neighbour worlds'.
+            MeshDraws = meshDraws,
             // The far plane every march ends at: render.farDistance off the LIVE definition (a world.row.set render
             // lands on the next frame, like the lighting below), or the engine's pinned default when unauthored.
             FarDistance = WorldRenderFarDistance.Resolve(defaults: m_client.Definition.Render),

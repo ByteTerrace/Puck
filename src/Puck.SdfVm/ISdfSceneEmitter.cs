@@ -139,4 +139,14 @@ public interface ISdfSceneEmitter {
     /// makes a stride grown later safe by construction rather than by remembering. Default <see langword="false"/>.
     /// </para></summary>
     bool OwnsMaterialScope => false;
+    /// <summary>Gets the mesh draws this emitter's current content carries (<see cref="SdfFrame.MeshDraws"/>): the draws
+    /// its last live <see cref="Emit"/> fixed, and any its last <see cref="PackDynamicTransforms"/> posed. The host reads
+    /// it after packing, every frame, and composes every emitter's draws in list order.
+    /// <para>
+    /// Return the same list instance while the draws are unchanged and a new one when any changes: the host recomposes,
+    /// and the engine repacks its mesh region, only for a list it has not seen (<see cref="SdfWorldEngine"/> compares by
+    /// reference). Never mutate a list after returning it. The default, an empty list, is correct for an emitter that
+    /// draws no mesh.
+    /// </para></summary>
+    IReadOnlyList<SdfMeshDraw> MeshDraws => [];
 }

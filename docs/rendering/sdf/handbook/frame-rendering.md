@@ -201,7 +201,9 @@ program is written only by a program upload, into a region sized to the live
 program and grown by half again when a larger one arrives. Mesh draws (`SdfFrame.MeshDraws`)
 are packed into the mesh region (`SdfMeshRegion`: one 80-byte record a draw,
 then each distinct mesh's positions and indices once) only when the frame hands
-a different draw list. The region starts with one draw record at engine construction
+a different draw list. Each scene emitter states its draws, a static placement's
+fixed at its rebuild and a stamp's posed at its root each frame, and returns the
+same list while none moved, so a still scene packs nothing. The region starts with one draw record at engine construction
 and grows by half again when a list outgrows it. The mesh pass reads its triangles,
 and primary reads the winning mesh's material.
 

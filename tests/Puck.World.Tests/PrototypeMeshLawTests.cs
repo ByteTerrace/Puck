@@ -6,14 +6,15 @@ using Puck.SignedDistance;
 using Puck.World.Authoring;
 using Puck.World.Client;
 using Puck.World.Protocol;
+using Puck.World.Server;
 using Xunit;
 
 namespace Puck.World.Tests;
 
 /// <summary>
-/// THE LAW: a prototype's inline mesh round-trips through the document, every malformed mesh and every placement
-/// that would carry one where no mesh is drawn is refused by name, and each static placement instance reaches the
-/// frame's mesh draws as the prototype's engine-frame triangles under the placement's scale, yaw and position.
+/// THE LAW: a prototype's inline mesh round-trips through the document, every malformed mesh is refused by name, each
+/// static placement instance reaches the frame's mesh draws as the prototype's engine-frame triangles under the
+/// placement's scale, yaw and position, and a stamp (an animated or attached placement) draws it at its root this frame.
 /// <para>Each refusal is paired with a control that differs in one authored field.</para>
 /// </summary>
 public sealed class PrototypeMeshLawTests {
@@ -60,6 +61,37 @@ public sealed class PrototypeMeshLawTests {
                 : (document.Population with { CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 1) })),
         });
     }
+    private static WorldPlacementInhabit Inhabit() => new(
+        Distribution: WorldDistribution.Default,
+        Kit: Fixtures.SeatKitName,
+        Look: null,
+        Source: IntentSource.Idle
+    );
+    // The slab with a timeline frame, so its placement is an animated stamp.
+    private static WorldDefinition Animated(WorldPrototypeMesh? mesh) => (With(mesh: mesh) with {
+        CreationsRaw = [(CreationFixtures.Prototype(document: (CreationFixtures.Document(
+            name: PrototypeId,
+            palette: CreationFixtures.GreyAndBlue,
+            shapes: [CreationFixtures.UnitSphereShape]
+        ) with { Frames = [new FrameDocument(Name: "idle", Transforms: [])] })) with { Mesh = mesh })],
+    });
+    // The slab's placement attached to body 0, one unit above it.
+    private static WorldDefinition Attached(WorldPrototypeMesh? mesh) {
+        var definition = With(mesh: mesh);
+
+        return (definition with {
+            PlacementRowsRaw = [definition.Placements.Single() with {
+                Attach = new WorldPlacementAttach(
+                    BodyIndex: 0,
+                    LocalOffset: new DocumentVector3(value: new Vector3(
+                        x: 0f,
+                        y: 1f,
+                        z: 0f
+                    ))
+                ),
+            }],
+        });
+    }
     private static List<SdfMeshDraw> Draws(WorldDefinition definition) {
         var draws = new List<SdfMeshDraw>();
 
@@ -103,58 +135,64 @@ public sealed class PrototypeMeshLawTests {
         Laws.Refuses(definition: With(mesh: (quad with { Vertices = [quad.Vertices[0], quad.Vertices[1], new Vector3(x: 2f, y: 0f, z: 0f), quad.Vertices[3]], Indices = [0U, 1U, 2U] })), locally: true, needle: "prototypes[0].mesh triangle 0 is degenerate: its vertices 0, 1 and 2 enclose no area");
         Laws.Refuses(definition: With(mesh: (quad with { Material = 2 })), locally: true, needle: "prototypes[0].mesh.material 2 names no entry of the creation's 2-entry palette");
     }
-    /// <summary>DENIAL: an inhabited placement of a mesh prototype, which rides the stamp pool that draws no mesh.
-    /// CONTROL: the same inhabited placement of the prototype without a mesh validates.</summary>
+    /// <summary>A mesh validates wherever its creation renders through the stamp pool: on an animated creation, under an
+    /// inhabited placement and under an attached one.</summary>
     [Fact]
-    public void AnInhabitedPlacementRefusesAMeshPrototype() {
-        var inhabit = new WorldPlacementInhabit(
-            Distribution: WorldDistribution.Default,
-            Kit: Fixtures.SeatKitName,
-            Look: null,
-            Source: IntentSource.Idle
+    public void AMeshValidatesOnEveryStamp() {
+        Laws.Validates(definition: Animated(mesh: Quad()), locally: true);
+        Laws.Validates(definition: With(inhabit: Inhabit(), mesh: Quad()), locally: true);
+        Laws.Validates(definition: Attached(mesh: Quad()), locally: true);
+    }
+    /// <summary>An animated placement's mesh draws from the stamp pool at the placement's root, the pose a static
+    /// placement's draw takes (scale 2, yaw 90°, position (2, 0, -3)), and not from the static path. A frame in which
+    /// nothing moved hands the engine the list it already has.</summary>
+    [Fact]
+    public void AnAnimatedPlacementDrawsItsMeshAtItsRoot() {
+        var definition = Animated(mesh: Quad());
+        var scene = new Scene(definition: definition);
+
+        Assert.Empty(collection: Draws(definition: definition));
+
+        var first = scene.Frame();
+        var draw = Assert.Single(collection: first);
+
+        Assert.Equal(expected: (Assert.Single(collection: new Scene(definition: Animated(mesh: (Quad() with { Material = 0 }))).Frame()).Material + 1), actual: draw.Material);
+        AssertNear(expected: new Vector3(x: 2f, y: 0f, z: -1f), actual: Vector3.Transform(position: draw.Mesh.Positions.Span[1], matrix: draw.ObjectToWorld));
+        AssertNear(expected: new Vector3(x: 2f, y: 2f, z: -3f), actual: Vector3.Transform(position: draw.Mesh.Positions.Span[3], matrix: draw.ObjectToWorld));
+        Assert.Same(expected: first, actual: scene.Frame());
+        Assert.Empty(collection: new Scene(definition: Animated(mesh: null)).Frame());
+    }
+    /// <summary>An attached placement's mesh draws at its body's pose composed with the facet's offset (0, 1, 0), under
+    /// the row's scale 2, and follows the body: a moved body hands the engine a new list with the draw moved. While the
+    /// body is inactive the row draws nothing.</summary>
+    [Fact]
+    public void AnAttachedPlacementsMeshFollowsItsBody() {
+        var scene = new Scene(definition: Attached(mesh: Quad()));
+
+        Assert.Empty(collection: scene.Frame());
+
+        scene.Deliver(
+            position: new Vector3(x: 5f, y: 0f, z: 0f),
+            tick: 1UL
         );
 
-        Laws.Refuses(definition: With(inhabit: inhabit, mesh: Quad()), locally: true, needle: "placements.rows[0] inhabits prototype 'slab', whose mesh only a static placement draws");
-        Laws.Validates(definition: With(inhabit: inhabit, mesh: null), locally: true);
-    }
-    /// <summary>DENIAL: a mesh on a creation with a timeline frame, whose placements ride the stamp pool that draws no
-    /// mesh. CONTROL: the same animated creation without a mesh validates.</summary>
-    [Fact]
-    public void AnAnimatedCreationRefusesAMesh() {
-        static WorldDefinition Animated(WorldPrototypeMesh? mesh) => (With(mesh: mesh) with {
-            CreationsRaw = [(CreationFixtures.Prototype(document: (CreationFixtures.Document(
-                name: PrototypeId,
-                palette: CreationFixtures.GreyAndBlue,
-                shapes: [CreationFixtures.UnitSphereShape]
-            ) with { Frames = [new FrameDocument(Name: "idle", Transforms: [])] })) with { Mesh = mesh })],
-        });
+        var rest = Assert.Single(collection: scene.Frame());
 
-        Laws.Refuses(definition: Animated(mesh: Quad()), locally: true, needle: "prototypes[0].mesh is refused on an animated creation");
-        Laws.Validates(definition: Animated(mesh: null), locally: true);
-    }
-    /// <summary>DENIAL: an attached placement of a mesh prototype, which rides a body's pose through the stamp pool
-    /// that draws no mesh. CONTROL: the same attached placement of the prototype without a mesh validates.</summary>
-    [Fact]
-    public void AnAttachedPlacementRefusesAMeshPrototype() {
-        static WorldDefinition Attached(WorldPrototypeMesh? mesh) {
-            var definition = With(mesh: mesh);
+        // Author (0, 1, 0) is engine (0, 1, 0), scaled to (0, 2, 0), lifted by the offset to (0, 3, 0) and carried to
+        // the body at (5, 0, 0).
+        AssertNear(expected: new Vector3(x: 5f, y: 3f, z: 0f), actual: Vector3.Transform(position: rest.Mesh.Positions.Span[3], matrix: rest.ObjectToWorld));
 
-            return (definition with {
-                PlacementRowsRaw = [definition.Placements.Single() with {
-                    Attach = new WorldPlacementAttach(
-                        BodyIndex: 0,
-                        LocalOffset: new DocumentVector3(value: new Vector3(
-                            x: 0f,
-                            y: 1f,
-                            z: 0f
-                        ))
-                    ),
-                }],
-            });
-        }
+        var still = scene.Frame();
 
-        Laws.Refuses(definition: Attached(mesh: Quad()), locally: true, needle: "placements.rows[0] attaches prototype 'slab', whose mesh only a static placement draws");
-        Laws.Validates(definition: Attached(mesh: null), locally: true);
+        scene.Deliver(
+            position: new Vector3(x: 8f, y: 0f, z: 0f),
+            tick: 2UL
+        );
+
+        var moved = scene.Frame();
+
+        Assert.NotSame(expected: still, actual: moved);
+        Assert.NotEqual(expected: rest.ObjectToWorld, actual: Assert.Single(collection: moved).ObjectToWorld);
     }
     /// <summary>A static placement reaches the mesh draws once, as the prototype's triangles turned into the engine
     /// frame (X and Z negated) under the placement's scale 2, yaw 90° and position (2, 0, -3), derived here from the
@@ -177,6 +215,121 @@ public sealed class PrototypeMeshLawTests {
 
         Assert.Equal(expected: (entryZero.Material + 1), actual: draw.Material);
         Assert.Empty(collection: Draws(definition: With(mesh: null)));
+    }
+
+    // The real scene emitter over one client, composed and dressed as a presenter composes it, reporting each frame's
+    // composed mesh draws.
+    private sealed class Scene {
+        private const float FrameSeconds = (1f / 60f);
+
+        private readonly WorldClient m_client;
+        private readonly RecordingDresser m_dresser = new();
+        private readonly WorldSceneEmitter m_emitter;
+        private readonly SdfCompositionFrameSource m_frames;
+
+        public Scene(WorldDefinition definition) {
+            var routes = new WorldSeatAuthorityRouter();
+
+            m_client = new WorldClient(
+                composition: new WorldCompositionState(),
+                definition: definition,
+                roster: new PlayerRoster(
+                    definition: definition,
+                    link: new SilentLink(definition: definition),
+                    seatBindings: new WorldSeatBindings(definition: definition)
+                ),
+                seatRouter: routes
+            );
+            m_emitter = new WorldSceneEmitter(
+                anchor: new WorldPerceptionAnchor(),
+                animator: new WorldStampPool(),
+                audio: new SilentAudio(),
+                client: m_client,
+                continuum: new WorldContinuum(
+                    m_client,
+                    routes,
+                    new NoNeighbours()
+                ),
+                settings: new WorldRenderSettings(defaults: definition.Render),
+                text: new WorldTextCatalog(source: new(
+                    Definition: definition,
+                    SourcePath: "unused.world.json"
+                ))
+            );
+            m_frames = new SdfCompositionFrameSource(
+                dresser: m_dresser,
+                emitters: [m_emitter]
+            );
+        }
+
+        // Body 0 alone, active at the position.
+        public void Deliver(Vector3 position, ulong tick) => m_client.DeliverSnapshot(snapshot: new WorldSnapshot(
+            Authority: "a",
+            Entries: ((EntitySnapshot[])[new EntitySnapshot(
+                Active: true,
+                BodyColor: Vector3.One,
+                CatalogRig: 0,
+                Continuity: EntityContinuity.Continuous,
+                Generation: 1,
+                Index: 0,
+                Kit: 0,
+                Look: 0,
+                Orientation: Quaternion.Identity,
+                Position: position
+            )]),
+            Revision: 1,
+            StepTicks: 1UL,
+            Tick: tick
+        ));
+        public IReadOnlyList<SdfMeshDraw> Frame() {
+            m_emitter.Tick(deltaSeconds: FrameSeconds);
+            _ = m_frames.CaptureFrame(
+                deltaSeconds: FrameSeconds,
+                height: 64,
+                interpolationAlpha: 0f,
+                width: 64
+            );
+
+            return m_dresser.MeshDraws;
+        }
+    }
+    // Keeps the composed mesh draws each frame hands it.
+    private sealed class RecordingDresser : ISdfFrameDresser {
+        public IReadOnlyList<SdfMeshDraw> MeshDraws { get; private set; } = [];
+
+        public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
+            MeshDraws = meshDraws;
+
+            return new SdfFrame(
+                Program: program,
+                ProgramChanged: false,
+                Time: 0f,
+                Views: []
+            ) {
+                DynamicTransforms = transforms,
+                MeshDraws = meshDraws,
+                MovedTransforms = moved,
+            };
+        }
+    }
+    private sealed class SilentAudio : IWorldAudioCueSink {
+        public void SubmitCue(string eventToken, Vector3? site) { }
+    }
+    private sealed class NoNeighbours : IWorldAdjacencySource {
+        public void BeginTick(ulong tick) { }
+        public WorldBodyContactMode LocalBodyContact(int index) => WorldBodyContactMode.Solid;
+        public WorldEntityAddress LocalEntityAddress(int index) => default;
+        public bool TryResolve(string adjacencyName, out IWorldAdjacencyNeighbour? neighbour) {
+            neighbour = null;
+
+            return false;
+        }
+        public IReadOnlyList<WorldAdjacencyProjection> Visuals() => [];
+        public bool TryLocalDepartedFrom(int index, out WorldEntityAddress departedFrom) {
+            departedFrom = default;
+
+            return false;
+        }
     }
 
     private static void AssertNear(Vector3 expected, Vector3 actual) => Assert.True(
