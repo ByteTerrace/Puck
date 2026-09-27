@@ -1,4 +1,5 @@
 using Puck.Abstractions.Presentation;
+using Puck.Hosting;
 using Puck.SdfVm;
 using Puck.Shaders;
 using Puck.Testing;
@@ -275,6 +276,59 @@ public sealed class WorldViewPlacementLawTests : IDisposable {
             Assert.Equal(
                 actual: PlacementOf(view: 0).Uncovered,
                 expected: !panesCover
+            );
+        }
+    }
+    // A view's render scale is what the scheduler renders its producer at: the host's footprints, over the set it
+    // composed and the root the display shows, schedule a lone whole-display view at each render-scale tier's own
+    // quantized extent, whichever tier the frame before rendered at. Three-quarter's scale quantizes to exactly the
+    // shrink threshold of a native allocation, so a live step down from native reaches it too.
+    [Fact]
+    public void ALoneViewAtEachRenderScaleTierIsScheduledAtThatTiersExtent() {
+        var set = m_instances.Instances;
+        var history = RenderGraphHistory.Empty(set: set);
+        var world = set.IndexOf(name: WorldViewGraphs.WorldInstance);
+
+        (int Width, int Height) Scheduled(long index, float renderScale) {
+            m_host.BeginFrame(views: Views);
+            m_host.PlaceViews(
+                panesCover: false,
+                rendered: static _ => true,
+                sharpness: 0f,
+                views: [View(region: Whole, renderScale: renderScale)]
+            );
+
+            var schedule = new RenderGraphSchedule(set: set);
+
+            RenderGraphScheduler.Schedule(
+                frame: new RenderGraphFrame(
+                    DisplayHeight: 144,
+                    DisplayHertz: 60,
+                    DisplayWidth: 256,
+                    Footprints: m_host.Footprints,
+                    Index: index,
+                    Roots: [new RenderGraphRoot(Height: 1, Instance: m_instances.Root, Width: 1)]
+                ),
+                history: history,
+                schedule: schedule,
+                set: set
+            );
+            history = schedule.Next;
+
+            return (schedule.Instances[world].Width, schedule.Instances[world].Height);
+        }
+
+        WorldRenderScaleTier[] walk = [
+            WorldRenderScaleTier.Native, WorldRenderScaleTier.ThreeQuarter, WorldRenderScaleTier.Native, WorldRenderScaleTier.Half,
+            WorldRenderScaleTier.ThreeQuarter, WorldRenderScaleTier.Quarter, WorldRenderScaleTier.Eighth, WorldRenderScaleTier.Native,
+        ];
+
+        for (var index = 0; (index < walk.Length); index++) {
+            var fraction = RenderGraphExtent.Quantize(fraction: WorldRenderScaleTiers.Scale(tier: walk[index]));
+
+            Assert.Equal(
+                actual: Scheduled(index: index, renderScale: WorldRenderScaleTiers.Scale(tier: walk[index])),
+                expected: (RenderGraphExtent.Pixels(display: 256, fraction: fraction), RenderGraphExtent.Pixels(display: 144, fraction: fraction))
             );
         }
     }
