@@ -391,6 +391,8 @@ public static partial class WorldDefinitionValidator {
             // a row nothing will ever hold.
             if (grant.Grantee.Principal.Kind == PrincipalKind.World) {
                 errors.Add(item: $"{path}.grantee is 'world' — the world's own authored program (a rules effect, a kit's generate effect) holds no grant rows: its authority is STRUCTURAL, admitted before the table is consulted at all, so the grant table refuses this row on every boot and the document would validate against itself.");
+            } else if (grant.Grantee.Principal.Kind == PrincipalKind.Session) {
+                errors.Add(item: $"{path}.grantee {grant.Grantee.Describe()} is a session — a session's rows are minted by its admission and end with it, so no document can know or grant one.");
             } else if (
                 (grant.Grantee.Principal.Kind == PrincipalKind.Addon) &&
                 !addonNames.Contains(item: (grant.Grantee.Principal.Name ?? string.Empty))

@@ -6,7 +6,7 @@ pipeline.time conversion pause
 pipeline.reset conversion
 pipeline.wait conversion submitted 1 10
 # The converted palette image, the converted NV12 image, the converted four-byte image, then the transfer image, whose
-# half-float linear light the capture reads through the float preview, clamped.
+# half-float linear light the capture reads through the display encode, clamped.
 pipeline.capture conversion {run}/palette.png
 pipeline.wait conversion captured 10
 pipeline.output conversion nv12

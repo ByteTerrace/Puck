@@ -33,9 +33,8 @@ public enum RenderGraphRuntimeRefusalCode : byte {
     InputProducer = 6,
     /// <summary>An input binds a version of another kind than its producer's output.</summary>
     InputKind = 7,
-    /// <summary>An input binds an image version of another format than its producer publishes, or a buffer version
-    /// larger than its producer's buffer.</summary>
-    InputFormat = 8,
+    /// <summary>An input binds a buffer version larger than its producer's buffer.</summary>
+    InputSize = 8,
     /// <summary>An external instance was given a graph, declares an output that is not an image, or names a package no
     /// external producer serves.</summary>
     ExternalProducer = 9,
@@ -310,7 +309,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 published: published[producer]
             ) is { } mismatch) {
                 refusal = Refuse(
-                    RenderGraphRuntimeRefusalCode.InputFormat,
+                    RenderGraphRuntimeRefusalCode.InputSize,
                     $"Instance '{instance.Name}' binds '{input.Version}' as {mismatch.Declared}, but '{input.Producer}' publishes {mismatch.Published}.",
                     instance.Name,
                     input.Version!,
@@ -670,25 +669,22 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 SizeBytes: 0UL
             ));
     }
-    // Why a consumer's external version cannot bind what its producer publishes, or null when it can: an image of
-    // another format, or a buffer larger than the producer's. A producer that publishes nothing known yet, a graph instance
-    // whose graph is not installed, is checked when its graph installs.
+    // Why a consumer's external version cannot bind what its producer publishes, or null when it can: a buffer larger than
+    // the producer's. An external image is only ever sampled, so it binds an image of any format its producer publishes,
+    // a float working image or an RGBA8 one alike. A producer that publishes nothing known yet, a graph instance whose
+    // graph is not installed, is checked when its graph installs.
     private static (string Declared, string Published)? Mismatch(ShaderPipelineResource declaration, Published? published) {
-        if (published is not { } known) {
+        if (
+            (published is not { } known) ||
+            (declaration.Kind != ShaderPipelineResourceKind.Buffer)
+        ) {
             return null;
         }
-        if (declaration.Kind == ShaderPipelineResourceKind.Buffer) {
-            var size = declaration.SizeBytes.GetValueOrDefault();
 
-            return ((size > known.SizeBytes)
-                ? ($"a {size}-byte buffer", $"a {known.SizeBytes}-byte buffer")
-                : null);
-        }
+        var size = declaration.SizeBytes.GetValueOrDefault();
 
-        var format = ShaderPipelineRenderNode.ParseFormat(format: declaration.Format);
-
-        return ((format != known.Format)
-            ? ($"{format}", $"{known.Format}")
+        return ((size > known.SizeBytes)
+            ? ($"a {size}-byte buffer", $"a {known.SizeBytes}-byte buffer")
             : null);
     }
     private static void DisposeAll(ShaderPipelineRenderNode?[] nodes, IRenderGraphExternalProducer?[] producers) {

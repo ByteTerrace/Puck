@@ -62,6 +62,8 @@ public enum WorldCodecRefusal : byte {
     FrameLengthInvalid,
     /// <summary>The frame's kind byte is not declared.</summary>
     FrameKindUnknown,
+    /// <summary>A remote submission names a session principal, which only the world that admitted it acts as.</summary>
+    SessionPrincipalRemote,
 }
 /// <summary>One named codec refusal plus narration suitable for a console/error frame.</summary>
 /// <param name="Refusal">The stable refusal name.</param>
@@ -824,6 +826,7 @@ public static class WorldSubmissionCodec {
             PrincipalKind.Console => ((principal.Index == 0) && (principal.Name is null) && (principal.Generation == 0)),
             PrincipalKind.Addon => ((principal.Index == 0) && !string.IsNullOrEmpty(value: principal.Name) && (principal.Generation == 0)),
             PrincipalKind.Peer => (WorldBodiesLimits.IsBodyIndex(index: principal.Index) && (principal.Name is null) && (principal.Generation > 0)),
+            PrincipalKind.Session => ((principal.Index >= 0) && (principal.Name is null) && (principal.Generation > 0)),
             _ => false,
         };
 

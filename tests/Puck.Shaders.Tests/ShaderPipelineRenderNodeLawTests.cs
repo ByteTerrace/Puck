@@ -1,4 +1,5 @@
 using Puck.Abstractions.Counting;
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 
@@ -13,6 +14,19 @@ namespace Puck.Shaders.Tests;
 public sealed partial class ShaderPipelineRenderNodeLawTests {
     private const uint Extent = 32;
     private const uint InFlight = 3;
+    // The host's image the backdrop graph copies (Feedback's backdrop), which a law selects to publish it through the
+    // node's preview.
+    private const string Backdrop = "backdrop";
+
+    private static readonly ShaderPipelineExternalImage BackdropImage = new(
+        Format: GpuPixelFormat.R8G8B8A8Unorm,
+        Height: Extent,
+        ImageHandle: 0x9000,
+        ImageViewHandle: 0x9001,
+        Layout: GpuImageLayout.ShaderReadOnly,
+        Width: Extent
+    );
+
     // Enough frames for every frame slot to have allocated its lazily created command pools and descriptor sets.
     private const int WarmFrames = ((int)(InFlight * 3));
 
@@ -63,8 +77,9 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
     /// <paramref name="revision"/> changes every pass's bytecode, for a candidate whose pass pipelines the pass-pipeline
     /// cache must create rather than share with the graph it replaces. <paramref name="convertArrays"/> and
     /// <paramref name="accumulateArrays"/> give those passes arrays in their World groups, for a law that binds them to
-    /// rows.</summary>
-    private static CompiledShaderPipeline Feedback(string historyFormat = "R16G16B16A16Float", ShaderPipelineDimensions? historyDimensions = null, IReadOnlyDictionary<string, ShaderConfigField>? convertConfig = null, byte revision = 0, IReadOnlyDictionary<string, ShaderArrayField>? convertArrays = null, IReadOnlyDictionary<string, ShaderArrayField>? accumulateArrays = null) {
+    /// rows. <paramref name="backdrop"/> gives the copy pass a host's image, <see cref="Backdrop"/>, for a law that selects
+    /// it, which the node publishes through its preview.</summary>
+    private static CompiledShaderPipeline Feedback(string historyFormat = "R16G16B16A16Float", ShaderPipelineDimensions? historyDimensions = null, IReadOnlyDictionary<string, ShaderConfigField>? convertConfig = null, byte revision = 0, IReadOnlyDictionary<string, ShaderArrayField>? convertArrays = null, IReadOnlyDictionary<string, ShaderArrayField>? accumulateArrays = null, bool backdrop = false) {
         var definition = new RenderGraphDefinition(
             name: "feedback",
             outputs: ["image"],
@@ -96,9 +111,12 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
                     Config = convertConfig,
                 },
                 Pass(
-                    inputs: [new ResourceReference(
-                        Name: "gray"
-                    )],
+                    inputs: [
+                        new ResourceReference(Name: "gray"),
+                        .. (backdrop
+                            ? [new ResourceReference(Name: Backdrop)]
+                            : Array.Empty<ResourceReference>()),
+                    ],
                     kind: ShaderPipelineDocumentPassKind.Fullscreen,
                     name: "copy",
                     outputs: ["image"]
@@ -119,6 +137,14 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
                     format: "R8G8B8A8Unorm",
                     name: "image"
                 ),
+                .. (backdrop
+                    ? [Image(
+                        format: "R8G8B8A8Unorm",
+                        name: Backdrop
+                    ) with {
+                        Initialization = ShaderPipelineInitialization.External,
+                    }]
+                    : Array.Empty<ShaderPipelineResource>()),
             ]
         );
         var plan = new ShaderPipelineCompiler().Compile(definition: definition);
@@ -202,17 +228,30 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         }
     }
     // A node with the feedback graph installed and every frame slot warm; with floatOutput, it publishes the float
-    // history through the float preview, selected once the graph has installed.
-    private static ShaderPipelineRenderNode InstalledNode(FakePipelineGpu gpu, bool floatOutput = false, CompiledShaderPipeline? pipeline = null, GpuPassPipelineCache? pipelines = null) {
+    // history itself, selected once the graph has installed; with previewOutput, it publishes the host's image a backdrop
+    // graph copies through its preview, selected once the graph has installed. A backdrop graph's image is bound before it
+    // installs.
+    private static ShaderPipelineRenderNode InstalledNode(FakePipelineGpu gpu, bool floatOutput = false, CompiledShaderPipeline? pipeline = null, GpuPassPipelineCache? pipelines = null, bool previewOutput = false) {
         var node = Node(
             gpu: gpu,
             pipelines: pipelines
         );
 
-        node.Swap(pipeline: (pipeline ?? Feedback()));
+        var installed = (pipeline ?? Feedback(backdrop: previewOutput));
+
+        if (installed.Plan.FindResource(name: Backdrop) is not null) {
+            node.BindImage(
+                image: BackdropImage,
+                name: Backdrop
+            );
+        }
+        node.Swap(pipeline: installed);
         _ = node.ProduceUntilInstalled();
         if (floatOutput) {
-            node.SelectOutputBuilt(name: "history");
+            node.SelectOutput(name: "history");
+        }
+        if (previewOutput) {
+            node.SelectOutputBuilt(name: Backdrop);
         }
         Produce(
             frames: (WarmFrames - 1),

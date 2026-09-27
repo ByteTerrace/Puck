@@ -175,8 +175,9 @@ together. `SdfViewsKernelVariantLawTests` pins the host half.
 No SDF kernel declares a binding or a register by hand. Every per-view kernel
 includes `isa/sdf-world.interface.hlsli` (through `field/sdf-vm.hlsli`) and the baker
 `isa/sdf-bricks.interface.hlsli`, both generated from `SdfWorldInterfaces` and
-owned by `puck shaders generate`; `SdfWorldPipelines.Build` creates each pipeline from its
-interface's layout and writes every binding by member name. A binding's
+owned by `puck shaders generate`; the pass-pipeline cache creates each pipeline from its
+interface's layout (`SdfWorldPipelines.Acquire`), and the tables and recorders write every
+binding by member name. A binding's
 Direct3D 12 register is its binding number in its group's space, as for every
 pass, and `ShaderRegisterBindingLawTests` holds every register the build
 compiles, and every pipeline source the World's package store is built from

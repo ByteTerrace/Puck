@@ -1182,7 +1182,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             return;
         }
 
-        graphs.BeginFrame(views: m_client.Definition.Views);
+        graphs.BeginFrame(
+            tonemap: m_client.Definition.Render.Tonemap,
+            views: m_client.Definition.Views
+        );
 
         var width = m_displayWidth;
         var height = m_displayHeight;

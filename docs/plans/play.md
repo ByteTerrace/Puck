@@ -227,8 +227,9 @@ arrival is not taped today, and `replay.verify` reports a remote or
 unavailable target as not verified, never as passing); bounded queues,
 backpressure, and query redaction on the observation feed; derived-band
 read-back with a long-run remainder-drift demonstration; destination and
-session resolution on the wire, an unembodied session authority, then optional
-body reservation and allocation; issuer-qualified group and document claims,
+session resolution on the wire, an unembodied session authority carried across
+the wire (a session is admitted, embodied and ended in-process, and both remote
+doors refuse one), then optional body reservation and allocation; issuer-qualified group and document claims,
 entry reservations and idempotent handoff tokens fenced by epochs, leases, and
 durable commit records, hydrate, suspend, and migrate for persisted worlds,
 and durable recovery when an authority dies mid-transaction; retry-safe
@@ -263,7 +264,7 @@ elsewhere.
 
 **Owns:** durable operation identity through ingress, application, the
 serialized persistence queue, receipt lookup, and typed completion; a
-bodyless session principal and session table at the authenticated doors;
+session table at the authenticated doors, over the in-process session principal;
 row-scoped group authority and the invite, revoke, accept, decline, set-role,
 transfer-leadership, and administrative-removal transitions; one effective
 roster surviving policy reload; the Group wire tag and mutation ordinals,

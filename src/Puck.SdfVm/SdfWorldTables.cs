@@ -33,7 +33,10 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     private const int DecalDescriptorCount = MaxScreenSurfaces;
     private const int DecalWordsPerCell = 4; // one uint4 per cell/descriptor (KEEP IN SYNC with shade/sdf-environment.hlsli's sdfDecalCells)
     private const int DynamicTransformByteLength = ((sizeof(float) * 4) * 3); // 48-byte rigid transform: float4 position (xyz + .w = soft-shadow participation: 0 casts / 1 shadow-suppressed) + float4 orientation quaternion + float4 anonymous Lanes (DynamicTransform.Lanes) (KEEP IN SYNC with isa/sdf-world.interface.hlsli sdfDynamicTransforms: position.w is read by sdfShadowParticipationActive's per-instance skip in field/sdf-layout.hlsli, the third row by SDF_OP_LANE_ERODE's currentLanes and shade-volumes.hlsli's selected intensity lane)
-    private const GpuPixelFormat Format = GpuPixelFormat.R8G8B8A8Unorm;
+    // The fillers' and the ISA report's format: the views' color format, which the storage image they stand in for declares.
+    private const GpuPixelFormat Format = RenderGraphPackageCatalog.WorkingFormat;
+    // The glyph atlas's format: RGBA8 coverage and color, as the host rasterizes it.
+    private const GpuPixelFormat GlyphAtlasFormat = GpuPixelFormat.R8G8B8A8Unorm;
     private const int MaxBrickBakeVoxelsPerSlice = (256 * 1024); // <= 256K voxels per brick per produced frame: ~1-2 ms background-budget
     private const int MaxBrickCarvesPerBake = 4096; // request-buffer carve capacity per slot (the debug pool's MaxCarves ceiling)
     private const int ScreenLightByteLength = ((sizeof(float) * 4) * MaxScreenSurfaces); // float4 rgb+intensity per screen slot (KEEP IN SYNC with frame/sdf-environment.hlsli sdfScreenLights)
@@ -393,8 +396,9 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
             : null
         );
 
-        // The tables' pool: the ISA handshake's frame and pass sets, and with a brick pool the frame set the baker shares
-        // and one bake set per brick slot. The sets allocated from the pool are released with it.
+        // The tables' pool: the World set per ring slot, the ISA handshake's frame and pass sets, and with a brick pool the
+        // frame set the baker shares and one bake set per brick slot. The sets allocated from the pool are released with
+        // it.
         m_pool = m_bindings.CreatePool(
             name: NameOf(part: "descriptors"),
             sizes: DescriptorPoolSizes(brickPool: m_brickPoolEnabled)
@@ -416,17 +420,22 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
             descriptorSetLayoutHandle: worldGroups[((int)PassGroup)],
             poolHandle: m_pool
         );
-        // The World set, which the ISA handshake and every view's compute passes bind: the mesh atlases, the sampled
-        // filler until a frame draws a textured mesh (SdfWorldTables.MeshAtlas.cs).
-        m_worldSet = m_bindings.AllocateSet(
-            name: NameOf(detail: "world group", part: "mesh atlases"),
-            descriptorSetLayoutHandle: worldGroups[((int)WorldGroup)],
-            poolHandle: m_pool
-        );
-        WriteMeshAtlases(views: []);
+        // The World set per ring slot, which every view's compute passes and the ISA handshake bind, written the first time
+        // one is bound (WorldSet).
+        for (var slot = 0; (slot < FrameRingSize); slot++) {
+            m_worldSets[slot] = m_bindings.AllocateSet(
+                name: NameOf(
+                    detail: "world group",
+                    index: slot,
+                    part: "tables"
+                ),
+                descriptorSetLayoutHandle: worldGroups[((int)WorldGroup)],
+                poolHandle: m_pool
+            );
+        }
 
         // One sampler per filter; a screen samples its source through the one its row chooses and the glyph atlas through
-        // the nearest one. A pass writes them into its set (WriteShared).
+        // the nearest one. The World sets bind them (WriteWorldSet).
         foreach (var filter in Enum.GetValues<GpuSamplerFilter>()) {
             m_samplers[((int)filter)] = scope.Own(
                 handle: m_bindings.CreateSampler(filter: filter),

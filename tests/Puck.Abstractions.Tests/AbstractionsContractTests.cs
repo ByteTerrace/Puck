@@ -24,14 +24,34 @@ public sealed class AbstractionsContractTests {
         ));
     }
     [Fact]
-    public void ASurfaceCarriesOnlyTheTwoEightBitOrders() {
+    public void ASurfaceCarriesTheTwoEightBitOrdersAndASameDeviceImageTheFloatWorkingFormatsToo() {
         foreach (var format in Enum.GetValues<GpuPixelFormat>()) {
             Assert.Equal(
                 expected: (format is GpuPixelFormat.R8G8B8A8Unorm or GpuPixelFormat.B8G8R8A8Unorm),
                 actual: Surface.IsSurfaceFormat(format: format)
             );
+            Assert.Equal(
+                expected: (format is GpuPixelFormat.R8G8B8A8Unorm or GpuPixelFormat.B8G8R8A8Unorm or GpuPixelFormat.R16G16B16A16Float or GpuPixelFormat.R32G32B32A32Float),
+                actual: Surface.IsImageFormat(format: format)
+            );
         }
 
+        Assert.Equal(
+            actual: Surface.SameDeviceImage(
+                format: GpuPixelFormat.R16G16B16A16Float,
+                height: 1,
+                imageHandle: 7,
+                imageViewHandle: 8,
+                width: 1
+            ).Format,
+            expected: GpuPixelFormat.R16G16B16A16Float
+        );
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Surface.SharedTexture(
+            format: GpuPixelFormat.R16G16B16A16Float,
+            height: 1,
+            sharedHandle: 23,
+            width: 1
+        ));
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Surface.CpuPixels(
             format: GpuPixelFormat.R8G8B8A8Srgb,
             height: 1,

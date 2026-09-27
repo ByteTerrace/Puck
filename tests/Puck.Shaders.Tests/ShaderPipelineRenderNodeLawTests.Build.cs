@@ -56,16 +56,24 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         var frameThread = Environment.CurrentManagedThreadId;
         using var node = Node(gpu: gpu);
 
-        // A first install, selecting the float output on the installed graph, a reload of changed shaders whose float
-        // output builds a preview with it, a resize, and the rebuild of the installed pipeline after a device loss.
-        node.Swap(pipeline: Feedback(historyDimensions: FrameRelative));
+        // A first install, selecting the host's image the installed graph copies, a reload of changed shaders whose
+        // selection builds a preview with it, a resize, and the rebuild of the installed pipeline after a device loss.
+        node.BindImage(
+            image: BackdropImage,
+            name: Backdrop
+        );
+        node.Swap(pipeline: Feedback(
+            backdrop: true,
+            historyDimensions: FrameRelative
+        ));
         _ = node.ProduceUntilInstalled();
-        node.SelectOutputBuilt(name: "history");
+        node.SelectOutputBuilt(name: Backdrop);
 
         _ = SwapAndProduce(
             gpu: gpu,
             node: node,
             pipeline: Feedback(
+                backdrop: true,
                 historyDimensions: FrameRelative,
                 historyFormat: "R32G32B32A32Float",
                 revision: 1
@@ -87,7 +95,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         var compiled = gpu.CreatedObjects.Where(predicate: IsPipelineOrModule).ToArray();
 
         // A graph's pipelines are four modules and three pipelines (two compute passes and a fullscreen pass, whose one
-        // pipeline serves every frame slot), and the float preview's two modules and one pipeline; each is created once per
+        // pipeline serves every frame slot), and the preview's two modules and one pipeline; each is created once per
         // cache entry. The first install and the selection create both; the reload's changed shaders create the graph's
         // anew while its preview joins the installed one's entry; the resize joins every entry; and the device loss
         // released every lease, so the rebuild creates both again.
@@ -256,6 +264,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         node.Paused = true;
 
         var held = Produce(node: node);
+        var creations = gpu.CreationCount;
 
         _ = SwapAndProduce(
             gpu: gpu,
@@ -264,7 +273,6 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         );
 
         var submissions = gpu.Submissions;
-        var creations = gpu.CreationCount;
 
         // The installed graph has rendered no frame, so it has none to publish through the new selection: the replaced
         // graph's image stays published and nothing is submitted.
@@ -280,14 +288,15 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             expected: submissions
         );
 
-        // The step's frame is the graph's first, published through the selection's float preview.
+        // The step's frame is the graph's first, which publishes the selected float history, an image of the installed
+        // graph.
         node.Step();
 
         var stepped = Produce(node: node);
 
         Assert.Equal(
-            actual: gpu.Submissions,
-            expected: (submissions + 1)
+            actual: (Submissions: gpu.Submissions, Format: stepped.Format),
+            expected: (Submissions: (submissions + 1), Format: GpuPixelFormat.R32G32B32A32Float)
         );
         Assert.Contains(
             collection: gpu.CreatedObjects.Skip(count: creations),

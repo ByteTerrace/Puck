@@ -113,7 +113,7 @@ public sealed partial class SdfWorldTables {
             Spec(name: "sdf-sky", layout: World),
             Spec(brick: true, layout: BrickBake, name: "sdf-brick-bake"),
         ];
-        // The order a build starts the pipelines in (SdfWorldPipelines.Build): the views variants, the longest driver
+        // The order a set leases the pipelines in (SdfWorldPipelines.Acquire): the views variants, the longest driver
         // translations, start last, lightest first (core, folds, full), and every other pipeline starts before them in
         // index order. Each Specs index appears exactly once.
         internal static readonly int[] BuildOrder = [

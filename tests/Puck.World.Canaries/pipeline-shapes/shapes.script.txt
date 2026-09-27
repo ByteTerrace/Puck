@@ -7,7 +7,7 @@ pipeline.wait shapes submitted 1 10
 # The final RGBA8 image, drawn by the fullscreen stage through the POSITION adapter.
 pipeline.capture shapes {run}/image.png
 pipeline.wait shapes captured 10
-# Each float intermediate through the float preview, paused: the second compute stage, then the first.
+# Each float intermediate, captured through the display encode, paused: the second compute stage, then the first.
 pipeline.output shapes mixed
 pipeline.capture shapes {run}/mixed.png
 pipeline.wait shapes captured 10

@@ -201,6 +201,9 @@ public sealed class WorldEngagement {
 
         return false;
     }
+    // Whether a principal's Index is its own body — only a seat's and a peer's is. An application set is written for a
+    // body's participant, so any other identity (a session's ordinal, the console, an addon) owns no set here.
+    private static bool OwnsABody(Principal principal) => (principal.Kind is PrincipalKind.Seat or PrincipalKind.Peer);
     // The principal a 0-based entity index resolves to — a seat slot below the local seat count, a population peer
     // identity above it (see the class remarks: no roster indirection is needed on the read half).
     private Principal PrincipalOf(int index) => ((index < m_population.LocalSeatCount)
@@ -219,7 +222,10 @@ public sealed class WorldEngagement {
     // The shared check-then-mutate decision Dissolve applies and PeekDissolve reports. Every dissolved target is
     // Control-checked against the actor — the identical pair composing it required — before anything is written.
     private ControlOutcome ResolveDissolve(int entityIndex, Principal actingPrincipal, Principal targetPrincipal, bool apply) {
-        if (Body(index: entityIndex) is null) {
+        if (
+            !OwnsABody(principal: targetPrincipal) ||
+            (Body(index: entityIndex) is null)
+        ) {
             return ControlOutcome.NotApplied;
         }
 
@@ -350,7 +356,8 @@ public sealed class WorldEngagement {
     /// no route row to author them from). Screen policy (engageable, proximity, and machine presence) remains the
     /// caller's concern; <see cref="WorldServer.ApplyCommand"/> and its context-button probe share the authoritative
     /// server-side policy check. Denied when the actor lacks Control, or when the entity index holds no live body —
-    /// either way nothing is mutated.</summary>
+    /// either way nothing is mutated, and so is a target identity that owns no body (a session, the console, an
+    /// addon), whose index names none.</summary>
     /// <param name="entityIndex">The 0-based entity index whose intent the composed application carries.</param>
     /// <param name="target">The application target subject — a screen or a body.</param>
     /// <param name="exclusive">Whether composing drops the own-body application (capture) or retains it (mirror).</param>
@@ -367,7 +374,10 @@ public sealed class WorldEngagement {
             return false;
         }
 
-        if (Body(index: entityIndex) is null) {
+        if (
+            !OwnsABody(principal: targetPrincipal) ||
+            (Body(index: entityIndex) is null)
+        ) {
             return false;
         }
 

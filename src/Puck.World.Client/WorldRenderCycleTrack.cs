@@ -374,21 +374,11 @@ public sealed class WorldRenderCycleTrack {
             }
         }
     }
-    // render.environment/render.tonemap are NOT part of a render.cycle key (WorldRenderCycleKey carries no
-    // environment/tonemap field), so they are written directly onto the statics once per revision rather than
-    // through Write's per-key carry — every cycle key inherits the same value via CopyFrom, so blending two
-    // identical lane values (whatever SdfEnvironment.BlendOf classifies them as) is exact.
-    private static void WriteEnvironment(WorldStateMirror mirror, WorldRenderEnvironment? environment, SdfEnvironment into, WorldTonemap? tonemap) {
-        into.Tonemap = ((tonemap ?? WorldTonemap.None) switch {
-            WorldTonemap.None => SdfTonemapMode.None,
-            WorldTonemap.Filmic => SdfTonemapMode.Filmic,
-            var other => throw new ArgumentOutOfRangeException(
-            paramName: nameof(tonemap),
-            actualValue: other,
-            message: "render.tonemap names a mode the environment lane table does not carry."
-        ),
-        });
-
+    // render.environment is NOT part of a render.cycle key (WorldRenderCycleKey carries no environment field), so it is
+    // written directly onto the statics once per revision rather than through Write's per-key carry — every cycle key
+    // inherits the same value via CopyFrom, so blending two identical lane values (whatever SdfEnvironment.BlendOf
+    // classifies them as) is exact.
+    private static void WriteEnvironment(WorldStateMirror mirror, WorldRenderEnvironment? environment, SdfEnvironment into) {
         var count = Math.Min(
             val1: (environment?.Softboxes?.Count ?? 0),
             val2: SdfEnvironment.MaxSoftboxes
@@ -458,8 +448,7 @@ public sealed class WorldRenderCycleTrack {
             WriteEnvironment(
                 environment: definition.Render.Environment,
                 into: m_statics,
-                mirror: mirror,
-                tonemap: definition.Render.Tonemap
+                mirror: mirror
             );
 
             if (cycle is { Keys.Count: >= 2 }) {

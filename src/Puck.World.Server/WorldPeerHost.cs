@@ -1585,7 +1585,8 @@ public sealed class WorldPeerHost : IDisposable {
     }
     // The one decode step both submission ingress paths share (the interactive frame loop and a federated peer's
     // forwarded submission, once unwrapped): a live payload, or a named WorldCodecFailure — each caller writes its
-    // own dialect's refusal frame from it.
+    // own dialect's refusal frame from it. A session principal is the admitting world's own, so a remote payload
+    // naming one anywhere is refused here, before either path reads it.
     private static bool TryDecodeSubmissionFrame(ReadOnlySpan<byte> frame, out WorldSubmissionPayload payload, out Guid operationId, out WorldCodecFailure failure) {
         if (
             !Puck.World.Protocol.WorldFrameCodec.TryDecode(
@@ -1596,6 +1597,16 @@ public sealed class WorldPeerHost : IDisposable {
         ) ||
             (decoded is null)
         ) {
+            payload = null!;
+
+            return false;
+        }
+
+        if (WorldSubmissionPrincipals.NamesSession(payload: decoded)) {
+            failure = new WorldCodecFailure(
+                Detail: "a session principal belongs to the world that admitted it; a remote submission never names one",
+                Refusal: WorldCodecRefusal.SessionPrincipalRemote
+            );
             payload = null!;
 
             return false;

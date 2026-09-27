@@ -7,9 +7,9 @@ namespace Puck.SdfVm;
 
 // One pass of an sdf.world instance (SdfWorldPasses): a part of the package's fragment, recorded into the instance's
 // command buffer for the pass. Every part writes its pass block (SdfFrameBlock): the view's camera, the frame's levers and
-// environment and the world values. Every compute part binds the world interface's pass group: the residency's tables in
-// the ring slot the frame's upload wrote, the fragment storages its ports bind and, at every member its ports do not, a
-// dummy of the residency's; and the screens, whose host images are rewritten every frame. The mesh part draws the frame's
+// environment and the world values. Every compute part binds the residency's World set of the ring slot the frame's upload
+// wrote, which holds its tables, and the world interface's pass group: the fragment storages its ports bind and, at every
+// member its ports do not, a dummy of the residency's; and the screens, whose host images are rewritten every frame. The mesh part draws the frame's
 // mesh draws into its target through the mesh pipeline, with a set of its own per frame slot binding its pass block. A
 // recorder records no barrier: the planner's are the instance's.
 internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
@@ -42,11 +42,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
 
     // A compute part's frame and pass sets, one of each per frame slot.
     private readonly RenderGraphPackageSets? m_sets;
-    // Per frame slot: the tables, ring slot and binding revision the pass set's shared bindings were written for, the
-    // tables its ports and dummies were written for, and each screen element's last written view.
-    private readonly SdfWorldTables?[] m_sharedTables;
-    private readonly int[] m_sharedSlots;
-    private readonly long[] m_sharedRevisions;
+    // Per frame slot: the tables the pass set's ports and dummies were written for, and each screen element's last written
+    // view.
     private readonly SdfWorldTables?[] m_portTables;
     private readonly nint[][] m_screens;
     // The mesh part's pool, its set per frame slot, and a framebuffer over each instance of its target and depth.
@@ -79,9 +76,6 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
         var slots = context.InFlightFrames;
         var tables = (view.Residency.Tables ?? throw new InvalidOperationException(message: $"Residency '{view.Residency.Name}' has no tables for pass '{context.Pass}'."));
 
-        m_sharedTables = new SdfWorldTables?[slots];
-        m_sharedSlots = new int[slots];
-        m_sharedRevisions = new long[slots];
         m_portTables = new SdfWorldTables?[slots];
         m_screens = new nint[slots][];
 
@@ -268,11 +262,6 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
             _ => tables.ViewsPipeline,
         };
 
-        BindShared(
-            set: set,
-            slot: slot,
-            tables: tables
-        );
         BindPorts(
             recording: in recording,
             set: set,
@@ -298,7 +287,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
         recorder.BindDescriptorSet(
             bindPoint: GpuBindPoint.Compute,
             commandBufferHandle: commandBuffer,
-            descriptorSetHandle: tables.WorldSet,
+            descriptorSetHandle: tables.WorldSet(slot: tables.CurrentSlot),
             group: ((uint)ShaderInterfaceGroup.World),
             pipelineLayoutHandle: pipeline.LayoutHandle
         );
@@ -413,28 +402,6 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
         }
 
         recorder.EndRenderPass(commandBufferHandle: commandBuffer);
-    }
-    // Writes the tables' shared bindings into a slot's pass set when the ring slot the frame's upload wrote, or what the
-    // tables bind, moved since the set last took them.
-    private void BindShared(nint set, int slot, SdfWorldTables tables) {
-        if (
-            ReferenceEquals(
-                objA: m_sharedTables[slot],
-                objB: tables
-            ) &&
-            (m_sharedSlots[slot] == tables.CurrentSlot) &&
-            (m_sharedRevisions[slot] == tables.BindingRevision)
-        ) {
-            return;
-        }
-
-        tables.WriteShared(
-            set: set,
-            slot: tables.CurrentSlot
-        );
-        m_sharedTables[slot] = tables;
-        m_sharedSlots[slot] = tables.CurrentSlot;
-        m_sharedRevisions[slot] = tables.BindingRevision;
     }
     // Writes, once per slot, every storage the pass's ports bind at the member its access reads or writes it through, and
     // the tables' dummy and fillers at every member no port binds. The storages a slot resolves stay

@@ -764,6 +764,50 @@ public static class BinaryIntegerFunctions {
             value *= value;
         }
     }
+    /// <summary>Raises <paramref name="value"/> to the power <paramref name="exponent"/> by squaring, reporting whether the exact power is representable in <typeparamref name="T"/>.</summary>
+    /// <typeparam name="T">The binary integer type.</typeparam>
+    /// <param name="value">The base.</param>
+    /// <param name="exponent">The exponent; must be non-negative, since a negative integer power is not representable.</param>
+    /// <param name="power">The exact power when it is representable; otherwise zero.</param>
+    /// <returns><see langword="true"/> when no step of the square-and-multiply schedule overflowed, which is exactly when the
+    /// power itself fits: every partial product and every square the schedule forms divides the final power, so none
+    /// exceeds its magnitude. Zero to the zeroth power is one. A <see cref="BigInteger"/> power never overflows.</returns>
+    /// <remarks>The schedule is <see cref="Exponentiate{T}(T, T)"/>'s, with each product checked rather than wrapped, so
+    /// the loop runs once per bit of <paramref name="exponent"/> at most and stops at the first product that does not fit.</remarks>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="exponent"/> is negative.</exception>
+    public static bool TryExponentiate<T>(this T value, T exponent, out T power) where T : IBinaryInteger<T> {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: exponent);
+
+        power = T.One;
+
+        while (true) {
+            if (
+                T.IsOddInteger(value: exponent) &&
+                !power.TryMultiply(
+                    product: out power,
+                    right: value
+                )
+            ) {
+                power = T.Zero;
+
+                return false;
+            }
+
+            exponent >>= 1;
+
+            if (T.Zero == exponent) {
+                return true;
+            }
+            if (!value.TryMultiply(
+                product: out value,
+                right: value
+            )) {
+                power = T.Zero;
+
+                return false;
+            }
+        }
+    }
     /// <summary>Returns a value containing only the lowest set bit of <paramref name="value"/>.</summary>
     /// <typeparam name="T">The binary integer type.</typeparam>
     /// <param name="value">The value to operate on.</param>
@@ -1338,6 +1382,33 @@ public static class BinaryIntegerFunctions {
             ? !T.IsNegative(value: (left ^ sum) & (right ^ sum))
             : (sum >= left)
         );
+    }
+    /// <summary>Multiplies two values, reporting whether the exact product is representable in <typeparamref name="T"/>.</summary>
+    /// <typeparam name="T">The binary integer type.</typeparam>
+    /// <param name="left">The first factor.</param>
+    /// <param name="right">The second factor.</param>
+    /// <param name="product">The exact product when it is representable; otherwise the wrapped product.</param>
+    /// <returns><see langword="true"/> when the multiplication did not overflow. The wrapped product is exact exactly when
+    /// dividing it by a non-zero factor gives back the other; a factor of minus one is read by sign instead, since its
+    /// one overflow, negating the signed minimum, is the one division the carrier cannot perform. A
+    /// <see cref="BigInteger"/> product never overflows.</returns>
+    public static bool TryMultiply<T>(this T left, T right, out T product) where T : IBinaryInteger<T> {
+        product = unchecked((left * right));
+
+        if (
+            (T.Zero == left) ||
+            (T.Zero == right)
+        ) {
+            return true;
+        }
+        if (T.IsNegative(value: T.AllBitsSet)) {
+            // Minus one times a value is its negation, which overflows exactly at the signed minimum, the one value
+            // whose negation keeps its sign.
+            if (T.AllBitsSet == right) { return (T.IsNegative(value: product) != T.IsNegative(value: left)); }
+            if (T.AllBitsSet == left) { return (T.IsNegative(value: product) != T.IsNegative(value: right)); }
+        }
+
+        return ((product / right) == left);
     }
     /// <summary>Converts a value to another binary integer type when, and only when, the conversion is exact.</summary>
     /// <typeparam name="TWide">The source type.</typeparam>

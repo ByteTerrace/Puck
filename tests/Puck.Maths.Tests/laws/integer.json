@@ -582,5 +582,48 @@
         "Absolute": ""
       }
     ]
+  },
+  {
+    "Id": "integer.try-multiply-and-try-exponentiate-vs-exact",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "TryMultiply"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "TryExponentiate"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BinaryIntegerFunctions.TryMultiply over swept raw pairs at long, and the same pairs truncated to int, ulong and byte and widened into two Int128 values, plus a seam square of the long extremes, minus one and the square-root boundary 3037000499/3037000500, and the unbounded carrier at 2^70 by -2^70",
+        "Against": "The exact BigInteger product compared against each carrier's range: the verdict must be true exactly when the product is representable, the product left must be exact when it is and the carrier's two's-complement wrap when it is not, and the BigInteger multiply must always accept. The subject decides by dividing the wrapped product back and reads a minus-one factor by sign; the claim shares neither test",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BinaryIntegerFunctions.TryExponentiate at long, int and ulong over bases below 70 in magnitude drawn from the lanes and exponents below 130, so every base size crosses its overflow edge, plus a seam ladder: (-2)^63 = long.MinValue accepted and 2^63 refused, 3037000499^2 accepted and 3037000500^2 refused, (-1) to odd and even powers, 0^0 = 1, and (-1)^(2^70) over BigInteger",
+        "Against": "The power formed by REPEATED multiplication in BigInteger, one factor per unit of exponent, never by squaring, compared against each carrier's range: the verdict must be true exactly when the power is representable, leaving it exactly, and false otherwise, leaving zero. The subject runs the square-and-multiply schedule with each product checked; the claim shares no schedule and no overflow test",
+        "Shared": "",
+        "Citation": "ENVELOPE: the repeated product stops early once its magnitude passes the carrier's span, which decides only that the power does not fit; bases of magnitude two or more keep growing, and zero and one never reach the cut",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the refusal is part of the statement: TryExponentiate<long>(2, -1) throws ArgumentOutOfRangeException naming 'exponent', because a negative integer power is not representable, rather than reporting an overflow",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
   }
 ]

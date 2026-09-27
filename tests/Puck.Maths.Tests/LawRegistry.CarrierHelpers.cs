@@ -13,6 +13,18 @@ internal static partial class LawRegistry {
         EdgeFraction: 0.4,
         NeighborhoodFraction: 0.3
     );
+    private static readonly Domain TryMultiplication = new(
+        Key: "integer-try-multiplication",
+        Block: 512,
+        EdgeFraction: 0.4,
+        NeighborhoodFraction: 0.3
+    );
+    private static readonly Domain WordModular = new(
+        Key: "core-word-modular",
+        Block: 512,
+        EdgeFraction: 0.4,
+        NeighborhoodFraction: 0.3
+    );
 
     private static LawCase[] CarrierHelperCases() => [
         SweptCase(
@@ -38,6 +50,38 @@ internal static partial class LawRegistry {
                 Laws.Claim(
                     claim: TryArithmeticClaims.SeamsAreExact,
                     lawId: "integer.try-add-and-try-narrow-vs-exact"
+                );
+            }
+        ),
+        Case(
+            id: "integer.try-multiply-and-try-exponentiate-vs-exact",
+            run: () => {
+                Laws.SweptClaim(
+                    claim: TryArithmeticClaims.MultiplyAndExponentiateMatchExactArithmetic,
+                    domain: TryMultiplication,
+                    lawId: "integer.try-multiply-and-try-exponentiate-vs-exact",
+                    tier: Tier.Default,
+                    width: 2
+                );
+                Laws.Claim(
+                    claim: TryArithmeticClaims.MultiplyAndExponentiateSeamsAreExact,
+                    lawId: "integer.try-multiply-and-try-exponentiate-vs-exact"
+                );
+            }
+        ),
+        Case(
+            id: "core.word-modular-arithmetic-vs-big-integer",
+            run: () => {
+                Laws.SweptClaim(
+                    claim: WordModularClaims.WordModularArithmeticMatchesBigInteger,
+                    domain: WordModular,
+                    lawId: "core.word-modular-arithmetic-vs-big-integer",
+                    tier: Tier.Default,
+                    width: 2
+                );
+                Laws.Claim(
+                    claim: WordModularClaims.WordModularSeamsAndRefusals,
+                    lawId: "core.word-modular-arithmetic-vs-big-integer"
                 );
             }
         ),

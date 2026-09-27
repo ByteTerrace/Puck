@@ -107,10 +107,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     }
 
 #if !defined(SDF_PRIMARY_PASS) && !defined(SDF_SURFACE_PASS) && !defined(SDF_AMBIENT_PASS)
-    // Dither before the 8-bit store to break gradient banding (sky, distance fog) into blue-ish high-frequency noise:
-    // +-0.5 LSB from the integer R2 dither, so BOTH backends add the identical pattern and cross-backend parity holds.
-    color += ((sdfR2Dither(pixel) - 0.5) * DitherQuantum);
-
+    // The float working color; the display encode dithers and quantizes it.
     output[pixel] = float4(color, 1.0);
 #endif
 }

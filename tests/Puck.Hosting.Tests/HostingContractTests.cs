@@ -221,6 +221,56 @@ public sealed class HostingContractTests {
             actual: secondSink.LastFrame.FrameIndex
         );
     }
+    [Fact]
+    public void FrameCaptureControllerTakesAFloatRootEncodedAsRgba8AndRefusesAnyOtherFormatChange() {
+        using var sink = new CountingCaptureSink();
+        using var controller = new FrameCaptureController();
+        var context = FrameContext(elapsedTicks: 7UL);
+        var working = Surface.SameDeviceImage(
+            format: GpuPixelFormat.R16G16B16A16Float,
+            height: 1U,
+            imageHandle: 11,
+            imageViewHandle: 12,
+            width: 1U
+        );
+
+        // A float working image reads back through the display encode's SDR, in RGBA8.
+        controller.Arm(
+            options: new CaptureOptions { MaxFrames = 1 },
+            sink: sink
+        );
+        controller.Capture(
+            context: in context,
+            readback: new RecordingReadback(format: GpuPixelFormat.R8G8B8A8Unorm),
+            surface: working
+        );
+        Assert.Equal(
+            actual: sink.Count,
+            expected: 1
+        );
+        _ = controller.Disarm();
+
+        // An RGBA8 surface that came back as BGRA8 is refused, so the sink never sees it.
+        controller.Arm(
+            options: new CaptureOptions { MaxFrames = 1 },
+            sink: sink
+        );
+        controller.Capture(
+            context: in context,
+            readback: new RecordingReadback(format: GpuPixelFormat.B8G8R8A8Unorm),
+            surface: Surface.SameDeviceImage(
+                format: GpuPixelFormat.R8G8B8A8Unorm,
+                height: 1U,
+                imageHandle: 11,
+                imageViewHandle: 12,
+                width: 1U
+            )
+        );
+        Assert.Equal(
+            actual: sink.Count,
+            expected: 1
+        );
+    }
     [InlineData(0, 0)]
     [InlineData(30, -1)]
     [Theory]
@@ -273,7 +323,8 @@ public sealed class HostingContractTests {
             throw new InvalidOperationException(message: "readback fault");
         }
     }
-    private sealed class RecordingReadback : IPresentSurfaceReadback {
+    // Reads a surface back as one opaque black pixel in the source's format, or in the format it is told to answer in.
+    private sealed class RecordingReadback(GpuPixelFormat? format = null) : IPresentSurfaceReadback {
         private readonly byte[] m_pixels = [0, 0, 0, 255];
 
         public Surface LastSurface { get; private set; }
@@ -285,7 +336,7 @@ public sealed class HostingContractTests {
                 pixels: m_pixels,
                 width: surface.Width,
                 height: surface.Height,
-                format: surface.Format
+                format: (format ?? surface.Format)
             );
         }
     }

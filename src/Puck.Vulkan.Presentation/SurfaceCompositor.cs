@@ -10,37 +10,20 @@ using Puck.Vulkan.Messages;
 namespace Puck.Vulkan.Presentation;
 
 /// <summary>
-/// The Vulkan surface compositor: it blits the one <see cref="Surface"/> a producer hands it, fullscreen,
-/// onto the swapchain through a triangle that samples the surface texture 1:1 via the
-/// <see cref="VulkanRenderer.Present"/> path. The blit pipeline and descriptor set rebuild whenever
-/// presentation resources are recreated (resize), and the device-level resources (shaders, vertex buffer,
-/// sampler) rebuild too if that recreation ever comes with a changed device; each resource is freed on the
-/// device that created it.
+/// The Vulkan surface compositor: it writes the one <see cref="Surface"/> a producer hands it onto the swapchain through
+/// the display encode (<see cref="SurfaceEncoder"/>), which samples the surface 1:1 and encodes it in the swapchain's
+/// <see cref="DisplayOutput"/> at the host's paper-white level, via the <see cref="VulkanRenderer.Present"/> path. The
+/// encode's pipeline, block and descriptor sets rebuild whenever presentation resources are recreated (resize), and the
+/// device-level resources (sampler, block buffer) rebuild too if that recreation ever comes with a changed device; each
+/// resource is freed on the device that created it.
 /// </summary>
 public sealed class SurfaceCompositor : IDisposable {
-    private const string BlitFragmentShaderFileName = "blit.frag.spv";
-    // The blit descriptor-set ring depth — matches the renderer's presentation frame ring: a set is rewritten only
+    // The encode's descriptor-set ring depth — matches the renderer's presentation frame ring: a set is rewritten only
     // when the ROOT surface's image view changes, and cycling to the other set on each change means the set being
-    // written was last referenced by a blit at least two presents back, which the renderer's frame-slot fence wait
-    // (WaitForFrameSlot) has already proven retired. A single set was updated while a pending blit still referenced
+    // written was last referenced by a draw at least two presents back, which the renderer's frame-slot fence wait
+    // (WaitForFrameSlot) has already proven retired. A single set was updated while a pending draw still referenced
     // it (VUID-vkUpdateDescriptorSets-None-03047, caught by the validation layer once the per-frame drain left).
     private const int DescriptorSetRingSize = 2;
-    private const string VertexShaderFileName = "fullscreen.vert.spv";
-
-    private static readonly byte[] FullscreenTriangleVertexData = FullscreenTriangle.CreateVertexData();
-    // The blit's pipeline description: the shared group, and the fullscreen triangle's one float2 position.
-    private static readonly GpuGraphicsPipelineDescription BlitDescription = new(
-        Layout: SurfaceBlitLayout.Layout,
-        Name: "surface-blit",
-        VertexInput: new GpuVertexInputLayout(
-            Attributes: [new GpuVertexAttribute(
-                Format: GpuVertexFormat.R32G32Float,
-                Location: 0,
-                OffsetBytes: 0
-            )],
-            StrideBytes: FullscreenTriangle.StrideBytes
-        )
-    );
 
     private readonly IVulkanBufferApi m_bufferApi;
     private readonly IVulkanCommandBufferRecordingApi m_commandBufferRecordingApi;
@@ -50,20 +33,20 @@ public sealed class SurfaceCompositor : IDisposable {
     private readonly IVulkanExternalMemoryApi m_externalMemoryApi;
     private readonly IVulkanFramebufferSetApi m_framebufferSetApi;
     private readonly IVulkanOffscreenImageApi m_offscreenImageApi;
+    private readonly double m_paperWhiteNits;
     private readonly GpuPassPipelineCache m_pipelines;
     private readonly VulkanQueueSubmitter m_queueSubmitter;
     private readonly VulkanRenderer m_renderer;
-    private readonly string m_shaderDirectory;
-    private readonly IShaderModuleLoader m_shaderModuleLoader;
 
-    private ReadOnlyMemory<byte> m_blitFragmentBytecode;
-    // The blit pipeline's lease on the device's pass pipelines, held from the first presentation resources on a device
-    // until that device's resources are released.
-    private GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? m_blitLease;
-    private AssetContentHash m_blitPipelineId;
+    // The encode block, rewritten whenever the swapchain's output is chosen again.
+    private VulkanBuffer? m_block;
     private nint m_descriptorPool;
     private int m_descriptorSetIndex;
     private VulkanDrawCommand[][]? m_drawCommandsPerSet;
+    // The encode pipeline's lease on the device's pass pipelines, held from the first presentation resources on a device
+    // until that device's resources are released.
+    private GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? m_encodeLease;
+    private AssetContentHash m_encodePipelineId;
     private Dictionary<AssetContentHash, IGpuPipeline>? m_graphicsPipelines;
     private bool m_initialized;
     private nint m_lastWrittenImageView;
@@ -71,14 +54,25 @@ public sealed class SurfaceCompositor : IDisposable {
     private VulkanSurfaceUpload? m_rootUpload;
     private nint m_sampler;
     private VulkanSurfaceImport? m_sharedImport;
-    private VulkanBuffer? m_vertexBuffer;
-    private ReadOnlyMemory<byte> m_vertexBytecode;
 
+    /// <summary>Initializes a new instance of the <see cref="SurfaceCompositor"/> class.</summary>
+    /// <param name="renderer">The swapchain renderer the encode draws through.</param>
+    /// <param name="pipelines">The composition's pass pipelines, which the encode is an entry of.</param>
+    /// <param name="presentationOptions">The presentation preferences, whose paper-white level the encode writes SDR white
+    /// at in an HDR output.</param>
+    /// <param name="bufferApi">The native buffer API.</param>
+    /// <param name="descriptorApi">The native descriptor API.</param>
+    /// <param name="externalMemoryApi">The native external-memory API a shared surface is imported through.</param>
+    /// <param name="offscreenImageApi">The native image API a CPU surface is uploaded through.</param>
+    /// <param name="framebufferSetApi">The native framebuffer and image-view API.</param>
+    /// <param name="commandResourcesFactory">The command resources factory.</param>
+    /// <param name="commandBufferRecordingApi">The native command-buffer recording API.</param>
+    /// <param name="queueSubmitter">The queue submitter.</param>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     public SurfaceCompositor(
         VulkanRenderer renderer,
-        string shaderDirectory,
-        IShaderModuleLoader shaderModuleLoader,
         GpuPassPipelineCache pipelines,
+        PresentationOptions presentationOptions,
         IVulkanBufferApi bufferApi,
         IVulkanDescriptorApi descriptorApi,
         IVulkanExternalMemoryApi externalMemoryApi,
@@ -96,10 +90,9 @@ public sealed class SurfaceCompositor : IDisposable {
         ArgumentNullException.ThrowIfNull(framebufferSetApi);
         ArgumentNullException.ThrowIfNull(offscreenImageApi);
         ArgumentNullException.ThrowIfNull(pipelines);
+        ArgumentNullException.ThrowIfNull(presentationOptions);
         ArgumentNullException.ThrowIfNull(queueSubmitter);
         ArgumentNullException.ThrowIfNull(renderer);
-        ArgumentNullException.ThrowIfNull(shaderDirectory);
-        ArgumentNullException.ThrowIfNull(shaderModuleLoader);
 
         m_bufferApi = bufferApi;
         m_commandBufferRecordingApi = commandBufferRecordingApi;
@@ -108,35 +101,22 @@ public sealed class SurfaceCompositor : IDisposable {
         m_externalMemoryApi = externalMemoryApi;
         m_framebufferSetApi = framebufferSetApi;
         m_offscreenImageApi = offscreenImageApi;
+        m_paperWhiteNits = presentationOptions.PaperWhiteNits;
         m_pipelines = pipelines;
         m_queueSubmitter = queueSubmitter;
         m_renderer = renderer;
-        m_shaderDirectory = shaderDirectory;
-        m_shaderModuleLoader = shaderModuleLoader;
     }
 
     private void CreateDeviceResources(VulkanLogicalDevice device) {
-        var vertexShaderInfo = ValidateShader(
-            fileName: VertexShaderFileName,
-            stage: ShaderStage.Vertex
-        );
-        var blitFragmentShaderInfo = ValidateShader(
-            fileName: BlitFragmentShaderFileName,
-            stage: ShaderStage.Fragment
-        );
-
         // A creation that throws releases the ones before it, newest first; the fields hold only a complete set.
         using var scope = new GpuCreationScope();
-        var vertexBuffer = scope.Own(created: VulkanBuffer.Create(
+        var block = scope.Own(created: VulkanBuffer.Create(
             bufferApi: m_bufferApi,
             device: m_renderer,
             memory: VulkanBufferMemory.HostCoherent,
-            sizeBytes: ((ulong)FullscreenTriangleVertexData.Length),
-            usage: VulkanBufferUsageFlags.VertexBuffer
+            sizeBytes: IGpuBindings.ConstantBufferAlignment,
+            usage: VulkanBufferUsageFlags.UniformBuffer
         ));
-
-        vertexBuffer.Write<byte>(data: FullscreenTriangleVertexData);
-
         var sampler = scope.Own(
             handle: CreateSampler(device: device),
             release: handle => m_descriptorAllocator.DestroySampler(
@@ -146,10 +126,7 @@ public sealed class SurfaceCompositor : IDisposable {
         );
 
         scope.Complete();
-        m_blitPipelineId = blitFragmentShaderInfo.ContentHash;
-        m_blitFragmentBytecode = blitFragmentShaderInfo.Content;
-        m_vertexBytecode = vertexShaderInfo.Content;
-        m_vertexBuffer = vertexBuffer;
+        m_block = block;
         m_sampler = sampler;
     }
     private nint CreateSampler(VulkanLogicalDevice device) =>
@@ -178,11 +155,11 @@ public sealed class SurfaceCompositor : IDisposable {
             samplerHandle: m_sampler
         );
         m_sampler = 0;
-        m_vertexBuffer?.Dispose();
-        m_vertexBuffer = null;
-        // The device's pass pipelines dispose the blit once no other lease holds it.
-        m_blitLease?.Release();
-        m_blitLease = null;
+        m_block?.Dispose();
+        m_block = null;
+        // The device's pass pipelines dispose the encode once no other lease holds it.
+        m_encodeLease?.Release();
+        m_encodeLease = null;
     }
     private void DisposeFrameResources(VulkanLogicalDevice device) {
         m_descriptorAllocator.DestroyPool(
@@ -212,25 +189,34 @@ public sealed class SurfaceCompositor : IDisposable {
 
         m_resourceDevice = device;
 
-        // The blit is the device's pass pipeline for SurfaceBlitLayout, created for the swapchain's render pass description in
-        // its format, compatible with the swapchain's own render pass (VulkanGpuRenderPass.PresentRequestOf). A lease on the new key is
-        // taken before the old one is released, so a recreation that keeps the format keeps the pipeline; the pool holds
-        // exactly one source image and one sampler per ring set, the pass group's two bindings.
-        var previousLease = m_blitLease;
+        // The encode is the device's pass pipeline for DisplayEncodeLayout, created for the swapchain's render pass
+        // description in its format, compatible with the swapchain's own render pass (VulkanGpuRenderPass.PresentRequestOf).
+        // A lease on the new key is taken before the old one is released, so a recreation that keeps the format keeps the
+        // pipeline; the pool holds exactly one source image, one sampler and one block per ring set, the pass group's three
+        // bindings.
+        var output = m_renderer.Swapchain.Output;
+        var previousLease = m_encodeLease;
+        var key = SurfaceEncoder.Key(
+            directX: false,
+            renderPass: VulkanGpuRenderPass.PresentDescription(format: output.Format)
+        );
 
-        m_blitLease = m_pipelines.Acquire(
+        m_encodeLease = m_pipelines.Acquire(
             device: m_renderer,
-            key: GpuPassPipelineKey.OfGraphics(
-                description: BlitDescription,
-                fragment: m_blitFragmentBytecode,
-                renderPass: VulkanGpuRenderPass.PresentDescription(format: m_renderer.Swapchain.Output.Format),
-                vertex: m_vertexBytecode
-            )
+            key: key
         );
         previousLease?.Release();
+        m_encodePipelineId = AssetContentHash.Compute(content: key.Secondary.Span);
 
-        var blitPipeline = m_blitLease.Wait(cancellationToken: CancellationToken.None).Graphics!;
+        var encodePipeline = m_encodeLease.Wait(cancellationToken: CancellationToken.None).Graphics!;
+        Span<byte> block = stackalloc byte[DisplayEncodeLayout.BlockBytes];
 
+        DisplayEncodeLayout.WriteBlock(
+            block: block,
+            output: output,
+            paperWhiteNits: m_paperWhiteNits
+        );
+        m_block!.Write<byte>(data: block);
         m_descriptorPool = m_descriptorAllocator.CreatePool(
             device: device.Commands,
             maxSets: DescriptorSetRingSize,
@@ -244,30 +230,43 @@ public sealed class SurfaceCompositor : IDisposable {
                 DescriptorCount: DescriptorSetRingSize,
                 DescriptorType: VulkanDescriptorType.Sampler
             ),
+                new(
+                DescriptorCount: DescriptorSetRingSize,
+                DescriptorType: VulkanDescriptorType.UniformBuffer
+            ),
             }
         );
 
         // One set + one prebuilt draw-command list per ring slot (the draw command bakes the set handle in, so the
-        // Blit path just indexes — see DescriptorSetRingSize). The sampler never changes, so each set takes it once
-        // here; a blit writes only the source image.
+        // Blit path just indexes — see DescriptorSetRingSize). The sampler and the block never change, so each set takes
+        // them once here; a blit writes only the source image. The encode draws its triangle from the vertex index, with
+        // no vertex buffer.
         var drawCommandsPerSet = new VulkanDrawCommand[DescriptorSetRingSize][];
 
         for (var setIndex = 0; (setIndex < DescriptorSetRingSize); setIndex++) {
             m_descriptorSets[setIndex] = m_descriptorAllocator.AllocateSet(
                 device: device.Commands,
-                descriptorSetLayoutHandle: blitPipeline.GroupLayoutHandles[((int)SurfaceBlitLayout.Group)],
+                descriptorSetLayoutHandle: encodePipeline.GroupLayoutHandles[((int)DisplayEncodeLayout.Group)],
                 poolHandle: m_descriptorPool
             );
             m_descriptorAllocator.WriteSampler(
                 arrayElement: 0,
-                binding: SurfaceBlitLayout.SamplerBinding,
+                binding: DisplayEncodeLayout.SamplerBinding,
                 descriptorSetHandle: m_descriptorSets[setIndex],
                 device: device.Commands,
                 samplerHandle: m_sampler
             );
+            m_descriptorAllocator.WriteUniformBuffer(
+                arrayElement: 0,
+                binding: DisplayEncodeLayout.BlockBinding,
+                bufferHandle: m_block.BufferHandle,
+                bufferSize: m_block.SizeBytes,
+                descriptorSetHandle: m_descriptorSets[setIndex],
+                device: device.Commands
+            );
             drawCommandsPerSet[setIndex] = [
                 new VulkanDrawCommand(
-                    DescriptorSetGroup: SurfaceBlitLayout.Group,
+                    DescriptorSetGroup: DisplayEncodeLayout.Group,
                     DescriptorSetHandle: m_descriptorSets[setIndex],
                     DrawParameters: new VulkanDrawParameters(
                         firstInstance: 0,
@@ -275,8 +274,7 @@ public sealed class SurfaceCompositor : IDisposable {
                         instanceCount: 1,
                         vertexCount: 3
                     ),
-                    PipelineId: m_blitPipelineId,
-                    VertexBufferBinding: new VulkanVertexBufferBinding(bufferHandle: m_vertexBuffer!.BufferHandle)
+                    PipelineId: m_encodePipelineId
                 ),
             ];
         }
@@ -285,21 +283,13 @@ public sealed class SurfaceCompositor : IDisposable {
         m_descriptorSetIndex = 0;
         m_drawCommandsPerSet = drawCommandsPerSet;
         m_graphicsPipelines = new Dictionary<AssetContentHash, IGpuPipeline> {
-            [m_blitPipelineId] = blitPipeline,
+            [m_encodePipelineId] = encodePipeline,
         };
     }
-    private ShaderStageInfo ValidateShader(string fileName, ShaderStage stage) {
-        return m_shaderModuleLoader.ValidateShader(
-            path: Path.Combine(
-                path1: m_shaderDirectory,
-                path2: fileName
-            ),
-            stage: stage
-        );
-    }
 
-    /// <summary>Blits the surface fullscreen onto the swapchain. A no-op until presentation resources
-    /// exist or when the surface is empty (a skipped frame).</summary>
+    /// <summary>Encodes the surface fullscreen onto the swapchain. A no-op until presentation resources exist or when the
+    /// surface is empty (a skipped frame).</summary>
+    /// <param name="surface">The surface the root render node produced this frame.</param>
     public void Blit(Surface surface) {
         if (
             !m_initialized ||
@@ -353,12 +343,12 @@ public sealed class SurfaceCompositor : IDisposable {
 
         if (imageViewHandle != m_lastWrittenImageView) {
             // Cycle to the NEXT ring set before writing (see DescriptorSetRingSize): the set being written was last
-            // referenced by a blit the renderer's frame-slot wait already proved retired; the pending blit rides the
+            // referenced by a draw the renderer's frame-slot wait already proved retired; the pending draw rides the
             // other set untouched.
             m_descriptorSetIndex = ((m_descriptorSetIndex + 1) % DescriptorSetRingSize);
             m_descriptorAllocator.WriteSampledImage(
                 arrayElement: 0,
-                binding: SurfaceBlitLayout.SourceImageBinding,
+                binding: DisplayEncodeLayout.SourceImageBinding,
                 descriptorSetHandle: m_descriptorSets[m_descriptorSetIndex],
                 device: m_renderer.Device.Commands,
                 imageViewHandle: imageViewHandle
@@ -372,6 +362,7 @@ public sealed class SurfaceCompositor : IDisposable {
             graphicsPipelines: m_graphicsPipelines!
         );
     }
+    /// <summary>Drains the device and releases every resource the compositor holds.</summary>
     public void Dispose() {
         m_renderer.PresentationResourcesRecreated -= OnPresentationResourcesRecreated;
         m_rootUpload?.Dispose();
@@ -398,8 +389,8 @@ public sealed class SurfaceCompositor : IDisposable {
         DisposeFrameResources(device: device);
         DisposeDeviceResources(device: device);
     }
-    /// <summary>Builds the device-level resources (shaders, vertex buffer, sampler) and subscribes to the
-    /// renderer's presentation-recreated signal. The renderer must already be initialized.</summary>
+    /// <summary>Builds the device-level resources (sampler, block buffer) and subscribes to the renderer's
+    /// presentation-recreated signal. The renderer must already be initialized.</summary>
     public void Initialize() {
         var device = m_renderer.Device;
 
@@ -409,12 +400,13 @@ public sealed class SurfaceCompositor : IDisposable {
         m_renderer.PresentationResourcesRecreated += OnPresentationResourcesRecreated;
         m_initialized = true;
     }
-    /// <summary>Releases the compositor's device-derived blit resources on the CURRENT resource device during device-loss
-    /// recovery — BEFORE that device is destroyed, so they don't leak (they are not swapchain resources, so the renderer's
-    /// device-recreate does not free them, and destroying a device with live children is a validation error and can
-    /// crash). The compositor STAYS subscribed to <c>PresentationResourcesRecreated</c>, which rebuilds the resources on
-    /// the new device at the next BeginFrame (the null <see cref="m_resourceDevice"/> signals a from-scratch rebuild).
-    /// Tolerant of an already-lost device: a faulting drain is swallowed (the host pump drained earlier when it could).</summary>
+    /// <summary>Releases the compositor's device-derived encode resources on the CURRENT resource device during
+    /// device-loss recovery — BEFORE that device is destroyed, so they don't leak (they are not swapchain resources, so the
+    /// renderer's device-recreate does not free them, and destroying a device with live children is a validation error
+    /// and can crash). The compositor STAYS subscribed to <c>PresentationResourcesRecreated</c>, which rebuilds the
+    /// resources on the new device at the next BeginFrame (the null <see cref="m_resourceDevice"/> signals a from-scratch
+    /// rebuild). Tolerant of an already-lost device: a faulting drain is swallowed (the host pump drained earlier when it
+    /// could).</summary>
     public void ReleaseForDeviceLoss() {
         if (
             !m_initialized ||

@@ -22,7 +22,7 @@ public sealed class GpuDescriptorHeapBudget {
     /// pools each: the engine's own and the one copy pool that holds every region's copy sets) and a Direct3D 12
     /// device's range for storage clears, which leave 885 pools for pipeline nodes and their previews, the root graph's
     /// overlay and post passes among them. A pipeline node holds one pool for all its passes and in-flight slots and one
-    /// for its float preview, which makes that 442 pipeline instances with previews, past any layout. Refused by name past it, like
+    /// for its preview, which makes that 442 pipeline instances with previews, past any layout. Refused by name past it, like
     /// <c>ShaderPipelineLimits.MaxPasses</c>.</summary>
     public const int MaxLivePools = 1024;
     /// <summary>The code every refusal of a candidate that does not fit carries, whichever owner it names.</summary>

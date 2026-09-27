@@ -64,6 +64,32 @@ public static class GpuPixelFormats {
     /// <returns><see langword="true"/> for BC4, BC5, BC6H and BC7.</returns>
     public static bool IsBlockCompressed(GpuPixelFormat format) =>
         (format is GpuPixelFormat.Bc4Unorm or GpuPixelFormat.Bc5Unorm or GpuPixelFormat.Bc6hUfloat or GpuPixelFormat.Bc7Unorm);
+    /// <summary>Gets the largest code a color channel of a format stores: the steps a write quantizes the range zero to
+    /// one into, 255 for an 8-bit format, sRGB or not, and 1023 for the 10-bit color channels of
+    /// <see cref="GpuPixelFormat.R10G10B10A2Unorm"/>; zero for a floating-point format, which a write does not
+    /// quantize.</summary>
+    /// <param name="format">The format.</param>
+    /// <returns>The largest code, or zero for a floating-point format.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The format holds depth or blocks, which no color write targets, or is
+    /// not defined.</exception>
+    public static uint ColorCodeMaximum(GpuPixelFormat format) => format switch {
+        GpuPixelFormat.R8Unorm or GpuPixelFormat.R8G8Unorm or GpuPixelFormat.R8G8B8A8Unorm or GpuPixelFormat.B8G8R8A8Unorm
+            or GpuPixelFormat.R8G8B8A8Srgb or GpuPixelFormat.B8G8R8A8Srgb => 255U,
+        GpuPixelFormat.R10G10B10A2Unorm => 1023U,
+        GpuPixelFormat.R16G16B16A16Float or GpuPixelFormat.R32G32B32A32Float => 0U,
+        _ => throw new ArgumentOutOfRangeException(
+            actualValue: format,
+            message: "The pixel format is not a color format a write targets.",
+            paramName: nameof(format)
+        ),
+    };
+    /// <summary>Gets whether a format encodes sRGB on a write and decodes it on a read, so a shader writes it linear
+    /// light.</summary>
+    /// <param name="format">The format.</param>
+    /// <returns><see langword="true"/> for <see cref="GpuPixelFormat.R8G8B8A8Srgb"/> and
+    /// <see cref="GpuPixelFormat.B8G8R8A8Srgb"/>.</returns>
+    public static bool EncodesSrgb(GpuPixelFormat format) =>
+        (format is GpuPixelFormat.R8G8B8A8Srgb or GpuPixelFormat.B8G8R8A8Srgb);
     /// <summary>Gets the bytes one texel of an uncompressed format, or one 4x4 block of a block-compressed format,
     /// occupies.</summary>
     /// <param name="format">The format.</param>

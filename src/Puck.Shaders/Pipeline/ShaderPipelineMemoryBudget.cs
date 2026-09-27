@@ -30,11 +30,11 @@ public static class ShaderPipelineMemoryBudget {
 }
 /// <summary>
 /// What installing a graph costs a shader pipeline instance, counted from the plan before anything is allocated. Bytes
-/// are the storage images, storage buffers, render targets, vertex buffers and float-preview targets the graph creates;
+/// are the storage images, storage buffers, render targets, vertex buffers and preview targets the graph creates;
 /// descriptor pools, samplers, command pools, pipelines and shader modules are not counted.
 /// </summary>
 /// <param name="SteadyBytes">The bytes the graph owns once it runs: every frame slot's resources, retained history
-/// included, and the float preview its selected output needs.</param>
+/// included, and the preview its selected output needs.</param>
 /// <param name="PeakBytes">The bytes the instance owns at the replacement's peak: everything it owns now (the installed
 /// graph with its preview, replaced objects still waiting for the GPU, published images held from them, and the capture
 /// readback's staging buffer) plus the

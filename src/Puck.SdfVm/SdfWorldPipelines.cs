@@ -58,7 +58,8 @@ public sealed class SdfWorldPipelines : IDisposable {
         var slots = new Slot?[specs.Length];
 
         try {
-            for (var index = 0; (index < specs.Length); index++) {
+            // The views variants, the longest driver translations, start last, so the others install first.
+            foreach (var index in SdfWorldTables.PipelineLayouts.BuildOrder) {
                 var spec = specs[index];
                 var bytecode = KernelBytes(
                     kernels: kernels,

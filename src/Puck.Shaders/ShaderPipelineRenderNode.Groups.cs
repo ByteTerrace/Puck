@@ -55,13 +55,19 @@ public sealed partial class ShaderPipelineRenderNode {
 
         return bindings;
     }
-    // The graph pool's demand for one pass: a frame set and a pass set per in-flight slot. A package pass's recorder
-    // allocates its sets from the same pool against its own pipeline's layouts, whose groups the pass's parameters
-    // describe; which stages a group is visible to does not change what its sets hold.
+    // The graph pool's demand for one pass: its sets per in-flight slot. A package pass's recorder allocates its frame
+    // and pass sets from the same pool against its own pipeline's layouts, whose groups the pass's parameters describe
+    // (RenderGraphPackageSets); a set of any other group a package binds is its own. Which stages a group is visible to
+    // does not change what its sets hold.
     private static GpuDescriptorPoolSizes GroupPoolSizes(ShaderPipelinePlannedPass planned, uint inFlight) {
         var groups = planned.Parameters.Layout.PipelineLayout(
             stages: (planned.Declaration?.Kind.Stages() ?? GpuShaderStage.Fragment)
         ).Groups;
+
+        if (planned.Kind == ShaderPipelinePassKind.Package) {
+            groups = [.. groups.Where(predicate: static group => (group.Ordinal is ((uint)ShaderInterfaceGroup.Frame) or ((uint)ShaderInterfaceGroup.Pass)))];
+        }
+
         var sizes = default(GpuDescriptorPoolSizes);
 
         for (var slot = 0u; (slot < inFlight); slot++) {

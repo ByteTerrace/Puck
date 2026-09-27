@@ -208,14 +208,18 @@ internal static class WorldRenderRoot {
 
         var overlaid = (overlay is not null);
 
-        // The host composes the root again whenever the document's panes, views or views.post move, from the post passes
-        // the document names then, so a live views.post edit reaches the running root.
+        // The host composes the root again whenever the document's panes, views, views.post or render.tonemap move, from
+        // the post passes and tonemap the document names then, so a live views.post or render.tonemap edit reaches the
+        // running root.
+        // A debug view shows its own colors, so the root runs no tonemap while one is on.
+        host.ShowsDebugView = () => (residency.DebugMode != 0);
         host.Attach(
-            compose: (panes, views, post) => WorldRootGraph.Compose(
+            compose: (panes, views, post, tonemap) => WorldRootGraph.Compose(
                 overlay: overlaid,
                 packages: RenderGraphPackageCatalog.Engine,
                 post: post,
                 panes: panes,
+                tonemap: tonemap,
                 views: views
             ),
             runtime: runtime,

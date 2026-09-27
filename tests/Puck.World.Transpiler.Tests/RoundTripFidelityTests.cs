@@ -131,6 +131,17 @@ public class RoundTripFidelityTests {
             NotPrinted: [],
             Printed: []
         ),
+        ["the integer division, power, and modular calls"] = new(
+            Json: """
+                {"schema":"puck.world.definition.v1","rules":[
+                  {"name":"r",
+                   "gate":{"$type":"compareValue","comparison":"Equal","kind":"Int","left":"floorDivide(a, b) + pairX(floorDivideModulo(a, b)) + pairY(divideRemainder(a, b)) + power(a, 3)","right":"modularPower(a, b, 7) + modularInverse(a, 11) + pairY(extendedGreatestCommonDivisor(a, b))"},
+                   "effects":[{"$type":"setState","state":"hp","value":0}]}
+                ]}
+                """,
+            NotPrinted: [],
+            Printed: ["floorDivide(a, b)", "floorDivideModulo(a, b)", "divideRemainder(a, b)", "power(a, 3)", "modularPower(a, b, 7)", "modularInverse(a, 11)", "extendedGreatestCommonDivisor(a, b)"]
+        ),
         ["scientific notation"] = new(
             Json: """
                 {"schema":"puck.world.definition.v1","palette":{"b":[0.01452,-0.0030928,8.57e-05]}}

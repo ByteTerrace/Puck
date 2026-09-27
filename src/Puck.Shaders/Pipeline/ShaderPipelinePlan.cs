@@ -50,7 +50,7 @@ public sealed record ShaderPipelinePlannedResource(
 /// when a pass touches this frame's instance, <see cref="ShaderPipelinePriorKind.Host"/> for a host-owned image no pass
 /// touches, and <see cref="ShaderPipelinePriorKind.CrossFrame"/> for an initialized storage no pass touches.</param>
 /// <param name="FrameEnd">The state this frame's instance is in after the frame's last pass: where publication, the
-/// float preview and the hand-back of a host-owned image start from.</param>
+/// preview and the hand-back of a host-owned image start from.</param>
 public sealed record ShaderPipelinePlannedStorage(
     int Index,
     ShaderPipelineResource Declaration,

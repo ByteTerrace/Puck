@@ -605,12 +605,16 @@ public sealed class WorldSessionResolver {
     /// <see cref="TryResolve"/>'s own parameter.</param>
     /// <param name="destination">The destination row being re-verified.</param>
     /// <param name="cohort">The cohort to re-derive against — every member must agree, exactly like
-    /// <see cref="TryResolve"/>. Never empty (an empty cohort refuses by name, like every other rule here).</param>
+    /// <see cref="TryResolve"/>. Empty only for a global destination, which no member decides; any other scope
+    /// refuses an empty cohort by name.</param>
     /// <param name="scopeKey">The re-derived scope key, on success.</param>
     /// <param name="reason">The refusal reason, naming which rule fired, on failure.</param>
     /// <returns><see langword="true"/> when every cohort member still agrees on one scope key.</returns>
     public bool TryDeriveScopeKey(WorldDefinition sourceDefinition, WorldDestination destination, IReadOnlyList<CohortMember> cohort, out string scopeKey, out string reason) {
-        if (cohort.Count == 0) {
+        if (
+            (cohort.Count == 0) &&
+            (destination.Scope != WorldDestinationScope.Global)
+        ) {
             scopeKey = string.Empty;
             reason = "the traveling cohort is empty";
 
@@ -677,14 +681,18 @@ public sealed class WorldSessionResolver {
     /// name-collision check, <c>TryFindRunningInstanceByOrigin</c>'s origin scan) already treats as one document —
     /// see this type's own <c>m_active</c> remarks.</param>
     /// <param name="cohort">Every member this one resolution must agree for — a single entry for a <c>body</c>
-    /// crossing, the source instance's whole active local-seat set for a <c>party</c> crossing. Never empty.</param>
+    /// crossing, the source instance's whole active local-seat set for a <c>party</c> crossing, and none for a view that
+    /// observes a global destination, which no member decides. Any other scope refuses an empty cohort by name.</param>
     /// <param name="resolved">The resolved session identity, on success.</param>
     /// <param name="reason">The refusal reason, naming which rule fired, on failure.</param>
     /// <returns><see langword="true"/> when every cohort member agrees on one scope key and a generation resolved.</returns>
     public bool TryResolve(WorldDefinition sourceDefinition, WorldDestination destination, string referencedDocument, IReadOnlyList<CohortMember> cohort, out Resolved resolved, out string reason) {
         resolved = default;
 
-        if (cohort.Count == 0) {
+        if (
+            (cohort.Count == 0) &&
+            (destination.Scope != WorldDestinationScope.Global)
+        ) {
             reason = "the traveling cohort is empty";
 
             return false;

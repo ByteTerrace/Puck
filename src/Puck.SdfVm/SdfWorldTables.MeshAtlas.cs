@@ -1,30 +1,30 @@
 using Puck.Abstractions.Gpu;
-using Puck.Shaders;
 
 namespace Puck.SdfVm;
 
 // The mesh atlases: every textured mesh a frame draws (SdfMesh.Textures) packed by SdfMeshAtlas into one image per usage,
-// bound in the tables' one World-group set, which every compute pass of every view binds at group 1. The atlases are
-// repacked only when the distinct texture sets the frame's draws name change, which a bake landing or leaving does, and a
-// repack first waits the device idle, since every view samples them; the set is then rewritten in place. A frame whose
-// draws name no texture set binds the sampled filler at every atlas, and a set of textures too large to pack draws its
-// meshes untextured.
+// bound in the tables' World sets (SdfWorldTables.Bindings.cs), which every compute pass of every view binds at group 1. The
+// atlases are repacked only when the distinct texture sets the frame's draws name change, which a bake landing or leaving
+// does, and a repack first waits the device idle, since every view samples them; it then moves the binding revision, so
+// the sets are rewritten before any pass binds them. A frame whose draws name no texture set binds the sampled filler at
+// every atlas, and a set of textures too large to pack draws its meshes untextured.
 public sealed partial class SdfWorldTables {
     private readonly IGpuSurfaceUpload?[] m_meshAtlasUploads = new IGpuSurfaceUpload?[SdfMeshTextures.Usages.Count];
+    // Each atlas's view the World sets bind, or zero for the sampled filler.
+    private readonly nint[] m_meshAtlasViews = new nint[SdfMeshTextures.Usages.Count];
     private readonly List<SdfMeshTextures> m_meshTextureScratch = [];
 
     // The atlases the World set binds, the texture sets they were packed from, in the order the draws first name them,
     // and whether a set too large to pack was reported.
     private SdfMeshAtlas? m_meshAtlas;
+
     private SdfMeshTextures[] m_meshAtlasSources = [];
+
     private bool m_meshAtlasRefusalReported;
 
     /// <summary>Gets the mesh atlases the latest frame binds, or <see langword="null"/> when its draws name no texture
     /// set.</summary>
     public SdfMeshAtlas? MeshAtlas => m_meshAtlas;
-
-    // Gets the World-group set every compute pass binds at group 1: the mesh atlases.
-    internal nint WorldSet => m_worldSet;
 
     // Returns the atlases a draw list's textured meshes sample, repacking and rebinding them when the distinct texture sets
     // it names differ from the ones last packed.
@@ -32,7 +32,7 @@ public sealed partial class SdfWorldTables {
         m_meshTextureScratch.Clear();
 
         for (var draw = 0; (draw < draws.Count); draw++) {
-            if ((draws[draw].Mesh.Textures is { } textures) && !ContainsReference(list: m_meshTextureScratch, item: textures)) {
+            if ((draws[draw].Mesh.Textures is { } textures) && !ContainsReference(item: textures, list: m_meshTextureScratch)) {
                 m_meshTextureScratch.Add(item: textures);
             }
         }
@@ -74,34 +74,21 @@ public sealed partial class SdfWorldTables {
             }
         }
 
-        WriteMeshAtlases(views: views);
         scope.Complete();
         DisposeMeshAtlases();
         uploads.CopyTo(array: m_meshAtlasUploads, index: 0);
         m_meshAtlas = atlas;
         m_meshAtlasSources = [.. m_meshTextureScratch];
+        views.CopyTo(array: m_meshAtlasViews, index: 0);
+        m_bindingRevision++;
 
         return atlas;
-    }
-    // Writes each atlas's view into the World set, or the sampled filler where it has none.
-    private void WriteMeshAtlases(ReadOnlySpan<nint> views) {
-        for (var usage = 0; (usage < SdfWorldPackage.MeshAtlases.Count); usage++) {
-            m_bindings.WriteSampledImage(
-                arrayElement: 0,
-                binding: SdfWorldInterfaces.WorldGroupBindingOf(member: SdfWorldPackage.MeshAtlases[usage]),
-                descriptorSetHandle: m_worldSet,
-                imageViewHandle: (((usage < views.Length) && (views[usage] != 0))
-                    ? views[usage]
-                    : m_sampledFiller.ImageViewHandle)
-            );
-        }
     }
     private void DisposeMeshAtlases() {
         foreach (var upload in m_meshAtlasUploads) {
             upload?.Dispose();
         }
     }
-
     private static bool ContainsReference(List<SdfMeshTextures> list, SdfMeshTextures item) {
         foreach (var candidate in list) {
             if (ReferenceEquals(objA: candidate, objB: item)) {

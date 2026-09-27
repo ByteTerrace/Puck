@@ -3,7 +3,7 @@ using Puck.Maths;
 
 namespace Puck.State.Tests;
 
-/// <summary>The exotic function families an expression can spell — Szudzik pairs, Morton codes, Hilbert
+/// <summary>The exotic function families an expression can spell — signed pairs, Morton codes, Hilbert
 /// distances, hex indices, layer sequences, and the square root and trigonometry — are exactly the Maths operations
 /// they name: every inverse round-trips, every algebraic shortcut agrees with the long way, and a domain fault fails
 /// the expression instead of wrapping.</summary>
@@ -304,6 +304,53 @@ public sealed class ExpressionFunctionLawTests {
             out _
         ));
     }
+    [InlineData("pairX", "")]
+    [InlineData("pairY", "")]
+    [InlineData("pairSwap", "")]
+    [InlineData("pairMaximum", "")]
+    [InlineData("pairMinimum", "")]
+    [InlineData("pairSum", "")]
+    [InlineData("pairDifference", "")]
+    [InlineData("pairTranslate", ", 0")]
+    [InlineData("pairScale", ", 0")]
+    [Theory]
+    public void PairConsumersRefuseCodesOutsideTheDeclaredRange(string function, string tail) {
+        // (2·1,518,500,249 + 1)² is the first code in the next shell. Its folded maximum is 3,037,000,499,
+        // which unfolds to −1,518,500,250, outside the declared signed component range.
+        foreach (var code in new[] { -1L, 9_223_372_030_926_249_001L, long.MaxValue }) {
+            Assert.False(condition: TryEval($"{function}({code}{tail})", out _));
+            // The live tick (zero in this reader) prevents folding the call, exercising the same refusal at runtime.
+            Assert.False(condition: TryEval($"{function}({code} + $tick{tail})", out _));
+        }
+    }
+    [Fact]
+    public void LastPairShellRemainsRepresentable() {
+        const long LastCode = 9_223_372_030_926_249_000L;
+
+        Assert.Equal(LastCode, Eval("pair(0, 1518500249)"));
+        Assert.Equal(0L, Eval($"pairX({LastCode})"));
+        Assert.Equal(1_518_500_249L, Eval($"pairY({LastCode})"));
+        Assert.Equal(LastCode, Eval($"pairSwap(pairSwap({LastCode} + $tick))"));
+    }
+    [InlineData(0L)]
+    [InlineData(1L)]
+    [InlineData(2L)]
+    [InlineData(255L)]
+    [InlineData(65_536L)]
+    [InlineData(3_037_000_497L)]
+    [InlineData(3_037_000_498L)]
+    [Theory]
+    public void PairCodesRoundTripAcrossShellBoundaries(long shell) {
+        foreach (var offset in new[] { 0L, shell, (2L * shell) }) {
+            var code = ((shell * shell) + offset);
+            var x = Eval($"pairX({code} + $tick)");
+            var y = Eval($"pairY({code} + $tick)");
+
+            Assert.Equal(code, Eval($"pair({x}, {y})"));
+            Assert.Equal(x, Eval($"pairX({code})"));
+            Assert.Equal(y, Eval($"pairY({code})"));
+        }
+    }
     [InlineData(0L, 0L)]
     [InlineData(1L, 0L)]
     [InlineData(0L, 1L)]
@@ -333,11 +380,11 @@ public sealed class ExpressionFunctionLawTests {
     [Fact]
     public void PairsRefuseOutsideTheSignedCell() {
         Assert.False(condition: TryEval(
-            "pair(-1, 0)",
+            "pair(1518500250, 0)",
             out _
         ));
         Assert.False(condition: TryEval(
-            "pair(3037000499, 0)",
+            "pair(0, -1518500250)",
             out _
         ));
         Assert.False(condition: TryEval(
@@ -345,11 +392,23 @@ public sealed class ExpressionFunctionLawTests {
             out _
         ));
         Assert.False(condition: TryEval(
-            "pairTranslate(pair(3037000498, 0), 1)",
+            "pairTranslate(pair(1518500249, 0), 1)",
             out _
         ));
         Assert.False(condition: TryEval(
-            "pairScale(pair(2000000000, 0), 2)",
+            "pairTranslate(pair(0, -1518500249), -1)",
+            out _
+        ));
+        Assert.False(condition: TryEval(
+            "pairScale(pair(1000000000, 0), 2)",
+            out _
+        ));
+        Assert.False(condition: TryEval(
+            "pairScale(pair(1000000000, 0), -2)",
+            out _
+        ));
+        Assert.False(condition: TryEval(
+            "pairTranslate(pair(0, 0), 9223372036854775807)",
             out _
         ));
     }
@@ -357,14 +416,25 @@ public sealed class ExpressionFunctionLawTests {
     [InlineData(3L, 7L)]
     [InlineData(7L, 3L)]
     [InlineData(1L, 1L)]
-    [InlineData(3_037_000_498L, 5L)]
-    [InlineData(5L, 3_037_000_498L)]
+    [InlineData(-1L, 0L)]
+    [InlineData(-3L, 7L)]
+    [InlineData(7L, -3L)]
+    [InlineData(-4L, -9L)]
+    [InlineData(1_518_500_249L, 5L)]
+    [InlineData(5L, -1_518_500_249L)]
+    [InlineData(-1_518_500_249L, 1_518_500_249L)]
     [Theory]
     public void PairsRoundTripAndAgreeWithTheAlgebra(long x, long y) {
         var pair = Eval($"pair({x}, {y})");
+        // Each component folds onto the naturals by 0, -1, 1, -2, 2, ... -> 0, 1, 2, 3, 4, ..., written out here as
+        // the two arms of the definition rather than the kernel's shift-and-xor.
+        static ulong Folded(long component) => ((component >= 0L)
+            ? (2UL * ((ulong)component))
+            : ((2UL * ((ulong)(-component))) - 1UL)
+        );
 
         Assert.Equal(
-            ((long)((ulong)x).ElegantPair<ulong, ulong>(other: ((ulong)y))),
+            ((long)Folded(component: x).ElegantPair<ulong, ulong>(other: Folded(component: y))),
             pair
         );
         Assert.Equal(
@@ -402,8 +472,8 @@ public sealed class ExpressionFunctionLawTests {
             Eval($"pairDifference({pair})")
         );
         if (Math.Max(
-            val1: x,
-            val2: y
+            val1: Math.Abs(value: x),
+            val2: Math.Abs(value: y)
         ) < 1_000_000L) {
             Assert.Equal(
                 Eval($"pair({(x + 11)}, {(y + 11)})"),
@@ -412,6 +482,14 @@ public sealed class ExpressionFunctionLawTests {
             Assert.Equal(
                 Eval($"pair({(x * 3)}, {(y * 3)})"),
                 Eval($"pairScale({pair}, 3)")
+            );
+            Assert.Equal(
+                Eval($"pair({(x - 11)}, {(y - 11)})"),
+                Eval($"pairTranslate({pair}, -11)")
+            );
+            Assert.Equal(
+                Eval($"pair({(x * -3)}, {(y * -3)})"),
+                Eval($"pairScale({pair}, -3)")
             );
         }
     }

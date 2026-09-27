@@ -1,4 +1,3 @@
-using Puck.Commands;
 using Puck.Abstractions;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -752,10 +751,6 @@ public sealed partial class WorldInstanceHost {
             return false;
         }
 
-        var cohort = new[] { new WorldSessionResolver.CohortMember(
-            Principal: Principal.Seat(slot: 0),
-            IdentityId: null
-        ) };
         var referencedDocument = ResolveReferenceDocument(
             source: source,
             neighbourKey: reference.NeighbourKey
@@ -801,7 +796,7 @@ public sealed partial class WorldInstanceHost {
             sourceDefinition: source.Server.Definition,
             destination: destination,
             referencedDocument: canonicalDocument,
-            cohort: cohort,
+            cohort: [],
             resolved: out resolved,
             reason: out reason
         )) {
@@ -856,10 +851,6 @@ public sealed partial class WorldInstanceHost {
             return false;
         }
 
-        var cohort = new[] { new WorldSessionResolver.CohortMember(
-            Principal: Principal.Seat(slot: 0),
-            IdentityId: null
-        ) };
         var referencedDocument = ResolveReferenceDocument(
             source: source,
             neighbourKey: reference.NeighbourKey
@@ -874,7 +865,7 @@ public sealed partial class WorldInstanceHost {
             m_resolver.TryDeriveScopeKey(
             sourceDefinition: source.Server.Definition,
             destination: destination,
-            cohort: cohort,
+            cohort: [],
             scopeKey: out var scopeKey,
             reason: out _
         ) &&
@@ -912,7 +903,7 @@ public sealed partial class WorldInstanceHost {
             sourceDefinition: source.Server.Definition,
             destination: destination,
             referencedDocument: canonicalDocument,
-            cohort: cohort,
+            cohort: [],
             resolved: out var resolved,
             reason: out reason
         )) {

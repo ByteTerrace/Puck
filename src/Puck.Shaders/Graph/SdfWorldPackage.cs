@@ -184,6 +184,7 @@ public static class SdfWorldPackage {
     /// the usages they pack (albedo, normal, occlusion, material, emission): images that change only when the set of
     /// textured meshes a frame draws does.</summary>
     public static IReadOnlyList<string> MeshAtlases { get; } = [MeshAlbedo, MeshNormals, MeshOcclusion, MeshMaterials, MeshEmission];
+
     /// <summary>The screen sources: one sampled image per screen, indexed by screen index.</summary>
     public const string ScreenSources = "screenSources";
     /// <summary>The length of <see cref="ScreenSources"/>: the most screen surfaces one program declares.</summary>
@@ -281,13 +282,37 @@ public static class SdfWorldPackage {
             type: ShaderValueType.Float4
         ),
     ];
-    /// <summary>Gets what every compute pass of the fragment reads from its pass group beside the extent: the values
-    /// (<see cref="Values"/>), then every table, buffer and image its dispatches bind.</summary>
+    /// <summary>Gets the World group's members: what every pass of every view reads alike, the residency's tables, the
+    /// brick pool, the glyph atlas, the samplers and the mesh atlases (<see cref="MeshAtlases"/>), which the residency
+    /// binds as one set per upload ring slot, written once and again only when what it binds moves.</summary>
+    public static IReadOnlyList<ShaderInterfaceMember> Tables { get; } = [
+        Table(element: ShaderValueType.Uint4, name: ProgramWords),
+        Table(element: ShaderValueType.Float4, name: DynamicTransforms),
+        Table(element: ShaderValueType.Uint, name: FrameInstanceGrid),
+        Table(element: ShaderValueType.Float4, name: ScreenSurfaces),
+        Table(element: ShaderValueType.Float4, name: ScreenMappings),
+        Table(element: ShaderValueType.Float4, name: ScreenLights),
+        Table(element: ShaderValueType.Uint4, name: DecalCells),
+        Table(element: ShaderValueType.Float, name: BrickPool),
+        Table(element: ShaderValueType.Float4, name: Volumes),
+        Table(element: ShaderValueType.Uint, name: MeshRegion),
+        WorldImage(name: GlyphAtlas),
+        ShaderInterfaceMember.Sampler(
+            group: ShaderInterfaceGroup.World,
+            length: SamplerCount,
+            name: Samplers
+        ),
+        WorldImage(name: MeshAlbedo),
+        WorldImage(name: MeshNormals),
+        WorldImage(name: MeshOcclusion),
+        WorldImage(name: MeshMaterials),
+        WorldImage(name: MeshEmission),
+    ];
+    /// <summary>Gets what every compute pass of the fragment reads: from its pass group, beside the extent, the values
+    /// (<see cref="Values"/>), the view's scratch, its output, the screens it shows and the mesh target; and the World
+    /// group's members (<see cref="Tables"/>).</summary>
     public static IReadOnlyList<ShaderInterfaceMember> Members { get; } = [
         .. Values,
-        Read(element: ShaderValueType.Uint4, name: ProgramWords),
-        Read(element: ShaderValueType.Float4, name: DynamicTransforms),
-        Read(element: ShaderValueType.Uint, name: FrameInstanceGrid),
         Read(element: ShaderValueType.Uint, name: InstanceMasks),
         Written(element: ShaderValueType.Uint, name: InstanceMasksWritten),
         Read(element: ShaderValueType.Float, name: Tiles),
@@ -298,18 +323,11 @@ public static class SdfWorldPackage {
         Read(element: ShaderValueType.Uint, name: VisibilityRecords),
         Written(element: ShaderValueType.Uint, name: VisibilityRecordsWritten),
         ShaderInterfaceMember.StorageImage(
-            format: GpuPixelFormat.R8G8B8A8Unorm,
+            format: RenderGraphPackageCatalog.WorkingFormat,
             group: ShaderInterfaceGroup.Pass,
             name: Output,
             type: ShaderValueType.Float4
         ),
-        Read(element: ShaderValueType.Float4, name: ScreenSurfaces),
-        Read(element: ShaderValueType.Float4, name: ScreenMappings),
-        Read(element: ShaderValueType.Float4, name: ScreenLights),
-        Read(element: ShaderValueType.Uint4, name: DecalCells),
-        Read(element: ShaderValueType.Float, name: BrickPool),
-        Read(element: ShaderValueType.Float4, name: Volumes),
-        Read(element: ShaderValueType.Uint, name: MeshRegion),
         ShaderInterfaceMember.SampledImage(
             group: ShaderInterfaceGroup.Pass,
             length: ScreenSourceCount,
@@ -318,24 +336,10 @@ public static class SdfWorldPackage {
         ),
         ShaderInterfaceMember.SampledImage(
             group: ShaderInterfaceGroup.Pass,
-            name: GlyphAtlas,
-            type: ShaderValueType.Float4
-        ),
-        ShaderInterfaceMember.SampledImage(
-            group: ShaderInterfaceGroup.Pass,
             name: MeshVisibility,
             type: ShaderValueType.Float4
         ),
-        ShaderInterfaceMember.Sampler(
-            group: ShaderInterfaceGroup.Pass,
-            length: SamplerCount,
-            name: Samplers
-        ),
-        MeshAtlas(name: MeshAlbedo),
-        MeshAtlas(name: MeshNormals),
-        MeshAtlas(name: MeshOcclusion),
-        MeshAtlas(name: MeshMaterials),
-        MeshAtlas(name: MeshEmission),
+        .. Tables,
     ];
     /// <summary>Gets the fragment the package runs as: one view's dispatch set, its scratch transient and counted, its
     /// one output the view's color.</summary>
@@ -360,8 +364,8 @@ public static class SdfWorldPackage {
             Hit(mesh: false, name: Parts.Views, visibility: Parts.AmbientVisibility, written: Color),
         ],
         Resources: [
-            Image(format: GpuPixelFormat.R8G8B8A8Unorm, from: null, name: Parts.SkyImage, transient: false),
-            Image(format: GpuPixelFormat.R8G8B8A8Unorm, from: Parts.SkyImage, name: Color, transient: false),
+            Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: Parts.SkyImage, transient: false),
+            Image(format: RenderGraphPackageCatalog.WorkingFormat, from: Parts.SkyImage, name: Color, transient: false),
             Buffer(
                 count: [Term(1, ShaderPipelineCountBasis.Viewports, ShaderPipelineCountBasis.Tiles, ShaderPipelineCountBasis.InstanceMaskWords)],
                 name: Parts.InstanceMasks,
@@ -394,20 +398,25 @@ public static class SdfWorldPackage {
         ]
     );
 
-    private static ShaderInterfaceMember MeshAtlas(string name) => ShaderInterfaceMember.SampledImage(
-        group: ShaderInterfaceGroup.World,
-        name: name,
-        type: ShaderValueType.Float4
-    );
     private static ShaderInterfaceMember Read(string name, ShaderValueType element) => ShaderInterfaceMember.ReadOnlyBuffer(
         element: element,
         group: ShaderInterfaceGroup.Pass,
+        name: name
+    );
+    private static ShaderInterfaceMember Table(string name, ShaderValueType element) => ShaderInterfaceMember.ReadOnlyBuffer(
+        element: element,
+        group: ShaderInterfaceGroup.World,
         name: name
     );
     private static ShaderInterfaceMember Value(string name, ShaderValueType type) => ShaderInterfaceMember.Value(
         group: ShaderInterfaceGroup.Pass,
         name: name,
         type: type
+    );
+    private static ShaderInterfaceMember WorldImage(string name) => ShaderInterfaceMember.SampledImage(
+        group: ShaderInterfaceGroup.World,
+        name: name,
+        type: ShaderValueType.Float4
     );
     private static ShaderInterfaceMember Written(string name, ShaderValueType element) => ShaderInterfaceMember.ReadWriteBuffer(
         element: element,

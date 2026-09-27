@@ -150,6 +150,9 @@ public static class WorldReplayEntryDescriber {
             WorldReplayEntry.Query query => $"query {query.Value.GetType().Name} by {query.Actor.Describe()}",
             WorldReplayEntry.PeerAdmitted admitted => $"peerAdmitted {DescribePeers(entries: admitted.Value.Entries)} grants={admitted.Value.MintedGrants.Count}",
             WorldReplayEntry.PeerDisconnected disconnected => $"peerDisconnected {DescribePeers(entries: disconnected.Value.Entries)} revoked={disconnected.Value.RevokedGrants.Count}",
+            WorldReplayEntry.SessionEvent { Value: WorldServerEvent.SessionAdmitted admitted } => $"sessionAdmitted {admitted.Session.Describe()} grants={admitted.MintedGrants.Count}",
+            WorldReplayEntry.SessionEvent { Value: WorldServerEvent.SessionEmbodied embodied } => $"sessionEmbodied {embodied.Session.Describe()} body={embodied.BodyIndex} grants={embodied.MintedGrants.Count}",
+            WorldReplayEntry.SessionEvent { Value: WorldServerEvent.SessionEnded ended } => $"sessionEnded {ended.Session.Describe()} revoked={ended.RevokedGrants.Count}",
             WorldReplayEntry.Rebuild rebuild => DescribeRebuild(rebuild: rebuild),
             WorldReplayEntry.ScreenOp screenOp => DescribeScreenOp(screenOp: screenOp),
             WorldReplayEntry.RateLever lever => (lever.Paused

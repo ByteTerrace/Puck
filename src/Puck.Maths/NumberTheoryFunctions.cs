@@ -4,8 +4,9 @@ using System.Numerics;
 namespace Puck.Maths;
 
 /// <summary>
-/// Provides exact number-theoretic routines over arbitrary-width integers: the Jacobi symbol, a segmented prime sieve
-/// over a range, and Hensel lifting of a polynomial root from a prime to a prime power.
+/// Provides exact number-theoretic routines: over arbitrary-width integers, the Jacobi symbol, a segmented prime sieve
+/// over a range, and Hensel lifting of a polynomial root from a prime to a prime power; over machine words, modular
+/// powers and inverses for any modulus and the extended greatest common divisor.
 /// </summary>
 /// <remarks>
 /// These are the arbitrary-width companions to the fixed-width prime-field arithmetic in <see cref="PrimeField64"/>:
@@ -21,6 +22,10 @@ public static class NumberTheoryFunctions {
     private const ulong WindowSpan = ((2UL * WindowBits) - 2UL);
     /// <summary>The bitmap words one window occupies.</summary>
     private const int WindowWords = (WindowBits >> 6);
+    /// <summary>The binary-GCD steps one inversion round batches: Pornin's <c>k − 1</c> at <c>k = 32</c>.</summary>
+    private const int InversionSteps = 31;
+    /// <summary>The inversion rounds, <c>⌈(2·64 − 1) / 31⌉</c>, enough steps for any pair of 64-bit operands.</summary>
+    private const int InversionRounds = 5;
 
     /// <summary>Evaluates a polynomial at a point by nested multiply-and-add.</summary>
     /// <param name="coefficients">The coefficients from the constant term upward.</param>
@@ -54,6 +59,96 @@ public static class NumberTheoryFunctions {
     /// <returns><see langword="true"/> when <paramref name="value"/> is congruent to zero modulo <paramref name="modulus"/>.</returns>
     private static bool IsZeroModulo(this BigInteger value, BigInteger modulus) =>
         (value % modulus).IsZero;
+    /// <summary>Multiplies two residues modulo a word modulus through a 128-bit product, which never overflows.</summary>
+    /// <param name="left">The first residue.</param>
+    /// <param name="right">The second residue.</param>
+    /// <param name="modulus">The non-zero modulus.</param>
+    /// <returns>The product reduced into <c>[0, <paramref name="modulus"/>)</c>.</returns>
+    private static ulong MultiplyModulo(ulong left, ulong right, ulong modulus) =>
+        ((ulong)((((UInt128)left) * right) % modulus));
+    /// <summary>Divides a signed multiple-precision residue combination by <c>2^<see cref="InversionSteps"/></c> modulo an odd
+    /// modulus, the Montgomery way: adds the multiple of the modulus that clears the low bits, then shifts them out.</summary>
+    /// <param name="combination">The combination <c>u·f + v·g</c> of two residues below the modulus and two update factors
+    /// whose magnitudes sum to at most <c>2^<see cref="InversionSteps"/></c>, so its magnitude is below
+    /// <c>modulus · 2^<see cref="InversionSteps"/></c>.</param>
+    /// <param name="modulus">The odd modulus.</param>
+    /// <param name="negatedInverse">The negation of the modulus's inverse modulo <c>2^64</c>.</param>
+    /// <returns>The residue in <c>[0, <paramref name="modulus"/>)</c> congruent to <c>combination · 2^−<see cref="InversionSteps"/></c>.</returns>
+    private static ulong ShiftOutModulo(Int128 combination, ulong modulus, ulong negatedInverse) {
+        var clearing = (((ulong)combination) * negatedInverse) & ((1UL << InversionSteps) - 1UL);
+        // The combination lies strictly between −modulus and modulus in units of 2^steps, and the clearing multiple adds
+        // less than one more modulus, so the shifted value lies strictly between −modulus and 2·modulus.
+        var shifted = ((combination + (((Int128)clearing) * modulus)) >> InversionSteps);
+
+        if (shifted < Int128.Zero) {
+            shifted += modulus;
+        } else if (shifted >= modulus) {
+            shifted -= modulus;
+        }
+
+        return ((ulong)shifted);
+    }
+    /// <summary>Inverts a residue modulo an odd modulus by Pornin's binary extended GCD, the halving steps batched into
+    /// update factors applied once per round.</summary>
+    /// <param name="value">The residue to invert, below <paramref name="modulus"/>.</param>
+    /// <param name="modulus">The odd modulus, at least three.</param>
+    /// <param name="inverse">The inverse in <c>[1, <paramref name="modulus"/>)</c> when one exists; otherwise the
+    /// residue the descent left, which is meaningless.</param>
+    /// <returns><see langword="true"/> when <paramref name="value"/> is coprime to <paramref name="modulus"/>.</returns>
+    /// <remarks>This is Algorithm 2 of Pornin, "Optimized Binary GCD for Modular Inversion" (IACR ePrint 2020/972), with
+    /// its word parameter <c>k</c> at 32. A 64-bit operand is its own <c>2k</c>-bit approximation, so the inner steps run
+    /// on the exact values and the approximation and the sign fix-ups it would otherwise need never arise. Each inner
+    /// step keeps <c>a·2^j = a₀·f₀ + b₀·g₀</c> and <c>b·2^j = a₀·f₁ + b₀·g₁</c>, so a round replaces the residues
+    /// <c>(u, v)</c> by the same combinations divided by <c>2^31</c>. Every step lowers the two operands' summed bit
+    /// length by at least one until the first reaches zero, so <c>2·64 − 1 = 127</c> steps finish the descent; five
+    /// rounds of 31 steps run 155, a fixed count whatever the operands.</remarks>
+    private static bool TryInvertOdd(ulong value, ulong modulus, out ulong inverse) {
+        var negatedInverse = (0UL - modulus.ModularInverse());
+        var a = value;
+        var b = modulus;
+        var u = 1UL;
+        var v = 0UL;
+
+        for (var round = 0; (round < InversionRounds); ++round) {
+            var (f0, g0, f1, g1) = (1L, 0L, 0L, 1L);
+
+            for (var step = 0; (step < InversionSteps); ++step) {
+                if ((a & 1UL) != 0UL) {
+                    if (a < b) {
+                        (a, b) = (b, a);
+                        (f0, g0, f1, g1) = (f1, g1, f0, g0);
+                    }
+
+                    a -= b;
+                    f0 -= f1;
+                    g0 -= g1;
+                }
+
+                a >>= 1;
+                f1 <<= 1;
+                g1 <<= 1;
+            }
+
+            (u, v) = (
+                ShiftOutModulo(
+                    combination: ((((Int128)u) * f0) + (((Int128)v) * g0)),
+                    modulus: modulus,
+                    negatedInverse: negatedInverse
+                ),
+                ShiftOutModulo(
+                    combination: ((((Int128)u) * f1) + (((Int128)v) * g1)),
+                    modulus: modulus,
+                    negatedInverse: negatedInverse
+                )
+            );
+        }
+
+        // The descent ends with the first operand at zero and the second at the greatest common divisor, which v
+        // multiplies the value to.
+        inverse = v;
+
+        return (1UL == b);
+    }
 
     /// <summary>Enumerates the primes in a closed range in ascending order as a materialized sequence.</summary>
     /// <param name="low">The inclusive lower bound of the range.</param>
@@ -70,6 +165,52 @@ public static class NumberTheoryFunctions {
         );
 
         return primes;
+    }
+    /// <summary>Computes the greatest common divisor of two integers together with the Bézout coefficients that combine
+    /// the integers into it.</summary>
+    /// <param name="value">The first integer, <c>a</c>; any sign, but not <see cref="long.MinValue"/>.</param>
+    /// <param name="other">The second integer, <c>b</c>; any sign, but not <see cref="long.MinValue"/>.</param>
+    /// <returns>The divisor <c>g = gcd(|a|, |b|)</c> and coefficients with <c>a·X + b·Y = g</c>. When <c>b</c> is zero they
+    /// are <c>(|a|, sign(a), 0)</c>, so <c>(0, 0, 0)</c> for two zeros. Otherwise <c>X</c> is the representative of
+    /// <c>(a/g)⁻¹</c> modulo <c>|b|/g</c> in <c>[−|b|/2g, |b|/2g]</c>, the least magnitude that residue class holds;
+    /// the only tie, <c>|b|/g = 2</c>, takes <c>sign(a)</c> to minimize <c>|Y|</c>. Then
+    /// <c>Y = (g − a·X) / b</c>, whose magnitude is at most <c>|a|/2g + 1</c>, so both always fit a
+    /// <see cref="long"/>.</returns>
+    /// <remarks>The coefficient comes from <see cref="ModularInverse(ulong, ulong)"/> and the divisor from
+    /// <see cref="BinaryIntegerFunctions.GreatestCommonDivisor{T}(T, T)"/>, so the descent is binary throughout; the
+    /// one division is the exact one that recovers <c>Y</c>.</remarks>
+    /// <exception cref="OverflowException"><paramref name="value"/> or <paramref name="other"/> is
+    /// <see cref="long.MinValue"/>, whose magnitude a <see cref="long"/> cannot hold.</exception>
+    public static (long Divisor, long X, long Y) ExtendedGreatestCommonDivisor(long value, long other) {
+        if (
+            (long.MinValue == value) ||
+            (long.MinValue == other)
+        ) {
+            throw new OverflowException(message: "The magnitude of the signed minimum is not representable.");
+        }
+
+        var divisor = value.GreatestCommonDivisor(other: other);
+
+        if (0L == other) {
+            return (divisor, Math.Sign(value: value), 0L);
+        }
+
+        var modulus = ((ulong)Math.Abs(value: (other / divisor)));
+        var x = 0L;
+
+        if (modulus > 1UL) {
+            var inverse = ModularInverse(
+                modulus: modulus,
+                value: ((ulong)(value / divisor).FloorModulo(modulus: ((long)modulus)))
+            );
+
+            x = (((inverse > (modulus >> 1)) || ((modulus == 2UL) && (value < 0L)))
+                ? (((long)inverse) - ((long)modulus))
+                : ((long)inverse)
+            );
+        }
+
+        return (divisor, x, ((long)((((Int128)divisor) - (((Int128)value) * x)) / other)));
     }
     /// <summary>Lifts a simple root of an integer polynomial from a base modulus to a power of that modulus.</summary>
     /// <param name="coefficients">The polynomial coefficients from the constant term upward: index <c>i</c> is the coefficient of <c>x^i</c>.</param>
@@ -211,6 +352,99 @@ public static class NumberTheoryFunctions {
             ? sign
             : 0
         );
+    }
+    /// <summary>Computes the multiplicative inverse of a word modulo a word modulus without dividing.</summary>
+    /// <param name="value">The value to invert, any magnitude; it must be coprime to <paramref name="modulus"/>.</param>
+    /// <param name="modulus">The modulus, at least two.</param>
+    /// <returns>The unique residue in <c>[1, <paramref name="modulus"/>)</c> whose product with <paramref name="value"/>
+    /// is congruent to one modulo <paramref name="modulus"/>.</returns>
+    /// <remarks>
+    /// <para>The modulus splits as <c>2^s · m</c> with <c>m</c> odd. Modulo <c>m</c> the inverse comes from Pornin's
+    /// optimized binary extended GCD ("Optimized Binary GCD for Modular Inversion", IACR ePrint 2020/972): five rounds of
+    /// 31 shift-and-subtract steps whatever the operands, each round's halvings folded into one Montgomery shift of the
+    /// running residues. Modulo <c>2^s</c> it is <see cref="UnsignedNumberFunctions.ModularInverse{T}(T)"/>'s
+    /// Newton–Hensel inverse, masked, and the two recombine as <c>x₁ + m·((x₂ − x₁)·m⁻¹ mod 2^s)</c>. Nothing divides:
+    /// the reductions are masks, shifts, and 128-bit products.</para>
+    /// <para>This is the word-sized companion to <see cref="BigIntegerFunctions.ModularInverse(BigInteger, BigInteger)"/>,
+    /// whose Euclidean descent serves any width at the price of a division per step.</para>
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="modulus"/> is zero or one.</exception>
+    /// <exception cref="ArgumentException"><paramref name="value"/> shares a factor with <paramref name="modulus"/>, so it
+    /// has no inverse there.</exception>
+    public static ulong ModularInverse(ulong value, ulong modulus) {
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            other: 2UL,
+            value: modulus
+        );
+
+        var twos = BitOperations.TrailingZeroCount(value: modulus);
+        var odd = (modulus >> twos);
+        var oddInverse = 0UL;
+
+        if (
+            (odd > 1UL) &&
+            !TryInvertOdd(
+                inverse: out oddInverse,
+                modulus: odd,
+                value: (value % odd)
+            )
+        ) {
+            throw NotInvertible();
+        }
+        if (0 == twos) {
+            return oddInverse;
+        }
+        if (0UL == (value & 1UL)) {
+            throw NotInvertible();
+        }
+
+        var mask = ((1UL << twos) - 1UL);
+        var evenInverse = value.ModularInverse() & mask;
+
+        return (oddInverse + (odd * (((evenInverse - oddInverse) * odd.ModularInverse()) & mask)));
+
+        static ArgumentException NotInvertible() => new(
+            message: "The value shares a factor with the modulus, so it has no multiplicative inverse there.",
+            paramName: nameof(value)
+        );
+    }
+    /// <summary>Raises a word to a power modulo a word modulus by square-and-multiply.</summary>
+    /// <param name="value">The base, any magnitude.</param>
+    /// <param name="exponent">The exponent.</param>
+    /// <param name="modulus">The modulus, which must be positive.</param>
+    /// <returns><c><paramref name="value"/>^<paramref name="exponent"/> mod <paramref name="modulus"/></c> in
+    /// <c>[0, <paramref name="modulus"/>)</c>; zero to the zeroth power is one, reduced, so zero modulo one.</returns>
+    /// <remarks>Each product is formed in 128 bits and reduced before the next, so no step overflows whatever the
+    /// operands; the loop runs once per bit of <paramref name="exponent"/>, at most 64 times. A prime modulus has the
+    /// faster Montgomery chain of <see cref="PrimeField64.Pow(ulong, ulong)"/>; this one serves every modulus.</remarks>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="modulus"/> is zero.</exception>
+    public static ulong ModularPower(ulong value, ulong exponent, ulong modulus) {
+        ArgumentOutOfRangeException.ThrowIfZero(value: modulus);
+
+        var power = (1UL % modulus);
+        var square = (value % modulus);
+
+        while (0UL != exponent) {
+            if (0UL != (exponent & 1UL)) {
+                power = MultiplyModulo(
+                    left: power,
+                    modulus: modulus,
+                    right: square
+                );
+            }
+
+            exponent >>= 1;
+
+            if (0UL != exponent) {
+                square = MultiplyModulo(
+                    left: square,
+                    modulus: modulus,
+                    right: square
+                );
+            }
+        }
+
+        return power;
     }
     /// <summary>Enumerates the primes in a closed range in ascending order.</summary>
     /// <param name="low">The inclusive lower bound of the range.</param>

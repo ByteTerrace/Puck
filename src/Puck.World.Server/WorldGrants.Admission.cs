@@ -589,6 +589,7 @@ public sealed partial class WorldGrants {
                     // until this catches it up from bodies.scaleRow — the same reason a reused slot never inherits
                     // a previous occupant's scale.
                     Host.Population.SyncBodyScale(definition: Host.Definition);
+                    RevokeStaleEmbodiments(index: join.Slot);
 
                     StageOwnedState(
                         slot: join.Slot,

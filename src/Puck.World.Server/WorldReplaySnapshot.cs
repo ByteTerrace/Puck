@@ -89,6 +89,9 @@ public abstract record WorldReplayEntry {
     /// <summary>A server-authored peer disconnect, emitted at the point of effect.</summary>
     /// <param name="Value">The ordered disconnect event.</param>
     internal sealed record PeerDisconnected(WorldServerEvent.PeerDisconnected Value) : WorldReplayEntry;
+    /// <summary>A server-authored session lifecycle event (admitted, embodied or ended), emitted at the point of effect.</summary>
+    /// <param name="Value">The <see cref="WorldServerEvent.SessionAdmitted"/>, <see cref="WorldServerEvent.SessionEmbodied"/> or <see cref="WorldServerEvent.SessionEnded"/> event.</param>
+    internal sealed record SessionEvent(WorldServerEvent Value) : WorldReplayEntry;
     /// <summary>A whole-document rebuild-and-swap (<c>world.reset</c>/<c>world.load</c>/<c>world.reload</c>) —
     /// CAS-pinned: <see cref="ContentHash"/> is the canonical <c>sha256-64/{hex}</c> pin of the exact bytes the live
     /// session consumed (Load/Reload, off disk) or of the base's canonical bytes at the moment the rebuild applied
@@ -267,7 +270,7 @@ public readonly record struct WorldReplayHashTraces(ulong[] Pose, ulong[] Author
 /// <c>tests/Puck.World.Tests</c> — which reads this surface directly per its own documented no-IVT/no-reflection
 /// convention — can exercise <see cref="ResolveStepWidth"/> without a grant.</para>
 /// </remarks>
-public sealed class WorldReplaySnapshot {
+public sealed partial class WorldReplaySnapshot {
     private const uint Magic = 0x5052_4C57u; // "WLRP" in little-endian wire order.
     // A shape-identity token, not a compatibility sequence: this build writes and reads exactly one tape contract.
     // Shape 4 carries each recorded intent's optional pointer ray. Refuse earlier tapes at intake instead of reporting
@@ -389,6 +392,10 @@ public sealed class WorldReplaySnapshot {
                     break;
                 case WorldReplayEntry.PeerDisconnected disconnected:
                     server.ApplyServerEvent(serverEvent: disconnected.Value);
+
+                    break;
+                case WorldReplayEntry.SessionEvent session:
+                    server.ApplyServerEvent(serverEvent: session.Value);
 
                     break;
                 case WorldReplayEntry.Rebuild rebuild:
@@ -807,6 +814,11 @@ public sealed class WorldReplaySnapshot {
                 }
             case 15:
                 return new WorldReplayEntry.LinkDelivery(Adjacency: reader.ReadString(field: "link delivery adjacency"));
+            case 16 or 17 or 18:
+                return ReadSessionEntry(
+                    kind: kind,
+                    reader: ref reader
+                );
             default:
                 if (!reader.Failed) {
                     throw new InvalidDataException(message: $"unknown .puckreplay authority entry discriminant {kind}.");
@@ -1230,6 +1242,13 @@ public sealed class WorldReplaySnapshot {
             case WorldReplayEntry.LinkDelivery linkDelivery:
                 writer.WriteByte(value: 15);
                 writer.WriteString(value: linkDelivery.Adjacency);
+
+                break;
+            case WorldReplayEntry.SessionEvent session:
+                WriteSessionEntry(
+                    serverEvent: session.Value,
+                    writer: writer
+                );
 
                 break;
             default:
