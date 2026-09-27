@@ -93,12 +93,13 @@ public sealed partial class SdfEngineNode : ICaptureRequestTarget {
     public ulong MeshAttachmentBytes => (m_engine?.MeshAttachmentBytes ?? 0UL);
     /// <summary>Gets the mesh draws of the last captured frame, the ones the mesh region holds once the frame
     /// renders.</summary>
-    public int MeshDrawCount => (Volatile.Read(location: ref m_meshRegionDraws)?.Count ?? 0);
+    public int MeshDrawCount => Volatile.Read(location: ref m_meshDrawCount);
 
     private readonly int m_programWordCapacity;
 
-    // The last captured frame's mesh draw list, which MeshDrawCount reads from another thread.
-    private IReadOnlyList<SdfMeshDraw>? m_meshRegionDraws;
+    // The last captured frame's mesh draw count, which MeshDrawCount reads from another thread: the count, never the
+    // list, which its producer may rewrite in place for the next frame.
+    private int m_meshDrawCount;
 
     // The image-view handle each screen index was bound to by the latest produced frame.
     private readonly nint[] m_boundScreenSources = new nint[SdfWorldEngine.MaxScreenSurfaces];
@@ -343,8 +344,8 @@ public sealed partial class SdfEngineNode : ICaptureRequestTarget {
         );
 
         Volatile.Write(
-            location: ref m_meshRegionDraws,
-            value: frame.MeshDraws
+            location: ref m_meshDrawCount,
+            value: frame.MeshDraws.Count
         );
 
         return frame;

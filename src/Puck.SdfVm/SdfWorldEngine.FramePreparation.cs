@@ -580,7 +580,10 @@ public sealed partial class SdfWorldEngine {
             bytes: m_volumeScratch,
             offset: 0
         );
-        StageMeshRegion(draws: frame.MeshDraws);
+        StageMeshRegion(
+            draws: frame.MeshDraws,
+            revision: frame.MeshDrawsRevision
+        );
         EnsureMeshAttachments();
         BindMeshVisibility(viewportCount: viewportCount);
 

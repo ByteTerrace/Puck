@@ -5,7 +5,8 @@ namespace Puck.SdfVm;
 
 // The mesh region: the frame's mesh draws (SdfFrame.MeshDraws) laid out by SdfMeshRegion in one GpuRegion, created like
 // every other engine region (SdfWorldEngine.Regions.cs) and copied with them in the upload pass. A frame whose draw list
-// is the one last packed repacks nothing; a new list is packed into the host copy and owes only the words that changed.
+// is the one last packed, at the revision last packed (SdfFrame.MeshDrawsRevision), repacks nothing; any other is packed
+// into the host copy and owes only the words that changed.
 // The region is created with the engine, one draw record long so every set that binds it binds a buffer, and grows,
 // after every frame-ring fence retires, like program capacity, rebinding its new buffers; a frame without draws keeps
 // it. The mesh pass reads the draws' triangles from it, and primary a mesh hit's material.
@@ -14,6 +15,7 @@ public sealed partial class SdfWorldEngine {
 
     // The draw list last packed, the words it packed into and their layout.
     private IReadOnlyList<SdfMeshDraw>? m_meshDraws;
+    private long m_meshDrawsRevision;
     private SdfMeshRegionLayout m_meshLayout;
     private GpuRegion m_meshRegion;
     // One more for every new draw list the region packs: the cadence signature folds it, so a frame whose draws moved
@@ -32,11 +34,14 @@ public sealed partial class SdfWorldEngine {
 
     // Packs a new draw list into the region, growing it first when the list needs more bytes; the upload pass sends the
     // slot what it owes. Called with the slot's fence retired.
-    private void StageMeshRegion(IReadOnlyList<SdfMeshDraw> draws) {
-        if (!ReferenceEquals(
-            objA: draws,
-            objB: m_meshDraws
-        )) {
+    private void StageMeshRegion(IReadOnlyList<SdfMeshDraw> draws, long revision) {
+        if (
+            !ReferenceEquals(
+                objA: draws,
+                objB: m_meshDraws
+            ) ||
+            (revision != m_meshDrawsRevision)
+        ) {
             var layout = SdfMeshRegion.Plan(
                 draws: draws,
                 meshes: m_meshPlacements
@@ -66,6 +71,7 @@ public sealed partial class SdfWorldEngine {
             }
 
             m_meshDraws = draws;
+            m_meshDrawsRevision = revision;
             m_meshLayout = layout;
             m_meshRevision++;
         }

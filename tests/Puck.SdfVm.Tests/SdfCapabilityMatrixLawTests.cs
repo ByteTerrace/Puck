@@ -276,7 +276,7 @@ public sealed class SdfCapabilityMatrixLawTests {
             Check: "SdfWorldEngineUploadLawTests; SdfWorldEngineWorkLawTests; puck canary sdf-mesh-visibility sdf-mesh-motion",
             Green: false,
             Members: [
-                "SdfFrame.MeshDraws", "SdfEngineNode.MeshRegionBytes", "SdfEngineNode.MeshDrawCount", "SdfEngineNode.MeshAttachmentBytes",
+                "SdfFrame.MeshDraws", "SdfFrame.MeshDrawsRevision", "SdfEngineNode.MeshRegionBytes", "SdfEngineNode.MeshDrawCount", "SdfEngineNode.MeshAttachmentBytes",
                 "SdfWorldEngine.MeshRegionBytes", "SdfWorldEngine.MeshRegionLayout", "SdfWorldEngine.MeshAttachmentBytes",
                 "SdfWorldEngine.MeshAttachmentBytesOf", "SdfWorldEngine.MeshDrawCount",
             ]

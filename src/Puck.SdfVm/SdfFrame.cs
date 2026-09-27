@@ -58,9 +58,14 @@ public sealed record SdfFrame(
     /// one call site at the end of <c>renderView</c>, after the surface color is final. Empty (the default) uploads an
     /// all-zero table whose first bound ends the shader's scan.</summary>
     public IReadOnlyList<SdfVolume> Volumes { get; init; } = [];
-    /// <summary>The frame's opaque triangle meshes: every static placement of a prototype that carries a mesh. Empty by
-    /// default; rasterized per view before primary traversal. A producer supplies a new list when its draws change.</summary>
+    /// <summary>The frame's opaque triangle meshes: every placement and stamp of a prototype that carries a mesh. Empty by
+    /// default; rasterized per view before primary traversal. An engine repacks them when the list is a different one or
+    /// <see cref="MeshDrawsRevision"/> moved, so a producer that reuses one list rewrites it in place and moves the
+    /// revision.</summary>
     public IReadOnlyList<SdfMeshDraw> MeshDraws { get; init; } = [];
+    /// <summary>The revision of <see cref="MeshDraws"/>' content, which a producer that rewrites one list in place moves
+    /// whenever it does; 0 for a producer that supplies a new list instead.</summary>
+    public long MeshDrawsRevision { get; init; }
 
     /// <summary>The simulation tick of the state the frame shows, or <see langword="null"/> when its producer names none.
     /// No kernel reads it: each view output of the frame records it, and a capture served from that output records it,

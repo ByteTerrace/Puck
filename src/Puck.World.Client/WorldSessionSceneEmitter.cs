@@ -281,7 +281,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     }
 
     /// <inheritdoc/>
-    public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
+    public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, long meshDrawsRevision, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
         var programChanged = !ReferenceEquals(
             objA: program,
             objB: m_lastProgram
@@ -324,6 +324,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             FarDistance = WorldRenderFarDistance.Resolve(defaults: m_mirror.Definition.Render),
             // The mirrored world's static placements' meshes.
             MeshDraws = meshDraws,
+            MeshDrawsRevision = meshDrawsRevision,
         };
     }
     /// <inheritdoc/>

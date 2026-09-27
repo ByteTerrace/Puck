@@ -32,9 +32,15 @@ public sealed partial class SdfProgram {
     /// <summary>The low byte of a segment's bound-mode word, which holds the bound mode beside
     /// <see cref="SegmentRigidPlanFlag"/> (<c>SDF_SEGMENT_BOUND_MASK</c>).</summary>
     public const uint SegmentBoundModeMask = 0xFFu;
-    /// <summary>The bits of an instance record's segmentEnd lane that hold the segment range's end; the high bit is
-    /// <see cref="ShadowTransparentInstanceFlag"/> (<c>SDF_INSTANCE_SEGMENT_END_MASK</c>).</summary>
-    public const uint SegmentEndMask = 0x7FFFFFFFu;
+    /// <summary>The bits of an instance record's segmentEnd lane that hold the segment range's end; the two high bits are
+    /// <see cref="ShadowTransparentInstanceFlag"/> and <see cref="CameraHiddenInstanceFlag"/>
+    /// (<c>SDF_INSTANCE_SEGMENT_END_MASK</c>).</summary>
+    public const uint SegmentEndMask = 0x3FFFFFFFu;
+    /// <summary>The per-instance camera-hidden flag, OR'd into the second-highest bit of the instance meta's segmentEnd
+    /// lane (i1.w) for an instance declared <see cref="SdfInstanceRange.CameraHidden"/>: the tile cull leaves it out of
+    /// every camera mask, and mapCore masks it off with <see cref="SegmentEndMask"/>. Segment-directory indices are far
+    /// below 2^30, so the bit is free (<c>SDF_INSTANCE_CAMERA_HIDDEN_BIT</c>).</summary>
+    public const uint CameraHiddenInstanceFlag = 0x40000000u;
     /// <summary>The high bit of a segment's bound mode: the segment owns a host-compiled rigid-leaf plan. The low byte
     /// remains the bound mode (<c>SDF_SEGMENT_RIGID_PLAN</c>).</summary>
     public const uint SegmentRigidPlanFlag = 0x80000000u;
@@ -54,4 +60,17 @@ public sealed partial class SdfProgram {
     /// <summary>The bits of a ShapeBlend instruction's shape lane below <see cref="ShapeDetailFlag"/> and
     /// <see cref="ShapeNoSecondaryFlag"/>: the <see cref="SdfShapeType"/> id (<c>SDF_SHAPE_TYPE_MASK</c>).</summary>
     public const uint ShapeTypeMask = ~(ShapeDetailFlag | ShapeNoSecondaryFlag);
+
+    // An instance's flags for the high bits of its segmentEnd lane: shadow-transparent when its compose only removes
+    // material (a pure Subtraction-family carve, which the sdf.shadow-proxy gather omits so the shadow ray marches the
+    // pre-carve union hull), and camera-hidden when it was declared so.
+    private uint InstanceFlagsOf(SdfInstanceRange instance) =>
+        ((IsShadowTransparentInstance(
+            first: instance.First,
+            end: instance.End
+        )
+            ? ShadowTransparentInstanceFlag
+            : 0u) | (instance.CameraHidden
+            ? CameraHiddenInstanceFlag
+            : 0u));
 }

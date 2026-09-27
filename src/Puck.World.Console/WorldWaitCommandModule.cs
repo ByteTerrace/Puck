@@ -10,8 +10,9 @@ namespace Puck.World;
 /// script honest. Every other verb returns the instant it is submitted (a movement verb only enqueues a segment), so a
 /// read-back on the next line observes a pose one tick into the motion; this verb suspends the drain of the queued lines
 /// behind it until the addressed row's simulation has advanced a stated number of ticks. Its <c>ready</c> form holds
-/// the session until the rendering engine is ready instead (<see cref="IWorldEngineReadiness"/>), so a script that
-/// reads rendered work waits on that fact rather than guessing it from a tick count.
+/// the session until the rendering engine is ready instead (<see cref="IWorldEngineReadiness"/>), and its <c>bakes</c>
+/// form until the presentation's creation bakes are settled (<see cref="IWorldBakeReadiness"/>), so a script that reads
+/// rendered work or a drawn bake waits on that fact rather than guessing it from a tick count.
 /// </summary>
 /// <remarks>
 /// It composes with (rather than replaces) <see cref="TextCommandSource"/>'s deferred-mutation barrier: that barrier
@@ -24,8 +25,11 @@ namespace Puck.World;
 /// <param name="gates">Resolves the addressed instance's tick barrier.</param>
 /// <param name="readiness">The rendering engine's readiness the <c>ready</c> form waits on, or <see langword="null"/> on
 /// a host that composes no renderer, where that form refuses.</param>
-public sealed class WorldWaitCommandModule(IWorldConsoleAuthority authority, IWorldWaitGateResolver gates, IWorldEngineReadiness? readiness = null) : ICommandModule {
-    /// <summary>The longest deadline, in seconds, one <c>world.wait ready</c> may hold a session for.</summary>
+/// <param name="bakes">The creation bakes' readiness the <c>bakes</c> form waits on, or <see langword="null"/> on a host
+/// that bakes nothing, where that form refuses.</param>
+public sealed class WorldWaitCommandModule(IWorldConsoleAuthority authority, IWorldWaitGateResolver gates, IWorldEngineReadiness? readiness = null, IWorldBakeReadiness? bakes = null) : ICommandModule {
+    /// <summary>The longest deadline, in seconds, one <c>world.wait ready</c> or <c>world.wait bakes</c> may hold a
+    /// session for.</summary>
     public const int MaxReadySeconds = 600;
 
     // Ten minutes at the addressed row's fixed step at its FASTEST authorable rate (50400 ticks/second) — far past
@@ -37,7 +41,7 @@ public sealed class WorldWaitCommandModule(IWorldConsoleAuthority authority, IWo
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.wait",
-            description: "Suspends only the issuing text session until the addressed world's simulation has advanced a number of fixed ticks, or until its rendering engine is ready. world.wait ready <seconds> holds the session until the engine has installed its pipeline set and produced its first frame, or the deadline (1..600 seconds) passes, whichever comes first, and reports which on stderr as a line of its own, not a second world.wait answer: '[engine: ready at tick T]', or '[engine: not ready after N seconds, so world.wait released: <reason naming the pipeline build and its progress>]'. The command's one answer is its arming line on stdout, as world.wait <ticks> answers with its release tick. It refuses on a host that composes no renderer. A script that reads rendered work (world.counters gpu) waits on it rather than on a tick count, since a cold driver cache can hold the first frame back for many ticks. world.wait <ticks> — exactly one whole number, 1..144000 (see world.rate for the world's own current step width and completed-tick count). Later work in that session resumes in order at the next command-pump drain after the count is reached. Catch-up steps can overshoot the deadline; this is a tick-based minimum wait, not an exact-tick state snapshot. It waits for TIME only — a preceding mutation is already serialized by the wire's own deferred-mutation barrier. Refuses outright (naming which) while the world is paused or authors rateHz 0 — neither ever produces another completed tick to release on, so world.rate resume would be the very command trapped behind the wait it could never satisfy; arm it only once the world is actually running. A wait already armed when a pause LANDS mid-hold is force-released with a named note on stderr rather than left hanging. Echoes the release tick on success.",
+            description: "Suspends only the issuing text session until the addressed world's simulation has advanced a number of fixed ticks, or until its rendering engine is ready, or until its creation bakes are settled. world.wait ready <seconds> holds the session until the engine has installed its pipeline set and produced its first frame, or the deadline (1..600 seconds) passes, whichever comes first, and reports which on stderr as a line of its own, not a second world.wait answer: '[engine: ready at tick T]', or '[engine: not ready after N seconds, so world.wait released: <reason naming the pipeline build and its progress>]'. The command's one answer is its arming line on stdout, as world.wait <ticks> answers with its release tick. It refuses on a host that composes no renderer. world.wait bakes <seconds> holds the same way until every prototype the presentation last saw is baked, held or refused and none is queued or baking, and reports '[bakes: settled at tick T]' or '[bakes: not settled after N seconds, so world.wait released]'; it refuses on a host that bakes nothing. A script that reads rendered work (world.counters gpu) waits on it rather than on a tick count, since a cold driver cache can hold the first frame back for many ticks. world.wait <ticks> — exactly one whole number, 1..144000 (see world.rate for the world's own current step width and completed-tick count). Later work in that session resumes in order at the next command-pump drain after the count is reached. Catch-up steps can overshoot the deadline; this is a tick-based minimum wait, not an exact-tick state snapshot. It waits for TIME only — a preceding mutation is already serialized by the wire's own deferred-mutation barrier. Refuses outright (naming which) while the world is paused or authors rateHz 0 — neither ever produces another completed tick to release on, so world.rate resume would be the very command trapped behind the wait it could never satisfy; arm it only once the world is actually running. A wait already armed when a pause LANDS mid-hold is force-released with a named note on stderr rather than left hanging. Echoes the release tick on success.",
             handler: (context, args) => {
                 if (
                     (args.Count == 2) &&
@@ -51,9 +55,21 @@ public sealed class WorldWaitCommandModule(IWorldConsoleAuthority authority, IWo
                         context: context
                     );
                 }
+                if (
+                    (args.Count == 2) &&
+                    args[0].Equals(
+                        comparisonType: StringComparison.Ordinal,
+                        other: "bakes"
+                    )
+                ) {
+                    return ArmBakes(
+                        args: args,
+                        context: context
+                    );
+                }
 
                 if (args.Count != 1) {
-                    return CommandResult.Error(output: "[world.wait: expected <ticks>, or ready <seconds>]");
+                    return CommandResult.Error(output: "[world.wait: expected <ticks>, ready <seconds>, or bakes <seconds>]");
                 }
 
                 if (!args.TryUnsignedDigits(
@@ -119,6 +135,39 @@ public sealed class WorldWaitCommandModule(IWorldConsoleAuthority authority, IWo
     // hold itself as the pump polls it. Polling reads only IsReady, so a pending hold allocates nothing; the reason is
     // read only for the report.
     private CommandResult ArmReady(CommandContext context, WireArgs args) {
+        if (readiness is not { } engine) {
+            return CommandResult.Error(output: "[world.wait: refused (this host composes no renderer, so no engine will ever be ready)]");
+        }
+
+        return ArmUntil(
+            args: args,
+            context: context,
+            done: () => engine.IsReady,
+            releasedLine: static seconds => string.Create(provider: CultureInfo.InvariantCulture, handler: $"[engine: not ready after {seconds} seconds, so world.wait released: "),
+            what: "the engine is ready",
+            readyLine: static tick => string.Create(provider: CultureInfo.InvariantCulture, handler: $"[engine: ready at tick {tick}]"),
+            reason: () => (engine.NotReadyReason ?? "no reason given")
+        );
+    }
+    // Holds the issuing session until the bakes are settled or the deadline passes, and reports which, once.
+    private CommandResult ArmBakes(CommandContext context, WireArgs args) {
+        if (bakes is not { } schedule) {
+            return CommandResult.Error(output: "[world.wait: refused (this host bakes nothing, so no bake will ever settle)]");
+        }
+
+        return ArmUntil(
+            args: args,
+            context: context,
+            done: () => schedule.IsSettled,
+            releasedLine: static seconds => string.Create(provider: CultureInfo.InvariantCulture, handler: $"[bakes: not settled after {seconds} seconds, so world.wait released"),
+            what: "the bakes are settled",
+            readyLine: static tick => string.Create(provider: CultureInfo.InvariantCulture, handler: $"[bakes: settled at tick {tick}]"),
+            reason: null
+        );
+    }
+    // The hold both forms arm: polls `done` each drain (a delegate read that allocates nothing), and on release reports
+    // once on stderr whether it came true or the deadline passed, naming `reason` when one is given.
+    private CommandResult ArmUntil(CommandContext context, WireArgs args, Func<bool> done, string what, Func<ulong, string> readyLine, Func<ulong, string> releasedLine, Func<string>? reason) {
         if (
             !args.TryUnsignedDigits(
                 index: 1,
@@ -128,10 +177,6 @@ public sealed class WorldWaitCommandModule(IWorldConsoleAuthority authority, IWo
             (seconds > MaxReadySeconds)
         ) {
             return CommandResult.Error(output: $"[world.wait: '{args[1]}' is not a whole number of seconds in 1..{MaxReadySeconds}]");
-        }
-
-        if (readiness is not { } engine) {
-            return CommandResult.Error(output: "[world.wait: refused (this host composes no renderer, so no engine will ever be ready)]");
         }
 
         if (!authority.TryResolve(
@@ -155,16 +200,12 @@ public sealed class WorldWaitCommandModule(IWorldConsoleAuthority authority, IWo
                 return false;
             }
 
-            if (engine.IsReady) {
-                Console.Error.WriteLine(value: string.Create(
-                    provider: CultureInfo.InvariantCulture,
-                    handler: $"[engine: ready at tick {gate.Tick}]"
-                ));
+            if (done()) {
+                Console.Error.WriteLine(value: readyLine(arg: gate.Tick));
             } else if (Stopwatch.GetTimestamp() >= deadline) {
-                Console.Error.WriteLine(value: string.Create(
-                    provider: CultureInfo.InvariantCulture,
-                    handler: $"[engine: not ready after {seconds} seconds, so world.wait released: {(engine.NotReadyReason ?? "no reason given")}]"
-                ));
+                Console.Error.WriteLine(value: ((reason is null)
+                    ? (releasedLine(arg: seconds) + "]")
+                    : (releasedLine(arg: seconds) + reason() + "]")));
             } else {
                 return true;
             }
@@ -176,7 +217,8 @@ public sealed class WorldWaitCommandModule(IWorldConsoleAuthority authority, IWo
 
         return new CommandResult(Output: string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"[world.wait: holding until the engine is ready, at most {seconds} seconds, from tick {gate.Tick}]"
+            handler: $"[world.wait: holding until {what}, at most {seconds} seconds, from tick {gate.Tick}]"
         ));
     }
+
 }

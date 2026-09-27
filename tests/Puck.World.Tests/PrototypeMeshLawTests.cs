@@ -145,7 +145,7 @@ public sealed class PrototypeMeshLawTests {
     }
     /// <summary>An animated placement's mesh draws from the stamp pool at the placement's root, the pose a static
     /// placement's draw takes (scale 2, yaw 90°, position (2, 0, -3)), and not from the static path. A frame in which
-    /// nothing moved hands the engine the list it already has.</summary>
+    /// nothing moved hands the engine the list and revision it already has.</summary>
     [Fact]
     public void AnAnimatedPlacementDrawsItsMeshAtItsRoot() {
         var definition = Animated(mesh: Quad());
@@ -159,11 +159,47 @@ public sealed class PrototypeMeshLawTests {
         Assert.Equal(expected: (Assert.Single(collection: new Scene(definition: Animated(mesh: (Quad() with { Material = 0 }))).Frame()).Material + 1), actual: draw.Material);
         AssertNear(expected: new Vector3(x: 2f, y: 0f, z: -1f), actual: Vector3.Transform(position: draw.Mesh.Positions.Span[1], matrix: draw.ObjectToWorld));
         AssertNear(expected: new Vector3(x: 2f, y: 2f, z: -3f), actual: Vector3.Transform(position: draw.Mesh.Positions.Span[3], matrix: draw.ObjectToWorld));
+        var revision = scene.Revision;
+
         Assert.Same(expected: first, actual: scene.Frame());
+        Assert.Equal(expected: revision, actual: scene.Revision);
         Assert.Empty(collection: new Scene(definition: Animated(mesh: null)).Frame());
     }
+    /// <summary>A moving mesh stamp allocates nothing per frame: over frames that move the body under an attached mesh
+    /// placement, the scene allocates exactly what it does for the same placement without a mesh, because the pool and
+    /// every composition rewrite their draw lists in place under a revision.</summary>
+    [Fact]
+    public void AMovingMeshStampAllocatesNothingPerFrame() {
+        static long Allocated(WorldPrototypeMesh? mesh) {
+            var scene = new Scene(definition: Attached(mesh: mesh));
+
+            void Move(int frame) {
+                scene.Deliver(
+                    position: new Vector3(x: (frame * 0.25f), y: 0f, z: 0f),
+                    tick: ((ulong)(frame + 1))
+                );
+                _ = scene.Frame();
+            }
+
+            for (var frame = 0; (frame < 64); frame++) {
+                Move(frame: frame);
+            }
+
+            var before = GC.GetAllocatedBytesForCurrentThread();
+
+            for (var frame = 64; (frame < 96); frame++) {
+                Move(frame: frame);
+            }
+
+            return (GC.GetAllocatedBytesForCurrentThread() - before);
+        }
+
+        var meshless = Allocated(mesh: null);
+
+        Assert.Equal(expected: meshless, actual: Allocated(mesh: Quad()));
+    }
     /// <summary>An attached placement's mesh draws at its body's pose composed with the facet's offset (0, 1, 0), under
-    /// the row's scale 2, and follows the body: a moved body hands the engine a new list with the draw moved. While the
+    /// the row's scale 2, and follows the body: a moved body moves the draws' revision with the draw moved. While the
     /// body is inactive the row draws nothing.</summary>
     [Fact]
     public void AnAttachedPlacementsMeshFollowsItsBody() {
@@ -182,7 +218,9 @@ public sealed class PrototypeMeshLawTests {
         // the body at (5, 0, 0).
         AssertNear(expected: new Vector3(x: 5f, y: 3f, z: 0f), actual: Vector3.Transform(position: rest.Mesh.Positions.Span[3], matrix: rest.ObjectToWorld));
 
-        var still = scene.Frame();
+        _ = scene.Frame();
+
+        var still = scene.Revision;
 
         scene.Deliver(
             position: new Vector3(x: 8f, y: 0f, z: 0f),
@@ -191,7 +229,7 @@ public sealed class PrototypeMeshLawTests {
 
         var moved = scene.Frame();
 
-        Assert.NotSame(expected: still, actual: moved);
+        Assert.NotEqual(expected: still, actual: scene.Revision);
         Assert.NotEqual(expected: rest.ObjectToWorld, actual: Assert.Single(collection: moved).ObjectToWorld);
     }
     /// <summary>A static placement reaches the mesh draws once, as the prototype's triangles turned into the engine
@@ -292,13 +330,17 @@ public sealed class PrototypeMeshLawTests {
 
             return m_dresser.MeshDraws;
         }
+        // The revision of the draws the last frame composed.
+        public long Revision => m_dresser.MeshDrawsRevision;
     }
     // Keeps the composed mesh draws each frame hands it.
     private sealed class RecordingDresser : ISdfFrameDresser {
         public IReadOnlyList<SdfMeshDraw> MeshDraws { get; private set; } = [];
+        public long MeshDrawsRevision { get; private set; }
 
-        public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
+        public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, long meshDrawsRevision, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
             MeshDraws = meshDraws;
+            MeshDrawsRevision = meshDrawsRevision;
 
             return new SdfFrame(
                 Program: program,
@@ -308,6 +350,7 @@ public sealed class PrototypeMeshLawTests {
             ) {
                 DynamicTransforms = transforms,
                 MeshDraws = meshDraws,
+                MeshDrawsRevision = meshDrawsRevision,
                 MovedTransforms = moved,
             };
         }

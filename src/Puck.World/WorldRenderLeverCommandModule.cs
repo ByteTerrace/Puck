@@ -62,6 +62,10 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
             : "off")}]";
     }
     // The world.far-field echo.
+    private static string BakesEcho(WorldRenderSettings settings) =>
+        $"[world.bakes: {(settings.Bakes
+            ? "on"
+            : "off")}]";
     private static string FarFieldEcho(WorldRenderSettings settings) {
         return $"[world.far-field: bound {(settings.FarBound
             ? "on"
@@ -424,6 +428,36 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
                     formatEcho: () => new CommandResult(Output: $"[world.ao: {(settings.AmbientOcclusion
                     ? "on"
                     : "off")}]")
+                );
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.bakes",
+            description: "Draws each prototype's ready bake in place of its field, or its field again: world.bakes [on|off|status]. Presentation only (the field still answers contact, casts shadows and occludes); a prototype whose bake is not ready yet draws its field and switches when it is (world.counters counts the switch as sdf.bakes.drawn). Ships off.",
+            handler: (context, args) => {
+                if (
+                    (args.Count == 0) ||
+                    args.Is(
+                    index: 0,
+                    value: "status"
+                )
+                ) {
+                    return new CommandResult(Output: BakesEcho(settings: settings));
+                }
+
+                if (ParseOnOff(token: args[0]) is not { } state) {
+                    return CommandResult.Error(output: $"[world.bakes: unknown '{args.Tail(start: 0)}' — on|off|status]");
+                }
+
+                return SubmitLever(
+                    link: link,
+                    principal: context.Principal,
+                    name: WorldSessionLevers.Bakes,
+                    a: (state
+                    ? 1.0
+                    : 0.0),
+                    formatEcho: () => new CommandResult(Output: BakesEcho(settings: settings))
                 );
             }
         );
