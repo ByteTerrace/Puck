@@ -5,7 +5,8 @@ namespace Puck.Shaders.Tests;
 
 /// <summary>
 /// Laws for the <c>puck.render.graph.v1</c> document: a graph of shader and package passes validates and plans through
-/// the one pipeline planner, each package refusal is named, a planner refusal passes through with its own code, a view
+/// the one pipeline planner, a fragment package's passes spliced in place of the pass naming it, each package refusal is
+/// named, a planner refusal passes through with its own code, a view
 /// reading its own output goes through the planner's history resource, a package pass, which only a graph's packages
 /// member declares, plans as its own kind over its compute shape, and every checked-in graph document plans alike through a
 /// pipeline host, which offers no package, and through the engine's catalog.
@@ -48,33 +49,43 @@ public sealed class RenderGraphDocumentLawTests {
     [Fact]
     public void AGraphOfShaderAndPackagePassesPlansThroughThePipelinePlanner() {
         var plan = Plan(json: Graph);
+        var world = SdfWorldPackage.Fragment.Passes.Select(selector: static part => RenderGraphPackageFragment.Spliced(
+            name: part.Name,
+            pass: "world"
+        )).ToArray();
+        var grade = world.Length;
+        var hud = (grade + 1);
 
+        // The fragment package's passes are spliced in place of the pass naming it.
         Assert.Equal(
-            expected: ["world", "grade", "hud"],
+            expected: [.. world, "grade", "hud"],
             actual: plan.Steps.Select(selector: static step => step.Name)
         );
-        Assert.Equal(expected: RenderGraphPackageCatalog.SdfWorld, actual: plan.Steps[0].Package?.Id);
-        Assert.Null(@object: plan.Steps[1].Package);
-        Assert.Equal(expected: RenderGraphPackageCatalog.Overlay, actual: plan.Steps[2].Package?.Id);
+        Assert.All(
+            action: static step => Assert.Equal(expected: RenderGraphPackageCatalog.SdfWorld, actual: step.Package?.Id),
+            collection: plan.Steps.Take(count: grade)
+        );
+        Assert.Null(@object: plan.Steps[grade].Package);
+        Assert.Equal(expected: RenderGraphPackageCatalog.Overlay, actual: plan.Steps[hud].Package?.Id);
         Assert.Equal(expected: ["screen"], actual: plan.Inputs);
         Assert.Equal(expected: ["final"], actual: plan.Outputs);
         Assert.Equal(
             expected: ShaderPipelinePassKind.Package,
-            actual: plan.Pipeline.Passes[2].Kind
+            actual: plan.Pipeline.Passes[hud].Kind
         );
-        Assert.Equal(expected: RenderGraphPackageCatalog.Overlay, actual: plan.Pipeline.Passes[2].Package?.Package);
-        Assert.Null(@object: plan.Pipeline.Passes[2].Declaration);
+        Assert.Equal(expected: RenderGraphPackageCatalog.Overlay, actual: plan.Pipeline.Passes[hud].Package?.Package);
+        Assert.Null(@object: plan.Pipeline.Passes[hud].Declaration);
         Assert.Equal(
             expected: ShaderPipelinePassKind.Compute,
-            actual: plan.Pipeline.Passes[1].Kind
+            actual: plan.Pipeline.Passes[grade].Kind
         );
-        Assert.Equal(expected: "grade", actual: plan.Pipeline.Passes[1].Declaration?.Name);
+        Assert.Equal(expected: "grade", actual: plan.Pipeline.Passes[grade].Declaration?.Name);
         Assert.Equal(
             expected: ["grade"],
             actual: plan.Pipeline.Definition.ShaderPasses.Select(selector: static pass => pass.Name)
         );
-        Assert.Equal(expected: [0], actual: plan.Pipeline.Passes[1].Dependencies);
-        Assert.Equal(expected: [1], actual: plan.Pipeline.Passes[2].Dependencies);
+        Assert.Equal(expected: [(grade - 1)], actual: plan.Pipeline.Passes[grade].Dependencies);
+        Assert.Equal(expected: [grade], actual: plan.Pipeline.Passes[hud].Dependencies);
         Assert.All(
             action: static step => Assert.NotEmpty(collection: step.Planned.Accesses),
             collection: plan.Steps
@@ -159,7 +170,7 @@ public sealed class RenderGraphDocumentLawTests {
 
         Assert.True(condition: storage.History);
         Assert.Contains(
-            collection: plan.Pipeline.Passes[1].Accesses,
+            collection: plan.Pipeline.Passes.Single(predicate: static pass => (pass.Name == "grade")).Accesses,
             filter: static access => ((access.Version == "final") && access.PreviousFrame)
         );
         Assert.Contains(

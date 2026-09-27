@@ -9,6 +9,7 @@ using Puck.DirectX.Interop;
 using Puck.Platform;
 using Puck.Platform.Probes;
 using Puck.Hosting;
+using Puck.Shaders;
 using Puck.World.Client;
 
 namespace Puck.World;
@@ -193,10 +194,10 @@ internal sealed partial class WorldScreenBinder {
         }
 
         var feed = GetOrAddViewExport(camera: camera);
-        var node = (ViewProducerOf(name: feed.Name) as CameraViewProducer)?.Node;
-        var handle = (node?.ExportSharedHandle ?? 0);
+        var image = Runtime?.NodeOf(instance: feed.Name)?.ExportedImage;
+        var handle = (image?.SharedHandle ?? 0);
 
-        generation = node?.ExportGeneration;
+        generation = image;
 
         if (
             (0 == handle) ||
@@ -218,7 +219,7 @@ internal sealed partial class WorldScreenBinder {
             feed.Input = new ProbeKernelInput.Ring(
                 Format: GpuPixelFormat.R8G8B8A8Unorm,
                 Height: ((int)feed.Height),
-                SharedFenceHandle: node!.ExportFenceHandle,
+                SharedFenceHandle: image!.SharedFenceHandle,
                 SharedTargetHandles: [handle],
                 Slots: feed.Slots,
                 Width: ((int)feed.Width)
@@ -241,8 +242,8 @@ internal sealed partial class WorldScreenBinder {
             : 1
         );
     }
-    /// <summary>Drops a view export requested through <see cref="TryGetViewExport"/> and rebuilds the view's engine
-    /// without export on its next resolve. A camera still filmed by a jumbotron screen keeps rendering (the release
+    /// <summary>Drops a view export requested through <see cref="TryGetViewExport"/>, so the view's node renders into
+    /// images of its own again from its next film. A camera still filmed by a jumbotron screen keeps rendering (the release
     /// only stops the export); one no screen films is released entirely, matching
     /// <see cref="ReleaseOrphanedCameraView"/>'s own orphan contract.</summary>
     /// <param name="cameraName">The <c>cameras[]</c> row name.</param>
@@ -282,9 +283,9 @@ internal sealed partial class WorldScreenBinder {
         }
     }
     // Retires the export's publication, so no reader acquires the image again, and stops its registration exporting: the
-    // view's next frame replaces the exporting engine with one rendering into images of its own, so nothing writes the
-    // exported image again. It never waits: a reader still holding the image finishes with it on its own device, which
-    // keeps its own reference to the shared texture and fence.
+    // view's node renders into images of its own again from its next frame, so nothing writes the exported image again.
+    // It never waits: a reader still holding the image finishes with it on its own device, which keeps its own reference
+    // to the shared texture and fence.
     private void Detach(ViewExportFeed feed) {
         feed.Slots.Retire();
 
@@ -292,9 +293,7 @@ internal sealed partial class WorldScreenBinder {
             key: feed.Name,
             value: out var registration
         )) {
-            registration.EndExportWrite = null;
-            registration.ExportFactory = null;
-            registration.TryBeginExportWrite = null;
+            registration.Export = null;
         }
     }
     // Registers (idempotent) the camera's view for export — the same registration a screen would show
@@ -320,7 +319,7 @@ internal sealed partial class WorldScreenBinder {
             key: camera.Name,
             value: out var existing
         )) {
-            if (registration.ExportFactory is not null) {
+            if (registration.Export is not null) {
                 return existing;
             }
 
@@ -331,24 +330,23 @@ internal sealed partial class WorldScreenBinder {
         var width = camera.RenderWidth;
         var height = camera.RenderHeight;
         var feed = new ViewExportFeed(
+            create: (m_hostsOnDirectX
+                ? device => new DirectXGpuSurfaceExportFactory(deviceContext: ((DirectXDeviceContext)device)).CreateSharedComputeImage(
+                    format: GpuPixelFormat.R8G8B8A8Unorm,
+                    height: height,
+                    width: width
+                )
+                : device => CreateImportedViewExport(
+                    device: device,
+                    height: height,
+                    width: width
+                )),
             height: height,
             name: name,
             width: width
         );
 
-        registration.ExportFactory = (m_hostsOnDirectX
-            ? device => new DirectXGpuSurfaceExportFactory(deviceContext: ((DirectXDeviceContext)device)).CreateSharedComputeImage(
-                format: GpuPixelFormat.R8G8B8A8Unorm,
-                height: height,
-                width: width
-            )
-            : device => CreateImportedViewExport(
-                device: device,
-                height: height,
-                width: width
-            ));
-        registration.EndExportWrite = feed.EndWrite;
-        registration.TryBeginExportWrite = feed.Slots.TryBeginWrite;
+        registration.Export = feed;
         m_viewExports[camera.Name] = feed;
         ReconcileViews();
 
@@ -512,7 +510,7 @@ internal sealed partial class WorldScreenBinder {
             feed.Release();
         }
     }
-    // No GPU teardown of its own — every export's image is owned by its view's engine, which the render graph disposes.
+    // No GPU teardown of its own — every export's image is owned by its view's node, which the render graph disposes.
     // Clearing the map only drops this binder's own bookkeeping.
     private void DisposeViewExports() {
         foreach (var feed in m_viewExports.Values) {
@@ -668,10 +666,9 @@ internal sealed partial class WorldScreenBinder {
             m_targetDevice.RemoveDependent();
         }
     }
-    // One camera's export state, keyed by camera name: the registration it exports, the extent its image was made at, and
-    // the one-image publication its readers share. It carries no GPU handle of its own — the view's engine's exported
-    // handle, fence and identity are read fresh each call.
-    private sealed class ViewExportFeed(string name, uint width, uint height) {
+    // A camera view's export: the image its node renders into, created on the render device, which a probe's kernel host
+    // reads through the ring's latest completed slot.
+    private sealed class ViewExportFeed(string name, uint width, uint height, Func<IGpuDeviceContext, IGpuExportableImage> create) : IShaderPipelineOutputExport {
         public object? CompletedGeneration { get; private set; }
 
         public uint Height { get; } = height;
@@ -683,17 +680,19 @@ internal sealed partial class WorldScreenBinder {
         public SingleSlotPublication Slots { get; } = new();
         public uint Width { get; } = width;
 
-        // Publishes the identity of the engine a completed frame rendered on before the ring's ready state. A failed first
-        // submission after device loss may preserve an older readable image, but it must never bless the replacement
-        // engine's new handle as completed.
-        public void EndWrite(bool completed, object? generation, ulong fenceValue) {
-            if (completed) {
-                CompletedGeneration = generation;
+        public IGpuExportableImage Create(IGpuDeviceContext device) => create(arg: device);
+        public bool TryBeginWrite() => Slots.TryBeginWrite();
+        // Publishes the image a completed frame rendered into before the ring's ready state. A failed first submission
+        // after device loss may preserve an older readable image, but it must never bless the replacement image as
+        // completed.
+        public void EndWrite(bool written, IGpuExportableImage? image, ulong writtenValue) {
+            if (written) {
+                CompletedGeneration = image;
             }
 
             Slots.EndWrite(
-                completed: completed,
-                fenceValue: fenceValue
+                completed: written,
+                fenceValue: writtenValue
             );
         }
     }

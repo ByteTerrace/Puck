@@ -15,11 +15,11 @@ namespace Puck.World.Tests;
 
 /// <summary>
 /// CONTRACT UNDER TEST: the frame thread never blocks on GPU pipeline creation. A host pump drains the console and then
-/// produces a frame from the SDF engine node, the way the windowed and offscreen hosts do; the node's pipeline factory
-/// blocks every creation until the law releases it, which is how a cold driver cache behaves under load. While that
-/// build is held, every produced frame returns at once with nothing new to present, console lines keep being answered,
+/// prepares a frame of the world's SDF residency, as a view's first pass of the frame does; the residency's pipeline
+/// factory blocks every creation until the law releases it, which is how a cold driver cache behaves under load. While
+/// that build is held, every prepared frame returns at once with no tables to render, console lines keep being answered,
 /// and a <c>pipeline.wait</c> armed through a text session reaches its deadline and reports it. Released, the build
-/// completes and the node renders. A release during the build — a device loss, or the last lease given up — waits only
+/// completes and the residency's tables are built. A release during the build — a device loss, or the last lease given up — waits only
 /// for the pipelines already in the driver, at most <see cref="SdfWorldPipelines.BuildConcurrency"/> of them, counted
 /// through the factory and never timed.
 /// </summary>
@@ -72,11 +72,12 @@ public sealed class SdfPipelineBuildLivenessLawTests {
             onResult: (line, _) => answered.Add(item: line),
             principal: Principal.Console
         );
-        using var node = new SdfEngineNode(
+        using var node = new SdfWorldResidency(
             brickPoolVoxelCapacity: 0,
             frameSource: new FixedFrameSource(frame: Frame()),
             height: Extent,
             kernels: SdfTestPipelines.Kernels(),
+            name: "world",
             pipelines: SdfTestPipelines.Cache(),
             width: Extent
         );
@@ -101,7 +102,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
         void Pump() {
             source.Collect();
 
-            if (!node.Produce(context: in context, height: Extent, width: Extent)) {
+            if (!node.Produce(context: in context)) {
                 emptyFrames++;
             }
         }
@@ -156,7 +157,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
             },
             timeout: TimeSpan.FromSeconds(value: 30)
         ));
-        Assert.True(condition: node.Produce(context: in context, height: Extent, width: Extent));
+        Assert.True(condition: node.Produce(context: in context));
     }
     [Fact]
     public void ADeviceLossWaitsOnlyForThePipelinesInTheDriverAndTheNextFrameStartsAnother() {
@@ -165,11 +166,12 @@ public sealed class SdfPipelineBuildLivenessLawTests {
         var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version) {
             BeforeComputePipeline = driver.Enter,
         };
-        using var node = new SdfEngineNode(
+        using var node = new SdfWorldResidency(
             brickPoolVoxelCapacity: 0,
             frameSource: new FixedFrameSource(frame: Frame()),
             height: Extent,
             kernels: SdfTestPipelines.Kernels(),
+            name: "world",
             pipelines: cache,
             width: Extent
         );
@@ -189,7 +191,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
             TargetWidth: Extent
         );
 
-        Assert.False(condition: node.Produce(context: in context, height: Extent, width: Extent));
+        Assert.False(condition: node.Produce(context: in context));
         driver.WaitUntilFull();
 
         // The loss cancels the build inside the cache's gate before the set leaves the cache, so once the cache no
@@ -212,7 +214,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
 
         Assert.True(condition: SpinWait.SpinUntil(
             condition: () => {
-                _ = node.Produce(context: in context, height: Extent, width: Extent);
+                _ = node.Produce(context: in context);
 
                 return node.IsReady;
             },

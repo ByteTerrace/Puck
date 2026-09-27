@@ -31,14 +31,15 @@ internal sealed class WorldOverlayGlyphs {
     /// <summary>Gets the loaded pack, or <see langword="null"/> when none could be loaded.</summary>
     public OverlayGlyphSdfPack? Pack { get; }
 }
-/// <summary>Builds the render root both GPU presentation shapes present and capture: the SDF engine node as the
-/// <c>sdf.world</c> producer, the graph's packages (<c>place</c>, every post-process package a <c>views.post</c> row may
-/// name, and the overlay when the shape draws one), and the <see cref="RenderGraphRuntime"/> that runs the document's
+/// <summary>Builds the render root both GPU presentation shapes present and capture: the world's SDF residency and the
+/// <c>sdf.world</c> passes every view renders through, the graph's packages (<c>place</c>, every post-process package a
+/// <c>views.post</c> row may name, and the overlay when the shape draws one), and the <see cref="RenderGraphRuntime"/>
+/// that runs the document's
 /// instances — its <c>views.graphs</c> rows beside the default graph composition synthesizes, or the rows alone under an
 /// authored <c>views.root</c> — behind the node the host produces frames from. The <see cref="WorldViewGraphHost"/>
 /// drives the runtime from then on, frame by frame.</summary>
 internal static class WorldRenderRoot {
-    /// <summary>Builds the render root and records it, and the engine node, on the <see cref="WorldRenderProbe"/>.</summary>
+    /// <summary>Builds the render root and records it, and the world's residency, on the <see cref="WorldRenderProbe"/>.</summary>
     /// <param name="sp">The composed services.</param>
     /// <param name="overlay">The overlay package the root graph draws, or <see langword="null"/> when it draws
     /// none.</param>
@@ -55,7 +56,7 @@ internal static class WorldRenderRoot {
         var definition = sp.GetRequiredService<WorldDefinition>();
         var graph = sp.GetRequiredService<WorldRootGraph>();
         var host = sp.GetRequiredService<WorldViewGraphHost>();
-        // The composition's one pipeline cache, which the engine node and every view's engine lease their pipeline sets
+        // The composition's one pipeline cache, which the world's residency and every view's lease their pipeline sets
         // from; each records through the services of the device context it renders on.
         var pipelines = sp.GetRequiredService<SdfWorldPipelineCache>();
 
@@ -96,7 +97,7 @@ internal static class WorldRenderRoot {
             throw new InvalidOperationException(message: $"The document's render graph instances were refused: {composeReason}");
         }
 
-        var engine = SdfWorldRenderBuilder.Build(
+        var residency = SdfWorldRenderBuilder.Build(
             pipelines: pipelines,
             spec: new SdfWorldRenderSpec(
                 FrameSource: frameSource,
@@ -109,28 +110,26 @@ internal static class WorldRenderRoot {
                 ProgramWordCapacity = frameSource.ProgramWordCapacity,
                 // The diegetic screens: the instance each one reads, and the light each casts into the room.
                 ScreenSources = binder,
-                ViewportCapacity = WorldRootGraph.ViewsOf(views: definition.Views),
             }
         );
         var packages = new RenderGraphPackageRecorders(regionCopy: sp.GetRequiredService<GpuRegionCopyPass>());
 
-        // The world's external instances are its views: a camera view or a session the binder registered renders through
-        // an engine node of its own, filming the frame the world's node renders; otherwise the first is the engine node,
-        // which renders every split-screen view, and each later one the node's producer for that view. The runtime owns
-        // every producer from here on.
-        binder.ViewHost = engine;
-        packages.RegisterProducer(
-            factory: context => (binder.TryViewProducer(
-                context: context,
-                producer: out var view
+        // The world's views are sdf.world instances: a camera view or a session the binder registered renders a residency
+        // of its own, filming the frame the world renders; every other instance renders a view of the world's residency,
+        // the first view unless its name numbers a later one (WorldViewNames).
+        binder.ViewHost = residency;
+        packages.Register(
+            factory: new SdfWorldPasses(resolve: instance => (binder.TryResolveView(
+                name: instance,
+                view: out var view
             )
                 ? view
-                : ((WorldViewNames.ViewOf(instance: context.Instance) is { } seat)
-                    ? engine.ViewProducer(view: seat)
-                    : engine)),
+                : new SdfWorldView(
+                    Residency: residency,
+                    View: (WorldViewNames.ViewOf(instance: instance) ?? 0)
+                ))),
             package: RenderGraphPackageCatalog.SdfWorld
         );
-        frameSource.ViewRendered = engine.HasViewOutput;
         // The root places each pane where the host's composer shows it this frame.
         packages.Register(
             factory: new PlacePackage(placements: host),
@@ -181,12 +180,18 @@ internal static class WorldRenderRoot {
             runtime: out var runtime,
             set: set
         )) {
-            engine.Dispose();
+            residency.Dispose();
 
             throw new InvalidOperationException(message: $"The document's render graph was refused: {refusal.Code}: {refusal.Message}");
         }
 
         binder.Runtime = runtime;
+        // A view the root places shows once its instance has completed an image, so a capture is never served over a
+        // stand-in.
+        frameSource.ViewRendered = view => runtime.TryLatestImage(
+            image: out _,
+            instance: WorldRootGraph.ProducerOf(view: view)
+        );
 
         var overlaid = (overlay is not null);
 
@@ -213,16 +218,17 @@ internal static class WorldRenderRoot {
             // The host rewrites its footprint and root lists in place, so the node reads those lists rather than the copy
             // its constructor takes.
             Footprints = host.Footprints,
-            // The binder's GPU holdings (camera feeds, capture fills) are created before the device context, so the
-            // container would dispose them after it; the root's teardown releases them while the device is alive.
-            Holdings = [binder],
+            // The binder's GPU holdings (camera feeds, capture fills, the views' residencies) and the world's residency are
+            // created before the device context, so the container would dispose them after it; the root's teardown releases
+            // them, after the runtime's passes gave back their holds, while the device is alive.
+            Holdings = [binder, residency],
             Prepare = frameSource.PrepareGraph,
             Roots = host.Roots,
         };
         var probe = sp.GetRequiredService<WorldRenderProbe>();
 
         probe.Device = device;
-        probe.Node = engine;
+        probe.Residency = residency;
         probe.Root = root;
         sp.GetRequiredService<WorldPostPasses>().Attach(
             graph: () => host.Synthesized,

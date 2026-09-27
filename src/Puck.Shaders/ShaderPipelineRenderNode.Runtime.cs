@@ -141,6 +141,8 @@ public sealed partial class ShaderPipelineRenderNode {
         public RenderGraphPackageResource[]? PackageOutputs;
         public GpuImageLayout[]? PackageInputLayouts;
         public GpuImageLayout[]? PackageOutputLayouts;
+        // The version an indirectly dispatched package pass reads its group counts from, or null.
+        public string? PackageArguments;
 
         public void Dispose(GpuDeviceServices gpu, IGpuDeviceContext device) {
             Package?.Dispose();

@@ -56,6 +56,7 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
         m_work.Invalidate();
         m_revision++;
         m_work.Configure(
+            passClasses: m_passClasses,
             passLabels: m_passLabels,
             revision: m_revision
         );

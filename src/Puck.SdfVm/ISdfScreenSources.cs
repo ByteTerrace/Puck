@@ -5,7 +5,7 @@ using Puck.Hosting;
 namespace Puck.SdfVm;
 
 /// <summary>
-/// What each diegetic screen an <see cref="SdfEngineNode"/> renders shows: the render-graph instance whose image it
+/// What each diegetic screen an <see cref="SdfWorldResidency"/> renders shows: the render-graph instance whose image it
 /// samples, a source's or a view's, the mapping its face is drawn from, and the light it casts into the room. A screen
 /// binds the image the render graph hands the node for that instance when it produces
 /// (<see cref="RenderGraphExternalReads"/>), under the lease the node holds until the submission that samples it has

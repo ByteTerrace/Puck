@@ -426,9 +426,9 @@ they have. A self-reference goes through the planner's previous-frame edge, so a
 mirror shows the previous frame, and a same-frame cycle is refused because no
 order of passes can satisfy it. The main view, the panes, the split-screen
 seats, and every camera and session a screen shows run as graph instances this
-way; a camera view is an external `sdf.world` instance that reads every view,
-itself included, at its previous frame, and whose engine renders into another
-output when one of its own screens samples the current one.
+way; a camera view is an `sdf.world` instance that reads every view, itself
+included, at its previous frame, so a screen showing its own view samples the
+output completed before this frame and never the one being written.
 
 **Post passes are passes of the synthesized root graph.** A world names them in
 `views.post`, each row written the way a graph document's `packages` row is,
@@ -495,27 +495,28 @@ library held the one resample pass, now the `place` package. The pixelate
 interface fixture under `tests/Puck.Shaders.Tests` is its own copy
 and stays with the spike.
 
-**Split-screen seats share one SDF engine, and each seat renders through its
-own dispatch set into its own output.** One `SdfWorldEngine` serves a world.
-It renders each composed view as its own set of dispatches, sky through views,
-into that view's own output image. The graph places each output into its seat
-rect with the `place` package. Everything a frame's views have in common is
-therefore shared by construction: the brick pool, the program upload, the glyph
-atlas, screen sources and their leases, lights, decals and volumes. Three
-alternatives with one engine per seat were rejected:
+**Split-screen seats share one SDF residency, and each seat renders as its own
+instance into its own output.** One `SdfWorldResidency` serves a world. Each
+composed view is an `sdf.world` instance of the render graph that runs the
+package's passes, sky through views, over the residency's tables into its own
+output. The graph places each output into its seat rect with the `place`
+package. Everything a frame's views have in common is therefore shared by
+construction: the brick pool, the program upload, the glyph atlas, screen
+sources, lights, decals and volumes. Three alternatives with one residency per
+seat were rejected:
 
-- A seat engine with no brick pool, the way offscreen camera views film, draws
-  carves through the uncarved-hull fallback. The seats would then visibly differ
-  from the first one, which keeps the baked bricks.
-- A pool per seat engine, with every bake requested on each, costs N times the
-  pool memory and N times the bake dispatches.
-- Seat engines binding the first engine's pool read-only need a cross-engine
-  hazard and ordering design. That design is P14's `sdf.bricks` buffer edge, not
-  split-screen's.
+- A seat residency with no brick pool, the way offscreen camera views film,
+  draws carves through the uncarved-hull fallback. The seats would then visibly
+  differ from the first one, which keeps the baked bricks.
+- A pool per seat residency, with every bake requested on each, costs N times
+  the pool memory and N times the bake dispatches.
+- Seat residencies binding the first residency's pool read-only need a
+  cross-residency hazard and ordering design. That design is P14's `sdf.bricks`
+  buffer edge, not split-screen's.
 
-N seats cost N dispatch sets rather than one dispatch whose Z dimension is N,
-and the counted work shows that cost. Layered views return only if the counts
-call for them.
+N seats cost N instances' passes rather than one dispatch whose Z dimension is
+N, and the counted work shows that cost. Layered views return only if the
+counts call for them.
 
 **`SdfEnvironment` folds into the generated frame block.** A separate
 environment packing is a second hand-kept layout beside the frame data, and

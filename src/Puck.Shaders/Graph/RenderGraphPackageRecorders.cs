@@ -39,7 +39,14 @@ public readonly record struct RenderGraphPackageResource(string Version, ShaderP
 /// stand for its inputs, and when an input is a host's image in another layout than the instance publishes in: the
 /// instance publishes every image in its output layout, and a host's image is handed back in the host's own, so the
 /// recording must draw.</param>
-public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuRecorder Recorder, int Slot, uint Width, uint Height, ReadOnlySpan<RenderGraphPackageResource> Inputs, ReadOnlySpan<RenderGraphPackageResource> Outputs, Span<byte> PassBlock, LeaseRetireList Leases, FrameContext Context, bool MayStandIn) {
+/// <param name="Arguments">The buffer holding an indirect dispatch's group counts, which the pass's planned barrier left
+/// in the indirect-argument state, or <see langword="null"/> for a pass that is not dispatched indirectly.</param>
+/// <param name="Reads">The latest completed image of each instance the pass's instance reads that its graph binds to no
+/// version, such as the sources an SDF view's screens show, or <see langword="null"/> when there is none. A recording
+/// takes the lease of each image it samples (<see cref="RenderGraphExternalReads.Take"/>) and holds it in
+/// <paramref name="Leases"/>; the runtime retires the rest once the frame is produced. Each image rests in its producer's
+/// published layout, shader-readable, and the planner plans no barrier for it.</param>
+public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuRecorder Recorder, int Slot, uint Width, uint Height, ReadOnlySpan<RenderGraphPackageResource> Inputs, ReadOnlySpan<RenderGraphPackageResource> Outputs, Span<byte> PassBlock, LeaseRetireList Leases, FrameContext Context, bool MayStandIn, IGpuBuffer? Arguments = null, RenderGraphExternalReads? Reads = null) {
     /// <summary>Gets the command buffer to record into.</summary>
     public nint CommandBuffer { get; } = CommandBuffer;
     /// <summary>Gets the instance's counting recorder.</summary>
@@ -62,6 +69,11 @@ public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuR
     public FrameContext Context { get; } = Context;
     /// <summary>Gets whether the recording may draw nothing and leave each output standing for its input.</summary>
     public bool MayStandIn { get; } = MayStandIn;
+    /// <summary>Gets the buffer holding an indirect dispatch's group counts, or <see langword="null"/>.</summary>
+    public IGpuBuffer? Arguments { get; } = Arguments;
+    /// <summary>Gets the images of the instances the pass's instance reads that its graph binds to no version, or
+    /// <see langword="null"/>.</summary>
+    public RenderGraphExternalReads? Reads { get; } = Reads;
 }
 /// <summary>What a package pass's recording did with its outputs this frame.</summary>
 public enum RenderGraphPackageOutcome : byte {
@@ -120,6 +132,36 @@ public interface IRenderGraphPackageFactory {
     /// <param name="context">The pass it states the regions of.</param>
     /// <returns>The regions, in the order the recorder receives them.</returns>
     IReadOnlyList<RenderGraphPackageRegion> Regions(RenderGraphPackageRecorderContext context) => [];
+
+    /// <summary>Gets whether the package's recorders sample the images of the instances their instance reads that its
+    /// graph binds to no version (<see cref="RenderGraphPackageRecording.Reads"/>), as an SDF view's screens do. The
+    /// runtime binds those reads, and acquires what they read, only for an instance whose graph runs such a
+    /// package.</summary>
+    bool SamplesReads => false;
+
+    /// <summary>Returns what an instance's passes of the package allocate their counted storages by
+    /// (<see cref="ShaderPipelineResource.Count"/>) beside the extent, or <see langword="null"/> for the extent alone. An
+    /// instance's node reads it for every graph it builds that runs a pass of the package, and rebuilds its graph beside
+    /// the installed one whenever the counter's revision moves.</summary>
+    /// <param name="instance">The instance's name.</param>
+    /// <returns>The counter, or <see langword="null"/>.</returns>
+    IShaderPipelineStorageCounter? CounterOf(string instance) => null;
+    /// <summary>Returns whether nothing an instance's passes of the package render from has changed since the instance's
+    /// latest completed render, so that render stands for the frame. The runtime asks on the frame thread before it
+    /// schedules each frame, for every instance whose graph binds no input and runs only package passes, and declares an
+    /// instance unchanged (<see cref="RenderGraphFrame.Unchanged"/>) when every one of its passes' packages answers
+    /// <see langword="true"/> and no capture of it is pending.</summary>
+    /// <param name="instance">The instance's name.</param>
+    /// <param name="context">The host's frame context of the frame being scheduled.</param>
+    /// <returns><see langword="true"/> when the instance's latest render stands for this frame.</returns>
+    bool IsUnchanged(string instance, in FrameContext context) => false;
+    /// <summary>Releases whatever the factory holds on the device after the device was lost, without waiting for any
+    /// submission. The runtime calls it once its nodes have released theirs.</summary>
+    void OnDeviceLost() { }
+    /// <summary>Starts a produced frame. The runtime calls it on the frame thread once a frame, before it asks any package
+    /// whether an instance is unchanged and before any instance renders.</summary>
+    /// <param name="context">The host's frame context of the frame being produced.</param>
+    void BeginFrame(in FrameContext context) { }
 }
 /// <summary>A host-written region a package pass's recorder writes (<see cref="IRenderGraphPackageFactory.Regions"/>).</summary>
 /// <param name="Name">The region's part name, which names its buffers after the instance and the pass.</param>
@@ -144,7 +186,11 @@ public readonly record struct RenderGraphPackageRegion(string Name, int ByteCoun
 /// set 3, whose block holds the extent, the package's config and the values it declares, followed by its declared
 /// resources. A recorder creates its pipeline through its <see cref="ShaderInterfaceLayout.PipelineLayout"/> and reads
 /// its values' offsets and its resources' bindings from it.</param>
-public sealed record RenderGraphPackageRecorderContext(string Instance, string Pass, string Package, IGpuDeviceContext Device, GpuDeviceServices Services, GpuPassPipelineCache Pipelines, bool HostsOnDirectX, int InFlightFrames, uint Width, uint Height, IReadOnlyList<ShaderPipelineResource> Inputs, IReadOnlyList<ShaderPipelineResource> Outputs, ShaderPipelineParameterLayout Parameters);
+/// <param name="Part">The fragment pass the pass runs (<see cref="RenderGraphFragmentPass.Name"/>), or
+/// <see langword="null"/> for a package that runs as one pass.</param>
+/// <param name="Dispatch">The pass's dispatch shape, or <see langword="null"/> for one invocation per pixel of its
+/// extent.</param>
+public sealed record RenderGraphPackageRecorderContext(string Instance, string Pass, string Package, IGpuDeviceContext Device, GpuDeviceServices Services, GpuPassPipelineCache Pipelines, bool HostsOnDirectX, int InFlightFrames, uint Width, uint Height, IReadOnlyList<ShaderPipelineResource> Inputs, IReadOnlyList<ShaderPipelineResource> Outputs, ShaderPipelineParameterLayout Parameters, string? Part = null, ShaderPipelineDispatch? Dispatch = null);
 /// <summary>What an external producer is created for: one external instance, on one device.</summary>
 /// <param name="Instance">The instance's name.</param>
 /// <param name="Package">The package id the instance names.</param>
@@ -164,6 +210,7 @@ public sealed record RenderGraphExternalProducerContext(string Instance, string 
 /// region by name then.</param>
 public sealed class RenderGraphPackageRecorders(GpuRegionCopyPass? regionCopy = null) {
     private readonly Dictionary<string, IRenderGraphPackageFactory> m_factories = new(comparer: StringComparer.Ordinal);
+    private readonly List<IRenderGraphPackageFactory> m_distinctFactories = [];
     private readonly Dictionary<string, Func<RenderGraphExternalProducerContext, IRenderGraphExternalProducer>> m_producers = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<string, Func<RenderGraphExternalProducerContext, IRenderGraphSourceUpload>> m_sources = new(comparer: StringComparer.Ordinal);
 
@@ -176,6 +223,9 @@ public sealed class RenderGraphPackageRecorders(GpuRegionCopyPass? regionCopy = 
     public IReadOnlyList<string> ProducerIds => [.. m_producers.Keys.Order(comparer: StringComparer.Ordinal)];
     /// <summary>Gets the package ids an upload serves, in ordinal order.</summary>
     public IReadOnlyList<string> SourceIds => [.. m_sources.Keys.Order(comparer: StringComparer.Ordinal)];
+
+    // Every registered recorder factory, each once however many ids it serves, in registration order.
+    internal IReadOnlyList<IRenderGraphPackageFactory> Factories => m_distinctFactories;
 
     /// <summary>Registers the external producer factory for a package id.</summary>
     /// <param name="package">The package id.</param>
@@ -252,6 +302,9 @@ public sealed class RenderGraphPackageRecorders(GpuRegionCopyPass? regionCopy = 
                 message: $"Package '{package}' already has a recorder.",
                 paramName: nameof(package)
             );
+        }
+        if (!m_distinctFactories.Contains(item: factory)) {
+            m_distinctFactories.Add(item: factory);
         }
     }
     /// <summary>Returns whether a recorder serves a package id.</summary>

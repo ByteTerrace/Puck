@@ -1,8 +1,5 @@
 using System.Diagnostics;
 using System.Numerics;
-using Puck.Abstractions.Gpu;
-using Puck.Abstractions.Presentation;
-using Puck.Hosting;
 using Puck.SdfVm;
 using Puck.World.Client;
 using Puck.World.Server;
@@ -584,79 +581,6 @@ internal sealed partial class WorldScreenBinder {
             WindowLease?.Dispose();
             WindowLease = lease;
         }
-    }
-    // A session screen's view as the external producer of its sdf.world instance: an engine node of its own rendering the
-    // session feed's frame source, which the producer builds again when a re-point hands the slot another feed.
-    private sealed class SessionViewProducer(WorldScreenBinder binder, string name) : IRenderGraphExternalProducer, IGpuWorkSource {
-        private SdfEngineNode? m_node;
-        private SdfCompositionFrameSource? m_source;
-
-        public GpuPixelFormat Format => GpuPixelFormat.R8G8B8A8Unorm;
-        public string? NotReadyReason => (m_node?.NotReadyReason ?? $"session view '{name}' has rendered nothing");
-        public string? PendingCapturePath => m_node?.PendingCapturePath;
-        public IGpuWorkSource Work => (m_node?.Work ?? this);
-
-        public void Dispose() {
-            binder.UnregisterViewWork(name: name);
-            m_node?.Dispose();
-            m_node = null;
-            m_source = null;
-        }
-        public void OnDeviceLost() => m_node?.OnDeviceLost();
-        public bool Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
-            if (binder.SessionFeedOf(name: name)?.FrameSource is not { } source) {
-                return false;
-            }
-
-            if (!ReferenceEquals(
-                objA: source,
-                objB: m_source
-            )) {
-                m_node?.Dispose();
-                m_source = source;
-                m_node = binder.CreateViewNode(
-                    dynamicTransformCapacity: source.WorstCaseDynamicTransformCapacity,
-                    frameSource: new SessionFrameSource(inner: source),
-                    instanceCapacity: source.WorstCaseInstanceCapacity,
-                    name: name,
-                    programWordCapacity: source.WorstCaseProgramWordCapacity,
-                    screenSources: null,
-                    screenSurfaceTransforms: ((ISdfFrameSource)source).ScreenSurfaceTransforms
-                );
-                binder.RegisterViewWork(
-                    lifetime: m_node.WorkLifetime,
-                    name: name,
-                    transforms: source.MovedTransforms,
-                    work: m_node.Work
-                );
-            }
-
-            return m_node!.Produce(
-                context: in context,
-                height: height,
-                width: width
-            );
-        }
-        public void RequestCapture(FrameCaptureRequest request) {
-            ArgumentNullException.ThrowIfNull(argument: request);
-
-            if (m_node is { } node) {
-                node.RequestCapture(request: request);
-            } else {
-                _ = request.TryFail(error: new InvalidOperationException(message: NotReadyReason));
-            }
-        }
-        public bool TryAcquireOutput(out RenderGraphExternalOutput output) {
-            if (m_node is { } node) {
-                return node.TryAcquireOutput(output: out output);
-            }
-
-            output = default;
-
-            return false;
-        }
-
-        bool IGpuWorkSource.TryReadCompleted(GpuWorkSample sample) => false;
     }
     // A session's frame source on its own clock: the destination is independently scheduled, so the view hands its
     // composition the interval between its own frames rather than the host's frame delta, and no interpolation fraction.

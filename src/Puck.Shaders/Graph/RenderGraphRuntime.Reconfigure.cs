@@ -105,6 +105,20 @@ public sealed partial class RenderGraphRuntime {
                     continue;
                 }
 
+                if (RunsPackage(
+                    instance: set.Instances[index],
+                    packages: m_packages
+                )) {
+                    effective[index] = ((kept[index] >= 0)
+                        ? m_graphs[kept[index]]
+                        : PackageGraphOf(
+                            fault: out _,
+                            package: set.Instances[index].ExternalPackage!
+                        ));
+
+                    continue;
+                }
+
                 if (m_packages.ServesSource(package: set.Instances[index].ExternalPackage!)) {
                     if (kept[index] >= 0) {
                         sources[index] = m_sources[kept[index]];
@@ -176,7 +190,13 @@ public sealed partial class RenderGraphRuntime {
 
                     continue;
                 }
-                if (set.Instances[index].Kind != RenderGraphInstanceKind.Graph) {
+                if (
+                    (set.Instances[index].Kind != RenderGraphInstanceKind.Graph) &&
+                    !RunsPackage(
+                        instance: set.Instances[index],
+                        packages: m_packages
+                    )
+                ) {
                     continue;
                 }
 
@@ -328,8 +348,8 @@ public sealed partial class RenderGraphRuntime {
     /// <exception cref="ObjectDisposedException">The runtime is disposed.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="instance"/> or <paramref name="graph"/> is
     /// <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">The set has no instance of that name, or it is an external producer's or an
-    /// uploaded source's instance.</exception>
+    /// <exception cref="ArgumentException">The set has no instance of that name, or it is an external producer's, an
+    /// uploaded source's or a package instance.</exception>
     /// <exception cref="InvalidDataException">The graph cannot be installed on a node: its shader compilation failed, or
     /// its plan is not one a node runs.</exception>
     public bool TryInstall(string instance, RenderGraphRuntimeGraph graph, [NotNullWhen(returnValue: false)] out RenderGraphRuntimeRefusal? refusal) {
@@ -344,6 +364,15 @@ public sealed partial class RenderGraphRuntime {
         if (m_sources[index] is not null) {
             throw new ArgumentException(
                 message: $"Instance '{instance}' is an uploaded source, which renders the conversion its upload names.",
+                paramName: nameof(instance)
+            );
+        }
+        if (
+            (m_set.Instances[index].Kind == RenderGraphInstanceKind.External) &&
+            (m_producers[index] is null)
+        ) {
+            throw new ArgumentException(
+                message: $"Instance '{instance}' renders its package '{m_set.Instances[index].ExternalPackage}''s graph, which the runtime makes.",
                 paramName: nameof(instance)
             );
         }

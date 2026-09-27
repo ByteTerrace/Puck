@@ -35,15 +35,24 @@ internal static class GenerateCommand {
         var interfaceFiles = files.Where(predicate: static file => file.EndsWith(comparisonType: StringComparison.Ordinal, value: InterfaceSuffix)).ToArray();
 
         // Every interface the model declares, in one list: each engine package's with pass-group members, found by its
-        // include's file name, and the SDF engine kernels' (SdfWorldInterfaces), at the paths they name.
+        // include's file name, and the SDF engine kernels' (SdfWorldInterfaces), at the paths they name. A package whose
+        // interface a kernel include already owns at its fixed path (sdf.world's) is that include, not a second owner.
+        var kernelIncludes = SdfWorldInterfaces.Includes
+            .Select(selector: static include => ShaderFrameInterface.IncludeFileName(interfaceName: include.Interface.Name))
+            .ToHashSet(comparer: StringComparer.Ordinal);
+
         IEnumerable<(string Owner, ShaderInterface Interface, string? Path)> Declared() {
             foreach (var package in packages.Packages.Where(predicate: static package => (package.Members.Count > 0))) {
-                yield return (package.Id, ShaderPipelineParameterLayout.ForPackage(
+                var shaderInterface = ShaderPipelineParameterLayout.ForPackage(
                     config: package.Config,
                     members: package.Members,
                     package: package.Id,
                     pushesIndex: package.PushesIndex
-                ).Interface, null);
+                ).Interface;
+
+                if (!kernelIncludes.Contains(item: ShaderFrameInterface.IncludeFileName(interfaceName: shaderInterface.Name))) {
+                    yield return (package.Id, shaderInterface, null);
+                }
             }
             foreach (var (path, shaderInterface) in SdfWorldInterfaces.Includes) {
                 yield return (shaderInterface.Name, shaderInterface, path);

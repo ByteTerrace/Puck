@@ -44,7 +44,7 @@ static const float3 CrtGrillePhase = float3(0.0, 2.0943951023931953, 4.188790204
 // is the ONE tier where 2D coverage reconstruction is legitimate (its designed job): the atlas ALPHA is a
 // single-channel coverage-SDF, sampled with a coverage threshold + a screen-projected AA half-width derived
 // ANALYTICALLY from the hit's pixel footprint (NO fwidth — deterministic, from the same pixelFootprint*traveled the
-// coverage-AA epilogue uses). KEEP IN SYNC with SdfWorldEngine's decal-buffer packing (SetDecalDescriptor/SetDecals)
+// coverage-AA epilogue uses). KEEP IN SYNC with SdfWorldTables's decal-buffer packing (SetDecalDescriptor/SetDecals)
 // and SdfProgram. LAYOUT (sdfDecalCells, one uint4 per entry): the first SdfDecalDescriptorCount (== SDF_MAX_SCREEN_SURFACES)
 // entries are the PER-SCREEN descriptors, then the shared CELL region.
 //   descriptor[screenIndex] = (gridCols, gridRows, cellBase, asuint(distanceRange)); gridCols == 0 => that screen has
@@ -103,7 +103,7 @@ float3 sdfSampleGlyphDecal(uint4 descriptor, float2 uv, float halfWidth, float f
 // Bounded emissive volumes (Puck.SignedDistance.SdfVolume — a participating medium, never a distance-field shape):
 // sdfVolumes, an 11-float4-per-volume table. Stage 1 is the only kernel that shades, so it is the only one that reads it.
 // Decoded and integrated by shade-volumes.hlsli in renderView and the sky prepass. KEEP IN SYNC with
-// SdfWorldEngine.PackVolumes / SdfProgramBuilder.MaxVolumes.
+// SdfWorldTables.PackVolumes / SdfProgramBuilder.MaxVolumes.
 static const uint SdfVolumeCount = 64u;
 #include "shade-volumes.hlsli"
 

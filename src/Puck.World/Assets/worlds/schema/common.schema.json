@@ -993,7 +993,7 @@
       }
     },
     "WorldScreenSourceText": {
-      "description": "Authored reading text on the screen face, rendered through the engine\u0027s glyph-decal tier (Puck.SdfVm.SdfWorldEngine.SetScreenDecal): a fixed monospace cell grid sampled from the world\u0027s packed font atlas at shade time \u2014 the dense-text sibling of a creation\u0027s textRuns, which stamp marched Glyph geometry. Signs, plaques, books, and monitors author this; short sculptural lettering stays a text run. Requires the world to declare a text font catalog (Text); the decal bypasses the CRT image pipeline, so no image source competes with it on the slot.",
+      "description": "Authored reading text on the screen face, rendered through the engine\u0027s glyph-decal tier (Puck.SdfVm.SdfWorldTables.SetScreenDecal): a fixed monospace cell grid sampled from the world\u0027s packed font atlas at shade time \u2014 the dense-text sibling of a creation\u0027s textRuns, which stamp marched Glyph geometry. Signs, plaques, books, and monitors author this; short sculptural lettering stays a text run. Requires the world to declare a text font catalog (Text); the decal bypasses the CRT image pipeline, so no image source competes with it on the slot.",
       "properties": {
         "$type": {
           "const": "text"

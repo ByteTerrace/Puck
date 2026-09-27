@@ -64,7 +64,7 @@ public static class WorldScreenTextDecal {
     /// <param name="colors">The colors the bake resolves a state-bound foreground or background through.</param>
     /// <param name="text">The authored decal-text source (validated: the grid fits the engine budget).</param>
     /// <param name="catalog">The world's packed font catalog.</param>
-    /// <returns>The baked frame, ready for <c>SdfWorldEngine.SetScreenDecal</c>.</returns>
+    /// <returns>The baked frame, ready for <c>SdfWorldTables.SetScreenDecal</c>.</returns>
     public static SdfScreenDecalFrame Bake(WorldBakedColors colors, WorldScreenSource.Text text, PackedFontAtlasCatalog catalog) {
         ArgumentNullException.ThrowIfNull(colors);
         ArgumentNullException.ThrowIfNull(text);

@@ -443,7 +443,15 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                     continue;
                 }
 
-                if (packages.ServesSource(package: instance.ExternalPackage!)) {
+                if (RunsPackage(
+                    instance: instance,
+                    packages: packages
+                )) {
+                    installed[index] = PackageGraphOf(
+                        fault: out _,
+                        package: instance.ExternalPackage!
+                    );
+                } else if (packages.ServesSource(package: instance.ExternalPackage!)) {
                     (sources[index], nodes[index]) = CreateSource(
                         deviceContext: deviceContext,
                         hostsOnDirectX: hostsOnDirectX,
@@ -483,7 +491,13 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             for (var index = 0; (index < graphs.Count); index++) {
                 sources[index]?.Install(node: nodes[index]!);
 
-                if (set.Instances[index].Kind != RenderGraphInstanceKind.Graph) {
+                if (
+                    (set.Instances[index].Kind != RenderGraphInstanceKind.Graph) &&
+                    !RunsPackage(
+                        instance: set.Instances[index],
+                        packages: packages
+                    )
+                ) {
                     continue;
                 }
 
@@ -496,7 +510,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                     pipelines: pipelines
                 );
 
-                if (graphs[index] is { } graph) {
+                if ((installed[index] ?? graphs[index]) is { } graph) {
                     nodes[index]!.Swap(pipeline: graph.Pipeline);
                     installed[index] = graph;
                 }
@@ -531,7 +545,8 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     }
 
     // Why an external instance cannot run as given, or null when every one can: it was given a graph, declares an output
-    // that is not an image, or names a package neither an external producer nor an upload serves.
+    // that is not an image, or names a package neither an external producer nor an upload serves, and that no recorder
+    // runs as an instance.
     private static RenderGraphRuntimeRefusal? RefuseExternal(RenderGraphInstanceSet set, IReadOnlyList<RenderGraphRuntimeGraph?> graphs, RenderGraphPackageRecorders packages) {
         for (var index = 0; (index < graphs.Count); index++) {
             var instance = set.Instances[index];
@@ -546,7 +561,10 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                     ? $"declares a {instance.Output} output, but an external producer hands out images"
                     : ((packages.ServesProducer(package: instance.ExternalPackage!) || packages.ServesSource(package: instance.ExternalPackage!))
                         ? null
-                        : "names a package neither an external producer nor an upload serves")));
+                        : PackageRefusal(
+                            package: instance.ExternalPackage!,
+                            packages: packages
+                        ))));
 
             if (reason is not null) {
                 return Refuse(
@@ -1001,6 +1019,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             source?.OnDeviceLost();
         }
 
+        PackagesLostDevice();
         ReleaseStandIns(wait: false);
         Release();
     }
@@ -1021,11 +1040,16 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         );
 
         RebuildDriftedSources();
+        PackagesBeginFrame(context: in context);
 
         var schedule = m_schedules[m_turn];
         var prior = m_history;
         var sourced = WithSourceStates(frame: in frame);
-        var scheduled = WithRerenders(frame: in sourced);
+        var rerendered = WithRerenders(frame: in sourced);
+        var scheduled = WithUnchanged(
+            context: in context,
+            frame: in rerendered
+        );
 
         RenderGraphScheduler.Schedule(
             frame: scheduled,
@@ -1113,6 +1137,13 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
                 continue;
             }
+
+            // The reads its graph binds to no version reach its package passes, their taint the instance's; what they
+            // leave is retired with the frame.
+            node.Reads = BindUnboundReads(
+                index: index,
+                schedule: schedule
+            );
             // A source's graph renders at the extent its descriptor fixed, which it declared to the scheduler.
             if (
                 (source is null) &&
@@ -1137,7 +1168,14 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             }
 
             var submitted = node.FrameCounter;
-            var surface = node.ProduceFrame(context: in context);
+            Surface surface;
+
+            try {
+                surface = node.ProduceFrame(context: in context);
+            } finally {
+                node.Reads?.RetireUntaken();
+                node.Reads = null;
+            }
 
             if (node.FrameCounter == submitted) {
                 m_unproduced++;

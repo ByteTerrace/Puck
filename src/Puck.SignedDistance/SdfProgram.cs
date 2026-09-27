@@ -49,7 +49,7 @@ namespace Puck.SignedDistance;
 //                         full interpreter for that segment.
 // Screen surfaces are a SEPARATE fixed-size side table (ScreenSurfaceWords), not part of the sdfWords stream above —
 // they are shading-only data the world renderer's Stage 1 binds into its own buffer, ALWAYS sized to
-// SdfProgramBuilder.MaxScreenSurfaces and indexed DIRECTLY by screen index (KEEP IN SYNC with SdfWorldEngine and
+// SdfProgramBuilder.MaxScreenSurfaces and indexed DIRECTLY by screen index (KEEP IN SYNC with SdfWorldTables and
 // frame/sdf-environment.hlsli's ScreenSurfaceData).
 /// <summary>Contains the typed SDF instruction stream and its packed GPU representation, bounds, instances,
 /// materials, screen surfaces, and acceleration metadata.</summary>
@@ -481,7 +481,7 @@ public sealed partial class SdfProgram {
 
     /// <summary>Gets the per-(viewport, tile) instance-mask width in uints for this program: ceil(instance count / 32),
     /// never below 1 (a zero-instance program keeps one all-zero word so the mask buffer indexing stays uniform).
-    /// <c>Puck.SdfVm.SdfWorldEngine</c> sizes its mask buffer from it and pushes the live uploaded program's value per
+    /// <c>Puck.SdfVm.SdfWorldTables</c> sizes its mask buffer from it and pushes the live uploaded program's value per
     /// frame as the kernels' indexing width (WorldParams.instanceMaskWordCount); the reader's inner word
     /// iteration independently derives the same formula (KEEP IN SYNC with sdfInstanceMaskWordCount in
     /// Assets/Shaders/Sdf/field/sdf-program.hlsli).</summary>
@@ -2115,7 +2115,7 @@ public sealed partial class SdfProgram {
     }
 
     // Rebuilds the cull grid against THIS frame's dynamic instance positions. The public instruction program remains
-    // immutable; SdfWorldEngine uploads this compact side table into a ring-local buffer after the matching dynamic
+    // immutable; SdfWorldTables uploads this compact side table into a ring-local buffer after the matching dynamic
     // transforms, so a moving instance no longer has to ride the O(dynamic-count) always-tested list. Static centers
     // pass through unchanged; a dynamic bound follows the same position + boundOffset rule as sdfInstanceBoundAt
     // (orientation is conservatively folded into the authored radius by BeginInstanceDynamic's contract).

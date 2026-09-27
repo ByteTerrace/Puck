@@ -16,11 +16,12 @@ public sealed record SdfWorldRenderSpec(
     uint Width,
     uint Height
 ) {
-    /// <summary>The carve-bake brick pool's voxel capacity (see <see cref="SdfWorldEngineOptions.BrickPoolVoxelCapacity"/>),
-    /// frozen at construction. Defaults to <see cref="SdfWorldEngine.DefaultBrickPoolVoxelCapacity"/> (64 MB); a host
+    /// <summary>The carve-bake brick pool's voxel capacity (see <see cref="SdfWorldTablesOptions.BrickPoolVoxelCapacity"/>),
+    /// frozen at construction. Defaults to <see cref="SdfWorldTables.DefaultBrickPoolVoxelCapacity"/> (64 MB); a host
     /// whose scene never bakes carves sets 0 to allocate no pool.</summary>
-    public int BrickPoolVoxelCapacity { get; init; } = SdfWorldEngine.DefaultBrickPoolVoxelCapacity;
-    /// <summary>An optional in-place decorator applied to <see cref="FrameSource"/> before the engine node is built —
+    public int BrickPoolVoxelCapacity { get; init; } = SdfWorldTables.DefaultBrickPoolVoxelCapacity;
+
+    /// <summary>An optional in-place decorator applied to <see cref="FrameSource"/> before the residency is built —
     /// the seam a host uses to wrap the scene's frame source (e.g. a diegetic-UI overlay that emits its own SDF
     /// geometry into the program). Returns the frame source to actually render; identity when absent.</summary>
     public Func<ISdfFrameSource, ISdfFrameSource>? DecorateFrameSource { get; init; }
@@ -38,17 +39,15 @@ public sealed record SdfWorldRenderSpec(
     /// that hot-swaps programs larger than the first frame's.</summary>
     public int ProgramWordCapacity { get; init; }
     /// <summary>What each program-declared screen shows and the light it casts into the room, or <see langword="null"/>
-    /// for a host with no screens: the source instance a screen reads, whose image the render graph hands the node, or
-    /// the image the host renders for it. The engine node retires each lease only after the submission that sampled it
-    /// has completed, and adds the wait the lease carries to that submission.</summary>
+    /// for a host with no screens: the source instance a screen reads, whose image the render graph hands each view's passes. A view's instance
+    /// retires each lease only after the submission that sampled it has completed, and adds the wait the lease carries to
+    /// that submission.</summary>
     public ISdfScreenSources? ScreenSources { get; init; }
+
     // NOTE: screen-surface TRANSFORM providers are read straight off FrameSource.ScreenSurfaceTransforms (see
     // ISdfFrameSource) rather than threaded through their own spec field — a caller's own type coupling would
     // otherwise grow just to spell SdfScreenSurfaceTransform in its render-assembly call site.
-
-    /// <summary>A floor on the compositor's viewport capacity — the capacity envelope for a frame source whose
-    /// per-frame view count grows past the first frame's (a split-screen host whose players join later). The engine
-    /// composites each frame's actual <see cref="SdfFrame.Views"/> count, up to this envelope; without a floor the
-    /// capacity freezes at the first frame's count (the pre-existing behavior).</summary>
-    public int ViewportCapacity { get; init; }
+    /// <summary>The residency's name, which labels its uploads in a GPU capture and names its counted work. Defaults to
+    /// <c>world</c>.</summary>
+    public string Name { get; init; } = "world";
 }

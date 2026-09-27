@@ -637,8 +637,9 @@ Facts a script needs:
   the presentation's creation bakes are settled (none queued or baking), so a
   script that reads a drawn bake waits on the bake. `world.wait ready <seconds>` waits for
   the rendering engine instead of a tick count: it holds the session until
-  the engine's pipeline set is installed and it has produced its first frame,
-  or the deadline passes, and reports which on standard error. A script that
+  the world's SDF residency has built its tables (its pipeline set installed
+  and its first frame captured) and the render graph's root has rendered over
+  a completed view, or the deadline passes, and reports which on standard error. A script that
   reads rendered work (`world.counters gpu`) waits on it, since a cold driver
   cache can hold the first frame back for many ticks.
 - **Timing.** The console drains before every fixed step. A piped script's
@@ -1169,10 +1170,11 @@ samples, so a pane or graph input bound to one draws a stand-in.
 
 The live render graph runs every source a screen shows, its row's or the one a
 presentation verb bound over the row (`screen.source <index> <kind>`, a
-`screen.select` entry): the SDF world producer reads each one, and each frame
-the engine binds the image the runtime hands it for a source to every screen
-showing it, under a lease it holds until the submission that sampled it has
-finished. A live bind publishes its source's mapping as a row does. A screen
+`screen.select` entry): the world's first view instance reads each one, and
+each frame its `sdf.world` passes bind the image the runtime hands them for a
+source to every screen showing it, under a lease their node holds until the
+submission that sampled it has finished. A live bind publishes its source's
+mapping as a row does. A screen
 showing a view or a session reads that view's own `sdf.world` instance
 (`WorldViewInstances`), which renders at its footprint's extent.
 
@@ -1188,7 +1190,7 @@ the drawn image, none exists:
 | `producer`, `qr` | `WorldQrProducer`, uploaded | `ImageProducerLawTests.AQrFeedStatesTheCodeItRasterized`, the `uploaded-sources` canary |
 | `producer`, `camera` | the binder's `CameraProducer`, imported through `WorldCameraSourceFeed` | `ImageProducerLawTests.ACameraSourceDeclaresTheExtentItsSeatsSensorDelivers`, the `hud-frame-slots` canary (offscreen, it opens no device); a recorded camera run is deferred |
 | `producer`, `capture` | the binder's `CaptureProducer`, imported through `CaptureSlotFeed` | `ImageProducerLawTests.ACaptureOfADesktopCaptureSourceShowsTheFillAndNeverTheDesktopPixels` and `AFilledExternalSourceHandsOutItsFillAndNeverAcquiresItsFeed`, `WorldCaptureFillLawTests`; no canary opens a capture |
-| `view` | an `sdf.world` instance of its own, which `WorldScreenBinder.TryViewProducer` renders | `WorldViewPaneMappingLawTests.Views`, `SdfEngineNodeLeaseLawTests.AViewTakesTheFrameTheNodeRendersNext`, the `view-screens` canary |
+| `view` | an `sdf.world` instance of its own, rendering the residency `WorldScreenBinder.TryResolveView` creates for it | `WorldViewPaneMappingLawTests.Views`, the `view-screens` canary |
 | `session` | an `sdf.world` instance (`WorldViewNames.Session`) rendered through the destination's own frame source | `WorldScreenMappingLawTests.EachSourceKindNamesItsInstance`, `WorldSessionFollowLawTests`; no canary shows a session screen |
 | `text` | no image: the decal tier draws its lines (`WorldScreenTextDecal`, through `TextSourceAt`) | `WorldTextAuthoringLawTests` (`TextScreenSourceValidates`, `TextScreenRefusesWithoutCatalogUnknownFontGridAndColor`, `TextCreationFaceSourceValidates`); no law or canary checks the drawn text |
 | `probe` | `source.probe`, an imported instance over the probe's output ring (`ProbeSourceFeed`) | `WorldSourceInstanceLawTests`, `RenderedProbeKernelHostLawTests`, the `probe-sources` canary |
@@ -1356,7 +1358,7 @@ once per completed tick its upload (`MachineVideoSourceUpload`, made by the
 binder's `MachineSource`) copies the output's latest complete frame into the
 instance's region (`IMachineVideoOutput.WriteFrame`, in the `Format` the output
 declares: RGBA8, or an indexed image and its palette), the instance converts it
-once however many screens show it, and the SDF world producer binds the
+once however many screens show it, and the world's `sdf.world` passes bind the
 converted image to every screen showing it. A machine touches no GPU object,
 so nothing of a machine's is retired on device loss. The source is
 deterministic and states the image it last wrote, so a `captures` row naming
@@ -1367,7 +1369,7 @@ device is disposed only after the last image made on it is released
 it. It recreates its own slot for a
 screen index removed and later restored by `world.reset`/`.load` exactly as
 `WorldMachineHost` does (bounded to the indices declared at boot, which the
-engine node binds every frame through the binder's `ISdfScreenSources`). It still
+world's residency binds every frame through the binder's `ISdfScreenSources`). It still
 OWNS the genuinely presentation sources bound through `screen.source <index>
 <kind>` (`camera`, `capture`, `desktop`, `probe`, `view`, `qr`; it ejects a
 present machine first, through the ordered domain)—a jumbotron view it renders
@@ -1809,8 +1811,8 @@ confirm the capture completion before reading the file. Its stdout echo says `pe
 precisely because no file exists yet; the resolved path arrives on **stderr**
 when the frame lands, named by whichever node served it: `[capture] main ->
 <path>` from the node of the render graph's root, which draws the
-`views.post` passes and the overlay over the world, or `[debug] captured
-frame N -> <path>` from the engine node when the world is the root because
+`views.post` passes and the overlay over the world, or `[capture] world ->
+<path>` from the world's own instance when the world is the root because
 nothing is drawn over it. The root reads the frame the display shows; an
 overlay that draws nothing this frame publishes the world's image in its place,
 and the capture reads that. Arming a second capture while one is still

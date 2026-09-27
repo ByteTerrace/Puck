@@ -325,10 +325,9 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// <summary>Composes a runtime's instance set from a document's <c>views</c> section, the source instances its
     /// screens read and the views the world renders beside its own: the sources, then the views, then the synthesized
     /// default graph (the world producer, then every row, then the root that reads the world and the panes) when the
-    /// section names no <c>views.root</c>, or the rows alone, rooted where <c>views.root</c> says, when it does. The
-    /// instance the SDF engine renders its first view through (the synthesized world producer, or every
-    /// <c>sdf.world</c> row of an authored root that names no later view) reads every source and every view a screen shows,
-    /// so its screens sample them.</summary>
+    /// section names no <c>views.root</c>, or the rows alone, rooted where <c>views.root</c> says, when it does. Every
+    /// instance that renders a view of the world (each synthesized world producer, or every <c>sdf.world</c> row of an
+    /// authored root) reads every source and every view a screen shows, so its screens sample them.</summary>
     /// <param name="views">The document's <c>views</c> section.</param>
     /// <param name="synthesized">The default graph, or <see langword="null"/> when the section names its own root.</param>
     /// <param name="sources">The source instances the world's screens read (<see cref="WorldScreenMappingSet.Sources"/>).</param>
@@ -420,15 +419,14 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         return true;
     }
 
-    // Whether an instance is one the SDF engine renders its first view through, whose screens sample the sources and the
-    // views: an sdf.world instance that renders no later view of the world and is no view of its own.
+    // Whether an instance renders a view of the world, whose screens sample the sources and the views: an sdf.world
+    // instance that is no camera or session view of its own.
     private static bool RendersScreens(RenderGraphInstance instance, WorldViewInstances rendered) => (
         string.Equals(
             a: instance.ExternalPackage,
             b: RenderGraphPackageCatalog.SdfWorld,
             comparisonType: StringComparison.Ordinal
         ) &&
-        (WorldViewNames.ViewOf(instance: instance.Name) is null) &&
         !rendered.Contains(name: instance.Name)
     );
     // The instance with a read of every source and every view a screen shows added, within the frame, when the SDF engine
@@ -449,7 +447,14 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         var footprints = new List<RenderGraphFootprint>();
 
         foreach (var instance in set.Instances) {
-            if (!RendersScreens(instance: instance, rendered: rendered)) {
+            if (
+                !RendersScreens(instance: instance, rendered: rendered) &&
+                !rendered.Views.Any(predicate: view => (view.FilmsWorld && string.Equals(
+                    a: view.Name,
+                    b: instance.Name,
+                    comparisonType: StringComparison.Ordinal
+                )))
+            ) {
                 continue;
             }
 
@@ -545,9 +550,9 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             )
         );
     }
-    /// <summary>Hands every graph instance the runtime renders for this host the frame values the frame presents: each
-    /// synthesized instance's node and each row's. A pane the frame shows is handed its own pointer, camera and clock
-    /// over them afterwards. Does nothing before a runtime is attached.</summary>
+    /// <summary>Hands every instance the runtime renders on a node the frame values the frame presents: the synthesized
+    /// root, every SDF view and each row. A pane the frame shows is handed its own pointer, camera and clock over them
+    /// afterwards. Does nothing before a runtime is attached.</summary>
     /// <param name="frame">The frame values: the presented tick and presentation time, with no pointer and no paired
     /// camera.</param>
     public void Present(in ShaderFrameValues frame) {
@@ -555,18 +560,14 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             return;
         }
 
-        if (m_synthesized is { } synthesized) {
-            var instances = synthesized.Instances;
+        // Every instance that renders on a node presents the frame: the synthesized root, every SDF view, and each
+        // views.graphs row, which PrepareGraph then hands its own camera, pointer and time.
+        var instances = runtime.Instances.Instances;
 
-            for (var index = 0; (index < instances.Count); index++) {
-                if (runtime.NodeOf(instance: instances[index].Name) is { } node) {
-                    node.Frame = frame;
-                }
+        for (var index = 0; (index < instances.Count); index++) {
+            if (runtime.NodeOf(instance: instances[index].Name) is { } node) {
+                node.Frame = frame;
             }
-        }
-
-        foreach (var entry in m_entries.Values) {
-            entry.Node.Frame = frame;
         }
     }
     /// <summary>Starts a frame before the runtime schedules it: reconciles the accepted <c>views</c> section, installs
@@ -623,9 +624,9 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         return true;
     }
     /// <summary>Places a view of the world this frame: the synthesized root reads the view's producer at its rect's
-    /// extent at its render scale, and, when the view is shown, reconstructs its output into the rect at the given
-    /// sharpness. The first view is also the base the root draws everything over, so it is read whether shown or not. A
-    /// view the synthesized root does not place (one past its <see cref="WorldRootGraph.Views"/>, or any view under a
+    /// extent at its render scale, shown or not, so the view renders before the root first shows it, and, when the view
+    /// is shown, reconstructs its output into the rect at the given sharpness. The first view is also the base the root
+    /// draws everything over. A view the synthesized root does not place (one past its <see cref="WorldRootGraph.Views"/>, or any view under a
     /// graph that places none) is ignored.</summary>
     /// <param name="view">The 0-based view.</param>
     /// <param name="region">The view's normalized rect.</param>
@@ -658,14 +659,12 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             Width: region.Width
         );
 
-        if (shown || (view == 0)) {
-            m_footprints.Add(item: new RenderGraphFootprint(
-                Consumer: WorldViewGraphs.MainInstance,
-                Height: (region.Height * scale),
-                Producer: synthesized.Producers[view].Name,
-                Width: (region.Width * scale)
-            ));
-        }
+        m_footprints.Add(item: new RenderGraphFootprint(
+            Consumer: WorldViewGraphs.MainInstance,
+            Height: (region.Height * scale),
+            Producer: synthesized.Producers[view].Name,
+            Width: (region.Width * scale)
+        ));
 
         return true;
     }

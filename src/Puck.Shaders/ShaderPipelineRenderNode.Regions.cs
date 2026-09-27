@@ -1,3 +1,4 @@
+using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
 using Puck.Hosting;
 
@@ -158,6 +159,27 @@ public sealed partial class ShaderPipelineRenderNode {
             .Select(selector: static resource => resource.Declaration)
             .Where(predicate: static declaration => declaration.IsHostBuffer),
     ];
+
+    /// <summary>The label a graph's region flushes and staged region copies count under
+    /// (<see cref="PassLabels"/>), as <see cref="WorkClass.PerBackendDeterministic"/> work: whether a region stages, and so
+    /// records a copy dispatch and its barriers, follows the device's memory profile.</summary>
+    public const string RegionCopiesPass = "region copies";
+
+    // Whether a graph declares a host-written region, which its region-copy pass flushes and, where it stages, copies:
+    // a package pass's region, a config row or a host buffer port. It is the graph's to decide, never the device's, so
+    // both backends report the same passes.
+    private bool DeclaresRegions(GraphBuild built, ShaderPipelinePlan plan) {
+        foreach (var planned in plan.Passes) {
+            if ((built.Passes[planned.Index]?.Regions?.Length ?? 0) > 0) {
+                return true;
+            }
+        }
+
+        return (
+            (m_installingRows!.Regions.Length > 0) ||
+            (HostBufferPorts(plan: plan).Count > 0)
+        );
+    }
     // Creates the installing graph's copy pool when any of its regions stages: one copy set per slot for each staged
     // package region, in pass order, then for each staged row region, in its plan's order, then for each staged host
     // buffer port, in declaration order. The pool belongs to m_regionCopiesOwner until the graph's first pass takes it.
@@ -313,6 +335,23 @@ public sealed partial class ShaderPipelineRenderNode {
     // begins that buffer at the first owed copy, behind the barrier ordering the earlier submissions' reads of every
     // staged destination before the copies write them.
     private void RecordRegionCopies(List<nint> commands, int slot) {
+        if (m_regionCopyPass < 0) {
+            return;
+        }
+
+        m_work.EnterPass(pass: m_regionCopyPass);
+
+        try {
+            RecordRegionCopiesInPass(
+                commands: commands,
+                slot: slot
+            );
+        } finally {
+            m_work.LeavePass();
+        }
+    }
+    // Records the region copies inside the graph's region-copy pass (RecordRegionCopies).
+    private void RecordRegionCopiesInPass(List<nint> commands, int slot) {
         m_copySlot = slot;
         m_copyRecording ??= new GpuRegionCopyRecording(
             begin: BeginRegionCopies,

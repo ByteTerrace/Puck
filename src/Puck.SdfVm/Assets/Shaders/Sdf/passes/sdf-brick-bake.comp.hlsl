@@ -19,7 +19,7 @@
 //   req[2] = (asfloat(destWordOffset) [uint bits], invLambda, 0, 0)
 //   req[3 .. 3 + carveCount) = (center.xyz, radius) per carve
 // The linear voxel index is x-fastest: destWordOffset + x + y*dimX + z*dimX*dimY (KEEP IN SYNC with sdfBrickVoxel's
-// fetch ordering in field/sdf-shapes.hlsli and the SdfBrickBake request packing in SdfWorldEngine).
+// fetch ordering in field/sdf-shapes.hlsli and the SdfBrickBake request packing in SdfWorldTables).
 
 // The sdf.bricks interface: the frame group, the slice extent, bakeRequest, brickPool and the pushed slice ordinal,
 // generated from SdfWorldInterfaces.BrickBake.

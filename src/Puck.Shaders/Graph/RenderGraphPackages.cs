@@ -139,9 +139,44 @@ public sealed record RenderGraphPackagePort(
 /// package. A world's <c>views.post</c> rows name post-process packages alone.</param>
 /// <param name="PushesIndex">Whether the package's pipelines push one 4-byte index, which its interface declares
 /// (<see cref="ShaderInterface.PushesIndex"/>) and its shaders read as <c>pushedIndex.index</c>.</param>
-public sealed record RenderGraphPackage(string Id, IReadOnlyList<RenderGraphPackagePort> Inputs, IReadOnlyList<RenderGraphPackagePort> Outputs, IReadOnlyList<ShaderInterfaceMember> Members, string Summary, IReadOnlyDictionary<string, ShaderConfigField>? Config = null, RenderGraphPackageStages? Stages = null, bool PushesIndex = false) {
+/// <param name="Fragment">The passes the package runs as, which the graph compiler splices into a graph in place of a
+/// pass naming it (<see cref="RenderGraphPackageFragment"/>), or <see langword="null"/> for a package that runs as the
+/// one pass naming it.</param>
+public sealed record RenderGraphPackage(string Id, IReadOnlyList<RenderGraphPackagePort> Inputs, IReadOnlyList<RenderGraphPackagePort> Outputs, IReadOnlyList<ShaderInterfaceMember> Members, string Summary, IReadOnlyDictionary<string, ShaderConfigField>? Config = null, RenderGraphPackageStages? Stages = null, bool PushesIndex = false, RenderGraphPackageFragment? Fragment = null) {
     /// <summary>Gets whether the package is a post-process package: one with <see cref="Stages"/>.</summary>
     public bool IsPostProcess => (Stages is not null);
+}
+/// <summary>One pass of a package fragment, as the fragment names its versions: its own resources, and the names that
+/// stand for the package's ports (<see cref="RenderGraphPackageFragment.InputVersions"/>,
+/// <see cref="RenderGraphPackageFragment.OutputVersions"/>).</summary>
+/// <param name="Name">The pass's name within the fragment, which its recorder is created for
+/// (<see cref="RenderGraphPackageRecorderContext.Part"/>) and which names the spliced pass after the pass that runs the
+/// package.</param>
+/// <param name="Inputs">The versions it reads.</param>
+/// <param name="InputAccesses">How it reads each of <paramref name="Inputs"/>, one read access per input.</param>
+/// <param name="Outputs">The versions it writes, at least one.</param>
+/// <param name="OutputAccesses">How it writes each of <paramref name="Outputs"/>, one write access per output.</param>
+/// <param name="Dispatch">Its dispatch shape: <see langword="null"/> or <see cref="ShaderPipelineDispatchKind.Extent"/>
+/// for one invocation per pixel, fixed groups, or an indirect dispatch whose arguments one of its versions holds.</param>
+public sealed record RenderGraphFragmentPass(string Name, IReadOnlyList<ResourceReference> Inputs, IReadOnlyList<RenderGraphPortAccess> InputAccesses, IReadOnlyList<ResourceReference> Outputs, IReadOnlyList<RenderGraphPortAccess> OutputAccesses, ShaderPipelineDispatch? Dispatch = null);
+/// <summary>The passes a package runs as. The graph compiler splices them into a graph in place of each pass naming the
+/// package: each fragment pass becomes a package pass named <c>&lt;pass&gt;$&lt;fragment pass&gt;</c>, each fragment
+/// resource a version named <c>&lt;pass&gt;$&lt;resource&gt;</c>, a name standing for an input port the version the pass
+/// binds to it, and a version standing for an output port the version the pass binds to it, which forwards what the
+/// fragment's version forwards. The planner then orders, versions and barriers the spliced passes as any other, so the
+/// package's passes record no barrier of their own.</summary>
+/// <param name="Resources">The fragment's own versions, output-port versions included and input-port names not.</param>
+/// <param name="Passes">The fragment's passes.</param>
+/// <param name="InputVersions">The name that stands for each input port, in port order.</param>
+/// <param name="OutputVersions">The version that is each output port, in port order: a version of
+/// <paramref name="Resources"/> whose declaration the graph's bound version replaces.</param>
+public sealed record RenderGraphPackageFragment(IReadOnlyList<ShaderPipelineResource> Resources, IReadOnlyList<RenderGraphFragmentPass> Passes, IReadOnlyList<string> InputVersions, IReadOnlyList<string> OutputVersions) {
+    /// <summary>Returns the name a fragment pass or resource takes in a graph, spliced after the pass that runs the
+    /// package.</summary>
+    /// <param name="pass">The name of the graph's pass naming the package.</param>
+    /// <param name="name">The fragment pass's or resource's name.</param>
+    /// <returns>The spliced name.</returns>
+    public static string Spliced(string pass, string name) => $"{pass}${name}";
 }
 /// <summary>The deployed stages of a post-process package's fullscreen draw: the directory its bytecode ships in and each
 /// stage's stem, completed by the backend's extension (<c>.spv</c> or <c>.dxil</c>).</summary>
@@ -153,7 +188,8 @@ public sealed record RenderGraphPackageStages(string Directory, string Vertex, s
 /// <summary>The engine packages a host offers graphs, by id.</summary>
 public sealed class RenderGraphPackageCatalog {
     /// <summary>The id of the SDF world view: primary traversal, surfaces, ambient occlusion and lighting of one view,
-    /// from the instance's camera. The screens it shows are the instance's reads, not ports.</summary>
+    /// from the instance's camera, run as the fragment <see cref="SdfWorldPackage.Fragment"/> declares. The screens it
+    /// shows are the instance's reads, not ports.</summary>
     public const string SdfWorld = "sdf.world";
     /// <summary>The id of the world's SDF brick pool: brick uploads and carve bakes into one pool the world's views
     /// read. It is world-scoped, one instance for the world, and its output is a buffer, so the views reach it over
@@ -197,7 +233,8 @@ public sealed class RenderGraphPackageCatalog {
     /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">A package has no id, null port lists, a null or malformed port
     /// (<see cref="RenderGraphPackagePort.IsValid"/>), an input port that writes or an output port that reads, or no
-    /// output, a post-process package does not sample one image and draw one, or two share an id.</exception>
+    /// output, a fragment has no pass, a name per input port or one of its versions per output port, a post-process
+    /// package does not sample one image and draw one, or two share an id.</exception>
     public RenderGraphPackageCatalog(IEnumerable<RenderGraphPackage> packages) {
         ArgumentNullException.ThrowIfNull(argument: packages);
 
@@ -213,10 +250,23 @@ public sealed class RenderGraphPackageCatalog {
                 (package.Outputs.Count < 1) ||
                 package.Inputs.Concat(second: package.Outputs).Any(predicate: static port => ((port is null) || !port.IsValid)) ||
                 package.Inputs.Any(predicate: static port => !port.Reads) ||
-                package.Outputs.Any(predicate: static port => port.Reads)
+                package.Outputs.Any(predicate: static port => port.Reads) ||
+                (
+                    (package.Fragment is { } fragment) &&
+                    (
+                        (fragment.InputVersions.Count != package.Inputs.Count) ||
+                        (fragment.OutputVersions.Count != package.Outputs.Count) ||
+                        (fragment.Passes.Count == 0) ||
+                        !fragment.OutputVersions.All(predicate: output => fragment.Resources.Any(predicate: resource => string.Equals(
+                            a: resource.Name,
+                            b: output,
+                            comparisonType: StringComparison.Ordinal
+                        )))
+                    )
+                )
             ) {
                 throw new ArgumentException(
-                    message: $"Package '{package.Id}' needs an id, well-formed input ports that read and output ports that write, and at least one output.",
+                    message: $"Package '{package.Id}' needs an id, well-formed input ports that read and output ports that write, at least one output, and, for a fragment, a pass, a name per input port and one of its versions per output port.",
                     paramName: nameof(packages)
                 );
             }
@@ -415,10 +465,11 @@ public sealed class RenderGraphPackageCatalog {
 
     private static IEnumerable<RenderGraphPackage> EnginePackages() => [
         new RenderGraphPackage(
+            Fragment: SdfWorldPackage.Fragment,
             Id: SdfWorld,
             Inputs: [],
             Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite)],
-            Members: [],
+            Members: SdfWorldPackage.Members,
             Summary: "The SDF world as the instance's camera sees it."
         ),
         new RenderGraphPackage(

@@ -17,10 +17,10 @@ namespace Puck.World.Tests;
 /// CONTRACT UNDER TEST: offscreen, the fixed-step pump never advances past an armed capture's tick until that capture
 /// is served or refused. The harness is the offscreen host without a GPU: the real <see cref="FixedStepPump"/> holding
 /// its clock, stepping a real <see cref="WorldServer"/> whose <see cref="WorldCaptureScheduler"/> is published after
-/// every step, and a real <see cref="SdfEngineNode"/> over <c>FakeGpuDevice</c> producing one frame after every pump
-/// call. The node's pipeline factory blocks every creation on a gate the law holds, which is how a cold driver shader
-/// cache behaves: the node presents nothing and serves no capture until the gate opens and its build installs. The
-/// scheduler reads the node's readiness, so the host time held while the build is held is spent from the
+/// every step, and a real <see cref="SdfWorldResidency"/> whose view a render graph renders over <c>FakeGpuDevice</c>, producing
+/// one graph frame after every pump call. The residency's pipeline factory blocks every creation on a gate the law holds, which is how a cold driver shader
+/// cache behaves: the view presents nothing and serves no capture until the gate opens and its build installs. The
+/// scheduler reads the view's readiness, so the host time held while the build is held is spent from the
 /// pipeline-build budget, never from the capture hold budget.
 /// </summary>
 public sealed class WorldCaptureHoldLawTests : IDisposable {
@@ -50,20 +50,20 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
             tape: null
         );
     }
-    // Forwards every request to the node and keeps it, so the law can read each request's own outcome.
-    private sealed class RecordingTarget(SdfEngineNode node) : ICaptureRequestTarget {
-        public string? PendingCapturePath => node.PendingCapturePath;
+    // Forwards every request to the view's instance and keeps it, so the law can read each request's own outcome.
+    private sealed class RecordingTarget(ICaptureRequestTarget target) : ICaptureRequestTarget {
+        public string? PendingCapturePath => target.PendingCapturePath;
         public List<FrameCaptureRequest> Requests { get; } = [];
 
         public void RequestCapture(FrameCaptureRequest request) {
-            node.RequestCapture(request: request);
+            target.RequestCapture(request: request);
             Requests.Add(item: request);
         }
     }
-    // The node's readiness as the World's render probe presents it.
-    private sealed class NodeReadiness(SdfEngineNode node) : IWorldEngineReadiness {
-        public bool IsReady => node.IsReady;
-        public string? NotReadyReason => node.NotReadyReason;
+    // The view's readiness as the World's render probe presents it.
+    private sealed class ViewReadiness(SdfTestView view) : IWorldEngineReadiness {
+        public bool IsReady => view.IsReady;
+        public string? NotReadyReason => view.NotReadyReason;
     }
     private sealed class FixedFrameSource(SdfFrame frame) : ISdfFrameSource {
         public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) =>
@@ -112,20 +112,28 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
                 }),
                 name: "boot"
             );
-            Node = new SdfEngineNode(
-                brickPoolVoxelCapacity: 0,
-                frameSource: new FixedFrameSource(frame: Frame()),
-                height: Extent,
-                kernels: SdfTestPipelines.Kernels(),
-                pipelines: SdfTestPipelines.Cache(),
-                width: Extent
+            var pipelines = SdfTestPipelines.Cache();
+
+            View = new SdfTestView(
+                device: gpu,
+                extent: Extent,
+                pipelines: pipelines,
+                residency: new SdfWorldResidency(
+                    brickPoolVoxelCapacity: 0,
+                    frameSource: new FixedFrameSource(frame: Frame()),
+                    height: Extent,
+                    kernels: SdfTestPipelines.Kernels(),
+                    name: SdfTestView.Instance,
+                    pipelines: pipelines,
+                    width: Extent
+                )
             );
-            Target = new RecordingTarget(node: Node);
+            Target = new RecordingTarget(target: View.CaptureTarget);
             Scheduler = new WorldCaptureScheduler(
                 backend: "vulkan",
                 captureTarget: _ => Target,
                 directory: directory,
-                readiness: new NodeReadiness(node: Node),
+                readiness: new ViewReadiness(view: View),
                 server: m_row.Server,
                 worldFile: "fixture.world.json"
             );
@@ -163,11 +171,11 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
             );
         }
 
-        public SdfEngineNode Node { get; }
         public WorldCaptureScheduler Scheduler { get; }
         public WorldServer Server => m_row.Server;
         public CaptureStepSimulation Simulation { get; }
         public RecordingTarget Target { get; }
+        public SdfTestView View { get; }
 
         // The tick and capture-scope state hash the server held when each served request's frame completed it.
         public Dictionary<string, (ulong Tick, string Hash)> Served { get; } = new(comparer: StringComparer.Ordinal);
@@ -194,21 +202,21 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
 
         public void Dispose() {
             m_gate.Set();
-            Node.Dispose();
+            View.Dispose();
             m_router.Dispose();
             m_row.Dispose();
             m_gate.Dispose();
             m_entered.Dispose();
         }
         // One offscreen host iteration: host time through the pump (one step's worth unless given), then one produced
-        // frame.
+        // graph frame.
         public void Iterate(ulong? hostTicks = null) {
             _ = m_pump.Advance(
                 deltaTicks: (hostTicks ?? m_stepTicks),
                 maxFrameTicks: ulong.MaxValue,
                 stepTicks: m_stepTicks
             );
-            _ = Node.Produce(context: in m_context, height: Extent, width: Extent);
+            _ = View.Produce(context: in m_context);
 
             foreach (var request in Target.Requests) {
                 if (
@@ -241,7 +249,7 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
             userMessage: $"Only {Scheduler.Entries.Count} of {captures} captures were decided."
         );
         public void Release() => m_gate.Set();
-        // Iterates until the node's build is held in the driver and the node names it, so a refusal's reason reads the
+        // Iterates until the residency's build is held in the driver and the view names it, so a refusal's reason reads the
         // same on every run; the bound is liveness, and decides nothing.
         public void IterateUntilBuilding() {
             Iterate();
@@ -253,7 +261,7 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
                 condition: () => {
                     Iterate();
 
-                    return (Node.NotReadyReason?.StartsWith(
+                    return (View.NotReadyReason?.StartsWith(
                         comparisonType: StringComparison.Ordinal,
                         value: "the engine's pipeline set is building"
                     ) ?? false);
@@ -262,14 +270,14 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
             ));
         }
         // The offscreen host's teardown order: settle what is owed a frame, then dispose the render root. The gate
-        // opens first only because the node's disposal waits out its build.
+        // opens first only because the residency's disposal waits out its build.
         public void EndRun() {
             Simulation.SettleOwedFrames();
             m_gate.Set();
-            Node.Dispose();
+            View.Dispose();
         }
         // Asserts every request the scheduler armed ended by a frame or by the scheduler's own refusal, never by the
-        // node's disposal.
+        // view's disposal.
         public void AssertNothingReachedDisposal() {
             Assert.NotEmpty(collection: Target.Requests);
 
@@ -332,7 +340,7 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
             run.Iterate();
         }
 
-        Assert.False(condition: run.Node.IsReady);
+        Assert.False(condition: run.View.IsReady);
         Assert.Equal(
             expected: FirstTick,
             actual: run.Tick
@@ -375,7 +383,7 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
             run.Iterate(hostTicks: EngineTicks.PerSecond);
         }
 
-        Assert.False(condition: run.Node.IsReady);
+        Assert.False(condition: run.View.IsReady);
         Assert.Equal(
             expected: FirstTick,
             actual: run.Tick
@@ -395,7 +403,7 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
     }
     /// <summary>Law 2: with the build held past the pipeline-build budget, the capture is refused by name, the reason
     /// naming the build and its progress, and withdrawn; the run steps on and refuses the next unservable capture at
-    /// once, a frame produced after the install writes neither, and the node's disposal finds nothing owed.</summary>
+    /// once, a frame produced after the install writes neither, and the view's disposal finds nothing owed.</summary>
     [Fact]
     public void ABuildHeldPastTheBudgetRefusesByNameAndTheRunEndsWithNothingReachingDisposal() {
         using var run = new Run(
@@ -412,7 +420,7 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
             hostTicks: EngineTicks.PerSecond
         );
 
-        Assert.False(condition: run.Node.IsReady);
+        Assert.False(condition: run.View.IsReady);
         Assert.Equal(
             expected: [
                 "first:10:Unserved:the engine's pipeline set is building (0 of 10 pipelines created) (the host held its clock at tick 10 while the engine's pipeline set built, until its 180-second pipeline-build hold budget was spent)",
@@ -430,7 +438,7 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
             condition: () => {
                 run.Iterate();
 
-                return run.Node.IsReady;
+                return run.View.IsReady;
             },
             timeout: TimeSpan.FromSeconds(value: 30)
         ));
@@ -450,7 +458,7 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
         run.AssertNothingReachedDisposal();
     }
     /// <summary>Law 2, at the run's end: a run that ends while a capture holds its clock refuses it as unserved when
-    /// it settles what is owed, before the node's disposal could refuse it.</summary>
+    /// it settles what is owed, before the view's disposal could refuse it.</summary>
     [Fact]
     public void ARunEndingWhileACaptureIsHeldRefusesItBeforeTheNodeIsDisposed() {
         using var run = new Run(

@@ -126,7 +126,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
             Assert.Equal(expected: (6UL, 6L), actual: ((node.FrameCounter - submitted), (upload.Writes - writes)));
             Assert.True(condition: runtime.Work(instance: source).TryReadCompleted(sample: sample));
-            Assert.Equal(expected: [RenderGraphRuntime.SourceConversionPass], actual: sample.PassLabels.ToArray());
+            Assert.Equal(expected: [RenderGraphRuntime.SourceConversionPass, ShaderPipelineRenderNode.RegionCopiesPass], actual: sample.PassLabels.ToArray());
             Assert.True(condition: sample.TryGetPassCount(column: 0, pass: 0, value: out var dispatches));
             Assert.Equal(actual: dispatches, expected: 1L);
 

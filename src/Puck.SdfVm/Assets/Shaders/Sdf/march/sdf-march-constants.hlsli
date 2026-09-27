@@ -1,7 +1,7 @@
 // The march, cone, tile-gap, shadow and heat-map constants the world kernels share, and the per-pixel query tally.
 #ifndef MARCH_SDF_MARCH_CONSTANTS_HLSLI
 #define MARCH_SDF_MARCH_CONSTANTS_HLSLI
-// The primary march's step budget. KEEP IN SYNC with SdfWorldEngine.PrimaryMarchSteps (the world.budget cost sheet
+// The primary march's step budget. KEEP IN SYNC with SdfWorldTables.PrimaryMarchSteps (the world.budget cost sheet
 // quotes it against the authored far distance). There is deliberately NO far-distance constant beside it any more:
 // the far plane is world data (render.farDistance), read per view through worldFarDistance.
 static const int MaxSteps = 128;

@@ -58,9 +58,9 @@ public readonly record struct SdfEmitContext(
 /// optional shape emitted, every modifier at its worst-case magnitude, every dynamic slot present — so the one
 /// construction-time probe <see cref="SdfCompositionFrameSource"/> runs (combining every emitter's probe form into a
 /// single program) sizes the engine's dynamic-transform capacity, which never grows, and the initial program-word and
-/// instance reserve, which <see cref="SdfWorldEngine.UploadProgram"/> grows on demand. A new optional emission an
+/// instance reserve, which <see cref="SdfWorldTables.UploadProgram"/> grows on demand. A new optional emission an
 /// emitter grows must grow its own probe branch in the same change: a live rebuild that needs more dynamic-transform
-/// slots than the probe reserved makes <see cref="SdfWorldEngine.UploadProgram"/> throw
+/// slots than the probe reserved makes <see cref="SdfWorldTables.UploadProgram"/> throw
 /// <see cref="ArgumentException"/>. The probe branch of each emitter must dominate its live branch on its own — never
 /// reason about it across the whole composed program.
 /// </para></summary>
@@ -143,7 +143,7 @@ public interface ISdfSceneEmitter {
     /// its last live <see cref="Emit"/> fixed, and any its last <see cref="PackDynamicTransforms"/> posed. The host reads
     /// it after packing, every frame, and composes every emitter's draws in list order.
     /// <para>
-    /// The host recomposes, and an engine repacks its mesh region, only when the list is a different one or
+    /// The host recomposes, and a residency's tables repack their mesh region, only when the list is a different one or
     /// <see cref="MeshDrawsRevision"/> moved, so an emitter may keep one list and rewrite it in place: it moves the
     /// revision whenever the content changes, and never while the host is reading it. The default, an empty list, is
     /// correct for an emitter that draws no mesh.

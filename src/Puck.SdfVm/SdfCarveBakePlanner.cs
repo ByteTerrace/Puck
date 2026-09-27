@@ -7,8 +7,8 @@ namespace Puck.SdfVm;
 
 /// <summary>The narrow engine-side seam the <see cref="SdfCarveBakePlanner"/> drives: request a
 /// sliced background bake into a pool slot, poll a slot's state, and ask whether the engine even owns a pool. A
-/// <see cref="SdfWorldEngine"/> is this service (its <see cref="SdfWorldEngine.RequestBrickBake"/>/
-/// <see cref="SdfWorldEngine.GetBrickState"/> match the shape), so the planner reaches the engine through this
+/// <see cref="SdfWorldTables"/> is this service (its <see cref="SdfWorldTables.RequestBrickBake"/>/
+/// <see cref="SdfWorldTables.GetBrickState"/> match the shape), so the planner reaches the engine through this
 /// three-member surface without naming the concrete engine type — a poll-each-produced-frame contract with no
 /// callbacks and no cross-thread seams.</summary>
 public interface ISdfBrickBakeService {
@@ -17,12 +17,12 @@ public interface ISdfBrickBakeService {
     /// scene renders exactly as it does today.</summary>
     bool BrickBakeAvailable { get; }
 
-    /// <summary>Polls a slot's current bake state and monotonic serial (see <see cref="SdfWorldEngine.GetBrickState"/>).</summary>
+    /// <summary>Polls a slot's current bake state and monotonic serial (see <see cref="SdfWorldTables.GetBrickState"/>).</summary>
     /// <param name="slot">The pool slot, in <c>[0, <see cref="SdfBrickPoolLayout.MaxBricks"/>)</c>.</param>
     /// <returns>The slot's state and serial.</returns>
     BrickBakeStatus GetBrickState(int slot);
     /// <summary>Requests a sliced background bake of a settled-carve bin's union field into a slot (see
-    /// <see cref="SdfWorldEngine.RequestBrickBake"/>). Does NOT wait; re-requesting a slot restarts it and bumps the
+    /// <see cref="SdfWorldTables.RequestBrickBake"/>). Does NOT wait; re-requesting a slot restarts it and bumps the
     /// serial.</summary>
     /// <param name="slot">The pool slot, in <c>[0, <see cref="SdfBrickPoolLayout.MaxBricks"/>)</c>.</param>
     /// <param name="request">The bake request (box, cell size, dims, 1/λ, and the sphere carves).</param>
@@ -66,7 +66,7 @@ public sealed class SdfCarveBakePlanner {
     // NO stepScale tax. The bake writes c·InvLambda; the outside-box boundary floor is margin·InvLambda. KEEP IN SYNC
     // with the √3 the sdf-brick-bake.comp baker and sdfSampledRegion assume.
     private const float InvLambda = 0.5773502691896258f;   // 1/√3 (λ = √3)
-    // The per-slot request-buffer carve ceiling (KEEP IN SYNC with SdfWorldEngine.MaxBrickCarvesPerBake). A bin holding
+    // The per-slot request-buffer carve ceiling (KEEP IN SYNC with SdfWorldTables.MaxBrickCarvesPerBake). A bin holding
     // more than this stays analytic rather than throwing at RequestBrickBake — it cannot happen with the debug pool's
     // 4096-carve cap even if every carve lands in one bin, but the guard keeps the planner total.
     private const int MaxCarvesPerBrick = 4096;

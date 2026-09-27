@@ -315,12 +315,25 @@ offers:
 
 | Package | Ports | Renders |
 |---|---|---|
-| `sdf.world` | no input, one image output written by compute | The SDF world as the instance's camera sees it. The screens it shows are the instance's reads, not ports. |
+| `sdf.world` | no input, one image output written by compute | The SDF world as the instance's camera sees it, run as a fragment (`SdfWorldPackage.Fragment`): sky, mask, beam, cull arguments, mesh, then primary, surface, ambient and views dispatched indirectly from the cull arguments, over transient counted scratch. The screens it shows are the instance's reads, not ports. |
 | `sdf.bricks` | no input, one buffer output written by compute | The world's SDF brick pool, written by brick uploads and carve bakes: one float per voxel, stride 4, counted `[{ "per": ["BrickPoolVoxels"] }]`. It is world-scoped, and the views read it across buffer edges. |
 | `overlay` | one fragment-sampled image input, one color-attachment image output | The console, HUD, toasts and cursor drawn over the input. |
 | `place` | two image inputs, a base and a source, read by compute, one image output written by compute | The base with the source reconstructed into a destination rect over it: an exact copy where the rect has the source's extent, otherwise bilinear at sharpness 0 blending to clamped Catmull-Rom at sharpness 1. Its config is `letterbox` (1 writes the letterbox color outside the rect instead of the base, 0 by default), `rect` (left, top, width and height as fractions of the output, the whole output by default, which resamples the whole source) and `sharpness`; a host that places panes per frame (`IRenderGraphPlacements`) overrides the rect and sharpness, and a source it shows nowhere draws nothing, so the base stands for the output, or, when the pass may not stand in, copies the base everywhere, letterbox or not. Its kernel, `src/Puck.Shaders/Assets/Shaders/Graph/place.comp.hlsl`, compiles at build, and `PlacePackage` records it. |
 | `sdf.film-grain` | one fragment-sampled image input, one color-attachment image output | Film grain over the input: the engine's [post-process package](#post-process-packages), a per-pixel integer-hashed offset keyed on the engine tick. Its stages, `fullscreen.vert` and `sdf-film-grain.frag` in `Assets/Shaders/Sdf/passes`, compile at build, and `PostProcessPackage` records it. |
 | `source-palette`, `source-nv12`, `source-rgba`, `source-transfer` | one raw buffer input read by compute, one image output written by compute | An uploaded source's region (`ImageSourceUploadLayout`) converted by the shipped kernel of that name in `src/Puck.Shaders/Assets/Shaders/Sources` into RGBA8, or half-float linear light for `source-transfer`. `SourceConversionPackage` records them; the runtime runs one in the graph it makes for each uploaded source instance, its region bound as a host buffer port (`ShaderPipelineRenderNode.BindRegion`). |
+
+A package may run as a fragment (`RenderGraphPackageFragment`): passes and
+versions of its own, which the graph compiler splices into the graph in place
+of each pass naming the package. A fragment pass becomes a package pass named
+`<pass>$<fragment pass>`, recorded by the package's recorder for that part
+(`ShaderPipelinePackageStep.Part`, `RenderGraphPackageRecorderContext.Part`),
+and a fragment version becomes `<pass>$<version>`. A name the fragment stands
+for an input port reads the version the pass binds there, and the version the
+pass binds to an output port takes the fragment's version's place, forwarding
+what that version forwards, so a bound output that forwards anything itself
+is refused (`RENDERGRAPH_PACKAGE_OUTPUT`). A package pass may draw a depth
+version through its own render pass, which clears it to the version's
+`clearDepth`, the value the node creates its images for.
 
 `RenderGraphCompiler` checks the schema tag and the package passes against the
 catalog, then plans the whole graph with `ShaderPipelineCompiler`, the one
@@ -477,6 +490,29 @@ which is the layout the producer's own submissions leave it in, and the planner
 plans its barriers from it. `PostProcessPackage` serves every post-process
 package and `OverlayPackage` serves `overlay`.
 
+An instance whose `ExternalPackage` names a package no external producer or
+upload serves, but a recorder does, is a package instance: when the package
+runs as a fragment with no input port and one image output, the runtime makes
+its graph, one pass named after the package id running it, whose output is the
+instance's, declared as the fragment declares its output version, and renders
+it on a node like any graph instance. Any other package is refused by name.
+Before it schedules each frame the runtime asks the package of every instance
+whose graph binds no input and runs only package passes whether anything it
+renders from changed since its latest render
+(`IRenderGraphPackageFactory.IsUnchanged`), and declares the instances none of
+whose packages saw a change unchanged (`RenderGraphFrame.Unchanged`), except one
+a pending capture reads, which only a render serves. A device loss reaches every
+package's factory (`IRenderGraphPackageFactory.OnDeviceLost`).
+
+A node given an export (`ShaderPipelineRenderNode.Export`, an
+`IShaderPipelineOutputExport`) renders its default output into the one image the
+export creates, which another device reads, at the export's extent whatever
+extent it is asked for. It publishes that image in `External` layout, takes it
+back from its reader before the submission that writes it
+(`IGpuExportableImage.BeginWrite`) and completes it after (`CompleteWrite`),
+handing the export the shared fence value the write signals, and renders nothing
+on a frame the reader still holds it.
+
 An instance can instead be an external producer: a `RenderGraphInstance` whose
 `ExternalPackage` names the `IRenderGraphExternalProducer` registered for that
 package (`RenderGraphPackageRecorders.RegisterProducer`). It has no graph. The
@@ -494,22 +530,37 @@ returns, a graph instance's unleased), so a read of its own output binds the
 output it completed before this frame, in a
 `RenderGraphExternalReads` it hands to `Produce`. The producer takes the leases
 its submission samples (`Take`) and retires them after that submission's
-fence, and the runtime retires the rest once `Produce` returns. `SdfEngineNode` is the
-`sdf.world` producer: it submits through the SDF engine's own frame ring and
-renders every view of the frame, each into its own output image.
-`SdfEngineNode.ViewProducer` gives a producer for each later view, whose own
-`Produce` only records the extent the scheduler chose; the engine renders at
-that extent from the next frame. The node counts every acquisition of each
-output. Its engine's extent only grows, and it disposes an engine a larger
-extent replaced only once that engine's outputs are released.
+fence, and the runtime retires the rest once `Produce` returns. A graph
+instance's reads that its graph binds to no version are bound the same way,
+after its graph's inputs, when its graph runs a package whose factory samples
+them (`IRenderGraphPackageFactory.SamplesReads`): each package recording of the
+frame is handed them (`RenderGraphPackageRecording.Reads`), takes the lease of
+what it samples into the frame's lease list, and their taint is the
+instance's. A frame may declare instances unchanged since their latest render
+(`RenderGraphFrame.Unchanged`): such an instance is not due by its refresh, so
+its latest output stands, and it renders only when it never has, when the frame
+names it to render again, or when it is demanded at another extent.
+
+Every SDF view is a package instance of `sdf.world`. Its factory,
+`SdfWorldPasses` in `Puck.SdfVm`, resolves each instance to a view of a
+residency (`SdfWorldResidency`): the tables one frame source's views share, its
+program, transforms, screens, lights, volumes and mesh draws. The frame's first
+pass to record submits the residency's one upload ahead of the view's
+submission, and every pass of the view reads the tables that upload wrote. At
+the start of each frame the factory starts and prepares every residency it
+holds (`IRenderGraphPackageFactory.BeginFrame`); it answers `IsUnchanged` from
+the residency's record of what each view last rendered, and sizes a view's
+counted scratch through `CounterOf` from the view's extent and the residency's
+instance capacity. A pass installs only once its residency has built its
+tables, so a view renders nothing before then.
 
 A capture armed on the runtime reads the root instance's output, and one armed
 through `RenderGraphRuntime.CaptureTarget` reads the instance it names. A graph
 instance's node serves it on a frame the instance renders with every image
 input it shows bound to a completed output, never a stand-in, and an external
 producer serves it from the next frame it produces. Until then
-`UnservedCaptureReasonOf` names why. The root may be an external producer, when
-nothing is drawn over its output. Each instance counts its own passes.
+`UnservedCaptureReasonOf` names why. The root may be the world's own instance,
+when nothing is drawn over its output. Each instance counts its own passes.
 
 ### The default root graph
 
@@ -518,10 +569,11 @@ gets the default graph `WorldRootGraph` (in `Puck.World.Client`) synthesizes
 from its document, a graph document value planned by `RenderGraphCompiler` like
 any other:
 
-- `world`: the `sdf.world` external producer, the SDF engine node, which
-  publishes the first view.
-- `world$2` onward: one producer per further split-screen view, when the
-  world's layouts or player roster can compose more than one view.
+- `world`: the `sdf.world` instance rendering the first view of the world's
+  residency.
+- `world$2` onward: one instance per further split-screen view of the same
+  residency, when the world's layouts or player roster can compose more than
+  one view.
 - `main`: the root graph reading `world`'s output over the whole display and
   every pane's output. With more than one view it first runs one `place` pass
   per view. Then it runs one `place` package pass per `views.graphs` instance
@@ -533,19 +585,22 @@ any other:
 
 `main` is the root whenever anything is drawn over the world, panes included,
 and whenever the world has more than one view. When neither holds, as in an offscreen World with no panes and no
-`views.post` rows, `world` is the root and the display shows the engine's
-output directly. A world that sets `views.root` authors its whole render graph,
+`views.post` rows, `world` is the root and the display shows the world's first
+view directly. A world that sets `views.root` authors its whole render graph,
 the `sdf.world` package row included, and the runtime runs its rows alone; such
 a world authors no `views.post`.
 `RenderGraphRuntimeNode` is the host's render root, the one `IRenderRoot` the
 launcher drives: each frame it shows the root over a display of the World's
-configured extent. Nothing wraps it; the screen binder, whose GPU holdings must
-go while the device is alive, is released by the root's teardown
-(`RenderGraphRuntimeNode.Holdings`). A `captures` row reads
+configured extent. Nothing wraps it; the screen binder and the world's
+residency, whose GPU holdings must go while the device is alive, are released
+by the root's teardown (`RenderGraphRuntimeNode.Holdings`). A `captures` row reads
 the root, or names `world` to capture the SDF world before its panes, post
 passes and overlay. `world.counters gpu` counts every graph instance under its
-instance name: `world` is the engine node, `main` the root's node, whose passes
-are the place, post and overlay passes, and each pane its own node.
+instance name: `world` is the first view's node, whose passes are
+`sdf.world$sky` through `sdf.world$views`, `main` the root's node, whose passes
+are the place, post and overlay passes, and each pane its own node. It counts
+each residency's upload beside them: the world's as `sdf:world`, and each
+camera or session view's as `sdf:<name>`.
 
 ### Graph instances in a World
 
@@ -612,7 +667,7 @@ full-display view or a full-display pane, and then the unshown pass stands for
 the world and dispatches nothing.
 
 Every screen reads a graph instance: a source instance, or a camera or session
-view, each an external `sdf.world` instance the scheduler feeds like any other
+view, each an `sdf.world` instance the scheduler feeds like any other
 ([motion and views](../rendering/sdf/handbook/motion-and-views.md#views-are-render-graph-instances)).
 
 ## Pass interfaces
@@ -1186,7 +1241,21 @@ more pieces of vocabulary:
   nothing stays `sizeBytes`. `ShaderPipelineResource.ResolveSizeBytes` computes
   the bytes. A term whose bases the host resolves to zero units adds nothing,
   and a buffer whose terms all resolve to zero bytes is refused, naming the
-  buffer and its terms.
+  buffer and its terms. The render node resolves a graph's counts through the
+  counter its package passes' factories state for its instance
+  (`IRenderGraphPackageFactory.CounterOf`, an `IShaderPipelineStorageCounter`)
+  at the extent it builds the graph for, and rebuilds the installed graph
+  beside it, as a resize does, when the counter's revision moves. A graph whose
+  packages state no counter resolves the extent alone.
+- A resource's `transient` makes its storage frame-transient: one allocation
+  every frame slot shares, instead of one per slot. Each frame writes it from
+  discarded contents before anything reads it, and nothing reads it across
+  frames, so the planner's barrier before its first use of a frame, from the
+  state the frame before left, orders the two frames' use of the one
+  allocation on the queue. Only a chain's first version declares it, and a
+  transient storage that is history, published, host- or zero-initialized,
+  read as the previous frame, or first reached by anything but its first
+  version's write is refused (`SHADERPIPE_TRANSIENT`).
 
 A shader pass declaring a `Groups` or `Indirect` dispatch is refused
 (`SHADERPIPE_DISPATCH_PACKAGE`), and so is a shader pass binding a buffer with

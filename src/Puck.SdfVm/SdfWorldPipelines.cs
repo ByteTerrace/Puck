@@ -4,7 +4,7 @@ using Puck.Abstractions.Gpu;
 namespace Puck.SdfVm;
 
 /// <summary>
-/// The compute pipelines an <see cref="SdfWorldEngine"/> records with, for one compiled kernel set on one device:
+/// The compute pipelines an <see cref="SdfWorldTables"/> records with, for one compiled kernel set on one device:
 /// about thirteen of them, the two brick pipelines included. Creating a pipeline is where a driver translates the
 /// kernel to native code, which can take seconds per pipeline with its cache cold, so <see cref="SdfWorldPipelineCache"/>
 /// builds this set on the thread pool (<see cref="Puck.Hosting.BackgroundBuild{T}"/>) for every node and view that leases
@@ -54,7 +54,7 @@ public sealed class SdfWorldPipelines : IDisposable {
                     computeShaderModule: shader,
                     description: description,
                     name: new GpuObjectName(
-                        owner: SdfWorldEngine.ObjectOwner,
+                        owner: SdfWorldTables.ObjectOwner,
                         part: description.Name
                     )
                 ),
@@ -146,7 +146,7 @@ public sealed class SdfWorldPipelines : IDisposable {
 
     /// <summary>Creates every engine pipeline for a kernel set, up to <see cref="BuildConcurrency"/> at once: the
     /// calling thread creates one at a time and the thread pool runs the rest beside it. Pipelines start in
-    /// <c>SdfWorldEngine.PipelineLayouts.BuildOrder</c>, the three views variants last. Safe on any thread. The token is
+    /// <c>SdfWorldTables.PipelineLayouts.BuildOrder</c>, the three views variants last. Safe on any thread. The token is
     /// checked before each pipeline and never during one, so a canceled build stops once the creations already in the
     /// driver return and releases everything it created; a failed creation stops the rest the same way.</summary>
     /// <param name="device">The device the pipelines are created on; the set creates them through its services, counted
@@ -173,10 +173,10 @@ public sealed class SdfWorldPipelines : IDisposable {
             ledger: ledger,
             services: device.Services
         );
-        var specs = SdfWorldEngine.PipelineLayouts.Specs;
+        var specs = SdfWorldTables.PipelineLayouts.Specs;
         var work = new List<Creation>(capacity: specs.Length);
 
-        foreach (var index in SdfWorldEngine.PipelineLayouts.BuildOrder) {
+        foreach (var index in SdfWorldTables.PipelineLayouts.BuildOrder) {
             var spec = specs[index];
             var bytecode = KernelBytes(
                 kernels: kernels,
@@ -236,7 +236,7 @@ public sealed class SdfWorldPipelines : IDisposable {
     }
     /// <summary>Creates replacements for the pipelines whose bytecode differs between the installed kernels and
     /// <paramref name="kernels"/>. Unchanged bytecode creates nothing. Safe on any thread while no other reload is being
-    /// installed; <see cref="SdfWorldEngine.InstallReload"/> puts the result into service on the render thread.</summary>
+    /// installed; <see cref="SdfWorldTables.InstallReload"/> puts the result into service on the render thread.</summary>
     /// <param name="kernels">A complete compiled set for the same backend and unchanged host binding ABI.</param>
     /// <param name="cancellationToken">Stops the preparation between pipelines.</param>
     /// <returns>The prepared reload, owned by the caller until it is installed or disposed.</returns>
@@ -310,7 +310,7 @@ public sealed class SdfWorldPipelines : IDisposable {
     internal IGpuComputePipeline? OptionalPipeline(int index) =>
         m_slots[index];
     internal IGpuComputePipeline Pipeline(int index) =>
-        (m_slots[index] ?? throw new InvalidOperationException(message: $"The pipeline set has no '{SdfWorldEngine.PipelineLayouts.Specs[index].Description.Name}' pipeline."));
+        (m_slots[index] ?? throw new InvalidOperationException(message: $"The pipeline set has no '{SdfWorldTables.PipelineLayouts.Specs[index].Description.Name}' pipeline."));
     internal void Rollback(SdfWorldPipelineReload reload) =>
         reload.Rollback(slots: m_slots);
     internal void ThrowIfNotCurrent(SdfWorldPipelineReload reload) {
@@ -433,7 +433,7 @@ public sealed class SdfWorldPipelines : IDisposable {
 }
 /// <summary>
 /// Replacement pipelines for the kernels that changed, prepared off the render thread by
-/// <see cref="SdfWorldPipelines.PrepareReload"/> and put into service by <see cref="SdfWorldEngine.InstallReload"/>.
+/// <see cref="SdfWorldPipelines.PrepareReload"/> and put into service by <see cref="SdfWorldTables.InstallReload"/>.
 /// Disposing a reload that was never installed releases its pipelines.
 /// </summary>
 public sealed class SdfWorldPipelineReload : IDisposable {

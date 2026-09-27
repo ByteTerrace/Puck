@@ -20,7 +20,7 @@ public enum BrickBakeState {
 /// cancels the in-flight bake and bumps the serial, so a consumer that cached <see cref="BrickBakeState.Ready"/> at an
 /// older serial knows its brick was superseded.</summary>
 /// <param name="State">The slot's lifecycle state.</param>
-/// <param name="Serial">The monotonic bake serial — incremented on every <c>Puck.SdfVm.SdfWorldEngine.RequestBrickBake</c>.</param>
+/// <param name="Serial">The monotonic bake serial — incremented on every <c>Puck.SdfVm.SdfWorldTables.RequestBrickBake</c>.</param>
 public readonly record struct BrickBakeStatus(BrickBakeState State, ulong Serial);
 /// <summary>A request to bake the settled-carve union distance field of one bin into a brick pool slot.
 /// The bake kernel writes <c>min_i(|v − cᵢ| − rᵢ) / λ</c> at each voxel centre — the closed-form

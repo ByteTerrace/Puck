@@ -482,7 +482,7 @@ public sealed partial class SdfProgramBuilder {
         );
     }
     /// <summary>Adds a screen slab whose lit face samples a bound screen source (see
-    /// <c>Puck.SdfVm.SdfWorldEngine.SetScreenSource</c>) instead of the flat screen material, when one is bound this
+    /// <c>Puck.SdfVm.SdfWorldTables.SetScreenBound</c>) instead of the flat screen material, when one is bound this
     /// frame — a diegetic screen (an emulator's framebuffer, e.g.) on static geometry. The slab's shape/distance field
     /// is identical to the plain overload (a rounded box); only shading differs. The world-space frame maps a hit
     /// point to the slab's <c>[0,1]²</c> UV: <paramref name="worldRight"/>/<paramref name="worldUp"/> must be unit and

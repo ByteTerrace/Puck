@@ -31,7 +31,7 @@ internal sealed partial class WorldScreenBinder {
         instance: instance,
         output: output
     );
-    /// <summary>Returns the same-device image-view handle the engine node bound to a screen index in its latest frame, or 0
+    /// <summary>Returns the same-device image-view handle the world's views bound to a screen index in its latest frame, or 0
     /// when the index is unbound, not declared, or nothing has been produced yet — the live state <c>world.screens</c>
     /// reports.</summary>
     /// <param name="index">The engine screen-surface index.</param>
@@ -39,10 +39,10 @@ internal sealed partial class WorldScreenBinder {
     public nint CurrentHandle(int index) => ((
         m_slots.ContainsKey(key: index) &&
         (index >= 0) &&
-        (index < SdfWorldEngine.MaxScreenSurfaces) &&
-        (m_renderProbe?.Node is { } node)
+        (index < SdfWorldTables.MaxScreenSurfaces) &&
+        (ViewHost is { } residency)
     )
-        ? node.BoundScreenSource(screen: index)
+        ? residency.BoundScreenSource(screen: index)
         : 0
     );
     /// <summary>Returns how the image a screen shows crosses from its producer's device to the render device: through the

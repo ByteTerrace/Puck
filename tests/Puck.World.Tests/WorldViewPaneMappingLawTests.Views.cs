@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Abstractions.Cameras;
+using Puck.Abstractions.Sources;
 using Puck.Assets.Documents;
 using Puck.Commands;
 using Puck.Hosting;
@@ -167,6 +168,46 @@ public sealed partial class WorldViewPaneMappingLawTests {
             collection: screens.Mappings,
             filter: mapping => (mapping == walk.Steps[2].Mapping)
         );
+    }
+    [InlineData(true)]
+    [InlineData(false)]
+    [Theory]
+    public void OnlyARootCameraDemandsTheScreensItFilmsWhileTheWorldIsHidden(bool filmsWorld) {
+        var screens = ShowCamera(demand: WorldViewDemand.Root);
+
+        screens.Reconcile(
+            cameras: [FilmingCamera()],
+            screens: [FacingScreen(index: 0, source: new WorldScreenSource.Probe(Id: "feed"))]
+        );
+        screens.ReconcileViews(views: WorldViewInstances.Of(views: [
+            new WorldView(Demand: WorldViewDemand.Root, FilmsWorld: filmsWorld, Height: 0.25, Name: ViewCamera, Refresh: RenderGraphRefresh.EveryFrame, Width: 0.25),
+            new WorldView(Demand: WorldViewDemand.Screen, FilmsWorld: false, Height: 0.25, Name: "session", Refresh: RenderGraphRefresh.EveryFrame, Width: 0.25),
+        ]));
+        Prepare(pane: null);
+
+        var set = m_instances.Instances;
+        var source = Assert.Single(collection: screens.Sources.Instances).Name;
+        var schedule = new RenderGraphSchedule(set: set);
+
+        RenderGraphScheduler.Schedule(
+            frame: new RenderGraphFrame(
+                DisplayHeight: Display,
+                DisplayHertz: 60,
+                DisplayWidth: Display,
+                Footprints: m_host.Footprints,
+                Index: 0,
+                Roots: m_host.Roots,
+                Sources: [new RenderGraphSourceState(Cadence: ImageSourceCadence.Tick, Height: Display, Instance: source, Width: Display)]
+            ),
+            history: RenderGraphHistory.Empty(set: set),
+            schedule: schedule,
+            set: set
+        );
+
+        Assert.Contains(expected: set.IndexOf(name: ViewCamera), collection: schedule.Renders);
+        Assert.DoesNotContain(expected: set.IndexOf(name: WorldViewGraphs.WorldInstance), collection: schedule.Renders);
+        Assert.Equal(expected: filmsWorld, actual: schedule.Renders.Contains(value: set.IndexOf(name: source)));
+        Assert.Equal(expected: filmsWorld, actual: schedule.Renders.Contains(value: set.IndexOf(name: "session")));
     }
 
     private sealed record FixedViewCameras(CameraSnapshot Camera) : IWorldViewCameras {

@@ -7,7 +7,7 @@ using Xunit;
 namespace Puck.SdfVm.Tests;
 
 /// <summary>
-/// Laws for the once-per-device-and-kernel-set ISA handshake an <see cref="SdfWorldEngine"/> runs at construction, over
+/// Laws for the once-per-device-and-kernel-set ISA handshake an <see cref="SdfWorldTables"/> runs at construction, over
 /// <see cref="FakeGpuDevice"/>: an engine built on a device that already verified the same kernel set submits no
 /// handshake, and changing any one of the fourteen kernels makes the next engine verify again. The kernel set is
 /// identified by <see cref="SdfWorldKernels.ContentKey"/>, which hashes every kernel with its length.
@@ -58,7 +58,7 @@ public sealed class SdfShaderSetVerificationLawTests {
     private static int Construct(FakeGpuDevice gpu, SdfWorldKernels kernels) {
         var builder = new SdfProgramBuilder();
         var ledger = new GpuWorkLedger(
-            framesInFlight: SdfWorldEngine.FrameRingSize,
+            framesInFlight: SdfWorldTables.FrameRingSize,
             name: "gpu.sdf-engine"
         );
 
@@ -82,19 +82,16 @@ public sealed class SdfShaderSetVerificationLawTests {
         );
         var before = gpu.Submissions;
 
-        using var engine = new SdfWorldEngine(
+        using var engine = new SdfWorldTables(
             device: gpu,
-            height: Extent,
-            options: new SdfWorldEngineOptions(
+            options: new SdfWorldTablesOptions(
                 BrickPoolVoxelCapacity: 0,
                 Program: builder.Build(),
-                ViewportCapacity: 1,
                 WorkLedger: ledger
             ),
             pipelines: pipelines,
             meshRaster: meshRaster,
-            regionCopy: regionCopy.Compute!,
-            width: Extent
+            regionCopy: regionCopy.Compute!
         );
 
         return (gpu.Submissions - before);

@@ -96,7 +96,7 @@ public sealed partial class ShaderPipelineRenderNode {
             if (resource.Buffers is { } buffers) {
                 foreach (var buffer in buffers) {
                     if (buffer is not null) {
-                        bytes = checked((bytes + (resource.Spec.SizeBytes ?? 0UL)));
+                        bytes = checked((bytes + buffer.SizeBytes));
                     }
                 }
             }

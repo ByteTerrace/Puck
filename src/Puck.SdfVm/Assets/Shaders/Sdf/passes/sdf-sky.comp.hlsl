@@ -6,7 +6,7 @@
 // later proves every tile live still runs this pass — the redundant write on a live tile's pixel is thrown away the
 // moment Stage 1 overwrites it moments later; a conditional dispatch would save nothing worth the branch.
 //
-// SHARES Stage 1's interface: SdfWorldEngine builds this kernel's pipeline from sdf-world, as it builds every per-view
+// SHARES Stage 1's interface: SdfWorldTables builds this kernel's pipeline from sdf-world, as it builds every per-view
 // kernel's, so it binds the SAME frame and views sets Stage 1 does — no descriptor set of its own. Reads viewports, sky/lighting rows, bounded volumes, and the dynamic
 // transforms their frames and optional intensity lanes use. SDF_SCREEN_SOURCES is required even though this
 // kernel never samples a screen source: it is

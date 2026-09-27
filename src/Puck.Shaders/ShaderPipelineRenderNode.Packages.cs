@@ -16,6 +16,10 @@ public sealed partial class ShaderPipelineRenderNode {
     // The host's recorders, or an empty set for a node given none, which refuses every package pass.
     private readonly RenderGraphPackageRecorders m_packages;
 
+    // The images of the instances this instance reads that its graph binds to no version, which the runtime binds before
+    // each frame it produces and every package recording of that frame is handed; null when there are none.
+    internal RenderGraphExternalReads? Reads { get; set; }
+
     // The buffer the published default output holds in the frame slot the node most recently submitted: what a graph
     // instance's consumers bind when its output is a buffer. Null before the first submission, after a device loss, or
     // when the output is not a buffer the node allocates.
@@ -40,6 +44,7 @@ public sealed partial class ShaderPipelineRenderNode {
     // on the pool.
     private static RenderGraphPackageRecorderContext PackageContextOf(ShaderPipelinePlannedPass planned, BuildRequest request, IReadOnlyDictionary<string, ShaderPipelineResource> specs, (uint Width, uint Height) extent) => new(
         Device: request.Device,
+        Dispatch: planned.Package!.Dispatch,
         Height: extent.Height,
         HostsOnDirectX: request.DirectX,
         InFlightFrames: ((int)request.InFlight),
@@ -48,6 +53,7 @@ public sealed partial class ShaderPipelineRenderNode {
         Outputs: [.. planned.Outputs.Select(selector: output => specs[output.Name])],
         Package: planned.Package!.Package,
         Parameters: planned.Parameters,
+        Part: planned.Package.Part,
         Pass: planned.Name,
         Pipelines: request.Pipelines,
         Services: request.Gpu,
@@ -95,6 +101,9 @@ public sealed partial class ShaderPipelineRenderNode {
             pass: runtime,
             planned: planned
         );
+        runtime.PackageArguments = ((planned.Package.Dispatch is { Kind: ShaderPipelineDispatchKind.Indirect, Arguments: { } arguments })
+            ? arguments
+            : null);
 
         CreatePackageRegions(
             copyPipeline: copyPipeline,
@@ -273,7 +282,10 @@ public sealed partial class ShaderPipelineRenderNode {
     // The image an output publishes in its place: its own, or the input it stands for this frame.
     private (RuntimeResource Resource, string Name, int Instance) PublicationOf(RuntimeResource selected, int slot) => ((selected.Alias.Target is { } target)
         ? (target, selected.Alias.Name!, selected.Alias.Instance)
-        : (selected, selected.Spec.Name, slot));
+        : (selected, selected.Spec.Name, InstanceAt(
+            index: slot,
+            resource: selected
+        )));
 
     // An output a package that drew nothing leaves standing for one of its inputs: the input's storage, name and the
     // instance the pass read.
@@ -330,6 +342,13 @@ public sealed partial class ShaderPipelineRenderNode {
             slot: slot
         );
         var outcome = pass.Package!.Record(recording: new RenderGraphPackageRecording(
+            Arguments: ((pass.PackageArguments is { } arguments)
+                ? ResolveBuffer(
+                    index: slot,
+                    name: arguments,
+                    resource: m_resourceLookup[arguments]
+                )
+                : null),
             CommandBuffer: handle,
             Context: context,
             Height: pass.Height,
@@ -338,6 +357,7 @@ public sealed partial class ShaderPipelineRenderNode {
             MayStandIn: ((pass.PackageAliasRefusal is null) && (HostInputInAnotherLayout(pass: pass, slot: slot) < 0)),
             Outputs: outputs,
             PassBlock: passBlock,
+            Reads: Reads,
             Recorder: recorder,
             Slot: slot,
             Width: pass.Width
@@ -405,7 +425,10 @@ public sealed partial class ShaderPipelineRenderNode {
             Kind: resource.Spec.Kind,
             Owned: (resource.Spec.IsExternal
                 ? null
-                : resource.Images?[index]),
+                : resource.Images?[InstanceAt(
+                    index: index,
+                    resource: resource
+                )]),
             Version: name
         ));
     // A graph whose package pass nothing records is refused when it is swapped in, naming the pass and its package.

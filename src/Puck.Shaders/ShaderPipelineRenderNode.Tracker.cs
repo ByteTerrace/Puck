@@ -225,9 +225,17 @@ public sealed partial class ShaderPipelineRenderNode {
             slot: slot
         );
 
+        // An exported output rests in the handoff layout its reader on another device takes it in.
+        var outputLayout = (IsExported(
+            plan: m_pipeline!.Plan,
+            storage: published.Storage
+        )
+            ? GpuImageLayout.External
+            : m_outputLayout);
+
         m_publishedLayout = (published.Spec.IsExternal
             ? m_externalImages[published.Spec.Name].Layout
-            : m_outputLayout);
+            : outputLayout);
 
         if (
             !published.Spec.IsExternal &&
@@ -239,7 +247,7 @@ public sealed partial class ShaderPipelineRenderNode {
                     resource: published,
                     use: new ShaderPipelineAccessState(
                         Access: GpuAccess.ShaderRead,
-                        Layout: m_outputLayout,
+                        Layout: outputLayout,
                         Stage: ShaderStages
                     )
                 ),

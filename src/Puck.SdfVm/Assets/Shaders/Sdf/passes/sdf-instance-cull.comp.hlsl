@@ -15,7 +15,7 @@
 // the occupancy loss taxed the co-resident cone march — the beam's dominant cost — by a measured +12% at 4096
 // instances ON BOTH PATHS (grid enabled or not; +22 ms on the sweep's 4096 rung). Splitting keeps the cone-march
 // kernel at its lean footprint and gives the cull's divergent cell walk its own occupancy budget; the extra dispatch
-// + barrier cost is noise against that. Timing: this pass closes the "mask" mark (SdfWorldEngine.PassLabels).
+// + barrier cost is noise against that. Timing: this pass is the graph pass sdf.world$mask.
 //
 // The tile cone is built from the same inputs the beam uses (a pure function of the viewport row + tile coords), so
 // both kernels derive the IDENTICAL cone and no inter-pass cone buffer is needed.

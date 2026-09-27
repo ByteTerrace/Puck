@@ -5,7 +5,8 @@ namespace Puck.Shaders;
 
 // The node's memory account. Every byte count the node reports or refuses by comes from the plan through Footprint,
 // GraphBytes and RegionBytesOf, which mirror what Allocate and the build create: one image or buffer per frame slot of
-// each storage the node owns (the images a graphics pass draws into among them), one geometry buffer per geometry pass
+// each storage the node owns (the images a graphics pass draws into among them), and one only of a transient storage,
+// each buffer at its fixed size or its count resolved against the graph's counts, one geometry buffer per geometry pass
 // and per fullscreen pass that reads the Position input, one constant buffer per frame slot for the frame group's block
 // and for each pass's pass block (ConstantBytes), the buffers of every host-written region the graph reads (each package
 // pass's regions, its row regions under the rows bound when it is built, and each host buffer port's, GpuRegion.BytesOf
@@ -66,7 +67,7 @@ public sealed partial class ShaderPipelineRenderNode {
     /// selection would reach from what the node owns now. Both are zero when no graph is installed.</summary>
     public ShaderPipelineMemoryAccount InstalledAccount => (((m_pipeline is { } pipeline) && m_ready)
         ? Account(
-            extent: (m_width, m_height),
+            counts: m_installedCounts,
             plan: pipeline.Plan,
             preview: ((m_preview is { } preview)
                 ? (preview.Width, preview.Height)
@@ -90,17 +91,19 @@ public sealed partial class ShaderPipelineRenderNode {
             : 0UL
         );
     // One storage's extent and the bytes its instances occupy; a host-owned storage occupies nothing. An image is
-    // allocated at its declared extent and format, which the planner requires, whichever passes write it.
-    private static (uint Width, uint Height, ulong Bytes) Footprint(ShaderPipelinePlannedStorage storage, (uint Width, uint Height) frame, int count) {
+    // allocated at its declared extent and format, which the planner requires, whichever passes write it, and a buffer at
+    // its fixed size or its count resolved against the graph's counts.
+    private static (uint Width, uint Height, ulong Bytes) Footprint(ShaderPipelinePlannedStorage storage, ShaderPipelineStorageCounts counts, int count) {
         var declaration = storage.Declaration;
 
         if (declaration.Kind == ShaderPipelineResourceKind.Buffer) {
             return (0U, 0U, (declaration.IsExternal
                 ? 0UL
-                : checked(((declaration.SizeBytes ?? 0UL) * ((ulong)count)))
+                : checked((declaration.ResolveSizeBytes(counts: counts) * ((ulong)count)))
             ));
         }
 
+        var frame = (counts.Width, counts.Height);
         var extent = (declaration.Dimensions?.Resolve(
             frameHeight: frame.Height,
             frameWidth: frame.Width
@@ -115,15 +118,18 @@ public sealed partial class ShaderPipelineRenderNode {
             ) * ((ulong)count)))
         ));
     }
-    // The bytes a graph planned at a frame extent owns, before its float preview: every storage's instances, and the
-    // geometry buffer of each pass that has one.
-    private static ulong GraphBytes(ShaderPipelinePlan plan, (uint Width, uint Height) extent, uint inFlight) {
+    // The bytes a graph planned at the counts' frame extent owns, before its float preview: every storage's instances, and
+    // the geometry buffer of each pass that has one.
+    private static ulong GraphBytes(ShaderPipelinePlan plan, ShaderPipelineStorageCounts counts, uint inFlight) {
         var bytes = 0UL;
 
         foreach (var storage in plan.Storages) {
             bytes = checked((bytes + Footprint(
-                count: ((int)inFlight),
-                frame: extent,
+                count: InstancesOf(
+                    inFlight: inFlight,
+                    storage: storage
+                ),
+                counts: counts,
                 storage: storage
             ).Bytes));
         }
@@ -169,12 +175,13 @@ public sealed partial class ShaderPipelineRenderNode {
         height: height,
         width: width
     );
-    // What installing a graph planned at an extent, with the float preview its selection needs and its arrays bound to
-    // rows, costs from what the node owns now. History the graph carries from the installed one is moved, not allocated,
-    // so the peak holds its bytes once.
-    private ShaderPipelineMemoryAccount Account(ShaderPipelinePlan plan, (uint Width, uint Height) extent, (uint Width, uint Height)? preview, RowBindings rows) {
+    // What installing a graph planned at an extent, with its counted buffers resolved against counts at that extent, the
+    // float preview its selection needs and its arrays bound to rows, costs from what the node owns now. History the graph
+    // carries from the installed one is moved, not allocated, so the peak holds its bytes once.
+    private ShaderPipelineMemoryAccount Account(ShaderPipelinePlan plan, ShaderPipelineStorageCounts counts, (uint Width, uint Height)? preview, RowBindings rows) {
+        var extent = (counts.Width, counts.Height);
         var steady = checked(((GraphBytes(
-            extent: extent,
+            counts: counts,
             inFlight: m_inFlight,
             plan: plan
         ) + RegionBytesOf(
@@ -193,7 +200,7 @@ public sealed partial class ShaderPipelineRenderNode {
         ).Keys) {
             carried = checked((carried + Footprint(
                 count: ((int)m_inFlight),
-                frame: extent,
+                counts: counts,
                 storage: plan.Storages[index]
             ).Bytes));
         }
@@ -336,6 +343,15 @@ public sealed partial class ShaderPipelineRenderNode {
             )))
                 ? GpuImageUsage.ColorAttachment
                 : GpuImageUsage.None));
+    // The usages every instance of a buffer storage is created with: a storage buffer, and an indirect-argument buffer too
+    // when a planned access reads it as an indirect dispatch's arguments.
+    internal static GpuBufferUsage BufferUsageOf(ShaderPipelinePlan plan, ShaderPipelinePlannedStorage storage) =>
+        GpuBufferUsage.Storage | (plan.Passes.Any(predicate: pass => pass.Accesses.Any(predicate: access => (
+            (access.Storage == storage.Index) &&
+            ((access.Use.Access & GpuAccess.IndirectCommandRead) != 0)
+        )))
+            ? GpuBufferUsage.Indirect
+            : GpuBufferUsage.None);
 
     // History an installing graph takes from the installed one: the storage whose instances move into it.
     private readonly record struct CarriedHistory(RuntimeResource Old);
@@ -343,7 +359,7 @@ public sealed partial class ShaderPipelineRenderNode {
     private ShaderPipelineResourceStatus StatusOf(RuntimeResource resource) {
         var (width, height, bytes) = Footprint(
             count: resource.Count,
-            frame: (m_width, m_height),
+            counts: m_installedCounts,
             storage: resource.Storage
         );
 
@@ -372,7 +388,10 @@ public sealed partial class ShaderPipelineRenderNode {
         var extent = (m_requestedWidth, m_requestedHeight);
 
         return Account(
-            extent: extent,
+            counts: CountsAt(
+                extent: extent,
+                plan: pipeline.Plan
+            ),
             plan: pipeline.Plan,
             preview: PreviewFor(
                 extent: extent,

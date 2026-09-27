@@ -20,13 +20,6 @@ namespace Puck.SdfVm;
 public sealed class SdfMeshRasterPass {
     /// <summary>The file stem of the pass's two stages: <c>sdf-mesh.vert</c> and <c>sdf-mesh.frag</c>.</summary>
     public const string ShaderStem = "sdf-mesh";
-    /// <summary>The format of the mesh visibility target: per pixel the ray parameter, the draw index plus one and the
-    /// triangle, each a whole number a float holds exactly.</summary>
-    public const GpuPixelFormat TargetFormat = GpuPixelFormat.R32G32B32A32Float;
-    /// <summary>The format of the pass's reversed-Z depth attachment.</summary>
-    public const GpuPixelFormat DepthFormat = GpuPixelFormat.D32Float;
-    /// <summary>The depth the pass clears its depth attachment to: zero, the reversed-Z far plane at infinity.</summary>
-    public const float ClearDepth = 0f;
     /// <summary>The bytes a pixel of the target and the depth attachment hold together.</summary>
     public const uint BytesPerPixel = (16u + 4u);
 
@@ -66,32 +59,26 @@ public sealed class SdfMeshRasterPass {
     /// test.</summary>
     public static GpuGraphicsPipelineDescription Description { get; } = new(
         DepthCompare: GpuDepthCompare.Greater,
-        Layout: SdfWorldEngine.PipelineLayouts.Mesh,
+        Layout: SdfWorldTables.PipelineLayouts.Mesh,
         Name: ShaderStem,
         VertexInput: new GpuVertexInputLayout(
             Attributes: [],
             StrideBytes: 0
         )
     );
-    /// <summary>Gets the pass's depth attachment: cleared to <see cref="ClearDepth"/> and discarded, the one statement of
-    /// its clear that the render pass and the engine's depth image (<see cref="IGpuImageFactory.CreateDepth"/>) share.</summary>
-    public static GpuDepthAttachment DepthAttachment { get; } = new(
-        ClearDepth: ClearDepth,
-        Format: DepthFormat,
-        Load: GpuAttachmentLoad.Clear,
-        Store: GpuAttachmentStore.Discard
-    );
-    /// <summary>Gets the render pass the pipeline draws in: the target cleared and stored, left in its attachment
-    /// layout, and the depth attachment cleared to <see cref="ClearDepth"/> and discarded.</summary>
+    /// <summary>Gets the render pass the pipeline draws in: the target (<see cref="SdfWorldPackage.MeshTargetFormat"/>)
+    /// cleared and stored, left in its attachment layout, and the depth attachment
+    /// (<see cref="SdfWorldPackage.MeshDepthAttachment"/>) cleared to its reversed-Z far plane and discarded.</summary>
     public static GpuRenderPassDescription RenderPass { get; } = new(
         Colors: [new GpuColorAttachment(
             FinalLayout: GpuImageLayout.RenderTarget,
-            Format: TargetFormat,
+            Format: SdfWorldPackage.MeshTargetFormat,
             Load: GpuAttachmentLoad.Clear,
             Store: GpuAttachmentStore.Store
         )],
-        Depth: DepthAttachment
+        Depth: SdfWorldPackage.MeshDepthAttachment
     );
+
     /// <summary>Gets the pipeline's key in <see cref="Pipelines"/>.</summary>
     public GpuPassPipelineKey Key { get; }
     /// <summary>Gets the composition's pass pipelines.</summary>

@@ -116,7 +116,7 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCache cache) {
     // release revision (IGpuBindings.HeapReleaseRevision) moves, as another owner returns its pools; a refusal of any
     // other kind never reads it. Release (a device loss or disposal) forgets the refusal. The inputs are read with inputsOf only when a build is due or a refusal is being
     // checked, never while the set builds. A device loss is never refused: it reaches the host's recovery.
-    public SdfWorldEngine? TryBuild<TState, TInputs>(IGpuDeviceContext device, SdfWorldKernels? kernels, bool hostsOnDirectX, bool includeBrickPipelines, string label, TState state, Func<TState, TInputs> inputsOf, Func<SdfWorldPipelines, SdfWorldPassPipelines, TInputs, SdfWorldEngine> construct) where TInputs : IEquatable<TInputs> {
+    public SdfWorldTables? TryBuild<TState, TInputs>(IGpuDeviceContext device, SdfWorldKernels? kernels, bool hostsOnDirectX, bool includeBrickPipelines, string label, TState state, Func<TState, TInputs> inputsOf, Func<SdfWorldPipelines, SdfWorldPassPipelines, TInputs, SdfWorldTables> construct) where TInputs : IEquatable<TInputs> {
         var key = new BuildKey(
             Device: device,
             FaultsRevision: (device.Services.Faults?.Revision ?? 0L),

@@ -63,7 +63,7 @@ public enum SdfTonemapMode : byte {
     Filmic = 1,
 }
 /// <summary>The lit path's per-frame environment — every light, the stylization gains, and the sky — as one lane
-/// table the engine uploads as float4 rows of the screen-light buffer (<c>SdfWorldEngine.PackEnvironment</c>, which
+/// table the engine uploads as float4 rows of the screen-light buffer (<c>SdfWorldTables.PackEnvironment</c>, which
 /// also performs the host bakes noted per row). KEEP IN SYNC with frame/sdf-environment.hlsli's <c>SdfEnv*</c> rows and
 /// accessors.</summary>
 /// <remarks>

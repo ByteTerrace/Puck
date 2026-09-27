@@ -39,7 +39,7 @@ public sealed class VulkanRenderer(
     /// <see cref="WaitForFrameSlot"/> blocks. Each slot owns a full <see cref="VulkanFrameSynchronization"/>
     /// (its own image-available semaphore and in-flight fence; the per-image render-finished semaphores ride
     /// along), so two presents can be pending without reusing a semaphore that still has a queued wait. Matches
-    /// the node-side <c>SdfWorldEngine.FrameRingSize</c> — the engine ring guards resource reuse, this ring
+    /// the node-side <c>SdfWorldTables.FrameRingSize</c> — the engine ring guards resource reuse, this ring
     /// bounds host latency.</summary>
     private const int PresentFrameRingSize = 2;
 

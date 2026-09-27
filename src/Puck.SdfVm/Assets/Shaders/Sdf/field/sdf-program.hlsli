@@ -323,7 +323,7 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 // register file allocated); stripping the cases lets more warps reside and hides tape-walk latency. The beam
 // deliberately stays on the full interpreter because the stripped variant increased cone-march cost. Selection is
 // per-program at UploadProgram time —
-// a pure function of the instruction stream (SdfWorldEngine picks the core pipeline only when no instruction touches a
+// a pure function of the instruction stream (SdfWorldTables picks the core pipeline only when no instruction touches a
 // stripped op/shape), so a stripped case is provably unreachable whenever this variant runs. KEEP the strip set IN SYNC
 // with SdfViewsKernelVariants.Select (Puck.SdfVm/SdfViewsKernelVariant.cs) — a case guarded here must make Select
 // answer Full, or the core variant silently no-ops the op.

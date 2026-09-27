@@ -137,7 +137,7 @@ public sealed record SdfMesh {
 /// with <see cref="SdfMesh.TriangleMaterials"/> adds each triangle's entry to it.</param>
 public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld, int Material);
 /// <summary>
-/// The raw word layout of the region a frame's mesh draws upload into (<see cref="SdfWorldEngine.MeshRegionLayout"/>),
+/// The raw word layout of the region a frame's mesh draws upload into (<see cref="SdfWorldTables.MeshRegionLayout"/>),
 /// read as a structured buffer of uints so every backend reads the same word offsets: first one record a draw
 /// (<see cref="DrawWords"/> words), then each distinct <see cref="SdfMesh"/> once, however many draws share it, as its
 /// vertices (<see cref="VertexWords"/> words each: position, normal and texture coordinate), then those meshes' triangle

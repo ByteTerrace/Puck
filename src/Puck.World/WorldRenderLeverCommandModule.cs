@@ -529,7 +529,7 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
                 value: DebugViewModes.Names
             )}]. Depth is the primary-march-only performance probe; off restores final shading.",
             handler: (_, args) => {
-                if (renderProbe.Node is not { } node) {
+                if (renderProbe.Residency is not { } node) {
                     return CommandResult.Error(output: "[world.debug-view: renderer not built yet]");
                 }
 

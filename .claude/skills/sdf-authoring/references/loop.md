@@ -65,7 +65,7 @@ world.wait <ticks>
 
 `world.screenshot` **arms** a capture. stdout carries
 `[world.screenshot: pending <path> …]`; the file exists only once stderr carries
-`[capture] … -> <path>` or `[debug] captured frame N -> <path>`. Fence with
+`[capture] <instance> -> <path>`. Fence with
 `world.wait` and confirm that line before reading bytes. A second arm while one
 is pending is refused by name. It is refused headless.
 

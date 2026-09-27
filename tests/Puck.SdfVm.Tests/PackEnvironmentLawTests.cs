@@ -7,19 +7,19 @@ using Xunit;
 
 namespace Puck.SdfVm.Tests;
 
-/// <summary>Exercises <c>SdfWorldEngine.PackEnvironment</c> (private, reflection-invoked — it needs no GPU device)
+/// <summary>Exercises <c>SdfWorldTables.PackEnvironment</c> (private, reflection-invoked — it needs no GPU device)
 /// directly, closing the gap between <see cref="SdfEnvironment"/>'s own lane table (proved elsewhere) and the exact
 /// bytes the engine uploads for the shader to read.</summary>
 public sealed class PackEnvironmentLawTests {
     private static float[] PackedFloats(SdfEnvironment environment) {
-        var packEnvironment = (typeof(SdfWorldEngine).GetMethod(
+        var packEnvironment = (typeof(SdfWorldTables).GetMethod(
             bindingAttr: BindingFlags.NonPublic | BindingFlags.Static,
             name: "PackEnvironment"
-        ) ?? throw new InvalidOperationException(message: "SdfWorldEngine.PackEnvironment not found."));
-        var screenLightByteLengthField = (typeof(SdfWorldEngine).GetField(
+        ) ?? throw new InvalidOperationException(message: "SdfWorldTables.PackEnvironment not found."));
+        var screenLightByteLengthField = (typeof(SdfWorldTables).GetField(
             bindingAttr: BindingFlags.NonPublic | BindingFlags.Static,
             name: "ScreenLightByteLength"
-        ) ?? throw new InvalidOperationException(message: "SdfWorldEngine.ScreenLightByteLength not found."));
+        ) ?? throw new InvalidOperationException(message: "SdfWorldTables.ScreenLightByteLength not found."));
         var byteLength = ((int)screenLightByteLengthField.GetValue(obj: null)!);
         var floats = new float[(byteLength / sizeof(float))];
         var frame = new SdfFrame(

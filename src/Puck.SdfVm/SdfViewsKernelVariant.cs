@@ -8,7 +8,7 @@ namespace Puck.SdfVm;
 /// every op and shape case compiled in. <see cref="CoreOps"/> (sdf-world-views-core.comp) compiles the exotic cases
 /// out (the <c>SDF_CORE_OPS</c> strip in the field modules, Assets/Shaders/Sdf/field/), reducing shader size and live register state. Occupancy and
 /// performance depend on the scene, shader build, and device; a previous fixture's counters are not a universal limit.
-/// <see cref="SdfWorldEngine.UploadProgram"/> selects per program via
+/// <see cref="SdfWorldTables.UploadProgram"/> selects per program via
 /// <see cref="SdfViewsKernelVariants.Select"/>: a pure function of the instruction stream, so a program that touches
 /// a heavy op/shape runs <see cref="Full"/>, the middle tier runs <see cref="Folds"/>, and under <see cref="CoreOps"/> every compiled-out case is
 /// unreachable — the rendered field is semantically identical (a separate compiled binary can still carry the usual

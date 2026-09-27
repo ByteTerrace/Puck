@@ -168,7 +168,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             name: "world.shaders.reload",
             description: "Reloads compiled SDF kernels on the next produced frame: world.shaders.reload [tree]. Reads the bytecode under the kernel tree's passes directory; defaults to the deployed Assets/Shaders/Sdf, and a source checkout can name src/Puck.SdfVm/Assets/Shaders/Sdf after CompileShaders completes. Uses the current backend. Replaces changed pipelines while retaining world state, GPU buffers and textures; failed loads or ISA validation keep the previous set. This queues work: world.shaders.status reports completion. Binding/ABI changes require a host rebuild; child engines and overlay/postprocess shaders are outside this command.",
             handler: (_, args) => {
-                if (renderProbe.Node is not { } node) {
+                if (renderProbe.Residency is not { } node) {
                     return CommandResult.Error(output: "[world.shaders.reload: renderer not ready]");
                 }
                 try {
@@ -193,7 +193,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 if (args.Count != 0) {
                     return CommandResult.Error(output: "[world.shaders.status: no arguments]");
                 }
-                if (renderProbe.Node is not { } node) {
+                if (renderProbe.Residency is not { } node) {
                     return new CommandResult(Output: "[world.shaders.status: renderer not ready]");
                 }
                 var status = node.ShaderReloadStatus;

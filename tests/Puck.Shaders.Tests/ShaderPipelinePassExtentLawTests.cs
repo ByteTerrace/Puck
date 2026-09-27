@@ -28,16 +28,25 @@ public sealed class ShaderPipelinePassExtentLawTests {
         outputs
     );
 
+    // A package that writes one image and reads nothing.
+    private const string Producer = "test.producer";
+
     // A package writing a quarter-size scene, a compute pass reading it into a half-size image, a fullscreen pass drawing
     // that into a fixed 16x8, a compute pass counting the fixed image into a buffer (its output declares no dimensions,
     // so its input's rule), and a compute pass reducing the buffer (nothing declares any, so the frame's).
-    internal static ShaderPipelinePlan Plan() => new RenderGraphCompiler(packages: RenderGraphPackageCatalog.Engine).Compile(definition: new RenderGraphDefinition(
+    private static ShaderPipelinePlan Plan() => new RenderGraphCompiler(packages: new RenderGraphPackageCatalog(packages: [new RenderGraphPackage(
+        Id: Producer,
+        Inputs: [],
+        Members: [],
+        Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite)],
+        Summary: "Writes one image."
+    )])).Compile(definition: new RenderGraphDefinition(
         name: "extents",
         outputs: ["fixed", "sum"],
         packages: [new RenderGraphPackagePass(
             Name: "world",
             Outputs: ["scene"],
-            Package: RenderGraphPackageCatalog.SdfWorld
+            Package: Producer
         )],
         passes: [
             Pass(inputs: ["scene"], kind: ShaderPipelineDocumentPassKind.Compute, name: "fill", outputs: ["half"]),

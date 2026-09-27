@@ -74,26 +74,38 @@ internal static class SdfTestPipelines {
             ViewsFolds: code
         );
     }
-    // Produces frames at the context's target extent until the node's pipeline build has installed its engine, and returns
-    // whether that first real frame was submitted. The bound is liveness for a build over a fake device; it decides
-    // nothing.
-    public static bool ProduceFirstFrame(this SdfEngineNode node, in FrameContext context) {
-        var produced = false;
+    // Produces frames until the residency's pipeline build has built its tables, then submits that frame's upload, as a
+    // view's first pass of the frame does. The bound is liveness for a build over a fake device; it decides nothing.
+    public static void ProduceFirstFrame(this SdfWorldResidency residency, in FrameContext context) {
         var copy = context;
 
         Assert.True(condition: SpinWait.SpinUntil(
             condition: () => {
-                produced = node.Produce(
-                    context: in copy,
-                    height: copy.TargetHeight,
-                    width: copy.TargetWidth
-                );
+                residency.BeginFrame();
 
-                return node.IsReady;
+                return residency.Prepare(context: in copy);
             },
             timeout: TimeSpan.FromSeconds(value: 30)
-        ), userMessage: node.NotReadyReason);
+        ), userMessage: residency.NotReadyReason);
+        _ = residency.Submit(context: in context);
+    }
+    // Produces one frame of a ready residency: captures and packs it and submits its upload, as a view's first pass of the
+    // frame does.
+    public static void ProduceFrame(this SdfWorldResidency residency, in FrameContext context) {
+        residency.BeginFrame();
+        _ = residency.Submit(context: in context);
+    }
+    // Produces one frame when the residency can: starts it, captures and packs it, and submits its upload once its tables
+    // exist, returning whether it did.
+    public static bool Produce(this SdfWorldResidency residency, in FrameContext context) {
+        residency.BeginFrame();
 
-        return produced;
+        if (!residency.Prepare(context: in context)) {
+            return false;
+        }
+
+        _ = residency.Submit(context: in context);
+
+        return true;
     }
 }

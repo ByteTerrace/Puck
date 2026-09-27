@@ -448,7 +448,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         );
         Assert.Equal(
             actual: Refusal(gpu, new Recorders(), set, "main", null!, main).Message,
-            expected: $"External instance 'world' of package '{World}' names a package neither an external producer nor an upload serves."
+            expected: $"External instance 'world' of package '{World}' names a package neither an external producer, an upload nor a recorder serves."
         );
         Assert.Equal(
             actual: Refusal(gpu, served, set, "nowhere", null!, main).Code,

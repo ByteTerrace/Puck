@@ -1,4 +1,4 @@
-// Bounded flow/cloud volumes. Eleven float4 rows, paired with SdfWorldEngine.PackVolumes.
+// Bounded flow/cloud volumes. Eleven float4 rows, paired with SdfWorldTables.PackVolumes.
 #ifndef SDF_SHADE_VOLUMES_HLSLI
 #define SDF_SHADE_VOLUMES_HLSLI
 struct SdfVolumeData {

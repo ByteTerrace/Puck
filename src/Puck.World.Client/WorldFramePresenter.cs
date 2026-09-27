@@ -1135,7 +1135,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         return true;
     }
 
-    /// <summary>Gets or sets whether the world has rendered a view into its output (<c>SdfEngineNode.HasViewOutput</c>),
+    /// <summary>Gets or sets whether the world's view instance has completed an image (<c>RenderGraphRuntime.TryLatestImage</c>),
     /// which a view must have before the root shows it, so a capture is never served over a stand-in; or
     /// <see langword="null"/> before a render root is attached, when no view is shown.</summary>
     public Func<int, bool>? ViewRendered { get; set; }
@@ -1653,9 +1653,6 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             // The sky's clock (twinkle, cloud motion), taken from the deterministic tick counter and never from
             // m_elapsedSeconds so a replay at tick N draws the identical sky.
             SampleIndex = ((uint)m_simulation.ElapsedTicks),
-            // The tick of the state this frame shows, the one every graph instance presents (PrepareGraph), which a
-            // capture of the world's output records.
-            StateTick = m_client.StateMirror.Tick,
             ShadowDistanceScale = ((m_settings.ShadowReach >= 1f)
             ? 0f
             : m_settings.ShadowReach),

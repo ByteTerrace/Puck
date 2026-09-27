@@ -9475,7 +9475,7 @@ export type WorldScreenSourceSession = {
 };
 
 /**
- * Authored reading text on the screen face, rendered through the engine's glyph-decal tier (Puck.SdfVm.SdfWorldEngine.SetScreenDecal): a fixed monospace cell grid sampled from the world's packed font atlas at shade time — the dense-text sibling of a creation's textRuns, which stamp marched Glyph geometry. Signs, plaques, books, and monitors author this; short sculptural lettering stays a text run. Requires the world to declare a text font catalog (Text); the decal bypasses the CRT image pipeline, so no image source competes with it on the slot.
+ * Authored reading text on the screen face, rendered through the engine's glyph-decal tier (Puck.SdfVm.SdfWorldTables.SetScreenDecal): a fixed monospace cell grid sampled from the world's packed font atlas at shade time — the dense-text sibling of a creation's textRuns, which stamp marched Glyph geometry. Signs, plaques, books, and monitors author this; short sculptural lettering stays a text run. Requires the world to declare a text font catalog (Text); the decal bypasses the CRT image pipeline, so no image source competes with it on the slot.
  */
 export type WorldScreenSourceText = {
   $type?: "text";

@@ -328,8 +328,8 @@ the whole truth, and a script reading only one of them reads a half-answer:
   composed frame]`. No file is promised yet. Let rendering progress with
   `world.wait`, then confirm the completion before reading it.
 - stderr, when the frame lands: `[capture] main -> <path>` (the render
-  graph's root node served it) or `[debug] captured frame N -> <path>` (the
-  engine node did, as the root when nothing is drawn over the world). THIS is
+  graph's root node served it) or `[capture] world -> <path>` (the world's
+  instance did, as the root when nothing is drawn over the world). THIS is
   the line that says a file exists.
 - stderr, at shutdown: `[world.screenshot] WARNING: a capture of <path> was
   still pending when the run ended … NO FILE WAS WRITTEN`

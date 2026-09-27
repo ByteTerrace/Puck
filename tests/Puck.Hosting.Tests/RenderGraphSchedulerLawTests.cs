@@ -30,10 +30,10 @@ public sealed partial class RenderGraphSchedulerLawTests {
         reads: reads
     );
 
-    // The SDF engine's pass count (SdfWorldEngine.PassLabels.Length), which prices the sdf.world producer.
-    private const int WorldPasses = 10;
+    // The sdf.world package's pass count (SdfWorldPackage.Fragment in Puck.Shaders), which prices a view of the world.
+    private const int WorldPasses = 9;
 
-    // The sdf.world external producer, which renders through the engine's own ring.
+    // A view of the world: an instance of the sdf.world package, which renders the package's passes.
     private static RenderGraphInstance World(RenderGraphRead[]? reads = null) => Instance(
         name: "world",
         passes: WorldPasses,

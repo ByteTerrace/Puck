@@ -30,7 +30,7 @@ public enum WorldViewDemand : byte {
 public readonly record struct WorldView(string Name, bool FilmsWorld, WorldViewDemand Demand, double Width, double Height, RenderGraphRefresh Refresh);
 /// <summary>
 /// The view instances a world renders beside its own: each camera a screen, a HUD frame or a probe export shows, and
-/// each session a screen shows, each an external <c>sdf.world</c> instance rendered by an <see cref="SdfEngineNode"/> of
+/// each session a screen shows, each an external <c>sdf.world</c> instance rendered by an <see cref="SdfWorldResidency"/> of
 /// its own. A view filming this world reads every source instance within the frame, as the world's screens show them,
 /// and every view a screen shows, its own included, at its previous frame, so a mirror shows the frame before and two
 /// cameras filming each other never read within one frame. A session reads nothing. The world's instance reads every view
@@ -129,7 +129,7 @@ public sealed class WorldViewInstances {
             instances[index] = new RenderGraphInstance(
                 ExternalPackage: RenderGraphPackageCatalog.SdfWorld,
                 Name: view.Name,
-                Passes: SdfEngineNode.PassLabels.Length,
+                Passes: SdfWorldPackage.Fragment.Passes.Count,
                 Reads: (view.FilmsWorld
                     ? [
                         .. sources.Select(selector: static source => new RenderGraphRead(Producer: source.Name)),

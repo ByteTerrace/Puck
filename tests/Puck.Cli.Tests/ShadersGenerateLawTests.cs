@@ -120,7 +120,7 @@ public sealed class ShadersGenerateLawTests {
             (OverlayPath, InterfaceOf(id: RenderGraphPackageCatalog.Overlay)),
             (FilmGrainPath, InterfaceOf(id: RenderGraphPackageCatalog.SdfFilmGrain)),
             (PlacePath, InterfaceOf(id: RenderGraphPackageCatalog.Place)),
-            (WorldPath, world.Text.Replace(comparisonType: StringComparison.Ordinal, newValue: "staleSampler", oldValue: "screenSampler")),
+            (WorldPath, world.Text.Replace(comparisonType: StringComparison.Ordinal, newValue: "staleWords", oldValue: "sdfWords")),
             .. SourceIncludes
         ]);
 

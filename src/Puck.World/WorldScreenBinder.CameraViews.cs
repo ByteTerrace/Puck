@@ -1,18 +1,17 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using Puck.Abstractions.Cameras;
-using Puck.Abstractions.Gpu;
-using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.SdfVm;
 using Puck.SdfVm.Views;
+using Puck.Shaders;
 using Puck.World.Client;
 
 namespace Puck.World;
 
 // Camera views: each camera a screen, a HUD frame or a probe export shows is a registration here, which the render graph
-// runs as an sdf.world instance of that name, rendered by an SdfEngineNode of its own (CameraViewProducer) that films the
-// frame the world node renders from the registration's rig.
+// runs as an sdf.world instance of that name, rendering a residency of its own (CreateCameraResidency) that films the
+// frame the world renders from the registration's rig.
 internal sealed partial class WorldScreenBinder : IWorldViewCameras {
     // The camera each view last rendered from, which a hit on a screen showing it continues through.
     private readonly Dictionary<string, CameraSnapshot> m_viewCameras = new(comparer: StringComparer.Ordinal);
@@ -548,6 +547,10 @@ internal sealed partial class WorldScreenBinder : IWorldViewCameras {
 
         frame = host.HostFrame(context: in context);
 
+        if (frame is null) {
+            return false;
+        }
+
         var anchor = default(SdfAnchor);
 
         if (registration.AnchorSource is { } source) {
@@ -611,99 +614,14 @@ internal sealed partial class WorldScreenBinder : IWorldViewCameras {
     }
     // One camera view's registration: the WorldCamera row it embodies (advanced by edits in place) — the diff baseline
     // ReconcileCameras works against — the 1-based seat a seat-relative registration resolves for (1 for a shared
-    // registration), the rig and anchor that pose it, and a probe export's output factory and write reservation.
+    // registration), the rig and anchor that pose it, and the probe export its view's node renders into.
     private sealed class CameraRegistration {
         public Func<int>? AnchorIdSource { get; set; }
         public ISdfAnchorSource? AnchorSource { get; set; }
-        // Ends a reservation TryBeginExportWrite made, with whether the frame completed, the engine it rendered on, and the
-        // shared fence value the engine's write of the exported image signals.
-        public Action<bool, object?, ulong>? EndExportWrite { get; set; }
-        public Func<IGpuDeviceContext, IGpuImage>? ExportFactory { get; set; }
+        public IShaderPipelineOutputExport? Export { get; set; }
         public ISdfCameraRig? Rig { get; set; }
         public required WorldCamera Row { get; set; }
         public required int Seat { get; init; }
-        public Func<bool>? TryBeginExportWrite { get; set; }
-    }
-    // A camera view as the external producer of its sdf.world instance: an engine node of its own, which binds the
-    // world's screens from the reads the graph hands it (every source within the frame, every view at its previous frame)
-    // and films the frame the world node renders from the registration's camera. Low-resolution diegetic displays skip
-    // soft shadows and ambient occlusion, which a view may add to the host's levers but never lift.
-    private sealed class CameraViewProducer : IRenderGraphExternalProducer {
-        private readonly WorldScreenBinder m_binder;
-        private readonly string m_name;
-        private readonly SdfEngineNode m_node;
-        private readonly SdfCameraFrameSource m_source;
-
-        public CameraViewProducer(WorldScreenBinder binder, string name, ISdfFrameSource host) {
-            m_binder = binder;
-            m_name = name;
-            m_source = new SdfCameraFrameSource(host: host) {
-                DisableAmbientOcclusion = true,
-                DisableSoftShadows = true,
-            };
-            m_node = binder.CreateViewNode(
-                frameSource: m_source,
-                name: name,
-                screenSources: binder,
-                screenSurfaceTransforms: host.ScreenSurfaceTransforms
-            );
-            binder.RegisterViewWork(
-                lifetime: m_node.WorkLifetime,
-                name: name,
-                work: m_node.Work
-            );
-        }
-
-        public GpuPixelFormat Format => GpuPixelFormat.R8G8B8A8Unorm;
-        public SdfEngineNode Node => m_node;
-        public string? NotReadyReason => m_node.NotReadyReason;
-        public string? PendingCapturePath => m_node.PendingCapturePath;
-        public IGpuWorkSource Work => m_node.Work;
-
-        public void Dispose() {
-            m_binder.UnregisterViewWork(name: m_name);
-            m_node.Dispose();
-        }
-        public void OnDeviceLost() => m_node.OnDeviceLost();
-        public bool Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
-            if (!m_binder.TryFilm(
-                camera: out var camera,
-                context: in context,
-                frame: out var frame,
-                name: m_name,
-                registration: out var registration
-            )) {
-                return false;
-            }
-
-            m_source.Camera = camera;
-            m_source.HostFrame = frame;
-            m_node.CreateOutputImage = registration.ExportFactory;
-
-            // An export reader holding the image keeps its last complete frame: the view renders nothing this frame.
-            if (!(registration.TryBeginExportWrite?.Invoke() ?? true)) {
-                return false;
-            }
-
-            var produced = false;
-            // An exported image is the extent the probe reading it declares: the camera's own.
-            var exported = (registration.ExportFactory is not null);
-
-            try {
-                produced = m_node.Produce(
-                    context: in context,
-                    height: (exported ? registration.Row.RenderHeight : height),
-                    reads: reads,
-                    width: (exported ? registration.Row.RenderWidth : width)
-                );
-            } finally {
-                registration.EndExportWrite?.Invoke(arg1: produced, arg2: m_node.ExportGeneration, arg3: m_node.ExportWrittenValue);
-            }
-
-            return produced;
-        }
-        public void RequestCapture(FrameCaptureRequest request) => m_node.RequestCapture(request: request);
-        public bool TryAcquireOutput(out RenderGraphExternalOutput output) => m_node.TryAcquireOutput(output: out output);
     }
     // One screen's camera view: the registration name its instance runs under.
     private sealed record ViewFeed(string Name);

@@ -87,7 +87,7 @@ public sealed partial class SdfProgramBuilder {
     /// ellipsoid in the ISA is emitted at; see its own remarks for the 1-Lipschitz proof this interval is sized to.</summary>
     public const float MinSuperellipsoidExponent = 2f;
     /// <summary>The most screen surfaces one program may declare: the length of the kernels' per-screen tables and of
-    /// their <c>screenSources</c> array, which <c>Puck.SdfVm.SdfWorldEngine.MaxScreenSurfaces</c> reads and the kernels read
+    /// their <c>screenSources</c> array, which <c>Puck.SdfVm.SdfWorldTables.MaxScreenSurfaces</c> reads and the kernels read
     /// as the generated <c>SDF_MAX_SCREEN_SURFACES</c>. A contract separate from the engine's viewport
     /// capacity.</summary>
     public const int MaxScreenSurfaces = 32;
@@ -95,7 +95,7 @@ public sealed partial class SdfProgramBuilder {
     /// as <c>SDF_SCREEN_MATERIAL</c>.</summary>
     public const int ScreenMaterialId = 65535;
     /// <summary>The most bounded emissive volumes (<see cref="SdfVolume"/>) one rendered frame may carry — matches
-    /// <c>Puck.SdfVm.SdfWorldEngine.MaxVolumes</c>, which reads this rather than hand-syncing a second literal. Sized
+    /// <c>Puck.SdfVm.SdfWorldTables.MaxVolumes</c>, which reads this rather than hand-syncing a second literal. Sized
     /// for multi-character jets and cloud banks. Rays test the live prefix; intersecting volumes require
     /// repeated selection scans and density integration. Capacity is not a frame-rate guarantee.</summary>
     public const int MaxVolumes = 64;

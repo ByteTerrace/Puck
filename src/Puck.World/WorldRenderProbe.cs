@@ -7,14 +7,14 @@ using Puck.Shaders;
 namespace Puck.World;
 
 /// <summary>
-/// A mutable singleton holder for the live render nodes, so console verbs can read them without depending on the
-/// render composition. The render root's factory stores the engine node and the render graph's
-/// root here; each is <see langword="null"/> until the renderer is built on the first frame. It is also the
-/// <see cref="IGpuWorkRegistry"/> whose nodes the <c>gpu</c> section of <c>world.counters</c> reports: the engine node,
-/// each graph instance the render graph renders, and the camera and session views
-/// <see cref="WorldScreenBinder"/> registers. It is the host's <see cref="IWorldEngineReadiness"/> too: ready once the
-/// engine node is and the graph's root has a completed output rendered over it, not before the render factory has
-/// composed either.
+/// A mutable singleton holder for the live render objects, so console verbs can read them without depending on the
+/// render composition. The render root's factory stores the world's SDF residency and the render graph's root here; each
+/// is <see langword="null"/> until the renderer is built on the first frame. It is also the
+/// <see cref="IGpuWorkRegistry"/> whose nodes the <c>gpu</c> section of <c>world.counters</c> reports: each graph
+/// instance the render graph renders by its instance name, the world's residency's uploads as <c>sdf:world</c>, and
+/// each camera and session view's as <c>sdf:&lt;name&gt;</c>, which <see cref="WorldScreenBinder"/> registers. It is the
+/// host's <see cref="IWorldEngineReadiness"/> too: ready once the world's residency has built its tables and the
+/// graph's root has a completed output rendered over it, not before the render factory has composed either.
 /// </summary>
 internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness {
     private readonly Lock m_gate = new();
@@ -38,18 +38,18 @@ internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness
     /// <inheritdoc/>
     public GpuDeviceCapabilities? DeviceCapabilities =>
         Device?.Capabilities;
-    /// <summary>The SDF engine node the render root wraps, or <see langword="null"/> until the render factory has run.</summary>
-    public SdfEngineNode? Node { get; set; }
+    /// <summary>The world's SDF residency, or <see langword="null"/> until the render factory has run.</summary>
+    public SdfWorldResidency? Residency { get; set; }
     /// <inheritdoc/>
     public bool IsReady => (
-        (Node?.IsReady ?? false) &&
+        (Residency?.IsReady ?? false) &&
         (Root?.Runtime.UnservedCaptureReason is null)
     );
     /// <inheritdoc/>
-    /// <remarks>The engine node's reason while it builds, then the render graph's while its root has not rendered over
-    /// a completed world output.</remarks>
-    public string? NotReadyReason => (((Node is { } node) && (Root is { } root))
-        ? (node.NotReadyReason ?? root.Runtime.UnservedCaptureReason)
+    /// <remarks>The world's residency's reason while it builds, then the render graph's while its root has not rendered
+    /// over a completed world output.</remarks>
+    public string? NotReadyReason => (((Residency is { } residency) && (Root is { } root))
+        ? (residency.NotReadyReason ?? root.Runtime.UnservedCaptureReason)
         : "the renderer has not been composed: no frame has been produced"
     );
     /// <summary>The render graph's root, the render host every captured and presented frame comes from, or
@@ -68,17 +68,17 @@ internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness
             ? root
             : root.Runtime.CaptureTarget(instance: instance)));
     /// <inheritdoc/>
-    /// <remarks>The engine node reads as <c>world</c>, each render-graph instance that renders a graph by its instance
-    /// name (the root's passes are its post
-    /// passes and the overlay), and each registered view as <c>view:&lt;name&gt;</c>.</remarks>
+    /// <remarks>The world's residency's uploads read as <c>sdf:world</c>, each render-graph instance that renders a graph
+    /// by its instance name (an SDF view's passes, <c>sdf.world$sky</c> through <c>sdf.world$views</c>; the root's, its
+    /// place and post passes and the overlay), and each registered view's residency as <c>sdf:&lt;name&gt;</c>.</remarks>
     public void CopyNodes(List<GpuWorkNode> nodes) {
         ArgumentNullException.ThrowIfNull(nodes);
 
-        if (Node is { } node) {
+        if (Residency is { } residency) {
             nodes.Add(item: new GpuWorkNode(
-                Lifetime: node.WorkLifetime,
-                Name: "world",
-                Work: node.Work
+                Lifetime: residency.WorkLifetime,
+                Name: ResidencyNode(name: residency.Name),
+                Work: residency.Work
             ));
         }
 
@@ -102,7 +102,7 @@ internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness
             foreach (var view in m_views) {
                 nodes.Add(item: new GpuWorkNode(
                     Lifetime: view.Lifetime,
-                    Name: $"view:{view.Name}",
+                    Name: ResidencyNode(name: view.Name),
                     Work: view.Work
                 ));
             }
@@ -134,6 +134,8 @@ internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness
         }
     }
 
+    // The work node a residency's uploads read as.
+    private static string ResidencyNode(string name) => $"sdf:{name}";
     private void RemoveView(string name) =>
         _ = m_views.RemoveAll(match: entry => string.Equals(
             a: entry.Name,

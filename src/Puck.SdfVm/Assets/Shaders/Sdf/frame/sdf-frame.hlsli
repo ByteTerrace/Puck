@@ -2,7 +2,7 @@
 #ifndef FRAME_SDF_FRAME_HLSLI
 #define FRAME_SDF_FRAME_HLSLI
 // The world values (imageExtent, tileGrid, viewportCount, screenCount, instanceMaskWordCount, sampleIndex and the view
-// the set renders, viewBase) are the views set's block, passGroup, written per view by SdfWorldEngine.WriteViewBlocks:
+// the set renders, viewBase) are the views set's block, passGroup, written per view by SdfWorldTables.WriteViewBlocks:
 // imageExtent is the engine extent, the largest a view renders and the per-view visibility record stride; tileGrid the
 // tiles per viewport, the cull buffer's per-viewport stride; viewportCount every view the frame renders; screenCount one
 // past the highest screen whose source is bound (the views passes only); instanceMaskWordCount the live program's per-tile mask width;
@@ -73,7 +73,7 @@ uint worldInstanceMaskBase(uint tileIndex) {
 // FAR BOUND: the depth beyond which the tile's cone provably cannot produce ANY footprint-accepted hit through the far
 // distance (sdf-beam writes it, sdf-world-views exits the fine march at traveled >= farBound). Each plane is one
 // entry per (viewport, tile) THIS frame — the same span worldTileIndex covers — so plane k of tile T sits at
-// (k * stride + tileIndex). KEEP IN SYNC with SdfWorldEngine.TilePlaneCount.
+// (k * stride + tileIndex). KEEP IN SYNC with SdfWorldPackage.TilePlaneCount.
 static const uint WorldTilePlaneCount = 4u;
 uint worldTilePlaneStride() {
     return (passGroup.tileGrid.x * passGroup.tileGrid.y * passGroup.viewportCount);

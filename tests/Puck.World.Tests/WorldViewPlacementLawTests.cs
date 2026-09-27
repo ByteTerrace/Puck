@@ -98,16 +98,18 @@ public sealed class WorldViewPlacementLawTests : IDisposable {
         }
     }
     [Fact]
-    public void TheFirstViewsFootprintIsAlwaysAddedAndALaterViewsOnlyWhileItIsShown() {
+    public void EveryPlacedViewsFootprintIsAddedWhetherOrNotItIsShown() {
         var left = new NormalizedRect(Height: 1f, Width: 0.5f, X: 0f, Y: 0f);
         var right = new NormalizedRect(Height: 1f, Width: 0.5f, X: 0.5f, Y: 0f);
 
+        // A view not yet shown is still read at its rect's extent, so it renders before the root first shows it.
         Assert.True(condition: m_host.PlaceView(region: left, renderScale: 0.5f, sharpness: 0.25f, shown: false, uncovered: false, view: 0));
         Assert.True(condition: m_host.PlaceView(region: right, renderScale: 1f, sharpness: 0.25f, shown: false, uncovered: false, view: 1));
         Assert.Equal(
             actual: WorldFootprints(),
             expected: new Dictionary<string, (double Width, double Height)>(comparer: StringComparer.Ordinal) {
                 [WorldRootGraph.ProducerOf(view: 0)] = (0.25, 0.5),
+                [WorldRootGraph.ProducerOf(view: 1)] = (0.5, 1.0),
             }
         );
         Assert.False(condition: PlacementOf(view: 1).Shown);
@@ -240,7 +242,7 @@ public sealed class WorldViewPlacementLawTests : IDisposable {
         }
     }
     [Fact]
-    public void AViewTheWorldHasNotRenderedIsNotShown() {
+    public void AViewTheWorldHasNotRenderedIsNotShownButIsRead() {
         m_host.PlaceViews(
             panesCover: false,
             rendered: static view => (view == 0),
@@ -254,8 +256,8 @@ public sealed class WorldViewPlacementLawTests : IDisposable {
         Assert.True(condition: PlacementOf(view: 0).Shown);
         Assert.False(condition: PlacementOf(view: 1).Shown);
         Assert.Equal(
-            actual: Assert.Single(collection: WorldFootprints()).Key,
-            expected: WorldRootGraph.ProducerOf(view: 0)
+            actual: WorldFootprints().Keys.Order(comparer: StringComparer.Ordinal),
+            expected: [WorldRootGraph.ProducerOf(view: 0), WorldRootGraph.ProducerOf(view: 1)]
         );
 
         // With no render root attached, no view has an output, so none is shown.

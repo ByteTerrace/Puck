@@ -214,7 +214,7 @@ float3 skyColor(float3 direction) {
     }
 
     // The sun disc: an additive pow(cosAngle, k) highlight about its light's direction. k is HOST-BAKED from the
-    // authored angular radius (SdfWorldEngine.PackEnvironment) so this pays one pow() rather than deriving the
+    // authored angular radius (SdfWorldTables.PackEnvironment) so this pays one pow() rather than deriving the
     // exponent from an angle per pixel.
     int discLight = worldSkySunDiscLightIndex();
 

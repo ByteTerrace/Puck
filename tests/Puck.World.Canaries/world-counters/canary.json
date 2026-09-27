@@ -1,7 +1,7 @@
 {
   "id": "world-counters",
-  "title": "world.counters gpu reports the world engine's counted work for its newest completed submission, pass by pass in order, identically on both backends",
-  "binding": "The positive leg boots a still offscreen world with one SDF view, waits for the engine to be ready (world.wait ready: its pipeline set installed and its first frame produced), and reads the gpu section of world.counters sixty completed ticks later and again after thirty more. The world node's line in each response carries its submission, and the second read's is greater: a later submission. The world node's ten pass lines appear in pass order. Upload's counts and the node's created buffers follow the device's residency policy (a device whose memory profile rings every table writes the one viewport word in place; one that stages records a copy, a transition and a header and run entry beside the word, over more buffers), which is why SdfWorldEngine.PassClasses makes upload per-backend-deterministic, so the canary names the upload line and the created-buffer count without pinning either, as puck counters does not hold the backends to them, and pins no machine's policy. Sky through views, the mesh pass among them, read skipped exactly because the cadence gate leaves the view's retained output standing for the still frame, so no image is transitioned; the work outside every pass is exact, and the node's created objects follow with no pipeline or shader module among them, because the shared SDF pipeline cache creates and counts those under gpu.sdf-pipelines, and with its four images, two descriptor pools and forty sets, which no residency policy changes, since the engine reserves every region's copy sets whatever policy the device selects. The mesh pass's visibility target and depth attachment are not among the images, because the world draws no mesh and an engine creates them only on the first frame that draws one. The forty sets include the mesh pass's set per ring slot, allocated with the others from the one pool whose size states them, so they reserve nothing a mesh-free world would get back. The pass pipelines count under their own source, gpu.pass-pipelines: three pipelines and four shader modules: the device's region copy, the one place pipeline the root's four place passes share, and the mesh pass's graphics pipeline with its vertex and fragment modules, which every engine's holder leases beside its pipeline set, one per device, so a mesh a live edit adds renders on the first frame that draws it rather than after a build. The root, main, places the world's one view through its four place passes, none of which shows anything, so each draws nothing and none dispatches: the chain stands for the world, and each pass line carries only its planned barriers. The exact lines hold on Vulkan and Direct3D 12 alike, which is the cross-backend proof. The discriminating leg reads world.counters gpu twice before the first tick, when no submission has completed, so neither read shows a pass line and the positive's exact lines turn red.",
+  "title": "world.counters gpu reports the world's view as a render-graph instance of the sdf.world passes, pass by pass in order, rendered once for a still world and identically on both backends",
+  "binding": "The positive leg boots a still offscreen world with one SDF view, waits for the engine to be ready (world.wait ready: the world's residency has built its tables and the root has rendered over the world's first output), and reads the gpu section of world.counters sixty completed ticks later and again after thirty more. The world's view is the render-graph instance world, whose node renders the sdf.world package's nine passes; the residency's uploads read as sdf:world. Nothing the view renders from changes in a still world, so the scheduler lets its first render stand for every later frame: the world node's submission is the same in both reads, while the root, main, renders every frame, so its second read carries a later submission. The world node's pass lines appear in the fragment's order, sky through views, each carrying the barriers the planner planned for it and the write of its pass block; the view's one viewport row is written with the sky's and bound by every later pass; the mesh pass draws nothing, because the world draws no mesh, and transitions its target and depth. Those pass lines are exact on Vulkan and Direct3D 12 alike, which is the cross-backend proof. The residency's upload line, the work outside the passes and the created buffers, pools and sets follow the device's residency policy (a staging device records copies, transitions and copy sets beside the writes), so the canary names those lines without pinning them. Neither node creates a pipeline or a shader module: the SDF kernels count under gpu.sdf-pipelines and the pass pipelines under gpu.pass-pipelines, three pipelines and four shader modules (the device's region copy, the one place pipeline the root's four place passes share, and the mesh pass's graphics pipeline with its vertex and fragment modules). The residency creates four images and the world node five (its output in each of three frame slots, and the mesh pass's visibility target and depth, one each, which every frame slot shares). The root places the world's one view through its four place passes, none of which shows anything, so none dispatches and each pass line carries only its planned barriers. The discriminating leg reads world.counters gpu twice before the first tick, when no submission has completed, so neither read shows a pass line and the positive's exact lines turn red.",
   "bootShape": "offscreen",
   "backends": [
     "vulkan",
@@ -60,9 +60,14 @@
         "count": 2,
         "extract": [
           {
-            "name": "first",
+            "name": "world-first",
             "field": "submission",
             "line": "node world work"
+          },
+          {
+            "name": "main-first",
+            "field": "submission",
+            "line": "node main work"
           }
         ]
       },
@@ -75,68 +80,79 @@
         "count": 2,
         "extract": [
           {
-            "name": "second",
+            "name": "world-second",
             "field": "submission",
             "line": "node world work"
+          },
+          {
+            "name": "main-second",
+            "field": "submission",
+            "line": "node main work"
           }
         ]
       },
       {
         "type": "relation",
-        "name": "a-later-read-sees-a-later-submission",
-        "operator": "greater",
+        "name": "the-still-view-renders-once",
+        "operator": "equal",
         "left": {
-          "value": "second"
+          "value": "world-second"
         },
         "right": {
-          "value": "first"
+          "value": "world-first"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "the-root-renders-every-frame",
+        "operator": "greater",
+        "left": {
+          "value": "main-second"
+        },
+        "right": {
+          "value": "main-first"
         }
       },
       {
         "type": "lines",
-        "name": "the-world-passes-arrive-in-pass-order",
+        "name": "the-residency-and-the-view-passes-arrive-in-order",
         "stream": "stdout",
         "match": "contains",
         "lines": [
+          "  node sdf:world work submission=",
           "  work upload executed: ",
-          "  work sky skipped",
-          "  work mask skipped",
-          "  work beam skipped",
-          "  work cull-args skipped",
-          "  work mesh skipped",
-          "  work primary skipped",
-          "  work surface skipped",
-          "  work ambient skipped",
-          "  work views skipped",
           "  work outside: ",
-          "  work lifetime: created.pipelines=0 created.shader-modules=0 created.images=4 created.buffers="
+          "  work lifetime: created.pipelines=0 created.shader-modules=0 created.images=4 created.buffers=",
+          "  node world work submission=",
+          "  work sdf.world$sky executed: ",
+          "  work sdf.world$mask executed: ",
+          "  work sdf.world$beam executed: ",
+          "  work sdf.world$cull-args executed: ",
+          "  work sdf.world$mesh executed: ",
+          "  work sdf.world$primary executed: ",
+          "  work sdf.world$surface executed: ",
+          "  work sdf.world$ambient executed: ",
+          "  work sdf.world$views executed: ",
+          "  work outside: ",
+          "  work lifetime: created.pipelines=0 created.shader-modules=0 created.images=5 created.buffers="
         ]
       },
       {
         "type": "lines",
-        "name": "the-residency-independent-passes-are-exact",
+        "name": "the-view-passes-are-exact",
         "stream": "stdout",
         "match": "exact",
         "lines": [
-          "  work sky skipped",
-          "  work mask skipped",
-          "  work beam skipped",
-          "  work cull-args skipped",
-          "  work mesh skipped",
-          "  work primary skipped",
-          "  work surface skipped",
-          "  work ambient skipped",
-          "  work views skipped",
-          "  work outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=0 barriers.memory=1 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0"
+          "  work sdf.world$sky executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=1 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=0 uploads.host-visible=24 clears=0",
+          "  work sdf.world$mask executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=0 barriers.memory=0 barriers.buffer=1 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=0 uploads.host-visible=24 clears=0",
+          "  work sdf.world$beam executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=0 barriers.memory=0 barriers.buffer=2 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=0 uploads.host-visible=24 clears=0",
+          "  work sdf.world$cull-args executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=0 barriers.memory=0 barriers.buffer=3 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=0 uploads.host-visible=24 clears=0",
+          "  work sdf.world$mesh executed: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=2 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=24 clears=0",
+          "  work sdf.world$primary executed: dispatches=0 dispatches.indirect=1 draws=0 render-passes=0 command-buffers=1 barriers.image=1 barriers.memory=0 barriers.buffer=3 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=0 uploads.host-visible=24 clears=0",
+          "  work sdf.world$surface executed: dispatches=0 dispatches.indirect=1 draws=0 render-passes=0 command-buffers=1 barriers.image=0 barriers.memory=0 barriers.buffer=1 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=0 uploads.host-visible=24 clears=0",
+          "  work sdf.world$ambient executed: dispatches=0 dispatches.indirect=1 draws=0 render-passes=0 command-buffers=1 barriers.image=0 barriers.memory=0 barriers.buffer=1 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=0 uploads.host-visible=24 clears=0",
+          "  work sdf.world$views executed: dispatches=0 dispatches.indirect=1 draws=0 render-passes=0 command-buffers=1 barriers.image=0 barriers.memory=1 barriers.buffer=1 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=0 uploads.host-visible=24 clears=0"
         ]
-      },
-      {
-        "type": "line",
-        "name": "the-world-node-pools-and-sets-do-not-follow-residency",
-        "stream": "stdout",
-        "match": "contains",
-        "text": " created.descriptor-pools=2 created.descriptor-sets=40",
-        "present": true
       },
       {
         "type": "lines",
@@ -160,6 +176,14 @@
           "  gpu.created.pipelines 3",
           "  gpu.created.shader-modules 4"
         ]
+      },
+      {
+        "type": "line",
+        "name": "no-engine-pass-line",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "  work sky ",
+        "present": false
       },
       {
         "type": "line",

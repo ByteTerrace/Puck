@@ -10,7 +10,9 @@ namespace Puck.Shaders;
 // frame follows the instance's last previous-role use, or its last current-role use when nothing reads it as the
 // previous frame, and the first previous-role use follows the last current-role use. The planner walks those sequences
 // once, at compile time, and gives every access its exact prior state and barrier; the render node records exactly
-// those and keeps no layout state of its own.
+// those and keeps no layout state of its own. A transient storage has one instance every slot shares, and the same
+// steady state holds for it one frame apart: its first use of a frame follows the previous frame's last, and the barrier
+// planned between them orders the two frames on the queue.
 public sealed partial class ShaderPipelineCompiler {
     // An indirect dispatch reads its group counts in the indirect-argument state, before any shader stage runs.
     private static ShaderPipelineAccessState ArgumentsUse { get; } = new(
@@ -362,5 +364,80 @@ public sealed partial class ShaderPipelineCompiler {
         }).ToArray();
 
         return (resources, storages, planned);
+    }
+    // A transient storage is one allocation every frame slot shares, so it may hold nothing a later frame reads: it is no
+    // history, no public output, never read as the previous frame, and host- or zero-initialized contents would outlive
+    // the frame that set them. Its first access in the frame writes its first version from discarded contents, so no read
+    // ever sees what an earlier frame left. Only the chain's first version declares it.
+    private static void ValidateTransients(RenderGraphDefinition definition, IReadOnlyList<ShaderPipelinePlannedStorage> storages, ShaderPipelineAccess[][] accesses, List<ShaderPipelineDiagnostic> diagnostics) {
+        foreach (var resource in definition.Resources) {
+            if (
+                resource.Transient &&
+                (resource.From is not null)
+            ) {
+                Add(
+                    diagnostics,
+                    "SHADERPIPE_TRANSIENT",
+                    $"Resource '{resource.Name}' forwards '{resource.From}' and declares transient; only a chain's first version declares it.",
+                    resource.Name
+                );
+            }
+        }
+
+        var outputs = definition.Outputs.ToHashSet(comparer: StringComparer.Ordinal);
+
+        foreach (var storage in storages) {
+            var root = storage.Declaration;
+
+            if (!root.Transient) {
+                continue;
+            }
+
+            string? why = null;
+
+            if (root.IsExternal || (root.Initialization == ShaderPipelineInitialization.Zero)) {
+                why = $"is initialized {root.Initialization}";
+            } else if (storage.History) {
+                why = "is history";
+            } else if (storage.Versions.FirstOrDefault(predicate: outputs.Contains) is { } published) {
+                why = $"is published as '{published}'";
+            } else {
+                var first = default(ShaderPipelineAccess);
+
+                foreach (var pass in accesses) {
+                    foreach (var access in pass) {
+                        if (access.Storage != storage.Index) {
+                            continue;
+                        }
+                        if (access.PreviousFrame) {
+                            why = $"is read as the previous frame through '{access.Version}'";
+                        }
+
+                        first ??= access;
+                    }
+                }
+
+                if (
+                    (why is null) &&
+                    (first is not null) &&
+                    (!first.Use.Writes || !string.Equals(
+                        a: first.Version,
+                        b: root.Name,
+                        comparisonType: StringComparison.Ordinal
+                    ))
+                ) {
+                    why = $"is first reached through '{first.Version}' without being written from discarded contents";
+                }
+            }
+
+            if (why is not null) {
+                Add(
+                    diagnostics,
+                    "SHADERPIPE_TRANSIENT",
+                    $"Transient storage '{root.Name}' {why}; a transient storage is written before it is read within the frame and never read across frames.",
+                    root.Name
+                );
+            }
+        }
     }
 }

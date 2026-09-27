@@ -23,7 +23,7 @@ public sealed partial class OverlayPackageLawTests {
     // the command buffer, the output's transition to the publish layout, the world image handed back to its host's
     // layout, and the frame group's one 256-byte constant-buffer view.
     private const string DrawnPass =
-        "work overlay executed: dispatches=0 dispatches.indirect=0 draws=1 render-passes=1 command-buffers=1 barriers.image=1 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=9 uploads.host-visible=0 clears=0\nwork outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=1 barriers.memory=1 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=256 clears=0";
+        "work overlay executed: dispatches=0 dispatches.indirect=0 draws=1 render-passes=1 command-buffers=1 barriers.image=1 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=9 uploads.host-visible=0 clears=0\nwork region copies executed: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=1 barriers.memory=1 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=256 clears=0";
 
     // The fake as a device context whose services pass through creation faults, as a backend's do.
     private sealed class FaultingDevice(FakeGpuDevice gpu, GpuCreationFaults faults) : IGpuDeviceContext {
@@ -113,6 +113,47 @@ public sealed partial class OverlayPackageLawTests {
         Assert.Equal(
             actual: CompletedWork(node: rig.Node),
             expected: DrawnPass
+        );
+    }
+    /// <summary>A staged region's copy dispatch counts under the graph's region-copy pass, whose class follows the
+    /// device (per-backend-deterministic) because a device that rings the region records no copy, never outside every
+    /// pass, whose work both backends are held to.</summary>
+    [Fact]
+    public void AStagedRegionsCopyCountsUnderThePerBackendRegionCopyPass() {
+        using var rig = new Rig(staged: true);
+
+        var sample = new GpuWorkSample();
+        var dispatches = GpuWork.SubmissionKinds.IndexOf(value: GpuWork.Dispatches);
+
+        // The first completed submission is the one that copies the region's static prefix; the bound is liveness.
+        Assert.True(condition: SpinWait.SpinUntil(
+            condition: () => {
+                _ = rig.Node.ProduceFrame(context: default);
+
+                return rig.Node.TryReadCompleted(sample: sample);
+            },
+            timeout: TimeSpan.FromSeconds(value: 30)
+        ));
+        Assert.Equal(
+            actual: sample.PassLabels.ToArray(),
+            expected: ["overlay", ShaderPipelineRenderNode.RegionCopiesPass]
+        );
+        Assert.Equal(
+            actual: (sample.GetPassClass(pass: 0), sample.GetPassClass(pass: 1)),
+            expected: (Puck.Abstractions.Counting.WorkClass.Deterministic, Puck.Abstractions.Counting.WorkClass.PerBackendDeterministic)
+        );
+        Assert.True(condition: sample.TryGetPassCount(
+            column: dispatches,
+            pass: 1,
+            value: out var copies
+        ));
+        Assert.True(
+            condition: (copies > 0),
+            userMessage: "The staged region's first copy counted under no region-copy pass."
+        );
+        Assert.Equal(
+            actual: sample.GetOutsidePassCount(column: dispatches),
+            expected: 0L
         );
     }
     [Fact]
