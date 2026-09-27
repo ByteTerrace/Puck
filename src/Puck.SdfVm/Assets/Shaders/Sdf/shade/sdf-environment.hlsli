@@ -179,11 +179,11 @@ bool sampleScreenSurface(int material, float3 hitPoint, float3 rayDirection, flo
     float outside = (length(max(edgeDistance, 0.0)) - CrtCornerRadius);
     float bezel = (1.0 - smoothstep(0.0, CrtBezelSoft, outside));
 
-    // The layout, the fit and the crop take the warped point to the source; past the crop of a letterboxing fit lies a
-    // black bar.
+    // The layout, the fit and the crop take the warped point to the source; outside the crop of a letterboxing fit, the
+    // half-open [left, right) x [top, bottom) SourceMapping.MapRay holds a hit to, lies a black bar.
     float3 warped = float3(image, 1.0);
     float2 source = float2(dot(mapping.imageU.xyz, warped), dot(mapping.imageV.xyz, warped));
-    bool letterbox = ((mapping.imageV.w != 0.0) && (any(source < mapping.crop.xy) || any(source > mapping.crop.zw)));
+    bool letterbox = ((mapping.imageV.w != 0.0) && (any(source < mapping.crop.xy) || any(source >= mapping.crop.zw)));
     float3 sampled = (letterbox
         ? float3(0.0, 0.0, 0.0)
         : sampleScreenSource(screenIndex, clamp(source, mapping.sampleClamp.xy, mapping.sampleClamp.zw)).rgb);

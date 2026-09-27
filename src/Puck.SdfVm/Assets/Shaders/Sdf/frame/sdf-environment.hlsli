@@ -58,7 +58,8 @@ ScreenSurfaceData worldScreenSurface(uint screenIndex) {
 // The mapping a screen is drawn from (SdfWorldEngine.SetScreenMapping, the draw form of the mapping its row publishes,
 // Puck.Commands.SourceDraw), indexed by screen index like ScreenSurfaceData. A face point (u, v), v = 0 at the top, runs
 // the warp's rows to the face point the glass sampled; outside the unit square it lies on the bezel. That point runs the
-// image rows to the source, normalized to its extent; outside crop it lies on a letterbox bar when imageV.w is set.
+// image rows to the source, normalized to its extent; outside the half-open crop, [left, right) x [top, bottom), it lies
+// on a letterbox bar when imageV.w is set.
 // Every sample is clamped to sampleClamp, the crop inset by half a source pixel, and reads through the samplers element
 // state.y names (an SDF_FILTER_* value). state.x is set while a source is bound this frame. An unmapped screen's rows
 // before state are zero.

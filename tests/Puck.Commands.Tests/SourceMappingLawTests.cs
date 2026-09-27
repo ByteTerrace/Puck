@@ -379,6 +379,72 @@ public sealed class SourceMappingLawTests {
 
         Assert.True(condition: (checkedOnSource > 1000));
     }
+    // The crop's edges are half-open in the draw form as in MapRay: on a two-to-one face letterboxing a square crop, a
+    // grid of face points in sixty-fourths, exact in both fixed and single precision, falls on the crop's right and
+    // bottom edges and its left and top ones under every layout, and the draw form's letterbox test, the screen
+    // shading's `source >= crop.zw`, agrees with the hit at every one: face point (0.75, 0.5) lies on the bar.
+    [Fact]
+    public void TheDrawFormsLetterboxIsHalfOpenAtTheCropsEdgesAsTheHitsIs() {
+        var face = new SourcePlacement.Surface(
+            HalfHeight: 1f,
+            HalfWidth: 2f,
+            Origin: Vector3.Zero,
+            Right: Vector3.UnitX,
+            Up: Vector3.UnitY
+        );
+        var edges = 0;
+
+        foreach (var layout in Enum.GetValues<SourceUvLayout>()) {
+            var mapping = new SourceMapping(
+                Crop: new SourcePixelRect(Height: 240, Width: 240, X: 40, Y: 0),
+                Fit: SourceFit.Contain,
+                Layout: layout,
+                Placement: face,
+                Source: Emulator,
+                SourceHeight: SourceHeight,
+                SourceWidth: SourceWidth
+            );
+            var draw = mapping.Draw();
+
+            for (var row = 0; (row < 64); row++) {
+                for (var column = 0; (column < 64); column++) {
+                    var point = new Vector2(x: (column / 64f), y: (row / 64f));
+                    var hit = mapping.MapRay(ray: RayAt(surface: face, u: point.X, v: point.Y));
+                    var source = Vector2.Transform(position: point, matrix: draw.Image);
+                    var right = (draw.Crop.X + draw.Crop.Width);
+                    var bottom = (draw.Crop.Y + draw.Crop.Height);
+                    var letterbox = (
+                        (source.X < draw.Crop.X) ||
+                        (source.Y < draw.Crop.Y) ||
+                        (source.X >= right) ||
+                        (source.Y >= bottom)
+                    );
+
+                    Assert.Equal(
+                        expected: (letterbox ? SourceHitOutcome.Letterbox : SourceHitOutcome.OnSource),
+                        actual: hit.Outcome
+                    );
+
+                    if ((source.X == right) || (source.Y == bottom) || (source.X == draw.Crop.X) || (source.Y == draw.Crop.Y)) {
+                        edges++;
+                    }
+                }
+            }
+        }
+
+        Assert.True(condition: (edges > 0));
+        Assert.Equal(
+            expected: SourceHitOutcome.Letterbox,
+            actual: new SourceMapping(
+                Crop: new SourcePixelRect(Height: 240, Width: 240, X: 40, Y: 0),
+                Fit: SourceFit.Contain,
+                Placement: face,
+                Source: Emulator,
+                SourceHeight: SourceHeight,
+                SourceWidth: SourceWidth
+            ).MapRay(ray: RayAt(surface: face, u: 0.75, v: 0.5)).Outcome
+        );
+    }
     [Fact]
     public void AMappingIsDrawnOnlyOnASurfaceThroughADeclaredInverse() {
         var pane = SourceMapping.WholePane(

@@ -3593,14 +3593,17 @@ Each commit is marked with what it waits on.
    sampler (`ShaderInterfaceMember.Length`, taking its length in registers, its
    count reflected by both bytecode readers). The screen shading indexes them in
    a loop over the distinct screens of a wave, so the index is dynamically
-   uniform (Vulkan's `shaderSampledImageArrayDynamicIndexing` is enabled), and
-   the glyph atlas reads the nearest sampler. The 32-bit `screenMask` is gone:
+   uniform (a Vulkan device without `shaderSampledImageArrayDynamicIndexing` is
+   refused by name), and the glyph atlas reads the nearest sampler. The
+   letterbox test is half-open at the crop's edges, as `MapRay`'s. The 32-bit `screenMask` is gone:
    each screen's row carries its bound flag and the world block `screenCount`,
    so the screen count is stated once, `SdfProgramBuilder.MaxScreenSurfaces`,
    which the kernels read as the generated `SDF_MAX_SCREEN_SURFACES`, and every
    per-screen row in the screen-light table derives from it. Laws:
    `ShaderInterfaceLawTests.An_image_or_sampler_array_takes_its_length_in_registers`,
-   `WorldScreenMappingLawTests.ARowsFilterReachesItsMappingAndItsDrawFormAndMovesNoHit`
+   `WorldScreenMappingLawTests.ARowsFilterReachesItsMappingAndItsDrawFormAndMovesNoHit`,
+   `SourceMappingLawTests.TheDrawFormsLetterboxIsHalfOpenAtTheCropsEdgesAsTheHitsIs`,
+   `VulkanGroupedBindingFloorLawTests.ADeviceWithoutSampledImageArrayDynamicIndexingIsRefusedByName`
    and the sampler lane of
    `SdfWorldEngineUploadLawTests.TheScreenMappingTableHoldsEachScreensDrawFormAndAnUnchangedMappingOwesNothing`.
 9. The check's list, last. Every `WorldScreenSource` arm
