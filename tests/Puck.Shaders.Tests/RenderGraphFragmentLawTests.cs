@@ -284,8 +284,8 @@ public sealed class RenderGraphFragmentLawTests {
     private static ShaderPipelineRenderNode Node(FakePipelineGpu gpu, RenderGraphPlan plan, IShaderPipelineStorageCounter? counter) {
         var packages = new RenderGraphPackageRecorders();
 
-        packages.Register(factory: new Silent(), package: Writer);
-        packages.Register(factory: new Silent(), package: Reader);
+        packages.Register(factory: new Silent(counter: counter), package: Writer);
+        packages.Register(factory: new Silent(counter: null), package: Reader);
 
         var node = new ShaderPipelineRenderNode(
             deviceContext: gpu,
@@ -296,9 +296,7 @@ public sealed class RenderGraphFragmentLawTests {
             packages: packages,
             pipelines: new GpuPassPipelineCache(),
             width: Extent
-        ) {
-            StorageCounter = counter,
-        };
+        );
 
         node.Swap(pipeline: new CompiledShaderPipeline(
             plan: plan.Pipeline,
@@ -326,8 +324,9 @@ public sealed class RenderGraphFragmentLawTests {
             Instances = Instances,
         };
     }
-    // A package that builds nothing and records nothing but says it drew.
-    private sealed class Silent : IRenderGraphPackageFactory {
+    // A package that builds nothing and records nothing but says it drew, counting its instance's storages by a counter.
+    private sealed class Silent(IShaderPipelineStorageCounter? counter) : IRenderGraphPackageFactory {
+        public IShaderPipelineStorageCounter? CounterOf(string instance) => counter;
         public IDisposable? Build(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) => null;
         public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) => new Recorder();
 

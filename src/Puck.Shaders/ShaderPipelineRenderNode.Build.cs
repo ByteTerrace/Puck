@@ -37,6 +37,7 @@ public sealed partial class ShaderPipelineRenderNode {
             Load: attachment.Load,
             Store: attachment.Store
         );
+
     // The depth attachment a depth storage's images are created for: the planned attachment of the graphics pass that
     // draws it, or, for one a package pass draws through its own render pass, a clear to the depth the storage declares,
     // which that render pass clears to as well.
@@ -59,6 +60,7 @@ public sealed partial class ShaderPipelineRenderNode {
             Store: GpuAttachmentStore.Discard
         );
     }
+
     private readonly BackgroundBuild<GraphBuild> m_build = new();
 
     // The refused candidate: its pipeline, or null for a refused resize of the installed one, and the revisions it was
@@ -336,8 +338,12 @@ public sealed partial class ShaderPipelineRenderNode {
                 extent: extent,
                 plan: pipeline.Plan
             ),
-            Counts: CountsAt(extent: extent),
-            CountRevision: (m_counter?.Revision ?? 0L),
+            Counts: CountsAt(
+                extent: extent,
+                plan: pipeline.Plan
+            ),
+            CountRevision: (CounterOf(plan: pipeline.Plan)?.Revision ?? 0L),
+            Export: m_export,
             Rows: m_rows,
             Width: extent.Width
         );
@@ -346,7 +352,7 @@ public sealed partial class ShaderPipelineRenderNode {
     // resize or a rebinding) rather than the installed pipeline rebuilt after a device loss, the float preview it needs,
     // the rows its arrays read, which BindRows replaces whole whenever they change, and the counts its counted buffers
     // are allocated by, with the counter revision they were resolved at.
-    private readonly record struct BuildKey(CompiledShaderPipeline? Pipeline, uint Width, uint Height, bool Candidate, (uint Width, uint Height)? Preview, RowBindings Rows, ShaderPipelineStorageCounts Counts, long CountRevision) {
+    private readonly record struct BuildKey(CompiledShaderPipeline? Pipeline, uint Width, uint Height, bool Candidate, (uint Width, uint Height)? Preview, RowBindings Rows, ShaderPipelineStorageCounts Counts, long CountRevision, IShaderPipelineOutputExport? Export) {
         public bool Matches(BuildKey other) =>
             (
                 ReferenceEquals(
@@ -361,7 +367,11 @@ public sealed partial class ShaderPipelineRenderNode {
                     objA: Rows,
                     objB: other.Rows
                 ) &&
-                (Counts == other.Counts)
+                (Counts == other.Counts) &&
+                ReferenceEquals(
+                    objA: Export,
+                    objB: other.Export
+                )
             );
     }
     // Everything a build reads, captured on the frame thread when it starts; a build never touches the node.

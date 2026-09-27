@@ -138,6 +138,26 @@ public interface IRenderGraphPackageFactory {
     /// runtime binds those reads, and acquires what they read, only for an instance whose graph runs such a
     /// package.</summary>
     bool SamplesReads => false;
+
+    /// <summary>Returns what an instance's passes of the package allocate their counted storages by
+    /// (<see cref="ShaderPipelineResource.Count"/>) beside the extent, or <see langword="null"/> for the extent alone. An
+    /// instance's node reads it for every graph it builds that runs a pass of the package, and rebuilds its graph beside
+    /// the installed one whenever the counter's revision moves.</summary>
+    /// <param name="instance">The instance's name.</param>
+    /// <returns>The counter, or <see langword="null"/>.</returns>
+    IShaderPipelineStorageCounter? CounterOf(string instance) => null;
+    /// <summary>Returns whether nothing an instance's passes of the package render from has changed since the instance's
+    /// latest completed render, so that render stands for the frame. The runtime asks on the frame thread before it
+    /// schedules each frame, for every instance whose graph binds no input and runs only package passes, and declares an
+    /// instance unchanged (<see cref="RenderGraphFrame.Unchanged"/>) when every one of its passes' packages answers
+    /// <see langword="true"/> and no capture of it is pending.</summary>
+    /// <param name="instance">The instance's name.</param>
+    /// <param name="context">The host's frame context of the frame being scheduled.</param>
+    /// <returns><see langword="true"/> when the instance's latest render stands for this frame.</returns>
+    bool IsUnchanged(string instance, in FrameContext context) => false;
+    /// <summary>Releases whatever the factory holds on the device after the device was lost, without waiting for any
+    /// submission. The runtime calls it once its nodes have released theirs.</summary>
+    void OnDeviceLost() { }
 }
 /// <summary>A host-written region a package pass's recorder writes (<see cref="IRenderGraphPackageFactory.Regions"/>).</summary>
 /// <param name="Name">The region's part name, which names its buffers after the instance and the pass.</param>
@@ -198,6 +218,9 @@ public sealed class RenderGraphPackageRecorders(GpuRegionCopyPass? regionCopy = 
     public IReadOnlyList<string> ProducerIds => [.. m_producers.Keys.Order(comparer: StringComparer.Ordinal)];
     /// <summary>Gets the package ids an upload serves, in ordinal order.</summary>
     public IReadOnlyList<string> SourceIds => [.. m_sources.Keys.Order(comparer: StringComparer.Ordinal)];
+
+    // Every registered recorder factory, each once however many ids it serves.
+    internal IEnumerable<IRenderGraphPackageFactory> Factories => m_factories.Values.Distinct();
 
     /// <summary>Registers the external producer factory for a package id.</summary>
     /// <param name="package">The package id.</param>

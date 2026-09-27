@@ -379,7 +379,10 @@ public sealed partial class ShaderPipelineRenderNode {
         var extent = (m_requestedWidth, m_requestedHeight);
 
         return Account(
-            counts: CountsAt(extent: extent),
+            counts: CountsAt(
+                extent: extent,
+                plan: pipeline.Plan
+            ),
             plan: pipeline.Plan,
             preview: PreviewFor(
                 extent: extent,

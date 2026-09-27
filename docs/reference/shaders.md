@@ -490,6 +490,29 @@ which is the layout the producer's own submissions leave it in, and the planner
 plans its barriers from it. `PostProcessPackage` serves every post-process
 package and `OverlayPackage` serves `overlay`.
 
+An instance whose `ExternalPackage` names a package no external producer or
+upload serves, but a recorder does, is a package instance: when the package
+runs as a fragment with no input port and one image output, the runtime makes
+its graph, one pass named after the package id running it, whose output is the
+instance's, declared as the fragment declares its output version, and renders
+it on a node like any graph instance. Any other package is refused by name.
+Before it schedules each frame the runtime asks the package of every instance
+whose graph binds no input and runs only package passes whether anything it
+renders from changed since its latest render
+(`IRenderGraphPackageFactory.IsUnchanged`), and declares the instances none of
+whose packages saw a change unchanged (`RenderGraphFrame.Unchanged`), except one
+a pending capture reads, which only a render serves. A device loss reaches every
+package's factory (`IRenderGraphPackageFactory.OnDeviceLost`).
+
+A node given an export (`ShaderPipelineRenderNode.Export`, an
+`IShaderPipelineOutputExport`) renders its default output into the one image the
+export creates, which another device reads, at the export's extent whatever
+extent it is asked for. It publishes that image in `External` layout, takes it
+back from its reader before the submission that writes it
+(`IGpuExportableImage.BeginWrite`) and completes it after (`CompleteWrite`),
+handing the export the shared fence value the write signals, and renders nothing
+on a frame the reader still holds it.
+
 An instance can instead be an external producer: a `RenderGraphInstance` whose
 `ExternalPackage` names the `IRenderGraphExternalProducer` registered for that
 package (`RenderGraphPackageRecorders.RegisterProducer`). It has no graph. The
@@ -1208,11 +1231,12 @@ more pieces of vocabulary:
   nothing stays `sizeBytes`. `ShaderPipelineResource.ResolveSizeBytes` computes
   the bytes. A term whose bases the host resolves to zero units adds nothing,
   and a buffer whose terms all resolve to zero bytes is refused, naming the
-  buffer and its terms. The render node resolves a graph's counts through its
-  `StorageCounter` (`IShaderPipelineStorageCounter`) at the extent it builds the
-  graph for, and rebuilds the installed graph beside it, as a resize does, when
-  the counter's revision moves. A node given no counter resolves the extent
-  alone.
+  buffer and its terms. The render node resolves a graph's counts through the
+  counter its package passes' factories state for its instance
+  (`IRenderGraphPackageFactory.CounterOf`, an `IShaderPipelineStorageCounter`)
+  at the extent it builds the graph for, and rebuilds the installed graph
+  beside it, as a resize does, when the counter's revision moves. A graph whose
+  packages state no counter resolves the extent alone.
 - A resource's `transient` makes its storage frame-transient: one allocation
   every frame slot shares, instead of one per slot. Each frame writes it from
   discarded contents before anything reads it, and nothing reads it across

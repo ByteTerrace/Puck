@@ -282,7 +282,10 @@ public sealed partial class ShaderPipelineRenderNode {
     // The image an output publishes in its place: its own, or the input it stands for this frame.
     private (RuntimeResource Resource, string Name, int Instance) PublicationOf(RuntimeResource selected, int slot) => ((selected.Alias.Target is { } target)
         ? (target, selected.Alias.Name!, selected.Alias.Instance)
-        : (selected, selected.Spec.Name, slot));
+        : (selected, selected.Spec.Name, InstanceAt(
+            index: slot,
+            resource: selected
+        )));
 
     // An output a package that drew nothing leaves standing for one of its inputs: the input's storage, name and the
     // instance the pass read.

@@ -965,7 +965,9 @@ one statement of its passes, members, scratch and layout constants
 mesh target and depth attachment). Its scratch is `transient`: one allocation
 every frame slot shares, ordered across frames by the planned barrier of each
 frame's first use, never one per slot. A node allocates counted buffers through
-its `StorageCounter` and rebuilds when the counter's revision moves.
+the counter its packages state for its instance
+(`IRenderGraphPackageFactory.CounterOf`) and rebuilds when the counter's
+revision moves.
 `SdfPassPlanLawTests` plans that fragment and holds the order to `PassLabels` and
 the between-pass buffer barriers to `SdfFrameBufferPlan`'s edges, so a change to
 either side moves the law. It also holds the planner's size of each counted

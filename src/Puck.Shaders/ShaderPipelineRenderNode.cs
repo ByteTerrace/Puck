@@ -448,11 +448,17 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         try {
             foreach (var planned in plan.Storages) {
                 var declaration = planned.Declaration;
+                var exported = IsExported(
+                    plan: plan,
+                    storage: planned
+                );
                 var resource = new RuntimeResource(
-                    count: InstancesOf(
-                        inFlight: m_inFlight,
-                        storage: planned
-                    ),
+                    count: (exported
+                        ? 1
+                        : InstancesOf(
+                            inFlight: m_inFlight,
+                            storage: planned
+                        )),
                     storage: planned
                 );
 
@@ -498,7 +504,9 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                             part: declaration.Name
                         );
 
-                        resource.Images[i] = ((depth is { } attachment)
+                        resource.Images[i] = (exported
+                            ? m_export!.Create(device: m_device)
+                            : ((depth is { } attachment)
                             ? m_gpu.ImageFactory.CreateDepth(
                                 attachment: in attachment,
                                 height: extent.Height,
@@ -511,7 +519,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                                 name: in name,
                                 usage: usage,
                                 width: extent.Width
-                            ));
+                            )));
                     }
                 } else if (
                     (declaration.Kind == ShaderPipelineResourceKind.Buffer) &&
@@ -869,6 +877,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             // sample, and the passes are the ones it had.
             m_installedRows = key.Rows;
             m_installedCounts = key.Counts;
+            m_installedCounter = CounterOf(plan: key.Pipeline!.Plan);
             m_installedCountRevision = key.CountRevision;
             if (key.Candidate) {
                 m_pending = null;
@@ -1580,7 +1589,45 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         }
         ValidateExternalResources();
         ValidateLeases();
-        var selectedResource = m_resourceLookup[(m_selectedOutput ?? m_pipeline.Plan.DefaultOutput)];
+
+        // An exported output is written only on a frame its reader has released it, and every write begun is ended.
+        var exported = ExportedImage();
+
+        if (
+            (exported is not null) &&
+            !m_export!.TryBeginWrite()
+        ) {
+            return m_lastSurface;
+        }
+
+        var exportWritten = false;
+        var exportValue = 0UL;
+
+        try {
+            return RenderFrame(
+                context: in context,
+                exportValue: out exportValue,
+                exportWritten: out exportWritten,
+                exported: exported
+            );
+        } finally {
+            if (exported is not null) {
+                m_export!.EndWrite(
+                    image: exported,
+                    written: exportWritten,
+                    writtenValue: exportValue
+                );
+            }
+        }
+    }
+    // Renders a frame of the installed graph: every pass, the region copies, the preview and the published outputs, in
+    // one submission, which takes an exported image back from its reader before it writes it and completes it for the
+    // reader after.
+    private Surface RenderFrame(in FrameContext context, IGpuExportableImage? exported, out ulong exportValue, out bool exportWritten) {
+        exportValue = 0UL;
+        exportWritten = false;
+
+        var selectedResource = m_resourceLookup[(m_selectedOutput ?? m_pipeline!.Plan.DefaultOutput)];
         var slotIndex = ((int)(m_frame % m_inFlight));
         var slot = m_slots[slotIndex];
 
@@ -1622,10 +1669,15 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         if (commands.Count == 0) {
             return m_lastSurface;
         }
+        exported?.BeginWrite();
         SubmitCounted(
             commands: commands,
             fence: slot.Fence!
         );
+        if (exported is not null) {
+            exportValue = exported.CompleteWrite();
+            exportWritten = true;
+        }
         m_frameLeases.MoveTo(destination: slot.Leases);
         Publish(surface: Output(slot: slotIndex));
         m_publishedStateTick = Frame.StateTick;
@@ -1687,6 +1739,10 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         );
         ArgumentOutOfRangeException.ThrowIfZero(width);
         ArgumentOutOfRangeException.ThrowIfZero(height);
+        // An exported output is the export's extent, whatever extent the node is asked for.
+        if (m_export is { } export) {
+            (width, height) = (export.Width, export.Height);
+        }
         if (
             (width == m_requestedWidth) &&
             (height == m_requestedHeight)
