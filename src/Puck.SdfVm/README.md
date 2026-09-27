@@ -87,7 +87,7 @@ variant that supports its operations, reducing shader size and register pressure
 
 The visibility record buffer (`SdfFrameBuffer.VisibilityRecords`) reserves one
 record per active pixel, `SdfVisibilityWords` words (`sdf-visibility.hlsli`,
-`SdfWorldEngine.VisibilityRecordByteLength`, 60 bytes). Primary traversal preserves
+`SdfWorldPackage.VisibilityRecordByteLength`, 60 bytes). Primary traversal preserves
 depth, hit acceptance, terminal field radius and threshold, material and seam
 data, dynamic frame/lanes, and primary iteration/evaluation counts. Surface adds
 the geometric normal, gradient magnitude and curvature; ambient adds AO and

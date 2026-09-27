@@ -73,7 +73,7 @@ uint worldInstanceMaskBase(uint tileIndex) {
 // FAR BOUND: the depth beyond which the tile's cone provably cannot produce ANY footprint-accepted hit through the far
 // distance (sdf-beam writes it, sdf-world-views exits the fine march at traveled >= farBound). Each plane is one
 // entry per (viewport, tile) THIS frame — the same span worldTileIndex covers — so plane k of tile T sits at
-// (k * stride + tileIndex). KEEP IN SYNC with SdfWorldEngine.TilePlaneCount.
+// (k * stride + tileIndex). KEEP IN SYNC with SdfWorldPackage.TilePlaneCount.
 static const uint WorldTilePlaneCount = 4u;
 uint worldTilePlaneStride() {
     return (passGroup.tileGrid.x * passGroup.tileGrid.y * passGroup.viewportCount);

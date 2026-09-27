@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using Puck.Abstractions.Gpu;
+using Puck.Shaders;
 
 namespace Puck.SdfVm;
 
@@ -13,8 +14,8 @@ namespace Puck.SdfVm;
 // filler in its place, and the first frame of each ring slot after its creation rebinds the target.
 public sealed partial class SdfWorldEngine {
     // Where the world block holds the frame's mesh draws, and the mesh interface's bindings.
-    private static readonly int MeshDrawsOffset = WorldOffset(member: SdfWorldInterfaces.MeshDraws);
-    private static readonly uint MeshVisibilityBinding = WorldBinding(member: SdfWorldInterfaces.MeshVisibility);
+    private static readonly int MeshDrawsOffset = WorldOffset(member: SdfWorldPackage.MeshDraws);
+    private static readonly uint MeshVisibilityBinding = WorldBinding(member: SdfWorldPackage.MeshVisibility);
 
     private readonly IGpuPipeline m_meshPipeline;
     private readonly IGpuRenderPass m_meshRenderPass;
@@ -60,14 +61,14 @@ public sealed partial class SdfWorldEngine {
 
         using var scope = new GpuCreationScope();
         var target = scope.Own(created: m_gpu.ImageFactory.Create(
-            format: SdfMeshRasterPass.TargetFormat,
+            format: SdfWorldPackage.MeshTargetFormat,
             height: m_height,
             name: NameOf(part: "mesh-visibility"),
             usage: GpuImageUsage.Sampled | GpuImageUsage.ColorAttachment,
             width: m_width
         ));
         var depth = scope.Own(created: m_gpu.ImageFactory.CreateDepth(
-            attachment: SdfMeshRasterPass.DepthAttachment,
+            attachment: SdfWorldPackage.MeshDepthAttachment,
             height: m_height,
             name: NameOf(part: "mesh-depth"),
             width: m_width
@@ -147,11 +148,11 @@ public sealed partial class SdfWorldEngine {
         var region = m_meshRegion.Buffer(slot: slot);
 
         foreach (var views in m_viewsSets[slot]) {
-            WriteWorldBuffer(buffer: region, member: SdfWorldInterfaces.MeshRegion, set: views);
+            WriteWorldBuffer(buffer: region, member: SdfWorldPackage.MeshRegion, set: views);
         }
 
-        WriteBuffer(buffer: m_viewportRegion.Buffer(slot: slot), layout: SdfWorldInterfaces.MeshLayout, member: SdfWorldInterfaces.Viewports, set: m_meshSets[slot]);
-        WriteBuffer(buffer: region, layout: SdfWorldInterfaces.MeshLayout, member: SdfWorldInterfaces.MeshRegion, set: m_meshSets[slot]);
+        WriteBuffer(buffer: m_viewportRegion.Buffer(slot: slot), layout: SdfWorldInterfaces.MeshLayout, member: SdfWorldPackage.Viewports, set: m_meshSets[slot]);
+        WriteBuffer(buffer: region, layout: SdfWorldInterfaces.MeshLayout, member: SdfWorldPackage.MeshRegion, set: m_meshSets[slot]);
     }
     // Moves the target from its first, undefined layout to the shader-readable one it rests in between passes, once, in
     // the frame that created it, before any dispatch can reach the views sets that bind it.

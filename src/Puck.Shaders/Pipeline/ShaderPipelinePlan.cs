@@ -88,10 +88,19 @@ public sealed record ShaderPipelineAttachment(
 /// <param name="Package">The package id, which names the recorder that records the pass.</param>
 /// <param name="Inputs">The versions bound to its input ports, in port order.</param>
 /// <param name="Outputs">The versions bound to its output ports, in port order.</param>
+/// <param name="Part">The fragment pass it runs (<see cref="RenderGraphFragmentPass.Name"/>), or <see langword="null"/>
+/// for a package that runs as one pass.</param>
+/// <param name="Dispatch">Its dispatch shape, or <see langword="null"/> for one invocation per pixel of its extent. An
+/// indirect dispatch's arguments version is planned as the pass's first access, in the indirect-argument state.</param>
+/// <param name="Depth">The depth attachment it draws its depth output through, which the node creates that version's
+/// images for, or <see langword="null"/>.</param>
 public sealed record ShaderPipelinePackageStep(
     string Package,
     IReadOnlyList<ResourceReference> Inputs,
-    IReadOnlyList<ResourceReference> Outputs
+    IReadOnlyList<ResourceReference> Outputs,
+    string? Part = null,
+    ShaderPipelineDispatch? Dispatch = null,
+    GpuDepthAttachment? Depth = null
 );
 /// <summary>A pass entry in an immutable shader execution plan.</summary>
 /// <param name="Name">The unique pass name.</param>

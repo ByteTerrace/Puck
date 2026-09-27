@@ -3979,6 +3979,16 @@ generates the frame block into `frame/`.
    indirect-argument state and per-instance scratch hazards all move with it.
    Done when parity and `puck counters compare` hold and both debug layers stay
    silent on the RTX 2060, with Vulkan validation repeated on the RTX 4070.
+   Landed first: `sdf.world` is a package fragment (`SdfWorldPackage.Fragment`)
+   the graph compiler splices in place of the pass naming it, planned exactly as
+   `SdfPassPlanLawTests` holds the engine's order, edges and sizes; its scratch
+   is transient, one allocation every frame slot shares rather than one per slot,
+   and the render node allocates counted buffers through its storage counter.
+   Still to land: the world residency and per-pass recorders, and the switch of
+   every SDF view to a graph instance of the fragment, which takes the engine's
+   cadence as the scheduler's (step 9) and its captures, export, readiness and
+   counted work as the runtime node's (those parts of step 13), and deletes the
+   engine's pass and hazard model.
 7. `SdfFrame` and `SdfEnvironment` join the generated frame block as members of
    the block pipeline passes already read.
 8. The SDF pipelines build through the graph's pipeline cache

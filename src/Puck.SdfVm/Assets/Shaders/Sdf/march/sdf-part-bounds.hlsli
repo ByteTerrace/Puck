@@ -3,7 +3,7 @@
 
 // Two cache bands follow the four tile planes: primary acceptance bounds, then AO sublevel bounds. Each band
 // stores two float3 corners per (viewport, live instance). The beam writes both before its compute barrier.
-// KEEP IN SYNC with SdfWorldEngine.PartBoundFloatCount and its construction-capacity tile allocation.
+// KEEP IN SYNC with SdfWorldPackage.PartBoundFloatCount and the tile buffer's count it sizes.
 static const uint SdfPartBoundFloatCount = 12u;
 static const uint SdfBoundCornerFloatCount = 6u;
 static const float SdfContactFieldLevel = 0.15;

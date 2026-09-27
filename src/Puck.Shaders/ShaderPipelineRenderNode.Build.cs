@@ -36,6 +36,30 @@ public sealed partial class ShaderPipelineRenderNode {
             Load: attachment.Load,
             Store: attachment.Store
         );
+
+    // The depth attachment a depth storage's images are created for: the planned attachment of the graphics pass that
+    // draws it, or the one the package pass that writes it declares for its own render pass.
+    private static GpuDepthAttachment DepthOf(ShaderPipelinePlan plan, ShaderPipelinePlannedStorage storage, GpuPixelFormat format) {
+        foreach (var pass in plan.Passes) {
+            foreach (var attachment in pass.Attachments) {
+                if (attachment.Depth && (attachment.Storage == storage.Index)) {
+                    return DepthAttachmentOf(
+                        attachment: attachment,
+                        format: format
+                    );
+                }
+            }
+            if (
+                (pass.Package is { Depth: { } declared }) &&
+                pass.Accesses.Any(predicate: access => ((access.Storage == storage.Index) && access.Use.Writes))
+            ) {
+                return declared with { Format = format };
+            }
+        }
+
+        throw new InvalidDataException(message: $"Depth storage '{storage.Name}' is drawn by no pass that declares its depth attachment.");
+    }
+
     private readonly BackgroundBuild<GraphBuild> m_build = new();
 
     // The refused candidate: its pipeline, or null for a refused resize of the installed one, and the revisions it was
@@ -98,7 +122,7 @@ public sealed partial class ShaderPipelineRenderNode {
             if (
                 candidate &&
                 (Account(
-                    extent: extent,
+                    counts: key.Counts,
                     plan: pipeline.Plan,
                     preview: key.Preview,
                     rows: key.Rows
@@ -188,15 +212,16 @@ public sealed partial class ShaderPipelineRenderNode {
     }
     private void Refuse(bool candidate, Exception error) {
         if (candidate) {
-            m_hasRefusal = ((m_pending is not null) || m_resizePending || m_rebindPending);
+            m_hasRefusal = ((m_pending is not null) || m_resizePending || m_rebindPending || m_recountPending);
             m_refusedByHeap = (error is GpuDescriptorHeapRefusalException);
             m_refusedFaultsRevision = FaultsRevision;
             m_refusedHeapRevision = m_device.Services.Bindings.HeapReleaseRevision;
             m_refusedPending = m_pending;
-            m_refusedResize = (m_resizePending || m_rebindPending);
+            m_refusedResize = (m_resizePending || m_rebindPending || m_recountPending);
             m_pending = null;
             m_resizePending = false;
             m_rebindPending = false;
+            m_recountPending = false;
         }
 
         m_lastSwapError = error;
@@ -219,6 +244,7 @@ public sealed partial class ShaderPipelineRenderNode {
             (m_pending is not null) ||
             m_resizePending ||
             m_rebindPending ||
+            m_recountPending ||
             (
                 (FaultsRevision == m_refusedFaultsRevision) &&
                 (
@@ -261,7 +287,7 @@ public sealed partial class ShaderPipelineRenderNode {
         if (m_pending is { } pending) {
             (pipeline, extent, candidate) = (pending, (m_requestedWidth, m_requestedHeight), true);
         } else if (
-            (m_resizePending || m_rebindPending) &&
+            (m_resizePending || m_rebindPending || m_recountPending) &&
             (m_pipeline is { } resized)
         ) {
             (pipeline, extent, candidate) = (resized, (m_requestedWidth, m_requestedHeight), true);
@@ -311,14 +337,17 @@ public sealed partial class ShaderPipelineRenderNode {
                 extent: extent,
                 plan: pipeline.Plan
             ),
+            Counts: CountsAt(extent: extent),
+            CountRevision: (m_counter?.Revision ?? 0L),
             Rows: m_rows,
             Width: extent.Width
         );
 
     // What one build makes: the pipeline, the extent it is planned at, whether it is a candidate (a queued pipeline, a
     // resize or a rebinding) rather than the installed pipeline rebuilt after a device loss, the float preview it needs,
-    // and the rows its arrays read, which BindRows replaces whole whenever they change.
-    private readonly record struct BuildKey(CompiledShaderPipeline? Pipeline, uint Width, uint Height, bool Candidate, (uint Width, uint Height)? Preview, RowBindings Rows) {
+    // the rows its arrays read, which BindRows replaces whole whenever they change, and the counts its counted buffers
+    // are allocated by, with the counter revision they were resolved at.
+    private readonly record struct BuildKey(CompiledShaderPipeline? Pipeline, uint Width, uint Height, bool Candidate, (uint Width, uint Height)? Preview, RowBindings Rows, ShaderPipelineStorageCounts Counts, long CountRevision) {
         public bool Matches(BuildKey other) =>
             (
                 ReferenceEquals(
@@ -332,7 +361,8 @@ public sealed partial class ShaderPipelineRenderNode {
                 ReferenceEquals(
                     objA: Rows,
                     objB: other.Rows
-                )
+                ) &&
+                (Counts == other.Counts)
             );
     }
     // Everything a build reads, captured on the frame thread when it starts; a build never touches the node.

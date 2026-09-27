@@ -468,13 +468,14 @@ public sealed partial class ShaderPipelineCompiler {
                         output.Name
                     );
                 } else if (
+                    !package &&
                     (pass.Kind != ShaderPipelineDocumentPassKind.Geometry) &&
                     (resources[output.Name].Kind == ShaderPipelineResourceKind.Depth)
                 ) {
                     Add(
                         diagnostics,
                         "SHADERPIPE_DEPTH_WRITER",
-                        $"{pass.Kind} pass '{pass.Name}' writes depth version '{output.Name}'; only a geometry pass writes a depth attachment.",
+                        $"{pass.Kind} pass '{pass.Name}' writes depth version '{output.Name}'; only a geometry pass, or a package drawing it through its own render pass, writes a depth attachment.",
                         output.Name
                     );
                 } else if (resources[output.Name].IsExternal) {
@@ -1038,6 +1039,17 @@ public sealed partial class ShaderPipelineCompiler {
             comparer: StringComparer.Ordinal
         );
 
+        ValidateTransients(
+            accesses: versions.Accesses,
+            definition: definition,
+            diagnostics: diagnostics,
+            storages: versions.Storages
+        );
+
+        if (diagnostics.Count != 0) {
+            throw new ShaderPipelineCompilationException(diagnostics: diagnostics);
+        }
+
         return new ShaderPipelinePlan(
             definition: graph with {
                 Passes = ((graph.Passes is null)
@@ -1056,7 +1068,10 @@ public sealed partial class ShaderPipelineCompiler {
                     storages: versions.Storages
                 ),
                 Package = ((pass.Kind == ShaderPipelinePassKind.Package)
-                    ? StepOf(pass: shapes[index])
+                    ? StepOf(
+                        package: shapePackages[index]!,
+                        pass: shapes[index]
+                    )
                     : null),
             }).ToArray(),
             resources: versions.Resources,
@@ -1068,11 +1083,14 @@ public sealed partial class ShaderPipelineCompiler {
     // outputs before inputs, or none, so the pass runs at the frame's extent.
     private static ShaderPipelineDimensions? ExtentOf(ShaderPipelinePass pass, IReadOnlyDictionary<string, ShaderPipelinePlannedResource> resources, IReadOnlyList<ShaderPipelinePlannedStorage> storages) =>
         pass.OutputReferences.Concat(second: pass.InputReferences).Select(selector: reference => storages[resources[reference.Name].Storage].Declaration.Dimensions).FirstOrDefault(predicate: static dimensions => (dimensions is not null));
-    // A package pass's step: its package and its ports' versions.
-    private static ShaderPipelinePackageStep StepOf(ShaderPipelinePass pass) => new(
+    // A package pass's step: its package, its ports' versions, the fragment pass it runs and its dispatch.
+    private static ShaderPipelinePackageStep StepOf(ShaderPipelinePass pass, ShaderPipelinePackagePass package) => new(
+        Depth: package.Depth,
+        Dispatch: package.Dispatch,
         Inputs: new ReadOnlyCollection<ResourceReference>(list: pass.InputReferences.ToArray()),
         Outputs: new ReadOnlyCollection<ResourceReference>(list: pass.OutputReferences.ToArray()),
-        Package: pass.Source
+        Package: pass.Source,
+        Part: package.Part
     );
 
     /// <summary>Convenience static entry point for callers that do not need custom limits.</summary>

@@ -277,16 +277,16 @@ public sealed class WorldViewGraphLawTests {
             passes: sources.PlanGraph
         );
 
-        Assert.Equal(expected: (((int?)2), ((string?)null)), actual: (presentation.Instances[0].Passes, presentation.Instances[0].Issue));
-        Assert.Equal(expected: 0.5, actual: presentation.Instances[0].PassDisplaysPerFrame);
-        Assert.Equal(expected: 2, actual: presentation.Instances[1].Passes);
+        Assert.Equal(expected: (((int?)10), ((string?)null)), actual: (presentation.Instances[0].Passes, presentation.Instances[0].Issue));
+        Assert.Equal(expected: 2.5, actual: presentation.Instances[0].PassDisplaysPerFrame);
+        Assert.Equal(expected: 10, actual: presentation.Instances[1].Passes);
         Assert.Contains(
             expectedSubstring: "screen name no external version",
             actualString: presentation.Instances[1].Issue
         );
         Assert.Null(@object: presentation.Instances[2].Passes);
         Assert.Contains(
-            expectedSubstring: "security (graphs/view.graph.json) extent<=display rate 1/4 frames passes 2 <= 0.5 display pass-pixels/frame",
+            expectedSubstring: "security (graphs/view.graph.json) extent<=display rate 1/4 frames passes 10 <= 2.5 display pass-pixels/frame",
             actualString: presentation.Describe()
         );
     }

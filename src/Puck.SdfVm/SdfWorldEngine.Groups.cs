@@ -16,19 +16,19 @@ public sealed partial class SdfWorldEngine {
 
     // The bindings the engine writes image by image, by their members' places in the world interface's pass group;
     // every buffer is written through WriteBuffer, which reads its member's binding, kind and stride.
-    private static readonly uint GlyphAtlasBinding = WorldBinding(member: SdfWorldInterfaces.GlyphAtlas);
-    private static readonly uint OutputBinding = WorldBinding(member: SdfWorldInterfaces.Output);
-    private static readonly uint ScreenSamplerBinding = WorldBinding(member: SdfWorldInterfaces.ScreenSampler);
+    private static readonly uint GlyphAtlasBinding = WorldBinding(member: SdfWorldPackage.GlyphAtlas);
+    private static readonly uint OutputBinding = WorldBinding(member: SdfWorldPackage.Output);
+    private static readonly uint ScreenSamplerBinding = WorldBinding(member: SdfWorldPackage.ScreenSampler);
     // screenSource{i}'s binding, by screen index.
-    private static readonly uint[] ScreenSourceBindings = [.. Enumerable.Range(count: MaxScreenSurfaces, start: 0).Select(selector: static screen => WorldBinding(member: SdfWorldInterfaces.ScreenSource(screen: screen)))];
+    private static readonly uint[] ScreenSourceBindings = [.. Enumerable.Range(count: MaxScreenSurfaces, start: 0).Select(selector: static screen => WorldBinding(member: SdfWorldPackage.ScreenSource(screen: screen)))];
     // Where each world value lies in a views set's block.
-    private static readonly int ImageExtentOffset = WorldOffset(member: SdfWorldInterfaces.ImageExtent);
-    private static readonly int InstanceMaskWordCountOffset = WorldOffset(member: SdfWorldInterfaces.InstanceMaskWordCount);
-    private static readonly int SampleIndexOffset = WorldOffset(member: SdfWorldInterfaces.SampleIndex);
-    private static readonly int ScreenMaskOffset = WorldOffset(member: SdfWorldInterfaces.ScreenMask);
-    private static readonly int TileGridOffset = WorldOffset(member: SdfWorldInterfaces.TileGrid);
-    private static readonly int ViewBaseOffset = WorldOffset(member: SdfWorldInterfaces.ViewBase);
-    private static readonly int ViewportCountOffset = WorldOffset(member: SdfWorldInterfaces.ViewportCount);
+    private static readonly int ImageExtentOffset = WorldOffset(member: SdfWorldPackage.ImageExtent);
+    private static readonly int InstanceMaskWordCountOffset = WorldOffset(member: SdfWorldPackage.InstanceMaskWordCount);
+    private static readonly int SampleIndexOffset = WorldOffset(member: SdfWorldPackage.SampleIndex);
+    private static readonly int ScreenMaskOffset = WorldOffset(member: SdfWorldPackage.ScreenMask);
+    private static readonly int TileGridOffset = WorldOffset(member: SdfWorldPackage.TileGrid);
+    private static readonly int ViewBaseOffset = WorldOffset(member: SdfWorldPackage.ViewBase);
+    private static readonly int ViewportCountOffset = WorldOffset(member: SdfWorldPackage.ViewportCount);
 
     // The frame block, written once a frame, and the ring slot's frame set that binds it.
     private readonly GpuRegion m_frameRegion;

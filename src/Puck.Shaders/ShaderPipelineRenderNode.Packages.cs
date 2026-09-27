@@ -40,6 +40,7 @@ public sealed partial class ShaderPipelineRenderNode {
     // on the pool.
     private static RenderGraphPackageRecorderContext PackageContextOf(ShaderPipelinePlannedPass planned, BuildRequest request, IReadOnlyDictionary<string, ShaderPipelineResource> specs, (uint Width, uint Height) extent) => new(
         Device: request.Device,
+        Dispatch: planned.Package!.Dispatch,
         Height: extent.Height,
         HostsOnDirectX: request.DirectX,
         InFlightFrames: ((int)request.InFlight),
@@ -48,6 +49,7 @@ public sealed partial class ShaderPipelineRenderNode {
         Outputs: [.. planned.Outputs.Select(selector: output => specs[output.Name])],
         Package: planned.Package!.Package,
         Parameters: planned.Parameters,
+        Part: planned.Package.Part,
         Pass: planned.Name,
         Pipelines: request.Pipelines,
         Services: request.Gpu,
@@ -95,6 +97,9 @@ public sealed partial class ShaderPipelineRenderNode {
             pass: runtime,
             planned: planned
         );
+        runtime.PackageArguments = ((planned.Package.Dispatch is { Kind: ShaderPipelineDispatchKind.Indirect, Arguments: { } arguments })
+            ? arguments
+            : null);
 
         CreatePackageRegions(
             copyPipeline: copyPipeline,
@@ -330,6 +335,13 @@ public sealed partial class ShaderPipelineRenderNode {
             slot: slot
         );
         var outcome = pass.Package!.Record(recording: new RenderGraphPackageRecording(
+            Arguments: ((pass.PackageArguments is { } arguments)
+                ? ResolveBuffer(
+                    index: slot,
+                    name: arguments,
+                    resource: m_resourceLookup[arguments]
+                )
+                : null),
             CommandBuffer: handle,
             Context: context,
             Height: pass.Height,
@@ -405,7 +417,10 @@ public sealed partial class ShaderPipelineRenderNode {
             Kind: resource.Spec.Kind,
             Owned: (resource.Spec.IsExternal
                 ? null
-                : resource.Images?[index]),
+                : resource.Images?[InstanceAt(
+                    index: index,
+                    resource: resource
+                )]),
             Version: name
         ));
     // A graph whose package pass nothing records is refused when it is swapped in, naming the pass and its package.

@@ -1,4 +1,5 @@
 using Puck.Abstractions.Gpu;
+using Puck.Shaders;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
@@ -11,16 +12,12 @@ public sealed partial class SdfWorldEngine {
         val1: m_programWordCapacity,
         val2: m_programWordReserve
     );
-    /// <summary>Gets the bytes allocated for the visibility records: one record of <see cref="VisibilityRecordByteLength"/>
+    /// <summary>Gets the bytes allocated for the visibility records: one record of <see cref="SdfWorldPackage.VisibilityRecordByteLength"/>
     /// bytes for every pixel of the full extent in every viewport the engine reserves.</summary>
     public ulong VisibilityRecordBytes => FrameBufferBytes(
         buffer: SdfFrameBuffer.VisibilityRecords,
         capacity: FrameCapacity
     );
-
-    /// <summary>The bytes of one visibility record: the fifteen words in its V, C, L, N and S rows that
-    /// <c>sdf-visibility.hlsli</c> lays out (<c>SdfVisibilityWords</c>).</summary>
-    public const int VisibilityRecordByteLength = (15 * sizeof(uint));
 
     private SdfFrameCapacity FrameCapacity => new(
         BrickPoolVoxels: m_brickPoolVoxelCapacity,
@@ -118,10 +115,10 @@ public sealed partial class SdfWorldEngine {
         )) * sizeof(float))),
         SdfFrameBuffer.InstanceMasks => checked(((((ulong)capacity.Viewports) * capacity.Tiles) * (((ulong)SdfProgram.InstanceMaskStorageWordCountFor(instanceCount: capacity.Instances)) * sizeof(uint)))),
         // Four tile planes per tile, then the primary and AO part-bound bands per instance, per viewport.
-        SdfFrameBuffer.Tiles => checked(((((ulong)capacity.Viewports) * ((TilePlaneCount * capacity.Tiles) + (((ulong)PartBoundFloatCount) * ((uint)capacity.Instances)))) * sizeof(float))),
+        SdfFrameBuffer.Tiles => checked(((((ulong)capacity.Viewports) * ((SdfWorldPackage.TilePlaneCount * capacity.Tiles) + (((ulong)SdfWorldPackage.PartBoundFloatCount) * ((uint)capacity.Instances)))) * sizeof(float))),
         SdfFrameBuffer.ViewsArgs => ViewsArgsByteLength,
-        SdfFrameBuffer.CullBounds => CullBoundsByteLength,
-        SdfFrameBuffer.VisibilityRecords => checked(((((ulong)capacity.Width) * capacity.Height) * (((ulong)capacity.Viewports) * VisibilityRecordByteLength))),
+        SdfFrameBuffer.CullBounds => SdfWorldPackage.CullBoundsByteLength,
+        SdfFrameBuffer.VisibilityRecords => checked(((((ulong)capacity.Width) * capacity.Height) * (((ulong)capacity.Viewports) * SdfWorldPackage.VisibilityRecordByteLength))),
         _ => throw new ArgumentOutOfRangeException(
             actualValue: buffer,
             message: "Unknown SDF frame buffer.",

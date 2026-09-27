@@ -184,6 +184,26 @@ public sealed class RenderGraphCompiler(RenderGraphPackageCatalog packages, Shad
                 references: pass.InputReferences,
                 resources: resources
             );
+            // A fragment's output version forwards what the fragment's version forwards, so the version a pass binds to it
+            // starts no chain of its own.
+            if (package.Fragment is not null) {
+                foreach (var output in pass.OutputReferences) {
+                    if (
+                        resources.TryGetValue(
+                            key: output.Name,
+                            value: out var bound
+                        ) &&
+                        (bound.From is not null)
+                    ) {
+                        Add(
+                            code: "RENDERGRAPH_PACKAGE_OUTPUT",
+                            diagnostics: diagnostics,
+                            message: $"Package pass '{pass.Name}' binds '{bound.Name}', which forwards '{bound.From}', to an output of package '{package.Id}', whose passes write it from the start of the frame.",
+                            name: bound.Name
+                        );
+                    }
+                }
+            }
             if (!TryBindConfig(
                 config: out _,
                 package: package,
@@ -276,15 +296,12 @@ public sealed class RenderGraphCompiler(RenderGraphPackageCatalog packages, Shad
 
         var packageByPass = new Dictionary<string, RenderGraphPackage>(comparer: StringComparer.Ordinal);
         var packagePasses = new List<ShaderPipelinePackagePass>(capacity: definition.PackagePasses.Count);
+        var resources = definition.Resources.ToList();
 
         foreach (var pass in definition.PackagePasses) {
             m_packages.TryGet(
                 id: pass.Package,
                 package: out var package
-            );
-            packageByPass.TryAdd(
-                key: pass.Name,
-                value: package!
             );
             TryBindConfig(
                 config: out var config,
@@ -292,9 +309,28 @@ public sealed class RenderGraphCompiler(RenderGraphPackageCatalog packages, Shad
                 pass: pass,
                 reason: out _
             );
+
+            if (package!.Fragment is { } fragment) {
+                Splice(
+                    config: config,
+                    fragment: fragment,
+                    package: package,
+                    packageByPass: packageByPass,
+                    packagePasses: packagePasses,
+                    pass: pass,
+                    resources: resources
+                );
+
+                continue;
+            }
+
+            packageByPass.TryAdd(
+                key: pass.Name,
+                value: package
+            );
             packagePasses.Add(item: new ShaderPipelinePackagePass(
                 Config: config,
-                InputAccesses: [.. package!.Inputs.Select(selector: static port => port.Access)],
+                InputAccesses: [.. package.Inputs.Select(selector: static port => port.Access)],
                 Inputs: pass.InputReferences,
                 Members: package.Members,
                 Name: pass.Name,
@@ -306,7 +342,9 @@ public sealed class RenderGraphCompiler(RenderGraphPackageCatalog packages, Shad
         }
 
         var pipeline = m_planner.Compile(
-            definition: definition,
+            definition: (packagePasses.Any(predicate: static pass => (pass.Part is not null))
+                ? definition with { Resources = resources }
+                : definition),
             packages: packagePasses
         );
         var steps = pipeline.Passes.Select(selector: planned => new RenderGraphStep(
@@ -325,6 +363,103 @@ public sealed class RenderGraphCompiler(RenderGraphPackageCatalog packages, Shad
             steps: Array.AsReadOnly(array: steps)
         );
     }
+
+    // Splices a fragment package's passes in place of the pass naming it (RenderGraphPackageFragment): its own versions
+    // join the graph's resources under spliced names, a name standing for an input port reads the version the pass binds
+    // to that port, and a version standing for an output port is the version the pass binds to it, declared as the graph
+    // declares it but forwarding what the fragment's version forwards. Each fragment pass plans as a package pass of the
+    // package, laid out by its members and config, with the fragment pass as its part.
+    private static void Splice(RenderGraphPackagePass pass, RenderGraphPackage package, RenderGraphPackageFragment fragment, IReadOnlyDictionary<string, ShaderConfigField>? config, Dictionary<string, RenderGraphPackage> packageByPass, List<ShaderPipelinePackagePass> packagePasses, List<ShaderPipelineResource> resources) {
+        var names = new Dictionary<string, ResourceReference>(comparer: StringComparer.Ordinal);
+
+        foreach (var resource in fragment.Resources) {
+            names[resource.Name] = new ResourceReference(Name: RenderGraphPackageFragment.Spliced(
+                name: resource.Name,
+                pass: pass.Name
+            ));
+        }
+        for (var port = 0; (port < fragment.InputVersions.Count); port++) {
+            names[fragment.InputVersions[port]] = pass.InputReferences[port];
+        }
+        for (var port = 0; (port < fragment.OutputVersions.Count); port++) {
+            names[fragment.OutputVersions[port]] = new ResourceReference(Name: pass.OutputReferences[port].Name);
+        }
+
+        ResourceReference Rename(ResourceReference reference) => (names[reference.Name] with {
+            PreviousFrame = (reference.PreviousFrame || names[reference.Name].PreviousFrame),
+        });
+
+        foreach (var resource in fragment.Resources) {
+            var from = ((resource.From is { } predecessor)
+                ? names[predecessor].Name
+                : null);
+            var port = IndexOf(
+                list: fragment.OutputVersions,
+                name: resource.Name
+            );
+
+            if (port < 0) {
+                resources.Add(item: resource with {
+                    From = from,
+                    Name = names[resource.Name].Name,
+                });
+
+                continue;
+            }
+
+            var bound = pass.OutputReferences[port].Name;
+            var declared = resources.FindIndex(match: candidate => string.Equals(
+                a: candidate.Name,
+                b: bound,
+                comparisonType: StringComparison.Ordinal
+            ));
+
+            if (declared >= 0) {
+                resources[declared] = resources[declared] with { From = from };
+            }
+        }
+        foreach (var part in fragment.Passes) {
+            var name = RenderGraphPackageFragment.Spliced(
+                name: part.Name,
+                pass: pass.Name
+            );
+
+            packageByPass.TryAdd(
+                key: name,
+                value: package
+            );
+            packagePasses.Add(item: new ShaderPipelinePackagePass(
+                Config: config,
+                Depth: part.Depth,
+                Dispatch: ((part.Dispatch is { Arguments: { } arguments } dispatch)
+                    ? dispatch with { Arguments = names[arguments].Name }
+                    : part.Dispatch),
+                InputAccesses: part.InputAccesses,
+                Inputs: [.. part.Inputs.Select(selector: Rename)],
+                Members: package.Members,
+                Name: name,
+                OutputAccesses: part.OutputAccesses,
+                Outputs: [.. part.Outputs.Select(selector: Rename)],
+                Package: package.Id,
+                Part: part.Name,
+                PushesIndex: package.PushesIndex
+            ));
+        }
+    }
+    private static int IndexOf(IReadOnlyList<string> list, string name) {
+        for (var index = 0; (index < list.Count); index++) {
+            if (string.Equals(
+                a: list[index],
+                b: name,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
     /// <summary>Validates and plans a graph without throwing for an authored refusal.</summary>
     /// <param name="definition">The graph document.</param>
     /// <param name="plan">The plan, when this returns <see langword="true"/>.</param>

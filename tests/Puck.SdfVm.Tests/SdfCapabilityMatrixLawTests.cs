@@ -234,9 +234,9 @@ public sealed class SdfCapabilityMatrixLawTests {
             Check: "SdfPassPlanLawTests; SdfWorldEngineUploadLawTests",
             Green: false,
             Members: [
-                "SdfWorldEngine.FrameBufferBytes", "SdfWorldEngine.TileSize",
+                "SdfWorldEngine.FrameBufferBytes",
                 "SdfWorldEngine.VisibilityRecordBytes",
-                "SdfWorldEngine.VisibilityRecordByteLength", "SdfEngineNode.VisibilityRecordBytes",
+                "SdfEngineNode.VisibilityRecordBytes",
                 "SdfWorldEngine.DescriptorPoolSizes", "SdfWorldEngine.DescriptorPools", "SdfWorldEngine.CheckAdmission",
             ]
         ),

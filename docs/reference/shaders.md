@@ -308,12 +308,25 @@ offers:
 
 | Package | Ports | Renders |
 |---|---|---|
-| `sdf.world` | no input, one image output written by compute | The SDF world as the instance's camera sees it. The screens it shows are the instance's reads, not ports. |
+| `sdf.world` | no input, one image output written by compute | The SDF world as the instance's camera sees it, run as a fragment (`SdfWorldPackage.Fragment`): sky, mask, beam, cull arguments, mesh, then primary, surface, ambient and views dispatched indirectly from the cull arguments, over transient counted scratch. The screens it shows are the instance's reads, not ports. |
 | `sdf.bricks` | no input, one buffer output written by compute | The world's SDF brick pool, written by brick uploads and carve bakes: one float per voxel, stride 4, counted `[{ "per": ["BrickPoolVoxels"] }]`. It is world-scoped, and the views read it across buffer edges. |
 | `overlay` | one fragment-sampled image input, one color-attachment image output | The console, HUD, toasts and cursor drawn over the input. |
 | `place` | two image inputs, a base and a source, read by compute, one image output written by compute | The base with the source reconstructed into a destination rect over it: an exact copy where the rect has the source's extent, otherwise bilinear at sharpness 0 blending to clamped Catmull-Rom at sharpness 1. Its config is `letterbox` (1 writes the letterbox color outside the rect instead of the base, 0 by default), `rect` (left, top, width and height as fractions of the output, the whole output by default, which resamples the whole source) and `sharpness`; a host that places panes per frame (`IRenderGraphPlacements`) overrides the rect and sharpness, and a source it shows nowhere draws nothing, so the base stands for the output, or, when the pass may not stand in, copies the base everywhere, letterbox or not. Its kernel, `src/Puck.Shaders/Assets/Shaders/Graph/place.comp.hlsl`, compiles at build, and `PlacePackage` records it. |
 | `sdf.film-grain` | one fragment-sampled image input, one color-attachment image output | Film grain over the input: the engine's [post-process package](#post-process-packages), a per-pixel integer-hashed offset keyed on the engine tick. Its stages, `fullscreen.vert` and `sdf-film-grain.frag` in `Assets/Shaders/Sdf/passes`, compile at build, and `PostProcessPackage` records it. |
 | `source-palette`, `source-nv12`, `source-rgba`, `source-transfer` | one raw buffer input read by compute, one image output written by compute | An uploaded source's region (`ImageSourceUploadLayout`) converted by the shipped kernel of that name in `src/Puck.Shaders/Assets/Shaders/Sources` into RGBA8, or half-float linear light for `source-transfer`. `SourceConversionPackage` records them; the runtime runs one in the graph it makes for each uploaded source instance, its region bound as a host buffer port (`ShaderPipelineRenderNode.BindRegion`). |
+
+A package may run as a fragment (`RenderGraphPackageFragment`): passes and
+versions of its own, which the graph compiler splices into the graph in place
+of each pass naming the package. A fragment pass becomes a package pass named
+`<pass>$<fragment pass>`, recorded by the package's recorder for that part
+(`ShaderPipelinePackageStep.Part`, `RenderGraphPackageRecorderContext.Part`),
+and a fragment version becomes `<pass>$<version>`. A name the fragment stands
+for an input port reads the version the pass binds there, and the version the
+pass binds to an output port takes the fragment's version's place, forwarding
+what that version forwards, so a bound output that forwards anything itself
+is refused (`RENDERGRAPH_PACKAGE_OUTPUT`). A fragment pass that draws a depth
+version through its own render pass declares the depth attachment the node
+creates its images for (`RenderGraphFragmentPass.Depth`).
 
 `RenderGraphCompiler` checks the schema tag and the package passes against the
 catalog, then plans the whole graph with `ShaderPipelineCompiler`, the one
@@ -1170,7 +1183,20 @@ more pieces of vocabulary:
   nothing stays `sizeBytes`. `ShaderPipelineResource.ResolveSizeBytes` computes
   the bytes. A term whose bases the host resolves to zero units adds nothing,
   and a buffer whose terms all resolve to zero bytes is refused, naming the
-  buffer and its terms.
+  buffer and its terms. The render node resolves a graph's counts through its
+  `StorageCounter` (`IShaderPipelineStorageCounter`) at the extent it builds the
+  graph for, and rebuilds the installed graph beside it, as a resize does, when
+  the counter's revision moves. A node given no counter resolves the extent
+  alone.
+- A resource's `transient` makes its storage frame-transient: one allocation
+  every frame slot shares, instead of one per slot. Each frame writes it from
+  discarded contents before anything reads it, and nothing reads it across
+  frames, so the planner's barrier before its first use of a frame, from the
+  state the frame before left, orders the two frames' use of the one
+  allocation on the queue. Only a chain's first version declares it, and a
+  transient storage that is history, published, host- or zero-initialized,
+  read as the previous frame, or first reached by anything but its first
+  version's write is refused (`SHADERPIPE_TRANSIENT`).
 
 A shader pass declaring a `Groups` or `Indirect` dispatch is refused
 (`SHADERPIPE_DISPATCH_PACKAGE`), and so is a shader pass binding a buffer with

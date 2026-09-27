@@ -438,7 +438,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     // pipeline and module set into them. The budget was checked against the plan and the rows before the build started. A
     // storage whose instances carry over from the replaced graph gets none of its own; PreserveCompatibleHistory moves the
     // carried ones in.
-    private void Allocate(GraphBuild built, IReadOnlyDictionary<int, CarriedHistory> carried, RowBindings rows) {
+    private void Allocate(GraphBuild built, IReadOnlyDictionary<int, CarriedHistory> carried, RowBindings rows, ShaderPipelineStorageCounts counts) {
         var plan = m_pipeline!.Plan;
         var map = new Dictionary<string, RuntimeResource>(comparer: StringComparer.Ordinal);
         FloatPreviewPass? preview = null;
@@ -449,7 +449,10 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             foreach (var planned in plan.Storages) {
                 var declaration = planned.Declaration;
                 var resource = new RuntimeResource(
-                    count: ((int)m_inFlight),
+                    count: InstancesOf(
+                        inFlight: m_inFlight,
+                        storage: planned
+                    ),
                     storage: planned
                 );
 
@@ -467,7 +470,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                     (declaration.Kind != ShaderPipelineResourceKind.Buffer) &&
                     !declaration.IsExternal
                 ) {
-                    resource.Images = new IGpuImage[m_inFlight];
+                    resource.Images = new IGpuImage[resource.Count];
                     var extent = (declaration.Dimensions?.Resolve(
                         frameHeight: m_height,
                         frameWidth: m_width
@@ -478,15 +481,17 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                     );
 
                     var format = ParseFormat(format: declaration.Format);
-                    // A depth storage's images are created for the depth attachment a pass draws it as.
+                    // A depth storage's images are created for the depth attachment a pass draws it as: a graphics pass's
+                    // planned attachment, or the one a package pass drawing it through its own render pass declares.
                     GpuDepthAttachment? depth = ((usage == GpuImageUsage.DepthAttachment)
-                        ? DepthAttachmentOf(
-                            attachment: plan.Passes.SelectMany(selector: static pass => pass.Attachments).First(predicate: attachment => (attachment.Depth && (attachment.Storage == planned.Index))),
-                            format: format
+                        ? DepthOf(
+                            format: format,
+                            plan: plan,
+                            storage: planned
                         )
                         : null);
 
-                    for (var i = 0; (i < m_inFlight); i++) {
+                    for (var i = 0; (i < resource.Count); i++) {
                         var name = new GpuObjectName(
                             index: i,
                             owner: m_name,
@@ -512,16 +517,14 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                     (declaration.Kind == ShaderPipelineResourceKind.Buffer) &&
                     !declaration.IsExternal
                 ) {
-                    if (
-                        !declaration.SizeBytes.HasValue ||
-                        (declaration.SizeBytes.Value == 0)
-                    ) {
+                    var sizeBytes = declaration.ResolveSizeBytes(counts: counts);
+
+                    if (sizeBytes == 0UL) {
                         throw new InvalidDataException(message: $"Buffer '{declaration.Name}' has no positive size.");
                     }
-                    var sizeBytes = declaration.SizeBytes.Value;
 
-                    resource.Buffers = new IGpuBuffer[m_inFlight];
-                    for (var i = 0; (i < m_inFlight); i++) {
+                    resource.Buffers = new IGpuBuffer[resource.Count];
+                    for (var i = 0; (i < resource.Count); i++) {
                         resource.Buffers[i] = m_gpu.BufferFactory.CreateDeviceLocal(
                             name: new GpuObjectName(
                                 index: i,
@@ -544,7 +547,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                 rows: rows
             );
             m_allocationBytes = checked((GraphBytes(
-                extent: (m_width, m_height),
+                counts: counts,
                 inFlight: m_inFlight,
                 plan: plan
             ) + m_regionBytes));
@@ -763,7 +766,10 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     }
     private static int HistoryIndex(RuntimeResource resource, int slot, bool previous) {
         if (!previous) {
-            return slot;
+            return InstanceAt(
+                index: slot,
+                resource: resource
+            );
         }
         if (!resource.History) {
             throw new InvalidDataException(message: $"Resource '{resource.Spec.Name}' is not declared as history.");
@@ -843,6 +849,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             Allocate(
                 built: built,
                 carried: carried,
+                counts: key.Counts,
                 rows: key.Rows
             );
             PreserveCompatibleHistory(
@@ -861,10 +868,13 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             // A rebuild of the installed pipeline after a device loss keeps its revision: the loss already withdrew the
             // sample, and the passes are the ones it had.
             m_installedRows = key.Rows;
+            m_installedCounts = key.Counts;
+            m_installedCountRevision = key.CountRevision;
             if (key.Candidate) {
                 m_pending = null;
                 m_resizePending = false;
                 m_rebindPending = false;
+                m_recountPending = false;
                 ConfigureWork();
                 ReleaseUndeclaredBindingHolds();
             }
@@ -1299,7 +1309,10 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     }
     private IGpuBuffer ResolveBuffer(RuntimeResource resource, string name, int index) {
         if (resource.Buffers is not null) {
-            return resource.Buffers[index];
+            return resource.Buffers[InstanceAt(
+                index: index,
+                resource: resource
+            )];
         }
         if (m_externalBuffers.TryGetValue(
             key: name,
@@ -1320,7 +1333,10 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             return external;
         }
         if (resource.Images is not null) {
-            var image = resource.Images[index];
+            var image = resource.Images[InstanceAt(
+                index: index,
+                resource: resource
+            )];
 
             return new ShaderPipelineExternalImage(
                 image.ImageHandle,
@@ -1510,8 +1526,9 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         );
 
         RetireCompleted();
-        // A reload, a row upsert or a resize replaces the graph; it is not a step, so a paused frame builds and installs
-        // it too, rendering nothing.
+        CheckCounts();
+        // A reload, a row upsert, a resize or a recount replaces the graph; it is not a step, so a paused frame builds and
+        // installs it too, rendering nothing.
         EnsureBuild();
         InstallPending();
         InstallPendingPreview();

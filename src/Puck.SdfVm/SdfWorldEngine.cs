@@ -30,7 +30,6 @@ namespace Puck.SdfVm;
 public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private const int BrickBakeRequestHeaderFloat4Count = 3; // (boxMin+cellSize), (dims+carveCount), (destWordOffset+invLambda) — KEEP IN SYNC with sdf-brick-bake.comp
     private const uint BrickBakeWorkgroupSize = 64; // sdf-brick-bake.comp's [numthreads(64, 1, 1)]
-    private const ulong CullBoundsByteLength = (sizeof(uint) * 4); // the dispatch box sdf-cull-args.comp writes: the group origin, then the exclusive end
     private const int DecalBufferCells = (DecalDescriptorCount + (MaxScreenSurfaces * MaxScreenDecalCells));
     // The decal buffer's leading DESCRIPTOR band (one uint4 per screen slot) precedes the shared cell region; a screen's
     // cell run starts at DecalDescriptorCount + screenIndex * MaxScreenDecalCells (KEEP IN SYNC with sdfSampleGlyphDecal).
@@ -43,19 +42,6 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private const int ScreenLightByteLength = ((sizeof(float) * 4) * ((MaxScreenSurfaces + 8) + SdfEnvironment.RowCount)); // float4 rgb+intensity per screen (0..MaxScreenSurfaces-1) + env (MaxScreenSurfaces) + FOUR grid-lock rows (+1..+4) + the engine-bench params row (+5) + the shadow-policy row (+6) + the far-field row (+7) + the environment block (+8 onward: SdfEnvironment's row layout) — KEEP IN SYNC with frame/sdf-environment.hlsli SdfGridWorld..SdfEnvBase
     private const float ScreenLightIntensity = 2.5f; // room-glow gain applied to each screen's average color
     private const int ScreenSurfaceByteLength = ((sizeof(float) * 4) * 3); // 48-byte ScreenSurfaceData: right.xyz+halfWidth, up.xyz+halfHeight, origin.xyz+pad (KEEP IN SYNC with frame/sdf-environment.hlsli)
-    // The tile cull buffer carries FOUR planes per (viewport, tile), each of stride
-    // (tileGrid.x * tileGrid.y * viewportCount): plane 0 = the march-start lower bound (the classic beam
-    // output; the ONLY plane cull-args reads, so its indexing is unchanged), plane 1 =
-    // firstExit, plane 2 = secondEntry — the four-bound teleport's proven-empty gap [firstExit, secondEntry]
-    // (Larsson "The Gunk") — and plane 3 = the F1 far bound (the depth past which the tile's cone cannot produce
-    // any footprint-accepted hit through the frame's far distance). The extra planes are written by sdf-beam and
-    // read by sdf-world-views only; a tile with no proven gap/far bound packs the far distance (teleport/far-exit
-    // disabled), so every plane is a total function.
-    // KEEP IN SYNC with WorldTilePlaneCount + worldTilePlaneStride in frame/sdf-frame.hlsli / frame/sdf-tile.hlsli.
-    private const uint TilePlaneCount = 4;
-    // Primary and AO cache bands, each holding two float3 corners per (viewport, live instance), after the tile planes.
-    // KEEP IN SYNC with SdfPartBoundFloatCount and sdfPartBoundIndex in sdf-part-bounds.hlsli.
-    private const uint PartBoundFloatCount = 12;
 
     /// <summary>The primary (camera) march's per-pixel step budget. KEEP IN SYNC with <c>MaxSteps</c> in
     /// march/sdf-march-constants.hlsli. Exposed so a host's cost sheet can quote an authored <see cref="SdfFrame.FarDistance"/>
@@ -66,9 +52,6 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     /// the SDF march (<see cref="Puck.Abstractions.Cameras.ViewProjection.Create"/>'s <c>near</c>). KEEP IN SYNC with
     /// <c>ConeNear</c> in sdf-viewport.hlsli.</summary>
     public const float ConeNear = 0.02f;
-    /// <summary>The edge of one screen tile in pixels, the unit the beam, the instance masks and the cull buffer
-    /// count in. KEEP IN SYNC with <c>WorldTileSize</c> in frame/sdf-tile.hlsli.</summary>
-    public const uint TileSize = 16;
 
     private const int ViewportByteLength = ((sizeof(float) * 4) * 6); // 96-byte ViewportData incl. the renderScale row (KEEP IN SYNC with frame/sdf-viewport.hlsli)
     private const ulong ViewsArgsByteLength = (sizeof(uint) * 3); // the three indirect group counts sdf-cull-args.comp writes
@@ -101,8 +84,8 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     /// <summary>The kernels' screen-source count — the most screen surfaces one program may declare (the same
     /// ceiling as <see cref="Puck.SignedDistance.SdfProgramBuilder.MaxScreenSurfaces"/>, which this reads rather than
     /// hand-syncing). Each screen is one sampled-image member of <see cref="SdfWorldInterfaces.World"/>, all sampled
-    /// through its one nearest <see cref="SdfWorldInterfaces.ScreenSampler"/>. Capped at 32 because the world block's
-    /// <see cref="SdfWorldInterfaces.ScreenMask"/> (the per-frame bound-slot bitmask) is a single <c>uint</c> — raising
+    /// through its one nearest <see cref="SdfWorldPackage.ScreenSampler"/>. Capped at 32 because the world block's
+    /// <see cref="SdfWorldPackage.ScreenMask"/> (the per-frame bound-slot bitmask) is a single <c>uint</c> — raising
     /// past 32 needs a second mask word on both sides.</summary>
     public const int MaxScreenSurfaces = Puck.SignedDistance.SdfProgramBuilder.MaxScreenSurfaces;
     /// <summary>The most bounded emissive volumes (<see cref="Puck.SignedDistance.SdfVolume"/>) one rendered frame
@@ -660,12 +643,12 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
                 );
                 // The shared device-local scratch: each buffer one pass writes binds twice, read-write for its writer and
                 // read-only for its readers.
-                WriteWorldBuffer(buffer: m_viewsArgsBuffer, member: SdfWorldInterfaces.ViewsArgsWritten, set: viewsSet);
-                WriteWorldBuffer(buffer: m_cullBoundsBuffer, member: SdfWorldInterfaces.CullBoundsWritten, set: viewsSet);
-                WriteWorldBuffer(buffer: m_cullBoundsBuffer, member: SdfWorldInterfaces.CullBounds, set: viewsSet);
-                WriteWorldBuffer(buffer: m_brickPoolBuffer, member: SdfWorldInterfaces.BrickPool, set: viewsSet);
-                WriteWorldBuffer(buffer: m_visibilityRecordBuffer, member: SdfWorldInterfaces.VisibilityRecordsWritten, set: viewsSet);
-                WriteWorldBuffer(buffer: m_visibilityRecordBuffer, member: SdfWorldInterfaces.VisibilityRecords, set: viewsSet);
+                WriteWorldBuffer(buffer: m_viewsArgsBuffer, member: SdfWorldPackage.ViewsArgsWritten, set: viewsSet);
+                WriteWorldBuffer(buffer: m_cullBoundsBuffer, member: SdfWorldPackage.CullBoundsWritten, set: viewsSet);
+                WriteWorldBuffer(buffer: m_cullBoundsBuffer, member: SdfWorldPackage.CullBounds, set: viewsSet);
+                WriteWorldBuffer(buffer: m_brickPoolBuffer, member: SdfWorldPackage.BrickPool, set: viewsSet);
+                WriteWorldBuffer(buffer: m_visibilityRecordBuffer, member: SdfWorldPackage.VisibilityRecordsWritten, set: viewsSet);
+                WriteWorldBuffer(buffer: m_visibilityRecordBuffer, member: SdfWorldPackage.VisibilityRecords, set: viewsSet);
                 // The mesh visibility target exists only once a frame draws a mesh (SdfWorldEngine.MeshPass.cs); until
                 // then the binding rides the filler, which no kernel reads while the world block's meshDraws is zero.
                 BindMeshVisibility(

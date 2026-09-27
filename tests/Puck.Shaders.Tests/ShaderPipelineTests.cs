@@ -304,17 +304,22 @@ public sealed class ShaderPipelineTests {
             expected: ["RENDERGRAPH_PACKAGE_UNKNOWN"],
             actual: pipelineHost.Diagnostics.Select(selector: static diagnostic => diagnostic.Code)
         );
-        var planned = new RenderGraphCompiler(packages: RenderGraphPackageCatalog.Engine).Compile(definition: definition).Pipeline.Passes.Single();
+        var passes = new RenderGraphCompiler(packages: RenderGraphPackageCatalog.Engine).Compile(definition: definition).Pipeline.Passes;
+        var planned = passes[^1];
 
-        Assert.Equal(
-            expected: ShaderPipelinePassKind.Package,
-            actual: planned.Kind
+        Assert.All(
+            action: static pass => Assert.Equal(
+                expected: ShaderPipelinePassKind.Package,
+                actual: pass.Kind
+            ),
+            collection: passes
         );
-        // The planned pass carries its step, not a declaration: the package and its ports; its extent is the pass's own.
+        // The planned pass carries its step, not a declaration: the package, the fragment pass it runs and its ports; its
+        // extent is the pass's own.
         Assert.Null(@object: planned.Declaration);
         Assert.Equal(
-            expected: (RenderGraphPackageCatalog.SdfWorld, "out", 0, ((uint)64), ((uint)32)),
-            actual: (planned.Package!.Package, planned.Package.Outputs.Single().Name, planned.Package.Inputs.Count, planned.ResolveExtent(frameHeight: 32, frameWidth: 64).Width, planned.ResolveExtent(frameHeight: 32, frameWidth: 64).Height)
+            expected: (RenderGraphPackageCatalog.SdfWorld, SdfWorldPackage.Parts.Views, "out", ((uint)64), ((uint)32)),
+            actual: (planned.Package!.Package, planned.Package.Part, planned.Package.Outputs.Single().Name, planned.ResolveExtent(frameHeight: 32, frameWidth: 64).Width, planned.ResolveExtent(frameHeight: 32, frameWidth: 64).Height)
         );
     }
     [Fact]

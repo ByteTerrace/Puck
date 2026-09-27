@@ -173,6 +173,11 @@
               "title": "ShaderPipelineCountTerm"
             },
             "default": null
+          },
+          "transient": {
+            "description": "Whether the storage is frame-transient: every frame writes it from discarded contents before anything reads it, and nothing reads it across frames, so it is allocated once rather than once per frame slot and successive frames\u0027 uses of the one allocation are ordered on the queue by the planned barrier of each frame\u0027s first use. Only the first version of a chain declares it; a transient storage is never history, external, zero-initialized or a public output.",
+            "type": "boolean",
+            "default": false
           }
         },
         "required": [

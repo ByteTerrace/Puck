@@ -92,7 +92,7 @@ cadence gate skips records no view set, and each view's retained output
 stands; `world.cadence off` disables the gate for measurement.
 
 The visibility record is 60 bytes per full-extent pixel per viewport
-(`SdfWorldEngine.VisibilityRecordByteLength`, the buffer `SdfFrameBuffer.VisibilityRecords`), allocated as width × height × viewport capacity;
+(`SdfWorldPackage.VisibilityRecordByteLength`, the buffer `SdfFrameBuffer.VisibilityRecords`), allocated as width × height × viewport capacity;
 `world.budget` prints the allocated bytes. `sdf-visibility.hlsli` owns its
 fifteen words in five rows: V (t, identity, material, march flags), exact; C
 (terminal radius, threshold, then the seam blend weight as a 15-bit fraction

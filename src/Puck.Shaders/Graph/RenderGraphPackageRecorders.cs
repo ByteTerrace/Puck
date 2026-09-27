@@ -39,7 +39,9 @@ public readonly record struct RenderGraphPackageResource(string Version, ShaderP
 /// stand for its inputs, and when an input is a host's image in another layout than the instance publishes in: the
 /// instance publishes every image in its output layout, and a host's image is handed back in the host's own, so the
 /// recording must draw.</param>
-public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuRecorder Recorder, int Slot, uint Width, uint Height, ReadOnlySpan<RenderGraphPackageResource> Inputs, ReadOnlySpan<RenderGraphPackageResource> Outputs, Span<byte> PassBlock, LeaseRetireList Leases, FrameContext Context, bool MayStandIn) {
+/// <param name="Arguments">The buffer holding an indirect dispatch's group counts, which the pass's planned barrier left
+/// in the indirect-argument state, or <see langword="null"/> for a pass that is not dispatched indirectly.</param>
+public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuRecorder Recorder, int Slot, uint Width, uint Height, ReadOnlySpan<RenderGraphPackageResource> Inputs, ReadOnlySpan<RenderGraphPackageResource> Outputs, Span<byte> PassBlock, LeaseRetireList Leases, FrameContext Context, bool MayStandIn, IGpuBuffer? Arguments = null) {
     /// <summary>Gets the command buffer to record into.</summary>
     public nint CommandBuffer { get; } = CommandBuffer;
     /// <summary>Gets the instance's counting recorder.</summary>
@@ -62,6 +64,8 @@ public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuR
     public FrameContext Context { get; } = Context;
     /// <summary>Gets whether the recording may draw nothing and leave each output standing for its input.</summary>
     public bool MayStandIn { get; } = MayStandIn;
+    /// <summary>Gets the buffer holding an indirect dispatch's group counts, or <see langword="null"/>.</summary>
+    public IGpuBuffer? Arguments { get; } = Arguments;
 }
 /// <summary>What a package pass's recording did with its outputs this frame.</summary>
 public enum RenderGraphPackageOutcome : byte {
@@ -144,7 +148,11 @@ public readonly record struct RenderGraphPackageRegion(string Name, int ByteCoun
 /// set 3, whose block holds the extent, the package's config and the values it declares, followed by its declared
 /// resources. A recorder creates its pipeline through its <see cref="ShaderInterfaceLayout.PipelineLayout"/> and reads
 /// its values' offsets and its resources' bindings from it.</param>
-public sealed record RenderGraphPackageRecorderContext(string Instance, string Pass, string Package, IGpuDeviceContext Device, GpuDeviceServices Services, GpuPassPipelineCache Pipelines, bool HostsOnDirectX, int InFlightFrames, uint Width, uint Height, IReadOnlyList<ShaderPipelineResource> Inputs, IReadOnlyList<ShaderPipelineResource> Outputs, ShaderPipelineParameterLayout Parameters);
+/// <param name="Part">The fragment pass the pass runs (<see cref="RenderGraphFragmentPass.Name"/>), or
+/// <see langword="null"/> for a package that runs as one pass.</param>
+/// <param name="Dispatch">The pass's dispatch shape, or <see langword="null"/> for one invocation per pixel of its
+/// extent.</param>
+public sealed record RenderGraphPackageRecorderContext(string Instance, string Pass, string Package, IGpuDeviceContext Device, GpuDeviceServices Services, GpuPassPipelineCache Pipelines, bool HostsOnDirectX, int InFlightFrames, uint Width, uint Height, IReadOnlyList<ShaderPipelineResource> Inputs, IReadOnlyList<ShaderPipelineResource> Outputs, ShaderPipelineParameterLayout Parameters, string? Part = null, ShaderPipelineDispatch? Dispatch = null);
 /// <summary>What an external producer is created for: one external instance, on one device.</summary>
 /// <param name="Instance">The instance's name.</param>
 /// <param name="Package">The package id the instance names.</param>

@@ -134,6 +134,11 @@ public sealed record ResourceReference(
 /// <see langword="null"/> for a raw buffer. Only a package pass reaches a structured buffer.</param>
 /// <param name="Count">A counted buffer's size in elements, a sum of terms that each scale with a product of counts the
 /// host resolves, in place of <paramref name="SizeBytes"/>. Only a package pass reaches a counted buffer.</param>
+/// <param name="Transient">Whether the storage is frame-transient: every frame writes it from discarded contents before
+/// anything reads it, and nothing reads it across frames, so it is allocated once rather than once per frame slot and
+/// successive frames' uses of the one allocation are ordered on the queue by the planned barrier of each frame's first
+/// use. Only the first version of a chain declares it; a transient storage is never history, external, zero-initialized
+/// or a public output.</param>
 public sealed record ShaderPipelineResource(
     string Name,
     ShaderPipelineResourceKind Kind = ShaderPipelineResourceKind.Image,
@@ -145,7 +150,8 @@ public sealed record ShaderPipelineResource(
     string? From = null,
     uint Samples = 1,
     uint? StrideBytes = null,
-    IReadOnlyList<ShaderPipelineCountTerm>? Count = null
+    IReadOnlyList<ShaderPipelineCountTerm>? Count = null,
+    bool Transient = false
 ) {
     /// <summary>Gets whether the host supplies the resource rather than a pass producing it.</summary>
     [JsonIgnore]
@@ -507,6 +513,10 @@ public sealed record ShaderPipelinePass(
 /// its frame block after the frame members; <see langword="null"/> when the package takes no config.</param>
 /// <param name="PushesIndex">Whether its package's pipelines push one 4-byte index
 /// (<see cref="RenderGraphPackage.PushesIndex"/>), which its interface declares.</param>
+/// <param name="Part">The fragment pass it runs (<see cref="RenderGraphFragmentPass.Name"/>), or <see langword="null"/>
+/// for a package that runs as one pass.</param>
+/// <param name="Depth">The depth attachment it draws its depth output through (<see cref="RenderGraphFragmentPass.Depth"/>),
+/// or <see langword="null"/>.</param>
 public sealed record ShaderPipelinePackagePass(
     string Name,
     string Package,
@@ -517,7 +527,9 @@ public sealed record ShaderPipelinePackagePass(
     IReadOnlyList<ShaderInterfaceMember> Members,
     ShaderPipelineDispatch? Dispatch = null,
     IReadOnlyDictionary<string, ShaderConfigField>? Config = null,
-    bool PushesIndex = false
+    bool PushesIndex = false,
+    string? Part = null,
+    GpuDepthAttachment? Depth = null
 ) {
     // Whether each port access is declared once per reference, reads on the inputs and writes on the outputs.
     internal bool HasValidAccesses => (

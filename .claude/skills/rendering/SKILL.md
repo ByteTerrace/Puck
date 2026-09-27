@@ -955,14 +955,22 @@ and a read of another kind than the prior reads is a read-state change that
 records a barrier (`ShaderPipelineAccessState.ChangesReadState`). Non-extent
 dispatches and structured or counted buffers are package-pass vocabulary: the
 planner refuses them on a shader pass, because the node records extent
-dispatches over raw fixed buffers. `SdfPassPlanLawTests` plans the SDF engine's
-passes from `SdfFrameBufferPlan`'s uses and holds the order to `PassLabels` and
-the between-pass buffer barriers to its edges, so a change to either side moves
-the law. It also counts each SDF buffer over the bases it grows with (a sum of
-terms, each a product of bases) and holds the planner's size to
-`SdfWorldEngine.FrameBufferBytes`, the one statement of every device-local
-frame buffer's size that construction and program growth allocate by; a new
-buffer or a resized one changes that function and the law's counts together.
+dispatches over raw fixed buffers. A package may run as a fragment
+(`RenderGraphPackageFragment`) the graph compiler splices in place of the pass
+naming it, `<pass>$<part>`; `sdf.world` runs as `SdfWorldPackage.Fragment`, the
+one statement of its passes, members, scratch and layout constants
+(`TileSize`, `VisibilityRecordByteLength`, the tile planes and part bounds, the
+mesh target and depth attachment). Its scratch is `transient`: one allocation
+every frame slot shares, ordered across frames by the planned barrier of each
+frame's first use, never one per slot. A node allocates counted buffers through
+its `StorageCounter` and rebuilds when the counter's revision moves.
+`SdfPassPlanLawTests` plans that fragment and holds the order to `PassLabels` and
+the between-pass buffer barriers to `SdfFrameBufferPlan`'s edges, so a change to
+either side moves the law. It also holds the planner's size of each counted
+buffer to `SdfWorldEngine.FrameBufferBytes`, the one statement of every
+device-local frame buffer's size that construction and program growth allocate
+by; a new buffer or a resized one changes that function and the fragment
+together.
 `SdfCapabilityMatrixLawTests` assigns every public member of the engine's
 surface to one capability row with its graph equivalent and check, so a new
 public member needs a row, and nothing a row claims is deleted before the row

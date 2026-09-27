@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using Puck.Abstractions.Gpu;
+using Puck.Shaders;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
@@ -76,14 +77,14 @@ public sealed partial class SdfWorldEngine {
     // into the slot's mesh set.
     private void BindRegions(int slot) {
         foreach (var views in m_viewsSets[slot]) {
-            WriteWorldBuffer(buffer: m_programRegion.Buffer(slot: slot), member: SdfWorldInterfaces.ProgramWords, set: views);
-            WriteWorldBuffer(buffer: m_viewportRegion.Buffer(slot: slot), member: SdfWorldInterfaces.Viewports, set: views);
-            WriteWorldBuffer(buffer: m_dynamicTransformRegion.Buffer(slot: slot), member: SdfWorldInterfaces.DynamicTransforms, set: views);
-            WriteWorldBuffer(buffer: m_instanceGridRegion.Buffer(slot: slot), member: SdfWorldInterfaces.FrameInstanceGrid, set: views);
-            WriteWorldBuffer(buffer: m_screenSurfaceRegion.Buffer(slot: slot), member: SdfWorldInterfaces.ScreenSurfaces, set: views);
-            WriteWorldBuffer(buffer: m_screenLightRegion.Buffer(slot: slot), member: SdfWorldInterfaces.ScreenLights, set: views);
-            WriteWorldBuffer(buffer: m_decalRegion.Buffer(slot: slot), member: SdfWorldInterfaces.DecalCells, set: views);
-            WriteWorldBuffer(buffer: m_volumeRegion.Buffer(slot: slot), member: SdfWorldInterfaces.Volumes, set: views);
+            WriteWorldBuffer(buffer: m_programRegion.Buffer(slot: slot), member: SdfWorldPackage.ProgramWords, set: views);
+            WriteWorldBuffer(buffer: m_viewportRegion.Buffer(slot: slot), member: SdfWorldPackage.Viewports, set: views);
+            WriteWorldBuffer(buffer: m_dynamicTransformRegion.Buffer(slot: slot), member: SdfWorldPackage.DynamicTransforms, set: views);
+            WriteWorldBuffer(buffer: m_instanceGridRegion.Buffer(slot: slot), member: SdfWorldPackage.FrameInstanceGrid, set: views);
+            WriteWorldBuffer(buffer: m_screenSurfaceRegion.Buffer(slot: slot), member: SdfWorldPackage.ScreenSurfaces, set: views);
+            WriteWorldBuffer(buffer: m_screenLightRegion.Buffer(slot: slot), member: SdfWorldPackage.ScreenLights, set: views);
+            WriteWorldBuffer(buffer: m_decalRegion.Buffer(slot: slot), member: SdfWorldPackage.DecalCells, set: views);
+            WriteWorldBuffer(buffer: m_volumeRegion.Buffer(slot: slot), member: SdfWorldPackage.Volumes, set: views);
         }
 
         BindMeshRegion(slot: slot);
@@ -92,10 +93,10 @@ public sealed partial class SdfWorldEngine {
     // instance masks, each read-write for its writer and read-only for its readers.
     private void BindProgramBuffers(int slot) {
         foreach (var views in m_viewsSets[slot]) {
-            WriteWorldBuffer(buffer: m_tileBuffer, member: SdfWorldInterfaces.TilesWritten, set: views);
-            WriteWorldBuffer(buffer: m_tileBuffer, member: SdfWorldInterfaces.Tiles, set: views);
-            WriteWorldBuffer(buffer: m_instanceMaskBuffer, member: SdfWorldInterfaces.InstanceMasksWritten, set: views);
-            WriteWorldBuffer(buffer: m_instanceMaskBuffer, member: SdfWorldInterfaces.InstanceMasks, set: views);
+            WriteWorldBuffer(buffer: m_tileBuffer, member: SdfWorldPackage.TilesWritten, set: views);
+            WriteWorldBuffer(buffer: m_tileBuffer, member: SdfWorldPackage.Tiles, set: views);
+            WriteWorldBuffer(buffer: m_instanceMaskBuffer, member: SdfWorldPackage.InstanceMasksWritten, set: views);
+            WriteWorldBuffer(buffer: m_instanceMaskBuffer, member: SdfWorldPackage.InstanceMasks, set: views);
         }
     }
     // Region index's region of byteCount bytes under the policy the device's profile selects, its ring in the memory the
