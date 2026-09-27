@@ -742,13 +742,14 @@ Facts a script needs:
   there too: `screen.insert`/`.eject` apply through the ordered domain headless exactly as windowed, and
   `screen.source <index> camera|capture|desktop|probe|view|qr` still attempts a real
   device open (or, for `qr`, a real encode) and reports the honest failure
-  rather than refusing as unknown), and
+  rather than refusing as unknown; `world.screens` and `world.view-refresh`
+  read only the screen binder, so every shape answers them), and
   most others are server-safe (registered in `AddWorldAuthoritativeCore`,
   the fly camera application included—see above);
   `WorldRenderLeverCommandModule.cs` (the render levers: shadows, ambient
   occlusion, far field, cadence, render scale, quality and the rest) is
   composed by both the windowed and the offscreen shapes; `WorldCommandModule.cs`
-  (frame rate, FPS target, screens, cameras, shader reload, debug view),
+  (frame rate, FPS target, cameras, shader reload),
   `WorldHostCommandModule.cs`, `WorldAudioCommandModule.cs`,
   `WorldRecordingCommandModule.cs`, and `WorldSdfCommandModule.cs` are
   genuinely presentation-only (unregistered headless); `WorldUiCommandModule.cs`,

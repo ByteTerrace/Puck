@@ -513,7 +513,8 @@ public static class WorldBootComposition {
         // screen.source (camera|capture|desktop|qr|view — the five former per-kind verbs folded into one) and
         // screen.links stay
         // genuinely presentation calls straight into WorldScreenBinder (harmless headless: they attempt a real
-        // device open/no-op exactly as they always have, never gated on a boot shape).
+        // device open/no-op exactly as they always have, never gated on a boot shape). world.screens and
+        // world.view-refresh read only the binder, so they live here too and every boot shape answers them.
         services.AddSingleton<ICommandModule, ScreenCommandModule>();
         // world.identify — the world's own identity (documentId + the live definition's content-address pin) drawn onto
         // a declared screen through the SAME live-QR path screen.source <index> qr drives. A composition of two
@@ -1034,7 +1035,8 @@ public static class WorldBootComposition {
     /// Registered only when <c>WorldHostSettings.Offscreen</c> is <see langword="true"/>; <c>world.screenshot</c>
     /// (core-registered) works unchanged because it reaches the render graph's own <c>RequestCapture</c>, never a
     /// presenter or swap chain. Every presentation-only console module (<see cref="WorldCommandModule"/>, audio, recording, gamepads)
-    /// stays unregistered and refuses as unknown, exactly like the <c>none</c> shape. Camera and session screens render
+    /// stays unregistered and refuses as unknown, exactly like the <c>none</c> shape; <c>world.screens</c> and
+    /// <c>world.view-refresh</c> are core (<see cref="ScreenCommandModule"/>), so an offscreen boot reads its screens back. Camera and session screens render
     /// as in the windowed shape, through the views <see cref="WorldRenderRoot"/> configures.
     /// </summary>
     /// <param name="services">The service collection.</param>
@@ -1211,7 +1213,7 @@ public static class WorldBootComposition {
         ));
         services.AddHostedService(implementationFactory: static sp => sp.GetRequiredService<WorldAudioRenderService>());
 
-        // The world's own presentation verb surface — world.fps, world.screens/.cameras, and the graphics
+        // The world's own presentation verb surface — world.fps, world.cameras, and the graphics
         // options (shadows, ambient occlusion, render scale, an FPS target, a quality preset). Refuses as unknown
         // over headless stdin because this whole method never runs there.
         services.AddSingleton<ICommandModule, WorldCommandModule>();
