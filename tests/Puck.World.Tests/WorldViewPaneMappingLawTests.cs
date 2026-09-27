@@ -53,6 +53,8 @@ public sealed partial class WorldViewPaneMappingLawTests : IDisposable {
     private readonly RenderGraphRoot[] m_roots = [new RenderGraphRoot(Height: 1, Instance: WorldViewGraphs.MainInstance, Width: 1)];
     private readonly List<SdfViewSnapshot> m_views = [];
 
+    // The render.tonemap each frame composes the root with.
+    private WorldTonemap? m_tonemap;
     private long m_frame;
     private RenderGraphHistory? m_history;
 
@@ -97,7 +99,10 @@ public sealed partial class WorldViewPaneMappingLawTests : IDisposable {
     }
     // The host's half of a frame, as the presenter's PrepareGraph drives it: begin, place, publish.
     private void Prepare(NormalizedRect? pane) {
-        m_host.BeginFrame(views: Views);
+        m_host.BeginFrame(
+            tonemap: m_tonemap,
+            views: Views
+        );
         m_host.PlaceViews(
             panesCover: false,
             rendered: static _ => true,
@@ -271,6 +276,20 @@ public sealed partial class WorldViewPaneMappingLawTests : IDisposable {
         Frame(pane: null);
         Frame(pane: null);
         Assert.Empty(collection: m_host.Panes);
+
+        // Under a filmic tonemap the lone view is shown, so its place pass tonemaps it, yet the display still shows the
+        // world itself: it publishes no pane, and a point on it picks none, as without a tonemap.
+        m_tonemap = WorldTonemap.Filmic;
+        Frame(pane: null);
+        Frame(pane: null);
+        Assert.True(condition: m_host.TryGet(
+            instance: WorldViewGraphs.MainInstance,
+            pass: Assert.IsType<WorldRootGraph>(@object: m_host.Synthesized).ViewPasses[0],
+            placement: out var lone
+        ));
+        Assert.True(condition: lone.Shown);
+        Assert.Empty(collection: m_host.Panes);
+        Assert.Null(@object: Picked(x: 40.5, y: 40.5));
     }
     // The hit walk runs over the live instance set from the published panes: a point on a view continues through the
     // view's camera into its world, and a point on a pane whose instance renders from no camera ends there until the

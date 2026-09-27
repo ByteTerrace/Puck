@@ -7,10 +7,13 @@ namespace Puck.Abstractions.Presentation;
 /// </summary>
 public interface IPresentSurfaceReadback {
     /// <summary>Reads <paramref name="surface"/> synchronously. CPU-pixel surfaces may be returned unchanged; an empty
-    /// surface produces an empty result. The returned CPU memory is guaranteed only until the next call on this
-    /// presenter, so a sink that retains it must copy it during consumption.</summary>
+    /// surface produces an empty result; a same-device image in a float working format no CPU surface carries reads
+    /// back through the display encode's SDR, in <see cref="Gpu.GpuPixelFormat.R8G8B8A8Unorm"/>. The returned CPU memory
+    /// is guaranteed only until the next call on this presenter, so a sink that retains it must copy it during
+    /// consumption.</summary>
     /// <param name="surface">The current root surface, normally the same value subsequently handed to
     /// <see cref="ISurfacePresenter.Present"/>.</param>
-    /// <returns>The same pixels as a CPU-pixel surface, or an empty surface when <paramref name="surface"/> is empty.</returns>
+    /// <returns>The same pixels as a CPU-pixel surface, in the source's format when a CPU surface carries it and RGBA8
+    /// otherwise, or an empty surface when <paramref name="surface"/> is empty.</returns>
     Surface ReadSurface(Surface surface);
 }

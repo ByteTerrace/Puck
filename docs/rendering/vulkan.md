@@ -165,14 +165,14 @@ its images' views, and the recorder begins it with one clear value per attachmen
 opaque black for a color, the declared `GpuDepthAttachment.ClearDepth` for the depth.
 A transition into or out of the depth-attachment layout covers the image's depth aspect.
 
-`VulkanGpuPipelineFactory` creates every graphics pipeline, the presenter's blit included,
+`VulkanGpuPipelineFactory` creates every graphics pipeline, the presenter's display encode included,
 from its description's groups: opaque, with one blend state per color attachment, a
 depth-stencil state that tests and writes exactly when the render pass has a depth
 attachment, and a dynamic viewport and scissor. `VulkanGpuRecorder` begins a render pass by
 setting a viewport of negative height over the area the pass draws, so clip-space +y is the
 top of the attachment as on Direct3D 12, and a scissor over the same area. The presenter's
 recorder (`VulkanCommandBufferRecorder`) sets the same viewport over the swapchain image, and
-its compositor leases the blit from the device's `GpuPassPipelineCache` for a render pass
+its compositor leases the display encode from the device's `GpuPassPipelineCache` for a render pass
 in the swapchain's format (`VulkanGpuRenderPass.PresentDescription` over `VulkanSwapchain.Output`'s format);
 the swapchain's own render pass is that description's request ending in `PRESENT_SRC_KHR`
 (`VulkanGpuRenderPass.PresentRequestOf`), so the two are compatible: attachments and dependencies

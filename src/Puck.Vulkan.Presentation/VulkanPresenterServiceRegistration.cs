@@ -16,7 +16,7 @@ namespace Puck.Vulkan.Presentation;
 
 /// <summary>
 /// Composes the Vulkan presentation backend: the native Vulkan APIs and factories, the swapchain renderer and
-/// its surface-blit compositor, and the <see cref="ISurfacePresenter"/> the host loop drives. It contributes
+/// its display-encode compositor, and the <see cref="ISurfacePresenter"/> the host loop drives. It contributes
 /// the Vulkan device as an inherited root capability (a <see cref="HostCapabilityContribution"/>) so a host
 /// can resolve the device without referencing this backend. Pair it with a host that assembles the root
 /// <see cref="IHostContext"/> from the contributions and drives the run loop.
@@ -233,17 +233,11 @@ public static class VulkanPresenterServiceRegistration {
     /// <see cref="ISurfacePresenter"/>, and the Vulkan device capability contribution.</summary>
     /// <param name="services">The service collection.</param>
     public static IServiceCollection AddVulkanPresenter(this IServiceCollection services) {
-        var blitShaderDirectory = Path.Combine(
-            path1: AppContext.BaseDirectory,
-            path2: "Assets",
-            path3: "Shaders"
-        );
-
         services
             .AddVulkanNativeApis()
             .AddVulkanFactories();
 
-        // The swapchain renderer, its surface-blit compositor, and the seam the host drives. The application
+        // The swapchain renderer, its display-encode compositor, and the seam the host drives. The application
         // name is a cosmetic Vulkan instance label; it defaults to the running app, validation follows the host's
         // GpuDeviceOptions (off when none is registered), and a consumer may register its own VulkanRendererOptions
         // before calling this to override both.
@@ -276,9 +270,9 @@ public static class VulkanPresenterServiceRegistration {
         // context (e.g. adding a DirectX device) without referencing the renderer type.
         services.TryAddSingleton<IVulkanDeviceContext>(implementationFactory: static sp => sp.GetRequiredService<VulkanRenderer>());
         services.TryAddSingleton<VulkanQueueSubmitter>();
-        // The composition's pass pipelines, which the blit is an entry of; a host that registers its own shares it.
+        // The composition's pass pipelines, which the display encode is an entry of; a host that registers its own shares it.
         services.TryAddSingleton<GpuPassPipelineCache>();
-        services.TryAddSingleton(implementationFactory: sp => new SurfaceCompositor(
+        services.TryAddSingleton(implementationFactory: static sp => new SurfaceCompositor(
             bufferApi: sp.GetRequiredService<IVulkanBufferApi>(),
             commandBufferRecordingApi: sp.GetRequiredService<IVulkanCommandBufferRecordingApi>(),
             commandResourcesFactory: sp.GetRequiredService<IVulkanCommandResourcesFactory>(),
@@ -287,13 +281,13 @@ public static class VulkanPresenterServiceRegistration {
             framebufferSetApi: sp.GetRequiredService<IVulkanFramebufferSetApi>(),
             offscreenImageApi: sp.GetRequiredService<IVulkanOffscreenImageApi>(),
             pipelines: sp.GetRequiredService<GpuPassPipelineCache>(),
+            presentationOptions: sp.GetRequiredService<PresentationOptions>(),
             queueSubmitter: sp.GetRequiredService<VulkanQueueSubmitter>(),
-            renderer: sp.GetRequiredService<VulkanRenderer>(),
-            shaderDirectory: blitShaderDirectory,
-            shaderModuleLoader: sp.GetRequiredService<IShaderModuleLoader>()
+            renderer: sp.GetRequiredService<VulkanRenderer>()
         ));
         services.TryAddSingleton(implementationFactory: static sp => new VulkanSurfacePresenter(
             compositor: sp.GetRequiredService<SurfaceCompositor>(),
+            pipelines: sp.GetRequiredService<GpuPassPipelineCache>(),
             renderer: sp.GetRequiredService<VulkanRenderer>()
         ));
         services.TryAddSingleton<ISurfacePresenter>(implementationFactory: static sp => sp.GetRequiredService<VulkanSurfacePresenter>());

@@ -197,11 +197,11 @@ public sealed partial class ShaderPipelineRenderNode {
         );
     }
 
-    // The selection the next graph installs with: one still waiting for its own float preview, else the published one.
+    // The selection the next graph installs with: one still waiting for its own preview, else the published one.
     // A graph build carries the preview for it, and its install supersedes the waiting preview build.
     private string? DesiredSelection => (m_previewRequest?.Name ?? m_selectedOutput);
 
-    // The float preview extent the selected output of a graph planned at this extent needs, or null for an RGBA8 output.
+    // The preview extent the selected output of a graph planned at this extent needs, or null for one that publishes itself.
     private (uint Width, uint Height)? PreviewFor(ShaderPipelinePlan plan, (uint Width, uint Height) extent) {
         var desired = DesiredSelection;
         var selected = (IsDeclaredImageOutput(
@@ -340,7 +340,7 @@ public sealed partial class ShaderPipelineRenderNode {
 
         return true;
     }
-    // The build of a pipeline at an extent, with the float preview its selected output needs and the rows bound now.
+    // The build of a pipeline at an extent, with the preview its selected output needs and the rows bound now.
     private BuildKey KeyFor(CompiledShaderPipeline pipeline, (uint Width, uint Height) extent, bool candidate) =>
         new(
             Candidate: candidate,
@@ -361,7 +361,7 @@ public sealed partial class ShaderPipelineRenderNode {
         );
 
     // What one build makes: the pipeline, the extent it is planned at, whether it is a candidate (a queued pipeline, a
-    // resize or a rebinding) rather than the installed pipeline rebuilt after a device loss, the float preview it needs,
+    // resize or a rebinding) rather than the installed pipeline rebuilt after a device loss, the preview it needs,
     // the rows its arrays read, which BindRows replaces whole whenever they change, and the counts its counted buffers
     // are allocated by, with the counter revision they were resolved at.
     private readonly record struct BuildKey(CompiledShaderPipeline? Pipeline, uint Width, uint Height, bool Candidate, (uint Width, uint Height)? Preview, RowBindings Rows, ShaderPipelineStorageCounts Counts, long CountRevision, IShaderPipelineOutputExport? Export) {

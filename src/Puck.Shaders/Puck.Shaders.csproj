@@ -18,9 +18,11 @@
         <None Include="$(MSBuildThisFileDirectory)..\..\build\Shaders.targets" Pack="true" PackagePath="buildTransitive\ByteTerrace.Puck.Shaders.targets" Visible="false" />
     </ItemGroup>
     <ItemGroup>
-        <VertexShaderSource Include="Assets\Runtime\pipeline-preview.vert.hlsl" />
-        <FragmentShaderSource Include="Assets\Runtime\pipeline-preview.frag.hlsl" />
-        <Content Include="Assets\Runtime\pipeline-preview.vert.hlsl;Assets\Runtime\pipeline-preview.frag.hlsl;Assets\Runtime\pipeline-preview.vert.spv;Assets\Runtime\pipeline-preview.frag.spv;Assets\Runtime\pipeline-preview.vert.dxil;Assets\Runtime\pipeline-preview.frag.dxil" CopyToOutputDirectory="PreserveNewest" />
+        <!-- The display encode (SurfaceEncoder): the fullscreen triangle and the encode every swapchain compositor, the
+             float preview and a capture of a float output draw with. -->
+        <VertexShaderSource Include="Assets\Runtime\display.vert.hlsl" />
+        <FragmentShaderSource Include="Assets\Runtime\display-encode.frag.hlsl" />
+        <Content Include="Assets\Runtime\display.vert.hlsl;Assets\Runtime\display-encode.frag.hlsl;Assets\Runtime\display.vert.spv;Assets\Runtime\display-encode.frag.spv;Assets\Runtime\display.vert.dxil;Assets\Runtime\display-encode.frag.dxil" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
     <ItemGroup>
         <!-- The image-source conversion passes (Puck.Abstractions.Sources.ImageSourceConversion), the region copy and the

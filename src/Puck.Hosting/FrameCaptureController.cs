@@ -111,10 +111,11 @@ public sealed class FrameCaptureController : IDisposable {
             throw new InvalidOperationException(message: "Surface readback returned a non-CPU surface.");
         }
 
+        // A float working image reads back through the display encode's SDR, in RGBA8; any other keeps its format.
         if (
             (captured.Width != surface.Width) ||
             (captured.Height != surface.Height) ||
-            (captured.Format != surface.Format)
+            (Surface.IsSurfaceFormat(format: surface.Format) && (captured.Format != surface.Format))
         ) {
             throw new InvalidOperationException(message: "Surface readback changed the source extent or pixel format.");
         }

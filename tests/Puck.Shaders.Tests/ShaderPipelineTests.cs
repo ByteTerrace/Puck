@@ -291,7 +291,7 @@ public sealed class ShaderPipelineTests {
                 Package: RenderGraphPackageCatalog.SdfWorld
             )],
             passes: [],
-            resources: [Image("out")]
+            resources: [Image("out") with { Format = RenderGraphPackageCatalog.WorkingFormat.ToString() }]
         );
         var planner = Assert.Throws<ShaderPipelineCompilationException>(testCode: () => new ShaderPipelineCompiler().Compile(definition: definition));
         var pipelineHost = Assert.Throws<ShaderPipelineCompilationException>(testCode: () => RenderGraphCompiler.ShaderPasses.Compile(definition: definition));

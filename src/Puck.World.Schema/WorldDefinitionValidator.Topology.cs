@@ -1,3 +1,4 @@
+using Puck.Abstractions.Presentation;
 using Puck.Maths;
 
 namespace Puck.World;
@@ -182,6 +183,21 @@ public static partial class WorldDefinitionValidator {
 
         if (!Enum.IsDefined(value: host.PresentMode)) {
             errors.Add(item: $"host.presentMode '{host.PresentMode}' is not a defined PresentMode.");
+        }
+
+        if (!Enum.IsDefined(value: host.ColorSpace)) {
+            errors.Add(item: $"host.colorSpace '{host.ColorSpace}' is not a defined DisplayColorSpace.");
+        }
+
+        if (
+            (host.PaperWhiteNits is { } paperWhite) &&
+            (
+                double.IsNaN(d: paperWhite) ||
+                (paperWhite < DisplayOutput.SdrWhiteNits) ||
+                (paperWhite > DisplayOutput.MaxPaperWhiteNits)
+            )
+        ) {
+            errors.Add(item: $"host.paperWhiteNits {paperWhite} must be {DisplayOutput.SdrWhiteNits} to {DisplayOutput.MaxPaperWhiteNits} nits.");
         }
 
         if (WorldHostTokens.ParseSurfaceFormat(token: WorldHostTokens.SurfaceFormatToken(format: host.SurfaceFormat)) is null) {

@@ -119,6 +119,24 @@
         "null"
       ],
       "default": null
+    },
+    "colorSpace": {
+      "description": "The color space the swapchain asks the display for (boot-only): Srgb, the default, or an HDR one (Hdr10, ScRgb), which the swapchain takes only when the display reports it, falling back to SDR. The display encode writes the frame in the color space taken.",
+      "enum": [
+        "Srgb",
+        "Hdr10",
+        "ScRgb"
+      ],
+      "default": "Srgb",
+      "title": "DisplayColorSpace"
+    },
+    "paperWhiteNits": {
+      "description": "The luminance, in nits, SDR white shows at in an HDR output, the HUD included (boot-only), from SdrWhiteNits to MaxPaperWhiteNits, or null for SdrWhiteNits. An SDR output shows white at its own white level whatever this is.",
+      "type": [
+        "number",
+        "null"
+      ],
+      "default": null
     }
   },
   "required": [

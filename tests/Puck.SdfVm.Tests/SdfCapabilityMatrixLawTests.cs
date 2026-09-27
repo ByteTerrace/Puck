@@ -154,8 +154,8 @@ public sealed class SdfCapabilityMatrixLawTests {
         ),
         new(
             Capability: "lights, sky and tonemap",
-            Equivalent: "the pass block's environment rows, the light stage, and P16's display transform for the tonemap",
-            Check: "PackEnvironmentLawTests; WorldRenderLightingSkyLawTests; puck parity (sky, materials)",
+            Equivalent: "the pass block's environment rows, the light stage, and each view's place pass for the tonemap",
+            Check: "PackEnvironmentLawTests; WorldRenderLightingSkyLawTests; WorldRootGraphLawTests; puck parity (sky, materials)",
             Green: false,
             Members: ["SdfFrame.Environment", "SdfFrame.AmbientScale", "SdfFrame.SunScale", "SdfFrame.SampleIndex", "SdfFrameBlock.BakeEnvironment"]
         ),

@@ -10,7 +10,7 @@ namespace Puck.Shaders;
 // and per fullscreen pass that reads the Position input, one constant buffer per frame slot for the frame group's block
 // and for each pass's pass block (ConstantBytes), the buffers of every host-written region the graph reads (each package
 // pass's regions, its row regions under the rows bound when it is built, and each host buffer port's, GpuRegion.BytesOf
-// under the device's residency choice, a port's whether or not a host has bound it yet), and one float-preview image per
+// under the device's residency choice, a port's whether or not a host has bound it yet), and one preview image per
 // frame slot.
 // ShaderPipelineRenderNode.Retirement.cs's LiveBytes counts the same kinds from a replaced graph's objects. The capture
 // readback is the node's, not a graph's: it creates its staging buffer on the first capture, sized to the published
@@ -84,10 +84,10 @@ public sealed partial class ShaderPipelineRenderNode {
 
     // The bytes of the readback staging buffer that reads a published RGBA8 surface of an extent.
     private static ulong ReadbackBytes(uint width, uint height) => checked(((((ulong)width) * height) * 4UL));
-    // The bytes of the float preview's targets, one per frame slot, at an extent.
+    // The bytes of the preview's targets, one per frame slot, at an extent, and its one encode block.
     private static ulong PreviewBytes((uint Width, uint Height)? extent, uint inFlight) =>
         ((extent is { } preview)
-            ? checked((((((ulong)preview.Width) * preview.Height) * 4UL) * inFlight))
+            ? checked(((((((ulong)preview.Width) * preview.Height) * 4UL) * inFlight) + IGpuBindings.ConstantBufferAlignment))
             : 0UL
         );
     // One storage's extent and the bytes its instances occupy; a host-owned storage occupies nothing. An image is
@@ -118,7 +118,7 @@ public sealed partial class ShaderPipelineRenderNode {
             ) * ((ulong)count)))
         ));
     }
-    // The bytes a graph planned at the counts' frame extent owns, before its float preview: every storage's instances, and
+    // The bytes a graph planned at the counts' frame extent owns, before its preview: every storage's instances, and
     // the geometry buffer of each pass that has one.
     private static ulong GraphBytes(ShaderPipelinePlan plan, ShaderPipelineStorageCounts counts, uint inFlight) {
         var bytes = 0UL;
@@ -176,7 +176,7 @@ public sealed partial class ShaderPipelineRenderNode {
         width: width
     );
     // What installing a graph planned at an extent, with its counted buffers resolved against counts at that extent, the
-    // float preview its selection needs and its arrays bound to rows, costs from what the node owns now. History the graph
+    // preview its selection needs and its arrays bound to rows, costs from what the node owns now. History the graph
     // carries from the installed one is moved, not allocated, so the peak holds its bytes once.
     private ShaderPipelineMemoryAccount Account(ShaderPipelinePlan plan, ShaderPipelineStorageCounts counts, (uint Width, uint Height)? preview, RowBindings rows) {
         var extent = (counts.Width, counts.Height);
@@ -374,7 +374,7 @@ public sealed partial class ShaderPipelineRenderNode {
         );
     }
 
-    /// <summary>Accounts installing a compiled pipeline now: at the requested extent, with the float preview the current
+    /// <summary>Accounts installing a compiled pipeline now: at the requested extent, with the preview the current
     /// selection needs and its arrays bound to the rows <see cref="BindRows"/> bound, from everything the node owns. It
     /// is the account a candidate is refused by.</summary>
     /// <param name="pipeline">The compiled pipeline.</param>

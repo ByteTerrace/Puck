@@ -1,3 +1,4 @@
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 
 namespace Puck.Shaders.Tests;
@@ -31,13 +32,18 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         _ = Produce(node: node);
         Assert.True(condition: request.Completion.IsCompleted);
 
-        return request.Completion.Result;
+        return Outcome(request: request);
     }
+    // The outcome of a request whose completion a law has already seen.
+    private static FrameCaptureResult Outcome(FrameCaptureRequest request) => request.Completion.Result;
 
     [Fact]
-    public void ACaptureArmedAfterAFloatSelectionWaitsForTheFrameThatPublishesTheSelection() {
+    public void ACaptureArmedAfterAPreviewSelectionWaitsForTheFrameThatPublishesTheSelection() {
         var gpu = new FakePipelineGpu();
-        using var node = InstalledNode(gpu: gpu);
+        using var node = InstalledNode(
+            gpu: gpu,
+            pipeline: Feedback(backdrop: true)
+        );
 
         node.Paused = true;
 
@@ -47,13 +53,13 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             path2: $"{Guid.NewGuid():N}.png"
         ));
 
-        // The selection's float preview is held in the driver, so the frame after the capture is armed still publishes
-        // the previous selection, and the capture must not read it.
+        // The selection's preview is held in the driver, so the frame after the capture is armed still publishes the
+        // previous selection, and the capture must not read it.
         using (var opener = new PipelineGateOpener()) {
             gpu.PipelineGate = opener.Gate;
 
             try {
-                node.SelectOutput(name: "history");
+                node.SelectOutput(name: Backdrop);
                 node.RequestCapture(request: request);
 
                 var held = Produce(node: node);
@@ -74,7 +80,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
                 condition: () => !node.IsBuildingPreview,
                 timeout: TimeSpan.FromSeconds(value: 30)
             ),
-            userMessage: "The float preview never finished building."
+            userMessage: "The preview never finished building."
         );
 
         // The next frame installs the preview and publishes the selection, and that is the frame the capture reads.
@@ -85,6 +91,111 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             expected: previous.ImageHandle
         );
         Assert.True(condition: request.Completion.IsCompleted);
+    }
+    [Fact]
+    public void AFloatSelectionPublishesItselfAndItsCaptureWaitsForTheDisplayEncode() {
+        var gpu = new FakePipelineGpu();
+        using var node = InstalledNode(gpu: gpu);
+
+        node.Paused = true;
+
+        var previous = Produce(node: node);
+        var request = new FrameCaptureRequest(path: Path.Combine(
+            path1: Path.GetTempPath(),
+            path2: $"{Guid.NewGuid():N}.png"
+        ));
+
+        // A float selection builds nothing: it publishes the history image itself on the next frame. A capture of it
+        // reads it through the display encode, whose pipeline is held in the driver, so the capture waits.
+        using (var opener = new PipelineGateOpener()) {
+            gpu.PipelineGate = opener.Gate;
+
+            try {
+                node.SelectOutput(name: "history");
+                node.RequestCapture(request: request);
+
+                var shown = Produce(node: node);
+
+                Assert.False(condition: node.IsBuildingPreview);
+                Assert.False(condition: request.Completion.IsCompleted);
+                Assert.NotEqual(
+                    actual: shown.ImageHandle,
+                    expected: previous.ImageHandle
+                );
+                Assert.Equal(
+                    actual: shown.Format,
+                    expected: GpuPixelFormat.R16G16B16A16Float
+                );
+            } finally {
+                gpu.PipelineGate = null;
+            }
+        }
+
+        // Once the encode is built, a frame serves the capture; the fake's readback is unsupported, so it fails there,
+        // after the encode drew.
+        Assert.True(
+            condition: SpinWait.SpinUntil(
+                condition: () => {
+                    _ = Produce(node: node);
+
+                    return request.Completion.IsCompleted;
+                },
+                timeout: TimeSpan.FromSeconds(value: 30)
+            ),
+            userMessage: "The capture was never served."
+        );
+        Assert.IsType<NotSupportedException>(@object: Outcome(request: request).Error);
+    }
+    // A barrier cannot change an image's layout, so the capture's encode moves a float output published in General into
+    // the layout its draw samples it in, and hands it back in General for the node's next frame, whose barriers name it.
+    [Fact]
+    public void AFloatCaptureMovesTheImageOutOfThePublishedLayoutToSampleItAndBack() {
+        var gpu = new FakePipelineGpu();
+        using var node = InstalledNode(
+            floatOutput: true,
+            gpu: gpu
+        );
+
+        node.Paused = true;
+
+        var shown = Produce(node: node);
+        var request = new FrameCaptureRequest(path: Path.Combine(
+            path1: Path.GetTempPath(),
+            path2: $"{Guid.NewGuid():N}.png"
+        ));
+
+        Assert.Equal(
+            actual: (shown.Format, node.PublishedLayout),
+            expected: (GpuPixelFormat.R16G16B16A16Float, GpuImageLayout.General)
+        );
+
+        gpu.ReadbackSupported = true;
+        gpu.Recording = true;
+        node.RequestCapture(request: request);
+        Assert.True(
+            condition: SpinWait.SpinUntil(
+                condition: () => {
+                    _ = Produce(node: node);
+
+                    return request.Completion.IsCompleted;
+                },
+                timeout: TimeSpan.FromSeconds(value: 30)
+            ),
+            userMessage: "The capture was never served."
+        );
+
+        Assert.Null(@object: Outcome(request: request).Error);
+        File.Delete(path: request.Path);
+        Assert.Equal(
+            actual: gpu.Barriers.Where(predicate: recorded => (
+                (recorded.Handle == shown.ImageHandle) &&
+                (recorded.Barrier.Kind == ShaderPipelineBarrierKind.Image)
+            )).Select(selector: static recorded => (recorded.Barrier.OldLayout, recorded.Barrier.NewLayout)),
+            expected: [
+                (GpuImageLayout.General, GpuImageLayout.ShaderReadOnly),
+                (GpuImageLayout.ShaderReadOnly, GpuImageLayout.General),
+            ]
+        );
     }
     [Fact]
     public void APausedCaptureAfterADeviceLossReportsTheImageUnavailableUntilAStepRenders() {
@@ -132,9 +243,11 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
     [Theory]
     public void ReplacementsWhilePausedOwnOneGraphAndThePublishedImagesHoweverManyThereAre(bool floatOutput) {
         const int Replacements = 8;
-        // The two surfaces published last are RGBA8 targets at the frame extent: the fullscreen pass's output image, or
-        // the float preview of the history.
-        const ulong HeldBytes = ((2UL * (Extent * Extent)) * 4UL);
+        // The two surfaces published last are images at the frame extent: the fullscreen pass's RGBA8 output image, or the
+        // half-float history itself.
+        var heldBytes = ((2UL * (Extent * Extent)) * (floatOutput
+            ? 8UL
+            : 4UL));
         var gpu = new FakePipelineGpu();
         using var node = InstalledNode(
             floatOutput: floatOutput,
@@ -164,9 +277,9 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         }
 
         Assert.All(
-            action: static bytes => Assert.Equal(
+            action: bytes => Assert.Equal(
                 actual: bytes.Owned,
-                expected: (bytes.Allocated + HeldBytes)
+                expected: (bytes.Allocated + heldBytes)
             ),
             collection: owned
         );

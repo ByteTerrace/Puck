@@ -41,5 +41,6 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
     uint3 hash = sdfPcg3d(uint3(cell.x, cell.y, (grainFrame ^ passGroup.seed)));
     float noise = ((float(hash.x) / 4294967295.0) * 2.0 - 1.0);
 
-    return float4(saturate(sourceColor + (noise * passGroup.intensity)), 1.0);
+    // The working image keeps its headroom above one; only the display encode clamps.
+    return float4(max((sourceColor + (noise * passGroup.intensity)), 0.0), 1.0);
 }

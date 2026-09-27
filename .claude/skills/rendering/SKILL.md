@@ -784,14 +784,26 @@ These are one-line cautions; the owning pages hold the derivations.
   A swapchain on either backend is created in a `DisplayOutput` (format and
   `DisplayColorSpace`) chosen by `DisplayOutput.TrySelect`: SDR in
   `SdrFormats` unless an HDR color space is requested
-  (`PresentationOptions.ColorSpace`, `Srgb` everywhere) and reported
+  (`PresentationOptions.ColorSpace`, which a World sets from its host section's
+  `colorSpace`, `Srgb` by default) and reported
   (`VulkanSwapchainFactory.SelectOutput` over the surface's pairs, the
   Direct3D 12 compositor's `ReportedOutputs` over `IDXGIOutput6`); a Vulkan
   surface offering none of them refuses at creation, never mid-frame.
   `ISurfacePresenter.Output` exposes the chosen one. Paper white is
-  `PresentationOptions.PaperWhiteNits` (80 to 10,000 nits, default
-  `DisplayOutput.SdrWhiteNits`), and `DisplayOutput.WhiteScale` is the one
-  conversion to an output's UI white: one in SDR at every level.
+  `PresentationOptions.PaperWhiteNits` (the host section's `paperWhiteNits`, 80
+  to 10,000 nits, default `DisplayOutput.SdrWhiteNits`), and
+  `DisplayOutput.WhiteScale` is the one conversion to an output's value of SDR
+  white, which the display encode scales the frame by, so the HUD shows at paper
+  white: one in SDR at every level.
+  The working images are float (`RenderGraphPackageCatalog.WorkingFormat`): every
+  SDF view's color and the root graph's versions, which a node publishes as they
+  are (`Surface.IsImageFormat`); only the display encode quantizes
+  ([Shader manifests and pipelines](../../../docs/reference/shaders.md#the-display-encode)).
+  Each compositor draws it into the swapchain in its `DisplayOutput`, a node's
+  preview of an external output and a capture of a float output draw it in SDR
+  into RGBA8 (`SurfaceEncoder.ReadSdr`), so an instance capture (`world`) is its
+  working output through the SDR encode and a root capture is what an SDR
+  display shows. The dither lives in the encode, never in a pass.
   `ShaderPipelineMemoryBudget.For(profile)` is the other reader: a pipeline
   instance's budget is a quarter of the device-local bytes, or 512 MiB when the
   profile reports none.
@@ -963,7 +975,8 @@ explanation is [Qualifying a package](../../../docs/development/qualification.md
 `WorldFramePresenter` re-reads `render.lighting`, `render.sky`, `render.cycle`,
 `render.environment`, `render.tonemap`, and `render.farDistance` from the live
 definition every frame, so a `world.row.set render …` lands on the next frame
-without a program rebuild. Creation volumes become `SdfFrame.Volumes`, not
+without a program rebuild; `render.tonemap` reaches the root graph
+(`WorldViewGraphHost.BeginFrame`), which it recomposes, never an SDF kernel. Creation volumes become `SdfFrame.Volumes`, not
 instructions. Validation ranges live in `WorldDefinitionValidator`; a new render
 field needs its validator bound, its `SdfFrame`/`SdfEnvironment` lane, its
 pass-block value (`SdfWorldPackage.Values`, written by `SdfFrameBlock`, generated
@@ -1033,7 +1046,8 @@ The grouped binding contract is the pass interface in `src/Puck.Shaders/Interfac
 shipped pass binds its groups as sets: each pipeline pass and package pass
 (post-process, `place`, `overlay`, the source conversions) through its
 interface, the SDF engine's kernels through `SdfWorldInterfaces` (`World` and
-`BrickBake`), and both surface compositors' blits through `SurfaceBlitLayout`.
+`BrickBake`), and the display encode (both surface compositors, a node's preview
+and a capture's encode) through `DisplayEncodeLayout`.
 The region copy is the one pipeline created from a positional binding list
 (`GpuRegion.CopyPipeline`), bound as one set at group 0. Its placement rules
 are its own: a group's ordinal is its set and register space, a register number
@@ -1085,9 +1099,9 @@ name on both backends. A pool's sets release with it
 (`DirectXGpuBindings.LiveHandles`). `DirectXGroupedBindingLawTests` and
 `VulkanGroupedBindingLawTests` hold the writes and binds. Every pipeline pass and
 package pass is created from its interface's layout
-(`ShaderInterfaceLayout.PipelineLayout`), except the float preview, whose one
-group `ShaderPipelineRenderNode.PreviewLayout` declares by hand; keep it and
-`pipeline-preview.frag.hlsl`'s registers in step. A description's positional binding list
+(`ShaderInterfaceLayout.PipelineLayout`), except the display encode, whose one
+group `DisplayEncodeLayout` declares by hand; keep it and
+`display-encode.frag.hlsl`'s registers in step. A description's positional binding list
 (`GpuComputeBinding`) states a `GpuBindingKind` and holds only buffers and
 storage images; a sampled image or a sampler belongs to a group.
 
@@ -1207,8 +1221,9 @@ pool through `RenderGraphPackageSets` and writing its values into the pass block
 the node seeds (`RenderGraphPackageRecording.PassBlock`). A package pass's `config` binds against its package's
 schema in the graph compiler (`RENDERGRAPH_PACKAGE_CONFIG`). A graph naming an
 unserved package is refused at install, as
-is an input whose format differs from what its producer publishes or whose
-buffer is larger than the producer's (`InputFormat`). An external instance
+is an input whose buffer is larger than the producer's (`InputSize`); an image
+input is only ever sampled, so it binds an image of any format its producer
+publishes, a float working image or an RGBA8 one alike. An external instance
 (`RenderGraphInstance.ExternalPackage`) has no graph: the
 `IRenderGraphExternalProducer` registered with `RegisterProducer` renders it
 through its own submissions, and each consumer binds its latest output under
@@ -1257,15 +1272,24 @@ The main view runs through the runtime. `WorldRootGraph`
 (the first view's `sdf.world` instance) and `world$2..world$K` for K =
 `WorldRootGraph.ViewsOf` (the most non-instance slots of any `views.layouts`
 row or `PlayerRoster.MaxSlots`; each view is an instance of its own), then
-the root `main`, which reads `world` and every pane and runs, when K > 1, one
-`place` pass per view (`main$view$<n>`, n from 1; view 1's reads `world`
-through a second version beside `main$world`), then one `place` package pass
-per `views.graphs` instance a layout slot names (the pass named after the
-instance), then one pass per `views.post` row in order (named by the row, running
-its package, each reading the frame the pass before it wrote), then `overlay` in
-a windowed World. `main` is the root whenever anything is
-drawn over the world, panes included, and always when K > 1; otherwise `world`
-is the root. With `views.root` set the runtime
+the root `main`, which reads `world` and every pane and runs, when K > 1 or a
+tonemap is on, one `place` pass per view (`main$view$<n>`, n from 1; view 1's
+reads `world` through a second version beside `main$world`), then one `place`
+package pass per `views.graphs` instance a layout slot names (the pass named
+after the instance), then one pass per `views.post` row in order (named by the
+row, running its package, each reading the frame the pass before it wrote), then
+`overlay` in a windowed World. The tonemap is each view's place pass: when
+`render.tonemap` is `Filmic` and no debug view is on
+(`WorldViewGraphHost.ShowsDebugView`), every view pass sets the `place` config's
+`tonemap` (`RenderGraphPackageCatalog.PlaceTonemap`), which puts the view it
+reconstructs, and nothing else, through the curve. The letterbox color is
+framing, written beside the view untonemapped, so it reaches the display exact;
+a pane is display-referred (a pane shader applies its own tonemap, as the moth
+studio's does), so the root never tonemaps a pane; and the HUD is never
+tonemapped. A tonemapped lone whole-display view is shown, never stood in for,
+so its pass runs. `main` is the root whenever anything is drawn over the world,
+panes and the tonemap included, and always when K > 1; otherwise `world` is
+the root. With `views.root` set the runtime
 runs the rows alone, and the document may author no `views.post`. A config that
 does not bind is refused when the document validates, naming the row
 (`views.post[<i>].config`), live edits included; the boot's pre-flight
@@ -1524,12 +1548,13 @@ frame converter's conversion kernels compile at build too
 (`CompileDirect3D11Kernels` over `Direct3D11KernelSource` items,
 `ProbeKindManifest.KernelBytecodePath`, `Win32D3D11CameraFrameConverter.KernelPath`);
 a camera device only creates them, and the colorimetry is constant-buffer data.
-The Direct3D 12 surface compositor's blit is build DXIL
-(`surface-blit.*.hlsl`, `PuckShaderSpirvEnabled` false). Both surface
-compositors bind `SurfaceBlitLayout` (the pass group, `t0` and `s1` in space 3)
-and lease their blit from the device's `GpuPassPipelineCache` for a render pass
-in the swapchain's format, so no presentation pipeline is created outside a
-build cache; the Direct3D 12 one binds a set of a pool admitted into the
+Both surface compositors write the root's surface through the display encode
+(`SurfaceEncoder`, `Assets/Runtime/display-encode.frag.hlsl` in `Puck.Shaders`,
+build SPIR-V and DXIL), binding `DisplayEncodeLayout` (the pass group, `t0`, `s1`
+and the encode block at `b2` in space 3), and lease it from the device's
+`GpuPassPipelineCache` for a render pass in the swapchain's format, so no
+presentation pipeline is created outside a build cache and no compositor ships a
+shader of its own; the Direct3D 12 one binds a set of a pool admitted into the
 device's heaps. No Puck assembly may
 import `d3dcompiler_*.dll` (`NoDeviceShaderCompileLawTests`).
 

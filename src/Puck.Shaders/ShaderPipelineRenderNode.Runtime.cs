@@ -8,7 +8,7 @@ namespace Puck.Shaders;
 public sealed partial class ShaderPipelineRenderNode {
     private sealed class FrameSlot {
         public IGpuSubmissionFence? Fence;
-        // The slot's command list: every pass, the float preview, the export copy and the presentation, in order.
+        // The slot's command list: every pass, the preview, the export copy and the presentation, in order.
         public IGpuCommandPool? Commands;
 
         // The leases this slot's latest submission sampled, retired after its fence.

@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/8854d9e3caa550cf3949b8cafd945e69456b6192de741d0eec687d26384eae21). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/7d8f5c31579392face56139830349fb69e05174891dad31e6f6ceb33d3722230). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -95,7 +95,7 @@ struct SdfWorldPass {
 [[vk::binding(10, 3)]] RWStructuredBuffer<uint> viewsArgsRW : register(u10, space3);
 [[vk::binding(11, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t11, space3);
 [[vk::binding(12, 3)]] RWStructuredBuffer<uint> sdfVisibilityRecordsRW : register(u12, space3);
-[[vk::binding(13, 3)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> output : register(u13, space3);
+[[vk::binding(13, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output : register(u13, space3);
 [[vk::binding(14, 3)]] StructuredBuffer<float4> screenSurfaces : register(t14, space3);
 [[vk::binding(15, 3)]] StructuredBuffer<float4> screenMappings : register(t15, space3);
 [[vk::binding(16, 3)]] StructuredBuffer<float4> sdfScreenLights : register(t16, space3);

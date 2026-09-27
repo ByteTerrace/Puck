@@ -1,7 +1,7 @@
 {
   "id": "source-conversion",
   "title": "The shipped palette, NV12, four-byte and transfer conversion passes turn uploaded source regions into the pixels the CPU reference computes",
-  "binding": "The positive leg boots an offscreen world whose one pipeline seeds four 32x32 regions in the uploaded-source layout, a palette-indexed one, an NV12 one, a BGRA8 one and an sRGB-encoded RGBA8 one, runs the shipped source-palette, source-nv12, source-rgba and source-transfer kernels from src/Puck.Shaders over them, and captures each converted image paused. Each quadrant of the palette image is the palette entry (i, 255 - i, 3i mod 256) its index selects, each quadrant of the NV12 image is the BT.709 limited-range conversion of its Y, Cb, Cr sample, clamped, each quadrant of the four-byte image is its BGRA pixel with red and blue swapped, and each quadrant of the transfer image is its sRGB code decoded to linear light, read through the float preview; every expectation is the CPU reference ImageSourceConversion applied to the same regions, which SourceConversionCanaryFixtureTests recomputes. The discriminating leg names BT.601 in the NV12 header, raises every palette index by one, names R8G8B8A8 over the four-byte region's bytes and the linear transfer function in the transfer region's header: the neutral white quadrants hold, and every other quadrant turns to the value the changed header or index predicts.",
+  "binding": "The positive leg boots an offscreen world whose one pipeline seeds four 32x32 regions in the uploaded-source layout, a palette-indexed one, an NV12 one, a BGRA8 one and an sRGB-encoded RGBA8 one, runs the shipped source-palette, source-nv12, source-rgba and source-transfer kernels from src/Puck.Shaders over them, and captures each converted image paused. Each quadrant of the palette image is the palette entry (i, 255 - i, 3i mod 256) its index selects, each quadrant of the NV12 image is the BT.709 limited-range conversion of its Y, Cb, Cr sample, clamped, each quadrant of the four-byte image is its BGRA pixel with red and blue swapped, and each quadrant of the transfer image is its sRGB code decoded to linear light, read through the display encode; every expectation is the CPU reference ImageSourceConversion applied to the same regions, which SourceConversionCanaryFixtureTests recomputes. The discriminating leg names BT.601 in the NV12 header, raises every palette index by one, names R8G8B8A8 over the four-byte region's bytes and the linear transfer function in the transfer region's header: the neutral white quadrants hold, and every other quadrant turns to the value the changed header or index predicts.",
   "bootShape": "offscreen",
   "backends": ["vulkan", "directx"],
   "requirements": ["gpu"],
@@ -265,8 +265,8 @@
         "extent": [32, 32],
         "region": [0.53125, 0.03125, 0.96875, 0.46875],
         "reduce": "every",
-        "minimum": [0.215686, 0.05098, 0.0, 1],
-        "maximum": [0.215686, 0.05098, 0.0, 1],
+        "minimum": [0.215686275, 0.050980392, 0.0, 1],
+        "maximum": [0.215686275, 0.050980392, 0.0, 1],
         "toleranceCodes": 1,
         "holds": true
       },
@@ -277,8 +277,8 @@
         "extent": [32, 32],
         "region": [0.03125, 0.53125, 0.46875, 0.96875],
         "reduce": "every",
-        "minimum": [0.576471, 0.015686, 0.352941, 1],
-        "maximum": [0.576471, 0.015686, 0.352941, 1],
+        "minimum": [0.576470588, 0.015686275, 0.352941176, 1],
+        "maximum": [0.576470588, 0.015686275, 0.352941176, 1],
         "toleranceCodes": 1,
         "holds": true
       },
@@ -289,8 +289,8 @@
         "extent": [32, 32],
         "region": [0.53125, 0.53125, 0.96875, 0.96875],
         "reduce": "every",
-        "minimum": [0.003922, 0.870588, 0.117647, 1],
-        "maximum": [0.003922, 0.870588, 0.117647, 1],
+        "minimum": [0.003921569, 0.870588235, 0.117647059, 1],
+        "maximum": [0.003921569, 0.870588235, 0.117647059, 1],
         "toleranceCodes": 1,
         "holds": true
       }
@@ -678,8 +678,8 @@
         "extent": [32, 32],
         "region": [0.53125, 0.03125, 0.96875, 0.46875],
         "reduce": "every",
-        "minimum": [0.215686, 0.05098, 0.0, 1],
-        "maximum": [0.215686, 0.05098, 0.0, 1],
+        "minimum": [0.215686275, 0.050980392, 0.0, 1],
+        "maximum": [0.215686275, 0.050980392, 0.0, 1],
         "toleranceCodes": 1,
         "holds": false
       },
@@ -690,8 +690,8 @@
         "extent": [32, 32],
         "region": [0.03125, 0.53125, 0.46875, 0.96875],
         "reduce": "every",
-        "minimum": [0.576471, 0.015686, 0.352941, 1],
-        "maximum": [0.576471, 0.015686, 0.352941, 1],
+        "minimum": [0.576470588, 0.015686275, 0.352941176, 1],
+        "maximum": [0.576470588, 0.015686275, 0.352941176, 1],
         "toleranceCodes": 1,
         "holds": false
       },
@@ -702,8 +702,8 @@
         "extent": [32, 32],
         "region": [0.53125, 0.53125, 0.96875, 0.96875],
         "reduce": "every",
-        "minimum": [0.003922, 0.870588, 0.117647, 1],
-        "maximum": [0.003922, 0.870588, 0.117647, 1],
+        "minimum": [0.003921569, 0.870588235, 0.117647059, 1],
+        "maximum": [0.003921569, 0.870588235, 0.117647059, 1],
         "toleranceCodes": 1,
         "holds": false
       },
@@ -714,8 +714,8 @@
         "extent": [32, 32],
         "region": [0.53125, 0.03125, 0.96875, 0.46875],
         "reduce": "every",
-        "minimum": [0.501961, 0.25098, 0.0, 1],
-        "maximum": [0.501961, 0.25098, 0.0, 1],
+        "minimum": [0.501960784, 0.250980392, 0.0, 1],
+        "maximum": [0.501960784, 0.250980392, 0.0, 1],
         "toleranceCodes": 1,
         "holds": true
       },
@@ -726,8 +726,8 @@
         "extent": [32, 32],
         "region": [0.03125, 0.53125, 0.46875, 0.96875],
         "reduce": "every",
-        "minimum": [0.784314, 0.12549, 0.627451, 1],
-        "maximum": [0.784314, 0.12549, 0.627451, 1],
+        "minimum": [0.784313725, 0.125490196, 0.62745098, 1],
+        "maximum": [0.784313725, 0.125490196, 0.62745098, 1],
         "toleranceCodes": 1,
         "holds": true
       },
@@ -738,8 +738,8 @@
         "extent": [32, 32],
         "region": [0.53125, 0.53125, 0.96875, 0.96875],
         "reduce": "every",
-        "minimum": [0.062745, 0.941176, 0.376471, 1],
-        "maximum": [0.062745, 0.941176, 0.376471, 1],
+        "minimum": [0.062745098, 0.941176471, 0.376470588, 1],
+        "maximum": [0.062745098, 0.941176471, 0.376470588, 1],
         "toleranceCodes": 1,
         "holds": true
       }

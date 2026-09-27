@@ -155,7 +155,7 @@
 #define SDF_FILTER_NEAREST 0u
 #define SDF_FILTER_LINEAR  1u
 
-// The environment's rows in the pass block's environment array (SdfEnvironment), its light kinds and tonemaps.
+// The environment's rows in the pass block's environment array (SdfEnvironment) and its light kinds.
 #define SDF_ENV_ROW_COUNT           53u
 #define SDF_ENV_CONTROL_ROW         0u
 #define SDF_ENV_LIGHTS_ROW          1u
@@ -181,9 +181,5 @@
 #define SDF_LIGHT_RIM         2u
 #define SDF_LIGHT_POINT       3u
 #define SDF_LIGHT_OCCLUDER    4u
-
-// Puck.SignedDistance.SdfTonemapMode.
-#define SDF_TONEMAP_NONE   0u
-#define SDF_TONEMAP_FILMIC 1u
 
 #endif // SDF_ISA_HLSLI
