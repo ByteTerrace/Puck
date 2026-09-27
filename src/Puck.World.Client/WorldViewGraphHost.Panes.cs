@@ -69,7 +69,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
     /// <see cref="SourceMapping"/> per placement the root's <c>place</c> passes draw, in drawing order, naming its
     /// instance by <see cref="RenderGraphInstance.Handle"/> and showing its whole image at the extent the runtime's
     /// latest schedule renders it at. A placement whose instance has not rendered yet, or that covers no area, publishes
-    /// nothing; neither does a view the root stands for, which no <c>place</c> pass draws. A frame whose placements,
+    /// nothing; neither does a view the root stands for, which no <c>place</c> pass draws, nor a lone whole-display view whose
+    /// pass draws it only to tonemap it, so the panes and every pick through them are the same with a tonemap or without. A frame whose placements,
     /// extents and instances hold publishes the mappings it published before, allocating nothing. Publishing clears the
     /// hovered pane until <see cref="Hover"/> asks again, so no hover outlives the panes it was picked from.</summary>
     /// <param name="displayWidth">The display's width, in pixels.</param>
@@ -90,7 +91,9 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
                 val2: synthesized.Producers.Count
             );
 
-            for (var view = 0; (view < views); view++) {
+            // A lone whole-display view shown only for its tonemap publishes nothing, as the view the root stands for
+            // does: the display shows the world itself either way.
+            for (var view = (m_loneTonemapped ? 1 : 0); (view < views); view++) {
                 PublishPane(
                     instance: synthesized.Producers[view].Name,
                     latest: latest,

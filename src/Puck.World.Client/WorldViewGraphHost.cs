@@ -298,6 +298,9 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     private readonly List<RenderGraphFootprint> m_footprints = [];
     private readonly Dictionary<string, RenderGraphPlacement> m_placements = new(comparer: StringComparer.Ordinal);
 
+    // Whether this frame's lone whole-display view is shown only so its place pass applies the tonemap: the display shows
+    // the world itself, as it does when the root stands for the view, so no pane is published for it.
+    private bool m_loneTonemapped;
     private Func<IReadOnlyList<string>, int, IReadOnlyList<WorldViewPostPass>?, WorldTonemap, WorldRootGraph>? m_compose;
     private bool m_disposed;
     // The source and view instances the running set was composed with, the footprints its screen-rendering instance shows
@@ -700,6 +703,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
         var whole = new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f);
 
+        m_loneTonemapped = false;
         if (views.Count == 0) {
             _ = PlaceView(
                 region: whole,
@@ -722,6 +726,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         // applied by the view's place pass, so a tonemapped lone view is shown like any other.
         var standsFor = (lone && (m_synthesized?.Tonemap != WorldTonemap.Filmic));
         var covered = (panesCover || standsFor);
+
+        m_loneTonemapped = (lone && !standsFor);
 
         for (var view = 0; (view < views.Count); view++) {
             covered |= (
