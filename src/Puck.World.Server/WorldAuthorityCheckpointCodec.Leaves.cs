@@ -152,7 +152,8 @@ public static partial class WorldAuthorityCheckpointCodec {
             throw new InvalidOperationException(message: $"peer event entry {peer.Identity.Describe()} (source '{peer.Source}') has no live wire value");
         }
     }
-    private static void WriteAdmissionGrant(WireWriter writer, WorldAdmissionGrant grant) {
+
+    internal static void WriteAdmissionGrant(WireWriter writer, WorldAdmissionGrant grant) {
         WriteCapability(
             capability: grant.Capability,
             writer: writer
@@ -177,7 +178,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             )
         );
     }
-    private static WorldAdmissionGrant ReadAdmissionGrant(ref WireReader reader) {
+    internal static WorldAdmissionGrant ReadAdmissionGrant(ref WireReader reader) {
         var capability = WorldWireCodec.ReadCapability(reader: ref reader);
         var subject = reader.ReadOptional(
             readValue: static (ref WireReader r) => WorldWireCodec.ReadSubject(reader: ref r)
@@ -202,6 +203,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             Subject: subject
         );
     }
+
     // Reuses the same leaf shape the "Grant"/"Revoke" tape entries already encode a WorldGrant with
     // (WorldSubmissionCodec.TryEncodeGrant/TryDecodeGrant) rather than re-deriving the field list here — the leaf
     // owns the definitive layout, this call site only frames the resulting bytes as one checkpoint block.

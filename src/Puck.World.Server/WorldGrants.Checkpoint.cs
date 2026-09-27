@@ -3,11 +3,17 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public sealed partial class WorldGrants {
-    /// <summary>Captures every table this class owns.</summary>
+    /// <summary>Captures every table this class owns, leaving out every row a session holds: a session is the screen
+    /// observing through it, which a restore cannot bring back, so it re-admits instead. The epoch each session ordinal
+    /// last carried is captured, so a restored world never reissues a retired session principal.</summary>
     public WorldGrantsCheckpoint Capture() {
         var grantees = new List<WorldGrantsGranteeCheckpoint>(capacity: m_byGrantee.Count);
 
         foreach (var (grantee, grants) in m_byGrantee) {
+            if (IsSessionGrantee(grantee: grantee)) {
+                continue;
+            }
+
             grantees.Add(item: new WorldGrantsGranteeCheckpoint(
                 Grantee: grantee,
                 Drive: [.. (grants.For(capability: WorldCapability.Drive) ?? [])],
@@ -24,7 +30,10 @@ public sealed partial class WorldGrants {
         // A principal may have composed an application set without holding any capability row of its own, so the
         // application table is swept separately rather than assumed to be a subset of the capability table.
         foreach (var (principal, applications) in m_applications) {
-            if (!m_byGrantee.ContainsKey(key: principal)) {
+            if (
+                !m_byGrantee.ContainsKey(key: principal) &&
+                !IsSessionGrantee(grantee: principal)
+            ) {
                 grantees.Add(item: new WorldGrantsGranteeCheckpoint(
                     Applications: [.. applications],
                     Control: [],
@@ -39,24 +48,27 @@ public sealed partial class WorldGrants {
 
         return new WorldGrantsCheckpoint(
             Grantees: grantees,
-            Exclusive: [.. m_exclusive.Select(selector: static pair => (pair.Key.Capability, pair.Key.Subject, pair.Value))],
-            Budgets: [.. m_budgets.Select(selector: static pair => (pair.Key.Grantee, pair.Key.Capability, pair.Key.Subject, pair.Value))],
-            EventBudgets: [.. m_eventBudgets.Select(selector: static pair => (pair.Key.Grantee, pair.Key.Capability, pair.Key.Subject, pair.Value))],
-            HoldCeilings: [.. m_holdCeilings.Select(selector: static pair => (pair.Key.Grantee, pair.Key.Capability, pair.Key.Subject, pair.Value))],
-            ChannelReach: [.. m_channelReach.Select(selector: static pair => (pair.Key.Grantee, pair.Key.Capability, pair.Key.Subject, pair.Value.Bits))],
-            PoolCeilings: [.. m_poolCeilings.Select(selector: static pair => (pair.Key.Grantee, pair.Key.Capability, pair.Key.Subject, CaptureCeilings(ceilings: pair.Value)))],
-            KindMasks: [.. m_kindMasks.Select(selector: static pair => (pair.Key.Grantee, pair.Key.Capability, pair.Key.Subject, pair.Value.Bits))],
-            WriteMasks: [.. m_writeMasks.Select(selector: static pair => (pair.Key.Grantee, pair.Key.Capability, pair.Key.Subject, pair.Value.Bits))],
-            SeededSections: [.. m_seededSections.Select(selector: static key => (key.Grantee, key.Capability, key.Subject))],
+            Exclusive: [.. m_exclusive.Where(predicate: static pair => !IsSessionGrantee(grantee: pair.Value)).Select(selector: static pair => (pair.Key.Capability, pair.Key.Subject, pair.Value))],
+            Budgets: [.. m_budgets.Where(predicate: static pair => !IsSessionGrantee(grantee: pair.Key.Grantee)).Select(selector: static pair => (pair.Key.Grantee, pair.Key.Capability, pair.Key.Subject, pair.Value))],
+            EventBudgets: [.. m_eventBudgets.Where(predicate: static pair => !IsSessionGrantee(grantee: pair.Key.Grantee)).Select(selector: static pair => (pair.Key.Grantee, pair.Key.Capability, pair.Key.Subject, pair.Value))],
+            HoldCeilings: [.. m_holdCeilings.Where(predicate: static pair => !IsSessionGrantee(grantee: pair.Key.Grantee)).Select(selector: static pair => (pair.Key.Grantee, pair.Key.Capability, pair.Key.Subject, pair.Value))],
+            ChannelReach: [.. m_channelReach.Where(predicate: static pair => !IsSessionGrantee(grantee: pair.Key.Grantee)).Select(selector: static pair => (pair.Key.Grantee, pair.Key.Capability, pair.Key.Subject, pair.Value.Bits))],
+            PoolCeilings: [.. m_poolCeilings.Where(predicate: static pair => !IsSessionGrantee(grantee: pair.Key.Grantee)).Select(selector: static pair => (pair.Key.Grantee, pair.Key.Capability, pair.Key.Subject, CaptureCeilings(ceilings: pair.Value)))],
+            KindMasks: [.. m_kindMasks.Where(predicate: static pair => !IsSessionGrantee(grantee: pair.Key.Grantee)).Select(selector: static pair => (pair.Key.Grantee, pair.Key.Capability, pair.Key.Subject, pair.Value.Bits))],
+            WriteMasks: [.. m_writeMasks.Where(predicate: static pair => !IsSessionGrantee(grantee: pair.Key.Grantee)).Select(selector: static pair => (pair.Key.Grantee, pair.Key.Capability, pair.Key.Subject, pair.Value.Bits))],
+            SeededSections: [.. m_seededSections.Where(predicate: static key => !IsSessionGrantee(grantee: key.Grantee)).Select(selector: static key => (key.Grantee, key.Capability, key.Subject))],
             DriveGates: [.. m_driveGates.Select(selector: static pair => (pair.Key, pair.Value))],
+            SessionEpochs: [.. m_sessionEpochs.OrderBy(keySelector: static pair => pair.Key).Select(selector: static pair => (pair.Key, pair.Value))],
             Revision: m_revision
         );
     }
     /// <summary>Restores every table this class owns from a previously captured checkpoint — a wholesale replace,
-    /// never a merge onto whatever the boot-seed constructor already installed.</summary>
+    /// never a merge onto whatever the boot-seed constructor already installed. No checkpoint holds a session, so every
+    /// live session ends here, its epoch still retired; its screen admits a new one.</summary>
     public void Restore(WorldGrantsCheckpoint checkpoint) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
 
+        m_sessions.Clear();
         m_applications.Clear();
         m_byGrantee.Clear();
         m_exclusive.Clear();
@@ -157,6 +169,14 @@ public sealed partial class WorldGrants {
         // RestoreGroups every group-derived check remains deny-by-default.
         foreach (var row in checkpoint.DriveGates) {
             m_driveGates[row.BodyIndex] = row.Reason;
+        }
+
+        // An epoch never moves backward: the later of the checkpoint's epoch and this world's own stays retired.
+        foreach (var (ordinal, epoch) in checkpoint.SessionEpochs) {
+            m_sessionEpochs[ordinal] = Math.Max(
+                val1: epoch,
+                val2: m_sessionEpochs.GetValueOrDefault(key: ordinal)
+            );
         }
 
         m_revision = checkpoint.Revision;

@@ -266,6 +266,13 @@ public static partial class WorldAuthorityCheckpointCodec {
                 w.WriteString(value: row.Reason);
             }
         );
+        writer.WriteArray(
+            items: section.SessionEpochs,
+            writeItem: static (w, row) => {
+                w.WriteInt32(value: row.Ordinal);
+                w.WriteInt32(value: row.Epoch);
+            }
+        );
         writer.WriteInt32(value: section.Revision);
 
         return writer.ToArray();
@@ -389,6 +396,26 @@ public static partial class WorldAuthorityCheckpointCodec {
             },
             maximum: MaxCollectionCount
         );
+        var sessionEpochs = reader.ReadArray(
+            field: "grants session epochs",
+            readItem: static (ref WireReader r) => {
+                var ordinal = r.ReadInt32();
+                var epoch = r.ReadInt32();
+
+                if (
+                    !r.Failed &&
+                    ((ordinal < 0) || (epoch <= 0))
+                ) {
+                    r.Fail(
+                        detail: $"grants session epoch {ordinal}:{epoch} is not a non-negative ordinal with a positive epoch",
+                        refusal: WireRefusal.PayloadMalformed
+                    );
+                }
+
+                return (ordinal, epoch);
+            },
+            maximum: MaxCollectionCount
+        );
         var revision = reader.ReadInt32();
 
         if (!reader.TryFinish(failure: out var failure)) {
@@ -410,6 +437,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             PoolCeilings: poolCeilings,
             Revision: revision,
             SeededSections: seededSections,
+            SessionEpochs: sessionEpochs,
             WriteMasks: writeMasks
         );
         reason = string.Empty;

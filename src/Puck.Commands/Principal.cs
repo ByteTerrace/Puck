@@ -2,10 +2,11 @@ namespace Puck.Commands;
 
 /// <summary>
 /// Who is acting: the one identity a dispatched command, a submission, a mutation, and a replayed intent carry — a
-/// seat, the console/script surface, an addon, a network/population peer, or the world's own authored program.
+/// seat, the console/script surface, an addon, a network/population peer, an unembodied joined session, or the world's
+/// own authored program.
 /// Zero-alloc, equatable, and hashable: a <see cref="Seat"/>/<see cref="Peer"/> carries its index (name null), a
-/// <see cref="Peer"/> also carries its admission generation, an <see cref="Addon"/> its name (index 0), and
-/// <see cref="Console"/>/<see cref="World"/> neither.
+/// <see cref="Peer"/> also carries its admission generation, a <see cref="Session"/> its ordinal and epoch (neither
+/// a body index), an <see cref="Addon"/> its name (index 0), and <see cref="Console"/>/<see cref="World"/> neither.
 /// </summary>
 /// <remarks>
 /// <para><b>Only an ingress door mints a principal.</b> The text submission door stamps <see cref="Console"/>, the
@@ -71,13 +72,15 @@ public readonly record struct Principal(PrincipalKind Kind, int Index, string? N
         Name: name
     );
     /// <summary>Describes a short stable label for echoes — <c>seat1</c>…, <c>console</c>, <c>world</c>,
-    /// <c>addon:&lt;name&gt;</c>, <c>peer:&lt;n&gt;:&lt;generation&gt;</c>, or <c>unstamped</c>.</summary>
+    /// <c>addon:&lt;name&gt;</c>, <c>peer:&lt;n&gt;:&lt;generation&gt;</c>, <c>session:&lt;n&gt;:&lt;epoch&gt;</c>, or
+    /// <c>unstamped</c>.</summary>
     /// <returns>The label.</returns>
     public string Describe() => Kind switch {
         PrincipalKind.Seat => $"seat{(Index + 1)}",
         PrincipalKind.Console => "console",
         PrincipalKind.Addon => $"addon:{Name}",
         PrincipalKind.Peer => $"peer:{Index}:{Generation}",
+        PrincipalKind.Session => $"session:{Index}:{Generation}",
         PrincipalKind.World => "world",
         _ => "unstamped",
     };
@@ -89,6 +92,19 @@ public readonly record struct Principal(PrincipalKind Kind, int Index, string? N
         Generation: generation,
         Index: index,
         Kind: PrincipalKind.Peer,
+        Name: null
+    );
+    /// <summary>Returns the unembodied session principal a world's session admission minted.</summary>
+    /// <param name="ordinal">The session's 0-based ordinal on the world that admitted it.</param>
+    /// <param name="epoch">The positive epoch that admission assigned; a later admission of the same ordinal carries a
+    /// later one, so a principal naming a retired epoch never matches a live session.</param>
+    /// <returns>The session principal.</returns>
+    /// <remarks>Only the admitting world mints one (<c>Server.WorldServer.TryAdmitSession</c>); anything else reaching
+    /// for this is assembling an identity.</remarks>
+    public static Principal Session(int ordinal, int epoch) => new(
+        Generation: epoch,
+        Index: ordinal,
+        Kind: PrincipalKind.Session,
         Name: null
     );
     /// <summary>Returns the seat principal for a 0-based slot.</summary>

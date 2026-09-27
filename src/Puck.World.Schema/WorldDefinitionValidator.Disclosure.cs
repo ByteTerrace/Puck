@@ -186,7 +186,7 @@ public static partial class WorldDefinitionValidator {
                 principal: out var actor,
                 token: reader
             ) ||
-                (actor.Kind == PrincipalKind.World) ||
+                (actor.Kind is PrincipalKind.World or PrincipalKind.Session) ||
                 !seen.Add(item: reader)
             ) {
                 errors.Add(item: $"state row '{name}': visibility readers must be distinct canonical authenticated principals.");

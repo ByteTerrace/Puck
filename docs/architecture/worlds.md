@@ -569,10 +569,32 @@ copy, deadline or persistence arithmetic.
 ## Joining, authority, and admission
 
 An unembodied joined session is the ordinary shape behind a portal display. The target chooses a full
-replica, redacted state projection or frames. Body-indexed principals cannot represent that
-participant: admission must materialize a non-body, session-scoped principal or capability handle
-before projection. Its epoch, revocation, budget and grant lifetime end with the session; embodiment
-may add concrete body authority without turning observation into a body.
+replica, redacted state projection or frames. A body-indexed principal cannot represent that
+participant, so a session has a principal of its own, written `session:<ordinal>:<epoch>`.
+`WorldServer.TryAdmitSession` asks the world's own `admission` rows what a viewer observing from a
+named authority is granted, through the same arrival verdict an authenticated authority receives. The
+session takes no population entry and no body. It holds only the verdict's rows that name a subject,
+such as `Mutate` over one placement row, and it acts through the ordinary grant door like any other
+untrusted principal: its rows are metered and it cannot hold a wildcard.
+
+A session's authority lives exactly as long as the session. `EndSession` revokes every row it holds
+and retires its epoch, so a submission still naming it is refused as `world.session.stale`, and a
+reused ordinal carries a later epoch. A rebuild ends every session. No checkpoint holds a session,
+but a checkpoint keeps each ordinal's last epoch, so a restored world never issues a retired principal
+again. Admission, embodiment and ending ride the replay tape as server events, and a tape armed while
+a session lives opens with that session as it stands, so a session's authorized mutation replays with
+the same outcome.
+
+Embodiment adds body authority without turning observation into a body. `TryEmbodySession` mints the
+verdict's body-relative rows, such as `Drive` over the body, onto the same principal. The body is one
+the population already allocated and no remote peer occupies. When a later generation takes that
+body, through a peer admission or a seat join, the session's rows over it are revoked, so it never
+drives the next occupant.
+
+A session belongs to the world that admitted it. The peer and federated wires refuse any submission
+that names a session principal (`SessionPrincipalRemote`), so a remote or federated session is not
+admitted. A portal screen does not observe through a session yet: it attaches as an ordinary
+observer, and a click through a portal does not reach the destination's rules.
 
 Crossing asks for embodiment. Successful target admission allocates a population entry and produces
 concrete `Drive/body:<allocated-id>` authority. Do not add `Enter`: the capability vocabulary is the

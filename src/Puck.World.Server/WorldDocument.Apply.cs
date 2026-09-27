@@ -216,6 +216,10 @@ public sealed partial class WorldDocument {
     // Definition/Undo/Composition/Lever's acting principal are ALWAYS the envelope's own Principal — the one field
     // every submission kind funnels its acting identity through now, never a second copy.
     internal WorldSubmissionResult? ApplyEnvelope(SubmissionEnvelope envelope, Action<WorldSubmissionResult>? completion = null) {
+        if (TryRefuseStaleSession(envelope: in envelope, refusal: out var stale)) {
+            return stale;
+        }
+
         switch (envelope.Payload) {
             case WorldSubmissionPayload.Command command:
                 ApplyCommand(
@@ -775,6 +779,8 @@ public sealed partial class WorldDocument {
             candidate: candidate,
             preRebuildPeerRows: preRebuildPeerRows
         );
+        // A live SESSION ends: the reset wiped its rows, and a screen observing through it re-admits under the candidate.
+        Host.GrantTable.EndSessionsForRebuild();
 
         // Finish runs here, AFTER the candidate's own grants have installed, never earlier: its capability
         // disclosure narration is computed lazily against the LIVE grant table at the moment each line actually

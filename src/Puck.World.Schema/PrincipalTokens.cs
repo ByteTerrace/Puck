@@ -12,7 +12,7 @@ namespace Puck.World.Protocol;
 public static class PrincipalTokens {
     /// <summary>The principal token grammar <see cref="TryParse"/> accepts, for a refusal to interpolate rather than
     /// hand-spell.</summary>
-    public const string Grammar = "seat1..seat4|console|world|addon:<name>|peer:<n>:<generation>";
+    public const string Grammar = "seat1..seat4|console|world|addon:<name>|peer:<n>:<generation>|session:<n>:<epoch>";
 
     /// <summary>Determines whether a principal is canonical — one <see cref="TryParse"/> itself produces from the
     /// principal's own <see cref="Principal.Describe"/> label.</summary>
@@ -89,25 +89,13 @@ public static class PrincipalTokens {
             comparisonType: StringComparison.OrdinalIgnoreCase,
             value: "peer:"
         )) {
-            var remainder = token[5..];
-            var separator = remainder.IndexOf(value: ':');
-
             if (
-                (separator <= 0) ||
-                !int.TryParse(
-                s: remainder[..separator],
-                style: NumberStyles.Integer,
-                provider: CultureInfo.InvariantCulture,
-                result: out var peer
-            ) ||
-                !WorldBodiesLimits.IsBodyIndex(index: peer) ||
-                !int.TryParse(
-                s: remainder[(separator + 1)..],
-                style: NumberStyles.Integer,
-                provider: CultureInfo.InvariantCulture,
-                result: out var generation
-            ) ||
-                (generation <= 0)
+                !TryParseIndexAndGeneration(
+                    generation: out var generation,
+                    index: out var peer,
+                    remainder: token[5..]
+                ) ||
+                !WorldBodiesLimits.IsBodyIndex(index: peer)
             ) {
                 return false;
             }
@@ -120,8 +108,57 @@ public static class PrincipalTokens {
             return true;
         }
 
+        if (token.StartsWith(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            value: "session:"
+        )) {
+            if (
+                !TryParseIndexAndGeneration(
+                    generation: out var epoch,
+                    index: out var ordinal,
+                    remainder: token[8..]
+                ) ||
+                (ordinal < 0)
+            ) {
+                return false;
+            }
+
+            principal = Principal.Session(
+                epoch: epoch,
+                ordinal: ordinal
+            );
+
+            return true;
+        }
+
         return false;
     }
+
+    // The `<n>:<g>` tail a peer and a session token share: an index, then a positive generation.
+    private static bool TryParseIndexAndGeneration(ReadOnlySpan<char> remainder, out int index, out int generation) {
+        index = 0;
+        generation = 0;
+
+        var separator = remainder.IndexOf(value: ':');
+
+        return (
+            (separator > 0) &&
+            int.TryParse(
+                s: remainder[..separator],
+                style: NumberStyles.Integer,
+                provider: CultureInfo.InvariantCulture,
+                result: out index
+            ) &&
+            int.TryParse(
+                s: remainder[(separator + 1)..],
+                style: NumberStyles.Integer,
+                provider: CultureInfo.InvariantCulture,
+                result: out generation
+            ) &&
+            (generation > 0)
+        );
+    }
+
     /// <summary>Parses a principal token (<see cref="Grammar"/>) and requires it to be the exact spelling
     /// <see cref="Principal.Describe"/> produces.</summary>
     /// <remarks>A case variant or a range-violating index is refused rather than silently normalised. A token accepted
