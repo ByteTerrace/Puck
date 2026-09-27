@@ -6,6 +6,7 @@ namespace Puck.Abstractions.Cameras;
 /// <summary>An immutable, finite camera basis and projection snapshot derived by <see cref="LookAt"/>.</summary>
 public readonly record struct CameraSnapshot {
     private readonly Vector2 m_frustumOffset;
+    private readonly float m_near;
 
     /// <summary>Initializes a finite camera snapshot from an already-derived basis and projection.</summary>
     public CameraSnapshot(Vector3 Position, Vector3 Right, Vector3 Up, Vector3 Forward, float TanHalfFieldOfView, float AspectRatio) {
@@ -100,6 +101,30 @@ public readonly record struct CameraSnapshot {
             }
 
             m_frustumOffset = value;
+        }
+    }
+    /// <summary>Gets the forward distance of the camera's near plane: the image begins there, so nothing nearer along
+    /// <see cref="Forward"/> is seen or hit. Zero, the default, begins the image at <see cref="Position"/>. A border
+    /// window's camera (<c>Puck.SdfVm.Views.SdfAsymmetricFrustum</c>) puts it on the glass, so the window shows only
+    /// what lies beyond its aperture; the SDF view pass starts its march there and a hit through the camera's image
+    /// (<c>Puck.Commands.SourceRay.Through</c>) starts its ray there.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The distance set at initialization is negative or not
+    /// finite.</exception>
+    public float Near {
+        get => m_near;
+        init {
+            if (
+                !float.IsFinite(f: value) ||
+                (value < 0f)
+            ) {
+                throw new ArgumentOutOfRangeException(
+                    actualValue: value,
+                    message: "The near-plane distance must be finite and not negative.",
+                    paramName: nameof(Near)
+                );
+            }
+
+            m_near = value;
         }
     }
     /// <summary>Gets the world-space camera position.</summary>

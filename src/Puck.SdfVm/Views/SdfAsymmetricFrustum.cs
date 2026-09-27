@@ -12,10 +12,12 @@ namespace Puck.SdfVm.Views;
 /// projects a vertex through a near/far clip.
 /// </summary>
 /// <remarks>
-/// <para><b>Why no near/far scaling.</b> A rasterizer's off-axis frustum bounds (<c>left</c>/<c>right</c>/
+/// <para><b>Tangents and the near plane.</b> A rasterizer's off-axis frustum bounds (<c>left</c>/<c>right</c>/
 /// <c>bottom</c>/<c>top</c>) are measured at the near-plane distance because a projection matrix needs a concrete
 /// plane to project onto. A ray direction only needs the tangent of each bound — the same value regardless of which
-/// distance it is measured at — so this type fits directly in tangent space and no near/far distance ever appears.</para>
+/// distance it is measured at — so this type fits directly in tangent space. The near plane is the aperture's own
+/// plane, <see cref="Depth"/> along <see cref="Forward"/> (<see cref="CameraSnapshot.Near"/>): a ray through an image
+/// point starts where it crosses the aperture, so nothing between the eye and the aperture is seen.</para>
 /// <para><b>The fit.</b> Fix the camera's orientation to the aperture's own basis (<see cref="CameraSnapshot.Right"/>/
 /// <see cref="CameraSnapshot.Up"/> = the aperture's Right/Up; <see cref="CameraSnapshot.Forward"/> = the aperture's
 /// inward direction, i.e. the negated outward <c>Normal</c> a <c>WorldFaceFrame</c> carries) rather than aiming at
@@ -37,7 +39,8 @@ public readonly record struct SdfAsymmetricFrustum(
     Vector3 Forward,
     float HalfWidthTangent,
     float HalfHeightTangent,
-    Vector2 CenterOffset
+    Vector2 CenterOffset,
+    float Depth
 ) {
     /// <summary>The smallest perpendicular eye-to-aperture-plane distance (world units) a sound frustum can fit
     /// against — below this the tangent terms blow up (division by a near-zero depth) or the eye has crossed to the
@@ -47,9 +50,10 @@ public readonly record struct SdfAsymmetricFrustum(
     /// <summary>Packs this fit into a <see cref="CameraSnapshot"/> apexed at <paramref name="eye"/> — reusing
     /// <see cref="CameraSnapshot.TanHalfFieldOfView"/>/<see cref="CameraSnapshot.AspectRatio"/> for the symmetric
     /// half-extent (<see cref="HalfHeightTangent"/> and <see cref="HalfWidthTangent"/>/<see cref="HalfHeightTangent"/>
-    /// respectively — the aperture's own physical aspect ratio, independent of the render target's pixel dimensions)
-    /// and <see cref="CameraSnapshot.FrustumOffset"/> for <see cref="CenterOffset"/>, so the camera alone casts every
-    /// ray the fit describes.</summary>
+    /// respectively — the aperture's own physical aspect ratio, independent of the render target's pixel dimensions),
+    /// <see cref="CameraSnapshot.FrustumOffset"/> for <see cref="CenterOffset"/> and <see cref="CameraSnapshot.Near"/>
+    /// for <see cref="Depth"/>, so the camera alone casts every ray the fit describes, each starting on the
+    /// aperture.</summary>
     /// <param name="eye">The frustum's apex (the same eye <see cref="TryFit"/> was fitted against).</param>
     public CameraSnapshot ToCameraSnapshot(Vector3 eye) => new(
         Position: eye,
@@ -58,7 +62,10 @@ public readonly record struct SdfAsymmetricFrustum(
         Forward: Forward,
         TanHalfFieldOfView: HalfHeightTangent,
         AspectRatio: (HalfWidthTangent / HalfHeightTangent)
-    ) { FrustumOffset = CenterOffset };
+    ) {
+        FrustumOffset = CenterOffset,
+        Near = Depth,
+    };
     /// <summary>Fits an off-axis frustum whose near-plane rectangle is exactly the aperture as seen from
     /// <paramref name="eye"/>.</summary>
     /// <param name="eye">The camera's eye position, in the same space as the aperture (already mapped through any
@@ -118,7 +125,8 @@ public readonly record struct SdfAsymmetricFrustum(
             CenterOffset: new Vector2(
                 x: (-offsetRight / depth),
                 y: (-offsetUp / depth)
-            )
+            ),
+            Depth: depth
         );
 
         return true;

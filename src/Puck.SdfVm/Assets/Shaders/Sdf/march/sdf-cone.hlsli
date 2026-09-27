@@ -148,7 +148,7 @@ TileBounds coneMarchTileBounds(ViewportData view, TileCone cone, uint instanceMa
 
     // ENTRY: the Lipschitz-clamped field clears the cone by map(center) - chord*t.
     // Advancing by clearance/(1+chord) stays conservative, including when the entry budget ends early.
-    float t = ConeNear;
+    float t = worldSurfaceNearDistance(view);
     bool foundEntry = false;
     int entrySteps = entryOnly ? IndependentConeMarchSteps : ConeMarchSteps;
 
