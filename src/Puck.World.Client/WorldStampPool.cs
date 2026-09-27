@@ -144,14 +144,13 @@ public sealed partial class WorldStampPool {
         // each live EmitOne; PackTransforms poses it at the registration's root. Null for a creation without a mesh.
         public SdfMesh? Mesh;
         public int MeshMaterial;
-
         // The root position/orientation followers — set only for a body-rooted registration whose look names a root
         // Motion.Dynamics row (see ApplyMotion; a row-rooted registration never has this true). FollowedPosition/
         // FollowedOrientation are the values PackTransforms actually rendered this frame: the followers step at most
         // once per frame, there, so TryBodyPartAuthoredPose/TryShapePosition read the latch instead of re-stepping.
         public bool HasRootDynamics;
 
-        // The body's WorldClient.PoseEpoch/EntityAddress this registration's followers last seeded against — -1/
+        // The body's IWorldStampSource.PoseEpoch/EntityAddress this registration's followers last seeded against — -1/
         // default before the first pack. PackTransforms reseeds both root followers (and every part follower riding
         // this root) whenever either moves past this: PoseEpoch for a teleport or an over-threshold correction,
         // EntityAddress for a body index reused by a different inhabitant (a distinct address, even at the SAME
@@ -1127,7 +1126,7 @@ public sealed partial class WorldStampPool {
     );
     // The root pose FollowedRootPose falls back to before the first PackTransforms has ever latched one, or for a
     // registration whose root has no dynamics — the un-followed RootPose, bit for bit.
-    private static (Vector3 Position, Quaternion Rotation, float Scale) FollowedRootPose(Registration live, WorldClient client) {
+    private static (Vector3 Position, Quaternion Rotation, float Scale) FollowedRootPose(Registration live, IWorldStampSource client) {
         var (position, rotation, scale) = RootPose(
             client: client,
             live: live
@@ -1205,7 +1204,7 @@ public sealed partial class WorldStampPool {
     // The root pose of a live registration: a body-rooted stamp reads the client's interpolated body pose; an ATTACHED
     // row reads that same pose composed with its authored local offset/yaw; an animated placement reads its static
     // stamped transform.
-    private static (Vector3 Position, Quaternion Rotation, float Scale) RootPose(Registration live, WorldClient client) {
+    private static (Vector3 Position, Quaternion Rotation, float Scale) RootPose(Registration live, IWorldStampSource client) {
         if (live.BodyIndex is { } bodyIndex) {
             return (client.Position(index: bodyIndex), client.Orientation(index: bodyIndex), live.Scale);
         }
@@ -1638,7 +1637,7 @@ public sealed partial class WorldStampPool {
     /// effector correction — read off the latch the last <see cref="PackTransforms"/> left, so an anchor consumer
     /// and the rendered geometry answer with the same pose. A shape with no animation has an identity delta, so its
     /// anchor is the authored pose exactly as before.</remarks>
-    public bool TryBodyPartAuthoredPose(int bodyIndex, string partId, WorldClient client, out SdfAnchor pose) {
+    public bool TryBodyPartAuthoredPose(int bodyIndex, string partId, IWorldStampSource client, out SdfAnchor pose) {
         if (
             !TryFindBody(
             bodyIndex: bodyIndex,
@@ -1812,7 +1811,7 @@ public sealed partial class WorldStampPool {
     /// <param name="shapeId">The creation shape id to ride, or <see langword="null"/> for the stamped root.</param>
     /// <param name="client">The client whose interpolated body poses root the body-rooted stamps.</param>
     /// <param name="position">The resolved world position.</param>
-    public bool TryShapePosition(string placementId, int? shapeId, WorldClient client, out Vector3 position) {
+    public bool TryShapePosition(string placementId, int? shapeId, IWorldStampSource client, out Vector3 position) {
         var live = FindRow(id: placementId);
 
         // An inhabited placement (a body-rooted stamp) resolves through the client's body pose, keyed by placement id.
@@ -1908,7 +1907,7 @@ public sealed partial class WorldStampPool {
     /// <param name="shapeId">The creation shape id to ride, or <see langword="null"/> for the stamped root.</param>
     /// <param name="client">The client whose inhabitant lookup resolves a body-rooted placement.</param>
     /// <param name="transformSlot">The absolute packed dynamic-transform slot, or -1 when unresolved.</param>
-    public bool TryShapeTransformSlot(string placementId, int? shapeId, WorldClient client, out int transformSlot) {
+    public bool TryShapeTransformSlot(string placementId, int? shapeId, IWorldStampSource client, out int transformSlot) {
         transformSlot = -1;
 
         if (m_packedSlotBase < 0) {

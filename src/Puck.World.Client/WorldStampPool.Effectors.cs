@@ -18,7 +18,7 @@ public sealed partial class WorldStampPool {
 
     // Solves every declared effector and folds each bone's correction into that bone's own delta. Returns whether any
     // own delta moved, so the caller re-chains only when a solve actually changed something.
-    private bool ApplyEffectors(Registration live, CreationDocument document, IReadOnlyList<ShapeDocument> shapes, Dictionary<int, FrameTransformDocument>? poses, WorldClient client, float deltaSeconds, Vector3 rootPosition, Quaternion rootRotation, float placementScale, int shapeCount) {
+    private bool ApplyEffectors(Registration live, CreationDocument document, IReadOnlyList<ShapeDocument> shapes, Dictionary<int, FrameTransformDocument>? poses, IWorldStampSource client, float deltaSeconds, Vector3 rootPosition, Quaternion rootRotation, float placementScale, int shapeCount) {
         if (document.Effectors is not { Count: > 0 } effectors) {
             return false;
         }
@@ -384,7 +384,7 @@ public sealed partial class WorldStampPool {
     }
     // The effector's world-space goal this frame, or false when nothing answers — a probe that finds no surface, a
     // body target that is not live, a state cell that holds no point.
-    private static bool TryResolveTarget(CreationEffectorDocument effector, WorldClient client, WorldStateLease reads, Vector3 tipWorld, Quaternion rootRotation, out Vector3 target) {
+    private static bool TryResolveTarget(CreationEffectorDocument effector, IWorldStampSource client, WorldStateLease reads, Vector3 tipWorld, Quaternion rootRotation, out Vector3 target) {
         target = tipWorld;
 
         var goal = effector.Target;

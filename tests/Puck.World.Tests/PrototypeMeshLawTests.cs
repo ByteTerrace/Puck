@@ -67,13 +67,13 @@ public sealed class PrototypeMeshLawTests {
         Look: null,
         Source: IntentSource.Idle
     );
-    // The slab with a timeline frame, so its placement is an animated stamp.
+    // The slab with a timeline frame that lifts its sphere, so its placement is an animated stamp.
     private static WorldDefinition Animated(WorldPrototypeMesh? mesh) => (With(mesh: mesh) with {
         CreationsRaw = [(CreationFixtures.Prototype(document: (CreationFixtures.Document(
             name: PrototypeId,
             palette: CreationFixtures.GreyAndBlue,
             shapes: [CreationFixtures.UnitSphereShape]
-        ) with { Frames = [new FrameDocument(Name: "idle", Transforms: [])] })) with { Mesh = mesh })],
+        ) with { Frames = [new FrameDocument(Name: "lift", Transforms: [new FrameTransformDocument(Id: CreationFixtures.UnitSphereShape.Id, Position: (CreationFixtures.UnitSphereShape.Position.Value + Vector3.UnitY), Rotation: CreationFixtures.UnitSphereShape.Rotation, Scale: CreationFixtures.UnitSphereShape.Scale)])] })) with { Mesh = mesh })],
     });
     // The slab's placement attached to body 0, one unit above it.
     private static WorldDefinition Attached(WorldPrototypeMesh? mesh) {
@@ -330,6 +330,7 @@ public sealed class PrototypeMeshLawTests {
 
             return m_dresser.MeshDraws;
         }
+
         // The revision of the draws the last frame composed.
         public long Revision => m_dresser.MeshDrawsRevision;
     }
