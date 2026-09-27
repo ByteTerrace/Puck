@@ -2,9 +2,6 @@
 #ifndef SDF_ISA_HLSLI
 #define SDF_ISA_HLSLI
 
-// The fingerprint of the rest of this file; a kernel set built from this file installs only in a host whose model generates the same one.
-#define SDF_ISA_FINGERPRINT 0x4B8DEFB0u
-
 // Puck.SignedDistance.SdfOp.
 #define SDF_OP_RESET_POINT       0u
 #define SDF_OP_TRANSLATE         1u

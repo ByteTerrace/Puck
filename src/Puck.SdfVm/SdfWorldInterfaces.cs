@@ -20,6 +20,10 @@ namespace Puck.SdfVm;
 /// <para><see cref="BrickBake"/> serves the carve-bake baker, the <c>sdf.bricks</c> pass: it binds the ring slot's frame
 /// set and one pass set per brick slot binding that slot's request buffer and the brick pool, whose block's extent is one
 /// slice as one row, the voxels one bake dispatch writes at most, with the slice ordinal pushed per dispatch.</para>
+/// <para><see cref="World"/> and <see cref="BrickBake"/> carry the instruction set's stamp (<see cref="SdfIsaHlsl.Stamp"/>)
+/// in their pass blocks' variable names, so every kernel's bytecode reflects the instruction set it was compiled against,
+/// and a reload holds each kernel to its interface's layout, stamp included
+/// (<see cref="SdfKernelSet.LayoutOf"/>, <see cref="SdfWorldPipelines.PrepareReload"/>).</para>
 /// <para><see cref="Mesh"/> serves the mesh pass's graphics pipeline (<see cref="SdfMeshRasterPass"/>): one pass set per
 /// frame slot binding the pass block the world interface lays out and the mesh region, with the view and the draw pushed
 /// per draw call.</para>
@@ -44,7 +48,7 @@ public static class SdfWorldInterfaces {
         config: null,
         package: RenderGraphPackageCatalog.SdfWorld,
         members: SdfWorldPackage.Members
-    );
+    ).Stamped(stamp: SdfIsaHlsl.Stamp);
 
     /// <summary>Gets the interface every per-view SDF dispatch reads.</summary>
     public static ShaderInterface World => WorldParameters.Interface;
@@ -61,7 +65,7 @@ public static class SdfWorldInterfaces {
         ],
         package: RenderGraphPackageCatalog.SdfBricks,
         pushesIndex: true
-    );
+    ).Stamped(stamp: SdfIsaHlsl.Stamp);
 
     /// <summary>Gets the interface the carve-bake baker reads.</summary>
     public static ShaderInterface BrickBake => BrickBakeParameters.Interface;

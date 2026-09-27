@@ -85,6 +85,7 @@
         <Compile Include="..\Shared\UploadModelGpu.cs" Link="UploadModelGpu.cs" />
         <Compile Include="..\Shared\RefusingGpuDevice.cs" Link="RefusingGpuDevice.cs" />
         <Compile Include="..\Shared\SdfTestPipelines.cs" Link="SdfTestPipelines.cs" />
+        <Compile Include="..\Shared\SpirvEdits.cs" Link="SpirvEdits.cs" />
         <Compile Include="..\Shared\SdfTestView.cs" Link="SdfTestView.cs" />
         <Compile Include="..\Shared\ObservedPackageFactory.cs" Link="ObservedPackageFactory.cs" />
         <Compile Include="..\Shared\WarpDeviceApi.cs" Link="WarpDeviceApi.cs" />

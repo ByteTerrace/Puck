@@ -310,10 +310,13 @@ creates replacements for the kernels whose bytecode changed, using the existing
 binding descriptions, off the frame thread. `SdfWorldTables.InstallReload` then
 owns the render-thread transaction: it waits for the device to go idle, swaps the
 pipelines and retires the old ones. A failed load or pipeline build keeps the
-previous kernels, and so do kernels built against another instruction set: the
-tree's generated `isa/sdf-isa.hlsli` records the fingerprint of the instruction
-set its kernels were built against, and `SdfWorldPipelines.PrepareReload` refuses a
-set whose fingerprint is not this host's (`SdfKernelSet.RequireHostInstructionSet`).
+previous kernels, and so do kernels that do not read this host's interface.
+`SdfWorldPipelines.PrepareReload` reflects each changed kernel and holds it to
+its interface's layout (`SdfKernelSet.InterfaceMismatch`), whose pass block
+carries the instruction set's stamp (`SdfIsaHlsl.Stamp`): a kernel compiled
+against another instruction set, or binding anything where the host does not
+place it, refuses the reload. Reflecting DXIL needs the `dxcompiler.dll` beside
+the `dxc` on the path.
 Buffers, images, scene programs, animation, and baked bricks remain allocated; only
 the frame-reuse signature is reset, so the next frame renders. A binding or layout
 change still needs a rebuilt host. Unchanged bytecode creates no
