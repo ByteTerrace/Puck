@@ -227,9 +227,11 @@ internal static class WorldRenderRoot {
         };
         var probe = sp.GetRequiredService<WorldRenderProbe>();
 
+        probe.Bakes = sp.GetService<WorldBakeSchedule>();
         probe.Device = device;
         probe.Residency = residency;
         probe.Root = root;
+        probe.Settings = sp.GetService<WorldRenderSettings>();
         sp.GetRequiredService<WorldPostPasses>().Attach(
             graph: () => host.Synthesized,
             root: () => runtime.NodeOf(instance: WorldViewGraphs.MainInstance)

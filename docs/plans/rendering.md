@@ -1421,15 +1421,21 @@ the palette-indexed and NV12 host layouts no GPU image is created in.
 
 P17 still owes:
 
-- the rest of drawing a bake: its geometry draws (a ready bake's mesh in place
-  of its static placements' fields behind `world.bakes`, the field kept
-  camera-hidden, the switch counted as `sdf.bakes.drawn`, held by
-  `CreationBakeLawTests` and the `sdf-bake-switch` canary), while its five
-  textures and its impostor do not, so the lever ships off; the textures decide
-  how an sRGB bake is read (a `Bc7UnormSrgb` view or a decode in the shader).
-  Choosing per placement between a bake and the field by measured cost is P6's;
-- the parity world shipping its bakes, and the check that a missing bake draws
-  through its field and then switches.
+- the rest of drawing a bake: its impostor. A ready bake's mesh draws textured
+  in place of its static placements' fields: the field is kept camera-hidden,
+  the switch counted as `sdf.bakes.drawn`, its five textures sampled from the
+  mesh atlases with the albedo decoded from sRGB in the shader (held by
+  `CreationBakeLawTests`, `SdfMeshAtlasLawTests`, `MeshTextureDeviceLawTests`
+  and the `sdf-bake-switch` canary). Bakes draw by default when the loaded
+  world carries its `BAKE` chunk (a released or compiled tree, the parity
+  world); a source boot draws fields unless `world.bakes on`, and a live bake
+  then switches when ready, which is the authoring path. So no capture depends
+  on a local bake, by construction. The parity
+  world ships its bakes: `puck parity` compiles its tree with the World
+  artifact's own CLI and boots the compiled world, whose `BAKE` chunk holds
+  every bake from the pack, and refuses a leg that resolved a bake on the
+  device. Choosing per placement between a bake and the field by measured cost
+  is P6's.
 
 The SDF engine's frame data is written by hand in three places: an `SdfFrame`
 field, a numbered row in the packed buffer, and an HLSL accessor.

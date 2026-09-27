@@ -419,6 +419,14 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
             descriptorSetLayoutHandle: worldGroups[((int)PassGroup)],
             poolHandle: m_pool
         );
+        // The World set, which the ISA handshake and every view's compute passes bind: the mesh atlases, the sampled
+        // filler until a frame draws a textured mesh (SdfWorldTables.MeshAtlas.cs).
+        m_worldSet = m_bindings.AllocateSet(
+            name: NameOf(detail: "world group", part: "mesh atlases"),
+            descriptorSetLayoutHandle: worldGroups[((int)WorldGroup)],
+            poolHandle: m_pool
+        );
+        WriteMeshAtlases(views: []);
 
         // One sampler per filter; a screen samples its source through the one its row chooses and the glyph atlas through
         // the nearest one. A pass writes them into its set (WriteShared).
@@ -578,5 +586,6 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
         m_storageFiller.Dispose();
         m_sampledFiller.Dispose();
         m_glyphAtlasUpload?.Dispose();
+        DisposeMeshAtlases();
     }
 }

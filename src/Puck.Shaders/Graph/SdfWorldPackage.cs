@@ -86,6 +86,21 @@ public static class SdfWorldPackage {
     public const string MeshVisibility = "meshVisibility";
     /// <summary>The glyph atlas.</summary>
     public const string GlyphAtlas = "sdfGlyphAtlas";
+    /// <summary>The mesh albedo atlas, sRGB-encoded BC7 the hit passes decode after sampling.</summary>
+    public const string MeshAlbedo = "sdfMeshAlbedo";
+    /// <summary>The mesh normal atlas: octahedral object-space normal pairs, BC5.</summary>
+    public const string MeshNormals = "sdfMeshNormals";
+    /// <summary>The mesh occlusion atlas, BC4.</summary>
+    public const string MeshOcclusion = "sdfMeshOcclusion";
+    /// <summary>The mesh material atlas: each texel's palette entry, R8, read without filtering.</summary>
+    public const string MeshMaterials = "sdfMeshMaterials";
+    /// <summary>The mesh emission atlas: linear emitted light, BC6H.</summary>
+    public const string MeshEmission = "sdfMeshEmission";
+
+    /// <summary>Gets the mesh atlases, World-group members of every compute pass, in the order the mesh atlases hold
+    /// the usages they pack (albedo, normal, occlusion, material, emission): images that change only when the set of
+    /// textured meshes a frame draws does.</summary>
+    public static IReadOnlyList<string> MeshAtlases { get; } = [MeshAlbedo, MeshNormals, MeshOcclusion, MeshMaterials, MeshEmission];
     /// <summary>The screen sources: one sampled image per screen, indexed by screen index.</summary>
     public const string ScreenSources = "screenSources";
     /// <summary>The length of <see cref="ScreenSources"/>: the most screen surfaces one program declares.</summary>
@@ -190,6 +205,11 @@ public static class SdfWorldPackage {
             length: SamplerCount,
             name: Samplers
         ),
+        MeshAtlas(name: MeshAlbedo),
+        MeshAtlas(name: MeshNormals),
+        MeshAtlas(name: MeshOcclusion),
+        MeshAtlas(name: MeshMaterials),
+        MeshAtlas(name: MeshEmission),
     ];
     /// <summary>Gets the fragment the package runs as: one view's dispatch set, its scratch transient and counted, its
     /// one output the view's color.</summary>
@@ -248,6 +268,11 @@ public static class SdfWorldPackage {
         ]
     );
 
+    private static ShaderInterfaceMember MeshAtlas(string name) => ShaderInterfaceMember.SampledImage(
+        group: ShaderInterfaceGroup.World,
+        name: name,
+        type: ShaderValueType.Float4
+    );
     private static ShaderInterfaceMember Read(string name, ShaderValueType element) => ShaderInterfaceMember.ReadOnlyBuffer(
         element: element,
         group: ShaderInterfaceGroup.Pass,

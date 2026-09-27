@@ -3,6 +3,7 @@ using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.SdfVm;
 using Puck.Shaders;
+using Puck.World.Client;
 
 namespace Puck.World;
 
@@ -14,7 +15,10 @@ namespace Puck.World;
 /// instance the render graph renders by its instance name, the world's residency's uploads as <c>sdf:world</c>, and
 /// each camera and session view's as <c>sdf:&lt;name&gt;</c>, which <see cref="WorldScreenBinder"/> registers. It is the
 /// host's <see cref="IWorldEngineReadiness"/> too: ready once the world's residency has built its tables and the
-/// graph's root has a completed output rendered over it, not before the render factory has composed either.
+/// graph's root has a completed output rendered over it, not before the render factory has composed either, and once
+/// the bake schedule has reconciled, so whether the presentation draws its bakes is known, and, while it draws them
+/// (<see cref="WorldRenderSettings.DrawsBakes"/>), is settled, so a capture or a <c>world.wait ready</c> never lands
+/// between a placement's field and its bake.
 /// </summary>
 internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness {
     private readonly Lock m_gate = new();
@@ -43,15 +47,39 @@ internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness
     /// <inheritdoc/>
     public bool IsReady => (
         (Residency?.IsReady ?? false) &&
-        (Root?.Runtime.UnservedCaptureReason is null)
+        (Root?.Runtime.UnservedCaptureReason is null) &&
+        BakesSettled
     );
     /// <inheritdoc/>
     /// <remarks>The world's residency's reason while it builds, then the render graph's while its root has not rendered
-    /// over a completed world output.</remarks>
+    /// over a completed world output, then the bake schedule's while a bake the presentation would draw is still
+    /// baking.</remarks>
     public string? NotReadyReason => (((Residency is { } residency) && (Root is { } root))
-        ? (residency.NotReadyReason ?? root.Runtime.UnservedCaptureReason)
+        ? (residency.NotReadyReason ?? root.Runtime.UnservedCaptureReason ?? (BakesSettled
+            ? null
+            : "the creation bakes are settling: a prototype the presentation would draw baked is still queued or baking"))
         : "the renderer has not been composed: no frame has been produced"
     );
+    /// <summary>The presentation's bake schedule, or <see langword="null"/> until the render factory has run.</summary>
+    public WorldBakeSchedule? Bakes { get; set; }
+    /// <summary>The presentation's render settings, whose <see cref="WorldRenderSettings.DrawsBakes"/> says whether it
+    /// draws its bakes, or <see langword="null"/> until the render factory has run.</summary>
+    public WorldRenderSettings? Settings { get; set; }
+
+    // Whether no bake the presentation would draw is still coming: it has no schedule or draws no bake, or its schedule
+    // has settled. Until the schedule first reconciles, whether the world ships its bakes is not yet known.
+    private bool BakesSettled {
+        get {
+            if ((Settings is null) || (Bakes is null)) {
+                return true;
+            }
+            if ((Settings.Bakes is null) && !Bakes.HasReconciled) {
+                return false;
+            }
+
+            return (!Settings.DrawsBakes(schedule: Bakes) || Bakes.IsSettled);
+        }
+    }
     /// <summary>The render graph's root, the render host every captured and presented frame comes from, or
     /// <see langword="null"/> until the render factory has run. <c>world.screenshot</c> arms captures on it, so the
     /// readback is the frame the display shows.</summary>

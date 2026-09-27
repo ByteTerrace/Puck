@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/80ab69a281897c7963be34493444fe7a78d1468741124374c5d2a324f1b5c5fb). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/b75af952749d39217e015e2a03e57b4fbb4db0be600d7ed5663eeb1f601af11d). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -21,6 +21,13 @@ struct SdfWorldFrame {
     [[vk::offset(80)]] float3 cameraUp;
 };
 [[vk::binding(0, 0)]] ConstantBuffer<SdfWorldFrame> frameGroup : register(b0, space0);
+
+// The World group: descriptor set 1, register space 1.
+[[vk::binding(0, 1)]] Texture2D<float4> sdfMeshAlbedo : register(t0, space1);
+[[vk::binding(1, 1)]] Texture2D<float4> sdfMeshNormals : register(t1, space1);
+[[vk::binding(2, 1)]] Texture2D<float4> sdfMeshOcclusion : register(t2, space1);
+[[vk::binding(3, 1)]] Texture2D<float4> sdfMeshMaterials : register(t3, space1);
+[[vk::binding(4, 1)]] Texture2D<float4> sdfMeshEmission : register(t4, space1);
 
 // The Pass group: descriptor set 3, register space 3.
 struct SdfWorldPass {

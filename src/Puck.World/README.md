@@ -323,8 +323,9 @@ presentation scales to the window.
 Because its frames are its only output, the offscreen host holds its clock
 for them: it never steps past an armed capture's tick until that capture is
 served or refused. Whatever keeps the render chain from serving the capture
-(the engine's pipelines still building on a cold driver shader cache, or a
-device being rebuilt), the host keeps producing frames and answering the
+(the engine's pipelines still building on a cold driver shader cache, the
+creation bakes still settling, or a device being rebuilt), the host keeps
+producing frames and answering the
 console but steps no further tick, and the time it waits is spent, not owed,
 so serving the capture releases no burst. The hold is bounded, and counts
 from readiness: while the engine's pipeline set builds (or rebuilds after a
@@ -638,8 +639,10 @@ Facts a script needs:
   script that reads a drawn bake waits on the bake. `world.wait ready <seconds>` waits for
   the rendering engine instead of a tick count: it holds the session until
   the world's SDF residency has built its tables (its pipeline set installed
-  and its first frame captured) and the render graph's root has rendered over
-  a completed view, or the deadline passes, and reports which on standard error. A script that
+  and its first frame captured), the render graph's root has rendered over
+  a completed view and the bake schedule has reconciled and, while the
+  presentation draws its bakes, settled, or
+  the deadline passes, and reports which on standard error. A script that
   reads rendered work (`world.counters gpu`) waits on it, since a cold driver
   cache can hold the first frame back for many ticks.
 - **Timing.** The console drains before every fixed step. A piped script's

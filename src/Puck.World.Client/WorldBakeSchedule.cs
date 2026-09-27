@@ -56,6 +56,8 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
     private long m_revision;
     // Written at the end of every pump on the presenter's thread, read from any thread (IsSettled).
     private volatile bool m_settled;
+    private volatile bool m_reconciled;
+    private volatile bool m_ships;
 
     private WorldBakeRequest[]? m_inFlight;
     private WorldDefinition? m_definition;
@@ -105,6 +107,14 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
     /// none queued or baking. False before the first pump. Written at the end of each pump and safe to read from any
     /// thread.</summary>
     public bool IsSettled => m_settled;
+    /// <summary>Gets whether the schedule has reconciled to a definition: false before the first pump, so a reader waits
+    /// for <see cref="Ships"/> to be known. Safe to read from any thread.</summary>
+    public bool HasReconciled => m_reconciled;
+    /// <summary>Gets whether the world ships its bakes: the definition the schedule last reconciled to names at least one
+    /// bake, and every one was already held when it did, as a compiled world's <c>BAKE</c> chunk holds them from its pack
+    /// when the world loads, so none is made on the device. False before the first pump. Safe to read from any
+    /// thread.</summary>
+    public bool Ships => m_ships;
     /// <summary>Gets the revision of what the schedule can hand out: one more whenever a bake lands or the definition it
     /// reconciled to changed.</summary>
     public long Revision => m_revision;
@@ -200,9 +210,9 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
 
     private readonly record struct Outcome(ContentPin Key, bool Baked, bool Refusal, long Evaluations);
 
-    // The drawable mesh of a bake: its positions, normals and texture coordinates, and each triangle's palette entry,
-    // read from the bake's material identity at the triangle's texture-coordinate centroid, which lies inside the
-    // triangle's own tile.
+    // The drawable mesh of a bake: its positions, normals and texture coordinates, each triangle's palette entry, read
+    // from the bake's material identity at the triangle's texture-coordinate centroid, which lies inside the triangle's
+    // own tile, and its five surface textures.
     private static SdfMesh MeshOf(SdfBake bake) {
         var baked = bake.Mesh;
         var positions = new System.Numerics.Vector3[baked.Vertices.Length];
@@ -240,6 +250,7 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
             indices: baked.Indices,
             normals: normals,
             positions: positions,
+            textures: new SdfMeshTextures(textures: bake.Textures),
             triangleMaterials: materials,
             uvs: uvs
         );
@@ -304,13 +315,19 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
         m_prototypes.Clear();
         m_current.Clear();
 
+        var held = 0;
+        var named = 0;
+
         foreach (var request in WorldBakeStore.RequestsOf(definition: definition, quality: Quality)) {
             var key = request.Key.Pin;
 
             m_prototypes[request.PrototypeId] = key;
             m_current.Add(item: key);
+            named++;
 
             if (m_store.TryGetHeld(key: key, outcome: out _)) {
+                held++;
+
                 if (m_counted.Add(item: key)) {
                     m_counts.Count(kind: Held);
                 }
@@ -338,6 +355,8 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
         }
 
         _ = m_queue.RemoveAll(match: request => !m_current.Contains(item: request.Key.Pin));
+        m_ships = ((named > 0) && (held == named));
+        m_reconciled = true;
     }
 
     // A nested holder initializes after every kind above, whatever order the members are declared in.

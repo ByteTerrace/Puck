@@ -71,7 +71,9 @@ public sealed partial class SdfWorldTables {
             slotCount: FrameRingSize
         );
     // Region index's region of byteCount bytes under the policy the device's profile selects, its ring in the memory the
-    // profile selects, named by its table's role and writing the copy sets reserved for it.
+    // profile selects, named by its table's role and writing the copy sets reserved for it. The mesh region is always
+    // staged: it holds every drawn mesh's vertices and is rewritten only when the draws change, so it belongs in
+    // device-local memory rather than in the small host-visible device-local heap every residency's rings share.
     private GpuRegion CreateRegion(int region, int byteCount) {
         var profile = m_deviceContext.MemoryProfile;
 
@@ -83,11 +85,13 @@ public sealed partial class SdfWorldTables {
             copySets: m_regionCopyPool.Region(index: region),
             memory: GpuResidency.RingMemory(profile: profile),
             name: RegionName(region: region),
-            policy: GpuResidency.Select(
-                byteCount: ((ulong)byteCount),
-                profile: profile,
-                readersInFlight: true
-            ),
+            policy: ((region == MeshRegionIndex)
+                ? GpuResidencyPolicy.Staged
+                : GpuResidency.Select(
+                    byteCount: ((ulong)byteCount),
+                    profile: profile,
+                    readersInFlight: true
+                )),
             recorder: m_gpu.Recorder,
             slotCount: FrameRingSize
         );

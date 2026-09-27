@@ -341,6 +341,13 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
             recorder: recorder,
             slot: slot
         );
+        recorder.BindDescriptorSet(
+            bindPoint: GpuBindPoint.Compute,
+            commandBufferHandle: commandBuffer,
+            descriptorSetHandle: tables.WorldSet,
+            group: ((uint)ShaderInterfaceGroup.World),
+            pipelineLayoutHandle: pipeline.LayoutHandle
+        );
 
         if (recording.Arguments is { } arguments) {
             recorder.DispatchIndirect(

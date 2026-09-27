@@ -336,12 +336,36 @@ sampled as stored codes, without sRGB decode. `BakeSamplingDeviceLawTests`
 samples each probe texel of the bake sampling fixture on Vulkan, Direct3D 12
 hardware and WARP and holds it to the CPU decoder.
 
-With `world.bakes` on, an untinted static placement whose prototype's bake is
-ready draws the baked mesh through the mesh pass (its vertex normals and each
-triangle's palette entry, read from the bake's material identity) while the
-bake's textures do not draw yet, and keeps its field as
-camera-hidden instances that still cast shadows and occlude; a creation with
-text or noise relief keeps drawing through its field. `WorldBakeSchedule.TryGetMesh` hands out a ready prototype's mesh,
+A presentation draws its bakes by default when the loaded world carries its
+`BAKE` chunk, and otherwise when `world.bakes on`
+(`WorldRenderSettings.DrawsBakes`). While it does, an untinted static placement
+whose prototype's bake is ready draws the baked mesh through the mesh pass and
+keeps
+its field as camera-hidden instances that still cast shadows and occlude; a
+creation with text or noise relief keeps drawing through its field. A baked
+mesh carries its five surface textures (`SdfMeshTextures`). The SDF tables pack
+every textured mesh a frame draws into five mesh atlases, one per usage
+(`SdfMeshAtlas`): each mesh takes a rectangle aligned to 16 texels, so its
+stored blocks move into the atlases unchanged at every level, and the mesh
+region writes its vertices' texture coordinates moved onto that rectangle. The
+atlases are World-group members of the `sdf.world` interface, bound in the
+tables' one World set at group 1; a change to the textured meshes a frame
+draws repacks them once the device is idle. At a textured mesh hit
+(`frame/sdf-mesh-textures.hlsli`) the hit passes interpolate the texture
+coordinate, choose the level whose texels match the pixel's footprint, blend
+the two nearest levels, and sample each level bilinearly inside the hit's own
+tile, clamped half a texel in, so no tap reads a neighbouring quad. Surface
+takes the normal (the octahedral pair under the draw's normal matrix) and the
+occlusion; views takes the material (the draw's plus the texel's palette entry,
+unfiltered), the albedo (decoded from sRGB after filtering) and the emission,
+which replaces the material's albedo times its emissive strength.
+`MeshTextureDeviceLawTests` holds the reads to the CPU decoders on Vulkan,
+Direct3D 12 hardware and WARP, and `SdfMeshAtlasLawTests` holds the packing.
+The engine is not ready until the bake schedule has reconciled and, while the
+presentation draws its bakes, settled, so a capture or `world.wait ready` never
+lands between a placement's field and its bake. The mesh region is always
+staged into device-local memory, never a ring in the host-visible device-local
+heap every residency's small tables share. `WorldBakeSchedule.TryGetMesh` hands out a ready prototype's mesh,
 decoded once, and counts the switch from field to bake once per bake
 (`sdf.bakes.drawn`); a bake landing moves the schedule's revision, so the static
 scene rebuilds on the next frame. A camera-hidden instance
