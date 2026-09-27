@@ -104,7 +104,7 @@ public sealed class DirectXSurfacePresenter : ISurfacePresenter, IPresentSurface
         // Release the compositor's swap chain / heaps / blit resources on the OLD (removed) device — COM Release is safe
         // on a removed device's objects, and these are not recreated by the device context. Then recreate the device IN
         // PLACE (preserving the shared capability's identity so the compute node resolving it stays valid), and
-        // re-initialize the compositor against the new device. The node tree rebuilds its own resources next frame.
+        // re-initialize the compositor against the new device. The render root rebuilds its own resources next frame.
         ReleaseCaptureResources();
         m_compositor.Dispose();
 

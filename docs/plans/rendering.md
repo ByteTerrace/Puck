@@ -33,8 +33,8 @@ reasoning behind every decision is in
 
 ## Implementation status
 
-P2, P3, P5, P7, P9 and P10 are complete; P1a, P1b, P4, P6, P8 and P11 to P17
-are not. The programmable compute and graphics foundation has functional GPU
+P2, P3, P5, P7, P9, P10 and P11 are complete; P1a, P1b, P4, P6, P8 and P12 to
+P17 are not. The programmable compute and graphics foundation has functional GPU
 fixtures on both backends. The
 work-counting model, the GPU work ledger, and the counting wrappers live in
 `Puck.Abstractions`. The state arena, rules and search, the shader pipeline
@@ -585,17 +585,15 @@ presentation dimension (`WorldPresentationCost`) and in `world.budget` with its
 extent ceiling, rate and planned passes; the server plans each row's source
 for that price.
 
-P11b owes the rest of the package. The main view, every `views.graphs` pane,
+P11b completes the package. The main view, every `views.graphs` pane,
 every split-screen seat (commits 6, 9 and 10 below) and every camera and
 session a screen shows (commit 13) run through the graph runtime. Commits 11
-and 12, the
-per-device pass-pipeline cache and the live schedule's extents and prices in
-`world.budget`, have landed, and so has commit 13, which moved the screens onto
-graph instances fed by the scheduler and deleted `ViewStack`,
-`OffscreenRenderBudget`, `SdfWorldEngine.MaxViewports` and the procedural test
-card. Only commit 14 remains: the final sweep runs P11's parity and
-counted-GPU checks, makes the rest of the deletions P11 lists, and has the
-owning guides and the `rendering` skill describe the result.
+and 12 are the per-device pass-pipeline cache and the live schedule's extents
+and prices in `world.budget`. Commit 13 moved the screens onto graph instances
+fed by the scheduler and deleted `ViewStack`, `OffscreenRenderBudget`,
+`SdfWorldEngine.MaxViewports` and the procedural test card, and commit 14, the
+final sweep, deleted the render-node tree the host drove: a host drives one
+`IRenderRoot`, the runtime's node.
 These
 P11b items have landed: the first-class package pass kind in
 `ShaderPipelineCompiler`, a steady-state schedule that allocates nothing, a
@@ -979,7 +977,7 @@ It deletes the SDF engine's composite, and it has landed.
   `split-seats` canary also captures a letterboxed layout it selects through
   `view.override`.
 
-P11b's last four commits are these; 11, 12 and 13 have landed:
+P11b's last four commits are these, and all four have landed:
 
 11. The per-device pass-pipeline cache, landed. `GpuPassPipelineCache`
     (`src/Puck.Shaders/Pipeline`) is one composition singleton whose entries
@@ -1072,11 +1070,27 @@ P11b's last four commits are these; 11, 12 and 13 have landed:
        dark glass. Landed: `sdf-world.hlsli`'s unbound branch shades a constant
        glass color under the faint sun tint, and `screenContent` is deleted.
     5. The engine node is an external producer only: `SdfEngineNode` is no
-       `IRenderNode`, and harnesses produce it through `Produce`. Landed: its
+       render node of the host, and harnesses produce it through `Produce`. Landed: its
        frame render and `Descriptor` are gone from its surface, and the
        SdfVm and World harnesses produce it at their extent.
-14. The final sweep: the rest of the deletions P11 lists, and the owning guides
-    and the `rendering` skill describe the result.
+14. The final sweep, landed. A host drives one render root, `IRenderRoot`
+    (`Puck.Hosting`): it produces the frame's surface, releases its device
+    resources on a loss and is disposed while the device is alive. The World's
+    root is `RenderGraphRuntimeNode`, which nothing wraps, and every view it
+    shows is a graph instance. The render-node tree the root once headed is
+    gone: `ISteppableRenderNode`, which nothing implemented, `NodeDescriptor`
+    and `SurfaceId`, which nothing read, and `WorldRenderTeardown`, the
+    pass-through node that tied the screen binder to the root's teardown, are
+    deleted; the binder is one of the root's `Holdings` instead. A graph
+    instance's `ShaderPipelineRenderNode` is no root, so the runtime alone
+    produces it. `puck references` and `puck search -M 0` find no consumer of
+    any type, kernel or document section P11 deletes. `hosting.md`, the
+    shader guide and the `rendering` skill describe the root. Checks: parity,
+    the `view-screens` canary's counted view submissions (a camera on two
+    screens renders once per world frame), `device-loss`,
+    `device-loss-windowed` and `post-pass` under the Vulkan debug layers, and
+    the Launcher laws over fake roots, the teardown law holding a root whose
+    one instance draws the overlay to reaching no device service.
 
 P13's CPU half has landed, and so have P13b's live mappings, simulation
 destination, host passthrough and live hit walk, described below. The
@@ -1596,7 +1610,7 @@ user-content packaging is separate.
 
 Done: device loss has one policy, `DeviceLossRecovery`, which the windowed and
 the offscreen host both follow: a named `[device-lost]` console line, the
-render tree released while the lost device exists, and the device rebuilt in
+render root released while the lost device exists, and the device rebuilt in
 place through an `IDeviceRebuild`, the windowed host's through its presenter
 and the offscreen host's through its GPU activation. A capture armed at the
 loss is refused as `deviceLost` in the capture manifest, and a run that gives up
@@ -3118,14 +3132,16 @@ with its extent, rate, and pass cost.
 **Deletes:** one graph document remains. The pipeline document has folded
 into `puck.render.graph.v1`, a pipeline being a graph a world names; the
 `views.pipelines` section, `WorldPipelineRuntime`, `WorldComposedSlot.Pipeline`,
-`SdfEngineNode`'s child map and `RegisterChild` are gone. The hand-composed `IRenderNode` tree
-and its `Children` wiring in `WorldBootComposition` give way to graph
-instances. The SDF composite kernel `sdf-world-composite.comp` and its push
-block are gone, and P11b commit 13 deleted the `MaxViewports` limit, `ViewStack`
-itself rather than only its budget, `OffscreenRenderBudget` and the procedural
-test card. The
-unified overlay is a package the graph names, and `UnifiedOverlayNode`, its
-hand-built node wiring, is deleted.
+`SdfEngineNode`'s child map and `RegisterChild` are gone. The hand-composed
+`IRenderNode` tree and its wiring in `WorldBootComposition` gave way to graph
+instances: the host drives one `IRenderRoot`, the runtime's node, and
+`ISteppableRenderNode`, `NodeDescriptor`, `SurfaceId` and
+`WorldRenderTeardown` are deleted. The SDF composite kernel
+`sdf-world-composite.comp` and its push block are gone, and so are the
+`MaxViewports` limit, `ViewStack` itself rather than only its budget,
+`OffscreenRenderBudget` and the procedural test card. The unified overlay is a
+package the graph names, and `UnifiedOverlayNode`, its hand-built node wiring,
+is deleted.
 
 **Check:** a graph document validates, and `puck schema --check` exits 0; a
 camera shown on two screens renders once per frame, counted; a camera whose
@@ -4126,11 +4142,9 @@ its frame group became a descriptor set when step 15 put pipelines on groups.
 P7 and P8 do not read simulation state, so they do not wait on the state
 rebuild.
 
-**The frame graph and nesting.** P11's CPU half has landed, and so have the
-P11b items its implementation status lists, the main view through the graph
-runtime among them, and commit 13, the screens as graph instances, which
-deleted `ViewStack`, `MaxViewports` and the test card. The rest of P11b is
-commit 14, the final sweep, which waits on nothing. P12's source contract,
+**The frame graph and nesting.** P11 is complete: every view, pane, seat,
+camera and session is a graph instance the runtime schedules by demand, and a
+host drives one render root. P12's source contract,
 producers and conversion passes have landed, and so have P12b's steps 1 to 6,
 the capture gate over the graph among them. Of the rest, step 7 can land now,
 step 8 can too since P7b-14b-6 and P7b-20 have landed, and step 9 comes last;

@@ -791,7 +791,7 @@ public static class WorldBootComposition {
         // The shader-pipeline verb surface (pipeline.*). CORE-registered for the same command-vocabulary-parity reason
         // as WorldViewCommandModule above; pipeline.load's row upsert is core so it genuinely works headless, and
         // WorldViewGraphHost is OPTIONAL (default null) so every other verb refuses by name at use when it is absent
-        // (compiling/swapping a pipeline needs a live render tree).
+        // (compiling/swapping a pipeline needs a live render graph).
         services.AddSingleton<ICommandModule, WorldPipelineCommandModule>();
 
         return services;
@@ -1066,7 +1066,7 @@ public static class WorldBootComposition {
             services.AddLinuxHostedPresentation();
         }
 
-        // Resolved eagerly by the IRenderNode factory below, before anything touches the GPU — see its own remarks
+        // Resolved eagerly by the render root factory below, before anything touches the GPU — see its own remarks
         // for the per-backend bring-up (surfaceless Direct3D 12; a never-shown window for Vulkan).
         services.AddSingleton<WorldOffscreenGpuActivation>();
         // The offscreen host rebuilds a lost device through the activation that brought it up.
@@ -1141,7 +1141,7 @@ public static class WorldBootComposition {
             views: WorldRootGraph.ViewsOf(views: sp.GetRequiredService<WorldDefinition>().Views)
         ));
 
-        services.AddSingleton<IRenderNode>(implementationFactory: sp => {
+        services.AddSingleton<IRenderRoot>(implementationFactory: sp => {
             // Brings the GPU device up before anything below asks for one.
             _ = sp.GetRequiredService<WorldOffscreenGpuActivation>();
 
@@ -1500,8 +1500,8 @@ public static class WorldBootComposition {
         // hybrid 4,096-body worst case is held by the capacity floors a construction-time probe measured, plus the
         // viewport floor for the join-later split screen. The affordance install, EchoTap, MachineLifecycleTap, and
         // lever-sink attachment live in the shared post-build wiring step (WorldPostBuildWiring) — this factory only
-        // builds the render tree.
-        services.AddSingleton<IRenderNode>(implementationFactory: sp => {
+        // builds the render root.
+        services.AddSingleton<IRenderRoot>(implementationFactory: sp => {
             var hostSettings = sp.GetRequiredService<WorldHostSettings>();
             var binder = sp.GetRequiredService<WorldScreenBinder>();
 

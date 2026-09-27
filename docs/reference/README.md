@@ -12,7 +12,7 @@ For an introduction, start with the [engine overview](../overview.md) or the
 | [Physics kernels](physics.md) | Gravity, motion, contacts, tethers, perception, navigation, and fields. |
 | [Deterministic numerics](maths.md) | Worked examples, primitive selection, and the boundary between reproducible simulation and other numeric work. |
 | [Seam abstractions](abstractions.md) | Neutral presentation, windowing, machine, and platform contracts. |
-| [Hosting and simulation](hosting.md) | Host loop, render nodes, fixed-step clocks, and capability trees. |
+| [Hosting and simulation](hosting.md) | Host loop, the render root, fixed-step clocks, and capability trees. |
 | [Extensions](extensions.md) | The one extension contract, keyed contributions, discovery and load contexts, and how every host composes and refuses them. |
 | [Wire framing and substrate](networking.md) | Dialect-agnostic length-prefixed framing and local token authentication. |
 | [Offline attestation](attestation.md) | Signed claims, key bindings, deterministic CBOR envelopes, and trust pinning. |

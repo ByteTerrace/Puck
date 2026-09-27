@@ -258,7 +258,7 @@ public static class LauncherServiceRegistration {
     }
     /// <summary>The headless twin of <see cref="AddLauncherTerminal"/>: the SAME command pump and terminal baton, but
     /// <see cref="HeadlessTickHostedService"/> paces the fixed step instead of <see cref="LauncherWindowHostedService"/>
-    /// — no graphics backend, no platform windowing, no <see cref="IRenderNode"/> ever resolved. A composition root
+    /// — no graphics backend, no platform windowing, no <see cref="IRenderRoot"/> ever resolved. A composition root
     /// calls this INSTEAD OF <see cref="AddLauncherTerminal"/> (never both) when its boot shape has no presentation
     /// composed.</summary>
     /// <param name="services">The service collection.</param>
@@ -280,7 +280,7 @@ public static class LauncherServiceRegistration {
     /// <summary>The offscreen twin of <see cref="AddLauncherTerminal"/>: the SAME command pump and terminal baton, but
     /// <see cref="OffscreenTickHostedService"/> paces the fixed step AND produces one composed frame per iteration —
     /// no <see cref="Puck.Abstractions.Presentation.ISurfacePresenter"/>, no platform windowing registered here. The
-    /// composition root supplies the GPU backend, the root <see cref="IRenderNode"/>, and an
+    /// composition root supplies the GPU backend, the <see cref="IRenderRoot"/>, and an
     /// <see cref="OffscreenRenderOptions"/> registration; it calls this INSTEAD OF <see cref="AddLauncherTerminal"/>
     /// or <see cref="AddLauncherHeadlessTerminal"/> (never more than one) when its boot shape composes a GPU device
     /// with no window.</summary>
@@ -294,10 +294,10 @@ public static class LauncherServiceRegistration {
     }
     /// <summary>The backend-neutral terminal: the terminal-control <em>baton</em>, the command pump, and the window
     /// run loop. It carries no graphics backend AND no platform windowing — the run loop drives an
-    /// <see cref="ISurfacePresenter"/>, whichever root <see cref="IRenderNode"/> the developer registers, and the
+    /// <see cref="ISurfacePresenter"/>, whichever <see cref="IRenderRoot"/> the developer registers, and the
     /// <c>INativeWindowFactory</c> the composition root supplies. The composition root supplies a backend (e.g.
     /// <c>AddVulkanPresenter</c>, which also provides the default root <see cref="IHostContext"/>), the native windowing
-    /// (e.g. <c>AddPlatformWindowing</c>), the root <see cref="IRenderNode"/>, the <see cref="IInputBindings"/> the
+    /// (e.g. <c>AddPlatformWindowing</c>), the <see cref="IRenderRoot"/>, the <see cref="IInputBindings"/> the
     /// router folds physical input through, and any engine-specific <see cref="ICommandModule"/>s.</summary>
     /// <param name="services">The service collection.</param>
     public static IServiceCollection AddLauncherTerminal(this IServiceCollection services) {

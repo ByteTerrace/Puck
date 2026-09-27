@@ -13,7 +13,7 @@ namespace Puck.Launcher;
 
 /// <summary>
 /// The outermost host loop — the dumb terminal. It owns the window + swapchain, and each frame drives the
-/// single primary <see cref="IRenderNode"/> to produce one surface, then blits that surface to the
+/// <see cref="IRenderRoot"/> to produce one surface, then blits that surface to the
 /// swapchain. The terminal knows nothing about the world — only the one surface the engine hands up. The
 /// engine drives the terminal's lifecycle through the baton it was handed on the root host context; this
 /// loop merely drains the resulting exit request (and honors <c>--exit-after</c> for scripted runs).
@@ -33,7 +33,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
     private readonly IPresentSurfaceReadback? m_presentReadback;
     private readonly ISurfacePresenter m_presenter;
     private readonly CommandRegistry m_registry;
-    private readonly IRenderNode m_root;
+    private readonly IRenderRoot m_root;
     private readonly IHostContext m_rootHostContext;
     private readonly IFixedStepSimulation? m_simulation;
     private readonly ISnapshotInputCapture[] m_snapshotInputCaptures;
@@ -50,7 +50,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
         LauncherOptions options,
         PresentPacingControl presentPacing,
         ISurfacePresenter presenter,
-        IRenderNode root,
+        IRenderRoot root,
         IHostContext rootHostContext,
         IEnumerable<InputRouter> inputRouters,
         IEnumerable<IFixedStepSimulation> simulations,
@@ -535,7 +535,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     var height = window.Height;
 
                     // The frame body (present-side GPU work) can surface a device-lost error (DXGI_ERROR_DEVICE_REMOVED /
-                    // VK_ERROR_DEVICE_LOST) at BeginFrame's wait-for-idle, the node tree's own submit, or Present, all
+                    // VK_ERROR_DEVICE_LOST) at BeginFrame's wait-for-idle, the render root's own submit, or Present, all
                     // translated to a neutral DeviceLostException at the backend boundary. Catch it here, recover the
                     // device + resources, and resume. The fixed-step sim above is already advanced for this tick and is
                     // not touched — a recovery that burns several wall-clock frames is absorbed by the maxFrameTicks
@@ -546,7 +546,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                         m_faults?.ThrowIfLossDue();
 
                         // BeginFrame recreates presentation resources when the size changed and waits for the
-                        // previous frame's GPU work, so the node tree can safely reuse its per-frame resources.
+                        // previous frame's GPU work, so the render root can safely reuse its per-frame resources.
                         m_presenter.BeginFrame(
                             height: height,
                             width: width

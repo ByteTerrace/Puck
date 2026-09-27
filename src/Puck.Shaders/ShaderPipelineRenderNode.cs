@@ -14,7 +14,7 @@ public readonly record struct ShaderPipelineExternalImage(
     GpuPixelFormat Format,
     GpuImageLayout Layout = GpuImageLayout.ShaderReadOnly);
 /// <summary>
-/// One render node for an ordered multi-pass shader graph. All passes are recorded before one queue submission;
+/// The node that renders one render graph instance: an ordered multi-pass shader graph and its package passes. All passes are recorded before one queue submission;
 /// frame-slot fences protect command buffers and descriptors, and every inter-pass image transition is explicit.
 /// A compiled candidate's pipelines and shader modules are built on the thread pool, never on the frame thread; its
 /// resources are allocated and it installs at the first frame boundary after. The graph it replaces retires once the
@@ -22,8 +22,8 @@ public readonly record struct ShaderPipelineExternalImage(
 /// published surfaces are held until a newer publication displaces them and the node's second submission after that
 /// has completed. An install neither waits for a build nor drains the device.
 /// </summary>
-public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarget {
-    private readonly NodeDescriptor m_descriptor;
+public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, IDisposable {
+    private readonly string m_name;
     private readonly IGpuDeviceContext m_device;
     private readonly GpuPassPipelineCache m_pipelines;
     private readonly bool m_directX;
@@ -97,10 +97,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         ArgumentOutOfRangeException.ThrowIfZero(width);
         ArgumentOutOfRangeException.ThrowIfZero(height);
         ArgumentOutOfRangeException.ThrowIfZero(inFlightFrames);
-        m_descriptor = new NodeDescriptor(
-            Name: name,
-            SurfaceId: SurfaceId.New()
-        );
+        m_name = name;
         m_work = new GpuWorkLedger(
             framesInFlight: ((int)inFlightFrames),
             name: "gpu.shader-pipeline"
@@ -152,8 +149,6 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         ),
         inFlight: m_inFlight
     )));
-    /// <inheritdoc/>
-    public NodeDescriptor Descriptor => m_descriptor;
     /// <summary>Gets the frame extent, in pixels, the installed graph's frame-relative resources were built for.</summary>
     public (uint Width, uint Height) Extent => (m_width, m_height);
     /// <summary>Gets whether a compiled candidate is queued and not yet installed.</summary>
@@ -272,7 +267,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                     data: geometry.BufferData(),
                     name: new GpuObjectName(
                         detail: "geometry",
-                        owner: m_descriptor.Name,
+                        owner: m_name,
                         part: runtime.Name
                     ),
                     usage: GpuBufferUsage.Vertex | GpuBufferUsage.Index
@@ -282,7 +277,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                     data: FullscreenTriangle.CreateVertexData(),
                     name: new GpuObjectName(
                         detail: "geometry",
-                        owner: m_descriptor.Name,
+                        owner: m_name,
                         part: runtime.Name
                     ),
                     usage: GpuBufferUsage.Vertex
@@ -391,7 +386,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                     throw new NotSupportedException(message: "PNG capture is unavailable.");
                 }
 
-                Console.Error.WriteLine(value: $"[capture] {m_descriptor.Name} -> {path}");
+                Console.Error.WriteLine(value: $"[capture] {m_name} -> {path}");
             })
         );
     }
@@ -494,7 +489,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                     for (var i = 0; (i < m_inFlight); i++) {
                         var name = new GpuObjectName(
                             index: i,
-                            owner: m_descriptor.Name,
+                            owner: m_name,
                             part: declaration.Name
                         );
 
@@ -530,7 +525,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                         resource.Buffers[i] = m_gpu.BufferFactory.CreateDeviceLocal(
                             name: new GpuObjectName(
                                 index: i,
-                                owner: m_descriptor.Name,
+                                owner: m_name,
                                 part: declaration.Name
                             ),
                             sizeBytes: sizeBytes,
@@ -574,7 +569,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                     copyPipeline: null,
                     memory: GpuResidency.RingMemory(profile: m_device.MemoryProfile),
                     name: new GpuObjectName(
-                        owner: m_descriptor.Name,
+                        owner: m_name,
                         part: "frame block"
                     ),
                     policy: GpuResidencyPolicy.Ring,
@@ -623,7 +618,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                 slot.Fence ??= m_gpu.QueueSubmitter.CreateSubmissionFence();
                 slot.Final ??= m_gpu.CommandPoolFactory.Create(name: new GpuObjectName(
                     index: index,
-                    owner: m_descriptor.Name,
+                    owner: m_name,
                     part: "final"
                 ));
             }
@@ -787,7 +782,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         if (
             key.Candidate &&
             !m_gpu.Bindings.CanAdmit(
-                owner: $"shader pipeline {m_descriptor.Name}",
+                owner: $"shader pipeline {m_name}",
                 pools: DescriptorPools(
                     inFlight: m_inFlight,
                     plan: next.Plan,
@@ -1465,7 +1460,8 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         ReleaseBindingHold(name: name);
         m_externalImages[name] = image;
     }
-    /// <inheritdoc/>
+    /// <summary>Releases every graph, recorder and GPU object the node holds, waiting for its submissions, and refuses a
+    /// capture still armed on it.</summary>
     public void Dispose() {
         if (m_disposed) {
             return;
@@ -1474,17 +1470,21 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         m_capture.Refuse(error: new ObjectDisposedException(objectName: nameof(ShaderPipelineRenderNode)));
         Release(wait: true);
     }
-    /// <inheritdoc/>
-    /// <remarks>The published image is destroyed with the device, and a capture armed at the loss is refused
-    /// (<see cref="CaptureRequestSlot.RefuseForDeviceLoss"/>). A paused node presents nothing after the rebuild, and a
-    /// capture of it reports that no completed output exists, until a step, resume or reset renders.</remarks>
+    /// <summary>Releases the node's device-derived GPU resources after the device was lost, so the next
+    /// <see cref="ProduceFrame"/> rebuilds them against the replacement device. The published image is destroyed with the
+    /// device, and a capture armed at the loss is refused (<see cref="CaptureRequestSlot.RefuseForDeviceLoss"/>). A paused
+    /// node presents nothing after the rebuild, and a capture of it reports that no completed output exists, until a
+    /// step, resume or reset renders.</summary>
     public void OnDeviceLost() {
         Release(wait: false);
         m_publicationLost = true;
         m_capture.RefuseForDeviceLoss();
     }
-    /// <inheritdoc/>
-    /// <remarks>A lease bound for this frame that no submission of it samples is retired before this returns.</remarks>
+    /// <summary>Renders one frame of the installed graph and returns its published surface. A lease bound for this frame
+    /// that no submission of it samples is retired before this returns.</summary>
+    /// <param name="context">The frame's fixed-step and presentation context.</param>
+    /// <returns>The latest published surface, or an empty surface before the node has published one or once it is
+    /// disposed.</returns>
     public Surface ProduceFrame(in FrameContext context) {
         try {
             return Produce(context: in context);

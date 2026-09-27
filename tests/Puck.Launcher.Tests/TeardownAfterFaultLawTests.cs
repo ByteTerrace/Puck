@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Puck.Abstractions.Gpu;
+using Puck.Hosting;
 using Puck.Overlays;
 using Puck.Shaders;
 using Puck.Testing;
@@ -36,9 +37,9 @@ public sealed class TeardownAfterFaultLawTests {
 
         return (exit, error.ToString().TrimEnd());
     }
-    // The shipped overlay package drawn by a graph node over the world image, on services that must never be called: a
-    // node that never produced a frame acquired nothing, so its teardown reaches none of them.
-    private static ShaderPipelineRenderNode Overlay(IGpuDeviceContext device, RefusingGpuDevice unused) {
+    // A render root whose one graph instance draws the shipped overlay package over the world image, on services that
+    // must never be called: a root that never produced a frame acquired nothing, so its teardown reaches none of them.
+    private static RenderGraphRuntimeNode Overlay(IGpuDeviceContext device, RefusingGpuDevice unused) {
         var glyphs = OverlayGlyphSdfPack.TryCreate(new FontAtlas(
             FontAtlasKind.Mtsdf,
             "test://fixed-grid",
@@ -101,18 +102,7 @@ public sealed class TeardownAfterFaultLawTests {
             package: RenderGraphPackageCatalog.Overlay
         );
 
-        var node = new ShaderPipelineRenderNode(
-            pipelines: new GpuPassPipelineCache(),
-            deviceContext: device,
-            height: 32U,
-            hostsOnDirectX: false,
-            name: "root",
-            outputLayout: GpuImageLayout.ShaderReadOnly,
-            packages: packages,
-            width: 32U
-        );
-
-        node.Swap(pipeline: new CompiledShaderPipeline(
+        var pipeline = new CompiledShaderPipeline(
             plan: new RenderGraphCompiler(packages: RenderGraphPackageCatalog.Engine).Compile(definition: new RenderGraphDefinition(
                 Name: "root",
                 Outputs: ["composed"],
@@ -126,7 +116,7 @@ public sealed class TeardownAfterFaultLawTests {
                     new ShaderPipelineResource(
                         Dimensions: ShaderPipelineDimensions.Relative(),
                         Format: "R8G8B8A8Unorm",
-                        Initialization: ShaderPipelineInitialization.External,
+                        Initialization: ShaderPipelineInitialization.Zero,
                         Name: "world"
                     ),
                     new ShaderPipelineResource(
@@ -138,9 +128,45 @@ public sealed class TeardownAfterFaultLawTests {
                 Schema: RenderGraphSchemas.Graph
             )).Pipeline,
             shaders: new Dictionary<string, CompiledShader>(comparer: StringComparer.Ordinal)
-        ));
+        );
 
-        return node;
+        Assert.True(
+            condition: RenderGraphInstanceSet.TryCreate(
+                instances: [new RenderGraphInstance(
+                    Name: "root",
+                    Passes: 1,
+                    Reads: [],
+                    Refresh: RenderGraphRefresh.EveryFrame
+                )],
+                refusal: out var setRefusal,
+                set: out var set
+            ),
+            userMessage: setRefusal?.Message
+        );
+        Assert.True(
+            condition: RenderGraphRuntime.TryCreate(
+                deviceContext: device,
+                graphs: [new RenderGraphRuntimeGraph(
+                    Inputs: [],
+                    Pipeline: pipeline
+                )],
+                hostsOnDirectX: false,
+                packages: packages,
+                pipelines: new GpuPassPipelineCache(),
+                refusal: out var refusal,
+                root: "root",
+                runtime: out var runtime,
+                set: set
+            ),
+            userMessage: refusal?.Message
+        );
+
+        return new RenderGraphRuntimeNode(
+            footprints: [],
+            height: 32U,
+            runtime: runtime,
+            width: 32U
+        );
     }
 
     [Fact]
@@ -178,7 +204,7 @@ public sealed class TeardownAfterFaultLawTests {
     }
     [Fact]
     public async Task ATeardownStepThatThrowsAfterTheFaultNeitherReplacesItNorSkipsTheSteps() {
-        var root = new WindowedHostFixture.FakeRenderNode(failure: new InvalidOperationException(message: "The renderer must be initialized before its device is used."));
+        var root = new WindowedHostFixture.FakeRenderRoot(failure: new InvalidOperationException(message: "The renderer must be initialized before its device is used."));
         var presenter = new WindowedHostFixture.FakePresenter(failure: NoDevice());
         var host = WindowedHostFixture.Build(
             device: new WindowedHostFixture.NeverInitializedDeviceContext(),

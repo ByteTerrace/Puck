@@ -142,7 +142,7 @@ public sealed partial class ShaderPipelineRenderNode {
         var pipelines = m_pipelines;
 
         m_previewBuilding = request;
-        var owner = m_descriptor.Name;
+        var owner = m_name;
 
         m_previewBuild.Start(build: token => PreviewObjects.Create(
             cancellationToken: token,

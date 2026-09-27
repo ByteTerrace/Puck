@@ -415,7 +415,7 @@ public sealed partial class ShaderPipelineRenderNode {
             plan: plan
         )) {
             throw new InvalidDataException(message: RenderGraphPackageRecorders.Unserved(
-                instance: m_descriptor.Name,
+                instance: m_name,
                 package: unserved.Package!.Package,
                 pass: unserved.Name
             ));

@@ -420,7 +420,7 @@ public sealed class VulkanRenderer(
     /// contract). The renderer is the published device-context capability and every node resource is a child of its
     /// device, so a presenter deactivation (a backend switch away from Vulkan) must not destroy the device under
     /// them — that is a use-after-free at their eventual release. Full device teardown belongs to <see cref="Dispose"/>
-    /// alone (the renderer is a container-owned singleton, disposed at host shutdown after the node tree).</summary>
+    /// alone (the renderer is a container-owned singleton, disposed at host shutdown after the render root).</summary>
     public void ReleasePresentation() {
         DisposePresentationResources();
         m_surface?.Dispose();

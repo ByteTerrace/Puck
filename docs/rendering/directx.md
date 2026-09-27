@@ -333,7 +333,7 @@ drained. `DirectXCommandCalls.Drain` returns instead of throwing when the signal
 the event arm reports a removal, because a removed device runs no further work and
 its fences read complete. Every release path drains that way (a surface upload's
 and an exportable image's `Dispose`, the context's own `Dispose`), so a node
-releasing its objects inside `IRenderNode.OnDeviceLost` never throws. Every frame
+releasing its objects inside `IRenderRoot.OnDeviceLost` never throws. Every frame
 path waits through `SignalAndWait`, which throws, so a loss mid-frame reaches
 recovery.
 

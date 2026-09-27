@@ -50,8 +50,8 @@ public static class SdfWorldRenderBuilder {
 
         return producer;
     }
-    /// <summary>The kernel bytecode extension for a resolved host backend — the counterpart of the per-child
-    /// <c>directX</c> flag (the GamingBrick child node), kept beside it so the two can never drift.</summary>
+    /// <summary>Returns the kernel bytecode extension for a resolved host backend.</summary>
     /// <param name="hostsOnDirectX">Whether the resolved host backend is Direct3D 12.</param>
+    /// <returns>The extension of the backend's kernel bytecode files, with its leading dot.</returns>
     public static string BytecodeExtension(bool hostsOnDirectX) => ShaderBytecode.FileExtension(hostsOnDirectX: hostsOnDirectX);
 }
