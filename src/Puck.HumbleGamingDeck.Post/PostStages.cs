@@ -7,6 +7,10 @@ internal static class PostStages {
     public static IPostStage<PostContext>[] Create() {
         return [new DeterminismStage(), new AllocationStage(), new ForkDeterminismStage(),
             new SnapshotStage(), new LoaderStage(), new CpuTimingStage(), new ThroughputStage(),
-            new Nes6502SstStage(), new NestestStage()];
+            new EmbeddingStage(), new QueuedHostCheckpointStage(), new QueuedHostBackpressureStage(),
+            new QueuedHostFramePublicationStage(), new QueuedHostAudioStage(), new QueuedHostTimeTravelStage(),
+            new QueuedHostMemoryAccessStage(), new PictureStage(),
+            new ControllerStage(), new OamDmaStage(), new ApuStage(),
+            new Nes6502SstStage(), new NestestStage(), new NestestBootStage()];
     }
 }
