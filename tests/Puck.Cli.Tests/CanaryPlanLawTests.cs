@@ -189,6 +189,48 @@ public sealed class CanaryPlanLawTests {
             actual: CanaryCommand.Plan(backends: WorldOffscreenLeg.Backends, manifests: [manifests[0]], namedWorldArtifact: false).WarmBoots
         );
     }
+    /// <summary>A warm boot succeeds only when it exits 0 within its timeout after reporting the engine ready and
+    /// printing its backend's pipeline-cache counts, the ready line narrated on standard error; a timeout, a nonzero exit, a missing ready line or missing counts
+    /// is refused, naming the backend.</summary>
+    [Fact]
+    public void AWarmBootThatTimesOutExitsNonzeroOrNeverGetsReadyIsRefusedByItsBackend() {
+        const string Ready = "[engine: ready at tick 12]\n";
+        const string Counts = "[world.counters: pipeline-cache.vulkan\n  gpu.created.pipelines 14\n  gpu.pipeline-cache.hits 0\n  gpu.pipeline-cache.misses 14\n";
+
+        static string? Refusal(string backend, string stdout, string stderr = Ready, int exitCode = 0, bool timedOut = false) => CanaryCommand.WarmRefusal(
+            backend: backend,
+            process: new CliProcessResult(ExitCode: exitCode, OutputLines: [], Stderr: stderr, Stdout: stdout, TimedOut: timedOut),
+            source: "plain"
+        );
+
+        Assert.Null(@object: Refusal(backend: "vulkan", stdout: Counts));
+        Assert.Contains(expectedSubstring: "warm on vulkan from plain's positive world did not exit within its 180-second timeout", actualString: Refusal(backend: "vulkan", exitCode: -1, stdout: string.Empty, timedOut: true));
+        Assert.Contains(expectedSubstring: "warm on directx from plain's positive world exited 3", actualString: Refusal(backend: "directx", exitCode: 3, stdout: Counts));
+        Assert.Contains(expectedSubstring: "warm on vulkan from plain's positive world never reported the engine ready", actualString: Refusal(backend: "vulkan", stderr: string.Empty, stdout: Counts));
+        Assert.Contains(expectedSubstring: "warm on vulkan from plain's positive world never reported the engine ready", actualString: Refusal(backend: "vulkan", stderr: string.Empty, stdout: (Ready + Counts)));
+        Assert.Contains(expectedSubstring: "printed no pipeline-cache.vulkan counts", actualString: Refusal(backend: "vulkan", stdout: string.Empty));
+    }
+    /// <summary>A run whose warm boot cannot start a World fails the selection with exit 2, naming the backend, and
+    /// starts no leg.</summary>
+    [Fact]
+    public void AFailedWarmFailsTheSelectionByNameBeforeAnyLeg() {
+        var root = Directory.CreateTempSubdirectory(prefix: "puck-warm-refusal-").FullName;
+
+        try {
+            var artifact = Path.Combine(path1: root, path2: "Puck.World.dll");
+
+            File.WriteAllBytes(path: artifact, bytes: []);
+
+            var (exitCode, output, error) = ConsoleCapture.RunSplit(run: () => PuckRootCommand.Invoke(args: ["canary", "sdf-mesh-motion", "--backend", "vulkan", "--world-artifact", artifact]));
+
+            Assert.Equal(expected: CliExit.Refused, actual: exitCode);
+            Assert.Contains(expectedSubstring: "ERROR: the pipeline-cache warm on vulkan from sdf-mesh-motion's positive world exited", actualString: error);
+            Assert.Contains(expectedSubstring: "The selection fails without starting a leg.", actualString: error);
+            Assert.DoesNotContain(expectedSubstring: "sdf-mesh-motion on vulkan positive", actualString: output);
+        } finally {
+            Directory.Delete(path: root, recursive: true);
+        }
+    }
     /// <summary>A leg starts from exactly the files the warm boots persisted, and counts as having built no pipeline
     /// outside them only when its cache holds those same files, byte for byte, after it exits: a changed file or an
     /// added one (a device the warm never saw) does not count.</summary>

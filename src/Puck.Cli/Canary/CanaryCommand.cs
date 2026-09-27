@@ -498,12 +498,17 @@ internal static partial class CanaryCommand {
         Console.CancelKeyPress += OnCancelKeyPress;
 
         try {
-            if (plan.Warm is { } warm) {
-                WarmPipelineCache(
+            if (
+                (plan.Warm is { } warm) &&
+                (WarmPipelineCache(
                     artifact: artifact,
                     budget: budget,
                     warm: warm
-                );
+                ) is { } warmRefusal)
+            ) {
+                Console.Error.WriteLine(value: $"ERROR: {warmRefusal}. The selection fails without starting a leg.");
+
+                return CliExit.Refused;
             }
 
             RunLegsConcurrently(

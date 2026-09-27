@@ -937,8 +937,9 @@ compiles. `--plan` counts the warm boots and their timeouts in the World boots
 and the leg budget, and the run's closing counts report how many seeded legs
 exited with the cache byte for byte as they received it: a pipeline the cache
 did not answer is written back to it, so an unchanged cache means every
-pipeline the leg created was a hit. A warm boot that does not reach ready
-fails nothing; its legs start from whatever the warm persisted.
+pipeline the leg created was a hit. A warm boot that times out, exits nonzero,
+never narrates the engine ready, or prints no counts fails the selection with
+exit 2, naming its backend, before any leg starts.
 
 The selection forms are mutually exclusive and every execution selection must
 be nonempty. `--jobs` combines with any of them, `--plan` with any but `--list`, and `--backend` with any but `--merge` and `--list`. Manifest tokens are case-sensitive. Every non-comment script

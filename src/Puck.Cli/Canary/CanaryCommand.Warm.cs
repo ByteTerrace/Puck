@@ -45,9 +45,9 @@ internal static partial class CanaryCommand {
         ((leg.Authorities.Count == 0) && (leg.AuthorityWorldPath is null) && !leg.Connect && (leg.Entry is null) && (leg.Package is null) && !leg.HideShaderCompiler);
 
     // Boots the warm world once per backend into one shared state directory, each boot waiting for the engine to be
-    // ready and reading its pipeline-cache counts, then hands the cache it persisted to the seed. A boot that does not
-    // reach ready is reported and the legs start from whatever the boots persisted; it never fails the run.
-    private static void WarmPipelineCache(CanaryWarm warm, string artifact, CanaryBudget budget) {
+    // ready and reading its pipeline-cache counts, then hands the cache it persisted to the seed. The first boot that
+    // fails (WarmRefusal) ends the warm with its refusal, and the selection fails without starting a leg.
+    private static string? WarmPipelineCache(CanaryWarm warm, string artifact, CanaryBudget budget) {
         var runDirectory = CreateRunDirectory(
             id: WarmRunId,
             leg: "pipeline-cache"
@@ -97,17 +97,51 @@ internal static partial class CanaryCommand {
                 )
             );
 
+            if (WarmRefusal(
+                backend: backend,
+                process: process,
+                source: warm.Manifest.Id
+            ) is { } refusal) {
+                return $"{refusal}; see {runDirectory}";
+            }
+
             var stdout = SplitLines(text: process.Stdout);
 
-            Console.WriteLine(value: ((CountOf(kind: "gpu.created.pipelines", lines: stdout) is { } created) && (CountOf(kind: "gpu.pipeline-cache.misses", lines: stdout) is { } misses)
-                ? $"canary: warmed the pipeline cache on {backend} from {warm.Manifest.Id}'s positive world: {created} pipeline(s) created, {misses} built outside the cache."
-                : $"canary: the pipeline-cache warm on {backend} from {warm.Manifest.Id}'s positive world reported no counts ({(process.TimedOut ? "timed out" : $"exit {process.ExitCode}")}; see {runDirectory}); its legs start from what it persisted."));
+            Console.WriteLine(value: $"canary: warmed the pipeline cache on {backend} from {warm.Manifest.Id}'s positive world: {CountOf(kind: "gpu.created.pipelines", lines: stdout)} pipeline(s) created, {CountOf(kind: "gpu.pipeline-cache.misses", lines: stdout)} built outside the cache.");
         }
 
         budget.Seed.Capture(directory: Path.Combine(
             path1: stateDirectory,
             path2: "pipeline-cache"
         ));
+
+        return null;
+    }
+    /// <summary>Names how one warm boot failed, or returns <see langword="null"/> when it succeeded: it exited 0 before
+    /// its timeout, after narrating the engine ready on standard error and printing its backend's pipeline-cache
+    /// counts on standard output.</summary>
+    /// <param name="backend">The backend the boot ran on.</param>
+    /// <param name="process">The boot's captured process.</param>
+    /// <param name="source">The id of the manifest whose positive world it booted.</param>
+    /// <returns>The refusal, naming the backend, or <see langword="null"/>.</returns>
+    internal static string? WarmRefusal(string backend, CliProcessResult process, string source) {
+        var warm = $"the pipeline-cache warm on {backend} from {source}'s positive world";
+        var stdout = SplitLines(text: process.Stdout);
+
+        if (process.TimedOut) {
+            return $"{warm} did not exit within its {WarmSeconds.ToString(provider: CultureInfo.InvariantCulture)}-second timeout";
+        }
+        if (process.ExitCode != 0) {
+            return $"{warm} exited {process.ExitCode.ToString(provider: CultureInfo.InvariantCulture)}";
+        }
+        if (!SplitLines(text: process.Stderr).Any(predicate: static line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: "[engine: ready at tick "))) {
+            return $"{warm} never reported the engine ready";
+        }
+        if ((CountOf(kind: "gpu.created.pipelines", lines: stdout) is null) || (CountOf(kind: "gpu.pipeline-cache.misses", lines: stdout) is null)) {
+            return $"{warm} printed no pipeline-cache.{backend} counts";
+        }
+
+        return null;
     }
     // The value of the last `<kind> <value>` line a counters readout printed for kind, or null.
     private static long? CountOf(IReadOnlyList<string> lines, string kind) {
