@@ -197,9 +197,11 @@ writes only what changed since the frame before it.
 Every table the kernels read from the host is a `GpuRegion`: the program
 words, dynamic transforms, the frame instance grid, screen surfaces, screen
 mappings, screen lights, bounded volumes, glyph decals and mesh draws, which the
-residency's tables hold, and each view's viewport row, which every pass of the
-view writes into a small region of its own that the view's node copies ahead of
-its passes. The region keeps a host copy of its table, and a write owes only the
+residency's tables hold. What is not a table rides each pass's block instead:
+the view's camera, far distance and debug view mode, the frame's shading levers
+and its environment's rows, which every pass of a view writes into its pass
+block (`SdfFrameBlock`) at the offsets the generated `sdf-world` interface
+declares. A region keeps a host copy of its table, and a write owes only the
 words that differ from that copy, one run for each stretch of changed words.
 Where each region lives is the device's choice, made by `GpuResidency.Select`
 from its memory profile and the table's size, with a reader always in flight:
@@ -242,11 +244,10 @@ pass-pipeline cache (`GpuRegionCopyPass`). An owner records a frame's owed copie
 destination before the first copy, then the copies, then one transition per
 copied buffer for its readers.
 
-A still frame therefore writes only the time word of each viewport row, because
-each row carries the frame's presentation time. When a sky's clouds drift, a
-few words of its environment rows are written too. A frame whose time did not
-move writes nothing. The frame instance grid is rebuilt only on a frame whose
-transforms moved. `world.counters gpu` reports the written bytes as
+A still frame therefore writes no table. The frame's presentation time and its
+drifting clouds ride the pass blocks, which the view's node writes whole each
+frame it renders. The frame instance grid is rebuilt only on a frame whose
+transforms moved. `world.counters gpu` reports the tables' written bytes as
 `uploads.host-visible` on its `upload` line.
 
 Nothing on the live path waits for its own submission: the upload and each
@@ -308,4 +309,5 @@ disassembly or trace the code path instead.
 - How a view records its passes and binds the residency's tables:
   [`src/Puck.SdfVm/SdfWorldPasses.cs`](../../../../src/Puck.SdfVm/SdfWorldPasses.cs)
   and [`src/Puck.SdfVm/SdfWorldPassRecorder.cs`](../../../../src/Puck.SdfVm/SdfWorldPassRecorder.cs),
-  and the `extent` viewport row in the [rendering skill's sync pairs](../../../../.claude/skills/rendering/references/sync-pairs.md).
+  [`src/Puck.SdfVm/SdfFrameBlock.cs`](../../../../src/Puck.SdfVm/SdfFrameBlock.cs), which writes each
+  pass's block, and the pass block in the [rendering skill's sync pairs](../../../../.claude/skills/rendering/references/sync-pairs.md).

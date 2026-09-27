@@ -422,7 +422,7 @@ a `GpuObjectName` passed to the creating member of `GpuDeviceServices`. The
 name joins the owner (an SDF engine, a graph instance, a package), the part of
 it the object is (a table, a pipeline, a pass), an optional detail within that
 part, and an index for one of several alike, usually a frame slot:
-`sdf.world/viewports[1]`, `overlay/pass`, or `sdf.world/region-copies` for a
+`sdf.world/program[1]`, `overlay/pass`, or `sdf.world/region-copies` for a
 pool. A name holds no handle, counter or clock, so an object has the same name
 on every run.
 

@@ -36,7 +36,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     private const GpuPixelFormat Format = GpuPixelFormat.R8G8B8A8Unorm;
     private const int MaxBrickBakeVoxelsPerSlice = (256 * 1024); // <= 256K voxels per brick per produced frame: ~1-2 ms background-budget
     private const int MaxBrickCarvesPerBake = 4096; // request-buffer carve capacity per slot (the debug pool's MaxCarves ceiling)
-    private const int ScreenLightByteLength = ((sizeof(float) * 4) * ((MaxScreenSurfaces + 8) + SdfEnvironment.RowCount)); // float4 rgb+intensity per screen (0..MaxScreenSurfaces-1) + env (MaxScreenSurfaces) + FOUR grid-lock rows (+1..+4) + the engine-bench params row (+5) + the shadow-policy row (+6) + the far-field row (+7) + the environment block (+8 onward: SdfEnvironment's row layout) — KEEP IN SYNC with frame/sdf-environment.hlsli SdfGridWorld..SdfEnvBase
+    private const int ScreenLightByteLength = ((sizeof(float) * 4) * MaxScreenSurfaces); // float4 rgb+intensity per screen slot (KEEP IN SYNC with frame/sdf-environment.hlsli sdfScreenLights)
     private const float ScreenLightIntensity = 2.5f; // room-glow gain applied to each screen's average color
     private const int ScreenMappingByteLength = ((sizeof(float) * 4) * 7);
     // The seventh ScreenMappingData row: the bound flag at its first float, the sampler at its second.
@@ -59,9 +59,6 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     /// the SDF march (<see cref="Puck.Abstractions.Cameras.ViewProjection.Create"/>'s <c>near</c>). KEEP IN SYNC with
     /// <c>ConeNear</c> in sdf-viewport.hlsli.</summary>
     public const float ConeNear = 0.02f;
-    /// <summary>The bytes of one view's viewport row: six float4 rows, the last holding the render scale, off-axis
-    /// offset and far distance. KEEP IN SYNC with frame/sdf-viewport.hlsli's <c>ViewportData</c>.</summary>
-    public const int ViewportByteLength = ((sizeof(float) * 4) * 6);
     /// <summary>The default carve-bake brick pool capacity in voxels (f32 words) — <see cref="SdfBrickPoolLayout.TotalVoxels"/>
     /// = 16.7M voxels = 64 MB, i.e. <see cref="SdfBrickPoolLayout.MaxBricks"/> slots at full resolution.</summary>
     public const int DefaultBrickPoolVoxelCapacity = SdfBrickPoolLayout.TotalVoxels;

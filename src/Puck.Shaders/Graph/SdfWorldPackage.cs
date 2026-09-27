@@ -31,15 +31,98 @@ public static class SdfWorldPackage {
     /// <summary>The pass-group value holding the deterministic tick clock star twinkle reads, or zero for a sky with no
     /// visible twinkle.</summary>
     public const string SampleIndex = "sampleIndex";
-    /// <summary>The pass-group value naming the viewport row the dispatch set renders.</summary>
+    /// <summary>The pass-group value naming the view the dispatch set renders, whose visibility records it indexes.</summary>
     public const string ViewBase = "viewBase";
     /// <summary>The pass-group value holding the frame's mesh draws, or zero when no mesh draws: the hit passes read the
     /// mesh visibility target only when it is non-zero, and cull-args then covers the whole extent.</summary>
     public const string MeshDraws = "meshDraws";
+    /// <summary>The pass-group value holding the view's camera position in world space (<c>float3</c>).</summary>
+    public const string ViewPosition = "viewPosition";
+    /// <summary>The pass-group value holding the view's unit right axis in world space (<c>float3</c>).</summary>
+    public const string ViewRight = "viewRight";
+    /// <summary>The pass-group value holding the view's unit up axis in world space (<c>float3</c>).</summary>
+    public const string ViewUp = "viewUp";
+    /// <summary>The pass-group value holding the view's unit forward axis in world space (<c>float3</c>).</summary>
+    public const string ViewForward = "viewForward";
+    /// <summary>The pass-group value holding the tangent of half the view's vertical field of view (<c>float</c>).</summary>
+    public const string TanHalfFieldOfView = "tanHalfFieldOfView";
+    /// <summary>The pass-group value holding the view's width over its height (<c>float</c>).</summary>
+    public const string AspectRatio = "aspectRatio";
+    /// <summary>The pass-group value holding the off-axis frustum's tangent-space center offset, zero for a symmetric
+    /// camera (<c>float2</c>).</summary>
+    public const string FrustumOffset = "frustumOffset";
+    /// <summary>The pass-group value holding the depth, in world units, at which every camera march ends
+    /// (<c>float</c>).</summary>
+    public const string FarDistance = "farDistance";
+    /// <summary>The pass-group value holding the frame's presentation time in seconds, which bounded volumes animate on
+    /// (<c>float</c>).</summary>
+    public const string SceneTime = "sceneTime";
+    /// <summary>The pass-group value holding the debug view mode, an index into the debug view names; zero renders the
+    /// final image (<c>uint</c>).</summary>
+    public const string DebugMode = "debugMode";
+    /// <summary>The pass-group value scaling the lit path's ambient terms (<c>float</c>).</summary>
+    public const string AmbientScale = "ambientScale";
+    /// <summary>The pass-group value scaling the lit path's sun term (<c>float</c>).</summary>
+    public const string SunScale = "sunScale";
+    /// <summary>The pass-group value selecting the slice debug view's plane: zero camera-locked, one to three the world
+    /// X, Y or Z axis (<c>float</c>).</summary>
+    public const string DebugSliceAxis = "debugSliceAxis";
+    /// <summary>The pass-group value holding the slice plane's signed offset along its axis, in world units
+    /// (<c>float</c>).</summary>
+    public const string DebugSliceOffset = "debugSliceOffset";
+    /// <summary>The pass-group value holding the grid overlay's flags: bit 0 the world floor grid, bit 1 the object grid
+    /// (<c>uint</c>).</summary>
+    public const string GridFlags = "gridFlags";
+    /// <summary>The pass-group value holding the floor height the world grid draws on (<c>float</c>).</summary>
+    public const string GridFloorY = "gridFloorY";
+    /// <summary>The pass-group value holding the world grid's pitch on X and Z, in world units, zero disabling an axis
+    /// (<c>float2</c>).</summary>
+    public const string GridWorldPitch = "gridWorldPitch";
+    /// <summary>The pass-group value holding the object grid's reference origin in world space (<c>float3</c>).</summary>
+    public const string GridObjectOrigin = "gridObjectOrigin";
+    /// <summary>The pass-group value holding the object grid's pitch on its reference X and Z (<c>float2</c>).</summary>
+    public const string GridObjectPitch = "gridObjectPitch";
+    /// <summary>The pass-group value holding the object grid's reference orientation quaternion, xyzw
+    /// (<c>float4</c>).</summary>
+    public const string GridObjectFrame = "gridObjectFrame";
+    /// <summary>The pass-group value holding the object grid's patch radius in reference-local units, zero disabling it
+    /// (<c>float</c>).</summary>
+    public const string GridObjectPatchRadius = "gridObjectPatchRadius";
+    /// <summary>The pass-group value set to one to shade normals with four finite-difference taps instead of the analytic
+    /// gradient (<c>uint</c>).</summary>
+    public const string FiniteDifferenceNormals = "finiteDifferenceNormals";
+    /// <summary>The pass-group value set to one to march every instance for soft shadows instead of the grid-gathered
+    /// set (<c>uint</c>).</summary>
+    public const string DisableShadowCull = "disableShadowCull";
+    /// <summary>The pass-group value set to one to skip the soft-shadow march (<c>uint</c>).</summary>
+    public const string DisableSoftShadows = "disableSoftShadows";
+    /// <summary>The pass-group value set to one to skip ambient occlusion (<c>uint</c>).</summary>
+    public const string DisableAmbientOcclusion = "disableAmbientOcclusion";
+    /// <summary>The pass-group value scaling the soft-shadow reach; zero reads as the full reach (<c>float</c>).</summary>
+    public const string ShadowDistanceScale = "shadowDistanceScale";
+    /// <summary>The pass-group value set to one to skip the screens' area lights (<c>uint</c>).</summary>
+    public const string DisableScreenLights = "disableScreenLights";
+    /// <summary>The pass-group value set to one to leave shadow-transparent carves out of the soft-shadow occluders
+    /// (<c>uint</c>).</summary>
+    public const string EnableShadowProxy = "enableShadowProxy";
+    /// <summary>The pass-group value set to one to shadow with the camera tile's instance mask instead of the gathered
+    /// one (<c>uint</c>).</summary>
+    public const string CameraTileShadowMask = "cameraTileShadowMask";
+    /// <summary>The pass-group value set to one to march soft shadows with the bounded-cost marcher (<c>uint</c>).</summary>
+    public const string FastSoftShadowMarch = "fastSoftShadowMarch";
+    /// <summary>The pass-group value set to one to take one contact sample for ambient occlusion (<c>uint</c>).</summary>
+    public const string FastAmbientOcclusion = "fastAmbientOcclusion";
+    /// <summary>The pass-group value set to one to march past the beam's per-tile far bound to the far distance
+    /// (<c>uint</c>).</summary>
+    public const string DisableFarBound = "disableFarBound";
+    /// <summary>The pass-group block array holding the frame's environment, <c>SdfEnvironment</c>'s lane table row for row
+    /// with its host bakes, <see cref="EnvironmentRows"/> <c>float4</c> rows.</summary>
+    public const string Environment = "environment";
+    /// <summary>The rows of <see cref="Environment"/>: <c>SdfEnvironment.RowCount</c>, which the SDF engine holds it to
+    /// when it writes the block.</summary>
+    public const uint EnvironmentRows = 53;
     /// <summary>The program word stream.</summary>
     public const string ProgramWords = "sdfWords";
-    /// <summary>The viewport table, six float4 rows per view.</summary>
-    public const string Viewports = "viewports";
     /// <summary>The dynamic-transform table, three float4 rows per slot.</summary>
     public const string DynamicTransforms = "sdfDynamicTransforms";
     /// <summary>The frame-local instance grid.</summary>
@@ -70,7 +153,7 @@ public static class SdfWorldPackage {
     /// publishes (<c>SourceMapping.Draw</c>), which the screen shading draws its face from, and the screen's state,
     /// whether its source is bound and the sampler it reads through.</summary>
     public const string ScreenMappings = "screenMappings";
-    /// <summary>The screen-light and environment table.</summary>
+    /// <summary>The screen-light table: each screen slot's emitted color and gain, one float4 row per slot.</summary>
     public const string ScreenLights = "sdfScreenLights";
     /// <summary>The glyph decal table.</summary>
     public const string DecalCells = "sdfDecalCells";
@@ -132,9 +215,10 @@ public static class SdfWorldPackage {
     /// over.</summary>
     public const string Color = "color";
 
-    /// <summary>Gets what every compute pass of the fragment reads from its pass group beside the extent: the world values,
-    /// then every table, buffer and image its dispatches bind.</summary>
-    public static IReadOnlyList<ShaderInterfaceMember> Members { get; } = [
+    /// <summary>Gets the values every pass of the fragment reads from its pass block beside the extent, which the mesh
+    /// pass's interface shares so its block lies alike: the world values, the view, the frame's levers and its
+    /// environment.</summary>
+    public static IReadOnlyList<ShaderInterfaceMember> Values { get; } = [
         Value(name: ImageExtent, type: ShaderValueType.Uint2),
         Value(name: InstanceMaskWordCount, type: ShaderValueType.Uint),
         Value(name: MeshDraws, type: ShaderValueType.Uint),
@@ -143,8 +227,50 @@ public static class SdfWorldPackage {
         Value(name: TileGrid, type: ShaderValueType.Uint2),
         Value(name: ViewBase, type: ShaderValueType.Uint),
         Value(name: ViewportCount, type: ShaderValueType.Uint),
+        Value(name: ViewPosition, type: ShaderValueType.Float3),
+        Value(name: ViewRight, type: ShaderValueType.Float3),
+        Value(name: ViewUp, type: ShaderValueType.Float3),
+        Value(name: ViewForward, type: ShaderValueType.Float3),
+        Value(name: TanHalfFieldOfView, type: ShaderValueType.Float),
+        Value(name: AspectRatio, type: ShaderValueType.Float),
+        Value(name: FrustumOffset, type: ShaderValueType.Float2),
+        Value(name: FarDistance, type: ShaderValueType.Float),
+        Value(name: SceneTime, type: ShaderValueType.Float),
+        Value(name: DebugMode, type: ShaderValueType.Uint),
+        Value(name: AmbientScale, type: ShaderValueType.Float),
+        Value(name: SunScale, type: ShaderValueType.Float),
+        Value(name: DebugSliceAxis, type: ShaderValueType.Float),
+        Value(name: DebugSliceOffset, type: ShaderValueType.Float),
+        Value(name: GridFlags, type: ShaderValueType.Uint),
+        Value(name: GridFloorY, type: ShaderValueType.Float),
+        Value(name: GridWorldPitch, type: ShaderValueType.Float2),
+        Value(name: GridObjectOrigin, type: ShaderValueType.Float3),
+        Value(name: GridObjectPitch, type: ShaderValueType.Float2),
+        Value(name: GridObjectFrame, type: ShaderValueType.Float4),
+        Value(name: GridObjectPatchRadius, type: ShaderValueType.Float),
+        Value(name: FiniteDifferenceNormals, type: ShaderValueType.Uint),
+        Value(name: DisableShadowCull, type: ShaderValueType.Uint),
+        Value(name: DisableSoftShadows, type: ShaderValueType.Uint),
+        Value(name: DisableAmbientOcclusion, type: ShaderValueType.Uint),
+        Value(name: ShadowDistanceScale, type: ShaderValueType.Float),
+        Value(name: DisableScreenLights, type: ShaderValueType.Uint),
+        Value(name: EnableShadowProxy, type: ShaderValueType.Uint),
+        Value(name: CameraTileShadowMask, type: ShaderValueType.Uint),
+        Value(name: FastSoftShadowMarch, type: ShaderValueType.Uint),
+        Value(name: FastAmbientOcclusion, type: ShaderValueType.Uint),
+        Value(name: DisableFarBound, type: ShaderValueType.Uint),
+        ShaderInterfaceMember.Value(
+            group: ShaderInterfaceGroup.Pass,
+            length: EnvironmentRows,
+            name: Environment,
+            type: ShaderValueType.Float4
+        ),
+    ];
+    /// <summary>Gets what every compute pass of the fragment reads from its pass group beside the extent: the values
+    /// (<see cref="Values"/>), then every table, buffer and image its dispatches bind.</summary>
+    public static IReadOnlyList<ShaderInterfaceMember> Members { get; } = [
+        .. Values,
         Read(element: ShaderValueType.Uint4, name: ProgramWords),
-        Read(element: ShaderValueType.Float4, name: Viewports),
         Read(element: ShaderValueType.Float4, name: DynamicTransforms),
         Read(element: ShaderValueType.Uint, name: FrameInstanceGrid),
         Read(element: ShaderValueType.Uint, name: InstanceMasks),

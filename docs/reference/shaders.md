@@ -57,9 +57,11 @@ post-process package:
 
 A config field's `type` is an HLSL spelling: `float`, `float2..4`, `uint`,
 `uint2..4`, `int`, `int2..4`; a vector's document value is an array of that
-many numbers. A field without a default is required, `min`/`max` are
-inclusive per component, and a field's name must not repeat a
-[frame member's](#frame-values-extent-and-ports).
+many numbers. A field with a `length` is a block array of that many
+four-component vectors (`float4`, `uint4` or `int4`), one 16-byte row each,
+whose document value is an array of that many vectors. A field without a
+default is required, `min`/`max` are inclusive per component, and a field's
+name must not repeat a [frame member's](#frame-values-extent-and-ports).
 
 The fragment stage includes `sdf-film-grain.interface.hlsli`, the declarations
 generated from the package's [interface](#frame-values-extent-and-ports), and

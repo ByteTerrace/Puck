@@ -58,7 +58,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     uint tileIndex = worldTileIndex(viewIndex, id.xy, passGroup.tileGrid);
 
-    ViewportData view = worldViewport(viewIndex);
+    ViewportData view = worldView();
 
     // The symmetry-LOD origin: this viewport's camera (the per-sample wallpaper LOD rule measures from it).
     sdfLodOrigin = view.position.xyz;
@@ -109,7 +109,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         // 16-px tile staircases around the shape. Forcing a 0.0 march-start keeps the downstream passes on their
         // normal "live tile" path; renderView skips the march
         // for slice anyway, so the forced tiles never pay a wasted march. Every OTHER mode leaves this kernel
-        // byte-identical (the override keys exactly on the viewport row's forward.w mode lane).
+        // byte-identical (the override keys exactly on the pass block's debug mode).
         if (((int)round(view.forward.w) == DebugViewModeSlice) && (bounds.entry == TileEmpty)) {
             bounds.entry = 0.0;
         }

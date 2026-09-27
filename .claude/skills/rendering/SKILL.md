@@ -650,9 +650,9 @@ These are one-line cautions; the owning pages hold the derivations.
   policy the device selects), so the tables create and admit two pools, their
   own and the copy pool, and no region the frame thread creates or grows takes
   a descriptor range; a new region takes a slice of that pool too. A view's
-  viewport row is not a table: each `sdf.world` pass writes it into the one
-  `viewports` region its package states
-  (`IRenderGraphPackageFactory.Regions`), which the instance's node owns. Change
+  camera, the frame's levers and its environment are no table: each
+  `sdf.world` pass writes them into its pass block (`SdfFrameBlock`, the values
+  `SdfWorldPackage.Values` declares). Change
   a table only through its
   region's `Write`, which owes each run of words that differs; a direct buffer
   write is lost or overwritten. The residency's upload records the slot's owed
@@ -720,8 +720,7 @@ These are one-line cautions; the owning pages hold the derivations.
   with that pipeline (the residency leases it beside the set, and the tables take
   it at construction). A `ShaderPipelineRenderNode` owns every host-written
   region its graph reads: a package states the regions its recorder writes
-  (`IRenderGraphPackageFactory.Regions`: the overlay's buffer, an `sdf.world`
-  pass's `viewports` row), a graph's
+  (`IRenderGraphPackageFactory.Regions`: the overlay's buffer), a graph's
   arrays read one row region per bound row and element type
   (`ShaderPipelineRenderNode.Rows.cs`: rows bound by `BindRows` before install,
   written by `TryWriteRow`, a structured buffer each pass's World set binds),
@@ -951,8 +950,10 @@ explanation is [Qualifying a package](../../../docs/development/qualification.md
 definition every frame, so a `world.row.set render …` lands on the next frame
 without a program rebuild. Creation volumes become `SdfFrame.Volumes`, not
 instructions. Validation ranges live in `WorldDefinitionValidator`; a new render
-field needs its validator bound, its `SdfFrame`/`SdfEnvironment` lane, and its
-shader consumer in the same change. What a document field means belongs to
+field needs its validator bound, its `SdfFrame`/`SdfEnvironment` lane, its
+pass-block value (`SdfWorldPackage.Values`, written by `SdfFrameBlock`, generated
+into `sdf-world.interface.hlsli` by `puck shaders generate`), and its shader
+consumer in the same change. What a document field means belongs to
 `puck-world`.
 
 Every state read reaches a program, a decal or a pass through the state

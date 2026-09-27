@@ -23,7 +23,7 @@ public sealed partial class SdfWorldPassesLawTests {
     private static partial Regex SlotSuffix();
 
     [Fact]
-    public void AViewAllocatesEachScratchBufferOnceAndOneViewportRegion() {
+    public void AViewAllocatesEachScratchBufferOnce() {
         var naming = new RecordingGpuObjectNaming(isEnabled: true);
         var gpu = new FakeGpuDevice(
             naming: naming,
@@ -76,10 +76,6 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.Equal(
             actual: new[] { "arguments", "cullBounds", "instanceMasks", "tiles", "visibility" }.Select(selector: scratch => buffers.GetValueOrDefault(key: $"{SdfTestView.Instance}/sdf.world${scratch}")),
             expected: [1, 1, 1, 1, 1]
-        );
-        Assert.Equal(
-            actual: buffers.Keys.Where(predicate: static name => (name.StartsWith(comparisonType: StringComparison.Ordinal, value: $"{SdfTestView.Instance}/") && name.EndsWith(comparisonType: StringComparison.Ordinal, value: "/viewports"))).Distinct().Order(comparer: StringComparer.Ordinal),
-            expected: [$"{SdfTestView.Instance}/sdf.world$sky/viewports"]
         );
 
         var scheduled = new RenderGraphFrame(

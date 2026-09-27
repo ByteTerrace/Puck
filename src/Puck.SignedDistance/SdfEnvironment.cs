@@ -63,9 +63,10 @@ public enum SdfTonemapMode : byte {
     Filmic = 1,
 }
 /// <summary>The lit path's per-frame environment — every light, the stylization gains, and the sky — as one lane
-/// table the engine uploads as float4 rows of the screen-light buffer (<c>SdfWorldTables.PackEnvironment</c>, which
-/// also performs the host bakes noted per row). KEEP IN SYNC with frame/sdf-environment.hlsli's <c>SdfEnv*</c> rows and
-/// accessors.</summary>
+/// table every SDF pass block carries as float4 rows (<c>SdfFrameBlock.BakeEnvironment</c>, which also performs the host
+/// bakes noted per row). The kernels read the row indices generated from these constants (<c>SDF_ENV_*</c> in
+/// <c>sdf-isa.hlsli</c>) and decode each row's lanes in <c>frame/sdf-lights.hlsli</c>; KEEP IN SYNC with those
+/// decoders.</summary>
 /// <remarks>
 /// Row layout (row-relative to the environment base, four float lanes per row):
 /// <list type="table">
@@ -141,7 +142,7 @@ public sealed class SdfEnvironment {
     public const int MaxSkyStops = 4;
     /// <summary>The most studio-reflection softboxes a frame carries.</summary>
     public const int MaxSoftboxes = 4;
-    /// <summary>The rows the environment occupies in the screen-light buffer.</summary>
+    /// <summary>The rows the environment occupies in a pass block's environment array.</summary>
     public const int RowCount = 53;
     /// <summary>Rows per light.</summary>
     public const int RowsPerLight = 3;

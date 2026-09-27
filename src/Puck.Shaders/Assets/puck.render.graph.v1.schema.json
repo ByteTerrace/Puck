@@ -348,6 +348,14 @@
                     "null"
                   ],
                   "default": null
+                },
+                "length": {
+                  "description": "The element count of a block array of four-component vectors, whose document value is an array of that many vectors, or null for a single value.",
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "default": null
                 }
               },
               "required": [

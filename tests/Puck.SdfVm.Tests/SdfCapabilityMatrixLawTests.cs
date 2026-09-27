@@ -26,6 +26,8 @@ public sealed class SdfCapabilityMatrixLawTests {
         typeof(SdfViewSnapshot),
         typeof(SdfWorldTablesOptions),
         typeof(SdfWorldRenderSpec),
+        typeof(SdfFrameBlock),
+        typeof(SdfPassValues),
     ];
     // Members a record or a type carries for its own identity rather than as a feature.
     private static readonly string[] IdentityMembers = [".ctor", "<Clone>$", "Deconstruct", "Equals", "GetHashCode", "ToString"];
@@ -85,19 +87,30 @@ public sealed class SdfCapabilityMatrixLawTests {
                 "SdfWorldTables.Pack", "SdfWorldTables.SubmitUpload", "SdfWorldTables.CurrentSlot", "SdfWorldTables.FrameRingSize",
                 "SdfFrame.Time", "SdfWorldResidency.HostFrame", "SdfWorldResidency.BeginFrame", "SdfWorldResidency.Prepare",
                 "SdfWorldResidency.Submit", "SdfWorldResidency.Frame", "SdfWorldResidency.Tables", "SdfWorldResidency.RequestExtent",
-                "SdfWorldPasses.Build", "SdfWorldPasses.Create", "SdfWorldPasses.Regions", "SdfWorldPasses.BeginFrame",
+                "SdfWorldPasses.Build", "SdfWorldPasses.Create", "SdfWorldPasses.BeginFrame",
             ]
         ),
         new(
             Capability: "viewports",
-            Equivalent: "one sdf.world instance per view, scheduled by RenderGraphScheduler, each with its own viewport row and scratch, its output placed by the root's place pass",
+            Equivalent: "one sdf.world instance per view, scheduled by RenderGraphScheduler, each with its own camera in its pass block and its own scratch, its output placed by the root's place pass",
             Check: "puck parity (one view); the split-seats canary (two views)",
             Green: true,
             Members: [
                 "SdfFrame.Views", "SdfViewSnapshot.Camera", "SdfViewSnapshot.Region", "SdfViewSnapshot.AsymmetricFrustumOffset",
-                "SdfWorldTables.WriteViewportRow", "SdfWorldTables.ViewportByteLength", "SdfWorldTables.ConeNear",
+                "SdfWorldTables.ConeNear",
                 "SdfWorldTables.PrimaryMarchSteps", "SdfWorldView.Residency", "SdfWorldView.View", "SdfWorldRenderSpec.Width",
                 "SdfWorldRenderSpec.Height",
+            ]
+        ),
+        new(
+            Capability: "frame block",
+            Equivalent: "the sdf.world pass block (SdfWorldPackage.Values), generated through ShaderFrameInterface and written once a pass by SdfFrameBlock",
+            Check: "SdfFrameBlockLawTests; the interface-echo canary (sdf-world); puck parity",
+            Green: true,
+            Members: [
+                "SdfFrameBlock.Write", "SdfFrameBlock.SizeBytes", "SdfWorldTables.PassValues", "SdfPassValues.ScreenCount",
+                "SdfPassValues.InstanceMaskWordCount", "SdfPassValues.SampleIndex", "SdfPassValues.MeshDraws",
+                "SdfPassValues.DebugMode", "SdfPassValues.Environment",
             ]
         ),
         new(
@@ -141,21 +154,21 @@ public sealed class SdfCapabilityMatrixLawTests {
         ),
         new(
             Capability: "lights, sky and tonemap",
-            Equivalent: "the residency's screen-light table's environment, the light stage, and P16's display transform for the tonemap",
+            Equivalent: "the pass block's environment rows, the light stage, and P16's display transform for the tonemap",
             Check: "PackEnvironmentLawTests; WorldRenderLightingSkyLawTests; puck parity (sky, materials)",
             Green: false,
-            Members: ["SdfFrame.Environment", "SdfFrame.AmbientScale", "SdfFrame.SunScale", "SdfFrame.SampleIndex"]
+            Members: ["SdfFrame.Environment", "SdfFrame.AmbientScale", "SdfFrame.SunScale", "SdfFrame.SampleIndex", "SdfFrameBlock.BakeEnvironment"]
         ),
         new(
             Capability: "far field",
-            Equivalent: "each view's viewport row's far distance and the beam's far bound",
+            Equivalent: "each view's pass block's far distance and the beam's far bound",
             Check: "WorldRenderFarDistanceLawTests",
             Green: false,
             Members: ["SdfFrame.FarDistance", "SdfFrame.DefaultFarDistance", "SdfFrame.DisableFarBound"]
         ),
         new(
             Capability: "shading levers",
-            Equivalent: "staged shading's stage options in the residency's screen-light table",
+            Equivalent: "staged shading's stage options in each view's pass block",
             Check: null,
             Green: false,
             Members: [

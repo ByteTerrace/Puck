@@ -67,9 +67,7 @@ public sealed partial class SdfWorldTables {
                     : m_sampledFiller.ImageViewHandle))
         );
     }
-    // Writes a ring slot's mesh region and a viewport row's buffer into a mesh pass set of the mesh interface.
-    internal void WriteMeshTables(nint set, int slot, IGpuBuffer viewports) {
-        WriteBuffer(buffer: viewports, layout: SdfWorldInterfaces.MeshLayout, member: SdfWorldPackage.Viewports, set: set);
+    // Writes a ring slot's mesh region into a mesh pass set of the mesh interface.
+    internal void WriteMeshTables(nint set, int slot) =>
         WriteBuffer(buffer: m_meshRegion.Buffer(slot: slot), layout: SdfWorldInterfaces.MeshLayout, member: SdfWorldPackage.MeshRegion, set: set);
-    }
 }

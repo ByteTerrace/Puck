@@ -3989,16 +3989,16 @@ versions 0 to 2). Brick upload and brick bake form `sdf.bricks`, a world-scoped
 instance joined to the views by buffer edges. A display pass tonemaps and
 encodes until P16 inherits it. There is no upload pass, because uploads go
 through `GpuRegion`, and no composite, because the engine has none. Group 0 is the
-frame (the generated block and per-world tables), group 1 the world (program
-words, screens, decals, the glyph atlas, the brick pool), group 2 the instance
-(empty and reserved), and group 3 the pass (masks, tiles, arguments, bounds,
-visibility, shadow, color, and the screen sources, an image array read through
-a sampler array). Each frame source's half is an `SdfWorldResidency`, and the
-graph runtime serves captures, work, readiness and `NotReadyReason`; the
-per-pass recorders (`SdfWorldPassRecorder`) record the passes, the tables'
-frame packers become frame-block writers (item 7), and the views are
-`sdf.world` instances. The kernels already sit in the layered module tree item
-2 landed; item 7 generates the frame block into `frame/`.
+frame, group 1 the world (program words and every per-world table, screens,
+decals, the glyph atlas, the brick pool), group 2 the instance (empty and
+reserved), and group 3 the pass (its block, holding the frame's values, then
+masks, tiles, arguments, bounds, visibility, shadow, color, and the screen
+sources, an image array read through a sampler array). Each frame source's half
+is an `SdfWorldResidency`, and the graph runtime serves captures, work,
+readiness and `NotReadyReason`; the per-pass recorders (`SdfWorldPassRecorder`)
+record the passes, `SdfFrameBlock` writes each pass block (item 7), and the
+views are `sdf.world` instances. The kernels sit in the layered module tree
+item 2 landed.
 
 **Build sequence.**
 
@@ -4036,8 +4036,8 @@ frame packers become frame-block writers (item 7), and the views are
 3. Landed, the generated instruction-set declarations: `puck shaders generate`
    writes `sdf-isa.hlsli` from the C# model through `SdfIsaHlsl`, covering the
    version handshake, every ISA enum member and the packed-layout constants,
-   and `--check` fails CI on a stale file. The frame block stays hand-written
-   until item 7.
+   and `--check` fails CI on a stale file. Item 7 adds the environment's row
+   layout to it.
 4. Landed, the planner's vocabulary: a pass's `dispatch` (`Extent`, `Groups`,
    or `Indirect` from a buffer version and offset, which the pass reaches in the
    indirect-argument state), a buffer's `strideBytes`, and a buffer's `count`
@@ -4096,8 +4096,22 @@ frame packers become frame-block writers (item 7), and the views are
    `puck counters compare` hold and both debug layers stay silent on the
    RTX 2060, with Vulkan validation repeated on the RTX 4070; the RTX 2060
    debug-layer run remains.
-7. `SdfFrame` and `SdfEnvironment` join the generated frame block as members of
-   the block pipeline passes already read.
+7. Landed, the frame block: `SdfFrame`'s values and `SdfEnvironment` are
+   members of the pass block every SDF pass already reads, declared once as
+   `SdfWorldPackage.Values` and generated into `sdf-world.interface.hlsli`. The
+   view's camera, far distance, scene time and debug mode, every shading and
+   grid lever, and the environment, a block array of `SdfEnvironment.RowCount`
+   float4 rows, are written by `SdfFrameBlock` at the offsets the generated
+   declarations read; `SdfFrameBlock.BakeEnvironment` is the host bakes, and the
+   rows' indices, light kinds and tonemaps reach the kernels generated
+   (`SDF_ENV_*`, `SDF_LIGHT_*`, `SDF_TONEMAP_*` in `sdf-isa.hlsli`). The
+   viewport table, the environment and lever rows of the screen-light table and
+   their hand-kept HLSL row constants are gone, and the mesh pass's interface
+   lays out the world pass block member for member, so it binds the block its
+   node writes. A block value and a config field may be an array of
+   four-component vectors (`length`), which the interface echo reads element by
+   element. The frame's tables (dynamic transforms, volumes, mesh draws, the
+   instance grid) stay regions.
 8. The SDF pipelines build through the graph's pipeline cache
    (`GpuPassPipelineCache`): each kernel variant an entry keyed like any pass,
    so `SdfWorldPipelineCache`, today its own `GpuBuildCache` instance, and its

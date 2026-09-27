@@ -1,39 +1,12 @@
-// The environment and screen-light rows the frame carries: their layout, the screen surfaces' frames, the mapping each
-// screen is drawn from, which screen slots hold a source this frame, which screen hits shade as a screen, and the row
-// reader.
+// The frame's environment rows and screen tables: the environment row reader, the screen surfaces' frames, the mapping
+// each screen is drawn from, which screen slots hold a source this frame and which screen hits shade as a screen.
 #ifndef FRAME_SDF_ENVIRONMENT_HLSLI
 #define FRAME_SDF_ENVIRONMENT_HLSLI
-// The ENVIRONMENT block: SdfEnvironment's lanes, row for row, after the far-field row. KEEP IN SYNC with
-// SdfEnvironment (row layout, blend kinds) and SdfWorldTables.PackEnvironment (the host bakes: unit directions, the
-// sun-disc exponent, the twinkle period, the integrated cloud offsets and spin).
-static const uint SdfEnvBase = (SDF_MAX_SCREEN_SURFACES + 8u);
-static const uint SdfEnvControl = (SdfEnvBase + 0u);     // x light count, y shadow light index (-1 none), z sky enabled, w fog density
-static const uint SdfEnvLights = (SdfEnvBase + 1u);      // 3 rows per light: (direction.xyz - a position for a point light, weight) (color.rgb, kind) (param, shadows, dynamicSlot - point only else 0, 0)
-static const uint SdfEnvMaxLights = 8u;
-static const uint SdfEnvRowsPerLight = 3u;
-static const uint SdfEnvCurvatureA = (SdfEnvBase + 25u); // cavity, rim, ink, ink band low
-static const uint SdfEnvCurvatureB = (SdfEnvBase + 26u); // ink color.rgb, ink band high
-static const uint SdfEnvSkyControl = (SdfEnvBase + 27u); // x gradient stop count, y sun-disc light index (-1 none), z sun-disc pow() exponent, w sun-disc intensity
-static const uint SdfEnvSkyStops = (SdfEnvBase + 28u);   // 4 rows: color.rgb, elevation in [-1, 1], ascending
-static const uint SdfEnvStars = (SdfEnvBase + 32u);      // density, brightness, seed, 0
-static const uint SdfEnvTwinkle = (SdfEnvBase + 33u);    // share, depth, period in engine ticks, 0
-static const uint SdfEnvCloudsA = (SdfEnvBase + 34u);    // color.rgb, coverage
-static const uint SdfEnvCloudsB = (SdfEnvBase + 35u);    // softness, scale, seed, 0
-static const uint SdfEnvCloudsC = (SdfEnvBase + 36u);    // layer offset.xy, shaping offset.xy
-static const uint SdfEnvCloudsD = (SdfEnvBase + 37u);    // spin angle, curl, 0, 0
-static const uint SdfEnvSoftboxControl = (SdfEnvBase + 38u); // x softbox count, y tonemap mode (0 none, 1 filmic), 0, 0
-static const uint SdfEnvSoftboxes = (SdfEnvBase + 39u);   // 3 rows per softbox: (direction.xyz, weight) (color.rgb, sizeW) (sizeH, blur, 0, 0)
-static const uint SdfEnvMaxSoftboxes = 4u;
-static const uint SdfEnvRowsPerSoftbox = 3u;
-static const uint SdfEnvHorizonLow = (SdfEnvBase + 51u);  // studio reflection horizon low (ground-ward) color.rgb
-static const uint SdfEnvHorizonHigh = (SdfEnvBase + 52u); // studio reflection horizon high (sky-ward) color.rgb
-static const uint SdfEnvLightDirectional = 0u;
-static const uint SdfEnvLightHemisphere = 1u;
-static const uint SdfEnvLightRim = 2u;
-static const uint SdfEnvLightPoint = 3u;
-static const uint SdfEnvLightOccluder = 4u;
-static const uint SdfTonemapNone = 0u;
-static const uint SdfTonemapFilmic = 1u;
+// The environment: SdfEnvironment's lanes, row for row, in the pass block's environment array, with the host bakes (unit
+// directions, the sun-disc exponent, the twinkle period, the integrated cloud offsets and spin). The generated
+// SDF_ENV_*_ROW indices place each row, and frame/sdf-lights.hlsli decodes the lanes of each as SdfEnvironment lays them
+// out.
+float4 worldEnvRow(uint row) { return passGroup.environment[row]; }
 
 #ifdef SDF_SCREEN_SOURCES
 // A declared ScreenSlab instance's world-space front-face frame (see Puck.SignedDistance.SdfScreenSurface) — Stage 1 ONLY
@@ -89,40 +62,10 @@ ScreenMappingData worldScreenMapping(uint screenIndex) {
 // its row names. A screen with no source bound this frame holds a valid filler view; the shader never samples an unbound
 // screen (screenSourceBound gates it), so the filler's content never reaches the image. Every screen index is bounded
 // by the generated SDF_MAX_SCREEN_SURFACES before it indexes a per-screen table.
-// Per-frame screen LIGHT records (sdfScreenLights): entries 0..SDF_MAX_SCREEN_SURFACES-1 carry each screen's emitted
-// light (rgb = the framebuffer's average color this frame, a = intensity gain), entry SDF_MAX_SCREEN_SURFACES is the
-// ENVIRONMENT (x = ambient scale, y = sun scale — dim the room so the glow dominates; z/w = the SLICE debug view's
-// plane selector: z = axis (0 camera-locked, 1/2/3 world X/Y/Z), w = the axis plane's signed offset — see
-// SdfFrame.DebugSliceAxis; read only by debug view mode 7). A light's geometry
-// (position/orientation/extent) is the SAME screenSurfaces[i] entry above — a screen is an area emitter, so it needs
-// only its color here. KEEP IN SYNC with SdfWorldTables's screen-light buffer packing.
-static const uint SdfScreenLightEnv = SDF_MAX_SCREEN_SURFACES;
-
-// Grid-lock overlay rows (grid-locking §4a): four float4 rows after the env entry. KEEP IN SYNC with
-// SdfWorldTables.PackScreenLights + SdfFrame's Grid* fields.
-static const uint SdfGridWorld = (SdfScreenLightEnv + 1u);     // x = flags (bit0 world floor grid, bit1 object grid), y = floorY, zw = world pitch (X, Z)
-static const uint SdfGridObjOrigin = (SdfScreenLightEnv + 2u); // xyz = reference origin (world), w = object pitch X
-static const uint SdfGridObjFrame = (SdfScreenLightEnv + 3u);  // xyzw = reference frame quaternion
-static const uint SdfGridObjParams = (SdfScreenLightEnv + 4u); // x = object pitch Z, y = patch radius (reference-local), z = analytic-normal A/B, w = shadow-cull A/B
-// Engine-bench shader-feature params: x = disable soft shadows, y = disable AO, z = shadow-distance
-// scale (0 = the full 1.0 reach), w = disable screen lights. KEEP IN SYNC with SdfWorldTables.PackScreenLights + SdfFrame's
-// DisableSoftShadows/DisableAmbientOcclusion/ShadowDistanceScale/DisableScreenLights fields.
-static const uint SdfBenchParams = (SdfScreenLightEnv + 5u);
-// The engine-bench SHADOW-PROXY params row (PATH B): x = enable the shadow proxy (shadow rays skip Subtraction-family
-// carve instances and march the pre-carve union hull — sdf.shadow-proxy; 0 = OFF, the default, so an unset frame uploads
-// 0 and is byte-identical); y = use the camera-tile shadow mask instead of the per-pixel shadow-grid gather; z = use the
-// bounded-cost fast soft-shadow marcher; w
-// reserved. A SEPARATE row from SdfBenchParams (whose four lanes are full). KEEP IN SYNC with
-// SdfWorldTables.PackScreenLights + SdfFrame's EnableShadowProxy/UseCameraTileShadowMask/UseFastSoftShadowMarch fields.
-static const uint SdfShadowProxyParams = (SdfScreenLightEnv + 6u);
-// The F1 FAR-FIELD lever row: x = disable the beam-published per-tile far bound (1 = the A/B
-// "off" side — the fine march ignores plane 3 and runs to the far distance exactly as pre-F1; 0 = the DEFAULT shipped
-// behavior with the far bound ACTIVE, so an unset frame uploads 0 and the feature is ON); y = disable the F2 shadow
-// light-side exit (RESERVED for F2, not yet consumed); zw reserved. A SEPARATE row from SdfShadowProxyParams (whose
-// lanes carry the shadow proxy). KEEP IN SYNC with SdfWorldTables.PackScreenLights + SdfFrame's DisableFarBound field.
-static const uint SdfFarFieldParams = (SdfScreenLightEnv + 7u);
-
-float4 worldEnvRow(uint row) { return sdfScreenLights[row]; }
+// Per-frame screen LIGHT records (sdfScreenLights): entry i carries screen i's emitted light (rgb = the framebuffer's
+// average color this frame, a = intensity gain). A light's geometry (position/orientation/extent) is the SAME
+// screenSurfaces[i] entry above — a screen is an area emitter, so it needs only its color here. KEEP IN SYNC with
+// SdfWorldTables.PackScreenLights.
 
 bool screenSourceBound(uint screenIndex) {
     return (worldScreenMapping(screenIndex).state.x != 0.0);
@@ -160,26 +103,6 @@ bool sdfScreenSurfaceShades(int material) {
 
     // Declared, but neither a decal nor a mapped, bound source this frame: the material-shaded fallback applies.
     return (screenSourceBound(screenIndex) && (worldScreenMapping(screenIndex).imageU.w != 0.0));
-}
-#else
-// The environment reader's no-screen-sources half: the pinned sun and hemisphere an unauthored world renders, so a
-// kernel that binds no screen-light buffer still parses the lit path and agrees with the bound one whenever a world
-// authors no lighting. KEEP IN SYNC with SdfEnvironment.Default.
-float4 worldEnvRow(uint row) {
-    uint offset = (row - SdfEnvBase);
-
-    if (offset == 0u) { return float4(2.0, 0.0, 0.0, 0.015); }
-    if (offset == 1u) { return float4(SdfSunDirection, 0.85); }
-    if (offset == 2u) { return float4(1.0, 1.0, 1.0, 0.0); }
-    if (offset == 3u) { return float4((1.0 / 9.0), 1.0, 0.0, 0.0); }
-    if (offset == 4u) { return float4(0.0, 0.0, 0.0, 0.25); }
-    if (offset == 5u) { return float4(1.0, 1.0, 1.0, 1.0); }
-    if (offset == 6u) { return float4(0.25, 0.0, 0.0, 0.0); }
-    if (offset == 25u) { return float4(0.0, 0.0, 0.0, 6.0); }
-    if (offset == 26u) { return float4(0.02, 0.02, 0.03, 16.0); }
-    if (offset == 27u) { return float4(0.0, -1.0, 1.0, 0.0); }
-
-    return float4(0.0, 0.0, 0.0, 0.0);
 }
 #endif
 

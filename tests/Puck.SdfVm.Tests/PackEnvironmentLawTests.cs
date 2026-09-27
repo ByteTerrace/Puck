@@ -1,5 +1,4 @@
 using System.Numerics;
-using System.Reflection;
 
 using Puck.SignedDistance;
 
@@ -7,21 +6,12 @@ using Xunit;
 
 namespace Puck.SdfVm.Tests;
 
-/// <summary>Exercises <c>SdfWorldTables.PackEnvironment</c> (private, reflection-invoked — it needs no GPU device)
-/// directly, closing the gap between <see cref="SdfEnvironment"/>'s own lane table (proved elsewhere) and the exact
-/// bytes the engine uploads for the shader to read.</summary>
+/// <summary>Exercises <see cref="SdfFrameBlock.BakeEnvironment"/>, which needs no GPU device, closing the gap between
+/// <see cref="SdfEnvironment"/>'s own lane table (proved elsewhere) and the exact rows every pass block carries for the
+/// shader to read.</summary>
 public sealed class PackEnvironmentLawTests {
     private static float[] PackedFloats(SdfEnvironment environment) {
-        var packEnvironment = (typeof(SdfWorldTables).GetMethod(
-            bindingAttr: BindingFlags.NonPublic | BindingFlags.Static,
-            name: "PackEnvironment"
-        ) ?? throw new InvalidOperationException(message: "SdfWorldTables.PackEnvironment not found."));
-        var screenLightByteLengthField = (typeof(SdfWorldTables).GetField(
-            bindingAttr: BindingFlags.NonPublic | BindingFlags.Static,
-            name: "ScreenLightByteLength"
-        ) ?? throw new InvalidOperationException(message: "SdfWorldTables.ScreenLightByteLength not found."));
-        var byteLength = ((int)screenLightByteLengthField.GetValue(obj: null)!);
-        var floats = new float[(byteLength / sizeof(float))];
+        var floats = new float[SdfEnvironment.LaneCount];
         var frame = new SdfFrame(
             Program: TinyProgram(),
             ProgramChanged: true,
@@ -31,13 +21,9 @@ public sealed class PackEnvironmentLawTests {
             Environment = environment,
         };
 
-        // PackEnvironment(SdfFrame frame, Span<float> floats) — MethodInfo.Invoke cannot box a Span, so call through
-        // a delegate built from the open method instead.
-        var del = ((PackEnvironmentDelegate)packEnvironment.CreateDelegate(delegateType: typeof(PackEnvironmentDelegate)));
-
-        del(
-            frame,
-            floats.AsSpan()
+        SdfFrameBlock.BakeEnvironment(
+            frame: frame,
+            rows: floats
         );
 
         return floats;
@@ -128,12 +114,11 @@ public sealed class PackEnvironmentLawTests {
         );
 
         var floats = PackedFloats(environment: environment);
-        var envBase = ((SdfProgramBuilder.MaxScreenSurfaces + 8) * 4);
-        var row = (envBase + ((SdfEnvironment.LightsRow + (4 * SdfEnvironment.RowsPerLight)) * 4));
+        var row = ((SdfEnvironment.LightsRow + (4 * SdfEnvironment.RowsPerLight)) * 4);
 
         Assert.Equal(
             expected: 5f,
-            actual: floats[(envBase + 0)]
+            actual: floats[(SdfEnvironment.ControlRow * 4)]
         );
         Assert.Equal(
             expected: 0f,
@@ -173,7 +158,7 @@ public sealed class PackEnvironmentLawTests {
             )
         );
         var floats = PackedFloats(environment: environment);
-        var row = (((SdfProgramBuilder.MaxScreenSurfaces + 8) + SdfEnvironment.LightsRow) * 4);
+        var row = (SdfEnvironment.LightsRow * 4);
 
         Assert.Equal(
             12f,
@@ -204,6 +189,4 @@ public sealed class PackEnvironmentLawTests {
             floats[(row + 10)]
         );
     }
-
-    private delegate void PackEnvironmentDelegate(SdfFrame frame, Span<float> floats);
 }

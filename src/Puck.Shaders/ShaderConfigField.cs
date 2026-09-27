@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Puck.Shaders;
 
@@ -12,10 +13,13 @@ namespace Puck.Shaders;
 /// <param name="Min">The inclusive per-component minimum, or <see langword="null"/> for none.</param>
 /// <param name="Max">The inclusive per-component maximum, or <see langword="null"/> for none.</param>
 /// <param name="Description">The field's description, carried into the emitted JSON Schema.</param>
+/// <param name="Length">The element count of a block array of four-component vectors, whose document value is an array
+/// of that many vectors, or <see langword="null"/> for a single value.</param>
 public sealed record ShaderConfigField(
     ShaderValueType Type,
     JsonElement? Default = null,
     double? Min = null,
     double? Max = null,
-    string? Description = null
+    string? Description = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] uint? Length = null
 );

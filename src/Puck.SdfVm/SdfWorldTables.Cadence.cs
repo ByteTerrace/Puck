@@ -7,25 +7,24 @@ namespace Puck.SdfVm;
 // The cadence: whether a view's latest render stands for the frame the tables hold now. A view stands only when its
 // signature equals the one it last rendered at and nothing unhashed forces a render (ForcesRender).
 //
-// Signature coverage — the tables' signature (TablesSignature) folds in everything every pass of a view reads besides the
-// view's own row, and the view's signature (ViewSignature) folds that with the row:
+// Signature coverage — the tables' signature (TablesSignature) folds in everything every pass of a view reads besides its
+// pass block's view and frame values, and the view's signature (ViewSignature) folds that with the pass block:
 //   - m_programRevision  : the uploaded program (words, live instance-mask width, kernel variant, reseeded screen-surface
 //                          table, invariant instance grid) and every kernel reload — bumped by UploadProgram and
 //                          InstallReload.
-//   - the pass values     : the bound screen count, the twinkle tick and the mesh draws' count.
-//   - the view's row      : its camera basis + fov/aspect, debug view mode, off-axis offset and the frame's far distance,
-//                          excluding the presentation-time lane (position.w) and the render extent, which the scheduler
-//                          renders a view again for when it moves. Time free-runs every frame, so hashing it would make
-//                          the signature never repeat; what reads it (bounded volumes) forces a render below.
+//   - the world values    : the bound screen count, the twinkle tick and the mesh draws' count.
+//   - the pass block      : the view's camera basis, fov/aspect, off-axis offset, far distance and debug view mode, every
+//                          lever and the environment (SdfFrameBlock), less the presentation time and the render extent,
+//                          which the scheduler renders a view again for when it moves. Time free-runs every frame, so
+//                          hashing it would make the signature never repeat; what reads it (bounded volumes) forces a
+//                          render below.
 //   - m_dynamicTransformRevision : bumped whenever a frame packs an owed dynamic-transform row, so the table is never
 //                          re-hashed. Also covers the frame instance grid (a pure function of these transforms + the
 //                          program).
 //   - m_meshRevision     : the mesh draws the mesh pass rasterizes and primary bounds its march by.
 //   - m_screenSurfaceRegion, m_screenMappingRegion : the screen-surface sampling table and the mapping and bound flag
 //                          each screen is drawn from.
-//   - m_screenLightScratch : per-screen glow colors + the environment row (ambient/sun/slice) + the grid-overlay rows +
-//                          the engine-bench lever rows + the shadow-proxy rows + the analytic-normal and shadow-cull
-//                          toggles — every shading lever.
+//   - m_screenLightScratch : the per-screen glow colors.
 //   - m_decalRevision    : the glyph-decal buffer — revision-tracked (it is 820 KB, not re-hashed each frame).
 // Not covered by any packed span — handled conservatively by forcing a render:
 //   - m_programDeclaresScreenSlab : a bound screen's image content updates in place each frame with the same view handle,
@@ -33,9 +32,7 @@ namespace Puck.SdfVm;
 //   - AnyBrickBaking()  : an in-progress carve bake writing brick voxels each upload.
 //   - frame.Volumes     : bounded volumes animate on the excluded time lane, and their table is not hashed.
 public sealed partial class SdfWorldTables {
-    // The row lanes the view signature leaves out: the presentation time (position.w) and the render extent.
-    private const int TimeLane = 3;
-    private const int ExtentLane = 16;
+    private readonly byte[] m_signatureBlock = new byte[SdfFrameBlock.SizeBytes];
 
     private ulong m_tablesSignature;
 
@@ -55,21 +52,24 @@ public sealed partial class SdfWorldTables {
         );
     }
     /// <summary>Returns the 64-bit FNV-1a signature of what one view renders from in the frame the tables hold: the
-    /// tables' signature (<see cref="UpdateTablesSignature"/>) folded with the view's row, less its presentation time and
-    /// its render extent. A collision would need a 64-bit hash clash across two genuinely different input sets —
-    /// negligible, and still only presentation, never simulation.</summary>
+    /// tables' signature (<see cref="UpdateTablesSignature"/>) folded with the view's pass block
+    /// (<see cref="SdfFrameBlock"/>), written with no presentation time and no render extent. A collision would need a
+    /// 64-bit hash clash across two genuinely different input sets — negligible, and still only presentation, never
+    /// simulation.</summary>
     /// <param name="frame">The frame the tables packed.</param>
     /// <param name="view">The view's index in <see cref="SdfFrame.Views"/>.</param>
     /// <returns>The signature.</returns>
     public ulong ViewSignature(SdfFrame frame, int view) {
         var hash = Fnv1aHash.Create();
-        Span<byte> row = stackalloc byte[ViewportByteLength];
+        var block = m_signatureBlock.AsSpan();
         Span<byte> tables = stackalloc byte[sizeof(ulong)];
 
-        WriteViewportRow(
+        SdfFrameBlock.Write(
+            block: block,
             frame: frame,
             height: 0u,
-            row: row,
+            sceneTime: 0f,
+            tables: PassValues,
             view: view,
             width: 0u
         );
@@ -78,14 +78,12 @@ public sealed partial class SdfWorldTables {
             value: in m_tablesSignature
         );
         hash.Add(values: tables);
-        hash.Add(values: row[..(TimeLane * sizeof(float))]);
-        hash.Add(values: row[((TimeLane + 1) * sizeof(float))..(ExtentLane * sizeof(float))]);
-        hash.Add(values: row[((ExtentLane + 2) * sizeof(float))..]);
+        hash.Add(values: block);
 
         return hash.Value;
     }
-    /// <summary>Folds everything every view reads of the tables besides its own row into the tables' signature, once the
-    /// frame is packed and its screens are bound.</summary>
+    /// <summary>Folds everything every view reads of the tables besides its pass block into the tables' signature, once
+    /// the frame is packed and its screens are bound.</summary>
     public void UpdateTablesSignature() {
         var hash = Fnv1aHash.Create();
 

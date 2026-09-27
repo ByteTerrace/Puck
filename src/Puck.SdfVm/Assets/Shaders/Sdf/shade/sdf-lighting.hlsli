@@ -10,8 +10,8 @@
 // shading site as studioReflection(reflect(rayDirection, normal), roughness) — an absent section (zero softboxes,
 // zero-black horizon) contributes exactly 0, so the reflection term is a no-op addition then.
 float3 worldEnvironmentHorizon(float3 direction) {
-    float3 low = worldEnvRow(SdfEnvHorizonLow).rgb;
-    float3 high = worldEnvRow(SdfEnvHorizonHigh).rgb;
+    float3 low = worldEnvRow(SDF_ENV_HORIZON_LOW_ROW).rgb;
+    float3 high = worldEnvRow(SDF_ENV_HORIZON_HIGH_ROW).rgb;
 
     return lerp(low, high, saturate((direction.y * 0.5) + 0.5));
 }

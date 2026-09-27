@@ -207,7 +207,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     public IGpuWorkSource Work => m_work;
     /// <summary>Gets the GPU objects the residency's tables have created, over its whole life.</summary>
     public IWorkCounterSource WorkLifetime => m_work;
-    /// <summary>Gets or sets the SDF debug view mode every view's viewport row carries from the next frame.</summary>
+    /// <summary>Gets or sets the SDF debug view mode every view's pass block carries from the next frame.</summary>
     public int DebugMode {
         get => m_debugMode;
         set {

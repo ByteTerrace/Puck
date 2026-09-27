@@ -13,10 +13,10 @@ namespace Puck.Shaders;
 /// <param name="Type">The value type of a <see cref="ShaderInterfaceMemberKind.Value"/>, the element type of an
 /// <see cref="ShaderInterfaceMemberKind.Array"/>, the texel type an image reads as, or the element type of a structured
 /// buffer; <see langword="null"/> for a raw buffer or a <see cref="ShaderInterfaceMemberKind.Sampler"/>.</param>
-/// <param name="Length">The element count of an <see cref="ShaderInterfaceMemberKind.Array"/>, at least one, or the
-/// descriptor count of an arrayed <see cref="ShaderInterfaceMemberKind.SampledImage"/> or
-/// <see cref="ShaderInterfaceMemberKind.Sampler"/>, which a pass indexes; <see langword="null"/> for a single image or
-/// sampler and for every other kind.</param>
+/// <param name="Length">The element count of an <see cref="ShaderInterfaceMemberKind.Array"/> or of a block array (a
+/// <see cref="ShaderInterfaceMemberKind.Value"/> of four-component vectors), at least one, or the descriptor count of an
+/// arrayed <see cref="ShaderInterfaceMemberKind.SampledImage"/> or <see cref="ShaderInterfaceMemberKind.Sampler"/>, which
+/// a pass indexes; <see langword="null"/> for a single value, image or sampler and for every other kind.</param>
 /// <param name="Format">The texel format of a <see cref="ShaderInterfaceMemberKind.StorageImage"/>;
 /// <see langword="null"/> for every other kind.</param>
 public sealed record ShaderInterfaceMember(
@@ -27,15 +27,20 @@ public sealed record ShaderInterfaceMember(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] uint? Length = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] GpuPixelFormat? Format = null
 ) {
-    /// <summary>Creates a scalar or vector member.</summary>
+    /// <summary>Creates a scalar or vector member of its group's constant block, or a fixed-length array of
+    /// four-component vectors there, whose element <c>i</c> lies <c>16 i</c> bytes past its first on both
+    /// backends.</summary>
     /// <param name="name">The member's name.</param>
     /// <param name="group">The member's frequency group.</param>
-    /// <param name="type">The value type.</param>
+    /// <param name="type">The value type, a four-component vector for an array.</param>
+    /// <param name="length">The element count of a block array, at least one, or <see langword="null"/> for a single
+    /// value.</param>
     /// <returns>The member.</returns>
-    public static ShaderInterfaceMember Value(string name, ShaderInterfaceGroup group, ShaderValueType type) =>
+    public static ShaderInterfaceMember Value(string name, ShaderInterfaceGroup group, ShaderValueType type, uint? length = null) =>
         new(
             Group: group,
             Kind: ShaderInterfaceMemberKind.Value,
+            Length: length,
             Name: name,
             Type: type
         );

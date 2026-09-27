@@ -29,7 +29,7 @@ first. Read back with `world.row.set render` (the section's read arm) and
 reach multiplier over the default, the horizon-ray step count per unit of
 camera height against the primary march's 128-step budget, and the fog
 remnant `exp(−fogDensity·far)` at the far plane. Renderer contract:
-`rendering` skill sync pairs, the viewport row.
+`rendering` skill sync pairs, the pass block (`farDistance`).
 
 `environment` (`WorldRenderEnvironment`, optional) and `tonemap`
 (`WorldTonemap` {`none`, `filmic`}, optional) are also read off the LIVE

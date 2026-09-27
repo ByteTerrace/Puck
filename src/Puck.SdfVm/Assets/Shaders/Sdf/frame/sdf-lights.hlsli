@@ -16,12 +16,12 @@ struct SdfEnvLight {
     bool shadows;
     int dynamicSlot;  // point only: the dynamic-transform slot its position rides, or -1 for the static position
 };
-uint worldLightCount() { return min((uint)max(worldEnvRow(SdfEnvControl).x + 0.5, 0.0), SdfEnvMaxLights); }
-int worldShadowLightIndex() { return (int)round(worldEnvRow(SdfEnvControl).y); }
-bool worldSkyEnabled() { return (worldEnvRow(SdfEnvControl).z > 0.5); }
-float worldSkyFogDensity() { return worldEnvRow(SdfEnvControl).w; }
+uint worldLightCount() { return min((uint)max(worldEnvRow(SDF_ENV_CONTROL_ROW).x + 0.5, 0.0), SDF_ENV_MAX_LIGHTS); }
+int worldShadowLightIndex() { return (int)round(worldEnvRow(SDF_ENV_CONTROL_ROW).y); }
+bool worldSkyEnabled() { return (worldEnvRow(SDF_ENV_CONTROL_ROW).z > 0.5); }
+float worldSkyFogDensity() { return worldEnvRow(SDF_ENV_CONTROL_ROW).w; }
 SdfEnvLight worldLight(uint index) {
-    uint row = (SdfEnvLights + (index * SdfEnvRowsPerLight));
+    uint row = (SDF_ENV_LIGHTS_ROW + (index * SDF_ENV_ROWS_PER_LIGHT));
     float4 a = worldEnvRow(row);
     float4 b = worldEnvRow(row + 1u);
     float4 c = worldEnvRow(row + 2u);
@@ -64,32 +64,32 @@ float worldShadowPenumbraSlope() {
 
     return ((index >= 0) ? max(worldLight((uint)index).param, 1.0e-3) : (1.0 / 9.0));
 }
-float worldCurvatureCavity() { return worldEnvRow(SdfEnvCurvatureA).x; }
-float worldCurvatureRim() { return worldEnvRow(SdfEnvCurvatureA).y; }
-float worldCurvatureInk() { return worldEnvRow(SdfEnvCurvatureA).z; }
-float worldCurvatureInkLow() { return worldEnvRow(SdfEnvCurvatureA).w; }
-float3 worldCurvatureInkColor() { return worldEnvRow(SdfEnvCurvatureB).rgb; }
-float worldCurvatureInkHigh() { return worldEnvRow(SdfEnvCurvatureB).w; }
-uint worldSkyStopCount() { return min((uint)max(worldEnvRow(SdfEnvSkyControl).x + 0.5, 0.0), 4u); }
-float4 worldSkyStop(uint index) { return worldEnvRow(SdfEnvSkyStops + index); } // rgb colour, w elevation
-int worldSkySunDiscLightIndex() { return (int)round(worldEnvRow(SdfEnvSkyControl).y); }
-float worldSkySunDiscExponent() { return worldEnvRow(SdfEnvSkyControl).z; }
-float worldSkySunDiscIntensity() { return worldEnvRow(SdfEnvSkyControl).w; }
-float worldSkyStarDensity() { return worldEnvRow(SdfEnvStars).x; }
-float worldSkyStarBrightness() { return worldEnvRow(SdfEnvStars).y; }
-uint worldSkyStarSeed() { return (uint)(worldEnvRow(SdfEnvStars).z + 0.5); }
-float worldSkyStarTwinkleShare() { return worldEnvRow(SdfEnvTwinkle).x; }
-float worldSkyStarTwinkleDepth() { return worldEnvRow(SdfEnvTwinkle).y; }
-uint worldSkyStarTwinklePeriodTicks() { return max((uint)(worldEnvRow(SdfEnvTwinkle).z + 0.5), 1u); }
-float3 worldSkyCloudColor() { return worldEnvRow(SdfEnvCloudsA).rgb; }
-float worldSkyCloudCoverage() { return worldEnvRow(SdfEnvCloudsA).w; }
-float worldSkyCloudSoftness() { return worldEnvRow(SdfEnvCloudsB).x; }
-float worldSkyCloudScale() { return worldEnvRow(SdfEnvCloudsB).y; }
-uint worldSkyCloudSeed() { return (uint)(worldEnvRow(SdfEnvCloudsB).z + 0.5); }
-float2 worldSkyCloudOffset() { return worldEnvRow(SdfEnvCloudsC).xy; }
-float2 worldSkyCloudShearOffset() { return worldEnvRow(SdfEnvCloudsC).zw; }
-float worldSkyCloudSpinAngle() { return worldEnvRow(SdfEnvCloudsD).x; }
-float worldSkyCloudCurl() { return worldEnvRow(SdfEnvCloudsD).y; }
+float worldCurvatureCavity() { return worldEnvRow(SDF_ENV_CURVATURE_ROW).x; }
+float worldCurvatureRim() { return worldEnvRow(SDF_ENV_CURVATURE_ROW).y; }
+float worldCurvatureInk() { return worldEnvRow(SDF_ENV_CURVATURE_ROW).z; }
+float worldCurvatureInkLow() { return worldEnvRow(SDF_ENV_CURVATURE_ROW).w; }
+float3 worldCurvatureInkColor() { return worldEnvRow((SDF_ENV_CURVATURE_ROW + 1u)).rgb; }
+float worldCurvatureInkHigh() { return worldEnvRow((SDF_ENV_CURVATURE_ROW + 1u)).w; }
+uint worldSkyStopCount() { return min((uint)max(worldEnvRow(SDF_ENV_SKY_CONTROL_ROW).x + 0.5, 0.0), SDF_ENV_MAX_SKY_STOPS); }
+float4 worldSkyStop(uint index) { return worldEnvRow(SDF_ENV_SKY_STOPS_ROW + index); } // rgb colour, w elevation
+int worldSkySunDiscLightIndex() { return (int)round(worldEnvRow(SDF_ENV_SKY_CONTROL_ROW).y); }
+float worldSkySunDiscExponent() { return worldEnvRow(SDF_ENV_SKY_CONTROL_ROW).z; }
+float worldSkySunDiscIntensity() { return worldEnvRow(SDF_ENV_SKY_CONTROL_ROW).w; }
+float worldSkyStarDensity() { return worldEnvRow(SDF_ENV_STARS_ROW).x; }
+float worldSkyStarBrightness() { return worldEnvRow(SDF_ENV_STARS_ROW).y; }
+uint worldSkyStarSeed() { return (uint)(worldEnvRow(SDF_ENV_STARS_ROW).z + 0.5); }
+float worldSkyStarTwinkleShare() { return worldEnvRow(SDF_ENV_TWINKLE_ROW).x; }
+float worldSkyStarTwinkleDepth() { return worldEnvRow(SDF_ENV_TWINKLE_ROW).y; }
+uint worldSkyStarTwinklePeriodTicks() { return max((uint)(worldEnvRow(SDF_ENV_TWINKLE_ROW).z + 0.5), 1u); }
+float3 worldSkyCloudColor() { return worldEnvRow(SDF_ENV_CLOUDS_ROW).rgb; }
+float worldSkyCloudCoverage() { return worldEnvRow(SDF_ENV_CLOUDS_ROW).w; }
+float worldSkyCloudSoftness() { return worldEnvRow((SDF_ENV_CLOUDS_ROW + 1u)).x; }
+float worldSkyCloudScale() { return worldEnvRow((SDF_ENV_CLOUDS_ROW + 1u)).y; }
+uint worldSkyCloudSeed() { return (uint)(worldEnvRow((SDF_ENV_CLOUDS_ROW + 1u)).z + 0.5); }
+float2 worldSkyCloudOffset() { return worldEnvRow((SDF_ENV_CLOUDS_ROW + 2u)).xy; }
+float2 worldSkyCloudShearOffset() { return worldEnvRow((SDF_ENV_CLOUDS_ROW + 2u)).zw; }
+float worldSkyCloudSpinAngle() { return worldEnvRow((SDF_ENV_CLOUDS_ROW + 3u)).x; }
+float worldSkyCloudCurl() { return worldEnvRow((SDF_ENV_CLOUDS_ROW + 3u)).y; }
 // render.environment's studio softboxes (the reflection shade/sdf-lighting.hlsli samples).
 struct SdfEnvSoftbox {
     float3 direction; // unit, surface -> the softbox (host-normalized on upload)
@@ -98,10 +98,10 @@ struct SdfEnvSoftbox {
     float2 size;       // angular half-extent proxy (width, height), world-authored radians-scale units
     float blur;
 };
-uint worldEnvironmentSoftboxCount() { return min((uint)max(worldEnvRow(SdfEnvSoftboxControl).x + 0.5, 0.0), SdfEnvMaxSoftboxes); }
-uint worldTonemapMode() { return (uint)max(worldEnvRow(SdfEnvSoftboxControl).y + 0.5, 0.0); }
+uint worldEnvironmentSoftboxCount() { return min((uint)max(worldEnvRow(SDF_ENV_SOFTBOX_CONTROL_ROW).x + 0.5, 0.0), SDF_ENV_MAX_SOFTBOXES); }
+uint worldTonemapMode() { return (uint)max(worldEnvRow(SDF_ENV_SOFTBOX_CONTROL_ROW).y + 0.5, 0.0); }
 SdfEnvSoftbox worldEnvironmentSoftbox(uint index) {
-    uint row = (SdfEnvSoftboxes + (index * SdfEnvRowsPerSoftbox));
+    uint row = (SDF_ENV_SOFTBOXES_ROW + (index * SDF_ENV_ROWS_PER_SOFTBOX));
     float4 a = worldEnvRow(row);
     float4 b = worldEnvRow(row + 1u);
     float4 c = worldEnvRow(row + 2u);

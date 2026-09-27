@@ -404,6 +404,61 @@ public sealed class ShaderPipelineTests {
         );
     }
     [Fact]
+    public void A_block_array_config_field_binds_row_by_row_and_refuses_another_count_or_element() {
+        var config = new Dictionary<string, ShaderConfigField> {
+            ["rows"] = new ShaderConfigField(
+                ShaderValueType.Float4,
+                Default: JsonDocument.Parse("[[1, 2, 3, 4], [5, 6, 7, 8]]").RootElement.Clone(),
+                Length: 2
+            ),
+        };
+        var layout = ShaderPipelineParameterLayout.Resolve(
+            pass: (Pass(
+                "configured",
+                [],
+                ["out"]
+            ) with { Config = config }),
+            resources: OutResources
+        );
+
+        // A block array starts a 16-byte row after the extent and holds one row an element.
+        Assert.Equal(
+            expected: 16u,
+            actual: layout.Slots[0].Offset
+        );
+        Assert.Equal(
+            expected: 48u,
+            actual: layout.SizeBytes
+        );
+        Assert.True(
+            condition: layout.TryBind(
+                config: null,
+                reason: out var reason,
+                values: out var values
+            ),
+            reason
+        );
+        Assert.Equal(
+            expected: [1f, 2f, 3f, 4f, 5f, 6f, 7f, 8f],
+            actual: System.Runtime.InteropServices.MemoryMarshal.Cast<byte, float>(span: values.Bytes.Span.Slice(length: 32, start: 16)).ToArray()
+        );
+        Assert.False(condition: layout.TryBind(
+            config: JsonDocument.Parse("{\"rows\": [[1, 2, 3, 4]]}").RootElement,
+            reason: out reason,
+            values: out _
+        ));
+        Assert.Equal(
+            actual: reason,
+            expected: "'rows' must be an array of 2 elements, each an array of 4 numbers."
+        );
+        _ = Assert.Throws<InvalidDataException>(testCode: () => ShaderConfigBinding.ValidateSchema(
+            ownerName: "narrow",
+            schema: new Dictionary<string, ShaderConfigField> {
+                ["rows"] = new ShaderConfigField(ShaderValueType.Float2, Length: 2),
+            }
+        ));
+    }
+    [Fact]
     public void Parameter_layout_uses_ordinal_names_for_vector_packing() {
         var config = new Dictionary<string, ShaderConfigField> {
             ["zVector"] = new ShaderConfigField(ShaderValueType.Float2),

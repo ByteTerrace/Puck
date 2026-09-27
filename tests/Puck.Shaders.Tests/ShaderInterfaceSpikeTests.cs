@@ -184,6 +184,37 @@ public sealed class ShaderInterfaceSpikeTests {
             );
         }
     }
+    // A block array of four-component vectors between two scalars: both bytecodes reflect it where the layout puts it,
+    // its elements one 16-byte row apart, so a host writing row after row lands where the kernel reads.
+    [Fact]
+    public async Task A_block_array_reflects_where_the_layout_places_it_on_both_backends() {
+        SkipWithoutDxc();
+
+        var shaderInterface = new ShaderInterface(
+            members: [
+                ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: "first", type: ShaderValueType.Float),
+                ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: 3, name: "rows", type: ShaderValueType.Float4),
+                ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: "after", type: ShaderValueType.Uint),
+                ShaderInterfaceMember.ReadWriteBuffer(group: ShaderInterfaceGroup.Pass, name: "sums"),
+            ],
+            name: "block-array"
+        );
+        var layout = shaderInterface.Layout();
+        var build = await ShaderInterfaceSpike.CompileSourceAsync(
+            cancellationToken: TestContext.Current.CancellationToken,
+            entryPoint: "CSMain",
+            profile: "cs_6_6",
+            source: (ShaderInterfaceHlsl.Generate(shaderInterface: shaderInterface) + "[numthreads(1, 1, 1)] void CSMain(uint3 id : SV_DispatchThreadID) { sums.Store((id.x * 4u), (asuint((passGroup.first + passGroup.rows[id.x % 3u].w)) + passGroup.after)); }\n")
+        );
+
+        Assert.Null(@object: layout.Mismatch(reflected: SpirvInterfaceReader.Read(module: build.Spirv)));
+
+        if (OperatingSystem.IsWindows()) {
+            using var reader = DxilInterfaceReader.Load(toolchain: new ShaderToolchain());
+
+            Assert.Null(@object: layout.Mismatch(reflected: reader.Read(container: build.Dxil)));
+        }
+    }
     [Fact]
     public void Both_passes_place_the_frame_group_identically() {
         var bindings = ShaderInterfaceSpike.Passes.Select(selector: static pass => pass.Interface.Layout().Bindings.Where(predicate: static binding => (binding.Set == ((uint)ShaderInterfaceGroup.Frame))).ToArray()).ToArray();

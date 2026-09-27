@@ -236,15 +236,10 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
             // never reaches march step-length/soundness logic, which stays keyed on the raw `stepScale` alone.
             float shadingStepScale = (stepScale * max(gradientMagnitude, GradientMagnitudeFloor));
 
-            // The environment scales dim the room so the diegetic screen glow dominates. They default to 1 outside the
-            // world-views path (every other path shades exactly as before); the overworld sets them low per frame.
-            float ambientScale = 1.0;
-            float sunScale = 1.0;
-#ifdef SDF_SCREEN_SOURCES
-            float4 environment = sdfScreenLights[SdfScreenLightEnv];
-            ambientScale = environment.x;
-            sunScale = environment.y;
-#endif
+            // The environment scales dim the room so the diegetic screen glow dominates; the overworld sets them low per
+            // frame.
+            float ambientScale = passGroup.ambientScale;
+            float sunScale = passGroup.sunScale;
 
             if ((sunDiffuse > 0.0) && (worldShadowLightIndex() >= 0) && !worldSoftShadowsDisabled() && !meshPixel) {
                 // ONE shared scaled reach for BOTH the gather cull cone and the march ceiling (world.shadows's
@@ -359,16 +354,16 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
                 for (uint lightIndex = 0u; (lightIndex < lightCount); lightIndex++) {
                     SdfEnvLight light = worldLight(lightIndex);
 
-                    if (light.kind == SdfEnvLightDirectional) {
+                    if (light.kind == SDF_LIGHT_DIRECTIONAL) {
                         float lambert = sdfWrapDiffuse(dot(normal, light.direction), shadeMaterial.wrap);
                         float occlusion = (((int)lightIndex == shadowLight) ? keyVisibility : ambientOcclusion);
 
                         radiance += (light.color * (((light.weight * lambert) * occlusion) * sunScale));
-                    } else if (light.kind == SdfEnvLightHemisphere) {
+                    } else if (light.kind == SDF_LIGHT_HEMISPHERE) {
                         float ambient = (light.weight + (light.param * normal.y));
 
                         radiance += (light.color * ((ambient * ambientScale) * ambientOcclusion));
-                    } else if (light.kind == SdfEnvLightPoint) {
+                    } else if (light.kind == SDF_LIGHT_POINT) {
                         float3 toLight = (worldPointLightPosition(light) - surfacePoint);
                         float pointDistance = length(toLight);
                         float3 pointDirection = (toLight / max(pointDistance, 1.0e-4));
@@ -434,7 +429,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
                 for (uint rimIndex = 0u; (rimIndex < lightCount); rimIndex++) {
                     SdfEnvLight rim = worldLight(rimIndex);
 
-                    if (rim.kind == SdfEnvLightRim) {
+                    if (rim.kind == SDF_LIGHT_RIM) {
                         color += ((rim.weight * rim.color) * pow((1.0 - saturate(dot(normal, -rayDirection))), rim.param));
                     }
                 }
@@ -445,7 +440,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
                 for (uint pointIndex = 0u; (pointIndex < lightCount); pointIndex++) {
                     SdfEnvLight pointLight = worldLight(pointIndex);
 
-                    if (pointLight.kind == SdfEnvLightPoint) {
+                    if (pointLight.kind == SDF_LIGHT_POINT) {
                         float3 toLight = (worldPointLightPosition(pointLight) - surfacePoint);
                         float pointDistance = length(toLight);
                         float3 pointDirection = (toLight / max(pointDistance, 1.0e-4));
@@ -460,7 +455,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
                 float attenuation = 1.0;
                 [loop] for (uint index = 0u; index < lightCount; index++) {
                     SdfEnvLight field = worldLight(index);
-                    if (field.kind != SdfEnvLightOccluder || field.weight <= 0.0) continue;
+                    if (field.kind != SDF_LIGHT_OCCLUDER || field.weight <= 0.0) continue;
                     float3 delta = worldPointLightPosition(field) - surfacePoint;
                     float distanceSquared = dot(delta, delta);
                     float facing = distanceSquared > 1.0e-12 ? saturate(dot(normal, delta * rsqrt(distanceSquared))) : 1.0;
@@ -483,15 +478,15 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
             // Grid-lock overlays (grid-locking §4): tint the lit color BEFORE the distance fog so a far grid still
             // recedes. The world grid gates on the surface being the floor plane by HEIGHT (its material id is
             // runtime-assigned, so height is the stable test); the object grid is a finite patch in the reference frame.
-            float4 gridControl = sdfScreenLights[SdfGridWorld];
-            uint gridFlags = (uint)(gridControl.x + 0.5);
+            uint gridFlags = passGroup.gridFlags;
+            float gridFloorY = passGroup.gridFloorY;
 
-            if (((gridFlags & 1u) != 0u) && (abs(surfacePoint.y - gridControl.y) < 0.02)) {
-                color = applyWorldFloorGrid(color, surfacePoint.xz, gridControl.zw, rayDirection, traveled);
+            if (((gridFlags & 1u) != 0u) && (abs(surfacePoint.y - gridFloorY) < 0.02)) {
+                color = applyWorldFloorGrid(color, surfacePoint.xz, passGroup.gridWorldPitch, rayDirection, traveled);
             }
 
             if ((gridFlags & 2u) != 0u) {
-                color = applyObjectGrid(color, surfacePoint, rayDirection, gridControl.y);
+                color = applyObjectGrid(color, surfacePoint, rayDirection, gridFloorY);
             }
 #endif
 
@@ -544,7 +539,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
     // every silhouette against an un-mapped sky). sdf-sky.comp applies the SAME curve to the sky it writes into a
     // beam-culled tile, so the tile seam stays bit-identical. Every debug view overwrites viewColor below and never
     // reads `color` again, so it stays untouched; None (the default) is a no-op.
-    if (worldTonemapMode() == SdfTonemapFilmic) {
+    if (worldTonemapMode() == SDF_TONEMAP_FILMIC) {
         color = sdfFilmicTonemap(color);
     }
 
@@ -606,19 +601,16 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
                   // note on case 6). The march was skipped (the gate above); the beam force-survived every in-viewport
                   // tile for this mode, so every pixel of the viewport reaches here — no tile truncation, no staircase.
                   // Default plane: through the WORLD ORIGIN with normal = camera forward (the debug subject sits at
-                  // the origin — a camera-locked slice). The env entry's z/w lanes optionally select a world-axis
-                  // plane instead (the `sdf.slice` verb; camera-locked when the lanes are 0/absent).
+                  // the origin — a camera-locked slice). The pass block's slice axis and offset optionally select a
+                  // world-axis plane instead (the `sdf.slice` verb; camera-locked while the axis is 0).
             float3 sliceNormal = view.forward.xyz; // already unit (the camera basis)
             float planeOffset = 0.0;               // the plane is dot(p, n) = planeOffset
 
-#ifdef SDF_SCREEN_SOURCES
-            float4 sliceEnv = sdfScreenLights[SdfScreenLightEnv];
-            int sliceAxis = (int)round(sliceEnv.z);
+            int sliceAxis = (int)round(passGroup.debugSliceAxis);
 
-            if (sliceAxis == 1) { sliceNormal = float3(1.0, 0.0, 0.0); planeOffset = sliceEnv.w; }
-            else if (sliceAxis == 2) { sliceNormal = float3(0.0, 1.0, 0.0); planeOffset = sliceEnv.w; }
-            else if (sliceAxis == 3) { sliceNormal = float3(0.0, 0.0, 1.0); planeOffset = sliceEnv.w; }
-#endif
+            if (sliceAxis == 1) { sliceNormal = float3(1.0, 0.0, 0.0); planeOffset = passGroup.debugSliceOffset; }
+            else if (sliceAxis == 2) { sliceNormal = float3(0.0, 1.0, 0.0); planeOffset = passGroup.debugSliceOffset; }
+            else if (sliceAxis == 3) { sliceNormal = float3(0.0, 0.0, 1.0); planeOffset = passGroup.debugSliceOffset; }
 
             float denominator = dot(rayDirection, sliceNormal);
 

@@ -175,9 +175,18 @@ public sealed partial class ShaderInterface {
         }
         if (
             member.Length.HasValue &&
-            (member.Kind is not (ShaderInterfaceMemberKind.Array or ShaderInterfaceMemberKind.SampledImage or ShaderInterfaceMemberKind.Sampler))
+            (member.Kind is not (ShaderInterfaceMemberKind.Array or ShaderInterfaceMemberKind.Value or ShaderInterfaceMemberKind.SampledImage or ShaderInterfaceMemberKind.Sampler))
         ) {
-            throw new InvalidDataException(message: $"{where}: only an array, a sampled image or a sampler takes a length.");
+            throw new InvalidDataException(message: $"{where}: only an array, a block value, a sampled image or a sampler takes a length.");
+        }
+        // A block array's element is a whole 16-byte row on both backends only when it is a four-component vector: a
+        // shorter element pads to a row in a constant block, which a host writing element after element would miss.
+        if (
+            (member.Kind == ShaderInterfaceMemberKind.Value) &&
+            member.Length.HasValue &&
+            (member.Type?.ComponentCount() != 4)
+        ) {
+            throw new InvalidDataException(message: $"{where}: a block array's element is a four-component vector, not {member.Type?.Spelling()}.");
         }
         if (member.Length == 0) {
             throw new InvalidDataException(message: $"{where}: an array holds at least one element.");
