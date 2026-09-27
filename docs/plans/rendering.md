@@ -4173,15 +4173,15 @@ item 2 landed.
      recording the other residency's tables through the passes it has, when
      they share every layout and the instance count its scratch is sized by
      (`SdfWorldPasses.CanFollow`). A residency whose kernels are loaded takes
-     its pipeline leases in the frame that first asks, so one a portal
-     crossing creates is ready in that frame, and the seat's first frame after
-     the arrival shows the destination
+     its pipeline leases in the frame that first asks. When those pipelines
+     are already built, a residency a portal crossing creates can be ready
+     in that frame, and compatible passes show the destination immediately
      (`SdfWorldPassesLawTests.AViewFollowsAnotherResidencyInPlaceWhenItsPassesCanRecordIt`,
      the `portal-walk` canary's crossing capture). A change the passes cannot
      follow still rebuilds them and holds the last image
      (`RenderGraphRuntimeLawTests.ResidencySwitchHeldFrames`).
-   Still to land: a routed seat view and a portal window's session view of the
-   same destination share one residency. They cannot today: a frame's quality
+   Open work: let a routed seat view and a portal window's session view of the
+   same destination share one residency. They cannot share it: a frame's quality
    levers (ambient occlusion, soft shadows, the far bound) are the frame's,
    not each view's, and the window is dressed at the session's reduced cost;
    and each reads its own mirror of the destination (the endpoint's, and the

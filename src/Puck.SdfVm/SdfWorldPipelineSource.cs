@@ -7,9 +7,9 @@ namespace Puck.SdfVm;
 
 // One residency's leases on the pipelines its tables record with, from its composition's SdfWorldPipelineCatalog: the
 // kernel variants (SdfWorldPipelines), the region copy and the mesh pass, every one an entry of the pass-pipeline cache.
-// Taking the leases — loading the deployed kernels when the holder supplies none, hashing them, and starting the shared
-// builds — runs on the thread pool, and the pipelines build there too, so a cold driver cache delays the first frame
-// instead of freezing the pump that drains the console. The leases outlive the tables built from them (a capacity or
+// A holder supplying kernels takes its leases on the frame thread; one loading deployed kernels takes them on the
+// thread pool. Every pipeline builds on the pool, so a cold driver cache delays the first frame instead of freezing
+// the pump that drains the console. The leases outlive the tables built from them (a capacity or
 // export rebuild reuses them) and are released on device loss and disposal. The holder builds its tables here
 // (TryBuild), which refuses a failed build by name instead of throwing it, and tries it again only when an input it was
 // built from changes. The set is ready only once the region copy and the mesh pass are too: the tables record their
@@ -265,7 +265,7 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
         }
     }
 
-    // The leases one background acquire takes.
+    // The leases one acquire takes.
     private sealed record Leases(SdfWorldPipelines Set, GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> RegionCopy, GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> MeshRaster) {
         public void Release() {
             Set.Dispose();

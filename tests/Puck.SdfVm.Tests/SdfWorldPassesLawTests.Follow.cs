@@ -1,4 +1,5 @@
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.Shaders;
 using Puck.SignedDistance;
@@ -18,13 +19,15 @@ namespace Puck.SdfVm.Tests;
 public sealed partial class SdfWorldPassesLawTests {
     private const int FollowedInstances = 8;
 
-    [InlineData(FollowedInstances, true)]
-    [InlineData((FollowedInstances * 8), false)]
+    [InlineData(FollowedInstances, true, false)]
+    [InlineData(FollowedInstances, true, true)]
+    [InlineData((FollowedInstances * 8), false, false)]
+    [InlineData((FollowedInstances * 8), false, true)]
     [Theory]
-    public void AViewFollowsAnotherResidencyInPlaceWhenItsPassesCanRecordIt(int otherInstances, bool followsInPlace) {
+    public void AViewFollowsAnotherResidencyInPlaceWhenItsPassesCanRecordIt(int otherInstances, bool followsInPlace, bool capture) {
         var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version);
         var pipelines = SdfTestPipelines.Cache();
-        using var first = new SdfWorldResidency(
+        var first = new SdfWorldResidency(
             brickPoolVoxelCapacity: 0,
             frameSource: new FixedFrameSource(frame: Frame()),
             height: Extent,
@@ -34,9 +37,12 @@ public sealed partial class SdfWorldPassesLawTests {
             pipelines: pipelines,
             width: Extent
         );
+        var otherFrame = Frame() with { EnableCadenceGate = true };
+
+        otherFrame = otherFrame with { Views = [otherFrame.Views[0], otherFrame.Views[0]] };
         using var other = new SdfWorldResidency(
             brickPoolVoxelCapacity: 0,
-            frameSource: new FixedFrameSource(frame: Frame()),
+            frameSource: new FixedFrameSource(frame: otherFrame),
             height: Extent,
             instanceCapacity: otherInstances,
             kernels: SdfTestPipelines.Kernels(),
@@ -45,9 +51,10 @@ public sealed partial class SdfWorldPassesLawTests {
             width: Extent
         );
         var resolved = first;
+        var resolvedView = 0;
         var passes = new SdfWorldPasses(resolve: _ => new SdfWorldView(
             Residency: resolved,
-            View: 0
+            View: resolvedView
         ));
         var packages = new RenderGraphPackageRecorders(regionCopy: pipelines.RegionCopy);
 
@@ -116,7 +123,8 @@ public sealed partial class SdfWorldPassesLawTests {
             condition: () => {
                 Produce();
 
-                return (first.IsReady && passes.HasRenderedResolvedView(instance: SdfTestView.Instance));
+                return (first.IsReady && passes.HasRenderedResolvedView(instance: SdfTestView.Instance) &&
+                    (owned.Node(instance: 0).Extent == (Extent, Extent)) && !owned.Node(instance: 0).IsBuildingCandidate);
             },
             timeout: TimeSpan.FromSeconds(value: 30)
         ), userMessage: first.NotReadyReason);
@@ -128,19 +136,20 @@ public sealed partial class SdfWorldPassesLawTests {
 
         resolved = other;
 
-        // The frame that first resolves the other residency prepares it, and its tables build in that frame from the
-        // pipelines the first residency holds. A frame the runtime defers asks about nothing, so the frames are counted
-        // until one resolves it.
-        var frames = 0;
+        // The creator can retire the source before its recorders follow. Their retains keep it alive until the last
+        // part moves or the graph retires, including the skipped mesh, ambient and shadow parts.
+        first.Dispose();
+        Assert.False(condition: first.IsReleased);
 
-        while (other.Frame is null) {
-            Produce();
+        using var directory = new TemporaryDirectory(prefix: "puck-follow-");
 
-            Assert.True(
-                condition: (++frames <= 30),
-                userMessage: "the view never resolved the other residency"
-            );
+        if (capture) {
+            owned.RequestCapture(request: new FrameCaptureRequest(path: directory.PathOf(name: "crossing.png")));
         }
+
+        // The frame that first resolves the other residency prepares it, and its tables build in that frame from the
+        // pipelines the first residency holds. This one frame decides the follow, independently of pool scheduling.
+        Produce();
 
         Assert.NotNull(@object: other.Tables);
 
@@ -150,6 +159,7 @@ public sealed partial class SdfWorldPassesLawTests {
             actual: (passes.CounterOf(instance: SdfTestView.Instance)!.Revision == counter),
             expected: followsInPlace
         );
+        Assert.Equal(actual: passes.HasRenderedResolvedView(instance: SdfTestView.Instance), expected: followsInPlace);
         // Either way the view goes on to render the other residency.
         Assert.True(condition: SpinWait.SpinUntil(
             condition: () => {
@@ -163,5 +173,40 @@ public sealed partial class SdfWorldPassesLawTests {
             actual: (passes.CounterOf(instance: SdfTestView.Instance)!.Revision == counter),
             expected: followsInPlace
         );
+
+        // A view index change must invalidate this instance's rendered binding even if another view already rendered
+        // the destination signature. Rendering the new index restores cadence without rebuilding the passes.
+        other.MarkRendered(view: 1);
+        var beforeView = passes.CounterOf(instance: SdfTestView.Instance)!.Revision;
+
+        resolvedView = 1;
+        passes.BeginFrame(context: in context);
+        Assert.False(condition: passes.HasRenderedResolvedView(instance: SdfTestView.Instance));
+        Assert.False(condition: passes.IsUnchanged(context: in context, instance: SdfTestView.Instance));
+        Assert.Equal(actual: passes.CounterOf(instance: SdfTestView.Instance)!.Revision, expected: beforeView);
+        Produce();
+        Assert.True(condition: passes.HasRenderedResolvedView(instance: SdfTestView.Instance));
+
+        // A followed residency still drives the counter when its program grows, so the node can replace its scratch.
+        var grown = new SdfProgramBuilder();
+        var material = grown.AddMaterial(material: new SdfMaterial(Albedo: System.Numerics.Vector3.One));
+
+        for (var instance = 0; (instance < (otherInstances + 1)); instance++) {
+            grown.BeginInstance(boundCenter: System.Numerics.Vector3.Zero, boundRadius: 1f);
+            grown.Sphere(material: material, radius: 1f);
+            grown.EndInstance();
+        }
+
+        var beforeGrowth = passes.CounterOf(instance: SdfTestView.Instance)!.Revision;
+        var program = grown.Build();
+
+        Assert.True(condition: (program.Instances.Count > otherInstances));
+        other.Tables!.UploadProgram(program: program);
+        Assert.NotEqual(actual: passes.CounterOf(instance: SdfTestView.Instance)!.Revision, expected: beforeGrowth);
+        Assert.Equal(actual: passes.CounterOf(instance: SdfTestView.Instance)!.CountsAt(height: Extent, width: Extent), expected: other.CountsAt(height: Extent, width: Extent));
+
+        owned.Dispose();
+        Assert.True(condition: first.IsReleased);
+        Assert.False(condition: other.IsReleased);
     }
 }

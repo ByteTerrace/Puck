@@ -26,9 +26,8 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
     private readonly Func<string, SdfWorldView?> m_resolve;
 
     // Each instance the runtime asked about: the view it renders, resolved on the frame thread at most once a frame, and
-    // its counter, whose revision moves when the instance's residency or view index changes, so the instance rebuilds
-    // its passes against that view. The runtime does not ask about every instance every frame (never about one a capture reads),
-    // so an entry stays while the package lives, keeping its revision's count of switches.
+    // its counter, whose revision moves when its passes cannot follow the resolved view. An entry stays while the
+    // package lives, keeping its revision's count of switches even while the runtime does not ask about the instance.
     private readonly Dictionary<string, Entry> m_entries = new(comparer: StringComparer.Ordinal);
     // Guards the entries, which a pass's build reads on the thread pool.
     private readonly Lock m_gate = new();
@@ -211,6 +210,12 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
                 _ = residency.Prepare(context: in context);
             }
         }
+
+        // A capture bypasses cadence, and an installed graph need not ask for its counter. Resolve its view before
+        // recording anyway, after the host's capture has latched the routes this frame presents.
+        foreach (var instance in m_entries.Keys) {
+            _ = Refresh(instance: instance);
+        }
     }
 
     // Starts a residency's frame the first time the package meets it in this frame.
@@ -243,16 +248,19 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
     // against, with the instance count their counted scratch is sized by.
     private static bool CanFollow(SdfWorldView from, SdfWorldView to) =>
         (
-            ReferenceEquals(
-                objA: from.Residency,
-                objB: to.Residency
-            ) ||
+            !to.Residency.IsReleased &&
             (
-                !from.Residency.IsReleased &&
-                (from.Residency.Tables is { } fromTables) &&
-                (to.Residency.Tables is { } toTables) &&
-                (from.Residency.CapacityRevision == to.Residency.CapacityRevision) &&
-                fromTables.SharesLayoutsWith(other: toTables)
+                ReferenceEquals(
+                    objA: from.Residency,
+                    objB: to.Residency
+                ) ||
+                (
+                    !from.Residency.IsReleased &&
+                    (from.Residency.Tables is { } fromTables) &&
+                    (to.Residency.Tables is { } toTables) &&
+                    (from.Residency.CapacityRevision == to.Residency.CapacityRevision) &&
+                    fromTables.SharesLayoutsWith(other: toTables)
+                )
             )
         );
     // Resolves the view an instance renders this frame, on the frame thread, once a frame. A residency the instance meets
@@ -281,6 +289,10 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
         entry.Frame = m_frame;
 
         var view = m_resolve(arg: instance);
+
+        if (view is { Residency.IsReleased: true }) {
+            view = null;
+        }
 
         if (!ReferenceEquals(
             objA: view?.Residency,

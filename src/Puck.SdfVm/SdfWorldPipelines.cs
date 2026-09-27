@@ -14,7 +14,7 @@ namespace Puck.SdfVm;
 /// builds on the thread pool, shared with every other holder of the same kernel on the device, and a residency builds
 /// its tables only once the set is ready (<see cref="Poll"/>); the frame thread never waits on the driver's compiler.
 /// <para>
-/// Acquiring hashes each kernel, so a holder on the frame thread acquires from its own background work. Everything else
+/// Acquiring hashes each kernel and starts or joins its background build without waiting for it. Everything else
 /// runs on the thread that renders with the set. The set is disposed after every table built from it and before the
 /// device goes away; disposal releases every lease, and the last lease on an entry waits only for the creation already
 /// in the driver.

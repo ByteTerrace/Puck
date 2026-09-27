@@ -685,11 +685,20 @@ the destination's coordinates, under the destination's sky and lighting and at t
 own quality. Seats presented through the same endpoint share one residency, with a view each. Split seats in
 different worlds each show their own world. Named boot cameras and the spectator fallback keep
 showing the boot world. A local seat keeps its roster's color wherever it is presented. A seat's view
-follows the destination's residency in place when the destination's scene fits the boot world's
-instance count: that residency's tables build in the frame the seat crosses, from the pipelines the
-boot world already holds, so the first frame after the arrival shows the destination. A destination
-that needs more instances rebuilds the view's passes, and the crossing holds the image of the world it
-left until they install.
+follows the destination's residency in place when its tables are ready, its instance capacity matches
+the view's scratch, and its compute layouts, mesh layouts, and mesh render pass match. Routed
+residencies reserve the boot world's instance capacity and join its cached pipelines, so a destination
+that fits can render in the crossing frame. A capacity or layout change rebuilds the view's passes;
+the crossing holds the image of the world it left until they install. Growth of the followed residency
+also rebuilds the view's scratch.
+
+`world.screenshot <path.png> crossing [player]` waits for a later route of the selected seat
+(player 1 by default) on a frame that includes its viewport, then requests that frame's composed
+image. It captures what the crossing presents, including a held image while incompatible passes
+rebuild. An ordinary capture can run while it waits; if one is still pending at the crossing, the
+crossing capture reports a refusal. If the root cannot serve that frame, the request is withdrawn
+before the next frame instead of capturing a later route. A request still waiting when presentation
+ends also reports a refusal.
 
 Every body that can travel crosses a portal face and a seam alike: a local seat, an admitted peer's
 traveller, or a body the world's own census authors. A party door entered by a traveller that is not

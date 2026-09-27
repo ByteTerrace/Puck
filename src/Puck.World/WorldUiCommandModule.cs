@@ -164,6 +164,10 @@ internal sealed class WorldUiCommandModule(IServerLink link, WorldRenderProbe? r
                     )
                 );
 
+                if (((args.Count > 1) && !crossing) || (args.Count > 3)) {
+                    return CommandResult.Error(output: "[world.screenshot: expected world.screenshot <path.png> [crossing [player]]]");
+                }
+
                 if (
                     !crossing &&
                     (render.PendingCapturePath is { } outstanding)
@@ -182,6 +186,16 @@ internal sealed class WorldUiCommandModule(IServerLink link, WorldRenderProbe? r
                 }
 
                 var request = new FrameCaptureRequest(path: path);
+
+                _ = request.Completion.ContinueWith(
+                    continuationAction: static (completed, state) => {
+                        if (completed.Result.Error is { } error) {
+                            Console.Error.WriteLine(value: $"[capture] refused {state}: {error.Message}");
+                        }
+                    },
+                    scheduler: TaskScheduler.Default,
+                    state: path
+                );
 
                 if (crossing) {
                     var player = 1;
@@ -211,17 +225,6 @@ internal sealed class WorldUiCommandModule(IServerLink link, WorldRenderProbe? r
                 }
 
                 render.RequestCapture(request: request);
-                // A capture the render chain refuses, such as one armed when the device is lost, writes no file; say so
-                // by name rather than leave the caller waiting on a file that will never exist.
-                _ = request.Completion.ContinueWith(
-                    continuationAction: static (completed, state) => {
-                        if (completed.Result.Error is { } error) {
-                            Console.Error.WriteLine(value: $"[capture] refused {state}: {error.Message}");
-                        }
-                    },
-                    scheduler: TaskScheduler.Default,
-                    state: path
-                );
 
                 // "pending", not the bare path: the words are true at the instant they are printed. The capture line
                 // on stderr is what says the file exists.

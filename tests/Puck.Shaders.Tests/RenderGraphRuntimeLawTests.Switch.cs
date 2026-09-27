@@ -67,10 +67,9 @@ public sealed partial class RenderGraphRuntimeLawTests {
             // Every pass has rebuilt before the next frame, so the frames counted are the hold's own, not a slow
             // build's.
             Assert.True(condition: SpinWait.SpinUntil(
-                condition: () => (view.Builds >= (builds + parts)),
+                condition: () => ((view.Builds >= (builds + parts)) && !runtime.Node(instance: 0).IsBuildingCandidate),
                 timeout: TimeSpan.FromSeconds(value: 30)
             ));
-            Thread.Sleep(millisecondsTimeout: 50);
         }
 
         Assert.Equal(

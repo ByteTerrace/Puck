@@ -266,8 +266,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
     }
 
     // Takes the view the instance resolved this frame when it is another than the one the pass records: the package
-    // decided the pass can record it as built (SdfWorldPasses.CanFollow), or it moved the instance's counter and this
-    // pass is about to be replaced. The hold and the retain move with the view; the ports and screens rebind for the
+    // decided the pass can record it as built (SdfWorldPasses.CanFollow). A counter change holds recording until matching
+    // passes install. The hold and the retain move with the view; the ports and screens rebind for the
     // other residency's tables on this recording.
     private void Follow() {
         if (
@@ -283,8 +283,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
             objA: previous,
             objB: current.Residency
         )) {
-            m_owner.Hold(residency: current.Residency);
             current.Residency.Retain();
+            m_owner.Hold(residency: current.Residency);
             m_owner.Unhold(residency: previous);
             previous.Release();
             DeclareScreens(residency: current.Residency);
