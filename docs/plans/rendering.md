@@ -4015,9 +4015,9 @@ the extent quantization rounds up to 0.75, so the view renders 1440x810 and
 **Target shape.** `sdf.world` is a package fragment that `RenderGraphCompiler`
 splices into the graph, so `ShaderPipelineCompiler` orders, versions and
 barriers its passes: sky, mask, beam, cull arguments (indirect arguments and
-bounds), primary (dispatched indirectly, writing visibility version 0), surface
-(version 1), ambient (version 2), then shadow, light and volume shading (color
-versions 0 to 2). Brick upload and brick bake form `sdf.bricks`, a world-scoped
+bounds), mesh, primary (dispatched indirectly, writing visibility version 0),
+surface (version 1), ambient (version 2), shadow (version 3), then views, the
+light stage with the volumes composited last, into the view's color. Brick upload and brick bake form `sdf.bricks`, a world-scoped
 instance joined to the views by buffer edges. The view writes its float working
 color; the root graph tonemaps and the display encode quantizes (step 10). There is no upload pass, because uploads go
 through `GpuRegion`, and no composite, because the engine has none. Group 0 is the
@@ -4105,7 +4105,7 @@ item 2 landed.
    the state mirror, and `FrameCaptureRequest` has no tick source of its own.
 6. Landed, the cutover: every SDF view is a render-graph instance of
    `sdf.world`. Its fragment (`SdfWorldPackage.Fragment`) is what the graph
-   compiler splices in place of the pass naming it, nine passes, `sdf.world$sky`
+   compiler splices in place of the pass naming it, ten passes, `sdf.world$sky`
    through `sdf.world$views`, planned as `SdfPassPlanLawTests` holds them. The
    package records into the instance's command buffer, so Direct3D 12's
    promotion from `COMMON`, the indirect-argument state and the scratch hazards
@@ -4197,9 +4197,7 @@ item 2 landed.
 11. Staged shading. Primary, surface and ambient are stages over the
     visibility record, which is the surface sample record (the decisions
     below): primary writes its V, C and L rows, surface the N and S rows, and
-    ambient the occlusion in S. The views pass still marches the key light's
-    soft shadow and gathers its candidates. The step lands in three
-    sub-steps:
+    ambient the occlusion in S. The step landed in three sub-steps:
 
     a. Landed, one record and one body per stage. A mesh hit's triangle rides
        the record's L row (its identity names the draw), so only primary reads
@@ -4220,19 +4218,19 @@ item 2 landed.
        light stage walks them once. `SdfLightInterfaceLawTests` holds that no
        other kernel source branches on a light's kind and that every generated
        kind has a response.
-    c. The shadow stage. A `shadow` pass between ambient and views gathers
-       each workgroup's shadow candidates and marches the key light's soft
-       shadow into a new row of the record, which grows to sixteen words
-       (64 bytes a pixel); views reads it and marches nothing. A frame whose
-       soft shadows are off, or which has no shadow light, skips the pass
-       (`IRenderGraphPackageRecorder.Skips`), and a frame whose ambient
-       occlusion is off skips the ambient pass, whose neutral occlusion the
-       surface pass already wrote. Done when the pass-plan law holds the
-       order and the record's edges, parity holds, and `puck counters
-       compare` on the floor tier (`low`: shadows and ambient occlusion off)
-       shows one indirect dispatch fewer per view (the skipped ambient pass)
-       and the visibility buffer's four more bytes a pixel, with the default
-       tier's one more indirect dispatch per view stated.
+    c. Landed, the shadow stage. A `shadow` pass between ambient and views
+       (`sdf-world-shadow.comp`, `surface/sdf-shadow.hlsli`) gathers each
+       workgroup's shadow candidates and marches the key light's soft shadow
+       into the record's K row, which grows it to sixteen words (64 bytes a
+       pixel); views reads the row and marches nothing, and holds no
+       groupshared mask. Each costed stage is off for a frame whose quality
+       levers turn it off: the shadow pass skips a frame whose soft shadows
+       are off or that has no shadow light, and the ambient pass a frame whose
+       ambient occlusion is off, whose neutral occlusion the surface pass
+       already wrote (`IRenderGraphPackageRecorder.Skips`). Which levers a
+       tier sets is the world's quality settings'; the counters workload's
+       `low` tier turns both off. `SdfPassPlanLawTests` holds the order and
+       the record's edges.
 
     Volume shading stays the views stage's last composite: a pass of its own
     would read and write the working color once more per pixel and save no

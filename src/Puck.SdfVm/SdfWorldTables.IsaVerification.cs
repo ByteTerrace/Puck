@@ -276,6 +276,7 @@ public sealed partial class SdfWorldTables {
             (PrimaryPipelineIndex, "primary traversal"),
             (SurfacePipelineIndex, "surface evaluation"),
             (AmbientPipelineIndex, "ambient occlusion"),
+            (ShadowPipelineIndex, "key light shadow"),
         ])) {
             var report = DispatchIsaReport(
                 initializeImages: first,

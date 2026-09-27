@@ -11,7 +11,7 @@ void sdfResolveSurface(float3 surfacePoint, float3 ray, bool hit, int material, 
     float3 normal = 0.0;
     float gradientMagnitude = 1.0, curvature = 0.0;
     float initialQueries = sdfEvalCount;
-    bool finalMode = mode <= 0 || mode >= DebugViewModeCount || mode == DebugViewModeEvals;
+    bool finalMode = worldFinalShadingMode(mode);
     bool sampledScreen = false;
 #ifdef SDF_SCREEN_SOURCES
     if (hit && finalMode) {

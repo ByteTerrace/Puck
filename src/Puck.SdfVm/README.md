@@ -75,8 +75,10 @@ fills every pixel of the view's output with the authored sky, before any tile is
 (cone march over the tile-masked field) → `sdf-cull-args.comp` → the mesh pass
 (`sdf-mesh.vert`/`.frag`, rasterizing the frame's mesh draws) →
 `sdf-world-primary.comp` (camera traversal) → `sdf-world-surface.comp`
-(normals and curvature) → `sdf-world-ambient.comp` (ambient occlusion) → the views
-kernel (materials, lighting and diagnostics). The region copies are the
+(normals and curvature) → `sdf-world-ambient.comp` (ambient occlusion) →
+`sdf-world-shadow.comp` (the key light's soft shadow) → the views kernel
+(materials, lighting and diagnostics). The ambient and shadow passes skip a
+frame whose levers turn them off. The region copies are the
 residency's one upload a frame (`SdfWorldResidency.Submit`); every pass after
 it runs once per view as a pass of the view's `sdf.world` instance, into that
 instance's own output image at its render extent. The package declares those
@@ -95,11 +97,12 @@ variant that supports its operations, reducing shader size and register pressure
 
 The visibility record buffer (the fragment's `visibility` scratch) reserves one
 record per pixel of the view, `SdfVisibilityWords` words (`sdf-visibility.hlsli`,
-`SdfWorldPackage.VisibilityRecordByteLength`, 60 bytes). Primary traversal preserves
+`SdfWorldPackage.VisibilityRecordByteLength`, 64 bytes). Primary traversal preserves
 depth, hit acceptance, terminal field radius and threshold, material and seam
 data, dynamic frame/lanes, and primary iteration/evaluation counts. Surface adds
 the geometric normal, gradient magnitude and curvature; ambient adds AO and
-their combined query count. The planner's buffer barrier orders each producer's
+shadow the key light's soft-shadow visibility, each adding its queries to the
+combined count. The planner's buffer barrier orders each producer's
 record writes before its consumer. Views binds the record read-only, and every hit pass binds the
 beam's tile planes read-only, so a buffer a pass only reads is never held in a
 read-write state. These four dispatches share indirect bounds and live view
@@ -307,7 +310,7 @@ creates replacements for the kernels whose bytecode changed, using the existing
 binding descriptions, off the frame thread. `SdfWorldTables.InstallReload` then
 owns the render-thread transaction: it waits for the device to go idle, swaps the
 pipelines, and checks the ISA of every march pipeline on the GPU (beam,
-primary, surface, ambient, and the three views variants) before retiring the
+primary, surface, ambient, shadow, and the three views variants) before retiring the
 old ones. A failed load or validation keeps the previous kernels. Buffers,
 images, scene programs, animation, and baked bricks remain allocated; only the
 descriptor bindings the ISA probe borrowed and the frame-reuse signature are

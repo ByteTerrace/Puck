@@ -1,21 +1,13 @@
 // The light stage: shades one pixel from its surface sample (SdfSurfaceSample) into the view's working color, the sky on
-// a miss. It samples a bound screen, marches the key light's soft shadow, re-resolves the material, lights the surface
-// through the one light interface (sdf-light.hlsli), and applies the grid overlays, the distance fog and the silhouette
-// coverage; the volumes and the debug views follow it.
+// a miss. It samples a bound screen, re-resolves the material, lights the surface through the one light interface
+// (sdf-light.hlsli), the key light under the soft shadow the shadow stage wrote, and applies the grid overlays, the
+// distance fog and the silhouette coverage; the volumes and the debug views follow it.
 #ifndef SHADE_SDF_LIGHT_STAGE_HLSLI
 #define SHADE_SDF_LIGHT_STAGE_HLSLI
 #include "sdf-light.hlsli"
 #ifdef SDF_VIEWS_PASS
 
-// Whether a pixel of `viewMode` takes the final shading. The evals heatmap rides it too, since it tallies what a lit
-// pixel really costs.
-bool sdfFinalShadingMode(int viewMode) {
-    return ((viewMode <= 0) || (viewMode >= DebugViewModeCount) || (viewMode == DebugViewModeEvals));
-}
-
-// `groupGather` is the workgroup's shadow candidate decision (sdfShadowGatherGroup): 2 when the group's mask is built, 1
-// for the camera-tile mask, 0 for the flat field.
-float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, uint groupGather) {
+float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s) {
     float3 color = skyColor(p.rayDirection);
 
     if (!s.hit) {
@@ -25,17 +17,14 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, uint groupGather) {
     float3 surfacePoint = (p.rayOrigin + (p.rayDirection * s.t));
     float3 normal = s.normal;
     float curvature = s.curvature;
-    float gradientMagnitude = s.gradientMagnitude;
     int material = s.material;
     float4 hitLanes = s.lanes;
     int hitFrameSlot = s.frameSlot;
     float materialBlendWeight = s.blendWeight;
     int materialBlendOther = s.blendOther;
     bool curvatureShading = worldCurvatureShadingEnabled();
-    bool useFinalShading = sdfFinalShadingMode(p.viewMode);
+    bool useFinalShading = worldFinalShadingMode(p.viewMode);
     bool sampledScreen = false;
-    // The per-program Lipschitz clamp, which the shadow march divides back out of its world-space comparisons.
-    float stepScale = sdfStepScale();
 
     sdfEvalCount += s.surfaceQueries;
 
@@ -49,45 +38,19 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, uint groupGather) {
 #endif
 
     if (useFinalShading && !sampledScreen) {
-        // The shadow light's Lambert term under its soft-shadow visibility (the ambient lights still fill shadowed regions,
-        // so shadows read soft, not black). The march is skipped where the surface faces away from the light, where no
-        // light shadows, on a mesh pixel, or when soft shadows are off (world.shadows off; the light then goes
-        // unshadowed). The unbound glass reads sunDiffuse too.
+        // The shadow light's Lambert term under the soft-shadow visibility the shadow stage wrote (the ambient lights still
+        // fill shadowed regions, so shadows read soft, not black). The record's key row is current exactly where the
+        // shadow stage marched: where the surface faces the light, a light shadows, soft shadows are on, and the pixel is
+        // no mesh's. The unbound glass reads sunDiffuse too.
         float3 keyDirection = worldSunDirection();
         float sunDiffuse = max(dot(normal, keyDirection), 0.0);
         float keyVisibility = 1.0;
-        // The program's march clamp composed with the hit's local gradient magnitude (GradientMagnitudeFloor): the one
-        // de-scale factor the shadow estimate divides by.
-        float shadingStepScale = (stepScale * max(gradientMagnitude, GradientMagnitudeFloor));
         // The environment scales dim the room so the diegetic screen glow dominates; the overworld sets them low per frame.
         float ambientScale = passGroup.ambientScale;
         float sunScale = passGroup.sunScale;
 
         if ((sunDiffuse > 0.0) && (worldShadowLightIndex() >= 0) && !worldSoftShadowsDisabled() && !s.mesh) {
-            // One scaled reach for both the gather's cull cone and the march's ceiling (world.shadows's reach), so the
-            // gathered occluder set is sound for the shadow ray.
-            float shadowReach = (ShadowMaxDistance * worldShadowDistanceScale());
-            sdfSecondaryMarchActive = true;
-#ifdef SDF_SCREEN_SOURCES
-            // The group's decision: 2 marches the group's candidate mask (bit-identical to the flat all-instances march,
-            // restricted to the instances the group's shadow rays can reach); 1 the camera-tile mask; 0 the flat field,
-            // which is cheap for a few-instance program and keeps the grid toggle render-invariant. The cull off marches
-            // the flat field, the ground-truth reference.
-            bool cullOn = worldShadowCullEnabled();
-            bool culled = (groupGather == 2u);
-            uint shadowFallbackMask = ((cullOn && (groupGather == 1u)) ? p.instanceMaskBase : SDF_INSTANCE_MASK_ALL);
-
-            sdfShadowMaskActive = culled;
-            // Per-instance soft-shadow participation is live for this march only, in every fallback mode, so a
-            // shadow-suppressed dynamic instance drops out of each identically.
-            sdfShadowParticipationActive = true;
-            keyVisibility = softShadowVisibility(surfacePoint, normal, keyDirection, shadowFallbackMask, shadingStepScale, shadowReach);
-            sdfShadowParticipationActive = false;
-            sdfShadowMaskActive = false;
-#else
-            keyVisibility = softShadowVisibility(surfacePoint, normal, keyDirection, p.instanceMaskBase, shadingStepScale, shadowReach);
-#endif
-            sdfSecondaryMarchActive = false;
+            keyVisibility = s.keyVisibility;
             sunDiffuse *= keyVisibility;
         }
 

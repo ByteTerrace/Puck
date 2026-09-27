@@ -77,6 +77,7 @@ internal static class SdfTestPipelines {
             CullArgs: code,
             InstanceCull: code,
             Primary: code,
+            Shadow: code,
             Sky: code,
             Surface: code,
             Views: code,

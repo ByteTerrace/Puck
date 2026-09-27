@@ -7,7 +7,7 @@ namespace Puck.Shaders.Tests;
 /// <summary>
 /// The <c>sdf.world</c> package's fragment (<see cref="SdfWorldPackage.Fragment"/>), spliced into a view's graph by the
 /// graph compiler, is the one statement of an SDF view's dispatch set: the planner orders its passes sky, mask, beam,
-/// cull arguments, mesh, primary, surface, ambient and views, and plans between them exactly the buffer transitions the
+/// cull arguments, mesh, primary, surface, ambient, shadow and views, and plans between them exactly the buffer transitions the
 /// kernels' reads and writes need, each after the pass that last wrote or read what the next writes or reads. Every
 /// scratch buffer is transient, one allocation shared by every frame slot, whose first use of a frame orders it after the
 /// frame before, and at every capacity the planner sizes each buffer as the kernels index it.
@@ -26,6 +26,7 @@ public sealed class SdfPassPlanLawTests {
         SdfWorldPackage.Parts.Primary,
         SdfWorldPackage.Parts.Surface,
         SdfWorldPackage.Parts.Ambient,
+        SdfWorldPackage.Parts.Shadow,
         SdfWorldPackage.Parts.Views,
     ];
     // Every buffer transition between two passes of a frame: the buffer, the pass it orders after and the pass it orders
@@ -37,7 +38,8 @@ public sealed class SdfPassPlanLawTests {
         (SdfWorldPackage.Parts.CullBounds, SdfWorldPackage.Parts.CullArgs, SdfWorldPackage.Parts.Primary, GpuAccess.ShaderWrite, GpuAccess.ShaderRead, GpuStage.ComputeShader, GpuStage.ComputeShader),
         (SdfWorldPackage.Parts.Visibility, SdfWorldPackage.Parts.Primary, SdfWorldPackage.Parts.Surface, GpuAccess.ShaderWrite, GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuStage.ComputeShader, GpuStage.ComputeShader),
         (SdfWorldPackage.Parts.Visibility, SdfWorldPackage.Parts.Surface, SdfWorldPackage.Parts.Ambient, GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuStage.ComputeShader, GpuStage.ComputeShader),
-        (SdfWorldPackage.Parts.Visibility, SdfWorldPackage.Parts.Ambient, SdfWorldPackage.Parts.Views, GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuAccess.ShaderRead, GpuStage.ComputeShader, GpuStage.ComputeShader),
+        (SdfWorldPackage.Parts.Visibility, SdfWorldPackage.Parts.Ambient, SdfWorldPackage.Parts.Shadow, GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuStage.ComputeShader, GpuStage.ComputeShader),
+        (SdfWorldPackage.Parts.Visibility, SdfWorldPackage.Parts.Shadow, SdfWorldPackage.Parts.Views, GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuAccess.ShaderRead, GpuStage.ComputeShader, GpuStage.ComputeShader),
     ];
     // A view's graph: the one pass running the package, publishing its color.
     private static RenderGraphPlan Plan { get; } = new RenderGraphCompiler(packages: RenderGraphPackageCatalog.Engine).Compile(definition: new RenderGraphDefinition(
@@ -114,7 +116,8 @@ public sealed class SdfPassPlanLawTests {
                 (SdfWorldPackage.Parts.Primary, string.Join(separator: ",", values: [.. hit, SdfWorldPackage.Parts.MeshTarget]), SdfWorldPackage.Parts.Visibility),
                 (SdfWorldPackage.Parts.Surface, string.Join(separator: ",", values: hit), SdfWorldPackage.Parts.SurfaceVisibility),
                 (SdfWorldPackage.Parts.Ambient, string.Join(separator: ",", values: hit), SdfWorldPackage.Parts.AmbientVisibility),
-                (SdfWorldPackage.Parts.Views, string.Join(separator: ",", values: [.. hit, SdfWorldPackage.Parts.AmbientVisibility]), SdfWorldPackage.Color),
+                (SdfWorldPackage.Parts.Shadow, string.Join(separator: ",", values: hit), SdfWorldPackage.Parts.ShadowVisibility),
+                (SdfWorldPackage.Parts.Views, string.Join(separator: ",", values: [.. hit, SdfWorldPackage.Parts.ShadowVisibility]), SdfWorldPackage.Color),
             ]
         );
     }
@@ -243,7 +246,7 @@ public sealed class SdfPassPlanLawTests {
             pass: Sdf
         );
 
-        foreach (var part in new[] { SdfWorldPackage.Parts.Primary, SdfWorldPackage.Parts.Surface, SdfWorldPackage.Parts.Ambient, SdfWorldPackage.Parts.Views }) {
+        foreach (var part in new[] { SdfWorldPackage.Parts.Primary, SdfWorldPackage.Parts.Surface, SdfWorldPackage.Parts.Ambient, SdfWorldPackage.Parts.Shadow, SdfWorldPackage.Parts.Views }) {
             var pass = Plan.Pipeline.Passes.Single(predicate: pass => (pass.Package!.Part == part));
 
             Assert.Equal(

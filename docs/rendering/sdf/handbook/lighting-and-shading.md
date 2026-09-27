@@ -16,8 +16,9 @@ captured at the accepting sample, and the accepted distance. It has **no
 normal, no shadow, no occlusion yet**—those belong to the later passes: the
 surface pass computes the normal and curvature (`sdfResolveSurface` in
 `sdf-surface.hlsli`), the ambient pass computes occlusion (`sdfResolveAmbient`),
-and the views pass computes shadows, materials, and lighting from the record,
-read once as a surface sample (`sdfLightStage` in
+the shadow pass marches the key light's soft shadow (`sdfShadowStage` in
+`surface/sdf-shadow.hlsli`), and the views pass computes materials and
+lighting from the record, read once as a surface sample (`sdfLightStage` in
 `shade/sdf-light-stage.hlsli`).
 
 Every technique here re-queries the same field function the march used, `map()`
@@ -185,7 +186,8 @@ order), then every bound screen. Each is one `SdfLight`, and one function,
 `sdfLightResponse` in `shade/sdf-light.hlsli`, answers what it adds at the
 surface: a diffuse term that joins the radiance the material shade lights by, a
 specular lobe (a point light's own), a rim brighten, and a factor on reflected
-light (an occluder's dimming). No other kernel source branches on a light's
+light (an occluder's dimming). The stage sums each kind of term over the walk
+and adds each total once, so the order the terms combine in is the walk's. No other kernel source branches on a light's
 kind, which `SdfLightInterfaceLawTests` holds, so a new kind is one branch of
 that function.
 
