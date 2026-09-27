@@ -16,9 +16,11 @@ namespace Puck.World;
 /// <c>screen.source &lt;index&gt; &lt;kind&gt; [args…]</c> stays genuinely presentation, calling
 /// <see cref="WorldScreenBinder"/> directly (never a machine, never tape-covered).
 /// <c>screen.state</c>/<c>screen.peek</c>/<c>screen.camera</c>/<c>world.machines</c> are read-only queries that make the
-/// live state pipe-assertable. The world speaks the engine-neutral machine vocabulary.
+/// live state pipe-assertable. <c>world.screens</c> lists the declared screens and <c>world.view-refresh</c> sets the
+/// views' cadence (<c>ScreenCommandModule.Listing.cs</c>); this module is core, so every boot shape answers both. The
+/// world speaks the engine-neutral machine vocabulary.
 /// </summary>
-internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer server, IServerLink link, WorldMachineCatalog machines) : ICommandModule {
+internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, WorldServer server, IServerLink link, WorldMachineCatalog machines) : ICommandModule {
     private readonly WorldScreenBinder m_binder = binder;
     private readonly WorldEngagement m_engagement = server.Engagement;
     private readonly WorldServer m_server = server;
@@ -93,6 +95,18 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
             name: "screen.peek",
             description: "Reads one memory byte from a screen's machine: screen.peek <index> <addr> — <addr> a 0x-prefixed hex machine address (or variable symbol for compiled cartridges). A read only, never a write into machine state, so a piped proof can assert a game's stored bytes. A query (always echoes). Errors when the screen carries no machine, or its machine has no memory-peek capability.",
             handler: PeekHandler
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.screens",
+            description: "Lists every declared diegetic screen, then every creation face showing a source, one segment each — index, source kind (test-pattern|none|machine|camera|view|capture; a machine reads machine:<engine>), bound/unbound (a nonzero live provider handle this frame), its engage policy (engageable|fixed), for a camera on its GPU tier or a capture on its GPU route, order:fence (the render device waits on the producer's shared fence) or order:cpu-wait (reason) (a device that cannot share the fence waits on the CPU), and last the mapping the screen publishes, in the line world.view.panes prints for a pane (mapping producer:source$<producer>$<digest> surface … or instance:<view> surface …, the source extent, crop, layout, fit, the glass warp and the destination), or mapping none (reason): no image source, a live presentation source no row names, an extent not known yet, or not published by a boot that presents nothing. No argument; the pipe-assertable state proving the test-pattern screen is bound and the unbound screen shades as dark glass. Every boot shape answers it, headless and offscreen included. A query — its listing always echoes, even under wire.ack quiet.",
+            handler: ScreensHandler
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.view-refresh",
+            description: "Sets the diegetic views' deterministic offscreen refresh cadence: world.view-refresh [1..8]. 1 renders every produced frame; 4 (the default) renders every fourth frame and preserves the previous images between refreshes. No argument echoes the current divisor and how many camera views are registered in the offscreen pool (a removed View screen releases its camera's render, dropping that count). Every boot shape answers it.",
+            handler: ViewRefreshHandler
         );
     }
     // The declared screens row at the engine screen-surface index, or null when undeclared — screen.state's own
@@ -864,7 +878,7 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         foreach (var command in Commands()) {
-            yield return ((command.Name is "screen.state" or "screen.peek" or "screen.links" or "world.machines")
+            yield return ((command.Name is "screen.state" or "screen.peek" or "screen.links" or "world.machines" or "world.screens" or "world.view-refresh")
                 ? command
                 : command with { Routing = CommandRouting.Simulation }
             );

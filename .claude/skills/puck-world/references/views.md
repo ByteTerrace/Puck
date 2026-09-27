@@ -400,6 +400,8 @@ Free Cam do not alter the logical movement basis.
   a source, each ending in `mapping <SourceMapping.Describe()>` (the line
   `world.view.panes` prints for a pane) or `mapping none (<reason>)`. A boot
   that presents nothing publishes no screen mapping (`none (not published)`).
+  It and `world.view-refresh` live in the core `ScreenCommandModule`, so
+  every boot shape answers them, offscreen and headless included.
 - `view.override camera|layout <name|auto>` — live composition override;
   `layout toggle` and `layout next` cycle the authored layouts. It is
   bindable: a bound dispatch (wheel sector / chord row, no tokens) selects the

@@ -9,10 +9,11 @@ using Puck.World.Server;
 namespace Puck.World;
 
 /// <summary>
-/// The world's own PRESENTATION console surface — its frame-rate readout (<c>world.fps</c>), the
-/// declared-row tables (<c>world.screens</c>, <c>world.cameras</c>), the FPS target, and the renderer's own
-/// diagnostics (shader reload, debug view, view refresh) — all live console verbs, each echoing the current value when
-/// called with no argument. The render levers every presentation shape honors live in
+/// The world's own PRESENTATION console surface — its frame-rate readout (<c>world.fps</c>), the camera table
+/// (<c>world.cameras</c>), the FPS target, and the renderer's shader diagnostics — all live console verbs, each echoing
+/// the current value when called with no argument. The screen listing and the views' refresh cadence
+/// (<c>world.screens</c>, <c>world.view-refresh</c>) read only the screen binder every boot shape composes, so they
+/// live in <see cref="ScreenCommandModule"/>, registered in core. The render levers every presentation shape honors live in
 /// <see cref="WorldRenderLeverCommandModule"/>. Registered ONLY when presentation is composed (<c>AddWorldPresentation</c>); over
 /// headless stdin every one of these refuses as unknown. The participant/census verbs (<c>world.players</c>,
 /// <c>world.devices</c>, <c>world.population</c>) and authoritative diagnostics (<c>world.navigation</c>,
@@ -21,7 +22,7 @@ namespace Puck.World;
 /// (<see cref="WorldCountersCommandModule"/>), registered in core. The FPS target rides the live
 /// <see cref="PresentPacingControl"/>, read by the frame source each captured frame.
 /// </summary>
-internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPacingControl pacing, WorldRenderProbe renderProbe, WorldServer server, WorldScreenBinder screens, IServerLink link, WorldOverlayFacts facts, PlayerRoster roster) : ICommandModule {
+internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPacingControl pacing, WorldRenderProbe renderProbe, WorldServer server, IServerLink link, WorldOverlayFacts facts, PlayerRoster roster) : ICommandModule {
     // A ranked camera's listing: every candidate's anchor kind in rank order, then the candidate currently winning
     // for each joined seat (a seat-relative list can win differently per seat).
     private string CameraAnchorCandidates(WorldCamera camera) {
@@ -159,80 +160,6 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             : "display (automatic — verified VRR capabilities or active signal timing)"
         );
     }
-    // The source-kind keyword for a screen's declared source — the stable token a piped proof asserts against. A
-    // producer source reads as its producer id.
-    private static string ScreenSourceKind(WorldScreenSource source) {
-        return source switch {
-            WorldScreenSource.Machine machine => $"machine:{machine.Instance}:{machine.Output}",
-            WorldScreenSource.Producer producer => producer.Id,
-            WorldScreenSource.View => "view",
-            WorldScreenSource.Session session => $"session:{session.Destination}",
-            WorldScreenSource.Text text => $"text:{text.Lines.Count}-line",
-            _ => "none",
-        };
-    }
-    // The world.screens listing: one segment per declared screen — index, source kind, live bound/unbound state (a
-    // nonzero provider handle this frame), engage policy, and the destination a pointer hit on it goes to. A query (not AcknowledgementOnly): its listing always surfaces, so a
-    // piped proof can assert the test-pattern screen is bound and the None screen stays unbound (dark glass).
-    private CommandResult ScreensHandler(CommandContext context, WireArgs args) {
-        if (args.Count != 0) {
-            return CommandResult.Error(output: "[world.screens: no arguments — lists every declared screen]");
-        }
-
-        // The LIVE definition's rows (never the boot snapshot), so a screen mutation's new source narrates honestly, then
-        // each creation face showing a source, as the presentation last derived it.
-        var declaredScreens = new List<WorldScreen>(collection: server.Definition.Screens);
-
-        foreach (var face in screens.Mappings.Screens) {
-            if (
-                (face.Index >= WorldPrototypeFacets.DerivedFaceBase) &&
-                (face.Source is not WorldScreenSource.None)
-            ) {
-                declaredScreens.Add(item: face);
-            }
-        }
-
-        if (declaredScreens.Count == 0) {
-            return new CommandResult(Output: "[world.screens: none declared]");
-        }
-
-        var builder = new StringBuilder(value: "[world.screens:");
-
-        for (var index = 0; (index < declaredScreens.Count); index++) {
-            var screen = declaredScreens[index];
-            var bound = (screens.CurrentHandle(index: screen.Index) != 0);
-            // The engaged marker (only when players are engaged) — reflects the route state, kept bracket-agnostic so the
-            // proof regexes are undisturbed.
-            var engaged = server.Engagement.PlayersOn(screenIndex: screen.Index);
-            var engagedText = ((engaged.Count > 0)
-                ? $" engaged:{string.Join(
-                    separator: "+",
-                    values: engaged.Select(selector: static entry => (entry.Capture
-                    ? $"p{entry.Display}"
-                    : $"p{entry.Display}(mirror)"))
-                )}"
-                : ""
-            );
-            // How a camera or capture image crosses devices: the shared fence, or the producer's CPU wait and why.
-            var orderText = ((screens.FenceOrderAt(index: screen.Index) is { } order)
-                ? $" order:{order}"
-                : ""
-            );
-
-            _ = builder.Append(
-                provider: CultureInfo.InvariantCulture,
-                handler: $"{((index == 0)
-                ? " "
-                : " | ")}{screen.Index} {ScreenSourceKind(source: screen.Source)} {(bound
-                ? "bound"
-                : "unbound")} {(screen.Route.Engageable
-                ? "engageable"
-                : "fixed")} input:{(screen.Route.Input ?? SourceDestination.Presentation)}{engagedText}{orderText} mapping {(screens.Mappings.Describe(screen: screen.Index) ?? "none (no slot)")}"
-            );
-        }
-
-        return new CommandResult(Output: builder.Append(value: ']').ToString());
-    }
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
@@ -274,31 +201,6 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 return new CommandResult(Output: $"[world.shaders.status: request={status.RequestId} state={status.State} generation={status.Generation} pipelines={status.ChangedPipelines} directory={(status.Directory ?? "default")}{((status.Error is { } error)
                     ? $" error={error}"
                     : "")}]");
-            }
-        );
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
-            name: "world.view-refresh",
-            description: "Sets the diegetic views' deterministic offscreen refresh cadence: world.view-refresh [1..8]. 1 renders every produced frame; 4 (the default) renders every fourth frame and preserves the previous images between refreshes. No argument echoes the current divisor and how many camera views are registered in the offscreen pool (a removed View screen releases its camera's render, dropping that count).",
-            handler: (_, args) => {
-                if (args.Count == 0) {
-                    return new CommandResult(Output: $"[world.view-refresh: every {screens.ViewRefreshDivisor} produced frame(s); {screens.ActiveCameraViewCount} camera view(s) registered]");
-                }
-
-                if (
-                    !args.TryInt(
-                    index: 0,
-                    value: out var divisor
-                ) ||
-                    (divisor < 1) ||
-                    (divisor > 8)
-                ) {
-                    return CommandResult.Error(output: $"[world.view-refresh: expected an integer divisor from 1 through 8, got '{args[0]}']");
-                }
-
-                screens.SetViewRefreshDivisor(divisor: divisor);
-
-                return new CommandResult(Output: $"[world.view-refresh: every {divisor} produced frame(s)]");
             }
         );
         yield return CommandDefinition.WithWireArgs(
@@ -353,12 +255,6 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                     formatEcho: () => new CommandResult(Output: $"[world.target: {DescribeTarget(target: pacing.TargetHertz)}]")
                 );
             }
-        );
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
-            name: "world.screens",
-            description: "Lists every declared diegetic screen, then every creation face showing a source, one segment each — index, source kind (test-pattern|none|machine|camera|view|capture; a machine reads machine:<engine>), bound/unbound (a nonzero live provider handle this frame), its engage policy (engageable|fixed), for a camera on its GPU tier or a capture on its GPU route, order:fence (the render device waits on the producer's shared fence) or order:cpu-wait (reason) (a device that cannot share the fence waits on the CPU), and last the mapping the screen publishes, in the line world.view.panes prints for a pane (mapping producer:source$<producer>$<digest> surface … or instance:<view> surface …, the source extent, crop, layout, fit, the glass warp and the destination), or mapping none (reason): no image source, a live presentation source no row names, an extent not known yet, or not published by a boot that presents nothing. No argument; the pipe-assertable state proving the test-pattern screen is bound and the unbound screen shades as dark glass. A query — its listing always echoes, even under wire.ack quiet.",
-            handler: ScreensHandler
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
