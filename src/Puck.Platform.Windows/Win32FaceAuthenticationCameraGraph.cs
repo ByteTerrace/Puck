@@ -170,7 +170,7 @@ internal sealed class Win32FaceAuthenticationPixelGraph : Win32FaceAuthenticatio
         }
     }
 
-    protected override bool IsLive => ((Streams.Count > 0) && Streams.All(predicate: stream => (stream.FrameVersion > 0L)));
+    protected override bool IsLive => ((Streams.Count > 0) && Streams.All(predicate: stream => (stream.Version > 0L)));
 
     protected override Win32PixelStream CreateStream(CameraSensor sensor, Win32FaceAuthenticationStream stream) => new(
         height: stream.Height,
@@ -328,7 +328,7 @@ internal sealed class Win32FaceAuthenticationPixelGraph : Win32FaceAuthenticatio
 /// Both pins must expose a Direct3D surface to be live, and both rings attach before either publishes, so a refusal
 /// returns the whole pair to the CPU tier.</summary>
 [SupportedOSPlatform("windows10.0.19041")]
-internal sealed class Win32FaceAuthenticationSharedGraph : Win32FaceAuthenticationCameraGraph<Win32SharedStream>, ICameraKernelHost, IProbeInputResolver {
+internal sealed class Win32FaceAuthenticationSharedGraph : Win32FaceAuthenticationCameraGraph<Win32SharedStream>, IProbeKernelHost, IProbeInputResolver {
     private readonly long m_adapterLuid;
     private readonly Win32ProbeKernelBench m_bench = new();
 
@@ -471,8 +471,6 @@ internal sealed class Win32FaceAuthenticationSharedGraph : Win32FaceAuthenticati
     public bool TryAttachKernel(in ProbeKernelRequest request, ProbeReadingRing ring, [NotNullWhen(true)] out IProbeKernelRun? run, out string fault) {
         ArgumentNullException.ThrowIfNull(ring);
 
-        var triggered = false;
-
         foreach (var input in request.Inputs) {
             switch (input) {
                 case ProbeKernelInput.Sensor sensorInput:
@@ -483,8 +481,6 @@ internal sealed class Win32FaceAuthenticationSharedGraph : Win32FaceAuthenticati
                         return false;
                     }
 
-                    triggered |= (sensorInput.Kind == request.Trigger);
-
                     break;
                 case ProbeKernelInput.StrobePair strobeInput:
                     if (CameraSensor.Infrared != strobeInput.Kind) {
@@ -494,15 +490,13 @@ internal sealed class Win32FaceAuthenticationSharedGraph : Win32FaceAuthenticati
                         return false;
                     }
 
-                    triggered |= (strobeInput.Kind == request.Trigger);
-
                     break;
             }
         }
 
-        if (!triggered) {
+        if (request.TriggerSensor is null) {
             run = null;
-            fault = $"the trigger sensor {request.Trigger} is not among the kernel's sensor/strobe-pair inputs";
+            fault = $"the trigger socket {request.Trigger} reads no sensor or strobe pair";
 
             return false;
         }

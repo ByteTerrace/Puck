@@ -88,13 +88,14 @@ internal sealed partial class WorldProbes {
     }
     // Every deep check the document's own shallow validator left behind the kind vocabulary: a non-optional socket
     // is bound, a bound name is a declared socket, a strobePair socket binds only a camera Infrared source, the
-    // trigger socket binds a camera source (kernels are hosted by a camera graph — this is what decides which
-    // graph a kernel attaches to), the output.of socket is bound regardless of its own optionality, and a `probe`
-    // socket names a probe whose kind declares an output. Returns the trigger socket's bound sensor, the seat a
+    // trigger socket binds a camera source (the camera graph hosts the kernel) or a view or probe source with no camera
+    // socket anywhere (the render adapter's own host runs it) — this is what decides which host a kernel attaches to —
+    // the output.of socket is bound regardless of its own optionality, and a `probe` socket names a probe whose kind
+    // declares an output. Returns the trigger socket's bound sensor (null for a rendered trigger), the seat a
     // NON-seat-relative row's single instance resolves against (every camera socket named its own seat, so the
     // trigger's is representative), and whether the row is seat-relative (WorldDefinitionValidator.IsSeatRelativeProbe's
     // runtime counterpart — at least one camera socket carries no seat).
-    private static (WorldCameraSensor Sensor, int SingleInstanceSeat, bool IsSeatRelative) ValidateProbeSockets(IReadOnlyDictionary<string, WorldFrameSource> inputs, ProbeKindManifest manifest, string path, IReadOnlyDictionary<string, WorldProbe> probesById) {
+    private static (WorldCameraSensor? Sensor, int SingleInstanceSeat, bool IsSeatRelative) ValidateProbeSockets(IReadOnlyDictionary<string, WorldFrameSource> inputs, ProbeKindManifest manifest, string path, IReadOnlyDictionary<string, WorldProbe> probesById) {
         var sockets = manifest.Inputs;
 
         for (var socketIndex = 0; (socketIndex < sockets.Count); socketIndex++) {
@@ -169,17 +170,33 @@ internal sealed partial class WorldProbes {
 
         var triggerSocket = sockets[manifest.TriggerSocket];
 
-        if (
-            !inputs.TryGetValue(
+        if (!inputs.TryGetValue(
             key: triggerSocket.Name,
             value: out var triggerSource
-        ) ||
-            !WorldImageProducerSettings.TryCamera(
-                camera: out var triggerCamera,
-                source: triggerSource
-            )
-        ) {
-            throw new InvalidOperationException(message: $"{path}.inputs['{triggerSocket.Name}'] is the trigger socket; it must bind a camera source (kernels are hosted by a camera graph).");
+        )) {
+            throw new InvalidOperationException(message: $"{path}.inputs['{triggerSocket.Name}'] is the trigger socket; it must be bound.");
+        }
+
+        if (!WorldImageProducerSettings.TryCamera(
+            camera: out var triggerCamera,
+            source: triggerSource
+        )) {
+            // A rendered trigger (a view export or another probe's output) runs on the render adapter's own kernel host,
+            // which opens no camera.
+            if (triggerSource is not (WorldScreenSource.View or WorldScreenSource.Probe)) {
+                throw new InvalidOperationException(message: $"{path}.inputs['{triggerSocket.Name}'] is the trigger socket; it must bind a camera, a view or a probe source.");
+            }
+
+            foreach (var (socketName, source) in inputs) {
+                if (WorldImageProducerSettings.TryCamera(
+                    camera: out _,
+                    source: source
+                )) {
+                    throw new InvalidOperationException(message: $"{path}.inputs['{socketName}'] binds a camera, but trigger socket '{triggerSocket.Name}' reads a rendered source; a kernel on the render adapter opens no camera.");
+                }
+            }
+
+            return (null, 1, false);
         }
 
         foreach (var (socketName, source) in inputs) {
@@ -666,7 +683,8 @@ internal sealed partial class WorldProbes {
                     Height: ringOutput.Height,
                     Format: ringOutput.TargetFormat,
                     SharedTargetHandles: ringOutput.SharedTargetHandles,
-                    Slots: ringOutput.Slots
+                    Slots: ringOutput.Slots,
+                    SharedFenceHandle: ringOutput.SharedFenceHandle
                 ), ringGeneration, (ringOutput.Width, ringOutput.Height), null);
             case WorldScreenSource.View view:
                 if (!m_screens.TryGetViewExport(
@@ -741,17 +759,32 @@ internal sealed partial class WorldProbes {
 
             output = provisioned;
         }
-        if (
-            !m_screens.TryGetCameraAttachment(
-            seat: instance.Seat,
-            sensor: instance.RowInfo.TriggerSensor!.Value,
-            attachment: out var triggerAttachment
-        ) ||
-            (triggerAttachment.Kernels is not { } kernels)
-        ) {
-            instance.Fault = "the open camera graph hosts no kernels";
+        IProbeKernelHost kernels;
+
+        if (instance.RowInfo.TriggerSensor is { } triggerSensor) {
+            if (
+                !m_screens.TryGetCameraAttachment(
+                seat: instance.Seat,
+                sensor: triggerSensor,
+                attachment: out var triggerAttachment
+            ) ||
+                (triggerAttachment.Kernels is not { } cameraKernels)
+            ) {
+                instance.Fault = "the open camera graph hosts no kernels";
+
+                return;
+            }
+
+            kernels = cameraKernels;
+        } else if (!m_screens.TryGetRenderedKernelHost(
+            fault: out var hostFault,
+            host: out var renderedKernels
+        )) {
+            instance.Fault = hostFault;
 
             return;
+        } else {
+            kernels = renderedKernels;
         }
 
         var manifest = instance.RowInfo.Manifest;
@@ -759,7 +792,7 @@ internal sealed partial class WorldProbes {
         var accumulatePath = manifest.KernelBytecodePath(entry: kernel.Accumulate);
         var finalizePath = manifest.KernelBytecodePath(entry: kernel.Finalize);
 
-        // The build compiles a kernel; the camera's device only creates it from the bytecode.
+        // The build compiles a kernel; its host's device only creates it from the bytecode.
         if (
             !File.Exists(path: accumulatePath) ||
             !File.Exists(path: finalizePath)
@@ -769,7 +802,7 @@ internal sealed partial class WorldProbes {
             return;
         }
 
-        // The camera graph keeps this request on its worker thread for the whole run. The per-instance Inputs array
+        // The kernel host keeps this request on its worker thread for the whole run. The per-instance Inputs array
         // above is render-thread scratch, rewritten on every service pass, so attach an immutable snapshot: a later
         // generation resolve must never substitute new ring handles beneath an older run's already-opened SRVs.
         var attachedInputs = inputs.ToArray();
@@ -782,7 +815,7 @@ internal sealed partial class WorldProbes {
             ChannelCount: instance.RowInfo.Manifest.Channels.Count,
             RateHz: instance.RowInfo.Row.RateHz,
             Inputs: attachedInputs,
-            Trigger: ToCameraSensor(sensor: instance.RowInfo.TriggerSensor.Value),
+            Trigger: manifest.TriggerSocket,
             Output: output
         );
 
@@ -794,6 +827,13 @@ internal sealed partial class WorldProbes {
         )) {
             instance.Fault = null;
             instance.Run = run;
+
+            if (output is not null) {
+                m_screens.BindProbeRun(
+                    id: instance.OutputRingKey,
+                    run: run
+                );
+            }
         } else {
             instance.Fault = fault;
         }

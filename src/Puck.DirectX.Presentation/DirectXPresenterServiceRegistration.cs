@@ -48,9 +48,6 @@ public static class DirectXPresenterServiceRegistration {
         });
         services.TryAddSingleton<IDirectXDeviceContext>(implementationFactory: static sp => sp.GetRequiredService<DirectXDeviceContext>());
         services.TryAddSingleton<IGpuDeviceContext>(implementationFactory: static sp => sp.GetRequiredService<DirectXDeviceContext>());
-        // Optional capability: Direct3D 12 can export a shared texture for another backend on the same adapter to
-        // import zero-copy. A host resolves this when present and falls back to the CPU-pixel transport otherwise.
-        services.TryAddSingleton<IGpuSurfaceExportFactory>(implementationFactory: static sp => new DirectXGpuSurfaceExportFactory(deviceContext: sp.GetRequiredService<DirectXDeviceContext>()));
 
         // Neutral presentation preferences (present mode + surface format); a consumer may register its own
         // before calling this to override the defaults (Vsync + R8G8B8A8).

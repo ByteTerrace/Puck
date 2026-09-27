@@ -4,6 +4,8 @@ namespace Puck.Vulkan;
 /// Common <c>VkPipelineStageFlagBits</c> values used in pipeline barriers and layout transitions. Combine with bitwise OR.
 /// </summary>
 public static class VulkanPipelineStageFlags {
+    /// <summary>The <c>VK_PIPELINE_STAGE_ALL_COMMANDS_BIT</c> value.</summary>
+    public const uint AllCommands = 0x00010000;
     /// <summary>The <c>VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT</c> value.</summary>
     public const uint BottomOfPipe = 0x00002000;
     /// <summary>The <c>VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT</c> value.</summary>

@@ -1285,21 +1285,25 @@ There is no jitter, motion vector, or history in the SDF kernels; render scale
 is a bilinear-to-Catmull-Rom upsample in the graph's `place` pass.
 
 P12's source contract, producer registration and conversion passes have
-landed, and so have P12b's steps 1 to 6: sources are graph instances,
+landed, and so have P12b's steps 1 to 7: sources are graph instances,
 feeds are external producers whose every screen image is a lease, uploaded
 sources write regions that a planned conversion pass reads, devices
 synchronize through a shared fence, a capture frame renders every tainted
-instance it reads again, and a machine's output is an uploaded source held to
-its exact verdict. Probe outputs and view exports as sources (step 7),
-consumer-chosen filtering with no slot limit (step 8) and the check's list
-(step 9) remain. The camera and probe GPU tiers, and
+instance it reads again, a machine's output is an uploaded source held to its
+exact verdict, and a probe's output is an imported source while a view export
+orders its reader by a shared fence of its own. Consumer-chosen filtering with
+no slot limit (step 8) and the check's list (step 9) remain. The camera and
+probe GPU tiers, and
 desktop capture on a Direct3D 12 host, share their images without a copy, as
-simultaneous-access Direct3D 12 textures that a Vulkan host imports. A camera
-or capture producer signals the consumer's Direct3D 12 shared fence after each
-Direct3D 11 write and publishes the slot with the value, and the consuming
+simultaneous-access Direct3D 12 textures that a Vulkan host imports. A camera,
+capture or probe producer signals the consumer's Direct3D 12 shared fence after
+each Direct3D 11 write and publishes the slot with the value, and the consuming
 submission waits for it on the GPU (a Vulkan host through the fence imported as
-a timeline semaphore); a device that cannot share the fence, and the probe
-kernel, which reads its channels on the CPU, wait on the CPU instead. The
+a timeline semaphore); a device that cannot share the fence waits on the CPU
+instead. A view export orders the other direction: the exporting engine signals
+the exported texture's shared fence (on the Vulkan host, a texture and fence it
+imports from a headless Direct3D 12 device) and the Direct3D 11 probe waits for
+it on its device. The
 consumer holds a CPU slot lease until its submission retires, the desktop capture's
 included (its targets' `LatestSlotPublication`, which its producer reserves write
 slots through, so it never overwrites a slot a lease holds).
@@ -1853,7 +1857,7 @@ no shared shadows, ambient occlusion, or reflections; a compact visibility
 record is tried before a large deferred buffer.
 
 **Deletes:** the shared record replaces the SDF engine's private one rather
-than sitting beside it. The `PrimaryHits` buffer and its per-pixel layout, and
+than sitting beside it. The engine's former `PrimaryHits` buffer and its per-pixel layout, and
 every pass that reads it, move to the shared visibility record, so one
 visibility format remains. The unbounded traversal survives only as the
 reference the check compares against, inside the test fixtures; no runtime
@@ -1885,7 +1889,8 @@ groups. The remaining work follows below.
    (ray parameter; identity, with its kind in bits 31 and 30 — background, SDF
    or mesh — and a source index; material; flags), coverage (terminal radius,
    threshold, blend weight and partner), lanes, normal and surface, and every
-   pass reads and writes `PrimaryHits` through it. Done when `puck parity` and
+   pass reads and writes the record buffer (`SdfFrameBuffer.VisibilityRecords`)
+   through it. Done when `puck parity` and
    `puck counters` read identically before and after.
 3. P4-1b, landed, freshness: `sdf-cull-args` writes the dispatch box's
    exclusive end beside its origin, and `worldVisibilityCurrent` in
@@ -1977,7 +1982,13 @@ groups. The remaining work follows below.
    validator refuses today, and in session views and neighbour worlds, whose
    emitters then pass their draw lists.
 10. The `PrimaryHit*` names become the visibility record's, and the owning
-    guides describe it.
+    guides describe it. Landed: the buffer is `SdfFrameBuffer.VisibilityRecords`,
+    held in the engine's `m_visibilityRecordBuffer`, its record length is the one
+    public `SdfWorldEngine.VisibilityRecordByteLength` (the alias that forwarded
+    to the private `PrimaryHitByteLength` is gone), the HLSL primary march's
+    result is `SdfPrimaryMarch`, the value its pass stores into a record's V, C
+    and L rows, and the `rendering` skill's kernel and sync-pair references and
+    the `Puck.SdfVm` README name the record.
 
 **Decisions.** Meshes rasterize first, into a sampled `RGBA32F` target (ray
 parameter, draw id plus one, octahedral normal) and a reversed-Z `D32Float`
@@ -3461,8 +3472,8 @@ except step 8.
    open the fence, and a Vulkan device that cannot import it, keep the CPU wait
    and publish zero, which the consumer never waits for; `world.screens` says
    which order each camera or capture screen has (`order:fence`, or
-   `order:cpu-wait (reason)`). The probe kernel keeps its CPU wait, since it
-   reads its channels back on the CPU every cycle, and publishes zero.
+   `order:cpu-wait (reason)`). A probe kernel signals its output ring's fence
+   the same way (step 7).
    `SharedFenceLawTests` holds a Direct3D 11 writer and a Direct3D 12 reader on
    one adapter, and on WARP, to the written pattern: the reader's submission is
    made before the writer writes, cannot retire until the signal, and then reads
@@ -3520,11 +3531,43 @@ except step 8.
    `WorldCaptureSchedulerLawTests.ACaptureOfASourceThatStatesItsImageRecordsTheExactVerdictAndOneDifferingPixelFailsIt`,
    and the emulator batteries' `queued-host-frame-publication` stage (whole
    frames, header untouched, monotonic sequences while the worker runs).
-7. Probe outputs and view exports are sources. Can land now, after step 4. A
-   probe kernel's output ring is an imported external source, and a view
-   export (a Direct3D 12 image a Direct3D 11 probe reads) signals the same
-   shared fence in the other direction, replacing the drain in
-   `ViewExportRing`. It needs a probe canary, which does not exist.
+7. Probe outputs and view exports are sources. Landed. A probe's output ring is provisioned with a shared fence like a
+   camera's, the kernel signals it through `Win32D3D11CompletionSignal` after
+   each cycle's writes and publishes a value the ring hands out
+   (`LatestSlotPublication.NextFenceValue`, so a run restarted over the ring
+   continues the fence's values), and a screen's probe source is
+   an imported source like any other: an `IWorldImportFeed` over the ring
+   (`WorldScreenBinder.ProbeSourceFeed`) adapted to `WorldImageFeedProducer`,
+   so `WorldCaptureGate.Resolve` hands out its slot tainted or its fill, and
+   `world.screens` reports its order. A view export signals a shared fence in
+   the other direction: the exported Direct3D 12 texture has a shared fence,
+   and `IGpuExportableImage.CompleteWrite` queues its next value behind the
+   submission that wrote it (`SdfWorldEngine.ExportWrittenValue`), which the
+   one-image `SingleSlotPublication` publishes and a Direct3D 11 reader waits
+   for on its own device (`Win32D3D11FenceWait`, `ID3D11DeviceContext4::Wait`);
+   no queue drain orders the two devices, a ring socket whose fence the reader
+   cannot open is refused by name, and retiring an export never waits for its
+   reader. On the Vulkan host the texture and its fence are made on the
+   binder's headless Direct3D 12 device, and the render device imports both to
+   write and signal (`IGpuSurfaceTransferFactory.TryImportWritable`,
+   `VulkanImportedWritableImage`, `VulkanQueueSubmitter.Signal`), releasing it
+   to the external queue family with each signal and acquiring it back before
+   the next write (`IGpuExportableImage.BeginWrite`). A camera
+   extent edit makes the export again at the new extent. A kernel whose trigger socket reads
+   a rendered source (a view or another probe) and that binds no camera runs
+   on the render adapter's own kernel host (`IRenderedProbeKernelHost`,
+   `Win32RenderedProbeKernelHost`), which the binder opens on the render
+   adapter and wakes once a frame, and which cycles a kernel when its trigger
+   ring publishes; a request names its trigger by socket index. The shipped
+   `average` kind measures a frame's mean color and writes it, tinted, to its
+   output. Laws: `RenderedProbeKernelHostLawTests` (a Direct3D 12 clear, and a
+   Vulkan clear into an imported texture, held behind a gate, are read only
+   once the fence reaches the published value; a restarted run continues its
+   ring's fence values) and `SingleSlotPublicationTests`. Canary:
+   `probe-sources`, on both backends, where a probe of the `average` kind reads
+   a camera's view export and its output shows on a screen through the fence,
+   and a live extent edit makes the export again; its discriminating leg reads
+   a camera looking at the sky.
 8. Consumer-chosen filtering and no slot limit, which P7b-14b-6 and P7b-20 unblock.
    Screens read a separate image and sampler, each screen row chooses nearest
    or linear, and the 32 fixed slots give way to the engine's group arrays.
@@ -4151,7 +4194,7 @@ packaging, and compiled worlds in the runtime and delivery programme.
 
 **Foundation.** P2, P3 and P5 are complete. P1a and P1b stay open beside the
 rest: neither blocks P4 or releasing the foundation. P4-0, P4-1a to P4-1c and
-P4-2a to P4-2d have landed; P4-2e and the visibility record's names remain. P6
+P4-2a to P4-2d and step 10, the visibility record's names, have landed; P4-2e remains. P6
 follows P4.
 Image-only packaging stays
 independent of placed-surface support, and shared GPU and World files have one
@@ -4168,10 +4211,11 @@ rebuild.
 **The frame graph and nesting.** P11 is complete: every view, pane, seat,
 camera and session is a graph instance the runtime schedules by demand, and a
 host drives one render root. P12's source contract,
-producers and conversion passes have landed, and so have P12b's steps 1 to 6,
-the capture gate over the graph among them. Of the rest, step 7 can land now,
-step 8 can too since P7b-14b-6 and P7b-20 have landed, and step 9 comes last;
-its `view` and `session` arms already went with P11b-13. P13b's live mappings
+producers and conversion passes have landed, and so have P12b's steps 1 to 7,
+the capture gate over the graph and probe outputs and view exports as sources
+among them. Of the rest, step 8 can land now since P7b-14b-6 and P7b-20 have
+landed, and step 9 comes last; its `view` and `session` arms already went with
+P11b-13. P13b's live mappings
 (step 1), simulation destination (step 2, with the light gun that authored
 cartridges read through `$light`), host passthrough (step 4), the GPU drawing
 from the mapping (step 5) and live hit walk (step 6) have landed, with step 3's

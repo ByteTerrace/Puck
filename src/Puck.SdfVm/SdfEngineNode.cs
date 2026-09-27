@@ -699,6 +699,13 @@ public sealed partial class SdfEngineNode : ICaptureRequestTarget {
     /// <summary>Gets the current engine's exported shared handle (<see cref="SdfWorldEngine.ExportSharedHandle"/>), or zero
     /// outside export mode and before an engine is built.</summary>
     public nint ExportSharedHandle => (m_engine?.ExportSharedHandle ?? 0);
+    /// <summary>Gets the current engine's exported image's shared fence handle (<see cref="SdfWorldEngine.ExportFenceHandle"/>),
+    /// or zero outside export mode and before an engine is built.</summary>
+    public nint ExportFenceHandle => (m_engine?.ExportFenceHandle ?? 0);
+    /// <summary>Gets the shared fence value the current engine's last submitted frame signals behind its write of the
+    /// exported image (<see cref="SdfWorldEngine.ExportWrittenValue"/>), or zero outside export mode and before an engine
+    /// has submitted.</summary>
+    public ulong ExportWrittenValue => (m_engine?.ExportWrittenValue ?? 0UL);
     /// <summary>Gets an identity that changes whenever the node builds another engine, and with it another exported image,
     /// or <see langword="null"/> while it has none.</summary>
     public object? ExportGeneration => m_engine;

@@ -262,9 +262,29 @@ These are one-line cautions; the owning pages hold the derivations.
   submit: `ShaderPipelineRenderNode.SubmitCounted`, and the SDF engine's
   frame submission through `SubmitFrameWithExternalResources`), never to
   whichever submission the device makes next. A published value of zero means
-  the write finished on the CPU (a device that cannot share the fence, the
-  probe kernel); never add a wait for it. A new path that samples a shared
-  slot carries its wait on the lease, never through the submitter directly.
+  the write finished on the CPU (a device that cannot share the fence); never
+  add a wait for it. A new path that samples a shared slot carries its wait on
+  the lease, never through the submitter directly. A fence more than one
+  producer signals over time (a probe's output ring, whose run restarts) takes
+  its values from the ring (`LatestSlotPublication.NextFenceValue`), so they
+  never fall. A view export orders the other direction with a shared fence of
+  the exported texture: the engine's `SubmitFrame` calls
+  `IGpuExportableImage.CompleteWrite`, which queues the fence's next value
+  behind the submission (`SdfWorldEngine.ExportWrittenValue`, never a queue
+  drain), `SingleSlotPublication` publishes it, and a Direct3D 11 reader queues
+  `Win32D3D11FenceWait.Wait` before it reads; the consumer-to-producer order
+  stays the CPU slot lease, and retiring an export never waits for a reader. On
+  the Vulkan host the exported texture and fence come from the binder's headless
+  Direct3D 12 device and the render device imports both to write and signal
+  (`IGpuSurfaceTransferFactory.TryImportWritable`, `VulkanQueueSubmitter.Signal`),
+  releasing the image to `VK_QUEUE_FAMILY_EXTERNAL` with each signal and acquiring it
+  back in `IGpuExportableImage.BeginWrite`, which the engine calls before the frame it
+  writes;
+  a camera extent edit makes the export again. A probe kernel runs on a host's own Direct3D
+  11 device: a camera graph's, or, when its trigger socket reads a view or a
+  probe and no socket binds a camera, the render adapter's
+  (`IRenderedProbeKernelHost`, opened by the binder, woken once a frame, cycling
+  a kernel when its trigger ring's `ISharedSlotRing.Version` moves).
 - **Image sources.** An image from outside a pass is described once, by
   `ImageSourceDescriptor`, and a world names its producer by id
   (`WorldScreenSource.Producer`). A new producer registers a
@@ -292,7 +312,8 @@ These are one-line cautions; the owning pages hold the derivations.
   (`WorldScreenBinder.Adapt`), whose `TryAcquireOutput` is the one place its
   image is acquired, through `WorldCaptureGate.Resolve`, so a filled source hands
   out its fill and never acquires the feed; the probe id registers the binder's
-  `ProbeSource`. The machine id registers an upload, the binder's
+  `ProbeSource`, which adapts a `ProbeSourceFeed` over the probe's output ring
+  the same way. The machine id registers an upload, the binder's
   `MachineSource`, a `MachineVideoSourceUpload` (`Puck.Hosting`) that writes the
   output's latest frame (`IMachineVideoOutput.WriteFrame`, RGBA8 or `Indexed8`)
   into the instance's region once per completed tick; a machine never uploads
@@ -524,7 +545,7 @@ These are one-line cautions; the owning pages hold the derivations.
   with its context, bound to it and taking no device argument; a consumer takes
   the device context and reads them there, never a bundle of its own or a DI
   registration of one service, and a new device-bound service joins that set.
-  The optional `IGpuSurfaceExportFactory` is registered on its own. `IGpuBufferFactory` creates by
+  `IGpuBufferFactory` creates by
   `GpuBufferUsage` and placement (`CreateHostVisible`, `CreateDeviceLocal`), and a
   geometry buffer is a host-visible one created with its data.
   A candidate (never the device-loss rebuild) is refused in `EnsureBuild` with

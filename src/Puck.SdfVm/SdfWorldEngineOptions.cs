@@ -15,8 +15,9 @@ namespace Puck.SdfVm;
 /// region, and a frame uploads only the words that changed. Excess transforms in a frame beyond the capacity are dropped.</param>
 /// <param name="CreateOutputImage">An optional factory for the output image. When it returns an
 /// <see cref="IGpuExportableImage"/>, the engine runs in <em>export</em> mode: each submitted frame ends in the
-/// cross-backend handoff layout and <see cref="SdfWorldEngine.SubmitFrame"/> drains the producer queue so the shared
-/// handle may be consumed on another device. When <see langword="null"/>, a plain same-device storage image is
+/// cross-backend handoff layout and <see cref="SdfWorldEngine.SubmitFrame"/> signals the image's shared fence behind it
+/// (<see cref="SdfWorldEngine.ExportWrittenValue"/>), which a consumer on another device waits for before it reads the
+/// shared handle. When <see langword="null"/>, a plain same-device storage image is
 /// created from the resolved <see cref="IGpuImageFactory"/>.</param>
 /// <param name="ProgramWordCapacity">The packed words the engine is provisioned for, which
 /// <see cref="SdfWorldEngine.ProgramWordCapacity"/> reports while no program exceeds it. It allocates nothing: the

@@ -13,11 +13,13 @@ public interface IVulkanCommandBufferRecordingApi {
     /// <param name="request">The record request identifying the device and command buffer.</param>
     /// <returns>A <see cref="VkResult"/> indicating whether recording began successfully.</returns>
     VkResult BeginCommandBuffer(VulkanCommandBufferRecordRequest request);
-    /// <summary>Begins recording into a command buffer. No usage flags are set, so the recording may be cached and resubmitted across frames.</summary>
+    /// <summary>Begins recording into a command buffer. No one-time flag is set, so the recording may be cached and resubmitted across frames.</summary>
     /// <param name="device">The command table of the logical device.</param>
     /// <param name="commandBufferHandle">The native <c>VkCommandBuffer</c> handle to begin recording into.</param>
+    /// <param name="resubmittedWhilePending">Whether the recording is submitted again before an earlier submission of
+    /// it has completed (<c>VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT</c>).</param>
     /// <returns>A <see cref="VkResult"/> indicating whether recording began successfully.</returns>
-    VkResult BeginCommandBuffer(VulkanDeviceCommands device, nint commandBufferHandle);
+    VkResult BeginCommandBuffer(VulkanDeviceCommands device, nint commandBufferHandle, bool resubmittedWhilePending = false);
     /// <summary>Opens a named debug-marker label (<c>vkCmdBeginDebugUtilsLabelEXT</c>) scoping the commands recorded
     /// until the matching <see cref="EndDebugLabel"/> — surfaced by GPU capture tools. A no-op when
     /// <c>VK_EXT_debug_utils</c> is unavailable; it records no GPU work and never affects rendered output.</summary>
@@ -161,6 +163,10 @@ public interface IVulkanCommandBufferRecordingApi {
     /// <param name="destinationAccessMask">A bitmask of <c>VkAccessFlagBits</c> giving the destination access scope.</param>
     /// <param name="sourceStageMask">A bitmask of <c>VkPipelineStageFlagBits</c> giving the source stage scope.</param>
     /// <param name="destinationStageMask">A bitmask of <c>VkPipelineStageFlagBits</c> giving the destination stage scope.</param>
+    /// <param name="sourceQueueFamily">The queue family the image's ownership is transferred from, or
+    /// <see cref="VulkanQueueFamily.Ignored"/> for a barrier that transfers none.</param>
+    /// <param name="destinationQueueFamily">The queue family the image's ownership is transferred to, or
+    /// <see cref="VulkanQueueFamily.Ignored"/> for a barrier that transfers none.</param>
     void TransitionImageLayout(
         VulkanDeviceCommands device,
         nint commandBufferHandle,
@@ -173,7 +179,9 @@ public interface IVulkanCommandBufferRecordingApi {
         uint sourceAccessMask,
         uint destinationAccessMask,
         uint sourceStageMask,
-        uint destinationStageMask
+        uint destinationStageMask,
+        uint sourceQueueFamily = VulkanQueueFamily.Ignored,
+        uint destinationQueueFamily = VulkanQueueFamily.Ignored
     );
     /// <summary>Records a buffer memory barrier over the whole of one buffer, scoped to the given accesses and stages.</summary>
     /// <param name="device">The command table of the logical device.</param>

@@ -123,7 +123,7 @@ struct SdfProgramLayout {
     uint segmentCount;       // segment directory's segment count
     uint rigidPlanOffset;    // rigid-leaf execution plan offset (segmentHeader.z)
     uint partProgramOffset;  // whole-scope shared programs (instanceHeader.y); zero when none qualify
-    bool noDetailShapes;    // instanceHeader.z bit 0: primary hit distance and attributes are valid for shading
+    bool noDetailShapes;    // instanceHeader.z bit 0: the visibility record's distance and attributes are valid for shading
     float stepScale;         // per-program Lipschitz step clamp (1/L; already >0-guarded)
     uint instanceOffset;     // instance directory offset
     uint instanceCount;      // packed (unclamped) instance count

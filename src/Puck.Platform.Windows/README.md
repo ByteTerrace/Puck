@@ -83,16 +83,24 @@ nominal-range, and chroma-siting attributes, passed to the kernel as constants;
 unsupported metadata or a failed Direct3D resource/view creation refuses the
 GPU tier so the coordinated pair reopens on CPU pixels.
 `Win32D3D11VideoDevice` is the source reader's DXVA
-device. Both shared-tier graphs are `ICameraKernelHost`s: `Win32ProbeKernelBench`
+device. Both shared-tier graphs are `IProbeKernelHost`s: `Win32ProbeKernelBench`
 holds the attached `Win32D3D11ProbeKernel`s and runs them on the graph's worker,
-on the graph's own device, right after the trigger frame converts. Each
+on the graph's own device, right after the trigger frame converts.
+`Win32RenderedProbeKernelHost` (opened by `Win32ProbeKernelHostService`) is the
+render adapter's own host: a `Win32D3D11VideoDevice` on the render adapter and
+a worker that runs, each time it is signalled, every kernel whose trigger `Ring`
+has published since it last ran. Each
 attached kernel's declared `Sensor`/`StrobePair` sockets resolve through
 `IProbeInputResolver` (the FaceAuth graph's converter output/previous view, or
 the source reader's latest published slot); a `Ring` socket's shared targets
-are opened once on the graph's device (`ID3D11Device1::OpenSharedResource1`,
-the same pattern the converter uses for its own output ring) and its latest
-slot is acquired and released around each run, running unbound (a null SRV,
-its `boundMask` bit clear) on a cycle with nothing published yet. A kernel
+are opened once on the host's device (`ID3D11Device1::OpenSharedResource1`,
+the same pattern the converter uses for its own output ring), with its
+producer's shared fence (`Win32D3D11FenceWait`, refused by name when the device
+cannot open it), and its latest slot is acquired and released around each run,
+the slot's fence value waited for on the device ahead of the dispatch, running
+unbound (a null SRV, its `boundMask` bit clear) on a cycle with nothing
+published yet. A kernel signals its output ring's shared fence through
+`Win32D3D11CompletionSignal` and publishes the value. A kernel
 is created once every `Sensor`/`StrobePair` socket resolves; a `Ring`/`Unbound`
 socket never blocks that. `Win32CameraControlSurface` maps the neutral control
 vocabulary onto either a WinRT `VideoDeviceController` or the legacy

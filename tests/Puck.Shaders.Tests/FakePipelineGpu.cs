@@ -304,6 +304,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
             width: width
         );
     }
+
     private FakeImage Image(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) => new(
         created: Create(
             bytes: ((((ulong)width) * height) * TexelBytes(format: format)),
@@ -314,6 +315,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         usage: usage,
         width: width
     );
+
     public IGpuPipeline Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description, in GpuObjectName name) {
         description.ValidateAgainst(renderPass: renderPass);
 
@@ -448,6 +450,12 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     public bool TryImportFence(nint sharedHandle, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IGpuSharedFence? fence, out string refusal) {
         fence = null;
         refusal = "the fake device imports no fence";
+
+        return false;
+    }
+    public bool TryImportWritable(nint sharedHandle, nint sharedFenceHandle, GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IGpuExportableImage? image, out string refusal) {
+        image = null;
+        refusal = "the fake device imports no image";
 
         return false;
     }

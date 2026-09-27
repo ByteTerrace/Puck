@@ -34,8 +34,8 @@
     <ItemGroup>
         <!-- puck.probe.v1 kind manifests and their kernel HLSL sources ship as content; each kernel's entry points compile
              to cs_5_0 DXBC at build (CompileDirect3D11Kernels in build/Shaders.targets), which ships beside them, because a
-             kernel runs on a camera graph's own Direct3D 11 device and compiles nothing there. -->
+             kernel runs on its host's own Direct3D 11 device and compiles nothing there. -->
         <Content Include="Assets\Probes\**" Exclude="Assets\Probes\**\*.dxbc" CopyToOutputDirectory="PreserveNewest" />
-        <Direct3D11KernelSource Include="Assets\Probes\faerie.hlsl;Assets\Probes\ir-blob.hlsl;Assets\Probes\ir-marker.hlsl" Entries="accumulate;finalize" />
+        <Direct3D11KernelSource Include="Assets\Probes\average.hlsl;Assets\Probes\faerie.hlsl;Assets\Probes\ir-blob.hlsl;Assets\Probes\ir-marker.hlsl" Entries="accumulate;finalize" />
     </ItemGroup>
 </Project>
