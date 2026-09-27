@@ -70,12 +70,16 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
     // from optimal-tiling images. VulkanLogicalDevice.SamplesBlockCompression records whether it was enabled, and an
     // upload of a block-compressed format refuses a device without it.
     private const uint TextureCompressionBcFeatureIndex = 22u;
+    // The 0-based VkPhysicalDeviceFeatures flag index of shaderSampledImageArrayDynamicIndexing: an array of sampled
+    // images or samplers may be indexed by a dynamically uniform value, as the SDF screen shading indexes its screen
+    // sources and samplers.
+    private const uint SampledImageArrayDynamicIndexingFeatureIndex = 34u;
 
     // 0-based VkPhysicalDeviceFeatures flag indices enabled only when the device reports them: textureCompressionBC,
-    // and storage-image read/write without a shader format qualifier (shaderStorageImage*WithoutFormat), needed to
-    // write image views whose format (commonly BGRA8) has no GLSL format qualifier; callers that need those probe
-    // separately and fall back otherwise.
-    private static readonly uint[] OptionalBaseFeatureIndices = [TextureCompressionBcFeatureIndex, 31u, 32u, 36u];
+    // storage-image read/write without a shader format qualifier (shaderStorageImage*WithoutFormat), needed to write
+    // image views whose format (commonly BGRA8) has no GLSL format qualifier, and dynamic indexing of sampled-image and
+    // storage-image arrays; callers that need those probe separately and fall back otherwise.
+    private static readonly uint[] OptionalBaseFeatureIndices = [TextureCompressionBcFeatureIndex, 31u, 32u, SampledImageArrayDynamicIndexingFeatureIndex, 36u];
 
     private readonly IVulkanLogicalDeviceApi m_logicalDeviceApi;
     private readonly IVulkanPhysicalDeviceApi m_physicalDeviceApi;

@@ -1337,8 +1337,14 @@ mapping (`ISdfScreenSources.MappingOf`) to `SdfWorldEngine.SetScreenMapping`,
 which packs its single-precision draw form (`SourceMapping.Draw`, the warp's
 inverse and one affine map folding the layout, fit and crop) into the
 `screenMappings` table of the `sdf-world` interface, and the screen shading draws
-the bezel, the letterbox and the sample from it. A screen with no mapping shades
-as unbound glass. `SourceMappingLawTests.TheDrawFormRunsTheChainTheHitRuns` holds
+the bezel, the letterbox and the sample from it, through the sampler its row's
+filter names (`WorldScreen.Filter`, `Nearest` or `Linear`, carried as
+`SourceMapping.Filter`). A screen with no mapping shades as unbound glass. The
+screens are one `screenSources` array beside one `samplers` array, one sampler
+per `GpuSamplerFilter`, whose length is `SdfProgramBuilder.MaxScreenSurfaces`
+and nothing else. A shader interface's image or sampler array
+(`ShaderInterfaceMember.Length` on a sampled image or sampler) takes its length
+in registers, and a pass indexes it only by a wave-uniform value. `SourceMappingLawTests.TheDrawFormRunsTheChainTheHitRuns` holds
 the draw form to `MapRay`, and the table's layout is a sync pair
 ([references/sync-pairs.md](references/sync-pairs.md)). A pane is not drawn from
 its mapping: `place` draws it.

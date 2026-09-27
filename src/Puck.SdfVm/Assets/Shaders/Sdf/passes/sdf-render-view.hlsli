@@ -382,7 +382,6 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
                 // Every BOUND diegetic screen is a colored area light: its position/orientation come from the
                 // screen-surface table, its color from the per-frame framebuffer average. The dot(screenNormal, -L) gate
                 // is the "light through the glass" cue — a screen only lights what sits in front of its face.
-                // SdfScreenLightEnv doubles as the screen-slot COUNT (the environment entry sits right after 0..count-1).
                 // right/up are orthonormal by contract (SdfScreenSurface); the normalize absorbs upload float drift.
                 // The engine-bench sdf.screen-lights lever skips the whole additive loop (the CRTs stop spilling glow).
                 if (!worldScreenLightsDisabled()) {

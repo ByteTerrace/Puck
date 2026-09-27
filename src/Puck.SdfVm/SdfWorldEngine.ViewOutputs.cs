@@ -274,7 +274,7 @@ public sealed partial class SdfWorldEngine {
     private bool SamplesAsScreen(nint imageView) {
         for (var screen = 0; (screen < MaxScreenSurfaces); screen++) {
             if (
-                (0u != (m_screenSourceMask & (1u << screen))) &&
+                (m_screenSourceViews[screen] != 0) &&
                 (m_screenSourceViews[screen] == imageView)
             ) {
                 return true;
@@ -307,11 +307,14 @@ public sealed partial class SdfWorldEngine {
     private void UnbindScreens(nint imageView) {
         for (var screen = 0; (screen < MaxScreenSurfaces); screen++) {
             if (m_screenSourceViews[screen] == imageView) {
-                m_screenSourceViews[screen] = 0;
-                m_screenSourceMask &= ~(1u << screen);
+                BindScreen(
+                    imageViewHandle: 0,
+                    screenIndex: screen
+                );
             }
         }
-    }    // The extent a view renders at this frame.
+    }
+    // The extent a view renders at this frame.
     private (uint Width, uint Height) ViewExtentOf(SdfFrame frame, int view) {
         if ((view == 0) && m_exportMode) {
             return (m_width, m_height);

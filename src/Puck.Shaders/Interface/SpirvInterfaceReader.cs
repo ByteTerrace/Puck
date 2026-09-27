@@ -103,13 +103,14 @@ public static class SpirvInterfaceReader {
             }
 
             // An OpTypePointer's operands after its result id are the storage class and the pointee type.
+            var declared = Operand(
+                index: 1,
+                module: parsed,
+                typeId: pointerType
+            );
             var pointee = Unwrap(
                 module: parsed,
-                typeId: Operand(
-                    index: 1,
-                    module: parsed,
-                    typeId: pointerType
-                )
+                typeId: declared
             );
             var name = (parsed.Names.GetValueOrDefault(key: id) ?? $"%{id}");
             var kind = (pushed
@@ -123,6 +124,10 @@ public static class SpirvInterfaceReader {
 
             bindings.Add(item: new ShaderInterfaceBinding(
                 Binding: parsed.Bindings.GetValueOrDefault(key: id),
+                Count: DescriptorCount(
+                    module: parsed,
+                    typeId: declared
+                ),
                 ElementStride: ((kind is GpuBindingKind.ReadOnlyBuffer or GpuBindingKind.ReadWriteBuffer)
                     ? ElementStride(
                         module: parsed,
@@ -334,6 +339,19 @@ public static class SpirvInterfaceReader {
 
         return text.ToString();
     }
+    // The descriptors a binding holds: a binding array's length, one for a variable that is no array, and zero for a
+    // runtime array, whose length the module does not state.
+    private static uint DescriptorCount(Module module, uint typeId) =>
+        (module.Types.TryGetValue(
+            key: typeId,
+            value: out var type
+        )
+            ? type.Kind switch {
+                OpTypeArray => module.Constants[type.Operands[1]],
+                OpTypeRuntimeArray => 0u,
+                _ => 1u,
+            }
+            : 1u);
     // A binding array's variable points at an array of its element; the element type decides the kind.
     private static uint Unwrap(Module module, uint typeId) {
         while (

@@ -8,9 +8,10 @@ namespace Puck.SdfVm;
 public sealed partial class SdfWorldEngine {
     // (Re)bind the MaxScreenSurfaces screen-source images in every view's set this frame renders — a slot with no
     // host-supplied source this frame duplicates the DEDICATED ShaderReadOnly filler (m_screenSourceFiller; a sampled
-    // image binding requires that layout). The shader never samples an unbound slot (the world block's screenMask gates
-    // it), so the filler's content never reaches a pixel. Each is a member of its own (ScreenSourceBindings), written at
-    // arrayElement 0, and all share the set's one nearest sampler; the change-detected rebind means an idle scene (no sources bound) only writes descriptors that actually changed.
+    // image binding requires that layout). The shader never samples an unbound slot (its row's bound flag gates it), so
+    // the filler's content never reaches a pixel. Each is an element of the one screenSources array, written at its
+    // screen index; the change-detected rebind means an idle scene (no sources bound) only writes descriptors that
+    // actually changed.
     //
     // THE HANDLE-IDENTITY RULE: a change-detected skip is sound ONLY for a view this engine's own lifetime covers. A
     // HOST-SUPPLIED handle (a screen source, a child's storage image) names an object the host may destroy and replace
@@ -48,8 +49,8 @@ public sealed partial class SdfWorldEngine {
             }
 
             m_bindings.WriteSampledImage(
-                arrayElement: 0,
-                binding: ScreenSourceBindings[((int)element)],
+                arrayElement: element,
+                binding: ScreenSourcesBinding,
                 descriptorSetHandle: viewsSet,
                 imageViewHandle: view
             );

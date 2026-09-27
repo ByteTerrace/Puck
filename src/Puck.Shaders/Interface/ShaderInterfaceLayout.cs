@@ -10,9 +10,10 @@ namespace Puck.Shaders;
 /// <item><description>Each group is Vulkan descriptor set and Direct3D 12 register space
 /// <see cref="ShaderInterfaceGroup"/>'s ordinal.</description></item>
 /// <item><description>A group with values owns one constant block at binding 0; its images, buffers, arrays and
-/// samplers follow at bindings 1, 2, … in declaration order, or from 0 when the group has no block. A binding's Direct3D 12
-/// register number equals its Vulkan binding number, in the register class its kind takes (<c>b</c>, <c>t</c>,
-/// <c>u</c> or <c>s</c>).</description></item>
+/// samplers follow at bindings 1, 2, … in declaration order, or from 0 when the group has no block. An arrayed image or
+/// sampler of length <c>n</c> takes <c>n</c> bindings' worth of registers, so the member after it starts <c>n</c> on. A
+/// binding's Direct3D 12 register number equals its Vulkan binding number, in the register class its kind takes
+/// (<c>b</c>, <c>t</c>, <c>u</c> or <c>s</c>).</description></item>
 /// <item><description>A block places its values in declaration order: a scalar on a 4-byte boundary, a two-component
 /// vector on an 8-byte boundary, and a three- or four-component vector on a 16-byte boundary. Every gap is filled with a
 /// named <c>uint</c> padding member, so Direct3D 12's sequential constant-buffer packing lands each member exactly where
@@ -117,7 +118,7 @@ public sealed class ShaderInterfaceLayout {
     public ShaderInterface Interface { get; }
 
     /// <summary>Returns the neutral pipeline layout of the interface's groups: each group at its set, each binding at
-    /// its number with its kind and one descriptor, visible to the pipeline's stages, and the 4-byte index pushed when
+    /// its number with its kind and descriptor count, visible to the pipeline's stages, and the 4-byte index pushed when
     /// the interface declares one (<see cref="ShaderInterface.PushesIndex"/>).</summary>
     /// <param name="stages">The pipeline's shader stages, from its pass kind
     /// (<see cref="ShaderPipelinePassKinds.Stages"/>).</param>
@@ -129,6 +130,7 @@ public sealed class ShaderInterfaceLayout {
             groups: Groups.Select(selector: static group => new GpuGroupLayoutDescription(
                 bindings: group.Bindings.Select(selector: static binding => new GpuGroupBinding(
                     binding: binding.Binding,
+                    count: binding.Count,
                     kind: binding.Kind
                 )).ToArray(),
                 ordinal: group.Set
@@ -205,6 +207,7 @@ public sealed class ShaderInterfaceLayout {
             if (
                 (candidate is null) ||
                 (candidate.ElementStride != binding.ElementStride) ||
+                (candidate.Count != binding.Count) ||
                 !binding.Members.SequenceEqual(second: candidate.Members)
             ) {
                 return (index, binding, candidate);
@@ -288,9 +291,13 @@ public sealed class ShaderInterfaceLayout {
             ));
         }
 
+        var next = ((uint)bindings.Count);
+
         foreach (var member in members.Where(predicate: static member => !member.IsBlockMember)) {
-            var binding = ((uint)bindings.Count);
+            var binding = next;
             var kind = BindingKind(kind: member.Kind);
+
+            next = checked((binding + member.DescriptorCount));
 
             resources.Add(item: new ShaderInterfaceResourceLayout(
                 Binding: binding,
@@ -299,6 +306,7 @@ public sealed class ShaderInterfaceLayout {
             ));
             bindings.Add(item: new ShaderInterfaceBinding(
                 Binding: binding,
+                Count: member.DescriptorCount,
                 ElementStride: (kind switch {
                     GpuBindingKind.ReadOnlyBuffer or GpuBindingKind.ReadWriteBuffer => (member.Type?.SizeBytes() ?? SpirvRawBufferStride),
                     _ => 0,

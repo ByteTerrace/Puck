@@ -24,8 +24,8 @@ public static class WorldScreenMappings {
     /// <param name="source">The source the row shows.</param>
     /// <param name="sourceWidth">The source's width, in pixels.</param>
     /// <param name="sourceHeight">The source's height, in pixels.</param>
-    /// <returns>The mapping, whose destination is the row's <see cref="WorldScreenRoute.Input"/> and whose opener is
-    /// <see cref="SourceOpener.Document"/>.</returns>
+    /// <returns>The mapping, whose destination is the row's <see cref="WorldScreenRoute.Input"/>, whose filter is the
+    /// row's <see cref="WorldScreen.Filter"/> and whose opener is <see cref="SourceOpener.Document"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="screen"/> is <see langword="null"/>.</exception>
     public static SourceMapping Of(WorldScreen screen, SourceHandle source, int sourceWidth, int sourceHeight) {
         ArgumentNullException.ThrowIfNull(argument: screen);
@@ -36,6 +36,7 @@ public static class WorldScreenMappings {
                 width: sourceWidth
             ),
             Destination: (screen.Route.Input ?? SourceDestination.Presentation),
+            Filter: screen.Filter,
             Opener: SourceOpener.Document,
             Placement: new SourcePlacement.Surface(
                 HalfHeight: screen.HalfHeight,

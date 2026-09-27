@@ -401,7 +401,7 @@ they respond to is in the programme's implementation status.
 
 **The frame graph is the centre of rendering, and the SDF engine is one pass
 package in it.** The SDF engine began as the host. It composited panes in its
-second stage, it owns the 32 screen slots, it capped nested cameras through a
+second stage, it owns the screen slots, it capped nested cameras through a
 round-robin refresh budget, and post-processing and the overlay were nodes
 chained after it. That
 design grew from a prototype, and each capacity in it is a constant rather than

@@ -4588,6 +4588,7 @@ public static partial class WorldModelShape {
                 M("solid", typeof(global::Puck.World.WorldSolid), typeof(global::Puck.World.WorldScreen), "Solid", Read | Write),
                 M("magazine", typeof(global::Puck.World.WorldScreenMagazine), typeof(global::Puck.World.WorldScreen), "Magazine", Read | Write),
                 M("memory", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.WorldScreenMemory>), typeof(global::Puck.World.WorldScreen), "Memory", Read | Write),
+                M("filter", typeof(global::Puck.Abstractions.Gpu.GpuSamplerFilter), typeof(global::Puck.World.WorldScreen), "Filter", Read | Write),
             ],
             []),
         T(typeof(global::Puck.World.WorldScreenMagazine), true, JsonTypeInfoKind.Object, null,

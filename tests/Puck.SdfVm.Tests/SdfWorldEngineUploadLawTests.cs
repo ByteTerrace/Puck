@@ -354,13 +354,13 @@ public sealed class SdfWorldEngineUploadLawTests {
         );
         Assert.Equal(expected: Reserve, actual: rig.Engine.ProgramWordCapacity);
     }
-    // A screen's mapping reaches the device as its six-row draw form (frame/sdf-environment.hlsli's ScreenMappingData)
-    // at its screen's place, every other screen's rows zero; the same mapping supplied again owes nothing, and clearing
-    // it zeroes its rows.
+    // A screen's mapping reaches the device as its draw form (frame/sdf-environment.hlsli's ScreenMappingData) at its
+    // screen's place, every other screen's rows zero, with the sampler its filter names in the state row; the same
+    // mapping supplied again owes nothing, another filter changes only the sampler, and clearing it zeroes its rows.
     [Fact]
     public void TheScreenMappingTableHoldsEachScreensDrawFormAndAnUnchangedMappingOwesNothing() {
         const int Screen = 3;
-        const int Rows = 6;
+        const int Rows = 7;
         const float Border = 0.03f;
         using var rig = new Rig(slots: 1);
         var mapping = new SourceMapping(
@@ -374,7 +374,8 @@ public sealed class SdfWorldEngineUploadLawTests {
         var inset = ((SourceWarpInverse.Affine)mapping.Warp!.Inverse!);
         var table = new float[((SdfWorldEngine.MaxScreenSurfaces * Rows) * 4)];
         // The warp's rows carry the face distance one warped unit spans, the inner width; the image rows the identity,
-        // mapped and not letterboxing; then the whole crop and the crop inset by half a pixel.
+        // mapped and not letterboxing; then the whole crop, the crop inset by half a pixel, and the state row: unbound,
+        // through the nearest sampler.
         float[] rows = [
             inset.M11, 0f, inset.M13, (1f / inset.M11),
             0f, inset.M22, inset.M23, (1f / inset.M22),
@@ -382,7 +383,10 @@ public sealed class SdfWorldEngineUploadLawTests {
             0f, 1f, 0f, 0f,
             0f, 0f, 1f, 1f,
             (0.5f / 160f), (0.5f / 144f), (1f - (0.5f / 160f)), (1f - (0.5f / 144f)),
+            0f, ((float)GpuSamplerFilter.Nearest), 0f, 0f,
         ];
+
+        byte[] Table() => rig.Gpu.DeviceLocal(sizeBytes: ((ulong)(table.Length * sizeof(float))));
 
         rig.Warm();
         rig.Engine.SetScreenMapping(mapping: mapping, screenIndex: Screen);
@@ -390,18 +394,26 @@ public sealed class SdfWorldEngineUploadLawTests {
         rows.CopyTo(array: table, index: ((Screen * Rows) * 4));
         Assert.Equal(
             expected: MemoryMarshal.AsBytes(span: table.AsSpan()).ToArray(),
-            actual: rig.Gpu.DeviceLocal(sizeBytes: ((ulong)(table.Length * sizeof(float))))
+            actual: Table()
         );
 
         rig.Engine.SetScreenMapping(mapping: mapping, screenIndex: Screen);
         rig.Render(time: 0f);
         Assert.Equal(expected: 0L, actual: rig.Gpu.HostBytes());
 
+        rig.Engine.SetScreenMapping(mapping: (mapping with { Filter = GpuSamplerFilter.Linear }), screenIndex: Screen);
+        rig.Render(time: 0f);
+        table[((((Screen * Rows) + 6) * 4) + 1)] = ((float)GpuSamplerFilter.Linear);
+        Assert.Equal(
+            expected: MemoryMarshal.AsBytes(span: table.AsSpan()).ToArray(),
+            actual: Table()
+        );
+
         rig.Engine.SetScreenMapping(mapping: null, screenIndex: Screen);
         rig.Render(time: 0f);
         Assert.Equal(
             expected: new byte[(table.Length * sizeof(float))],
-            actual: rig.Gpu.DeviceLocal(sizeBytes: ((ulong)(table.Length * sizeof(float))))
+            actual: Table()
         );
     }
     [Fact]

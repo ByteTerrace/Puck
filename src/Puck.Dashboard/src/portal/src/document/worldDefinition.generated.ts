@@ -1259,6 +1259,8 @@ export type GeneratorWeightedNumeric = {
 
 export type GpuPixelFormat = "r8g8b8a8" | "b8g8r8a8";
 
+export type GpuSamplerFilter = "Nearest" | "Linear";
+
 export type GrantSubject = string;
 
 export type Grantee = string;
@@ -9304,6 +9306,10 @@ export type WorldScreen = {
    * The screen's live byte-window bindings between its booted machine's bus and ordinary state.world Int cells (see WorldScreenMemory), or null for a screen with none. Omitted from the wire when null.
    */
   memory?: (WorldScreenMemory | null)[] | null;
+  /**
+   * How the face samples its source's image: Nearest, the default, keeps each source pixel crisp, as an emulator or a pixel-art source wants; Linear blends between source pixels, as a camera or a desktop capture wants. The screen's mapping carries it, and a hit maps to the same source pixel under either. Omitted from the wire when Nearest.
+   */
+  filter?: GpuSamplerFilter;
 };
 
 export type WorldScreenMagazine = {

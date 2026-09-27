@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Maths;
 
@@ -27,6 +28,8 @@ namespace Puck.Commands;
 /// <param name="Warp">The warp pass the face is drawn through, or <see langword="null"/> for none.</param>
 /// <param name="Destination">Where a point mapped onto the source goes.</param>
 /// <param name="Opener">Who opened the source.</param>
+/// <param name="Filter">How the image is sampled where it is drawn from this mapping: nearest keeps each source pixel
+/// crisp, linear blends between them. A hit maps to the same pixel either way.</param>
 public sealed partial record SourceMapping(
     SourceHandle Source,
     SourcePlacement Placement,
@@ -37,7 +40,8 @@ public sealed partial record SourceMapping(
     SourceFit Fit = SourceFit.Stretch,
     SourceWarp? Warp = null,
     SourceDestination Destination = SourceDestination.Presentation,
-    SourceOpener Opener = SourceOpener.Document
+    SourceOpener Opener = SourceOpener.Document,
+    GpuSamplerFilter Filter = GpuSamplerFilter.Nearest
 ) {
     private static readonly FixedQ4816 Half = FixedQ4816.FromRawBits(value: (FixedQ4816.One.Value >> 1));
 
@@ -77,9 +81,10 @@ public sealed partial record SourceMapping(
             !Enum.IsDefined(value: Layout) ||
             !Enum.IsDefined(value: Fit) ||
             !Enum.IsDefined(value: Destination) ||
-            !Enum.IsDefined(value: Opener)
+            !Enum.IsDefined(value: Opener) ||
+            !Enum.IsDefined(value: Filter)
         ) {
-            return "The layout, fit, destination or opener is not a defined value.";
+            return "The layout, fit, destination, opener or filter is not a defined value.";
         }
 
         switch (Placement) {

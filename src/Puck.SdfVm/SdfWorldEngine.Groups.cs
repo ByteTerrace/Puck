@@ -17,29 +17,32 @@ public sealed partial class SdfWorldEngine {
     // every buffer is written through WriteBuffer, which reads its member's binding, kind and stride.
     private static readonly uint GlyphAtlasBinding = WorldBinding(member: SdfWorldInterfaces.GlyphAtlas);
     private static readonly uint OutputBinding = WorldBinding(member: SdfWorldInterfaces.Output);
-    private static readonly uint ScreenSamplerBinding = WorldBinding(member: SdfWorldInterfaces.ScreenSampler);
-    // screenSource{i}'s binding, by screen index.
-    private static readonly uint[] ScreenSourceBindings = [.. Enumerable.Range(count: MaxScreenSurfaces, start: 0).Select(selector: static screen => WorldBinding(member: SdfWorldInterfaces.ScreenSource(screen: screen)))];
-
+    private static readonly uint SamplersBinding = WorldBinding(member: SdfWorldInterfaces.Samplers);
+    private static readonly uint ScreenSourcesBinding = WorldBinding(member: SdfWorldInterfaces.ScreenSources);
     // Where each world value lies in a views set's block.
     private static readonly int ImageExtentOffset = WorldOffset(member: SdfWorldInterfaces.ImageExtent);
     private static readonly int InstanceMaskWordCountOffset = WorldOffset(member: SdfWorldInterfaces.InstanceMaskWordCount);
     private static readonly int SampleIndexOffset = WorldOffset(member: SdfWorldInterfaces.SampleIndex);
-    private static readonly int ScreenMaskOffset = WorldOffset(member: SdfWorldInterfaces.ScreenMask);
+    private static readonly int ScreenCountOffset = WorldOffset(member: SdfWorldInterfaces.ScreenCount);
     private static readonly int TileGridOffset = WorldOffset(member: SdfWorldInterfaces.TileGrid);
     private static readonly int ViewBaseOffset = WorldOffset(member: SdfWorldInterfaces.ViewBase);
     private static readonly int ViewportCountOffset = WorldOffset(member: SdfWorldInterfaces.ViewportCount);
 
     // The frame block, written once a frame, and the ring slot's frame set that binds it.
     private readonly GpuRegion m_frameRegion;
+
     private readonly nint[] m_frameSets = new nint[FrameRingSize];
+
     // Per view slot: the region holding the view's world block, one constant buffer per ring slot.
     private readonly GpuRegion[] m_viewBlocks;
+
     // The world values every view shares this frame, the view it names left zero: the cadence signature folds these
     // bytes, so it never depends on which view a set renders.
     private readonly byte[] m_worldBlock = new byte[SdfWorldInterfaces.WorldParameters.SizeBytes];
+
     // The baker's block, the same for every brick slot, written once at construction.
     private readonly IGpuStorageBuffer? m_brickBakeBlock;
+
     // The slice ordinal a bake dispatch pushes.
     private readonly byte[] m_brickBakeIndex = new byte[GpuPipelineLayoutDescription.PushIndexBytes];
 
@@ -58,7 +61,6 @@ public sealed partial class SdfWorldEngine {
         );
     private static int WorldOffset(string member) =>
         ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: member));
-
     // Binds a per-view dispatch's two sets: a ring slot's frame set and the view's views set of the same slot.
     private void BindWorldGroups(nint commandBuffer, IGpuComputePipeline pipeline, nint frameSet, nint viewsSet) {
         var recorder = m_gpu.Recorder;
@@ -144,7 +146,7 @@ public sealed partial class SdfWorldEngine {
         BinaryPrimitives.WriteUInt32LittleEndian(destination: block[TileGridOffset..], value: m_tileGridX);
         BinaryPrimitives.WriteUInt32LittleEndian(destination: block[(TileGridOffset + sizeof(uint))..], value: m_tileGridY);
         BinaryPrimitives.WriteUInt32LittleEndian(destination: block[ViewportCountOffset..], value: viewportCount);
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: block[ScreenMaskOffset..], value: m_screenSourceMask);
+        BinaryPrimitives.WriteUInt32LittleEndian(destination: block[ScreenCountOffset..], value: BoundScreenCount());
         BinaryPrimitives.WriteUInt32LittleEndian(destination: block[InstanceMaskWordCountOffset..], value: ((uint)m_liveInstanceMaskWordCount));
         BinaryPrimitives.WriteUInt32LittleEndian(destination: block[SampleIndexOffset..], value: sampleIndex);
         BinaryPrimitives.WriteUInt32LittleEndian(destination: block[MeshDrawsOffset..], value: m_meshDrawCount);

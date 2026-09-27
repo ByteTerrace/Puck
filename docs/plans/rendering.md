@@ -2525,10 +2525,10 @@ Phase 3, the groups, follows phase 2:
       its pass group; `FullscreenPassNode` was
       deleted with P11b commit 6. Canaries: 21, the 14b-1 set with the
       overlay's three audio canaries.
-    - 14b-6, done with step 20: the SDF engine. Its thirty-two screen sources
-      and its glyph atlas are sampled images of the `sdf-world` interface,
-      read through its one nearest `screenSampler`, and the engine's binding
-      lists are gone. Canaries: the 32 `puck affected` maps the change to,
+    - 14b-6, done with step 20: the SDF engine. Its screen sources and its
+      glyph atlas are sampled images of the `sdf-world` interface, read
+      through its sampler array (the screens are one image array, P12b-8), and
+      the engine's binding lists are gone. Canaries: the 32 `puck affected` maps the change to,
       `sdf-visibility-fresh` and `world-counters` among them. The package library's `place.comp.hlsl`,
       which took the SDF-side kernel's place, is a package pass and moved
       onto groups with the other package passes in step 18.
@@ -2741,8 +2741,8 @@ takes the nearest free spelling. `GpuResidency.Select` also takes whether
 readers are in flight, and brick staging is a region with an external
 destination. A region's staging buffer states its copy (header, run table,
 words), so the region-copy kernel pushes nothing. The SDF engine's groups
-landed with P7b-20: the 32 screens bind as 32 bindings and one sampler, and
-P12b-8 makes them an array with per-screen filtering. The test fakes
+landed with P7b-20, and P12b-8 made the screens one image array read through a
+sampler array with per-screen filtering. The test fakes
 consolidate as the surface shrinks. The gate's Linux build, which CI's
 `shader-bytecode` job runs, is [deferred to the end](#deferred-to-the-end).
 
@@ -3264,8 +3264,7 @@ same way. Four facts shaped the order:
   kernels; no canary names a test pattern, a QR code, a capture, a probe or a
   session. Most steps therefore land with a canary of their own.
 
-Each commit is marked with what it waits on. None waits on P7b's groups
-except step 8.
+Each commit is marked with what it waits on.
 
 1. Sources are instances. Landed. `WorldSourceInstances` makes a `producer`
    screen source, a machine output and a probe output an external instance
@@ -3568,11 +3567,26 @@ except step 8.
    a camera's view export and its output shows on a screen through the fence,
    and a live extent edit makes the export again; its discriminating leg reads
    a camera looking at the sky.
-8. Consumer-chosen filtering and no slot limit, which P7b-14b-6 and P7b-20 unblock.
-   Screens read a separate image and sampler, each screen row chooses nearest
-   or linear, and the 32 fixed slots give way to the engine's group arrays.
-   Until then every screen samples through the one nearest sampler the glyph
-   atlas shares.
+8. Consumer-chosen filtering and no slot limit. Landed. A screen row's
+   `filter` (`GpuSamplerFilter`: `Nearest`, the default and omitted, or
+   `Linear`; the validator refuses any other value) reaches its mapping
+   (`SourceMapping.Filter`) and the draw form the engine packs, whose state row
+   names the sampler. The `sdf-world` interface binds the screens as one
+   `screenSources` image array and a `samplers` array, one sampler per filter,
+   which a shader interface now declares through an arrayed sampled image or
+   sampler (`ShaderInterfaceMember.Length`, taking its length in registers, its
+   count reflected by both bytecode readers). The screen shading indexes them in
+   a loop over the distinct screens of a wave, so the index is dynamically
+   uniform (Vulkan's `shaderSampledImageArrayDynamicIndexing` is enabled), and
+   the glyph atlas reads the nearest sampler. The 32-bit `screenMask` is gone:
+   each screen's row carries its bound flag and the world block `screenCount`,
+   so the screen count is stated once, `SdfProgramBuilder.MaxScreenSurfaces`,
+   which the kernels read as the generated `SDF_MAX_SCREEN_SURFACES`, and every
+   per-screen row in the screen-light table derives from it. Laws:
+   `ShaderInterfaceLawTests.An_image_or_sampler_array_takes_its_length_in_registers`,
+   `WorldScreenMappingLawTests.ARowsFilterReachesItsMappingAndItsDrawFormAndMovesNoHit`
+   and the sampler lane of
+   `SdfWorldEngineUploadLawTests.TheScreenMappingTableHoldsEachScreensDrawFormAndAnUnchangedMappingOwesNothing`.
 9. The check's list, last. Every `WorldScreenSource` arm
    (`none`, `machine`, the four shipped producer ids, `view`, `session`,
    `text` and `probe`) is listed with the producer or instance that reproduces
@@ -3888,8 +3902,8 @@ through `GpuRegion`, and no composite, because the engine has none. Group 0 is t
 frame (the generated block and per-world tables), group 1 the world (program
 words, screens, decals, the glyph atlas, the brick pool), group 2 the instance
 (empty and reserved), and group 3 the pass (masks, tiles, arguments, bounds,
-visibility, shadow, color, and the 32 screen sources as an array with a sampler
-table). `SdfEngineNode` splits into an `SdfWorldResidency` for the world's
+visibility, shadow, color, and the screen sources, an image array read through
+a sampler array). `SdfEngineNode` splits into an `SdfWorldResidency` for the world's
 half and the graph runtime for captures, work, readiness and
 `NotReadyReason`; `SdfWorldEngine`'s partials become per-pass recorders
 and its frame packers frame-block writers; the views become `sdf.world`
@@ -3996,8 +4010,8 @@ generates the frame block into `frame/`.
 
 **Decisions.** P4's visibility record is the surface sample record staged
 shading reads. P7b moves the SDF push blocks and binding constants onto groups;
-after P7b-20 the 32 screens bind as 32 bindings and one sampler, and P12b-8
-makes them an array with per-screen filtering.
+P12b-8 made the screens one image array read through a sampler array with
+per-screen filtering.
 P11b keeps one resample pass in the graph's package library: the `place`
 package, whose build-compiled kernel `src/Puck.Shaders/Assets/Shaders/Graph/place.comp.hlsl`
 holds placement and reconstruction: the base outside a destination rect, and
@@ -4211,10 +4225,9 @@ rebuild.
 **The frame graph and nesting.** P11 is complete: every view, pane, seat,
 camera and session is a graph instance the runtime schedules by demand, and a
 host drives one render root. P12's source contract,
-producers and conversion passes have landed, and so have P12b's steps 1 to 7,
-the capture gate over the graph and probe outputs and view exports as sources
-among them. Of the rest, step 8 can land now since P7b-14b-6 and P7b-20 have
-landed, and step 9 comes last; its `view` and `session` arms already went with
+producers and conversion passes have landed, and so have P12b's steps 1 to 8,
+the capture gate over the graph, probe outputs and view exports as sources, and
+consumer-chosen filtering among them. Of the rest, step 9 comes last; its `view` and `session` arms already went with
 P11b-13. P13b's live mappings
 (step 1), simulation destination (step 2, with the light gun that authored
 cartridges read through `$light`), host passthrough (step 4), the GPU drawing

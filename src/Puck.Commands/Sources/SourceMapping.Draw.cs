@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 
 namespace Puck.Commands;
@@ -20,7 +21,8 @@ namespace Puck.Commands;
 /// height.</param>
 /// <param name="Letterboxes">Whether a source point outside <see cref="Crop"/> is a letterbox bar, which the fit
 /// <see cref="SourceFit.Contain"/> leaves; the other fits never reach past the crop.</param>
-public readonly record struct SourceDraw(Matrix3x2 Warp, Matrix3x2 Image, NormalizedRect Crop, Vector2 Texel, bool Letterboxes);
+/// <param name="Filter">The filter the source is sampled with (<see cref="SourceMapping.Filter"/>).</param>
+public readonly record struct SourceDraw(Matrix3x2 Warp, Matrix3x2 Image, NormalizedRect Crop, Vector2 Texel, bool Letterboxes, GpuSamplerFilter Filter);
 public sealed partial record SourceMapping {
     /// <summary>Returns the chain a surface placement's face is drawn through, in single precision: the form the SDF
     /// screen shading reads. It composes the layout, fit and crop in double precision and rounds each coefficient
@@ -105,6 +107,7 @@ public sealed partial record SourceMapping {
                 m31: ((float)(cropX + (cropWidth * c))),
                 m32: ((float)(cropY + (cropHeight * f)))
             ),
+            Filter: Filter,
             Letterboxes: (Fit == SourceFit.Contain),
             Texel: new Vector2(
                 x: ((float)(1d / SourceWidth)),

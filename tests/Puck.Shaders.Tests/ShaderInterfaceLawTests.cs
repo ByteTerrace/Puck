@@ -150,6 +150,47 @@ public sealed class ShaderInterfaceLawTests {
     public void The_document_refuses_numbers_unknown_names_unknown_and_missing_properties(string json) {
         _ = Assert.Throws<InvalidDataException>(testCode: () => ShaderInterface.Parse(json: json));
     }
+    // An arrayed image or sampler takes its length in registers from its binding on, the member after it starts past
+    // them, the pipeline layout binds that many descriptors there, the include declares the length, and a module
+    // reflecting another length is refused.
+    [Fact]
+    public void An_image_or_sampler_array_takes_its_length_in_registers() {
+        var shaderInterface = new ShaderInterface(
+            members: [
+                ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: "count", type: ShaderValueType.Uint),
+                ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, length: 5, name: "sources", type: ShaderValueType.Float4),
+                ShaderInterfaceMember.Sampler(group: ShaderInterfaceGroup.Pass, length: 2, name: "samplers"),
+                ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: "atlas", type: ShaderValueType.Float4),
+            ],
+            name: "arrays"
+        );
+        var layout = shaderInterface.Layout();
+
+        Assert.Equal(
+            actual: layout.Bindings.Select(selector: static binding => (binding.Binding, binding.Kind, binding.Count)),
+            expected: [(0u, GpuBindingKind.ConstantBuffer, 1u), (1u, GpuBindingKind.SampledImage, 5u), (6u, GpuBindingKind.Sampler, 2u), (8u, GpuBindingKind.SampledImage, 1u)]
+        );
+        Assert.Equal(
+            actual: layout.PipelineLayout(stages: GpuShaderStage.Compute).Groups.Single().Bindings.Select(selector: static binding => (binding.Binding, binding.Count)),
+            expected: [(0u, 1u), (1u, 5u), (6u, 2u), (8u, 1u)]
+        );
+
+        var include = ShaderInterfaceHlsl.Generate(shaderInterface: shaderInterface);
+
+        Assert.Contains(actualString: include, expectedSubstring: "[[vk::binding(1, 3)]] Texture2D<float4> sources[5] : register(t1, space3);");
+        Assert.Contains(actualString: include, expectedSubstring: "[[vk::binding(6, 3)]] SamplerState samplers[2] : register(s6, space3);");
+        Assert.Contains(actualString: include, expectedSubstring: "[[vk::binding(8, 3)]] Texture2D<float4> atlas : register(t8, space3);");
+        Assert.Null(@object: layout.Mismatch(reflected: [layout.Bindings[1]]));
+        Assert.NotNull(@object: layout.Mismatch(reflected: [(layout.Bindings[1] with { Count = 4 })]));
+        _ = Assert.Throws<InvalidDataException>(testCode: () => new ShaderInterface(
+            members: [ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, length: 0, name: "none", type: ShaderValueType.Float4)],
+            name: "empty-image-array"
+        ));
+        _ = Assert.Throws<InvalidDataException>(testCode: () => new ShaderInterface(
+            members: [new ShaderInterfaceMember(Group: ShaderInterfaceGroup.Pass, Kind: ShaderInterfaceMemberKind.ReadOnlyBuffer, Length: 2, Name: "buffers")],
+            name: "buffer-array"
+        ));
+    }
     [Fact]
     public void The_interface_refuses_what_it_cannot_generate() {
         static void Refused(string name, ShaderInterfaceMember[] members) =>

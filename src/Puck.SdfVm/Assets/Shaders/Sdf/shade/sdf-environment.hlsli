@@ -45,7 +45,7 @@ static const float3 CrtGrillePhase = float3(0.0, 2.0943951023931953, 4.188790204
 // single-channel coverage-SDF, sampled with a coverage threshold + a screen-projected AA half-width derived
 // ANALYTICALLY from the hit's pixel footprint (NO fwidth — deterministic, from the same pixelFootprint*traveled the
 // coverage-AA epilogue uses). KEEP IN SYNC with SdfWorldEngine's decal-buffer packing (SetDecalDescriptor/SetDecals)
-// and SdfProgram. LAYOUT (sdfDecalCells, one uint4 per entry): the first SdfDecalDescriptorCount (== SdfWorldEngine.MaxScreenSurfaces)
+// and SdfProgram. LAYOUT (sdfDecalCells, one uint4 per entry): the first SdfDecalDescriptorCount (== SDF_MAX_SCREEN_SURFACES)
 // entries are the PER-SCREEN descriptors, then the shared CELL region.
 //   descriptor[screenIndex] = (gridCols, gridRows, cellBase, asuint(distanceRange)); gridCols == 0 => that screen has
 //                             NO decal this frame (the image or unbound-glass path applies) — an all-zero buffer is inert, so
@@ -53,7 +53,7 @@ static const float3 CrtGrillePhase = float3(0.0, 2.0943951023931953, 4.188790204
 //   cell[i]                 = (packedUvTopLeft, packedUvBottomRight [unorm2x16, sdfGlyphUnpackUv], fgRgba8, bgRgba8);
 //                             a BLANK cell packs uvTopLeft == uvBottomRight (a real glyph never has zero UV extent).
 #if defined(SDF_GLYPH_ATLAS)
-static const uint SdfDecalDescriptorCount = 32u; // == SdfWorldEngine.MaxScreenSurfaces (the per-screen descriptor band)
+static const uint SdfDecalDescriptorCount = SDF_MAX_SCREEN_SURFACES; // the per-screen descriptor band
 // Minimum AA half-width in encoded-coverage units. This keeps a 1:1 glyph edge from collapsing to a hard one-bit step.
 static const float DecalMinAa = 0.03125;
 float3 sdfDecalUnpackRgb(uint packed) {
@@ -107,50 +107,33 @@ float3 sdfSampleGlyphDecal(uint4 descriptor, float2 uv, float halfWidth, float f
 static const uint SdfVolumeCount = 64u;
 #include "shade-volumes.hlsli"
 
+// Samples a screen's source through the sampler its row names. A descriptor array is indexed only by a dynamically
+// uniform value, so each pass of the loop takes the first active lane's screen, samples it for every lane showing that
+// screen, and retires them; a wave spanning one screen passes once.
 float4 sampleScreenSource(uint screenIndex, float2 uv) {
-    // Every screenSamplerN carries the SAME filter (NEAREST) — the thirty-two-way split is purely to give DXC one
-    // sampler symbol per register; there is exactly one LOGICAL sampler behavior on either backend.
-    switch (screenIndex) {
-        case 0:  return screenSource0.SampleLevel(screenSampler, uv, 0);
-        case 1:  return screenSource1.SampleLevel(screenSampler, uv, 0);
-        case 2:  return screenSource2.SampleLevel(screenSampler, uv, 0);
-        case 3:  return screenSource3.SampleLevel(screenSampler, uv, 0);
-        case 4:  return screenSource4.SampleLevel(screenSampler, uv, 0);
-        case 5:  return screenSource5.SampleLevel(screenSampler, uv, 0);
-        case 6:  return screenSource6.SampleLevel(screenSampler, uv, 0);
-        case 7:  return screenSource7.SampleLevel(screenSampler, uv, 0);
-        case 8:  return screenSource8.SampleLevel(screenSampler, uv, 0);
-        case 9:  return screenSource9.SampleLevel(screenSampler, uv, 0);
-        case 10: return screenSource10.SampleLevel(screenSampler, uv, 0);
-        case 11: return screenSource11.SampleLevel(screenSampler, uv, 0);
-        case 12: return screenSource12.SampleLevel(screenSampler, uv, 0);
-        case 13: return screenSource13.SampleLevel(screenSampler, uv, 0);
-        case 14: return screenSource14.SampleLevel(screenSampler, uv, 0);
-        case 15: return screenSource15.SampleLevel(screenSampler, uv, 0);
-        case 16: return screenSource16.SampleLevel(screenSampler, uv, 0);
-        case 17: return screenSource17.SampleLevel(screenSampler, uv, 0);
-        case 18: return screenSource18.SampleLevel(screenSampler, uv, 0);
-        case 19: return screenSource19.SampleLevel(screenSampler, uv, 0);
-        case 20: return screenSource20.SampleLevel(screenSampler, uv, 0);
-        case 21: return screenSource21.SampleLevel(screenSampler, uv, 0);
-        case 22: return screenSource22.SampleLevel(screenSampler, uv, 0);
-        case 23: return screenSource23.SampleLevel(screenSampler, uv, 0);
-        case 24: return screenSource24.SampleLevel(screenSampler, uv, 0);
-        case 25: return screenSource25.SampleLevel(screenSampler, uv, 0);
-        case 26: return screenSource26.SampleLevel(screenSampler, uv, 0);
-        case 27: return screenSource27.SampleLevel(screenSampler, uv, 0);
-        case 28: return screenSource28.SampleLevel(screenSampler, uv, 0);
-        case 29: return screenSource29.SampleLevel(screenSampler, uv, 0);
-        case 30: return screenSource30.SampleLevel(screenSampler, uv, 0);
-        default: return screenSource31.SampleLevel(screenSampler, uv, 0);
+    float4 sampled = float4(0.0, 0.0, 0.0, 0.0);
+
+    [loop]
+    for (;;) {
+        uint screen = WaveReadLaneFirst(screenIndex);
+
+        if (screen == screenIndex) {
+            uint filter = (uint)worldScreenMapping(screen).state.y;
+
+            sampled = screenSources[screen].SampleLevel(samplers[filter], uv, 0);
+
+            break;
+        }
     }
+
+    return sampled;
 }
 // For a screen-instance material id (> SDF_SCREEN_MATERIAL, from SdfProgramBuilder's screen-surface ScreenSlab
 // overload), resolves the surface UV at the hit and shades it. Two tiers, decal-first: a screen slot carrying a GLYPH
-// DECAL (a per-screen cell grid — see sdfSampleGlyphDecal) samples TEXT at the hit (no screenMask bit needed — a decal
-// terminal has no bound image); otherwise, when a source is bound and mapped this frame, draws it (NEAREST)
-// from the screen's mapping through the CRT glass. outColor is valid only when this returns true; the caller falls back to the unbound glass
-// otherwise (the plain sentinel, or a declared surface with neither a decal nor a bound source this frame).
+// DECAL (a per-screen cell grid — see sdfSampleGlyphDecal) samples TEXT at the hit (no bound source needed — a decal
+// terminal has no bound image); otherwise, when a source is bound and mapped this frame, draws it from the screen's
+// mapping through the CRT glass and the sampler its row names. outColor is valid only when this returns true; the
+// caller falls back to the unbound glass otherwise (the plain sentinel, or a declared surface with neither a decal nor a bound source this frame).
 // footprintDiameter = the hit pixel's world diameter (pixelFootprint * traveled) — the decal's analytic AA source.
 bool sampleScreenSurface(int material, float3 hitPoint, float3 rayDirection, float footprintDiameter, out float3 outColor) {
     outColor = float3(0.0, 0.0, 0.0);

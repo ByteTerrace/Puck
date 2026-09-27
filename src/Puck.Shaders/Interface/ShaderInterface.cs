@@ -167,10 +167,17 @@ public sealed partial class ShaderInterface {
         ) {
             throw new InvalidDataException(message: $"{where}: a buffer's element cannot be the three-component {member.Type.Value.Spelling()}, whose stride differs between Direct3D 12 (12 bytes) and Vulkan (16 when padded); use a scalar, a two-component or a four-component element.");
         }
-        if ((member.Kind == ShaderInterfaceMemberKind.Array) != member.Length.HasValue) {
-            throw new InvalidDataException(message: ((member.Kind == ShaderInterfaceMemberKind.Array)
-                ? $"{where}: an array names its length."
-                : $"{where}: only an array takes a length."));
+        if (
+            (member.Kind == ShaderInterfaceMemberKind.Array) &&
+            !member.Length.HasValue
+        ) {
+            throw new InvalidDataException(message: $"{where}: an array names its length.");
+        }
+        if (
+            member.Length.HasValue &&
+            (member.Kind is not (ShaderInterfaceMemberKind.Array or ShaderInterfaceMemberKind.SampledImage or ShaderInterfaceMemberKind.Sampler))
+        ) {
+            throw new InvalidDataException(message: $"{where}: only an array, a sampled image or a sampler takes a length.");
         }
         if (member.Length == 0) {
             throw new InvalidDataException(message: $"{where}: an array holds at least one element.");
