@@ -3,7 +3,7 @@
 #define SDF_ISA_HLSLI
 
 // The instruction-set version and the report word the version handshake dispatches with.
-#define SDF_ISA_VERSION        2u
+#define SDF_ISA_VERSION        3u
 #define SDF_ISA_REPORT_REQUEST 0x53444656u
 
 // Puck.SignedDistance.SdfOp.
@@ -127,7 +127,8 @@
 #define SDF_SEGMENT_RIGID_PLAN              0x80000000u
 #define SDF_SEGMENT_BOUND_MASK              0x000000FFu
 #define SDF_INSTANCE_SHADOW_TRANSPARENT_BIT 0x80000000u
-#define SDF_INSTANCE_SEGMENT_END_MASK       0x7FFFFFFFu
+#define SDF_INSTANCE_CAMERA_HIDDEN_BIT      0x40000000u
+#define SDF_INSTANCE_SEGMENT_END_MASK       0x3FFFFFFFu
 #define SDF_NO_DETAIL_SHAPES_FLAG           0x00000001u
 
 // The rigid-leaf plan.

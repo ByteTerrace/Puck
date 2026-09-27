@@ -310,7 +310,7 @@ uint collectInstanceMaskWord(uint instanceOffset, uint wordIndex, uint instanceC
     for (uint i = first; (i < end); i++) {
         float4 bound = sdfInstanceBoundAt(instanceOffset, i);
 
-        if (sdfInstancePassesTileCone(bound, rayOrigin, centerDirection, chord, inverseAperture)) {
+        if (sdfInstancePassesTileCone(bound, rayOrigin, centerDirection, chord, inverseAperture) && !sdfInstanceCameraHidden(instanceOffset, i)) {
             bits |= (1u << (i - first));
         }
     }

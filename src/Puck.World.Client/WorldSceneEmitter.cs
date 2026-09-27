@@ -96,6 +96,10 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // Replaced, never cleared, on a static rebuild: a consumer that keys work on the list (the engine's mesh region
     // count) sees a new list exactly when the placements it came from moved.
     private IReadOnlyList<SdfMeshDraw> m_staticMeshDraws = [];
+    // The bakes a static rebuild draws in place of their fields (null for a presentation that bakes nothing), and the
+    // lookup the rebuild asks, made once so a rebuild allocates no delegate.
+    private readonly WorldBakeSchedule? m_bakes;
+    private readonly Func<string, SdfMesh?> m_bakedMeshFor;
     // MeshDraws' composition of the static draws and the pool's, and the two lists it was composed from.
     private IReadOnlyList<SdfMeshDraw> m_meshDraws = [];
     private readonly List<SdfMeshDraw> m_composedMeshDraws = [];
@@ -233,7 +237,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 volumes: m_staticVolumes,
                 meshDraws: meshDraws,
                 colors: m_bakedColors,
-                palettes: m_palettes
+                palettes: m_palettes,
+                bakedMeshFor: m_bakedMeshFor
             );
             m_staticMeshDraws = meshDraws;
         }
@@ -884,7 +889,22 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         }
 
         destination[(WorldClient.RevisionComponentCount + 1)] = m_bakedColorRevision;
+        // What the static placements draw from their bakes: none while the lever is off, and otherwise the schedule's
+        // revision, which moves whenever a bake lands, so a ready bake switches its placements on the next rebuild.
+        destination[(WorldClient.RevisionComponentCount + 2)] = ((m_settings.Bakes && (m_bakes is not null))
+            ? unchecked((int)((m_bakes.Revision * 2L) + 1L))
+            : 0);
     }
+    // A prototype's baked mesh when the lever is on and its bake is ready; the schedule counts the switch.
+    private SdfMesh? BakedMeshFor(string prototypeId) => ((
+        m_settings.Bakes &&
+        (m_bakes is not null) &&
+        m_bakes.TryGetMesh(
+            mesh: out var mesh,
+            prototypeId: prototypeId
+        ))
+        ? mesh
+        : null);
 
     /// <summary>Initializes a new instance of the <see cref="WorldSceneEmitter"/> class over the boot definition,
     /// freezing the authoring-headroom policy and the placement reservation the probe branch reserves against.</summary>
@@ -897,8 +917,10 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// <param name="continuum">The route-to-presentation-frame resolver used to keep locally followed travelers in
     /// their original catalog slot across authority handoffs.</param>
     /// <param name="text">The world-relative font catalog used by creation text runs.</param>
-    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldSceneEmitter(WorldClient client, WorldRenderSettings settings, WorldStampPool animator, IWorldAudioCueSink audio, WorldPerceptionAnchor anchor, WorldContinuum continuum, WorldTextCatalog text) {
+    /// <param name="bakes">The schedule whose ready bakes the static placements draw while <see cref="WorldRenderSettings.Bakes"/>
+    /// is on, or <see langword="null"/> for a presentation that bakes nothing.</param>
+    /// <exception cref="ArgumentNullException">An argument other than <paramref name="bakes"/> is <see langword="null"/>.</exception>
+    public WorldSceneEmitter(WorldClient client, WorldRenderSettings settings, WorldStampPool animator, IWorldAudioCueSink audio, WorldPerceptionAnchor anchor, WorldContinuum continuum, WorldTextCatalog text, WorldBakeSchedule? bakes = null) {
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: settings);
         ArgumentNullException.ThrowIfNull(argument: animator);
@@ -915,6 +937,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         m_animator = animator;
         m_text = text;
         m_audio = audio;
+        m_bakes = bakes;
+        m_bakedMeshFor = BakedMeshFor;
 
         var definition = client.Definition;
 
@@ -963,7 +987,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// composed words are byte-identical to the unscoped build.</summary>
     public bool OwnsMaterialScope => true;
     /// <inheritdoc/>
-    public int RevisionComponentCount => (WorldClient.RevisionComponentCount + 2);
+    public int RevisionComponentCount => (WorldClient.RevisionComponentCount + 3);
     /// <summary>Gets the bounded volumes the latest live build's static placements baked into world space.</summary>
     public IReadOnlyList<SdfVolume> StaticVolumes => m_staticVolumes;
     /// <inheritdoc/>

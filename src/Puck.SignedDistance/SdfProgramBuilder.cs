@@ -175,6 +175,7 @@ public sealed partial class SdfProgramBuilder {
     // both sides (SDF_OP_RESET_POINT zeroes parityMaterialDelta).
     private (int InstructionIndex, int ReachPerUnit, SdfOp Op)? m_materialRecolor;
     private bool m_openInstanceActive;
+    private bool m_openInstanceCameraHidden;
     private Vector3 m_openInstanceCenter;
     private int m_openInstanceFirst = -1;
     private bool m_openInstanceIsDynamic;
@@ -268,7 +269,7 @@ public sealed partial class SdfProgramBuilder {
         // segment) re-checks against this smaller value, so repeated shapes never re-widen a clamp a scope required.
         m_positionalFold = (fold.InstructionIndex, fold.ReachPerUnit, clampedRaw);
     }
-    private void BeginInstanceCore(bool isDynamic, Vector3 center, float radius, int slot, bool active = true) {
+    private void BeginInstanceCore(bool isDynamic, Vector3 center, float radius, int slot, bool active = true, bool cameraHidden = false) {
         if (
             isDynamic &&
             ((slot < 0) || (slot > SdfProgram.MaxDynamicTransformSlot))
@@ -290,6 +291,7 @@ public sealed partial class SdfProgramBuilder {
         m_openInstanceFirst = m_instructions.Count;
         m_openInstanceIsDynamic = isDynamic;
         m_openInstanceActive = active;
+        m_openInstanceCameraHidden = cameraHidden;
         m_openInstanceCenter = center;
         m_openInstanceRadius = radius;
         m_openInstanceSlot = slot;

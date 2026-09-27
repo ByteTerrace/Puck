@@ -226,7 +226,7 @@ public static class WorldPlacementStamper {
             )]
         );
     }
-    private static void EmitPlacement(SdfProgramBuilder builder, CreationDocument creation, WorldDefinition definition, int[] paletteIds, WorldPlacement placement, PackedFontAtlasCatalog? textCatalog, ulong worldSeed, ICollection<SdfVolume>? volumes, SdfMesh? mesh, int meshMaterial, ICollection<SdfMeshDraw>? meshDraws) {
+    private static void EmitPlacement(SdfProgramBuilder builder, CreationDocument creation, WorldDefinition definition, int[] paletteIds, WorldPlacement placement, PackedFontAtlasCatalog? textCatalog, ulong worldSeed, ICollection<SdfVolume>? volumes, SdfMesh? mesh, int meshMaterial, ICollection<SdfMeshDraw>? meshDraws, SdfMesh? bakedMesh = null) {
         var frame = WorldDefinitionRows.ResolvedFrame(
             definition: definition,
             placement: placement
@@ -275,6 +275,7 @@ public static class WorldPlacementStamper {
         );
 
         var visitor = new StaticInstanceVisitor(
+            bakedMesh: bakedMesh,
             builder: builder,
             creation: creation,
             hasText: hasText,
@@ -306,8 +307,10 @@ public static class WorldPlacementStamper {
     }
 
     // One static placement's instances: its volumes and mesh draws, then either one tight instance per shape or one
-    // instance holding the whole creation. A struct the lattice walk calls, so a placement allocates no closure.
-    private readonly struct StaticInstanceVisitor(SdfProgramBuilder builder, CreationDocument creation, bool hasText, SdfMesh? mesh, ICollection<SdfMeshDraw>? meshDraws, int meshMaterial, int[] paletteIds, bool perShape, WorldPlacement placement, float reach, Quaternion rotation, bool scoped, PackedFontAtlasCatalog? textCatalog, TextLayoutResult[]? textLayouts, ICollection<SdfVolume>? volumes) : ICreationStampVisitor {
+    // instance holding the whole creation. A placement drawing its bake draws the baked mesh, in its palette's first
+    // material, and keeps its instances camera-hidden, so its field still casts shadows and occludes. A struct the
+    // lattice walk calls, so a placement allocates no closure.
+    private readonly struct StaticInstanceVisitor(SdfMesh? bakedMesh, SdfProgramBuilder builder, CreationDocument creation, bool hasText, SdfMesh? mesh, ICollection<SdfMeshDraw>? meshDraws, int meshMaterial, int[] paletteIds, bool perShape, WorldPlacement placement, float reach, Quaternion rotation, bool scoped, PackedFontAtlasCatalog? textCatalog, TextLayoutResult[]? textLayouts, ICollection<SdfVolume>? volumes) : ICreationStampVisitor {
         public void Visit(CreationStampInstance instance) {
             AppendStaticVolumes(
                 creation: creation,
@@ -319,6 +322,15 @@ public static class WorldPlacementStamper {
             AppendMeshDraw(
                 material: meshMaterial,
                 mesh: mesh,
+                meshDraws: meshDraws,
+                origin: instance.Origin,
+                reflectionNormal: instance.ReflectionNormal,
+                rotation: rotation,
+                scale: placement.Scale
+            );
+            AppendMeshDraw(
+                material: paletteIds[0],
+                mesh: bakedMesh,
                 meshDraws: meshDraws,
                 origin: instance.Origin,
                 reflectionNormal: instance.ReflectionNormal,
@@ -349,7 +361,8 @@ public static class WorldPlacementStamper {
 
                     _ = builder.BeginInstance(
                         boundCenter: boundCenter,
-                        boundRadius: (boundRadius + PlacementBoundMargin)
+                        boundRadius: (boundRadius + PlacementBoundMargin),
+                        cameraHidden: (bakedMesh is not null)
                     );
                     CreationStampEmitter.EmitShapeStamp(
                         builder: builder,
@@ -371,7 +384,8 @@ public static class WorldPlacementStamper {
 
             _ = builder.BeginInstance(
                 boundCenter: instance.Origin,
-                boundRadius: (reach + PlacementBoundMargin)
+                boundRadius: (reach + PlacementBoundMargin),
+                cameraHidden: (bakedMesh is not null)
             );
             if (scoped) {
                 _ = builder.PushField(compose: SdfBlendOp.Union);
@@ -558,7 +572,11 @@ public static class WorldPlacementStamper {
     /// palette color is emitted (<see cref="WorldBakedColors.Of"/>).</param>
     /// <param name="palettes">The owner's palettes, reused across its rebuilds so a warm emission allocates none, or
     /// <see langword="null"/> for palettes this emission keeps alone.</param>
-    public static void EmitStatic(SdfProgramBuilder builder, WorldDefinition definition, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<WorldPlacement> placements, PackedFontAtlasCatalog? textCatalog = null, Func<string, (Vector3 Color, float Blend)?>? tintFor = null, ICollection<SdfVolume>? volumes = null, ICollection<SdfMeshDraw>? meshDraws = null, WorldBakedColors? colors = null, WorldStaticPalettes? palettes = null) {
+    /// <param name="bakedMeshFor">Returns a prototype's baked mesh when the presentation draws its bake, or
+    /// <see langword="null"/>: its untinted placements then draw that mesh, and keep their field camera-hidden so it still
+    /// casts shadows and occludes. A creation carrying text or noise relief, which its bake does not hold, draws through
+    /// its field. Collected only with <paramref name="meshDraws"/>.</param>
+    public static void EmitStatic(SdfProgramBuilder builder, WorldDefinition definition, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<WorldPlacement> placements, PackedFontAtlasCatalog? textCatalog = null, Func<string, (Vector3 Color, float Blend)?>? tintFor = null, ICollection<SdfVolume>? volumes = null, ICollection<SdfMeshDraw>? meshDraws = null, WorldBakedColors? colors = null, WorldStaticPalettes? palettes = null, Func<string, SdfMesh?>? bakedMeshFor = null) {
         var worldSeed = (definition.Generation?.WorldSeed ?? 0UL);
         var baked = (colors ?? WorldBakedColors.Of(definition: definition));
         var registered = (palettes ?? new WorldStaticPalettes());
@@ -616,10 +634,19 @@ public static class WorldPlacementStamper {
                     max: (paletteIds.Length - 1),
                     min: 0
                 )],
-                meshDraws: meshDraws
+                meshDraws: meshDraws,
+                bakedMesh: (((meshDraws is not null) && (tint is null) && DrawsItsBake(creation: creation.EngineDocument))
+                    ? bakedMeshFor?.Invoke(arg: placement.ShownPrototypeId)
+                    : null)
             );
         }
     }
+    // Whether a creation's bake holds everything its placements show: a bake is the creation's contact field, so text
+    // runs and noise relief, which only its presentation carries, keep it drawing through its field.
+    private static bool DrawsItsBake(CreationDocument creation) => (
+        (creation.TextRuns is not { Count: > 0 }) &&
+        (creation.Noise is null)
+    );
     /// <summary>The emitted instance count of one placement, including pattern/sampled and reflected copies.</summary>
     /// <param name="placement">The placement row.</param>
     /// <param name="worldSeed">The world's reroll seed (<c>generation.worldSeed</c>) — resolves a Noise/Scatter

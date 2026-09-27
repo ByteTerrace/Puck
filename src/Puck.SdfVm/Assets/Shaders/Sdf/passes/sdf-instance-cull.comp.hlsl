@@ -81,7 +81,7 @@ void collectInstanceGridMask(SdfInstanceGridHeader grid, uint instanceOffset, ui
         uint index = sdfGridWordAt(grid, grid.alwaysWord + a);
         float4 bound = sdfInstanceBoundAt(instanceOffset, index);
 
-        if (sdfInstancePassesTileCone(bound, rayOrigin, centerDirection, chord, inverseAperture)) {
+        if (sdfInstancePassesTileCone(bound, rayOrigin, centerDirection, chord, inverseAperture) && !sdfInstanceCameraHidden(instanceOffset, index)) {
             sdfInstanceMasksRW[maskBase + (index >> 5u)] |= (1u << (index & 31u));
         }
     }
@@ -172,7 +172,7 @@ void collectInstanceGridMask(SdfInstanceGridHeader grid, uint instanceOffset, ui
                             uint index = sdfGridWordAt(grid, grid.entryWord + k);
                             float4 bound = sdfInstanceBoundAt(instanceOffset, index);
 
-                            if (sdfInstancePassesTileCone(bound, rayOrigin, centerDirection, chord, inverseAperture)) {
+                            if (sdfInstancePassesTileCone(bound, rayOrigin, centerDirection, chord, inverseAperture) && !sdfInstanceCameraHidden(instanceOffset, index)) {
                                 sdfInstanceMasksRW[maskBase + (index >> 5u)] |= (1u << (index & 31u));
                             }
                         }

@@ -1788,7 +1788,8 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             client: client,
             continuum: continuum,
             settings: settings,
-            text: text
+            text: text,
+            bakes: bakes
         );
         m_adjacencies = new WorldAdjacencySceneEmitter(
             client: client,

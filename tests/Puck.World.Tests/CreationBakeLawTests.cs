@@ -187,6 +187,56 @@ public sealed class CreationBakeLawTests {
         Assert.Equal(expected: 3L, actual: later.Read(kind: WorldBakeSchedule.Held));
         Assert.Equal(expected: WorldBakeState.Ready, actual: later.StateOf(prototypeId: "block"));
     }
+    /// <summary>A ready bake draws in place of its field, and the switch is counted once. Before its bake lands, a
+    /// placement draws through its field: no mesh draw, and a camera-visible instance. Once the bake is ready it draws
+    /// the baked mesh, with its instance camera-hidden so its field still casts shadows and occludes. A creation whose
+    /// bake is refused keeps its field, and a later rebuild counts no second switch.</summary>
+    [Fact]
+    public void AReadyBakeDrawsInPlaceOfItsFieldAndTheSwitchIsCounted() {
+        static WorldPlacement Placed(string prototypeId, float x) => new(
+            Id: $"{prototypeId}-placed",
+            Position: new Puck.Assets.Documents.DocumentVector3(value: new System.Numerics.Vector3(x: x, y: 0f, z: 0f)),
+            PrototypeId: prototypeId
+        );
+
+        var definition = (Definition() with { PlacementRowsRaw = [Placed(prototypeId: "block", x: 0f), Placed(prototypeId: "glint", x: 4f)] });
+        using var schedule = new WorldBakeSchedule(quality: SdfBakeQuality.Preview, store: new WorldBakeStore());
+
+        (List<Puck.SdfVm.SdfMeshDraw> Draws, Puck.SignedDistance.SdfProgram Program) Emit() {
+            var draws = new List<Puck.SdfVm.SdfMeshDraw>();
+            var builder = new Puck.SignedDistance.SdfProgramBuilder();
+
+            WorldPlacementStamper.EmitStatic(
+                bakedMeshFor: prototypeId => (schedule.TryGetMesh(mesh: out var mesh, prototypeId: prototypeId) ? mesh : null),
+                builder: builder,
+                creations: definition.Creations,
+                definition: definition,
+                meshDraws: draws,
+                placements: definition.Placements
+            );
+
+            return (draws, builder.Build());
+        }
+
+        schedule.Pump(definition: definition);
+
+        var pending = Emit();
+
+        Assert.Empty(collection: pending.Draws);
+        Assert.DoesNotContain(collection: pending.Program.Instances, filter: static instance => instance.CameraHidden);
+
+        Drain(definition: definition, schedule: schedule);
+
+        var ready = Emit();
+        var draw = Assert.Single(collection: ready.Draws);
+
+        Assert.True(condition: (draw.Mesh.TriangleCount > 0));
+        Assert.Contains(collection: ready.Program.Instances, filter: static instance => instance.CameraHidden);
+        Assert.Contains(collection: ready.Program.Instances, filter: static instance => !instance.CameraHidden);
+        Assert.Equal(expected: 1L, actual: schedule.Read(kind: WorldBakeSchedule.Drawn));
+        _ = Emit();
+        Assert.Equal(expected: 1L, actual: schedule.Read(kind: WorldBakeSchedule.Drawn));
+    }
     [Fact]
     public void EditingOnePrototypeRebakesOnlyThatPrototype() {
         var definition = Definition();

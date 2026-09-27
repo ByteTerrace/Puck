@@ -29,6 +29,7 @@ public enum AmbientOcclusionMode {
 public sealed class WorldRenderSettings {
     private bool m_ambientOcclusion;
     private AmbientOcclusionMode m_ambientOcclusionQuality;
+    private bool m_bakes;
     private bool m_cadenceGate;
     private bool m_farBound;
     private float m_renderScale;
@@ -73,6 +74,11 @@ public sealed class WorldRenderSettings {
     /// durable config. Rides the per-frame <see cref="Puck.SdfVm.SdfFrame.DisableFarBound"/> lane
     /// <c>WorldFramePresenter</c> inverts each frame, so no rebuild.</summary>
     public bool FarBound { get => m_farBound; set { m_farBound = value; m_revision++; } }
+    /// <summary>Whether a prototype whose bake is ready draws its baked mesh in place of its field (default
+    /// <see langword="false"/>; <c>world.bakes</c>). Presentation only: the field still answers contact, casts shadows and
+    /// occludes, so simulation state is the same either way. Session state, never durable config; a change rebuilds the
+    /// static scene.</summary>
+    public bool Bakes { get => m_bakes; set { m_bakes = value; m_revision++; } }
     /// <summary>Whether a frame whose render inputs match the previous one re-composites the retained image instead of
     /// re-rendering (default <see langword="true"/>; pixel-identical either way). Set <see langword="false"/> (via
     /// <c>world.cadence off</c>) to render every frame, so <c>world.counters gpu</c> measures a still scene. Session state, never

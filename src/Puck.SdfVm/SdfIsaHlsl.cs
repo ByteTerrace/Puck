@@ -82,6 +82,10 @@ public static class SdfIsaHlsl {
             value: SdfProgram.ShadowTransparentInstanceFlag
         );
         declarations.Bits(
+            name: "SDF_INSTANCE_CAMERA_HIDDEN_BIT",
+            value: SdfProgram.CameraHiddenInstanceFlag
+        );
+        declarations.Bits(
             name: "SDF_INSTANCE_SEGMENT_END_MASK",
             value: SdfProgram.SegmentEndMask
         );

@@ -1787,23 +1787,14 @@ public sealed partial class SdfProgram {
                 val2: 0
             ));
 
-            // The segmentEnd lane (i1.w) additionally carries the SHADOW-TRANSPARENT flag in its high bit (PATH B): a
-            // pure Subtraction-family carve is host-classified as never OCCLUDING, so the sdf.shadow-proxy gather omits
-            // it and the shadow ray marches the pre-carve union hull. mapCore masks the bit off before using the lane as
-            // a range, so the render is byte-identical whether the bit is set or not (see ShadowTransparentInstanceFlag).
+            // The segmentEnd lane (i1.w) additionally carries the instance's flags in its two high bits (InstanceFlagsOf);
+            // mapCore masks them off before using the lane as a range.
             var segmentEndPacked = ((uint)Math.Max(
                 val1: segmentEnd[instanceIndex],
                 val2: 0
             )) & SegmentEndMask;
 
-            if (IsShadowTransparentInstance(
-                first: instance.First,
-                end: instance.End
-            )) {
-                segmentEndPacked |= ShadowTransparentInstanceFlag;
-            }
-
-            m_words[((entryBase + WordsPerVector) + 3)] = segmentEndPacked;
+            m_words[((entryBase + WordsPerVector) + 3)] = (segmentEndPacked | InstanceFlagsOf(instance: instance));
         }
     }
     // Packs the world-segment list: a count header (worldSegmentCount — the ctor already counted the unowned

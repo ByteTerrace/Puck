@@ -24,6 +24,10 @@ namespace Puck.SignedDistance;
 /// sentinel — see <see cref="SdfProgram"/>) instead of running the full sphere-vs-cone test, so a parked slot costs
 /// almost nothing per tile. Its mask bit is always 0, so Stage 1 never marches it — bit-identical to a bound that no
 /// ray can reach, at a fraction of the cull cost.</param>
+/// <param name="CameraHidden">Whether the camera never sees the instance: the tile cull leaves it out of every camera
+/// mask, so primary never marches it, while shadows and ambient occlusion, which gather their own occluders, still
+/// read it. A placement whose baked mesh draws in its place keeps its field this way, so its shadows and occlusion
+/// stay (<see cref="SdfProgram.CameraHiddenInstanceFlag"/>).</param>
 public readonly record struct SdfInstanceRange(
     int First,
     int End,
@@ -31,5 +35,6 @@ public readonly record struct SdfInstanceRange(
     Vector3 Center,
     float Radius,
     int Slot,
-    bool Active = true
+    bool Active = true,
+    bool CameraHidden = false
 );
