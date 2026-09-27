@@ -242,8 +242,8 @@ and ink lines where curvature spikes. The authored `render.lighting.curvature`
 gains enable it at runtime; all three at zero disable it. It uses four nearby
 field samples and a center distance to estimate a discrete Laplacian, since
 the analytic normal alone provides no second derivative. Programs without
-shading-only detail reuse the primary hit's center distance. See the
-[renderer README](../../../../src/Puck.SdfVm/README.md) for hit-data reuse.
+shading-only detail reuse the center distance the visibility record holds. See
+the [renderer README](../../../../src/Puck.SdfVm/README.md) for that reuse.
 
 ---
 

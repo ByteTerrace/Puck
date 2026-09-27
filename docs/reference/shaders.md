@@ -960,8 +960,11 @@ compiles each entry point the kernel block names to Direct3D 11 compute
 bytecode (`cs_5_0`), written beside the source as `<stem>.<entry>.dxbc`
 (`ProbeKindManifest.KernelBytecodePath`) by the shared recipe's
 `CompileDirect3D11Kernels` target for every `Direct3D11KernelSource` item, and a kernel
-host creates the kernel from that bytecode on the camera's own device, so
-nothing compiles there. The camera frame converter's YUY2, NV12 and L8
+host creates the kernel from that bytecode on its own Direct3D 11 device, so
+nothing compiles there. The host is the camera graph a camera trigger names, or,
+for a kernel whose trigger socket reads a view or another probe and that binds
+no camera, the render adapter's own host, which cycles the kernel whenever its
+trigger publishes a frame. The camera frame converter's YUY2, NV12 and L8
 conversion kernels (`camera-conversion.hlsl` in `Puck.Platform.Windows`) are
 `Direct3D11KernelSource` items too, and read the stream's colorimetry from a
 constant buffer rather than from generated source. Direct3D 11 exists only on
@@ -993,9 +996,9 @@ runs, only the kind's own `class`.
 |-----|---------|
 | `$schema` | `puck.probe.manifest.v1`. |
 | `name` | The kind's id; the manifest filename is `<name>.puck.probe.json`. |
-| `class` | `kernel` (handwritten GPU compute on the camera graph's own device and worker) or `model` (an out-of-process host; no host runs a `model` kind yet). |
+| `class` | `kernel` (handwritten GPU compute on its host's own device and worker) or `model` (an out-of-process host; no host runs a `model` kind yet). |
 | `inputs[]` | `{ name, class: "frame"\|"strobePair", optional?: bool }`, `1..8` sockets bound at `t0, t1, …` in this order (a `strobePair` socket takes two consecutive registers, lit then unlit). `name` is unique within the manifest: letters, digits, or `-`, starting with a letter. A document row plugs one `WorldFrameSource` into each socket by name; `optional` lets a row leave it unbound. |
-| `trigger` | The socket name whose new frame starts a cycle; defaults to `inputs[0].name`, must name a declared socket. |
+| `trigger` | The socket name whose new frame starts a cycle; defaults to `inputs[0].name`, must name a declared socket. A document row binds it to a camera (the camera graph hosts the kernel) or to a view or a probe with no camera socket anywhere (the render adapter's own host runs it). |
 | `output` | `{ of: <socket name>, format?: "rgba8" }`—a texture the kind writes each cycle at the named socket's bound source extent, published like a camera frame; a screen shows it as a `probe` source. `of` must name a declared socket. Absent for a channels-only kind. |
 | `kernel` | `{ source, accumulate, finalize }`, required for a `kernel`-class kind; `source` is an HLSL file beside the manifest. |
 | `channels[]` | `{ name, min, max, neutral, description }`, `1..8` entries (a `ProbeReading` carries at most 8 channels); `neutral` must lie in `[min, max]`. |
@@ -1014,6 +1017,12 @@ reflection:
 | `RWStructuredBuffer<uint> Accumulate : register(u0)` | Scratch space, cleared before `accumulate` dispatches over the trigger frame (or the output extent, when the kind declares one). |
 | `RWStructuredBuffer<float> Channels : register(u1)` | `channels.Count + 1` floats, written once by `finalize`: the kind's channels in declaration order, then confidence. |
 | `RWTexture2D<float4> Output : register(u2)` | The declared `output`, when the kind has one; written by `accumulate`, copied to the published ring slot after `finalize`. |
+
+`average.hlsl` (the shipped `average` kind) is the smallest texture-writing
+kind: its one `frame` socket is its trigger and its output's extent, it writes
+the frame times `tintR`/`tintG`/`tintB` to `Output`, and its channels are the
+frame's mean red, green and blue. Bound to a view, it measures what a camera in
+the world sees, on the render adapter's own host.
 
 `ir-blob.hlsl` (the shipped `ir-blob` kind) is the reference: an 8×8
 `accumulate` pass weighs each pixel by how far its luminance clears

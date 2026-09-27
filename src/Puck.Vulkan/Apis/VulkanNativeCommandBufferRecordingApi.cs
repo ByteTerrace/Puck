@@ -12,10 +12,10 @@ namespace Puck.Vulkan;
 /// <c>vkCmd*</c> command-recording entry points resolved per device from the Vulkan loader.
 /// </summary>
 public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanCommandBufferRecordingApi {
+    private const uint CommandBufferUsageSimultaneousUse = 0x00000004;
     private const uint ComputePipelineBindPoint = 1;
     private const uint GraphicsPipelineBindPoint = 0;
     private const uint ImageAspectColorBit = 0x00000001;
-    private const uint QueueFamilyIgnored = 0xFFFFFFFF;
     private const uint StructureTypeBufferMemoryBarrier = 44;
     private const uint StructureTypeCommandBufferBeginInfo = 42;
     private const uint StructureTypeDebugUtilsLabel = 1000128002;
@@ -82,7 +82,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         );
     }
     /// <inheritdoc/>
-    public VkResult BeginCommandBuffer(VulkanDeviceCommands device, nint commandBufferHandle) {
+    public VkResult BeginCommandBuffer(VulkanDeviceCommands device, nint commandBufferHandle, bool resubmittedWhilePending = false) {
         ArgumentNullException.ThrowIfNull(argument: device);
 
         VulkanArgument.RequireHandle(
@@ -93,7 +93,9 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
 
         var beginCommandBuffer = device.BeginCommandBuffer;
         var beginInfo = new VkCommandBufferBeginInfo {
-            Flags = 0,
+            Flags = (resubmittedWhilePending
+                ? CommandBufferUsageSimultaneousUse
+                : 0),
             SType = StructureTypeCommandBufferBeginInfo,
         };
 
@@ -730,12 +732,12 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         var barrier = new VkBufferMemoryBarrier {
             Buffer = bufferHandle,
             DstAccessMask = destinationAccessMask,
-            DstQueueFamilyIndex = QueueFamilyIgnored,
+            DstQueueFamilyIndex = VulkanQueueFamily.Ignored,
             Offset = 0,
             SType = StructureTypeBufferMemoryBarrier,
             Size = WholeSize,
             SrcAccessMask = sourceAccessMask,
-            SrcQueueFamilyIndex = QueueFamilyIgnored,
+            SrcQueueFamilyIndex = VulkanQueueFamily.Ignored,
         };
 
         pipelineBarrier(
@@ -948,18 +950,20 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         uint sourceAccessMask,
         uint destinationAccessMask,
         uint sourceStageMask,
-        uint destinationStageMask
+        uint destinationStageMask,
+        uint sourceQueueFamily = VulkanQueueFamily.Ignored,
+        uint destinationQueueFamily = VulkanQueueFamily.Ignored
     ) {
         var pipelineBarrier = device.CmdPipelineBarrier;
         var barrier = new VkImageMemoryBarrier {
             DstAccessMask = destinationAccessMask,
-            DstQueueFamilyIndex = QueueFamilyIgnored,
+            DstQueueFamilyIndex = destinationQueueFamily,
             Image = imageHandle,
             NewLayout = newLayout,
             OldLayout = oldLayout,
             SType = StructureTypeImageMemoryBarrier,
             SrcAccessMask = sourceAccessMask,
-            SrcQueueFamilyIndex = QueueFamilyIgnored,
+            SrcQueueFamilyIndex = sourceQueueFamily,
             SubresourceRange = new VkImageSubresourceRange {
                 AspectMask = aspectMask,
                 BaseArrayLayer = 0,

@@ -49,7 +49,7 @@ float3 calculateNormal(float3 p, uint instanceMaskBase, out float gradientMagnit
     return normalize(sum);
 }
 // The tetrahedron's four distances minus four times the center recover 2*e^2 times the field Laplacian.
-// De-scale it to world units: concave creases read negative, convex ridges positive. The primary hit supplies
+// De-scale it to world units: concave creases read negative, convex ridges positive. The visibility record supplies
 // the center unless Detail shapes can change the shading field; those programs query the current field again.
 float3 calculateNormalCurvature(float3 p, uint instanceMaskBase, float primaryCenter, out float curvature, out float gradientMagnitude) {
     const float e = NormalProbeEpsilon;

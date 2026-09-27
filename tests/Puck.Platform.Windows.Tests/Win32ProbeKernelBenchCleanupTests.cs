@@ -76,9 +76,10 @@ public sealed class Win32ProbeKernelBenchCleanupTests {
                     Height: KernelBench.FrameHeight,
                     Format: GpuPixelFormat.R8G8B8A8Unorm,
                     SharedTargetHandles: [target.SharedHandle, ((nint)1)],
-                    Slots: slots
+                    Slots: slots,
+                    SharedFenceHandle: 0
                 )],
-            Trigger: CameraSensor.Color
+            Trigger: 0
         );
         var ring = new ProbeReadingRing();
         var assembly = typeof(Win32RawInput).Assembly;

@@ -281,7 +281,7 @@ public sealed partial class SdfWorldEngine {
                 workPass: AmbientPass
             );
 
-            // Stage 1: shade the view's primary hits into its output — dispatched INDIRECTLY from the
+            // Stage 1: shade the view's visibility records into its output — dispatched INDIRECTLY from the
             // GPU-computed surviving-tile bbox; the all-empty margins are never dispatched; the kernel offsets each
             // invocation by the bbox origin (binding 8). The pipeline is the variant UploadProgram selected for the LIVE
             // program (full ISA vs core-ops — the stripped cases are unreachable under core, so the field is the same;

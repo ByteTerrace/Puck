@@ -1,5 +1,6 @@
 using Puck.Commands;
 using Puck.Platform;
+using Puck.Platform.Probes;
 using Puck.Hosting;
 using Puck.SdfVm;
 using Puck.SignedDistance;
@@ -59,6 +60,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     // simulation state or duplicating pose math here.
     private readonly ISdfAnchorSource m_anchors;
     private readonly ICameraCaptureService m_cameraCapture;
+    private readonly IProbeKernelHostService m_probeKernelHosts;
     // The D3D12-host GPU capture transport: on the Direct3D 12 host, window/monitor captures AND the shared webcam
     // publish GPU-side into shared simultaneous-access textures the screens sample directly (no CPU round trip); the
     // Vulkan host keeps the CPU path.
@@ -182,6 +184,8 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     /// <param name="machines">The authoritative screen-machine host this binder reads outputs from.</param>
     /// <param name="cameraCapture">The platform webcam service (CPU tier) the camera screens share one session of.</param>
     /// <param name="windowCapture">The platform compositor window-capture service.</param>
+    /// <param name="probeKernels">The platform service that opens the render adapter's probe kernel host, which runs a
+    /// probe whose trigger reads a rendered source.</param>
     /// <param name="cameras">The world's placeable cameras a View (jumbotron) screen resolves its camera name against.</param>
     /// <param name="anchors">The entity anchor source used by anchored cameras (the client's snapshot-fed view).</param>
     /// <param name="stamps">The compiled creation-look pool supplying authored entity parts.</param>
@@ -201,12 +205,13 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     /// <param name="producers">The image producers the host registers beside the four the engine ships, or
     /// <see langword="null"/> for none; each must match a shape in <see cref="WorldImageProducerVocabulary"/>.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldScreenBinder(IReadOnlyList<WorldScreen> screens, WorldMachineHost machines, ICameraCaptureService cameraCapture, INativeImageCaptureService windowCapture, IReadOnlyList<WorldCamera> cameras, ISdfAnchorSource anchors, WorldStampPool stamps, WorldPerceptionAnchor perception, Func<WorldOverlayFacts> facts, bool hostsOnDirectX, WorldInstanceHost instanceHost, PlayerRoster roster, WorldRenderProbe? renderProbe = null, bool alwaysFillsCaptures = false, IReadOnlyList<IWorldImageProducer>? producers = null) {
+    public WorldScreenBinder(IReadOnlyList<WorldScreen> screens, WorldMachineHost machines, ICameraCaptureService cameraCapture, INativeImageCaptureService windowCapture, IProbeKernelHostService probeKernels, IReadOnlyList<WorldCamera> cameras, ISdfAnchorSource anchors, WorldStampPool stamps, WorldPerceptionAnchor perception, Func<WorldOverlayFacts> facts, bool hostsOnDirectX, WorldInstanceHost instanceHost, PlayerRoster roster, WorldRenderProbe? renderProbe = null, bool alwaysFillsCaptures = false, IReadOnlyList<IWorldImageProducer>? producers = null) {
         ArgumentNullException.ThrowIfNull(argument: screens);
         m_renderProbe = renderProbe;
         ArgumentNullException.ThrowIfNull(argument: machines);
         ArgumentNullException.ThrowIfNull(argument: cameraCapture);
         ArgumentNullException.ThrowIfNull(argument: windowCapture);
+        ArgumentNullException.ThrowIfNull(argument: probeKernels);
         ArgumentNullException.ThrowIfNull(argument: cameras);
         ArgumentNullException.ThrowIfNull(argument: anchors);
         ArgumentNullException.ThrowIfNull(argument: stamps);
@@ -222,6 +227,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             TimeSpan.FromSeconds(seconds: 2)
         );
         m_windowCapture = windowCapture;
+        m_probeKernelHosts = probeKernels;
         m_cameras = cameras;
         m_anchors = anchors;
         m_stamps = stamps;

@@ -82,11 +82,11 @@ public interface ICameraGraph<out TStream> : IDisposable where TStream : ICamera
     IReadOnlyList<TStream> Streams { get; }
 }
 /// <summary>One sensor's stream inside a camera graph. Frames arrive on a platform-owned thread; the consumer polls
-/// <see cref="FrameVersion"/> and never blocks.</summary>
+/// <see cref="Version"/> and never blocks.</summary>
 public interface ICameraStream {
     /// <summary>Gets a monotonically increasing count of frames delivered; a consumer compares it against the value it
     /// last processed to skip unchanged frames.</summary>
-    long FrameVersion { get; }
+    long Version { get; }
     /// <summary>Gets the negotiated frame height in pixels.</summary>
     int Height { get; }
     /// <summary>Gets the <see cref="System.Diagnostics.Stopwatch"/> timestamp of the most recent frame's arrival, stamped
@@ -130,6 +130,9 @@ public interface ICameraSharedStream : ICameraStream, ISharedSlotRing {
 public interface ISharedSlotRing {
     /// <summary>Gets the most recently published slot, or <c>-1</c> before the first publication.</summary>
     int LatestSlot { get; }
+    /// <summary>Gets a monotonically increasing count of publications; a consumer compares it against the value it last
+    /// read to tell a new publication from the one it has.</summary>
+    long Version { get; }
 
     /// <summary>Acquires the latest published slot; pair a <see langword="true"/> result with <see cref="Release"/>.</summary>
     /// <param name="slot">When this returns <see langword="true"/>, the slot to sample.</param>

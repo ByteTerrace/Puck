@@ -16,6 +16,7 @@ internal sealed partial class ScreenCommandModule {
             WorldScreenSource.Machine machine => $"machine:{machine.Instance}:{machine.Output}",
             WorldScreenSource.Producer producer => producer.Id,
             WorldScreenSource.View => "view",
+            WorldScreenSource.Probe probe => $"probe:{probe.Id}",
             WorldScreenSource.Session session => $"session:{session.Destination}",
             WorldScreenSource.Text text => $"text:{text.Lines.Count}-line",
             _ => "none",

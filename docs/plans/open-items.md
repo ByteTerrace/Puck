@@ -102,7 +102,7 @@ Every package below carries its own check on the programme page; tick it there a
 - [x] P2 per-pass work counters and the collector.
 - [ ] P1b foundation qualification against the candidate that ships the forcing world (`puck qualify` and the release profile are in; the first runs on the reference GPUs are not).
 - [x] P3 attachments and indexed geometry.
-- [ ] P4 shared opaque visibility (through P4-2e, the mesh raster, its canaries and meshes on every stamp, landed; the visibility record's names remain).
+- [ ] P4 shared opaque visibility (every build step, P4-0 to P4-2e and the visibility record's names, landed; the check's fixtures for an opening, equal-depth ties, silhouettes, near-plane clipping, small and multiple viewports, reduced render scale and resize remain).
 - [x] P5 reproducible authoring and packaged dependencies.
 - [ ] P6 representation experiments.
 - [x] P7 the binding contract and the adapter memory profile, with the one-day spike as its gate (every P7b step landed; the gate's Linux bytecode leg is deferred to the end).

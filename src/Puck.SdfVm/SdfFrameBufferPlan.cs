@@ -17,7 +17,7 @@ public enum SdfFrameBuffer {
     /// end.</summary>
     CullBounds,
     /// <summary>The per-pixel visibility records (<c>sdf-visibility.hlsli</c>) the hit passes write and shading reads.</summary>
-    PrimaryHits,
+    VisibilityRecords,
 }
 /// <summary>The SDF engine's dispatches in recording order. Brick work and the region copies record only when they have work.</summary>
 public enum SdfFramePass {
@@ -107,9 +107,9 @@ public static class SdfFrameBufferPlan {
         new(Access: SdfBufferAccess.Write, Buffer: SdfFrameBuffer.ViewsArgs),
         new(Access: SdfBufferAccess.Write, Buffer: SdfFrameBuffer.CullBounds),
     ];
-    private static readonly SdfBufferUse[] PrimaryUses = HitPassUses(primaryHits: SdfBufferAccess.Write);
-    private static readonly SdfBufferUse[] ResolveUses = HitPassUses(primaryHits: SdfBufferAccess.ReadWrite);
-    private static readonly SdfBufferUse[] ViewsUses = HitPassUses(primaryHits: SdfBufferAccess.Read);
+    private static readonly SdfBufferUse[] PrimaryUses = HitPassUses(visibilityRecords: SdfBufferAccess.Write);
+    private static readonly SdfBufferUse[] ResolveUses = HitPassUses(visibilityRecords: SdfBufferAccess.ReadWrite);
+    private static readonly SdfBufferUse[] ViewsUses = HitPassUses(visibilityRecords: SdfBufferAccess.Read);
 
     /// <summary>The buffers <paramref name="pass"/> touches and how, in the order its transitions are recorded.</summary>
     /// <param name="pass">The dispatch.</param>
@@ -178,12 +178,12 @@ public static class SdfFrameBufferPlan {
         return [.. edges];
     }
 
-    private static SdfBufferUse[] HitPassUses(SdfBufferAccess primaryHits) => [
+    private static SdfBufferUse[] HitPassUses(SdfBufferAccess visibilityRecords) => [
         new(Access: SdfBufferAccess.IndirectRead, Buffer: SdfFrameBuffer.ViewsArgs),
         new(Access: SdfBufferAccess.Read, Buffer: SdfFrameBuffer.CullBounds),
         new(Access: SdfBufferAccess.Read, Buffer: SdfFrameBuffer.InstanceMasks),
         new(Access: SdfBufferAccess.Read, Buffer: SdfFrameBuffer.BrickPool),
         new(Access: SdfBufferAccess.Read, Buffer: SdfFrameBuffer.Tiles),
-        new(Access: primaryHits, Buffer: SdfFrameBuffer.PrimaryHits),
+        new(Access: visibilityRecords, Buffer: SdfFrameBuffer.VisibilityRecords),
     ];
 }

@@ -42,15 +42,19 @@ plus the pieces that need no OS-specific code at all.
 - **Probes contracts** (`Puck.Platform.Probes`)—`ProbeReading`, the
   neutral fixed-point currency between an probe and every binding that
   consumes it; `ProbeReadingRing`, its triple-buffered seqlock latest-wins
-  publication; `ICameraKernelHost`/`IProbeKernelRun`, the seam a kernel-class
-  probe attaches to a camera graph through. `ProbeKernelRequest.Inputs` is a
-  socket list of `ProbeKernelInput` arms—`Sensor` (a camera sensor's
+  publication; `IProbeKernelHost`/`IProbeKernelRun`, the seam a kernel-class
+  probe attaches to its host through: a camera graph, or the render adapter's
+  own host (`IRenderedProbeKernelHost`, opened by `IProbeKernelHostService`)
+  for a kernel whose trigger reads a rendered source. `ProbeKernelRequest.Inputs`
+  is a socket list of `ProbeKernelInput` arms—`Sensor` (a camera sensor's
   converted frame), `StrobePair` (that sensor's lit frame and the unlit frame
   kept beside it), `Ring` (an external `ISharedSlotRing` the host opens
-  read-only, e.g. another probe's output or an offscreen view export), or
+  read-only, with the shared fence its producer signals, e.g. another probe's
+  output or an offscreen view export), or
   `Unbound` (an optional socket left empty)—flattened to consecutive kernel
   registers (`ProbeKernelInput.RegisterCount`; a `StrobePair` spans two,
-  every other arm one). `ProbeTrackPlayer` is the hardware-free
+  every other arm one), and `ProbeKernelRequest.Trigger` names the socket
+  whose new frame starts a cycle. `ProbeTrackPlayer` is the hardware-free
   recorded-reading substitute for a live probe input.
 
 ## What does not live here

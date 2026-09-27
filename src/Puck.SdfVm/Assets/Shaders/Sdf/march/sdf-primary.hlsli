@@ -3,7 +3,8 @@
 
 // Full-scene and independent whole-part queries share this marcher.
 // Included after the world constants and VM helpers, before renderView.
-struct SdfPrimaryHit {
+// One ray's primary march: what the primary pass stores into its pixel's visibility record's V, C and L rows.
+struct SdfPrimaryMarch {
     float traveled;
     float radius;
     float threshold;
@@ -35,7 +36,7 @@ SdfHit sdfPrimarySample(float3 position, uint mask, uint4 part, bool localPart) 
     return mapMasked(position, mask);
 }
 
-SdfPrimaryHit sdfTracePrimaryField(float3 rayOrigin, float3 rayDirection, float marchStart,
+SdfPrimaryMarch sdfTracePrimaryField(float3 rayOrigin, float3 rayDirection, float marchStart,
     float firstExit, float secondEntry, float farBound, float farDistance, uint instanceMaskBase,
     float pixelFootprint, uint4 part, bool localPart) {
     float traveled = max(marchStart, 0.0);
@@ -258,7 +259,7 @@ SdfPrimaryHit sdfTracePrimaryField(float3 rayOrigin, float3 rayDirection, float 
         terminalHitThreshold = max(SurfaceEpsilon, (pixelFootprint * traveled));
     }
 
-    SdfPrimaryHit result;
+    SdfPrimaryMarch result;
     result.traveled = traveled;
     result.radius = terminalRadius;
     result.threshold = terminalHitThreshold;
@@ -285,7 +286,7 @@ struct SdfPrimarySurface {
 SdfPrimarySurface sdfTracePrimarySurface(float3 rayOrigin, float3 rayDirection, float marchStart,
     float firstExit, float secondEntry, float farBound, float farDistance, uint instanceMaskBase,
     float pixelFootprint, uint4 part, bool localPart) {
-    SdfPrimaryHit hit = sdfTracePrimaryField(rayOrigin, rayDirection, marchStart, firstExit, secondEntry,
+    SdfPrimaryMarch hit = sdfTracePrimaryField(rayOrigin, rayDirection, marchStart, firstExit, secondEntry,
         farBound, farDistance, instanceMaskBase, pixelFootprint, part, localPart);
     SdfPrimarySurface surface;
     surface.traveled = hit.traveled;
@@ -296,7 +297,7 @@ SdfPrimarySurface sdfTracePrimarySurface(float3 rayOrigin, float3 rayDirection, 
     return surface;
 }
 
-SdfPrimaryHit sdfTracePrimary(float3 rayOrigin, float3 rayDirection, float marchStart,
+SdfPrimaryMarch sdfTracePrimary(float3 rayOrigin, float3 rayDirection, float marchStart,
     float firstExit, float secondEntry, float farBound, float farDistance, uint instanceMaskBase,
     float pixelFootprint) {
     bool independent = false;
@@ -347,7 +348,7 @@ SdfPrimaryHit sdfTracePrimary(float3 rayOrigin, float3 rayDirection, float march
     }
     sdfPrimaryOmitParts = false;
 
-    SdfPrimaryHit result = (SdfPrimaryHit)0;
+    SdfPrimaryMarch result = (SdfPrimaryMarch)0;
     result.traveled = best.traveled;
     result.radius = best.radius;
     result.threshold = best.threshold;
