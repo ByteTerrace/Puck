@@ -96,6 +96,10 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // Replaced, never cleared, on a static rebuild: a consumer that keys work on the list (the engine's mesh region
     // count) sees a new list exactly when the placements it came from moved.
     private IReadOnlyList<SdfMeshDraw> m_staticMeshDraws = [];
+    // MeshDraws' composition of the static draws and the pool's, and the two lists it was composed from.
+    private IReadOnlyList<SdfMeshDraw> m_meshDraws = [];
+    private IReadOnlyList<SdfMeshDraw>? m_composedStaticMeshDraws;
+    private IReadOnlyList<SdfMeshDraw>? m_composedStampedMeshDraws;
     // Per-frame scratch reused to keep packing allocation-free: movement-driven gait state per avatar.
     private readonly float[] m_avatarGaitPhases = new float[WorldBodiesLimits.CapacityCeiling];
     private readonly Vector3[] m_avatarPreviousPositions = new Vector3[WorldBodiesLimits.CapacityCeiling];
@@ -960,7 +964,28 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     public int RevisionComponentCount => (WorldClient.RevisionComponentCount + 2);
     /// <summary>Gets the bounded volumes the latest live build's static placements baked into world space.</summary>
     public IReadOnlyList<SdfVolume> StaticVolumes => m_staticVolumes;
-    /// <summary>Gets one mesh draw per static placement instance of a prototype that carries a mesh, from the last
-    /// static rebuild.</summary>
-    public IReadOnlyList<SdfMeshDraw> StaticMeshDraws => m_staticMeshDraws;
+    /// <inheritdoc/>
+    /// <remarks>One draw per static placement instance of a prototype that carries a mesh, from the last static
+    /// rebuild, then the stamp pool's (<see cref="WorldStampPool.MeshDraws"/>): an animated, inhabited or attached
+    /// stamp's mesh at its root this frame. Recomposed only when either list is a new one.</remarks>
+    public IReadOnlyList<SdfMeshDraw> MeshDraws {
+        get {
+            var stamped = m_animator.MeshDraws;
+
+            if (
+                !ReferenceEquals(objA: m_staticMeshDraws, objB: m_composedStaticMeshDraws) ||
+                !ReferenceEquals(objA: stamped, objB: m_composedStampedMeshDraws)
+            ) {
+                m_composedStaticMeshDraws = m_staticMeshDraws;
+                m_composedStampedMeshDraws = stamped;
+                m_meshDraws = ((stamped.Count == 0)
+                    ? m_staticMeshDraws
+                    : ((m_staticMeshDraws.Count == 0)
+                        ? stamped
+                        : [.. m_staticMeshDraws, .. stamped]));
+            }
+
+            return m_meshDraws;
+        }
+    }
 }

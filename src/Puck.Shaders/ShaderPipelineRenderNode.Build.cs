@@ -32,6 +32,7 @@ public sealed partial class ShaderPipelineRenderNode {
     // depth they are cleared to has one statement.
     internal static GpuDepthAttachment DepthAttachmentOf(ShaderPipelineAttachment attachment, GpuPixelFormat format) =>
         new(
+            ClearDepth: attachment.ClearDepth,
             Format: format,
             Load: attachment.Load,
             Store: attachment.Store

@@ -78,9 +78,10 @@ public sealed partial class SdfShaderLayeringLawTests {
                 "#ifdef DEBUG_OVERLAY",
                 "float tintOf(float Tint) { return Tint; }",
                 "#endif",
-                "float tinted() { return Tint; }"
+                "float tinted() { return Tint; }",
+                "float shaded() { { float Shade = 0.0; } return Shade; }"
             ),
-            ["debug/d.hlsli"] = "#define DEBUG_TINT 0.5\n#define DEBUG_OVERLAY\nstatic const int debugMode = 3;\nstatic const float Tint = 1.0;\nfloat levelOf(float3 p) { return p.x; }\n",
+            ["debug/d.hlsli"] = "#define DEBUG_TINT 0.5\n#define DEBUG_OVERLAY\nstatic const int debugMode = 3;\nstatic const float Tint = 1.0;\nstatic const float Shade = 0.5;\nfloat levelOf(float3 p) { return p.x; }\n",
             ["field/f.hlsli"] = "float probe(uint debugMode) { float levelOf = 1.0; return (debugMode * levelOf); }\n",
             ["passes/e.comp.hlsl"] = "#define PASS_FLAG\n[numthreads(8, 8, 1)] void main(uint3 id : SV_DispatchThreadID) { surfaceAt((float3)id); }\n",
         };
@@ -90,6 +91,7 @@ public sealed partial class SdfShaderLayeringLawTests {
             expected: [
                 "surface/c.hlsli uses DEBUG_OVERLAY from debug/d.hlsli, a higher layer",
                 "surface/c.hlsli uses DEBUG_TINT from debug/d.hlsli, a higher layer",
+                "surface/c.hlsli uses Shade from debug/d.hlsli, a higher layer",
                 "surface/c.hlsli uses Tint from debug/d.hlsli, a higher layer",
                 "surface/c.hlsli uses debugMode from debug/d.hlsli, a higher layer",
                 "surface/c.hlsli uses levelOf from debug/d.hlsli, a higher layer",
@@ -312,10 +314,14 @@ public sealed partial class SdfShaderLayeringLawTests {
             }
 
             var scope = body[start..Math.Min(val1: (index + 1), val2: body.Length)];
-            var locals = LocalDeclarations(scope: scope);
+            var blocks = BlocksOf(scope: scope);
+            var locals = LocalDeclarations(
+                blocks: blocks,
+                scope: scope
+            );
 
             foreach (Match use in UsePattern().Matches(input: scope)) {
-                if (!locals.Contains(item: use.Value)) {
+                if (!locals.TryGetValue(key: use.Value, value: out var declaredIn) || !declaredIn.Any(predicate: block => blocks.Encloses(block: block, index: use.Index))) {
                     _ = uses.Add(item: use.Value);
                 }
             }
@@ -325,19 +331,69 @@ public sealed partial class SdfShaderLayeringLawTests {
 
         return (uses, tested);
     }
-    // The names one file-scope declaration or definition declares, its parameters and locals included: a name that
-    // follows a type and is followed by an initializer, an array bound, a semantic, a separator or the end of a
-    // declaration or parameter list.
-    private static HashSet<string> LocalDeclarations(string scope) {
-        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+    // The blocks of one file-scope declaration or definition: each brace pair is a block inside the one around it, and
+    // everything outside every brace (a parameter list) is block 0, which encloses the whole definition.
+    private static ScopeBlocks BlocksOf(string scope) {
+        var innermost = new int[scope.Length];
+        var parents = new List<int> { -1 };
+        var open = new Stack<int>();
 
-        foreach (Match declaration in LocalDeclarationPattern().Matches(input: scope)) {
-            if (declaration.Groups[1].Value is not ("return" or "else" or "case" or "in" or "out" or "inout")) {
-                _ = names.Add(item: declaration.Groups[2].Value);
+        open.Push(item: 0);
+
+        for (var index = 0; (index < scope.Length); index++) {
+            if (scope[index] == '{') {
+                parents.Add(item: open.Peek());
+                open.Push(item: (parents.Count - 1));
+            }
+
+            innermost[index] = open.Peek();
+
+            if ((scope[index] == '}') && (open.Count > 1)) {
+                _ = open.Pop();
             }
         }
 
+        return new ScopeBlocks(
+            Innermost: innermost,
+            Parents: parents
+        );
+    }
+    // The names one file-scope declaration or definition declares, its parameters and locals included, each with the
+    // blocks it is declared in: a name that follows a type and is followed by an initializer, an array bound, a
+    // semantic, a separator or the end of a declaration or parameter list. A parameter is declared in block 0, so it
+    // is in scope across the whole definition; a local only inside its own block.
+    private static Dictionary<string, List<int>> LocalDeclarations(ScopeBlocks blocks, string scope) {
+        var names = new Dictionary<string, List<int>>(comparer: StringComparer.Ordinal);
+
+        foreach (Match declaration in LocalDeclarationPattern().Matches(input: scope)) {
+            if (declaration.Groups[1].Value is ("return" or "else" or "case" or "in" or "out" or "inout")) {
+                continue;
+            }
+
+            var name = declaration.Groups[2];
+
+            if (!names.TryGetValue(key: name.Value, value: out var declaredIn)) {
+                names[name.Value] = declaredIn = [];
+            }
+
+            declaredIn.Add(item: blocks.Innermost[name.Index]);
+        }
+
         return names;
+    }
+
+    // The block each character of one definition sits in, innermost first, and each block's enclosing block.
+    private sealed record ScopeBlocks(int[] Innermost, List<int> Parents) {
+        // Whether the block encloses the character at the index: it is that character's block or one around it.
+        public bool Encloses(int block, int index) {
+            for (var current = Innermost[index]; (current >= 0); current = Parents[current]) {
+                if (current == block) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
     }
     private static bool IsIdentifier(string? token) => ((token is { Length: > 0 }) && (char.IsLetter(c: token[0]) || (token[0] == '_')));
 

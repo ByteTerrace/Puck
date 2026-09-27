@@ -78,6 +78,8 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
 
     private int m_neighbourRevision;
     private int m_selectionRevision;
+    // The neighbours' static placements' mesh draws the last live Emit fixed, in the source world's frame.
+    private IReadOnlyList<SdfMeshDraw> m_meshDraws = [];
 
     // EmitCurrent's own scratch for one band's source-mapped placements, bounded by MaxInstancesPerBand (the same
     // reservation WorldAdjacencyGeometry.Select's default `maximum` honors) and reused across bands and rebuilds —
@@ -147,6 +149,10 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     /// revision moves for, so without it a body would enter or leave a border only when something unrelated
     /// happened to force a rebuild.</remarks>
     public int RevisionComponentCount => 2;
+    /// <inheritdoc/>
+    /// <remarks>The reachable neighbours' static placements' meshes, mapped into this world and fixed by each live
+    /// <see cref="Emit"/>, like their shapes.</remarks>
+    public IReadOnlyList<SdfMeshDraw> MeshDraws => m_meshDraws;
 
     internal static (Vector3 Position, Quaternion Orientation) MapPoseIntoSource(Vector3 position, Quaternion orientation, IReadOnlyList<WorldAdjacencyFramePair> path) {
         var mappedPosition = position;
@@ -407,15 +413,24 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
             return;
         }
 
+        var meshDraws = new List<SdfMeshDraw>();
+
         EmitCurrent(
             builder: builder,
             slotBase: context.SlotBase,
-            includeEntities: true
+            includeEntities: true,
+            meshDraws: meshDraws
         );
+        m_meshDraws = meshDraws;
     }
     /// <summary>Emits the currently reachable live adjacency geometry without the capacity-probe branch. Camera
     /// clearance uses this to evaluate the same static strip the renderer composes.</summary>
-    public void EmitCurrent(SdfProgramBuilder builder, int slotBase = 0, bool includeEntities = false) {
+    /// <param name="builder">The program builder.</param>
+    /// <param name="slotBase">The emitter's first dynamic-transform slot.</param>
+    /// <param name="includeEntities">Whether each band's bodies are emitted too.</param>
+    /// <param name="meshDraws">Receives the mesh draws of the neighbours' static placements, mapped into this world, or
+    /// <see langword="null"/> to collect none.</param>
+    public void EmitCurrent(SdfProgramBuilder builder, int slotBase = 0, bool includeEntities = false, ICollection<SdfMeshDraw>? meshDraws = null) {
         ArgumentNullException.ThrowIfNull(argument: builder);
 
         // One Visuals() read, indexed rather than foreach'd — the compile-time type is the IReadOnlyList seam, and
@@ -498,7 +513,8 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                         count: mappedCount,
                         offset: 0
                     ),
-                    palettes: m_palettes
+                    palettes: m_palettes,
+                    meshDraws: meshDraws
                 );
             }
 

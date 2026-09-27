@@ -140,6 +140,11 @@ public sealed partial class WorldStampPool {
 
         public float Scale = 1f;
 
+        // The creation's mesh (WorldPrototype.Mesh) and the engine material its palette entry registered as, set by
+        // each live EmitOne; PackTransforms poses it at the registration's root. Null for a creation without a mesh.
+        public SdfMesh? Mesh;
+        public int MeshMaterial;
+
         // The root position/orientation followers — set only for a body-rooted registration whose look names a root
         // Motion.Dynamics row (see ApplyMotion; a row-rooted registration never has this true). FollowedPosition/
         // FollowedOrientation are the values PackTransforms actually rendered this frame: the followers step at most
@@ -314,6 +319,19 @@ public sealed partial class WorldStampPool {
             ? maxPlacementScale
             : (live?.Scale ?? 1f)
         );
+
+        // The mesh rides the registration's root, drawn by the mesh pass rather than emitted into the program, so the
+        // probe reserves nothing for it; the material is this build's registration of its palette entry.
+        if (!probeWorstCase && (live is not null)) {
+            live.Mesh = ((live.Creation.Mesh is { } mesh)
+                ? WorldPlacementStamper.MeshOf(mesh: mesh)
+                : null);
+            live.MeshMaterial = paletteIds[Math.Clamp(
+                value: (live.Creation.Mesh?.Material ?? 0),
+                max: (paletteIds.Length - 1),
+                min: 0
+            )];
+        }
         // Text stays inside the probed envelope by trading capacity the validator already reserved: glyphs charge the
         // same stamp budget the boxes do (CreationDocument.StampShapeCount), each glyph chain is shorter than
         // the probe's full-modifier shape chain, and the one text instance takes the place of the last parked

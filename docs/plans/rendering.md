@@ -1825,8 +1825,8 @@ normal and curvature rows, the ambient pass updates the last, and the views pass
 reads all five, including a neighbour's record for the silhouette sky blend
 behind a `TileEmpty` test. Primary traversal (`sdf-primary.hlsli`) exits at the
 far bound or the far distance after at most 128 steps, with its ray parameter
-the Euclidean distance along the normalized camera ray. P3's depth attachment is
-always cleared to 1, and a `Geometry` pass's vertex stage takes no parameters.
+the Euclidean distance along the normalized camera ray. A P3 graph's depth attachment
+clears to its resource's `clearDepth` (1 when omitted), and a `Geometry` pass's vertex stage takes no parameters.
 
 **Owns:** the SDF engine's passes and the shared visibility records (P4-1);
 the SDF primary traversal and hybrid fixtures (P4-2).
@@ -1879,7 +1879,11 @@ groups. The remaining work follows below.
    [0, 1]), and both backends clear to it, so a reversed-Z attachment clears to
    0. The value belongs to the render pass's attachment, not to the recorder.
    A depth image is created from that attachment (`IGpuImageFactory.CreateDepth`),
-   so its optimized clear on Direct3D 12 is the same statement.
+   so its optimized clear on Direct3D 12 is the same statement. A graph document's
+   depth resource states the same value as `clearDepth`, which the planner
+   carries into its pass's attachment and refuses outside [0, 1], on a
+   forwarded version, or where a strict test passes nothing (`Greater` against
+   1, `Less` against 0).
 2. P4-1a, landed, the shared record: `sdf-visibility.hlsli` declares visibility
    (ray parameter; identity, with its kind in bits 31 and 30 — background, SDF
    or mesh — and a source index; material; flags), coverage (terminal radius,
@@ -1926,9 +1930,8 @@ groups. The remaining work follows below.
    creation's author frame, `indices`, and a palette `material`). The
    validator refuses an empty mesh, a partial triangle, an index past the
    vertices, a non-finite vertex, a degenerate triangle (a repeated index or
-   zero area) and a material outside the palette, each by name, and refuses a
-   mesh on an animated creation or under an inhabited or attached placement,
-   because only a static stamp draws one. `WorldPlacementStamper.EmitPlacement`,
+   zero area) and a material outside the palette, each by name.
+   `WorldPlacementStamper.EmitPlacement`,
    the static placement path P17's bakes also reach, adds one `SdfMeshDraw` per
    placement instance (the engine-frame triangles under the instance's scale,
    mirror, yaw and position), and `WorldFramePresenter` hands them to
@@ -1940,9 +1943,7 @@ groups. The remaining work follows below.
    pipeline under the staged policy. `world.budget`
    prints the bytes the region holds and the draws they cover.
    `PrototypeMeshLawTests` hold the round trip, the refusals and the
-   placement's draw. Open: meshes on animated and attached stamps and in
-   session views and neighbour worlds, whose static emitters pass no draw list,
-   which P4-2e owns.
+   placement's draw.
 7. P4-2c, landed, the raster pass and the bounded primary. The mesh pass
    (`SdfMeshRasterPass`, the `mesh` ledger pass, recorded per view between
    cull-args and primary) draws each `SdfMeshDraw` with one draw call, pulling
@@ -1973,9 +1974,22 @@ groups. The remaining work follows below.
    analytic oracle. The rest of the check above (an opening, equal-depth ties,
    silhouettes, near-plane clipping, small and multiple viewports, reduced render
    scale and resize) has no fixture yet.
-9. P4-2e, after P4-2c: meshes on animated and attached stamps, which the
-   validator refuses today, and in session views and neighbour worlds, whose
-   emitters then pass their draw lists.
+9. P4-2e, landed, meshes wherever a creation renders. Every scene emitter
+   states its draws (`ISdfSceneEmitter.MeshDraws`, the same list while none
+   moved), and `SdfCompositionFrameSource` composes them in emitter order and
+   hands the composition to the dresser, which the frame carries as
+   `SdfFrame.MeshDraws`; the engine repacks its mesh region only for a list it
+   has not seen. The stamp pool (`WorldStampPool.MeshDraws`) poses each
+   animated, inhabited, attached or look-worn registration's mesh at its packed
+   root and scale through `WorldPlacementStamper.MeshDrawOf`, the pose a static
+   placement's draw also takes, and rebuilds its list only in a pack that moved
+   a draw. A session view draws its mirrored world's static placements'
+   meshes, and a neighbour's border its mapped placements' meshes. The
+   validator no longer refuses a mesh on an animated creation or under an
+   inhabited or attached placement. `PrototypeMeshLawTests` hold an animated
+   placement's draw at its root, the list kept while nothing moved, and an
+   attached placement's draw following its body; a session view and a
+   neighbour's border reuse the static path and have no law of their own.
 10. The `PrimaryHit*` names become the visibility record's, and the owning
     guides describe it. Landed: the buffer is `SdfFrameBuffer.VisibilityRecords`,
     held in the engine's `m_visibilityRecordBuffer`, its record length is the one
@@ -4204,7 +4218,8 @@ packaging, and compiled worlds in the runtime and delivery programme.
 
 **Foundation.** P2, P3 and P5 are complete. P1a and P1b stay open beside the
 rest: neither blocks P4 or releasing the foundation. P4-0, P4-1a to P4-1c and
-P4-2a to P4-2d and step 10, the visibility record's names, have landed; P4-2e remains. P6
+P4-2a to P4-2e and step 10, the visibility record's names, have landed; the check's
+remaining fixtures stay open. P6
 follows P4.
 Image-only packaging stays
 independent of placed-surface support, and shared GPU and World files have one

@@ -173,6 +173,14 @@
               "title": "ShaderPipelineCountTerm"
             },
             "default": null
+          },
+          "clearDepth": {
+            "description": "The depth a depth resource\u0027s writer clears it to, in [0, 1], or null for DefaultClearDepth: its render pass\u0027s ClearDepth. A pass that keeps greater depths (Greater) tests against a depth cleared to 0. Only a depth resource that forwards nothing declares it, because a forwarded version\u0027s writer loads what its predecessor left.",
+            "type": [
+              "number",
+              "null"
+            ],
+            "default": null
           }
         },
         "required": [
