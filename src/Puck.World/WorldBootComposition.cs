@@ -1011,7 +1011,7 @@ public static class WorldBootComposition {
             toolchainDirectory: sp.GetRequiredService<WorldDefinition>().Views.ShaderToolchain
         ));
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<ShaderCompiler>().Work);
-        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: SdfWorldKernels.LoadWork);
+        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: SdfKernelSet.LoadWork);
         services.TryAddSingleton<GpuPassPipelineCache>();
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<GpuPassPipelineCache>().Work);
     }
@@ -1574,7 +1574,7 @@ public static class WorldBootComposition {
                         revision: client.DefinitionRevision
                     ),
                     vertexBytecode: File.ReadAllBytes(path: Path.Combine(
-                        path1: SdfWorldKernels.DefaultDirectory,
+                        path1: SdfKernelSet.DefaultDirectory,
                         path2: $"fullscreen.vert{bytecodeExtension}"
                     ))
                 );

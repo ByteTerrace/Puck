@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using Puck.Abstractions.Gpu;
 using Puck.Shaders;
-using Puck.SignedDistance;
 using Puck.Testing;
 using Xunit;
 
@@ -18,7 +17,7 @@ namespace Puck.SdfVm.Tests;
 public sealed class SdfWorldPipelinesLawTests {
     [Fact]
     public void ASetLeasesEveryEnginePipelineAndAReloadOnlyTheChangedOnes() {
-        var device = new PersistingDevice(services: new FakeGpuDevice(reportVersion: SdfIsa.Version).Services);
+        var device = new PersistingDevice(services: new FakeGpuDevice().Services);
         var cache = new GpuPassPipelineCache();
 
         using var pipelines = SdfTestPipelines.Build(
@@ -57,16 +56,52 @@ public sealed class SdfWorldPipelinesLawTests {
 
         Assert.Equal(expected: 12L, actual: Created(cache: cache));
     }
+    // A reload of kernels built against another instruction set is refused before it leases anything, and the set keeps
+    // its kernels; the same kernels built against this host's instruction set prepare.
+    [Fact]
+    public void AReloadBuiltAgainstAnotherInstructionSetIsRefusedAndTheSetKeepsItsKernels() {
+        var gpu = new FakeGpuDevice();
+        var cache = new GpuPassPipelineCache();
+        using var pipelines = SdfTestPipelines.Build(
+            cache: cache,
+            device: gpu,
+            kernels: SdfTestPipelines.Kernels(beam: 1)
+        );
+        var installed = pipelines.Kernels;
+        var created = Created(cache: cache);
+        var changed = SdfTestPipelines.Kernels(beam: 2);
+        var foreign = new SdfKernelSet(
+            bytecode: [.. SdfKernelSet.Kernels.Select(selector: kernel => changed[kernel])],
+            fingerprint: SdfIsaHlsl.Fingerprint ^ 1U
+        );
+
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => pipelines.PrepareReload(
+            cache: cache,
+            device: gpu,
+            kernels: foreign
+        ));
+        Assert.Same(expected: installed, actual: pipelines.Kernels);
+        Assert.Equal(expected: created, actual: Created(cache: cache));
+
+        using var reload = pipelines.PrepareReload(
+            cache: cache,
+            device: gpu,
+            kernels: changed
+        );
+
+        reload.Wait(cancellationToken: CancellationToken.None);
+        Assert.Equal(expected: 1, actual: reload.ChangedPipelines);
+    }
     [Fact]
     public void ASetWithABrickPoolAddsTheBrickBakePipelineItsKernelCarries() {
-        var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version);
+        var gpu = new FakeGpuDevice();
         var cache = new GpuPassPipelineCache();
 
         using var pipelines = SdfTestPipelines.Build(
             cache: cache,
             device: gpu,
             includeBrickPipelines: true,
-            kernels: SdfTestPipelines.Kernels(beam: 1) with { BrickBake = new byte[] { 1 } }
+            kernels: SdfTestPipelines.Kernels(beam: 1).With(bytecode: new byte[] { 1 }, kernel: SdfKernel.BrickBake)
         );
 
         Assert.True(condition: pipelines.IncludesBrickPipelines);
@@ -75,7 +110,7 @@ public sealed class SdfWorldPipelinesLawTests {
     [Fact]
     public async Task TheCacheHoldsAtMostItsConcurrencyInTheDriverAndBuildsEveryPipeline() {
         using var driver = new SteppedDriver();
-        var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version) {
+        var gpu = new FakeGpuDevice() {
             BeforeComputePipeline = driver.Enter,
         };
         var cache = new GpuPassPipelineCache();
@@ -111,7 +146,7 @@ public sealed class SdfWorldPipelinesLawTests {
     [Fact]
     public async Task ASetDisposedWhilePipelinesAreInTheDriverWaitsOnlyForThoseAndCreatesNoMore() {
         using var driver = new SteppedDriver();
-        var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version) {
+        var gpu = new FakeGpuDevice() {
             BeforeComputePipeline = driver.Enter,
         };
         var cache = new GpuPassPipelineCache();
@@ -153,7 +188,6 @@ public sealed class SdfWorldPipelinesLawTests {
         // Each failing creation waits in the driver for the other before it throws, so both fail while the set builds.
         using var bothInDriver = new Barrier(participantCount: 2);
         var gpu = new FakeGpuDevice(
-            reportVersion: SdfIsa.Version,
             trackObjects: true
         ) {
             BeforeComputePipeline = description => {

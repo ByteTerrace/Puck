@@ -25,7 +25,7 @@ public sealed partial class SdfWorldPassesLawTests {
     [InlineData((FollowedInstances * 8), false, true)]
     [Theory]
     public void AViewFollowsAnotherResidencyInPlaceWhenItsPassesCanRecordIt(int otherInstances, bool followsInPlace, bool capture) {
-        var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version);
+        var gpu = new FakeGpuDevice();
         var pipelines = SdfTestPipelines.Cache();
         var first = new SdfWorldResidency(
             brickPoolVoxelCapacity: 0,

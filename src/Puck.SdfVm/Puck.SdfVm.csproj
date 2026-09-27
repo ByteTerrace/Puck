@@ -39,6 +39,13 @@
     </ItemGroup>
 
     <ItemGroup>
+        <!-- The generated instruction-set include ships beside the bytecode: SdfKernelSet reads the fingerprint it records
+             (SDF_ISA_FINGERPRINT) from the tree it loads, and the engine refuses kernels built against another
+             instruction set. -->
+        <Content Include="Assets\Shaders\Sdf\isa\sdf-isa.hlsli" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+
+    <ItemGroup>
         <VertexShaderSource Include="Assets\Shaders\**\*.vert.hlsl" />
         <FragmentShaderSource Include="Assets\Shaders\**\*.frag.hlsl" />
         <ComputeShaderSource Include="Assets\Shaders\**\*.comp.hlsl" />

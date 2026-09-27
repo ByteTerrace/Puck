@@ -5,7 +5,6 @@ using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.SdfVm;
-using Puck.SignedDistance;
 using Puck.Testing;
 using Puck.World.Client;
 using Puck.World.Protocol;
@@ -296,7 +295,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
         using var north = Endpoint(definition: AwayDocument(), identity: Away, position: AwayPose);
         var scene = new WorldRoutedScene(bodyColor: north.Mirror.BodyColor, endpoint: north, hostFrame: static () => null);
         var frame = (Capture(source: scene.FrameSource) with { EnableCadenceGate = true });
-        var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version);
+        var gpu = new FakeGpuDevice();
         var context = new FrameContext(
             AccumulatorTicks: 0UL,
             DeltaTicks: 0UL,

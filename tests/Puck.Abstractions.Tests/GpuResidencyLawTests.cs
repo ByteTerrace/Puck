@@ -247,7 +247,7 @@ public sealed class GpuResidencyLawTests {
         var readings = new Dictionary<GpuResidencyPolicy, List<byte[]>>();
 
         foreach (var policy in Enum.GetValues<GpuResidencyPolicy>()) {
-            var gpu = new UploadModelGpu(reportVersion: 0);
+            var gpu = new UploadModelGpu();
             using var copy = CopyPipeline(gpu: gpu);
             using var region = new GpuRegion(
                 bindings: gpu.Services.Bindings,
@@ -310,7 +310,7 @@ public sealed class GpuResidencyLawTests {
     // destination before the copies write it, which the memory model requires of every copy it runs.
     [Fact]
     public void ARecordingBeginsOnlyForAnOwedCopyAndOrdersTheEarlierReadsBeforeIt() {
-        var gpu = new UploadModelGpu(reportVersion: 0);
+        var gpu = new UploadModelGpu();
         using var copy = CopyPipeline(gpu: gpu);
         using var region = new GpuRegion(
             bindings: gpu.Services.Bindings,
@@ -350,7 +350,7 @@ public sealed class GpuResidencyLawTests {
     // The memory model refuses a copy recorded where nothing ordered the earlier reads of its destination before it.
     [Fact]
     public void ACopyRecordedWithNoBarrierOrderingTheEarlierReadsIsRefused() {
-        var gpu = new UploadModelGpu(reportVersion: 0);
+        var gpu = new UploadModelGpu();
         using var copy = CopyPipeline(gpu: gpu);
         using var region = new GpuRegion(
             bindings: gpu.Services.Bindings,
@@ -373,7 +373,7 @@ public sealed class GpuResidencyLawTests {
     }
     [Fact]
     public void AStagedCopyOfASlotNotFlushedSinceTheLastWriteIsRefused() {
-        var gpu = new UploadModelGpu(reportVersion: 0);
+        var gpu = new UploadModelGpu();
         using var copy = CopyPipeline(gpu: gpu);
         using var region = new GpuRegion(
             bindings: gpu.Services.Bindings,
@@ -408,7 +408,7 @@ public sealed class GpuResidencyLawTests {
     [InlineData(GpuResidencyPolicy.Staged)]
     [Theory]
     public void TheCopyPoolARegionStatesIsThePoolItCreates(GpuResidencyPolicy policy) {
-        var gpu = new UploadModelGpu(reportVersion: 0);
+        var gpu = new UploadModelGpu();
         using var copy = CopyPipeline(gpu: gpu);
         using var region = new GpuRegion(
             bindings: gpu.Services.Bindings,
@@ -436,7 +436,7 @@ public sealed class GpuResidencyLawTests {
     [InlineData(GpuResidencyPolicy.Staged)]
     [Theory]
     public void ARegionOwnsTheBytesItsPolicyStates(GpuResidencyPolicy policy) {
-        var gpu = new UploadModelGpu(reportVersion: 0);
+        var gpu = new UploadModelGpu();
         using var copy = CopyPipeline(gpu: gpu);
         var before = gpu.BufferBytes;
         var region = new GpuRegion(
@@ -468,7 +468,7 @@ public sealed class GpuResidencyLawTests {
     /// move, as does a share of another number of slots.</summary>
     [Fact]
     public void AStagedRegionMovesToAnotherShareAndCopiesThroughIt() {
-        var gpu = new UploadModelGpu(reportVersion: 0);
+        var gpu = new UploadModelGpu();
         using var copy = CopyPipeline(gpu: gpu);
         var first = new GpuRegionCopyPool(
             bindings: gpu.Services.Bindings,
@@ -550,7 +550,7 @@ public sealed class GpuResidencyLawTests {
     /// own share never disturbs another region's.</summary>
     [Fact]
     public void RegionsOnReservedCopySetsCreateNoPoolAndACopyRewritesASetAnotherRegionWrote() {
-        var gpu = new UploadModelGpu(reportVersion: 0);
+        var gpu = new UploadModelGpu();
         using var copy = CopyPipeline(gpu: gpu);
         using var pool = new GpuRegionCopyPool(
             bindings: gpu.Services.Bindings,
@@ -619,7 +619,7 @@ public sealed class GpuResidencyLawTests {
     public void AStagedCopyStatesItselfInTheStagingBufferAndOwesOnlyTheWordsThatDiffer() {
         const int RunEntryBytes = 8;
         const int HeaderBytes = (GpuRegion.CopyHeaderWords * sizeof(uint));
-        var gpu = new UploadModelGpu(reportVersion: 0);
+        var gpu = new UploadModelGpu();
         using var copy = CopyPipeline(gpu: gpu);
         using var region = new GpuRegion(
             bindings: gpu.Services.Bindings,
@@ -656,7 +656,7 @@ public sealed class GpuResidencyLawTests {
     [Fact]
     public void AnExternalDestinationTakesTheRegionAtItsTargetAndARetargetOwesEveryWordWrittenAfterIt() {
         const int DestinationWords = 64;
-        var gpu = new UploadModelGpu(reportVersion: 0);
+        var gpu = new UploadModelGpu();
         using var copy = CopyPipeline(gpu: gpu);
         using var destination = gpu.Services.BufferFactory.CreateDeviceLocal(
             name: default,
@@ -722,7 +722,7 @@ public sealed class GpuResidencyLawTests {
         )));
 
         foreach (var (profile, aperture) in ((ReadOnlySpan<(GpuMemoryProfile, int)>)[(DiscreteSmallAperture, 3), (CoherentUnified, 0)])) {
-            var gpu = new UploadModelGpu(reportVersion: 0);
+            var gpu = new UploadModelGpu();
             using var copy = CopyPipeline(gpu: gpu);
             using var region = new GpuRegion(
                 bindings: gpu.Services.Bindings,
@@ -744,7 +744,7 @@ public sealed class GpuResidencyLawTests {
     [Fact]
     public void AStagedCopyPastOneRowOfGroupsDispatchesMoreRowsAndStaysExact() {
         var words = (((int)GpuRegion.CopyRowThreads) + 1000);
-        var gpu = new UploadModelGpu(reportVersion: 0);
+        var gpu = new UploadModelGpu();
         using var copy = CopyPipeline(gpu: gpu);
         using var region = new GpuRegion(
             bindings: gpu.Services.Bindings,
@@ -769,7 +769,7 @@ public sealed class GpuResidencyLawTests {
     }
     [Fact]
     public void OnlyARegionWithAnExternalDestinationRetargets() {
-        var gpu = new UploadModelGpu(reportVersion: 0);
+        var gpu = new UploadModelGpu();
         using var copy = CopyPipeline(gpu: gpu);
         using var region = new GpuRegion(
             bindings: gpu.Services.Bindings,
@@ -790,7 +790,7 @@ public sealed class GpuResidencyLawTests {
     /// constant-buffer view cannot take. A staged region of either usage is refused without its copy kernel.</summary>
     [Fact]
     public void AUniformRegionIsAHostWrittenConstantBufferOfWholeViews() {
-        var gpu = new UploadModelGpu(reportVersion: 0);
+        var gpu = new UploadModelGpu();
         var alignment = ((int)IGpuBindings.ConstantBufferAlignment);
 
         GpuRegion Uniform(GpuResidencyPolicy policy, int byteCount) => new(
@@ -836,7 +836,7 @@ public sealed class GpuResidencyLawTests {
     }
     [Fact]
     public void ASlotOwingEverythingAgainSendsTheWholeRegionWhateverItHeld() {
-        var gpu = new UploadModelGpu(reportVersion: 0);
+        var gpu = new UploadModelGpu();
         var alignment = ((int)IGpuBindings.ConstantBufferAlignment);
         using var ring = new GpuRegion(
             bindings: gpu.Services.Bindings,

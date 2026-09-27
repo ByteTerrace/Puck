@@ -22,7 +22,7 @@ namespace Puck.World.Tests;
 /// ids are closed to document producers.
 /// </summary>
 public sealed class WorldSourceInstanceLawTests {
-    private static readonly FakeGpuDevice Gpu = new(reportVersion: 1);
+    private static readonly FakeGpuDevice Gpu = new();
 
     private static WorldScreenSource.Producer Pattern(int width) => WorldImageProducerSettings.SourceOf(
         id: WorldImageProducerSettings.TestPatternId,

@@ -33,7 +33,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     private const int DecalDescriptorCount = MaxScreenSurfaces;
     private const int DecalWordsPerCell = 4; // one uint4 per cell/descriptor (KEEP IN SYNC with shade/sdf-environment.hlsli's sdfDecalCells)
     private const int DynamicTransformByteLength = ((sizeof(float) * 4) * 3); // 48-byte rigid transform: float4 position (xyz + .w = soft-shadow participation: 0 casts / 1 shadow-suppressed) + float4 orientation quaternion + float4 anonymous Lanes (DynamicTransform.Lanes) (KEEP IN SYNC with isa/sdf-world.interface.hlsli sdfDynamicTransforms: position.w is read by sdfShadowParticipationActive's per-instance skip in field/sdf-layout.hlsli, the third row by SDF_OP_LANE_ERODE's currentLanes and shade-volumes.hlsli's selected intensity lane)
-    // The fillers' and the ISA report's format: the views' color format, which the storage image they stand in for declares.
+    // The fillers' format: the views' color format, which the storage image they stand in for declares.
     private const GpuPixelFormat Format = RenderGraphPackageCatalog.WorkingFormat;
     // The glyph atlas's format: RGBA8 coverage and color, as the host rasterizes it.
     private const GpuPixelFormat GlyphAtlasFormat = GpuPixelFormat.R8G8B8A8Unorm;
@@ -120,7 +120,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     private int m_instanceGridWordCapacity;
     private SdfInstanceGrid.Workspace m_instanceGridWorkspace;
 
-    // The tables' descriptor pool: the ISA handshake's sets and the bake sets.
+    // The tables' descriptor pool: the World sets and the bake sets.
     private readonly nint m_pool;
 
     // The program region's words, and the words the options provisioned for, which ProgramWordCapacity reports when
@@ -194,8 +194,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     public string DebugLabel { get; set; } = "world";
 
     /// <summary>Initializes a new instance of the <see cref="SdfWorldTables"/> class: builds every table, the brick pool
-    /// and the samplers against pipelines already built, verifies the kernels' ISA version once per device and kernel
-    /// set, and uploads the scene program. Creates no pipeline, so it never waits on the driver's pipeline compiler. A
+    /// and the samplers against pipelines already built, and uploads the scene program. Creates no pipeline, so it never waits on the driver's pipeline compiler. A
     /// construction that throws partway has released every object it created before the exception leaves the
     /// constructor.</summary>
     /// <param name="device">The GPU device the tables live on; they record through its services, unwrapped.</param>
@@ -215,8 +214,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     /// pass pipeline is no graphics pipeline with a render pass.</exception>
     /// <exception cref="ObjectDisposedException"><paramref name="pipelines"/> has been disposed.</exception>
     /// <exception cref="InvalidOperationException">The device's descriptor heap cannot admit the tables' pools
-    /// (<see cref="CheckAdmission"/>, checked before anything is allocated), or the loaded shader bytecode does not report
-    /// the host's <see cref="Puck.SignedDistance.SdfIsa.Version"/>.</exception>
+    /// (<see cref="CheckAdmission"/>, checked before anything is allocated).</exception>
     public SdfWorldTables(IGpuDeviceContext device, SdfWorldPipelines pipelines, IGpuComputePipeline regionCopy, GpuPassPipeline meshRaster, SdfWorldTablesOptions options) {
         ArgumentNullException.ThrowIfNull(device);
         ArgumentNullException.ThrowIfNull(pipelines);
@@ -273,8 +271,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
         );
         m_brickPoolEnabled = (m_brickPoolVoxelCapacity > 0);
 
-        // Every object the construction creates joins this scope, so a creation, the ISA verification or the program
-        // upload that throws releases exactly what was created before it, newest first. Nothing is in flight to drain
+        // Every object the construction creates joins this scope, so a creation or the program upload that throws releases exactly what was created before it, newest first. Nothing is in flight to drain
         // first: every submission construction makes waits for its completion.
         using var scope = new GpuCreationScope();
 
@@ -375,7 +372,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
         // The carve-bake baker and the host-baked brick staging run only when the pool is enabled (nothing bakes into a
         // filler). The staging region holds one brick, the most one upload carries, and lands it at the brick's slot.
         m_brickBakePipeline = (m_brickPoolEnabled
-            ? pipelines.OptionalPipeline(index: BrickBakePipelineIndex)
+            ? pipelines.OptionalPipeline(kernel: SdfKernel.BrickBake)
             : null
         );
         m_brickRegion = (m_brickPoolEnabled
@@ -396,9 +393,8 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
             : null
         );
 
-        // The tables' pool: the World set per ring slot, the ISA handshake's frame and pass sets, and with a brick pool the
-        // frame set the baker shares and one bake set per brick slot. The sets allocated from the pool are released with
-        // it.
+        // The tables' pool: the World set per ring slot, and with a brick pool the frame set the baker shares and one bake
+        // set per brick slot. The sets allocated from the pool are released with it.
         m_pool = m_bindings.CreatePool(
             name: NameOf(part: "descriptors"),
             sizes: DescriptorPoolSizes(brickPool: m_brickPoolEnabled)
@@ -408,20 +404,10 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
             release: m_bindings.DestroyPool
         );
 
-        var worldGroups = pipelines.Pipeline(index: BeamPipelineIndex).GroupLayoutHandles;
+        var worldGroups = pipelines.Pipeline(kernel: SdfKernel.Beam).GroupLayoutHandles;
 
-        m_isaFrameSet = m_bindings.AllocateSet(
-            name: NameOf(detail: "frame group", part: "isa"),
-            descriptorSetLayoutHandle: worldGroups[((int)FrameGroup)],
-            poolHandle: m_pool
-        );
-        m_isaPassSet = m_bindings.AllocateSet(
-            name: NameOf(detail: "pass group", part: "isa"),
-            descriptorSetLayoutHandle: worldGroups[((int)PassGroup)],
-            poolHandle: m_pool
-        );
-        // The World set per ring slot, which every view's compute passes and the ISA handshake bind, written the first time
-        // one is bound (WorldSet).
+        // The World set per ring slot, which every view's compute passes bind, written the first time one is bound
+        // (WorldSet).
         for (var slot = 0; (slot < FrameRingSize); slot++) {
             m_worldSets[slot] = m_bindings.AllocateSet(
                 name: NameOf(
@@ -526,12 +512,6 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
                 WriteBuffer(buffer: m_brickPoolBuffer, layout: SdfWorldInterfaces.BrickBakeLayout, member: SdfWorldInterfaces.BakePool, set: bakeSet);
             }
         }
-
-        SdfShaderSetVerification.VerifyShaderSet(
-            device: device,
-            kernels: pipelines.Kernels,
-            verify: VerifyIsaVersion
-        );
 
         // The "uploaded once" seam: the program (and its screen-surface table) is uploaded here and normally never
         // again — frames move entities by rewriting only the small dynamic-transform buffer. UploadProgram is the

@@ -25,7 +25,7 @@ namespace Puck.World.Tests;
 public sealed class ImageProducerLawTests {
     private const string ThirdId = "lawThird";
 
-    private static readonly FakeGpuDevice Gpu = new(reportVersion: 1);
+    private static readonly FakeGpuDevice Gpu = new();
     // The third producer's shape registers once per process: the vocabulary is process-wide, as the document's other
     // vocabularies are, and refuses a second registration under the same id.
     private static readonly Lazy<bool> ThirdRegistered = new(valueFactory: static () => {

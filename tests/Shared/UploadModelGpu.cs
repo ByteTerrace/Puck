@@ -54,9 +54,8 @@ internal sealed class UploadModelGpu :
     private long m_nextHandle = 0x1000;
 
     /// <summary>Initializes a new instance of the <see cref="UploadModelGpu"/> class.</summary>
-    /// <param name="reportVersion">The ISA version a 1×1 readback reports.</param>
-    public UploadModelGpu(byte reportVersion) {
-        m_inner = new FakeGpuDevice(reportVersion: reportVersion);
+    public UploadModelGpu() {
+        m_inner = new FakeGpuDevice();
         Services = new GpuDeviceServices {
             Bindings = this,
             BufferFactory = this,

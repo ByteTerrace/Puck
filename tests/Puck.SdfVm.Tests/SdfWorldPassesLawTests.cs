@@ -26,8 +26,7 @@ public sealed partial class SdfWorldPassesLawTests {
     public void AViewAllocatesEachScratchBufferOnce() {
         var naming = new RecordingGpuObjectNaming(isEnabled: true);
         var gpu = new FakeGpuDevice(
-            naming: naming,
-            reportVersion: SdfIsa.Version
+            naming: naming
         );
         var pipelines = SdfTestPipelines.Cache();
         using var view = new SdfTestView(

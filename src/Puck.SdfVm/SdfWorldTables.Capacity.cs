@@ -52,16 +52,14 @@ public sealed partial class SdfWorldTables {
         RegionCopyPoolSizes(brickPool: brickPool),
     ];
     /// <summary>Returns the one descriptor pool the tables create themselves, the statement their construction creates the
-    /// pool from: the World set per ring slot, holding the World group of <see cref="SdfWorldInterfaces.World"/>, the ISA
-    /// handshake's frame and pass sets, holding its other groups, and with a brick pool the baker's frame set, holding the
-    /// frame group of <see cref="SdfWorldInterfaces.BrickBake"/>, and one bake set per brick slot holding its pass
-    /// group.</summary>
+    /// pool from: the World set per ring slot, holding the World group of <see cref="SdfWorldInterfaces.World"/>, and with
+    /// a brick pool the baker's frame set, holding the frame group of <see cref="SdfWorldInterfaces.BrickBake"/>, and one
+    /// bake set per brick slot holding its pass group.</summary>
     /// <param name="brickPool">Whether the tables keep a brick pool.</param>
     /// <returns>The pool's sizes.</returns>
     public static GpuDescriptorPoolSizes DescriptorPoolSizes(bool brickPool) {
-        var worldGroups = PipelineLayouts.World.Groups;
-        var sizes = GpuDescriptorPoolSizes.ForGroups(groups: worldGroups.Where(predicate: static group => (group.Ordinal != WorldGroup)).ToArray());
-        var world = GpuDescriptorPoolSizes.ForGroups(groups: worldGroups.Where(predicate: static group => (group.Ordinal == WorldGroup)).ToArray());
+        var sizes = default(GpuDescriptorPoolSizes);
+        var world = GpuDescriptorPoolSizes.ForGroups(groups: PipelineLayouts.World.Groups.Where(predicate: static group => (group.Ordinal == WorldGroup)).ToArray());
 
         for (var slot = 0; (slot < FrameRingSize); slot++) {
             sizes += world;

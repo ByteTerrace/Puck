@@ -58,7 +58,7 @@ public sealed class WorldPipelineResizedWaitLawTests {
         using var directory = new TemporaryDirectory();
         using var gate = new ManualResetEventSlim(initialState: true);
         var reports = new List<string>();
-        var gpu = new FakeGpuDevice(reportVersion: 0) {
+        var gpu = new FakeGpuDevice() {
             BeforeComputePipeline = _ => gate.Wait(),
         };
         using var node = new ShaderPipelineRenderNode(

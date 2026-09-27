@@ -14,6 +14,10 @@ stream). Its static creations draw their bakes, and the world ships them:
 own CLI and boots the compiled world, whose bake pack holds every bake, so no
 capture depends on a bake made on the device.
 
+The world boots with soft shadows at `High` and ambient occlusion on
+(`render.shadows`, `render.ambientOcclusion`), so every SDF station passes
+through the shadow and ambient stages under the cross-backend pixel gate.
+
 The SDF stations' `captures` rows name the `world` instance, the SDF world as the
 station camera sees it. The layout also shows two instances of the binding graph
 (`binding.graph.json`, each a `views.graphs` row), `binding` and `bound`, in

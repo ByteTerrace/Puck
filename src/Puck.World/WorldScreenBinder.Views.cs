@@ -12,7 +12,7 @@ namespace Puck.World;
 // binder hands the instances to its mappings, which the view graph host composes into the running set.
 internal sealed partial class WorldScreenBinder {
     // The kernels every view's residency records with, read once from the composition's pipeline cache.
-    private SdfWorldKernels? m_viewKernels;
+    private SdfKernelSet? m_viewKernels;
     // What the views are composed with: the host world's frame source, whose glyph atlas, decals and moving screens a
     // camera view shares, and the display's extent, which a view's declared extent is a fraction of.
     private ISdfFrameSource? m_viewHostSource;
@@ -205,7 +205,7 @@ internal sealed partial class WorldScreenBinder {
 
         return true;
     }
-    private SdfWorldKernels ViewKernels() =>
+    private SdfKernelSet ViewKernels() =>
         (m_viewKernels ??= m_viewPipelines!.LoadDeployed(bytecodeExtension: SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: m_viewHostsOnDirectX)));
     // Releases the residency of every view that is no camera registration and no session with the frame source its
     // residency renders: the view's instance leaves the render graph, whose passes give back their holds once the device

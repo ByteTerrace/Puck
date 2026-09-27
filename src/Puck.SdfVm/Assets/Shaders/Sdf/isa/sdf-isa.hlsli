@@ -2,9 +2,8 @@
 #ifndef SDF_ISA_HLSLI
 #define SDF_ISA_HLSLI
 
-// The instruction-set version and the report word the version handshake dispatches with.
-#define SDF_ISA_VERSION        3u
-#define SDF_ISA_REPORT_REQUEST 0x53444656u
+// The fingerprint of the rest of this file; a kernel set built from this file installs only in a host whose model generates the same one.
+#define SDF_ISA_FINGERPRINT 0xB48106CEu
 
 // Puck.SignedDistance.SdfOp.
 #define SDF_OP_RESET_POINT       0u

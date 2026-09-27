@@ -494,7 +494,7 @@ backends: the PCI vendor and device IDs in four hexadecimal digits and the raw
 driver version in sixteen (`10de-2786-000000008d8d8000`). A driver version the
 backend could not read is zero and still names a file. The host names the
 kernel set with a hash of the SDF kernels it ships
-(`SdfWorldKernels.ContentKey`), so a driver update or a kernel change starts a
+(`SdfKernelSet.ContentKey`), so a driver update or a kernel change starts a
 new file rather than loading one that could never hit.
 
 Each backend keeps at most eight `.bin` files (`GpuPipelineCacheFile.RetainedFiles`),

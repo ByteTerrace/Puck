@@ -265,7 +265,7 @@ both pools itself, reserving every region's copy sets in the one copy pool
 residency policy the device selects, so no later
 frame takes a descriptor range, not even one that
 grows the program, the instance grid or the mesh region. It releases every object it created, newest
-first, when a later step throws: a creation, the ISA handshake, or the program
+first, when a later step throws: a creation or the program
 upload. A
 residency builds its tables only when it has none, and a build that fails, whether
 the set's or the tables', is refused rather than thrown, except for a device
@@ -309,12 +309,14 @@ do not change a running GPU pipeline.
 creates replacements for the kernels whose bytecode changed, using the existing
 binding descriptions, off the frame thread. `SdfWorldTables.InstallReload` then
 owns the render-thread transaction: it waits for the device to go idle, swaps the
-pipelines, and checks the ISA of every march pipeline on the GPU (beam,
-primary, surface, ambient, shadow, and the three views variants) before retiring the
-old ones. A failed load or validation keeps the previous kernels. Buffers,
-images, scene programs, animation, and baked bricks remain allocated; only the
-descriptor bindings the ISA probe borrowed and the frame-reuse signature are
-reset, so the next frame rebinds and renders. Unchanged bytecode creates no
+pipelines and retires the old ones. A failed load or pipeline build keeps the
+previous kernels, and so do kernels built against another instruction set: the
+tree's generated `isa/sdf-isa.hlsli` records the fingerprint of the instruction
+set its kernels were built against, and `SdfWorldPipelines.PrepareReload` refuses a
+set whose fingerprint is not this host's (`SdfKernelSet.RequireHostInstructionSet`).
+Buffers, images, scene programs, animation, and baked bricks remain allocated; only
+the frame-reuse signature is reset, so the next frame renders. A binding or layout
+change still needs a rebuilt host. Unchanged bytecode creates no
 pipeline and causes no GPU drain. Device-loss recovery uses the last
 successfully loaded set, and a loss during a reload fails that request. A
 reload replaces pipelines in place, so the residency first takes its set out of
@@ -414,7 +416,7 @@ kernel behavior outside the parity stations is not verified by any machine
 check.
 The kernels read the instruction set from
 `Assets/Shaders/Sdf/isa/sdf-isa.hlsli`, which `SdfIsaHlsl` generates from
-`Puck.SignedDistance`: the ISA version and report word, every opcode, shape,
+`Puck.SignedDistance`: every opcode, shape,
 blend, lift, noise, polar-axis and wallpaper enum, and the packed-layout
 constants. It is checked in and never edited by hand. After changing any of
 those C# members, run `puck shaders generate` and rebuild this project;

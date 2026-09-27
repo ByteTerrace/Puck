@@ -23,8 +23,7 @@ public sealed class SdfWorldTablesObjectNameLawTests {
     private static IReadOnlyList<string> NamesOfOneConstruction(bool naming) {
         var recording = new RecordingGpuObjectNaming(isEnabled: naming);
         var gpu = new FakeGpuDevice(
-            naming: recording,
-            reportVersion: SdfIsa.Version
+            naming: recording
         );
         var ledger = new GpuWorkLedger(
             framesInFlight: SdfWorldTables.FrameRingSize,
@@ -49,9 +48,7 @@ public sealed class SdfWorldTablesObjectNameLawTests {
             device: gpu,
             includeBrickPipelines: true,
             // A brick pool's engine needs the carve baker, which the fake kernel set leaves out.
-            kernels: (SdfTestPipelines.Kernels() with {
-                BrickBake = new byte[] { 1 },
-            }),
+            kernels: SdfTestPipelines.Kernels().With(bytecode: new byte[] { 1 }, kernel: SdfKernel.BrickBake),
             cache: new GpuPassPipelineCache()
         );
         using var engine = new SdfWorldTables(
@@ -84,7 +81,7 @@ public sealed class SdfWorldTablesObjectNameLawTests {
         Assert.Contains(collection: names, expected: "Image sdf.world/sampled-filler");
         Assert.Contains(collection: names, expected: "Image sdf.world/storage-filler");
         Assert.Contains(collection: names, expected: "DescriptorPool sdf.world/descriptors");
-        Assert.Contains(collection: names, expected: "DescriptorSet sdf.world/isa/pass group");
+        Assert.Contains(collection: names, expected: "DescriptorSet sdf.world/tables/world group[0]");
         Assert.Contains(collection: names, expected: "CommandPool sdf.world/commands[1]");
         Assert.Contains(
             collection: names,

@@ -12,7 +12,7 @@ namespace Puck.SdfVm;
 /// <param name="regionCopy">The composition's region copy, whose pipeline every residency leases for its device.</param>
 /// <param name="meshRaster">The composition's mesh pass, whose pipeline every residency leases for its device.</param>
 public sealed class SdfWorldPipelineCatalog(GpuRegionCopyPass regionCopy, SdfMeshRasterPass meshRaster) {
-    private readonly Dictionary<string, SdfWorldKernels> m_deployed = new(comparer: StringComparer.Ordinal);
+    private readonly Dictionary<string, SdfKernelSet> m_deployed = new(comparer: StringComparer.Ordinal);
     private readonly Lock m_deployedGate = new();
 
     /// <summary>Gets the composition's region copy, one pipeline a device in the pass pipelines, which a residency's table
@@ -26,14 +26,14 @@ public sealed class SdfWorldPipelineCatalog(GpuRegionCopyPass regionCopy, SdfMes
     /// engine's kernel variants are too.</summary>
     public GpuPassPipelineCache Pipelines => RegionCopy.Pipelines;
 
-    /// <summary>Returns the deployed kernel set for a backend, reading it from <see cref="SdfWorldKernels.DefaultDirectory"/>
+    /// <summary>Returns the deployed kernel set for a backend, reading it from <see cref="SdfKernelSet.DefaultDirectory"/>
     /// on the first call for that backend and returning the same set on every later call. Safe on any thread; the first
     /// call reads files, so a holder on the frame thread calls it from its own background work.</summary>
     /// <param name="bytecodeExtension">The compiled-kernel extension (<c>".spv"</c> for Vulkan, <c>".dxil"</c> for Direct3D 12).</param>
     /// <returns>The deployed kernel set.</returns>
     /// <exception cref="ArgumentException"><paramref name="bytecodeExtension"/> is empty.</exception>
     /// <exception cref="IOException">A kernel file is missing or cannot be read.</exception>
-    public SdfWorldKernels LoadDeployed(string bytecodeExtension) {
+    public SdfKernelSet LoadDeployed(string bytecodeExtension) {
         ArgumentException.ThrowIfNullOrEmpty(bytecodeExtension);
 
         lock (m_deployedGate) {
@@ -41,7 +41,7 @@ public sealed class SdfWorldPipelineCatalog(GpuRegionCopyPass regionCopy, SdfMes
                 key: bytecodeExtension,
                 value: out var kernels
             )) {
-                kernels = SdfWorldKernels.Load(bytecodeExtension: bytecodeExtension);
+                kernels = SdfKernelSet.Load(bytecodeExtension: bytecodeExtension);
                 m_deployed.Add(
                     key: bytecodeExtension,
                     value: kernels
