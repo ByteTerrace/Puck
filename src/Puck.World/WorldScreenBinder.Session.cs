@@ -278,9 +278,15 @@ internal sealed partial class WorldScreenBinder {
     // next produced frame.
     //
     // The eye is the primary local seat's body (WorldPopulation.EntryBody) at LocalEyeHeight, in the document's
-    // authored space, the space WorldFaceCatalog derives both apertures in. A no-op with no live window session or no
-    // resolvable local body.
+    // authored space, the space WorldFaceCatalog derives both apertures in. With no resolvable local body, each window
+    // falls back to the ordinary session camera.
     private void UpdateWindowCameras() {
+        foreach (var slot in m_slots.Values) {
+            if (slot.Session is { Projection: WorldScreenProjection.Window, Emitter: { } emitter }) {
+                emitter.SetWindowCamera(camera: null);
+            }
+        }
+
         // The LOCAL (boot) document — the same "one observation door" WorldInstanceHost.BootInstanceName resolves
         // everywhere else in this type (TryResolveDestinationInstance). Absent only in a boot-sequencing gap this
         // binder itself is constructed inside; a window degrades to its ordinary fallback for that one frame.

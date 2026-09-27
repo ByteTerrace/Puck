@@ -78,6 +78,9 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     private readonly WorldSessionStampSource m_source;
 
     private SdfProgram? m_lastProgram;
+    // Retain the geometry's definition through emission and dressing: a later delivery must not change a held image's pick.
+    private WorldDefinition? m_emittedDefinition;
+    private WorldDefinition? m_dressedDefinition;
     // The WINDOW projection's per-produced-frame override — set by WorldScreenBinder.Publish (the one place with access
     // to both the local eye and the border pair's two face rows) before the render graph renders this view.
     // Null (the default, and every non-window session's steady state) leaves Dress on the ordinary camera path below.
@@ -309,6 +312,9 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         );
 
         m_lastProgram = program;
+        if (programChanged) {
+            m_dressedDefinition = m_emittedDefinition;
+        }
         // The pool's replay cursors advance on this view's own produced-frame interval, latched for the next pack.
         m_pool.Tick(deltaSeconds: deltaSeconds);
 
@@ -370,6 +376,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
             return;
         } else {
+            m_emittedDefinition = definition;
             var colors = BakedColors();
 
             colors.Begin();
@@ -541,11 +548,11 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// <param name="ray">The ray, in the destination's space.</param>
     /// <param name="point">The point the ray meets, in the destination's space, when this returns <see langword="true"/>.</param>
     /// <returns><see langword="true"/> when a frame has been dressed, the evaluator admits the static placements'
-    /// program, and the ray meets a surface within the far distance.</returns>
+    /// program, and the ray proves a surface within the far distance; a bounded, non-converged march answers nothing.</returns>
     public bool TrySurface(SourceRay ray, out FixedVector3 point) {
         point = default;
 
-        if (m_lastProgram is not { } program) {
+        if ((m_lastProgram is not { } program) || (m_dressedDefinition is not { } definition)) {
             return false;
         }
 
@@ -553,12 +560,10 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             objA: m_dressedFieldProgram,
             objB: program
         )) {
-            var definition = m_mirror.Definition;
             var builder = new SdfProgramBuilder();
 
             WorldPlacementStamper.EmitStatic(
                 builder: builder,
-                colors: BakedColors(),
                 creations: definition.Creations,
                 definition: definition,
                 placements: definition.Placements
@@ -580,7 +585,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
                 hit: out var hit,
                 maxDist: FixedQ4816.FromDouble(value: m_dressedFarDistance),
                 origin: FixedPosition.FromLocal(local: ray.Origin)
-            )
+            ) ||
+            (hit.Confidence != WorldQueryConfidence.Exact)
         ) {
             return false;
         }
