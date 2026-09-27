@@ -37,8 +37,9 @@ deterministic counters, dispatches, march steps, texels written and bytes
 uploaded, is recorded over one pinned workload, `puck counters`' world with its
 camera and views, at the floor tier and the RTX 2060's 1920x1080, and
 held as a calibrated ceiling that workload may not exceed; other content is
-free to cost more, since its counts gate nothing. P14 adds the march-step and
-texel counters, and per-pass upload bytes, that the ledger lacks today. A ceiling is
+free to cost more, since its counts gate nothing. P15's first step adds the
+march-step and texel counters, and per-pass upload bytes, that the ledger lacks
+today, before any reconstruction pass lands. A ceiling is
 re-recorded only in the change that explains why the count moved, so a cost
 increase is always a stated decision; wall-clock and GPU timing never set or
 move one. The floor device is where a missed budget first shows, so its counts
