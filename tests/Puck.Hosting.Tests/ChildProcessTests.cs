@@ -63,22 +63,33 @@ public sealed class ChildProcessTests {
     /// exactly when <see cref="ChildProcess.ExitDrainGrace"/> elapses on the run's clock, with everything the child
     /// wrote, rather than when that process exits. This is the shape of a build tool whose node or compiler server
     /// outlives it.</summary>
-    [Fact]
-    public async Task RunAsync_EndsAtTheDrainGraceWhenAProcessTheChildStartedHoldsItsStreams() {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RunAsync_EndsAtTheDrainGraceOrCancellationWhenAProcessTheChildStartedHoldsItsStreams(bool cancel) {
         var clock = new VirtualClock();
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(token: Token);
+        // The red leg never returns stdout. Keep the inheritor's PID outside the pipe so cleanup still kills it.
+        var pidFile = Path.GetTempFileName();
+        var quotedPidFile = pidFile.Replace(oldValue: "'", newValue: OperatingSystem.IsWindows() ? "''" : "'\"'\"'", comparisonType: StringComparison.Ordinal);
 
         var (executable, arguments) = (OperatingSystem.IsWindows()
-            ? ("powershell.exe", new[] { "-NoProfile", "-NonInteractive", "-Command", $"$held = Start-Process -FilePath powershell.exe -ArgumentList '-NoProfile','-NonInteractive','-Command','Start-Sleep -Seconds {InheritorSeconds}' -NoNewWindow -PassThru; [Console]::Out.Write($held.Id); [Console]::Error.Write('exited')" })
-            : ("/bin/sh", new[] { "-c", $"sleep {InheritorSeconds} & printf '%s' $!; printf exited 1>&2" }));
+            ? ("powershell.exe", new[] { "-NoProfile", "-NonInteractive", "-Command", $"$held = Start-Process -FilePath powershell.exe -ArgumentList '-NoProfile','-NonInteractive','-Command','Start-Sleep -Seconds {InheritorSeconds}' -NoNewWindow -PassThru; [IO.File]::WriteAllText('{quotedPidFile}', [string]$held.Id); [Console]::Out.Write($held.Id); [Console]::Error.Write('exited')" })
+            : ("/bin/sh", new[] { "-c", $"sleep {InheritorSeconds} & held=$!; printf '%s' $held > '{quotedPidFile}'; printf '%s' $held; printf exited 1>&2" }));
         var run = ChildProcess.RunAsync(
             arguments: arguments,
-            cancellationToken: Token,
+            cancellationToken: cancellation.Token,
             clock: clock,
             fileName: executable
         );
-        var inheritorId = "";
-
         try {
+            if (cancel) {
+                await clock.WhenArmedAsync(count: 1, ct: Token, dueTime: ChildProcess.ExitDrainGrace).WaitAsync(timeout: HangGuard, cancellationToken: Token);
+                await cancellation.CancelAsync();
+                _ = await Assert.ThrowsAnyAsync<OperationCanceledException>(testCode: () => run.WaitAsync(timeout: HangGuard, cancellationToken: Token));
+                Assert.Equal(expected: TimeSpan.Zero, actual: clock.Elapsed);
+                return;
+            }
             await clock.ExpireAsync(
                 ct: Token,
                 dueTime: ChildProcess.ExitDrainGrace,
@@ -93,7 +104,6 @@ public sealed class ChildProcessTests {
                 timeout: HangGuard
             );
 
-            inheritorId = result.Stdout;
             Assert.False(condition: result.TimedOut);
             Assert.Equal(
                 actual: result.ExitCode,
@@ -113,17 +123,50 @@ public sealed class ChildProcessTests {
             if (int.TryParse(
                 provider: CultureInfo.InvariantCulture,
                 result: out var held,
-                s: inheritorId,
+                s: File.ReadAllText(path: pidFile),
                 style: NumberStyles.None
             )) {
                 try {
                     using var inheritor = Process.GetProcessById(processId: held);
 
                     inheritor.Kill();
+                    await inheritor.WaitForExitAsync(cancellationToken: Token);
                 } catch (Exception exception) when ((exception is ArgumentException or InvalidOperationException)) {
                     // It has already exited.
                 }
             }
+            File.Delete(path: pidFile);
+            await cancellation.CancelAsync();
+            try { await run.WaitAsync(timeout: HangGuard, cancellationToken: Token); } catch (OperationCanceledException) { }
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RunAsync_TimeoutOrCancellationKillsAChildWithABlockedInputWrite(bool cancel) {
+        var clock = new VirtualClock();
+        var timeout = TimeSpan.FromSeconds(seconds: 3);
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(token: Token);
+        var (executable, arguments) = OperatingSystem.IsWindows()
+            ? ("powershell.exe", new[] { "-NoProfile", "-NonInteractive", "-Command", "Start-Sleep -Seconds 180" })
+            : ("/bin/sh", new[] { "-c", "sleep 180" });
+        var run = ChildProcess.RunAsync(fileName: executable, arguments: arguments, input: new string(c: 'i', count: StreamLength),
+            clock: clock, timeout: timeout, cancellationToken: cancellation.Token);
+
+        try {
+            if (cancel) {
+                await cancellation.CancelAsync();
+                _ = await Assert.ThrowsAnyAsync<OperationCanceledException>(testCode: () => run.WaitAsync(timeout: HangGuard, cancellationToken: Token));
+            } else {
+                await clock.ExpireAsync(dueTime: timeout, pending: run, ct: Token).WaitAsync(timeout: HangGuard, cancellationToken: Token);
+                var result = await run.WaitAsync(timeout: HangGuard, cancellationToken: Token);
+                Assert.True(condition: result.TimedOut);
+                Assert.NotEqual(expected: 0, actual: result.ExitCode);
+            }
+        } finally {
+            await cancellation.CancelAsync();
+            try { await run.WaitAsync(timeout: HangGuard, cancellationToken: Token); } catch (OperationCanceledException) { }
         }
     }
 }

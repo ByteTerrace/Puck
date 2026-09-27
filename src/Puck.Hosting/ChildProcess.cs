@@ -18,9 +18,8 @@ namespace Puck.Hosting;
 /// then owns every redirected stream and must drain each one it does not close.</para>
 /// </summary>
 public static class ChildProcess {
-    /// <summary>How long the reads of an exited child's streams may continue before they are released. Everything the
-    /// child wrote is already in its pipes when it exits, so reading it takes a small fraction of this; a read still
-    /// waiting afterwards is waiting on a process that inherited the pipe, not on the child.</summary>
+    /// <summary>How long to wait for EOF after exit. At expiry, readers consume the bytes still buffered in the pipe
+    /// before ending, so scheduling delays cannot truncate the child's output.</summary>
     public static readonly TimeSpan ExitDrainGrace = TimeSpan.FromSeconds(seconds: 5);
 
     /// <summary>Runs one tool to exit and returns its exit code with both streams read raw. A child that exits before
@@ -37,7 +36,7 @@ public static class ChildProcess {
     /// <param name="clock">The clock the timeout runs on; system time when it is <see langword="null"/>.</param>
     /// <param name="cancellationToken">The token that cancels the run.</param>
     /// <returns>The exit code and both captured texts. The texts hold everything the child wrote. A process that
-    /// inherited its streams adds only what it wrote before <see cref="ExitDrainGrace"/> ran out on
+    /// inherited its streams contributes through the final buffer snapshot after <see cref="ExitDrainGrace"/> on
     /// <paramref name="clock"/>, and never holds the run open. A timeout kills the whole tree, drains both streams, and
     /// answers <see cref="ChildProcessResult.TimedOut"/> rather than throwing.</returns>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled. A token already
@@ -59,17 +58,22 @@ public static class ChildProcess {
 
         if (capture) { info.StandardErrorEncoding = Encoding.UTF8; info.StandardOutputEncoding = Encoding.UTF8; }
         foreach (var argument in arguments) { info.ArgumentList.Add(item: argument); }
-        using var process = (Process.Start(startInfo: info) ?? throw new InvalidOperationException(message: $"Cannot start {fileName}."));
-        using var release = new CancellationTokenSource();
-        Task<string>[] pumps = (capture
-            ? [ReadAsync(reader: process.StandardOutput, release: release.Token), ReadAsync(reader: process.StandardError, release: release.Token)]
-            : [Task.FromResult(result: ""), Task.FromResult(result: "")]
-        );
         var runClock = (clock ?? TimeProvider.System);
+        using var process = (Process.Start(startInfo: info) ?? throw new InvalidOperationException(message: $"Cannot start {fileName}."));
+        // Process.Dispose leaves streams that callers accessed open. Close stdin's handle even when a cancelled
+        // write bypasses StreamWriter.Close; disposing its buffer would otherwise try to flush into a dead child.
+        using var inputStream = (input is not null) ? process.StandardInput.BaseStream : null;
+        using var release = new CancellationTokenSource();
+        using var output = capture ? OpenOutputReader(reader: process.StandardOutput, release: release.Token) : null;
+        using var errors = capture ? OpenOutputReader(reader: process.StandardError, release: release.Token) : null;
         using var deadline = new OperationDeadline(
             caller: cancellationToken,
             timeProvider: runClock,
             timeout: (timeout ?? Timeout.InfiniteTimeSpan)
+        );
+        Task<string>[] pumps = (capture
+            ? [output!.ReadToEndAsync(), errors!.ReadToEndAsync()]
+            : [Task.FromResult(result: ""), Task.FromResult(result: "")]
         );
         var timedOut = false;
 
@@ -93,12 +97,13 @@ public static class ChildProcess {
         }
 
         var drained = await DrainAfterExitAsync(
+            cancellationToken: cancellationToken,
             clock: runClock,
             pumps: pumps,
             release: release
         ).ConfigureAwait(continueOnCapturedContext: false);
 
-        if (timedOut) { cancellationToken.ThrowIfCancellationRequested(); }
+        cancellationToken.ThrowIfCancellationRequested();
         return new ChildProcessResult(
             ExitCode: process.ExitCode,
             Stderr: drained[1],
@@ -108,26 +113,44 @@ public static class ChildProcess {
     }
     /// <summary>Finishes reading the streams of a child that has exited. Waits for every pump to reach end of stream
     /// for at most <see cref="ExitDrainGrace"/> on <paramref name="clock"/>, then cancels <paramref name="release"/>,
-    /// so a pump blocked on a pipe that a surviving process inherited stops and returns what it has read.</summary>
+    /// so a pump using <see cref="OpenOutputReader"/> consumes the remaining buffered bytes and ends.</summary>
     /// <typeparam name="T">The result each pump returns.</typeparam>
-    /// <param name="pumps">The reads of the child's output streams. Each reads with <paramref name="release"/>'s token
-    /// and, once that is cancelled, returns what it has read rather than throwing.</param>
+    /// <param name="pumps">The reads of the child's output streams, using <see cref="OpenOutputReader"/> with
+    /// <paramref name="release"/>'s token.</param>
     /// <param name="release">The source of the token every pump reads with.</param>
     /// <param name="clock">The clock the grace runs on.</param>
+    /// <param name="cancellationToken">Ends the grace early; pumps still settle before this method returns.</param>
     /// <returns>Each pump's result, in the order of <paramref name="pumps"/>.</returns>
-    public static async Task<T[]> DrainAfterExitAsync<T>(Task<T>[] pumps, CancellationTokenSource release, TimeProvider clock) {
+    public static async Task<T[]> DrainAfterExitAsync<T>(Task<T>[] pumps, CancellationTokenSource release, TimeProvider clock, CancellationToken cancellationToken = default) {
         var drained = Task.WhenAll(tasks: pumps);
+        using var grace = CancellationTokenSource.CreateLinkedTokenSource(token: cancellationToken);
+        var expired = Task.Delay(delay: ExitDrainGrace, timeProvider: clock, cancellationToken: grace.Token);
 
         try {
-            return await drained.WaitAsync(
-                timeProvider: clock,
-                timeout: ExitDrainGrace
-            ).ConfigureAwait(continueOnCapturedContext: false);
-        } catch (TimeoutException) {
-            await release.CancelAsync().ConfigureAwait(continueOnCapturedContext: false);
+            if (await Task.WhenAny(drained, expired).ConfigureAwait(continueOnCapturedContext: false) != drained) {
+                try {
+                    await release.CancelAsync().ConfigureAwait(continueOnCapturedContext: false);
+                } finally {
+                    // Even a failing cancellation callback must not leave reads racing disposal of their streams.
+                    await drained.ConfigureAwait(continueOnCapturedContext: false);
+                }
+            }
             return await drained.ConfigureAwait(continueOnCapturedContext: false);
+        } finally {
+            await grace.CancelAsync().ConfigureAwait(continueOnCapturedContext: false);
         }
     }
+    /// <summary>Opens the sole reader of a freshly redirected output pipe. Releasing it after child exit cancels
+    /// a pending byte read, drains the bytes still in the pipe, and presents EOF to the decoder. Partial characters
+    /// and lines therefore survive release. The reader must finish before it or the process is disposed.</summary>
+    /// <param name="reader">The child's standard output or error, which must not have been read yet.</param>
+    /// <param name="release">Ends waiting for more bytes once the child has exited.</param>
+    /// <returns>A reader owned by the caller, which also disposes the supplied reader and its pipe.</returns>
+    public static StreamReader OpenOutputReader(StreamReader reader, CancellationToken release) => new(
+        stream: new ExitDrainStream(reader: reader, release: release),
+        encoding: reader.CurrentEncoding,
+        detectEncodingFromByteOrderMarks: true
+    );
     /// <summary>Starts a companion the caller drives itself: reading its streams as they arrive, writing to it, and
     /// killing or waiting on it at its own pace.</summary>
     /// <param name="fileName">The executable to start.</param>
@@ -149,28 +172,6 @@ public static class ChildProcess {
         foreach (var argument in arguments) { info.ArgumentList.Add(item: argument); }
 
         return (Process.Start(startInfo: info) ?? throw new InvalidOperationException(message: $"Cannot start {fileName}."));
-    }
-
-    // Reads one stream to its end, or until release is cancelled, and returns the text read either way.
-    private static async Task<string> ReadAsync(StreamReader reader, CancellationToken release) {
-        var text = new StringBuilder();
-        var buffer = new char[4096];
-
-        try {
-            while (await reader.ReadAsync(
-                buffer: buffer.AsMemory(),
-                cancellationToken: release
-            ).ConfigureAwait(continueOnCapturedContext: false) is > 0 and var count) {
-                _ = text.Append(
-                    charCount: count,
-                    startIndex: 0,
-                    value: buffer
-                );
-            }
-        } catch (OperationCanceledException) when (release.IsCancellationRequested) {
-            // Only a process that inherited the pipe is still writing; everything the child wrote is already in text.
-        }
-        return text.ToString();
     }
 }
 /// <summary>The outcome of one <see cref="ChildProcess.RunAsync"/> run.</summary>

@@ -366,10 +366,13 @@ it returns only after both reads finish, so the tail of the output is never lost
 A read ends only when every process holding the pipe has closed it. A process the
 child started with inherited handles, such as a build node or a compiler server,
 can hold it long after the child exits. Once the child exits, the reads therefore
-get `ExitDrainGrace` to finish on the run's clock and are then released with what
-they have read. Everything the child wrote is already in the pipe by then, so only
-a surviving process's later output is lost. `DrainAfterExitAsync` applies the
-same bound to a caller that pumps its own streams.
+get `ExitDrainGrace` to finish on the run's clock. Release cancels the pending byte
+read, consumes a snapshot of the bytes still buffered in the pipe, and presents EOF
+to the text decoder. This preserves output even when a reader has not been scheduled
+before the grace expires, including a final line without a newline.
+`OpenOutputReader` and `DrainAfterExitAsync` apply the same bound to a caller that
+pumps its own streams. Caller cancellation ends the grace early and still joins
+the pumps before disposing their streams.
 The run is bounded by an optional timeout on a caller-supplied `TimeProvider` and
 by cancellation. Either bound kills the whole process tree and drains both
 streams. A timeout is reported as `TimedOut` in the result, while cancellation

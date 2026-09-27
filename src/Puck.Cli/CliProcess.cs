@@ -110,29 +110,24 @@ internal static class CliProcess {
         object eventGate,
         Func<long> nextSequence,
         long startedAt,
-        Action<CliProcessOutputLine>? onOutput,
-        CancellationToken release
+        Action<CliProcessOutputLine>? onOutput
     ) {
         var text = new StringBuilder();
 
-        try {
-            while (await reader.ReadLineAsync(cancellationToken: release).ConfigureAwait(continueOnCapturedContext: false) is { } line) {
-                text.AppendLine(value: line);
+        while (await reader.ReadLineAsync().ConfigureAwait(continueOnCapturedContext: false) is { } line) {
+            text.AppendLine(value: line);
 
-                lock (eventGate) {
-                    var observed = new CliProcessOutputLine(
-                        ElapsedMilliseconds: Stopwatch.GetElapsedTime(startingTimestamp: startedAt).TotalMilliseconds,
-                        Line: line,
-                        Sequence: nextSequence(),
-                        Stream: stream
-                    );
+            lock (eventGate) {
+                var observed = new CliProcessOutputLine(
+                    ElapsedMilliseconds: Stopwatch.GetElapsedTime(startingTimestamp: startedAt).TotalMilliseconds,
+                    Line: line,
+                    Sequence: nextSequence(),
+                    Stream: stream
+                );
 
-                    events.Add(item: observed);
-                    onOutput?.Invoke(observed);
-                }
+                events.Add(item: observed);
+                onOutput?.Invoke(observed);
             }
-        } catch (OperationCanceledException) when (release.IsCancellationRequested) {
-            // Only a process that inherited the pipe is still writing; every line the child wrote is already recorded.
         }
 
         return text.ToString();
@@ -170,6 +165,7 @@ internal static class CliProcess {
         var startedAt = Stopwatch.GetTimestamp();
         using var process = (Process.Start(startInfo: startInfo)
             ?? throw new InvalidOperationException(message: $"Failed to start {fileName}."));
+        using var inputStream = process.StandardInput.BaseStream;
         // A World treats a pipe still empty at its first read as idle and starts stepping, so the input's first bytes are
         // written here, before any await can yield to a busy thread pool. The head stays under a pipe buffer, so this
         // write never blocks on a child that has not started reading.
@@ -199,6 +195,8 @@ internal static class CliProcess {
             timeout: timeout
         );
         using var release = new CancellationTokenSource();
+        using var output = ChildProcess.OpenOutputReader(reader: process.StandardOutput, release: release.Token);
+        using var errors = ChildProcess.OpenOutputReader(reader: process.StandardError, release: release.Token);
         var events = new List<CliProcessOutputLine>();
         var eventGate = new object();
         var sequence = 0L;
@@ -209,24 +207,22 @@ internal static class CliProcess {
             if (continueWhen?.Invoke(line) == true) { continuation.TrySetResult(); }
         }
         var stdout = PumpAsync(
-            reader: process.StandardOutput,
+            reader: output,
             stream: CliProcessOutputStream.Stdout,
             events: events,
             eventGate: eventGate,
             nextSequence: () => Interlocked.Increment(location: ref sequence),
             startedAt: startedAt,
-            onOutput: ((continueWhen is null) ? null : Observe),
-            release: release.Token
+            onOutput: ((continueWhen is null) ? null : Observe)
         );
         var stderr = PumpAsync(
-            reader: process.StandardError,
+            reader: errors,
             stream: CliProcessOutputStream.Stderr,
             events: events,
             eventGate: eventGate,
             nextSequence: () => Interlocked.Increment(location: ref sequence),
             startedAt: startedAt,
-            onOutput: ((continueWhen is null) ? null : Observe),
-            release: release.Token
+            onOutput: ((continueWhen is null) ? null : Observe)
         );
         var inputPump = WriteInputAsync(
             writer: process.StandardInput,
@@ -268,6 +264,7 @@ internal static class CliProcess {
         }
 
         var streams = await ChildProcess.DrainAfterExitAsync(
+            cancellationToken: cancellationToken,
             clock: clock,
             pumps: [stdout, stderr],
             release: release
