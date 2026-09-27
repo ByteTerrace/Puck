@@ -13,8 +13,10 @@ namespace Puck.Shaders;
 /// <param name="Type">The value type of a <see cref="ShaderInterfaceMemberKind.Value"/>, the element type of an
 /// <see cref="ShaderInterfaceMemberKind.Array"/>, the texel type an image reads as, or the element type of a structured
 /// buffer; <see langword="null"/> for a raw buffer or a <see cref="ShaderInterfaceMemberKind.Sampler"/>.</param>
-/// <param name="Length">The element count of an <see cref="ShaderInterfaceMemberKind.Array"/>, at least one;
-/// <see langword="null"/> for every other kind.</param>
+/// <param name="Length">The element count of an <see cref="ShaderInterfaceMemberKind.Array"/>, at least one, or the
+/// descriptor count of an arrayed <see cref="ShaderInterfaceMemberKind.SampledImage"/> or
+/// <see cref="ShaderInterfaceMemberKind.Sampler"/>, which a pass indexes; <see langword="null"/> for a single image or
+/// sampler and for every other kind.</param>
 /// <param name="Format">The texel format of a <see cref="ShaderInterfaceMemberKind.StorageImage"/>;
 /// <see langword="null"/> for every other kind.</param>
 public sealed record ShaderInterfaceMember(
@@ -52,26 +54,33 @@ public sealed record ShaderInterfaceMember(
             Name: name,
             Type: type
         );
-    /// <summary>Creates a sampled image member.</summary>
+    /// <summary>Creates a sampled image member: one image, or an array of images a pass indexes, which takes
+    /// <paramref name="length"/> consecutive bindings' worth of registers.</summary>
     /// <param name="name">The member's name.</param>
     /// <param name="group">The member's frequency group.</param>
     /// <param name="type">The texel type a sample returns.</param>
+    /// <param name="length">The image count of an arrayed member, at least one, or <see langword="null"/> for a single
+    /// image.</param>
     /// <returns>The member.</returns>
-    public static ShaderInterfaceMember SampledImage(string name, ShaderInterfaceGroup group, ShaderValueType type) =>
+    public static ShaderInterfaceMember SampledImage(string name, ShaderInterfaceGroup group, ShaderValueType type, uint? length = null) =>
         new(
             Group: group,
             Kind: ShaderInterfaceMemberKind.SampledImage,
+            Length: length,
             Name: name,
             Type: type
         );
-    /// <summary>Creates a sampler member.</summary>
+    /// <summary>Creates a sampler member: one sampler, or an array of samplers a pass indexes.</summary>
     /// <param name="name">The member's name.</param>
     /// <param name="group">The member's frequency group.</param>
+    /// <param name="length">The sampler count of an arrayed member, at least one, or <see langword="null"/> for a single
+    /// sampler.</param>
     /// <returns>The member.</returns>
-    public static ShaderInterfaceMember Sampler(string name, ShaderInterfaceGroup group) =>
+    public static ShaderInterfaceMember Sampler(string name, ShaderInterfaceGroup group, uint? length = null) =>
         new(
             Group: group,
             Kind: ShaderInterfaceMemberKind.Sampler,
+            Length: length,
             Name: name
         );
     /// <summary>Creates a storage image member.</summary>
@@ -117,6 +126,12 @@ public sealed record ShaderInterfaceMember(
             Type: element
         );
 
+    /// <summary>Gets the number of descriptors the member binds: an arrayed sampled image's or sampler's
+    /// <see cref="Length"/>, and one for every other binding.</summary>
+    [JsonIgnore]
+    public uint DescriptorCount => ((Kind is ShaderInterfaceMemberKind.SampledImage or ShaderInterfaceMemberKind.Sampler)
+        ? (Length ?? 1u)
+        : 1u);
     /// <summary>Gets a value indicating whether the member lives in its group's constant block: a value does, and every
     /// other kind, an array included, is a binding of its own.</summary>
     [JsonIgnore]

@@ -1,14 +1,15 @@
 using System.Globalization;
 using System.Text;
+using Puck.Abstractions.Gpu;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
 
 /// <summary>
 /// Generates <see cref="FileName"/>, the kernels' declarations of the SDF instruction set: its version handshake, every
-/// enum an instruction word carries, and the packed-layout constants the interpreter decodes words with. Every value is
-/// read from the C# model, never transcribed, and an enum member's name is its C# name in upper snake case after the
-/// enum's prefix (<see cref="SdfOp.ResetPoint"/> is <c>SDF_OP_RESET_POINT</c>), so a new member reaches the kernels by
+/// enum an instruction word carries, the packed-layout constants the interpreter decodes words with, the screen count,
+/// and the sampler filters a screen's row indexes the engine's samplers by. Every value is read from the C# model, never
+/// transcribed, and an enum member's name is its C# name in upper snake case after the enum's prefix (<see cref="SdfOp.ResetPoint"/> is <c>SDF_OP_RESET_POINT</c>), so a new member reaches the kernels by
 /// regenerating. <c>puck shaders generate</c> writes the file beside the kernels and <c>--check</c> fails on drift.
 /// <para>The text is a pure function of the model: the same build generates the same bytes, with LF line endings, on
 /// every host.</para>
@@ -148,6 +149,11 @@ public static class SdfIsaHlsl {
             name: "SDF_SCREEN_MATERIAL",
             value: SdfProgramBuilder.ScreenMaterialId
         );
+        declarations.Count(
+            name: "SDF_MAX_SCREEN_SURFACES",
+            value: SdfProgramBuilder.MaxScreenSurfaces
+        );
+        declarations.Members<GpuSamplerFilter>(prefix: "SDF_FILTER");
 
         return declarations.Text();
     }

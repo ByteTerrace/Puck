@@ -148,10 +148,10 @@ public sealed partial class SdfWorldEngine {
         );
         m_boundOutputViews[0][0] = 0;
 
-        foreach (var binding in ScreenSourceBindings) {
+        for (var screen = 0u; (screen < MaxScreenSurfaces); screen++) {
             m_bindings.WriteSampledImage(
-                arrayElement: 0,
-                binding: binding,
+                arrayElement: screen,
+                binding: ScreenSourcesBinding,
                 descriptorSetHandle: viewsSet,
                 imageViewHandle: sampledImage.ImageViewHandle
             );

@@ -285,7 +285,7 @@ public sealed partial class SdfEngineNode : ICaptureRequestTarget {
     }
     // The leases the frame's submission samples are the slot's it adopted them into, so their waits ride that submission.
     private void AddScreenSourceWaits(IGpuQueueSubmitter submitter) => m_retainedScreenSourceFrames[m_adoptedScreenSourceSlot].AddWaits(submitter: submitter);
-    // Binds every screen's image, with its light. A screen's read binds the image the graph handed this frame, whose lease
+    // Binds every screen's image, with the mapping it is drawn from and its light. A screen's read binds the image the graph handed this frame, whose lease
     // is taken once however many screens show it; a screen reading nothing, or a read the frame was not handed (a frame
     // produced outside the graph), binds nothing, which the engine shades as dark glass.
     private void BindScreenSources(SdfWorldEngine engine) {
@@ -315,6 +315,10 @@ public sealed partial class SdfEngineNode : ICaptureRequestTarget {
 
             engine.SetScreenSource(
                 imageViewHandle: handle,
+                screenIndex: screen
+            );
+            engine.SetScreenMapping(
+                mapping: sources.MappingOf(screen: screen),
                 screenIndex: screen
             );
             engine.SetScreenLight(

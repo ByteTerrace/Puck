@@ -412,7 +412,9 @@ These are one-line cautions; the owning pages hold the derivations.
   records `regionTick`, the tick of the state the serving image was rendered
   from: a graph node records `ShaderFrameValues.StateTick` with each image it
   renders and passes it to `CaptureRequestSlot.Serve`, so a republished image
-  keeps its own tick, and `SdfEngineNode` serves with view 0's output's tick,
+  keeps its own tick (an uploaded source's node renders as the tick its upload
+  wrote the image for, `RenderGraphRuntime.Sources.cs`), and `SdfEngineNode`
+  serves with view 0's output's tick,
   the `SdfFrame.StateTick` of the frame that rendered it or that its cadence
   gate retained it for, which the presenter fills from the state mirror. A
   `FrameCaptureRequest` carries no tick of its own: a node that names none
@@ -1297,8 +1299,8 @@ pointer-to-pane mapping, so a pipeline's frame-block pointer
 (`WorldFramePresenter.UpdatePipelinePointer`) maps through it and a new pane or
 screen pointer path reads a mapping rather than scaling a rect by hand. A warp
 pass is an input path only with a declared exact inverse; a new warp kind is a
-new `SourceWarpInverse` arm. The screen glass bezel is a sync pair
-([references/sync-pairs.md](references/sync-pairs.md)). Panes publish their
+new `SourceWarpInverse` arm. The screen glass's bezel is data: its one statement
+is `WorldScreenMappings.Glass`, the warp every screen row's mapping carries. Panes publish their
 mappings from the placements `place` draws: `WorldFramePresenter.PrepareGraph`
 ends with `WorldViewGraphHost.PublishPanes`, which writes one whole-image
 mapping per shown view and pane, in drawing order, named by the instance's
@@ -1335,7 +1337,22 @@ producer reports those mappings as its placements
 camera view reports them too, so a walk through a screen showing a camera view
 continues into the view through the camera it last filmed from
 (`WorldViewGraphHost.ViewCameras`, the binder); a session reports none. The GPU
-does not draw from a mapping (P13b-5).
+draws every screen from its mapping: the node hands each screen's published
+mapping (`ISdfScreenSources.MappingOf`) to `SdfWorldEngine.SetScreenMapping`,
+which packs its single-precision draw form (`SourceMapping.Draw`, the warp's
+inverse and one affine map folding the layout, fit and crop) into the
+`screenMappings` table of the `sdf-world` interface, and the screen shading draws
+the bezel, the letterbox and the sample from it, through the sampler its row's
+filter names (`WorldScreen.Filter`, `Nearest` or `Linear`, carried as
+`SourceMapping.Filter`). A screen with no mapping shades as unbound glass. The
+screens are one `screenSources` array beside one `samplers` array, one sampler
+per `GpuSamplerFilter`, whose length is `SdfProgramBuilder.MaxScreenSurfaces`
+and nothing else. A shader interface's image or sampler array
+(`ShaderInterfaceMember.Length` on a sampled image or sampler) takes its length
+in registers, and a pass indexes it only by a wave-uniform value. `SourceMappingLawTests.TheDrawFormRunsTheChainTheHitRuns` holds
+the draw form to `MapRay`, and the table's layout is a sync pair
+([references/sync-pairs.md](references/sync-pairs.md)). A pane is not drawn from
+its mapping: `place` draws it.
 
 HLSL is the one source language, and `ShaderCompiler` runs DXC alone: no pass
 declares a language, and a one-off source is an `.hlsl` compute pass read as a

@@ -59,8 +59,8 @@ public sealed class OwedFrameTeardownLawTests {
             ExitAfter = TimeSpan.Zero,
         });
         builder.Services.AddSingleton(implementationInstance: new OffscreenRenderOptions(
-            Height: 32U,
-            Width: 32U
+            height: 32U,
+            width: 32U
         ));
         builder.Services.AddSingleton<IRenderRoot>(implementationInstance: new RecordingRoot(log: log));
         AddRecordingSimulation(

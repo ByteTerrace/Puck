@@ -8,8 +8,9 @@ namespace Puck.Shaders;
 /// Generates the HLSL include a pass reads its <see cref="ShaderInterface"/> through. Every declaration carries its
 /// placement explicitly and for both backends at once: a block member carries <c>[[vk::offset(n)]]</c> and sits after
 /// named padding that makes Direct3D 12's packing land on the same offset, and a binding carries
-/// <c>[[vk::binding(b, set)]]</c> paired with <c>register(xb, spaceset)</c>. Values reach a pass as members of a named struct per group, and an array is read through a generated accessor that hides how
-/// its elements are stored. A buffer with an element type is a <c>StructuredBuffer&lt;T&gt;</c> or
+/// <c>[[vk::binding(b, set)]]</c> paired with <c>register(xb, spaceset)</c>, and an arrayed image or sampler declares its
+/// length. Values reach a pass as members of a named struct per group, and an array is read through a generated
+/// accessor that hides how its elements are stored. A buffer with an element type is a <c>StructuredBuffer&lt;T&gt;</c> or
 /// <c>RWStructuredBuffer&lt;T&gt;</c>, and one without is a <c>ByteAddressBuffer</c> or <c>RWByteAddressBuffer</c>. A
 /// pushed index (<see cref="ShaderInterface.PushesIndex"/>) follows the groups as a one-member struct carrying
 /// <c>[[vk::push_constant]]</c> paired with <c>register(b0, space4)</c>, the space
@@ -187,7 +188,11 @@ public static class ShaderInterfaceHlsl {
             ),
         };
 
-        return $"{Binding(binding: resource.Binding, set: set)} {declaration}{Register(binding: resource.Binding, register: register, set: set)};";
+        var extent = (((resource.Kind is GpuBindingKind.SampledImage or GpuBindingKind.Sampler) && (member.Length is { } length))
+            ? $"[{Number(value: length)}]"
+            : "");
+
+        return $"{Binding(binding: resource.Binding, set: set)} {declaration}{extent}{Register(binding: resource.Binding, register: register, set: set)};";
     }
     private static void Line(StringBuilder text, string line) =>
         text.Append(value: line).Append(value: '\n');

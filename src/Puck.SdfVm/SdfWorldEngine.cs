@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Commands;
 using Puck.Abstractions.Gpu;
 using Puck.Shaders;
 using Puck.SignedDistance;
@@ -42,6 +43,11 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private const int MaxBrickCarvesPerBake = 4096; // request-buffer carve capacity per slot (the debug pool's MaxCarves ceiling)
     private const int ScreenLightByteLength = ((sizeof(float) * 4) * ((MaxScreenSurfaces + 8) + SdfEnvironment.RowCount)); // float4 rgb+intensity per screen (0..MaxScreenSurfaces-1) + env (MaxScreenSurfaces) + FOUR grid-lock rows (+1..+4) + the engine-bench params row (+5) + the shadow-policy row (+6) + the far-field row (+7) + the environment block (+8 onward: SdfEnvironment's row layout) — KEEP IN SYNC with frame/sdf-environment.hlsli SdfGridWorld..SdfEnvBase
     private const float ScreenLightIntensity = 2.5f; // room-glow gain applied to each screen's average color
+    private const int ScreenMappingByteLength = ((sizeof(float) * 4) * 7);
+    // The seventh ScreenMappingData row: the bound flag at its first float, the sampler at its second.
+    private const int ScreenBoundOffset = ((sizeof(float) * 4) * 6);
+    private const int ScreenSamplerOffset = (ScreenBoundOffset + sizeof(float));
+    private const int ScreenStateFloats = 4;
     private const int ScreenSurfaceByteLength = ((sizeof(float) * 4) * 3); // 48-byte ScreenSurfaceData: right.xyz+halfWidth, up.xyz+halfHeight, origin.xyz+pad (KEEP IN SYNC with frame/sdf-environment.hlsli)
     // The tile cull buffer carries FOUR planes per (viewport, tile), each of stride
     // (tileGrid.x * tileGrid.y * viewportCount): plane 0 = the march-start lower bound (the classic beam
@@ -98,12 +104,12 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     /// partitions its cell region into <see cref="MaxScreenSurfaces"/> equal per-screen runs of this size, so a decal
     /// on one screen never collides with another's cells.</summary>
     public const int MaxScreenDecalCells = SdfScreenDecalLayout.MaxScreenDecalCells;
-    /// <summary>The kernels' screen-source count — the most screen surfaces one program may declare (the same
-    /// ceiling as <see cref="Puck.SignedDistance.SdfProgramBuilder.MaxScreenSurfaces"/>, which this reads rather than
-    /// hand-syncing). Each screen is one sampled-image member of <see cref="SdfWorldInterfaces.World"/>, all sampled
-    /// through its one nearest <see cref="SdfWorldInterfaces.ScreenSampler"/>. Capped at 32 because the world block's
-    /// <see cref="SdfWorldInterfaces.ScreenMask"/> (the per-frame bound-slot bitmask) is a single <c>uint</c> — raising
-    /// past 32 needs a second mask word on both sides.</summary>
+    /// <summary>The kernels' screen count: the most screen surfaces one program may declare, the same ceiling as
+    /// <see cref="Puck.SignedDistance.SdfProgramBuilder.MaxScreenSurfaces"/>, which this reads. It is the length of the
+    /// <see cref="SdfWorldInterfaces.ScreenSources"/> array of <see cref="SdfWorldInterfaces.World"/> and of every
+    /// per-screen table, and the kernels read it as the generated <c>SDF_MAX_SCREEN_SURFACES</c>, so it is stated once.
+    /// Each screen samples its source through the <see cref="SdfWorldInterfaces.Samplers"/> element its row's filter
+    /// names.</summary>
     public const int MaxScreenSurfaces = Puck.SignedDistance.SdfProgramBuilder.MaxScreenSurfaces;
     /// <summary>The most bounded emissive volumes (<see cref="Puck.SignedDistance.SdfVolume"/>) one rendered frame
     /// carries — the same ceiling as <see cref="Puck.SignedDistance.SdfProgramBuilder.MaxVolumes"/>, which this
@@ -157,7 +163,10 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private int m_programWordCapacity;
 
     private readonly int m_programWordReserve;
-    private readonly nint m_screenSampler;
+
+    // One sampler per filter, indexed by the filter's value, as SdfWorldInterfaces.Samplers binds them.
+    private readonly nint[] m_samplers = new nint[SdfWorldInterfaces.SamplerCount];
+
     private readonly IGpuImage m_screenSourceFiller;
     // Like every per-view pipeline it binds the world interface's groups, so the frame sets and the per-slot, per-view
     // m_viewsSets bind against it and it needs no descriptor sets of its own.
@@ -215,7 +224,6 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private bool m_rebuildInstanceGridPerFrame;
     private int m_requiredDynamicTransformCapacity;
     private ulong m_ringFrame;
-    private uint m_screenSourceMask;
     // Cadence gate, latched by PrepareFrame and read by Record: when true, Record skips every view's dispatch set and
     // each view's retained output stands — pixel-identical because the change signature below proved every input those
     // passes consume is unchanged.
@@ -244,6 +252,9 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     // rewriting slot k's resources; the fenced submit re-arms it.
     private readonly IGpuSubmissionFence[] m_frameFences = new IGpuSubmissionFence[FrameRingSize];
     private readonly nint[] m_screenSourceViews = new nint[MaxScreenSurfaces];
+    // The mapping each screen was last drawn from, compared by reference: a published mapping is republished unchanged
+    // while its handle and extent hold, so an unchanged screen packs nothing.
+    private readonly SourceMapping?[] m_screenMappings = new SourceMapping?[MaxScreenSurfaces];
     // The screen-light table (screen glow colors, environment, grid-overlay and lever rows) and the bounded-volume table
     // (views and sky), each packed here every frame and written into its region.
     private readonly byte[] m_screenLightScratch = new byte[ScreenLightByteLength];
@@ -465,6 +476,10 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             byteCount: (MaxScreenSurfaces * ScreenSurfaceByteLength),
             region: ScreenSurfaceRegionIndex
         ));
+        m_screenMappingRegion = scope.Own(created: CreateRegion(
+            byteCount: (MaxScreenSurfaces * ScreenMappingByteLength),
+            region: ScreenMappingRegionIndex
+        ));
         m_screenLightRegion = scope.Own(created: CreateRegion(
             byteCount: m_screenLightScratch.Length,
             region: ScreenLightRegionIndex
@@ -613,12 +628,15 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             release: m_bindings.DestroyPool
         );
 
-        // The screen sources and the glyph atlas are sampled through one nearest sampler, written into every views set
-        // once; the images themselves are (re)bound per frame by BindScreenSources.
-        m_screenSampler = scope.Own(
-            handle: m_bindings.CreateSampler(filter: GpuSamplerFilter.Nearest),
-            release: m_bindings.DestroySampler
-        );
+        // One sampler per filter, written into every views set once; a screen samples its source through the one its
+        // row chooses and the glyph atlas through the nearest one. The images are (re)bound per frame by
+        // BindScreenSources.
+        foreach (var filter in Enum.GetValues<GpuSamplerFilter>()) {
+            m_samplers[((int)filter)] = scope.Own(
+                handle: m_bindings.CreateSampler(filter: filter),
+                release: m_bindings.DestroySampler
+            );
+        }
 
         var groupLayouts = m_viewsPipeline.GroupLayoutHandles;
 
@@ -652,12 +670,15 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
                     bufferSize: ((ulong)m_viewBlocks[view].ByteCount),
                     descriptorSetHandle: viewsSet
                 );
-                m_bindings.WriteSampler(
-                    arrayElement: 0,
-                    binding: ScreenSamplerBinding,
-                    descriptorSetHandle: viewsSet,
-                    samplerHandle: m_screenSampler
-                );
+                for (var sampler = 0; (sampler < m_samplers.Length); sampler++) {
+                    m_bindings.WriteSampler(
+                        arrayElement: ((uint)sampler),
+                        binding: SamplersBinding,
+                        descriptorSetHandle: viewsSet,
+                        samplerHandle: m_samplers[sampler]
+                    );
+                }
+
                 // The shared device-local scratch: each buffer one pass writes binds twice, read-write for its writer and
                 // read-only for its readers.
                 WriteWorldBuffer(buffer: m_viewsArgsBuffer, member: SdfWorldInterfaces.ViewsArgsWritten, set: viewsSet);
@@ -829,9 +850,10 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         }
 
         m_brickPoolBuffer.Dispose();
-        m_bindings.DestroySampler(
-            samplerHandle: m_screenSampler
-        );
+        foreach (var sampler in m_samplers) {
+            m_bindings.DestroySampler(samplerHandle: sampler);
+        }
+
         m_bindings.DestroyPool(
             poolHandle: m_pool
         );

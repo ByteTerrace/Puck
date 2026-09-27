@@ -184,10 +184,11 @@ and a light*.
 
 As a **picture**, a bound screen is emissive: it is its own light source, like a
 real display, so no scene lighting dims or tints it. Its pixels are the
-emulator's framebuffer, sampled through a CRT glass-face model—a subtle bezel
-mask, soft cosine scanlines, an aperture-grille phosphor-stripe tint, optional
-bloom on the bright regions, and (all off by default) pincushion curvature,
-vignette, and a fresnel rim glint. The tuned look is a flat square tube: a hint
+emulator's framebuffer, drawn from the screen's published mapping (the glass's
+bezel inset, the layout, any letterbox and the crop) through a CRT glass-face
+model—a soft bezel edge, soft cosine scanlines, an aperture-grille
+phosphor-stripe tint, optional bloom on the bright regions, and (both off by
+default) a vignette and a fresnel rim glint. The tuned look is a flat square tube: a hint
 of CRT, not a heavy filter.
 
 As a **light**, every bound screen is a colored area light illuminating the

@@ -86,10 +86,10 @@ public sealed partial class SdfProgramBuilder {
     /// <summary>The smallest exponent a <see cref="Superellipsoid"/> admits — the ellipsoid itself, the exponent every
     /// ellipsoid in the ISA is emitted at; see its own remarks for the 1-Lipschitz proof this interval is sized to.</summary>
     public const float MinSuperellipsoidExponent = 2f;
-    /// <summary>The most screen surfaces one program may declare (matches <c>Puck.SdfVm.SdfWorldEngine.MaxScreenSurfaces</c>
-    /// — the kernels' <c>screenSurfaces[]</c>/<c>screenSources[]</c> array length; a contract separate from the
-    /// engine's viewport capacity). Capped at 32 by the single-<c>uint</c>
-    /// <c>screenMask</c> the engine pushes per frame.</summary>
+    /// <summary>The most screen surfaces one program may declare: the length of the kernels' per-screen tables and of
+    /// their <c>screenSources</c> array, which <c>Puck.SdfVm.SdfWorldEngine.MaxScreenSurfaces</c> reads and the kernels read
+    /// as the generated <c>SDF_MAX_SCREEN_SURFACES</c>. A contract separate from the engine's viewport
+    /// capacity.</summary>
     public const int MaxScreenSurfaces = 32;
     /// <summary>The reserved material identifier used by the plain screen material, unbound glass, which the kernels read
     /// as <c>SDF_SCREEN_MATERIAL</c>.</summary>

@@ -358,14 +358,27 @@ public sealed partial class RenderGraphRuntime {
         // The node lost its device objects, the region among them.
         public void OnDeviceLost() => m_region.OnDeviceLost();
         // Writes the upload's image for a render into the region and returns whether the region holds an image to
-        // convert: never while the node cannot bind one yet.
-        public bool TryWrite(long tick, ShaderPipelineRenderNode node) => (
-            (Graph is not null) &&
-            (m_region.Bind(node: node) is { } region) &&
-            Upload.TryWrite(
-                region: region,
-                tick: tick
-            )
-        );
+        // convert: never while the node cannot bind one yet. The image is the one the upload states for the tick, so the
+        // node renders it as that tick's state (ShaderFrameValues.StateTick), which a capture of the source records.
+        public bool TryWrite(long tick, ShaderPipelineRenderNode node) {
+            if (
+                (Graph is null) ||
+                (m_region.Bind(node: node) is not { } region) ||
+                !Upload.TryWrite(
+                    region: region,
+                    tick: tick
+                )
+            ) {
+                return false;
+            }
+
+            node.Frame = (node.Frame with {
+                StateTick = ((tick >= 0L)
+                    ? ((ulong)tick)
+                    : null),
+            });
+
+            return true;
+        }
     }
 }

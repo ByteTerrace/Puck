@@ -11,3 +11,8 @@ world.row.set placements slab position [1.5,0,0]
 world.wait 30
 world.screenshot {run}/after.png
 world.wait 10
+# The camera pans to the left: the scene, the slab included, crosses the beam's tiles the other way.
+world.row.set cameras {"anchor":null,"name":"mesh-cam","renderHeight":144,"renderWidth":256,"rig":{"name":"mesh-cam","operations":[{"$type":"anchor","subject":{"$type":"worldPoint","point":[-1.5,2.5,7]}},{"$type":"lookAt","subject":{"$type":"worldPoint","point":[-1.5,0.8,0]}},{"$type":"fieldOfView","fieldOfViewRadians":0.9}],"version":"puck.camera.program.v1"}}
+world.wait 30
+world.screenshot {run}/panned.png
+world.wait 10
