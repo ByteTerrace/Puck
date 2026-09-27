@@ -13,12 +13,12 @@ project. See [Contributing to Puck](development/contributing.md) for verificatio
    registers windowing, presenters, and content.
 4. `Puck.HumbleGamingBrick` and `Puck.AdvancedGamingBrick` split internally: the
    core emulator depends only on leaf contract/data projects (`Puck.Maths` for
-   deterministic numerics) and `Puck.GamingBricks` (the shared state-serialization
+   deterministic numerics) and `Puck.Machines` (the shared state-serialization
    substrate, forked-instance lifecycle, and the machine-neutral queued-host
    substrate)—never on shared substrate, backends, or composition roots. Each
    project's `Hosting/` folder carries its screen-machine engine adapter
    (`GamingBrickEngine`/`AdvancedGamingBrickEngine`,
-   `MachineHost`/`AdvancedMachineHost`) over `Puck.GamingBricks`'s
+   `MachineHost`/`AdvancedMachineHost`) over `Puck.Machines`'s
    `QueuedMachineWorker` and the neutral screen-machine contracts in
    `Puck.Abstractions`. `Puck.World` consumes both cores through its `Hosting/`
    adapters or through composition-root debug hosts.
@@ -55,14 +55,14 @@ Optional extensions      Puck.Mcp  Puck.Mcp.Azure  Puck.World.AgentBridge
                          Puck.World.Azure
 Composition roots        Puck.Actors  Puck.Launcher.Stub  Puck.World
                          Puck.World.Browser  Puck.World.Silo
-Validation               Puck.AdvancedGamingBrick.Post  Puck.GamingBricks.Post
-                         Puck.HumbleGamingBrick.Post
+Validation               Puck.AdvancedGamingBrick.Post
+                         Puck.HumbleGamingBrick.Post  Puck.Machines.Post
 Engine services          Puck.AdvancedGamingBrick
                          Puck.AdvancedGamingBrick.Forge  Puck.Audio
-                         Puck.Embeddings  Puck.GamingBricks
-                         Puck.GamingBricks.Forge  Puck.GamingBricks.Transpiler
-                         Puck.HumbleGamingBrick  Puck.HumbleGamingBrick.Forge
-                         Puck.Launcher  Puck.Overlays  Puck.Physics
+                         Puck.Embeddings  Puck.GamingBricks.Forge
+                         Puck.GamingBricks.Transpiler  Puck.HumbleGamingBrick
+                         Puck.HumbleGamingBrick.Forge  Puck.Launcher
+                         Puck.Machines  Puck.Overlays  Puck.Physics
                          Puck.Recording  Puck.SdfVm  Puck.SignedDistance
                          Puck.State  Puck.State.Generators  Puck.State.Rules
                          Puck.State.Search  Puck.State.Topology
@@ -85,23 +85,22 @@ Leaf contracts and data  Puck.Abstractions  Puck.Assets  Puck.Attestation
                          Puck.AdvancedGamingBrick.Tests  Puck.Analyzers.Tests
                          Puck.Assets.Tests  Puck.Attestation.Tests
                          Puck.Audio.Tests  Puck.Cli.Tests  Puck.Commands.Tests
-                         Puck.DirectX.Tests  Puck.GamingBricks.Tests
-                         Puck.GamingBricks.Transpiler.Tests  Puck.Hosting.Tests
-                         Puck.HumbleGamingBrick.Forge.Tests
+                         Puck.DirectX.Tests  Puck.GamingBricks.Transpiler.Tests
+                         Puck.Hosting.Tests  Puck.HumbleGamingBrick.Forge.Tests
                          Puck.HumbleGamingBrick.Tests  Puck.Input.Tests
-                         Puck.Launcher.Tests  Puck.Maths.Tests
-                         Puck.Networking.Tests  Puck.Physics.Tests
-                         Puck.Platform.Windows.Tests  Puck.Recording.Tests
-                         Puck.SdfVm.Tests  Puck.Shaders.Tests
-                         Puck.SignedDistance.Tests  Puck.State.Generators.Tests
-                         Puck.State.Rebuild.Corpus  Puck.State.Rules.Tests
-                         Puck.State.Search.Tests  Puck.State.Tests
-                         Puck.State.Topology.Tests  Puck.State.Vectors.Tests
-                         Puck.Text.Tests  Puck.Vulkan.Tests
-                         Puck.World.Agents.Tests  Puck.World.Azure.Tests
-                         Puck.World.Browser.Tests  Puck.World.Protocol.Tests
-                         Puck.World.Schema.Tests  Puck.World.Tests
-                         Puck.World.Transpiler.Tests
+                         Puck.Launcher.Tests  Puck.Machines.Tests
+                         Puck.Maths.Tests  Puck.Networking.Tests
+                         Puck.Physics.Tests  Puck.Platform.Windows.Tests
+                         Puck.Recording.Tests  Puck.SdfVm.Tests
+                         Puck.Shaders.Tests  Puck.SignedDistance.Tests
+                         Puck.State.Generators.Tests  Puck.State.Rebuild.Corpus
+                         Puck.State.Rules.Tests  Puck.State.Search.Tests
+                         Puck.State.Tests  Puck.State.Topology.Tests
+                         Puck.State.Vectors.Tests  Puck.Text.Tests
+                         Puck.Vulkan.Tests  Puck.World.Agents.Tests
+                         Puck.World.Azure.Tests  Puck.World.Browser.Tests
+                         Puck.World.Protocol.Tests  Puck.World.Schema.Tests
+                         Puck.World.Tests  Puck.World.Transpiler.Tests
 (Tool)                   Puck.Cli
 (Analyzer)               Puck.Analyzers
 ```
@@ -114,7 +113,7 @@ and drives it over compilations it builds itself.
 
 Dependencies normally point downward. A same-row dependency is acceptable
 when it does not introduce a backend or composition-root dependency—each
-GamingBrick project's dependency on `Puck.GamingBricks` (rule 4 above) is
+GamingBrick project's dependency on `Puck.Machines` (rule 4 above) is
 exactly this case.
 
 ### The architecture gate
@@ -206,9 +205,9 @@ Cross-backend parity has one on-demand check: `puck parity` boots the real `Puck
 | `Puck.Physics` | Deterministic fixed-point simulation kernels: an exact pairwise gravity oracle, reusable Barnes–Hut monopoles, adaptive dual-tree FMM with M2M/M2L/L2L passes, shared compound body-collider vocabulary, dynamic and analytic-static contact geometry, the `IContactField` seam a grounded body resolves against with both providers behind it (`FixedStaticContactSolver` relaxes against a collider set; `FixedFieldContactSolver` measures against a scalar field through `Puck.Maths`' seams), a temporal-substep sequential-impulse rigid solver with persistent manifolds, and the body motion-program core in `Motion/` (`BodyMotionOp`, `CompiledBodyMotionProgram`'s admission/phase compiler, the per-body trigger and action-state IR, and the compiled `FixedMotionTuning`/`FixedBodyShaping` shapes the stages read). It owns no world schema, authority, walkability policy, or presentation seam: the authored-row translation into the motion IR stays in `Puck.World.Schema` and the per-phase execution stays in `Puck.World.Server.WorldBody`. Depends on `Puck.Maths`, `Puck.Abstractions` (the strict by-name enum converter the authored motion enums declare), and `Puck.State` (the `ExpressionOp` comparison/`ActionTriggerMode` vocabulary a compiled predicate shares with a state rule). |
 | `Puck.Audio` | `Puck.Audio.Mixing`: the fixed-point mixer core (s16×Q16 gains, int32 accumulate, polynomial soft-clip, ramped coefficients) and the 32-voice deterministic synth (`AudioMixer`/`VoiceSynth`/`AudioSnapshot`/`MachineAudioRate`), presentation-adjacent state with no replay/hash contract of its own. Parses no document—`Puck.World.Audio.WorldVoicePatchFactory` (which stays in `Puck.World`) converts an authored `puck.synth.v1` patch into the runtime `VoicePatch` struct. Depends only on `Puck.Abstractions`, `Puck.Commands`, `Puck.Hosting`, `Puck.Maths`. |
 | `Puck.Recording` | Everything downstream of a captured frame, in one project. `Capture/` is the still-frame half: the `ICaptureSink` that writes PNGs through `Puck.Assets`'s `PngEncoder`, and the FNV-1a frame-hash observer (GPU readback occurs upstream). The rest is the `puck.recording.v1` moving-picture graph: frame source → data-defined overlay compositor → encoder ladder → hand-rolled Matroska/WebM muxer, plus the managed-Opus (Concentus) audio lane and the `RecordingSession` that implements the same `ICaptureSink`. It defines the recording document, muxer, overlays, and session; the Media Foundation video-encoder ladder and WASAPI audio sources are the platform backend. Depends on `Puck.Abstractions`, `Puck.Assets`, and `Puck.Maths`. |
-| `Puck.GamingBricks` | The substrate both GamingBrick cores build on. State-serialization and forked-instance lifecycle: `StateWriter`/`StateReader` (little-endian widths + `WriteBlock<T>` memcpy + `Reset` reuse), `IStateTransfer` with its `StateSaveTransfer`/`StateLoadTransfer` directions (one field list per component, run both ways), `SnapshotSection`, `ISnapshotable`, the flat `SnapshotImage`, the `SnapshotDivergence` localizer, `MachineInstance<,>`/`MachineFork<,>`/`MachineInstancePool<,>`, `ISnapshotableMachine`. The machine-neutral queued-host substrate: `QueuedMachineWorker` + `IQueuedMachineCore` adapter (worker thread, bounded FIFO with backpressure, triple-buffer publication with the upload lease, native-frame-keyed save-flush debounce, the vectorized framebuffer repack), `MachineTimeTravel<TInput>` (rewind, persistent-fork runahead, capped fast-forward), and `QueuedHostContractProbe`, which proves the queued-host contract for both cores' batteries. Per-core snapshot identity fields, component orders, and fingerprints stay in each core; the fingerprint primitive lives in `Puck.Maths`. References `Puck.Abstractions` and `Puck.Hosting` (`EngineTicks`' tick-to-cycle conversion). |
-| `Puck.HumbleGamingBrick` | Deterministic SM83 machine across its DMG, MGB, SGB, CGB, and AGB-compatibility revisions (snapshots, forks, cartridges, link cable, PPU, APU, peripherals). Its `Hosting/` folder carries the thin adapter from the neutral screen-machine contract to the core over `Puck.GamingBricks`'s `QueuedMachineWorker`: an `IQueuedMachineCore` (pad mapping, KEY1-aware tick conversion, framebuffer, save persistence) plus the host shell and work-RAM peek. Inherits the substrate's queued/backpressure behavior. |
-| `Puck.AdvancedGamingBrick` | Deterministic AGB-native ARM7TDMI machine (cycle-level bus, DMA, timers, PPU, APU, cartridges, snapshots, link cable). Its `Hosting/` folder carries the thin adapter from the neutral screen-machine contract to the core over `Puck.GamingBricks`'s `QueuedMachineWorker`: an `IQueuedMachineCore` (KEYINPUT mapping, exact tick conversion, framebuffer, save persistence) and the host shell. Hosted defaults use bundled Puck cold boot; explicit fast boot bypasses presentation while retaining firmware services, and external firmware selection is independent of startup mode. See the [AGB embedding guide](emulation/agb/embedding.md). |
+| `Puck.Machines` | The substrate both GamingBrick cores build on. State-serialization and forked-instance lifecycle: `StateWriter`/`StateReader` (little-endian widths + `WriteBlock<T>` memcpy + `Reset` reuse), `IStateTransfer` with its `StateSaveTransfer`/`StateLoadTransfer` directions (one field list per component, run both ways), `SnapshotSection`, `ISnapshotable`, the flat `SnapshotImage`, the `SnapshotDivergence` localizer, `MachineInstance<,>`/`MachineFork<,>`/`MachineInstancePool<,>`, `ISnapshotableMachine`. The machine-neutral queued-host substrate: `QueuedMachineWorker` + `IQueuedMachineCore` adapter (worker thread, bounded FIFO with backpressure, triple-buffer publication with the upload lease, native-frame-keyed save-flush debounce, the vectorized framebuffer repack), `MachineTimeTravel<TInput>` (rewind, persistent-fork runahead, capped fast-forward), and `QueuedHostContractProbe`, which proves the queued-host contract for both cores' batteries. Per-core snapshot identity fields, component orders, and fingerprints stay in each core; the fingerprint primitive lives in `Puck.Maths`. References `Puck.Abstractions` and `Puck.Hosting` (`EngineTicks`' tick-to-cycle conversion). |
+| `Puck.HumbleGamingBrick` | Deterministic SM83 machine across its DMG, MGB, SGB, CGB, and AGB-compatibility revisions (snapshots, forks, cartridges, link cable, PPU, APU, peripherals). Its `Hosting/` folder carries the thin adapter from the neutral screen-machine contract to the core over `Puck.Machines`'s `QueuedMachineWorker`: an `IQueuedMachineCore` (pad mapping, KEY1-aware tick conversion, framebuffer, save persistence) plus the host shell and work-RAM peek. Inherits the substrate's queued/backpressure behavior. |
+| `Puck.AdvancedGamingBrick` | Deterministic AGB-native ARM7TDMI machine (cycle-level bus, DMA, timers, PPU, APU, cartridges, snapshots, link cable). Its `Hosting/` folder carries the thin adapter from the neutral screen-machine contract to the core over `Puck.Machines`'s `QueuedMachineWorker`: an `IQueuedMachineCore` (KEYINPUT mapping, exact tick conversion, framebuffer, save persistence) and the host shell. Hosted defaults use bundled Puck cold boot; explicit fast boot bypasses presentation while retaining firmware services, and external firmware selection is independent of startup mode. See the [AGB embedding guide](emulation/agb/embedding.md). |
 | `Puck.GamingBricks.Forge` | Host-independent `puck.cartridge.v1` source model, validation, canonical source identity, JSON Pointer draft editor, graphics encoding and compiler contracts. Depends on Abstractions, Assets, and State; neutral machine extension and prepared-content contracts live in Abstractions. |
 | `Puck.HumbleGamingBrick.Forge` | Native CGB document compiler (`HgbCartridgeCompiler`), SM83 emitters and framework primitives, tile/audio encoders, Tune audio-document compiler and authored boot-ROM tools. Depends on `Puck.GamingBricks.Forge`, Assets and the HGB emulator; no World dependency. |
 | `Puck.AdvancedGamingBrick.Forge` | Native AGB document compiler (`AgbCartridgeCompiler`), Thumb/ARM emitters, direct-boot cartridge builder and polling kernel. Depends on `Puck.GamingBricks.Forge` and the AGB emulator. No World dependency or BIOS distribution. |
@@ -239,7 +238,7 @@ Cross-backend parity has one on-demand check: `puck parity` boots the real `Puck
 | `Puck.Azure.Functions` | The public Azure Functions edge: self-onboarding (`SelfOnboard`/`SelfOnboardStatus`, proxying to `Puck.Actors`), key attestation, blob SAS generation and load-balanced blob endpoints, guest access, publishing/unpublishing and listing public files, feature checks, and health checks, plus a blob-created Event Grid trigger. References `Puck.Attestation`, `Puck.Azure`, `Puck.Maths`, and `Puck.Storage`. |
 | `Puck.HumbleGamingBrick.Post` | Humble core conformance, determinism, reference-ROM, save, and cross-generation link battery. |
 | `Puck.AdvancedGamingBrick.Post` | Advanced core conformance, determinism, commercial-ROM, link, co-simulation, and diagnostic tooling. |
-| `Puck.GamingBricks.Post` | The battery scaffold both Post projects reference: `PostVerdict`/`PostTier` (verdict class and fast→slow tier), `PostStageOutcome`/`PostStageResult` (a stage's return and its report row), the generic runner `PostBattery<TContext>` over `IPostStage<TContext>` into a `PostReport`, `PostProgressGuard` (the hang guard), `HashDivergenceReport`, `CorpusManifest`, and `CommandLineArguments` (flag-value lookup). Each battery's own `PostContext` and stage list stay in the owning project—they diverge per machine (BIOS image, corpus roots, console model) and are not shared. |
+| `Puck.Machines.Post` | The battery scaffold both Post projects reference: `PostVerdict`/`PostTier` (verdict class and fast→slow tier), `PostStageOutcome`/`PostStageResult` (a stage's return and its report row), the generic runner `PostBattery<TContext>` over `IPostStage<TContext>` into a `PostReport`, `PostProgressGuard` (the hang guard), `HashDivergenceReport`, `CorpusManifest`, and `CommandLineArguments` (flag-value lookup). Each battery's own `PostContext` and stage list stay in the owning project—they diverge per machine (BIOS image, corpus roots, console model) and are not shared. |
 
 ## Experimental projects
 

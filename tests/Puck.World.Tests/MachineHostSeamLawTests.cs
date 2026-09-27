@@ -17,7 +17,7 @@ public sealed class MachineHostSeamLawTests {
     // name here must NOT appear among Server's own referenced assemblies once the fold holds.
     private static readonly string[] DeniedAssemblyNames = [
         "Puck.AdvancedGamingBrick",
-        "Puck.GamingBricks",
+        "Puck.Machines",
         "Puck.GamingBricks.Forge",
         "Puck.HumbleGamingBrick",
         "Puck.HumbleGamingBrick.Forge",

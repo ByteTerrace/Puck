@@ -55,7 +55,7 @@ public sealed partial class HumbleGamingBrickCore : IQueuedMachineCore {
     /// <param name="configuration">The hardware model, cartridge, optional boot ROM, and tick resolution.</param>
     /// <param name="savePath">Optional battery-save path; null keeps saves in memory.</param>
     /// <param name="dmgSpeed">Whether to hold the reported pacing rate at 4,194,304 LCD dots/second, including
-    /// double speed. Choose true when using <see cref="CyclesPerSecond"/> to pace a hardware-speed host loop.</param>
+    /// double speed. Choose true when using <see cref="CycleRate"/> to pace a hardware-speed host loop.</param>
     public HumbleGamingBrickCore(MachineConfiguration configuration, string? savePath = null, bool dmgSpeed = false) {
         CheckpointIdentity = MachineCheckpointIdentity.Compute(
             FormattableString.Invariant(formattable: $"puck.hgb.core.v1/{MachineIdentity.CurrentVersion}/{((int)configuration.Model)}/{configuration.TickResolution.SubdivisionLog2}/{dmgSpeed}"),
@@ -80,11 +80,11 @@ public sealed partial class HumbleGamingBrickCore : IQueuedMachineCore {
     /// <inheritdoc/>
     public string CheckpointIdentity { get; }
     /// <inheritdoc/>
-    public ulong CyclesPerSecond =>
-        ((!m_dmgSpeed && m_key1.IsDoubleSpeed)
+    public MachineCycleRate CycleRate =>
+        new(cycles: ((!m_dmgSpeed && m_key1.IsDoubleSpeed)
             ? (2UL * MachineCyclesPerSecond)
             : MachineCyclesPerSecond
-        );
+        ));
     /// <inheritdoc/>
     public long NativeFrameIndex =>
         ((long)(m_machine.Machine.Clock.CycleCount / DotsPerFrame));

@@ -1176,7 +1176,7 @@ leaves the gun off for no ray, a miss, the bezel or a screen that is not
 infrared receive line: a game reads RP bit 1 or a HuC IR window and sees light
 while the aim lands on a pixel the LCD shows at least half bright, and the
 gun's trigger is an ordinary kit-mapped button. The aim is snapshot state and
-the queued checkpoint carries it (`puck.queued-machine.v2`); the advanced brick
+the queued checkpoint carries it; the advanced brick
 has no light gun and ignores the pointer. `screen.state` echoes the tick's aim
 as `gun=`. The laws are the Humble battery's `light-gun` stage and
 `LightGunLawTests`, whose probe cartridge (`LightGunProbeCartridge`) draws a

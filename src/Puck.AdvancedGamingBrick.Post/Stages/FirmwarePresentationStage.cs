@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 using Puck.Assets;
-using Puck.GamingBricks;
+using Puck.Machines;
 
 namespace Puck.AdvancedGamingBrick.Post;
 

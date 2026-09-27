@@ -62,8 +62,8 @@ internal sealed class SerialLinkGroupCore : IMachineGroupCore {
     public long CycleCount =>
         m_first.CycleCount;
     /// <inheritdoc/>
-    public ulong CyclesPerSecond =>
-        m_first.CyclesPerSecond;
+    public MachineCycleRate CycleRate =>
+        m_first.CycleRate;
     /// <inheritdoc/>
     public ReadOnlySpan<uint> Framebuffer =>
         m_first.Framebuffer;

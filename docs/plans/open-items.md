@@ -80,6 +80,14 @@ Every package below carries its own check on the programme page; tick it there a
 - [ ] The program model: memory model, procedures and banks, interrupts, ROM residency and the save, arithmetic.
 - [ ] The content library; optional distribution.
 
+### [Humble Gaming Deck](humble-gaming-deck.md)
+
+- [x] The shared-layer rename to `Puck.Machines`.
+- [ ] Neutral contracts: native frames, multi-port input, optional firmware (startable today).
+- [ ] The CPU and the bus; a complete NTSC machine; NTSC accuracy.
+- [ ] Common boards; regional hardware; long-tail boards; expansion audio.
+- [ ] The Famicom Disk System; peripherals; World cabinets.
+
 ## [Play](play.md)
 
 Every package below carries its own check on the programme page; tick it there and here in the same change.

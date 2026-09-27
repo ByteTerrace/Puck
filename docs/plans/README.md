@@ -19,6 +19,8 @@ How a world is composed, compiled, packaged, released, and rolled back, and what
 
 Hosted machines under screens and the cartridges they run, as one page of packages: the cabinet module, cabinet authoring, optional distribution, firmware and content policy, the program model, asset ingestion, the content library. Forcing artifact: the arcade's cabinet module used twice, with a retail-scale cartridge in one. Its decisions are in [the register](../decisions/machines-and-cartridges.md).
 
+- [Humble Gaming Deck](humble-gaming-deck.md)—the proposed NES and Famicom emulator core, the shared-layer changes it needs, and its accuracy target.
+
 ## [Play](play.md)
 
 The reference game's remaining engineering, its creatures and scale, the finder that admits a party across authorities, and the MCP adapter, as one page of packages. Forcing artifact: the quilt played by a group the finder admitted, with an agent authoring through MCP. Its decisions are in [the register](../decisions/play.md).

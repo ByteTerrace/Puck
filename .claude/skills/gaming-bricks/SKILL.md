@@ -61,7 +61,7 @@ Post stages are authoritative; update stale skill guidance in the same change.
   for clock and event ordering, serial and timer edges, snapshots, GB PPU
   timing, oracle conflicts, and the documented GBA ready-line gap.
 - Read the
-  [`Puck.GamingBricks.Post` README](../../../src/Puck.GamingBricks.Post/README.md)
+  [`Puck.Machines.Post` README](../../../src/Puck.Machines.Post/README.md)
   first when a change touches stage or verdict semantics rather than one
   brick's own context — the shared battery scaffold both Post projects close
   over: `PostBattery<TContext>`, `IPostStage<TContext>`, `PostVerdict`,

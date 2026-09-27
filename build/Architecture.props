@@ -165,7 +165,7 @@
         <!-- The headless P1 split's document row (docs/project-map.md's Puck.World.Schema row; formerly
              Puck.World.Data). Puck.World.Authoring is the authored-content document row (formerly the Authoring/
              half of Puck.World.Forge; the SM83 forge half moved to Puck.HumbleGamingBrick.Forge, taking the
-             Puck.HumbleGamingBrick edge — and its Puck.GamingBricks tail — out of this closure, an
+             Puck.HumbleGamingBrick edge — and its Puck.Machines tail — out of this closure, an
              absence this profile now enforces: the document row no longer links an emulator). Puck.Hosting is a
              direct edge for exactly one symbol, EngineTicks.PerRate (its local attachment support also
              brings Networking transitively): ValidateProfile refuses a refresh rate with

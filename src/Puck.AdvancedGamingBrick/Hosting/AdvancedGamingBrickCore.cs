@@ -73,8 +73,8 @@ public sealed partial class AdvancedGamingBrickCore : IQueuedMachineCore {
     /// <inheritdoc/>
     public string CheckpointIdentity { get; }
     /// <inheritdoc/>
-    public ulong CyclesPerSecond =>
-        MachineCyclesPerSecond;
+    public MachineCycleRate CycleRate =>
+        new(cycles: MachineCyclesPerSecond);
     /// <inheritdoc/>
     public long NativeFrameIndex =>
         (m_machine.Cycles / AdvancedGamingBrickMachine.CyclesPerFrame);
