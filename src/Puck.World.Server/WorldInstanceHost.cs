@@ -344,6 +344,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// <summary>Disposes every instance this host owns. The boot instance's own graph belongs to the container and
     /// is untouched.</summary>
     public void Dispose() {
+        foreach (var owner in m_screenSessions.Keys.ToList()) { CloseScreenSessions(owner: owner); }
         foreach (var forwarded in m_forwardedBodies.Values) { (forwarded.Authority as IDisposable)?.Dispose(); }
         m_forwardedBodies.Clear();
         foreach (var endpoint in m_authorityEndpoints.Values) {
@@ -502,6 +503,18 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             ScanInstanceBoundaries(instance: boot);
         }
     }
+    /// <summary>Settles the boot world's screen sessions right after its own step (see
+    /// <see cref="SettleScreenSessions"/>): every other instance settles inside <see cref="StepInstances"/>.</summary>
+    /// <param name="forwards">Whether the boot world's input reaches its destinations this step: false while it
+    /// replays or verifies.</param>
+    public void SettleBootScreenSessions(bool forwards) {
+        if (Boot is { } boot) {
+            SettleScreenSessions(
+                forwards: forwards,
+                instance: boot
+            );
+        }
+    }
     /// <summary>Whether the boot instance is due to actually step this master tick — <see langword="false"/> when
     /// its own live <see cref="WorldInstance.IsPaused"/> lever holds it, its authored rate is the durable stop (0),
     /// or <paramref name="stepTicks"/> no longer matches the width its current rate demands;
@@ -650,6 +663,10 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
 
                 instance.ElapsedEngineTicks = elapsedTicks;
                 ScanInstanceBoundaries(instance: instance);
+                SettleScreenSessions(
+                    forwards: (instance.Tape?.Mode != WorldReplayMode.Replaying),
+                    instance: instance
+                );
 
                 // Server.Step installs any pending definition swap (world.load/.reset/.reload) before
                 // advancing, so a mid-batch rate change makes the cached stepWidth stale for further
@@ -1177,6 +1194,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         // mints a genuinely new generation rather than reusing a name nothing answers to any more. A no-op for a name
         // the resolver never minted.
         m_resolver.NotifyInstanceRetired(instanceName: name);
+        CloseScreenSessions(owner: name);
         instance.Dispose();
         reason = string.Empty;
 
@@ -1246,6 +1264,10 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         m_instances[row.Name] = row;
         _ = EndpointFor(instance: row);
         ResolveForwardedRecoveries();
+        SettleScreenSessions(
+            forwards: false,
+            instance: row
+        );
     }
     /// <summary>Admits <paramref name="row"/> as this host's one boot row and seeds every embodied local seat's
     /// route to it — a desktop's one-time boot admission, never called by a boot-free host.</summary>

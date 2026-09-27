@@ -79,6 +79,7 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
             );
 
             m_instances.ScanBootBoundaryTriggers();
+            m_instances.SettleBootScreenSessions(forwards: (m_replayTape.Mode != WorldReplayMode.Replaying));
             // Count actual host work, including fast-forward bursts, but never paused pump calls.
             m_completedHostEngineTicks += ((stepTick - m_completedHostSteps) * context.StepTicks);
             m_completedHostSteps = stepTick;

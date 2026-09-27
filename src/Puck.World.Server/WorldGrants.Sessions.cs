@@ -1,4 +1,5 @@
 using Puck.Commands;
+using Puck.Maths;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -10,6 +11,9 @@ public sealed partial class WorldGrants {
     // (see Capture), and a rebuild ends every one (EndSessionsForRebuild).
     private readonly Dictionary<int, SessionEntry> m_sessions = new();
     private readonly Dictionary<int, int> m_sessionEpochs = new();
+
+    // One past the highest ordinal a session ever took here: the bound a read over every live session walks.
+    private int m_sessionOrdinalBound;
 
     // The verdict's rows that name a subject: the grants a session holds with no body.
     private static List<WorldGrant> BuildSessionGrants(Principal session, IReadOnlyList<WorldAdmissionGrant> templates) {
@@ -266,6 +270,10 @@ public sealed partial class WorldGrants {
             Host.DetachSessionSink(session: displaced.Principal);
         }
 
+        m_sessionOrdinalBound = Math.Max(
+            val1: m_sessionOrdinalBound,
+            val2: (session.Index + 1)
+        );
         m_sessions[session.Index] = new SessionEntry(
             principal: session,
             templates: admitted.Templates
@@ -332,6 +340,85 @@ public sealed partial class WorldGrants {
 
         return events;
     }
+
+    /// <summary>Gets one past the highest ordinal a session ever took on this world — the bound a read over every live
+    /// session walks, in ordinal order.</summary>
+    public int SessionOrdinalBound => m_sessionOrdinalBound;
+
+    /// <summary>Latches one forwarded input for a live session: its pointer ray and channels become the session's
+    /// current input, held until the next forward, and each channel's press is kept until the step's rules have read
+    /// it (<see cref="SettleSessionPresses"/>), so a press and release that both arrive between two steps still reach
+    /// one step's rules. A submission naming a session that is not live is refused.</summary>
+    /// <param name="submission">The submission, whose principal is the session.</param>
+    /// <returns><see langword="true"/> when the input latched.</returns>
+    internal bool TryLatchSessionInput(in IntentSubmission submission) {
+        if (!IsLiveSession(principal: submission.Principal)) {
+            return false;
+        }
+
+        var entry = m_sessions[submission.Principal.Index];
+
+        entry.Input = submission.Intent;
+
+        for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
+            var value = submission.Intent[ordinal];
+
+            if (FixedQ4816.Abs(value: value) > FixedQ4816.Abs(value: entry.PressedSince[ordinal])) {
+                entry.PressedSince[ordinal] = value;
+            }
+        }
+
+        return true;
+    }
+    /// <summary>Clears every session's kept presses once a step's rules have read them; the current input stays.</summary>
+    internal void SettleSessionPresses() {
+        foreach (var entry in m_sessions.Values) {
+            entry.PressedSince = default;
+        }
+    }
+
+    /// <summary>Reads the input of the live session at an ordinal: its pointer ray this step.</summary>
+    /// <param name="ordinal">The session ordinal.</param>
+    /// <param name="session">The live session principal, on success.</param>
+    /// <param name="ray">The session's pointer ray, or <see langword="null"/> for none.</param>
+    /// <returns><see langword="true"/> when a live session holds the ordinal.</returns>
+    public bool TryReadSessionPointer(int ordinal, out Principal session, out SourceRay? ray) {
+        if (m_sessions.TryGetValue(
+            key: ordinal,
+            value: out var entry
+        )) {
+            session = entry.Principal;
+            ray = entry.Input.SourceRay;
+
+            return true;
+        }
+
+        session = default;
+        ray = null;
+
+        return false;
+    }
+    /// <summary>Reads a live session's channel this step: its current value, or the stronger press it made since the
+    /// last step, whichever has the larger magnitude.</summary>
+    /// <param name="ordinal">The session ordinal.</param>
+    /// <param name="channel">The channel ordinal.</param>
+    /// <returns>The channel's value, or zero when no live session holds the ordinal.</returns>
+    public FixedQ4816 ReadSessionChannel(int ordinal, int channel) {
+        if (!m_sessions.TryGetValue(
+            key: ordinal,
+            value: out var entry
+        )) {
+            return FixedQ4816.Zero;
+        }
+
+        var current = entry.Input[channel];
+        var pressed = entry.PressedSince[channel];
+
+        return ((FixedQ4816.Abs(value: pressed) > FixedQ4816.Abs(value: current))
+            ? pressed
+            : current);
+    }
+
     /// <summary>Ends every live session at a rebuild, detaching each observation: the reset wiped their rows, and no
     /// template survives it. Their epochs stay retired, so a screen observing through one admits a new session under
     /// the candidate's policy.</summary>
@@ -368,13 +455,19 @@ public sealed partial class WorldGrants {
         }
     }
 
-    // One live session: the principal it acts as, the verdict's templates, and the body (and that body's generation)
-    // an embodiment assigned it.
+    // One live session: the principal it acts as, the verdict's templates, the body (and that body's generation) an
+    // embodiment assigned it, and the input its viewer forwards.
     private sealed class SessionEntry(Principal principal, IReadOnlyList<WorldAdmissionGrant> templates) {
+        // The largest-magnitude value each channel reached since the last settled step (SettleSessionPresses).
+        public ChannelValues PressedSince;
+
         public int BodyGeneration { get; set; }
         public int? BodyIndex { get; set; }
         // Set the moment the session's observer faulted: it acts no more, though its end applies at the next step.
         public bool Faulted { get; set; }
+        // The input the session's viewer last forwarded: its pointer ray in this world and its channels, held until the
+        // next forward replaces it (a release forward clears it).
+        public PlayerIntent Input { get; set; }
 
         public Principal Principal { get; } = principal;
         public IReadOnlyList<WorldAdmissionGrant> Templates { get; } = templates;

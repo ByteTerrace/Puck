@@ -279,6 +279,13 @@ public sealed partial class WorldTick {
         m_tickWrittenCount = 0;
 
         while (m_intents.TryDequeue(result: out var submission)) {
+            // A session has no body: its input latches on the session itself, for the rules to read.
+            if (submission.Principal.Kind == PrincipalKind.Session) {
+                _ = Host.GrantTable.TryLatchSessionInput(submission: in submission);
+
+                continue;
+            }
+
             if (Host.Body(index: submission.EntityIndex) is not { } body) {
                 continue;
             }
@@ -484,6 +491,7 @@ public sealed partial class WorldTick {
             tick: tick,
             stepTicks: context.StepTicks
         );
+        Host.GrantTable.SettleSessionPresses();
         StepBoardEnforcement(tick: tick);
         Host.StepSearch(tick: tick);
         StepFields(tick: tick);

@@ -64,7 +64,8 @@ public sealed class WorldSessionObservation : IDisposable {
         // The candidate's own store, laid out with the lanes validation lays it out with, at this world's clock: a
         // projection reads the audiences and values the candidate declares, not the ones the live document still holds.
         // Which session a screen admits next, and which reader lists name it, is not known, so the projection is the
-        // upper bound: every reader restriction admitted. Any failure to lay out or compose it is the candidate's
+        // upper bound: every reader restriction admitted, and every dealt child showing the costliest prototype its
+        // deal can deal to some reader. Any failure to lay out or compose it is the candidate's
         // refusal, never a throw through the envelope or the step.
         var time = m_server.Time;
 
@@ -80,13 +81,15 @@ public sealed class WorldSessionObservation : IDisposable {
                 throw new WorldRenderMeasureRefusedException(message: $"the candidate's state does not load into a store to disclose it to {Session.Describe()}: {reason}");
             }
 
-            return sink.Disclose(
+            return ((sink.Disclose(
                 arena: arena,
                 definition: candidate,
                 recipient: null,
                 tier: verdict.Tier,
                 unrestricted: true
-            );
+            ) is { } disclosed)
+                ? WorldPlacementDeal.WithCostliestChildren(definition: disclosed)
+                : null);
         } catch (Exception exception) when ((exception is not WorldRenderMeasureRefusedException)) {
             throw new WorldRenderMeasureRefusedException(
                 innerException: exception,

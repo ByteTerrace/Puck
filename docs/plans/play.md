@@ -228,7 +228,13 @@ backpressure, and query redaction on the observation feed; derived-band
 read-back with a long-run remainder-drift demonstration; destination and
 session resolution on the wire, an unembodied session authority carried across
 the wire (a session is admitted, embodied and ended in-process, and both remote
-doors refuse one), then optional body reservation and allocation; issuer-qualified group and document claims,
+doors refuse one), then optional body reservation and allocation; portal input
+beyond the window: a camera-projection portal's click (a deterministic
+destination camera pose on the authority's side), one session per viewer for
+split screen, a click on arbitrary destination geometry rather than a
+destination `Simulation` screen, a rule addressing one session rather than
+`any`, and hover feedback; destination tapes, since only the source world's
+tape records the input a portal forwards, and a replay forwards nothing; issuer-qualified group and document claims,
 entry reservations and idempotent handoff tokens fenced by epochs, leases, and
 durable commit records, hydrate, suspend, and migrate for persisted worlds,
 and durable recovery when an authority dies mid-transaction; retry-safe
