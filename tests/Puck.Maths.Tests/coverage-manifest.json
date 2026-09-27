@@ -846,6 +846,20 @@
     },
     {
       "CoveredBy": [
+        "integer.try-multiply-and-try-exponentiate-vs-exact"
+      ],
+      "Id": "Puck.Maths.BinaryIntegerFunctions.TryExponentiate(T,T,T&)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "integer.try-multiply-and-try-exponentiate-vs-exact"
+      ],
+      "Id": "Puck.Maths.BinaryIntegerFunctions.TryMultiply(T,T,T&)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "integer.try-add-and-try-narrow-vs-exact"
       ],
       "Id": "Puck.Maths.BinaryIntegerFunctions.TryNarrow(TWide,TNarrow&)",
@@ -13227,6 +13241,13 @@
     },
     {
       "CoveredBy": [
+        "core.word-modular-arithmetic-vs-big-integer"
+      ],
+      "Id": "Puck.Maths.NumberTheoryFunctions.ExtendedGreatestCommonDivisor(System.Int64,System.Int64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "core.number-theory-contracts"
       ],
       "Id": "Puck.Maths.NumberTheoryFunctions.HenselLiftRoot(System.ReadOnlySpan<System.Numerics.BigInteger>,System.Numerics.BigInteger,System.Numerics.BigInteger,System.Int32)",
@@ -13239,6 +13260,20 @@
         "scalar.jacobi-symbol-fixed-width-vs-exact-descent"
       ],
       "Id": "Puck.Maths.NumberTheoryFunctions.JacobiSymbol(System.Numerics.BigInteger,System.Numerics.BigInteger)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "core.word-modular-arithmetic-vs-big-integer"
+      ],
+      "Id": "Puck.Maths.NumberTheoryFunctions.ModularInverse(System.UInt64,System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "core.word-modular-arithmetic-vs-big-integer"
+      ],
+      "Id": "Puck.Maths.NumberTheoryFunctions.ModularPower(System.UInt64,System.UInt64,System.UInt64)",
       "State": "covered"
     },
     {
