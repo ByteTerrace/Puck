@@ -22,12 +22,12 @@
     {
       "id": 2,
       "name": "renderview-ao-no-effect",
-      "prompt": "ok this is driving me nuts. AO on the moth's wings has a weird dark band. i've been editing the AO code inside renderView in sdf-world.hlsli, rebuilt src/Puck.SdfVm, restarted Puck.World — and literally nothing changes, not even when i made calcAO return 1.0. what's going on, where should i actually be editing, and is there a faster loop than restarting the game every time?",
-      "expected_output": "Explains that ambient occlusion runs in the separate ambient dispatch (sdf-world-ambient.comp.hlsl, sdfResolveAmbient in surface/sdf-surface.hlsli calling calcAO in surface/sdf-occlusion.hlsli) and that renderView in passes/sdf-render-view.hlsli holds no AO code, so there is nothing there to edit. Points at the right file, recommends the build plus world.shaders.reload / world.shaders.status loop, and optionally world.ao / world.debug-view to isolate.",
+      "prompt": "ok this is driving me nuts. AO on the moth's wings has a weird dark band. i've been editing the AO code inside the views stage in sdf-world.hlsli, rebuilt src/Puck.SdfVm, restarted Puck.World — and literally nothing changes, not even when i made calcAO return 1.0. what's going on, where should i actually be editing, and is there a faster loop than restarting the game every time?",
+      "expected_output": "Explains that ambient occlusion runs in the separate ambient dispatch (sdf-world-ambient.comp.hlsl, sdfResolveAmbient in surface/sdf-surface.hlsli calling calcAO in surface/sdf-occlusion.hlsli) and that the views stage (sdfLightStage in shade/sdf-light-stage.hlsli) only reads the occlusion the ambient stage wrote, so there is nothing there to edit. Points at the right file, recommends the build plus world.shaders.reload / world.shaders.status loop, and optionally world.ao / world.debug-view to isolate.",
       "files": [],
       "assertions": [
-        "Identifies that AO is computed in a separate ambient pass/dispatch, not in renderView",
-        "States that renderView does not compute AO: the views pass reads the ambient pass's result",
+        "Identifies that AO is computed in a separate ambient pass/dispatch, not in the views stage",
+        "States that the views stage does not compute AO: it reads the ambient pass's result",
         "Points to the file that actually hosts the shipped AO code (sdf-surface.hlsli and/or sdf-occlusion.hlsli / sdf-world-ambient.comp.hlsl)",
         "Recommends world.shaders.reload (with world.shaders.status) instead of restarting",
         "Notes that reload requires compiling the shaders first",

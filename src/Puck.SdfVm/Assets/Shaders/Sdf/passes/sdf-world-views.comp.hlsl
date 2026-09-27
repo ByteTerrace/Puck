@@ -1,14 +1,16 @@
-// Shared dispatch for primary, surface, ambient and views. Each wrapper selects its pass macro; views reads the
-// resulting visibility records and shades the set's view into its own output image. The render graph's place pass
-// puts each view's output into its rect. All four hit passes use an 8x8 workgroup and identical indirect tile bbox,
-// camera, masks and active-pixel tests. Primary also reads the mesh pass's target (sdf-mesh.hlsli).
-// Every hit pass reads its resources through the sdf-world interface: dynamic transforms, screen sources, and the
-// read-only instance mask instance-cull produced (sdfInstanceMasks). Primary, surface and ambient write the visibility
-// records through sdfVisibilityRecordsRW; views reads them through sdfVisibilityRecords (sdf-visibility.hlsli).
+// The hit passes' shared entry point: primary, surface, ambient and views each select their pass macro and compile their
+// own stage (sdf-hit-stages.hlsli) over the pixel the entry point gathers. All four use an 8x8 workgroup over the one
+// indirect tile box, and the same camera, masks and active-pixel test. Primary also reads the mesh pass's target
+// (sdf-mesh.hlsli). Every hit pass reads its resources through the sdf-world interface: dynamic transforms, screen sources,
+// and the read-only instance mask instance-cull produced (sdfInstanceMasks). Primary, surface and ambient write the
+// visibility records through sdfVisibilityRecordsRW; views reads them through sdfVisibilityRecords (sdf-visibility.hlsli).
 // Unused shading resources compile out of primary traversal.
 #define SDF_DYNAMIC_TRANSFORMS
 #ifndef SDF_PRIMARY_PASS
 #define SDF_PRIMARY_READ
+#if !defined(SDF_SURFACE_PASS) && !defined(SDF_AMBIENT_PASS)
+#define SDF_VIEWS_PASS
+#endif
 #endif
 #define SDF_FRAME_INSTANCE_GRID
 #define SDF_INSTANCE_MASKS
@@ -16,25 +18,22 @@
 // Primary and views sample the glyph atlas, so primary marches true lettering.
 // The beam and other non-atlas kernels retain the conservative cell box.
 #define SDF_GLYPH_ATLAS
-// The brick pool: primary and shading sample baked SampledRegion carves O(1), so primary/shadow/AO marches stop paying
-// O(carve-count). All views variants inherit it.
+// The brick pool: primary and shading sample baked SampledRegion carves O(1), so the primary, shadow and occlusion marches
+// do not pay for every carve. All views variants inherit it.
 #define SDF_SAMPLED_REGIONS
-// The bounded volumes are in the shared interface, but only shading uses shade-volumes.hlsli's call at the end of
-// renderView; primary compiles it out.
-// The per-tile shadow gather (surface/sdf-shadow-gather.hlsli's sdfShadowGatherGroup): one groupshared shadow candidate mask per 8x8
-// workgroup, built cooperatively at the uniform seam inside renderView. Every lane — rendered pixel or not — must
-// reach renderView, so CSMain below turns its per-pixel extent test into an `active` flag instead of a return.
-// Primary and surface exit before group gathers; ambient and views each execute their own uniform gather.
+// The bounded volumes are in the shared interface, but only the views stage composites them (shade-volumes.hlsli).
+// The per-group shadow and ambient gathers (surface/sdf-shadow-gather.hlsli): one groupshared candidate mask per 8x8
+// workgroup, built cooperatively at a uniform seam of the ambient and views stages. Every lane, rendered pixel or not,
+// reaches its stage, so the entry point turns the per-pixel extent test into the pixel's `active` flag instead of a
+// return. Primary and surface gather nothing.
 #define SDF_GROUP_SHADOW_GATHER
 #define SDF_PART_RAY_BOUNDS
-// Every hit pass reads the beam's tile planes and part bounds through tiles, and the surviving-tile bbox from the
-// cull-args pass through cullBounds (sdf-cull-args.comp): its group origin, then its exclusive group end.
-// The dispatch is origin-anchored, so the origin offsets each invocation onto the bbox's pixels, and the all-empty
-// margins outside the bbox are never dispatched; the whole box is where this frame wrote visibility records, which
-// worldVisibilityCurrent reads.
+// Every hit pass reads the beam's tile planes and part bounds through tiles, and the surviving-tile box from the cull-args
+// pass through cullBounds (sdf-cull-args.comp): its group origin, then its exclusive group end. The dispatch is
+// origin-anchored, so the origin offsets each invocation onto the box's pixels, and the all-empty margins outside the box
+// are never dispatched; the whole box is where this frame wrote visibility records, which worldVisibilityCurrent reads.
 #include "sdf-world.hlsli"
 
-// Stage 1 writes the view's pixels into the set's view's output image, output, at their view-local coordinates.
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
     if (passGroup.sampleIndex == SDF_ISA_REPORT_REQUEST) {
@@ -50,64 +49,32 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         return;
     }
 
-    // The indirect dispatch covers the GPU-computed surviving-tile bbox anchored at (0,0); add its group origin (in
-    // pixels) so this invocation addresses the bbox's pixel rather than the frame's top-left.
+    // The indirect dispatch covers the surviving-tile box anchored at (0,0); its group origin, in pixels, moves this
+    // invocation onto the box's pixel rather than the frame's top-left.
     uint2 pixel = ((uint2(cullBounds[0], cullBounds[1]) * 8u) + id.xy);
 
     ViewportData view = worldView();
 
     // The symmetry-LOD origin: this viewport's camera (the per-sample wallpaper LOD rule measures from it).
     sdfLodOrigin = view.position.xyz;
-    // The per-invocation program-layout cache (field/sdf-layout.hlsli): primary/shadow marches, AO taps and normal queries
-    // repeatedly call the field evaluators. Decode once for this invocation before renderView runs.
+    // The per-invocation program-layout cache (field/sdf-layout.hlsli), decoded once before the stage's field queries.
     sdfProgramLayout = sdfLoadProgramLayout();
     sdfPartBoundsViewport = viewIndex;
 
-    // The RENDER extent: the view's output image's size (worldViewDims, the value the beam and instance-cull tile
-    // coverage read too).
-    uint2 rectDims = worldViewDims(view);
+    SdfPixel p = sdfPixelAt(view, pixel, viewIndex);
 
-    // Pixels past this viewport's RENDER extent fall outside its rendered source area. NOT a return: the lane still
-    // has to reach the group shadow gather's barriers inside renderView (uniform control flow), so it runs the
-    // march-free prologue as an inactive lane and stores nothing. Its tile reads are clamped onto the extent so no
-    // index leaves the tile grid.
-    bool active = ((pixel.x < rectDims.x) && (pixel.y < rectDims.y));
-    uint lane = (((pixel.y & 7u) * 8u) + (pixel.x & 7u)); // == SV_GroupThreadID: the bbox origin is group-aligned
-    uint2 clampedPixel = min(pixel, (rectDims - uint2(1u, 1u)));
+#if defined(SDF_PRIMARY_PASS)
+    sdfPrimaryStage(p);
+#elif defined(SDF_SURFACE_PASS)
+    sdfSurfaceStage(p);
+#elif defined(SDF_AMBIENT_PASS)
+    sdfAmbientStage(p);
+#else
+    float3 color = sdfViewsStage(p);
 
-    float2 localUv = ((float2(pixel) + 0.5) / float2(rectDims));
-    uint2 tileCoord = (clampedPixel / WorldTileSize);
-    uint tileIndex = worldTileIndex(viewIndex, tileCoord, passGroup.tileGrid);
-    float marchStart = (active ? tiles[worldTileMarchStartIndex(tileIndex)] : TileEmpty);
-    // The four-bound teleport's proven-empty gap for this tile (planes 1/2; sdf-beam wrote them). firstExit = the
-    // far distance when no gap was proven — the teleport in renderView is then a dead branch.
-    float firstExit = tiles[worldTileFirstExitIndex(tileIndex)];
-    float secondEntry = tiles[worldTileSecondEntryIndex(tileIndex)];
-    // The F1 far bound (plane 3; sdf-beam wrote it): the depth past which this tile's cone cannot produce any hit the
-    // fine march would ACCEPT (proven against the footprint-inflated threshold), so renderView exits the march there.
-    // The far distance (the view's authored far plane, worldFarDistance) = no bound proven (a dead far-exit past the
-    // far plane). The A/B lever pushes it out of reach so the "off" side marches exactly as pre-F1.
-    float farBound = tiles[worldTileFarBoundIndex(tileIndex)];
-
-    if (worldFarBoundDisabled()) {
-        farBound = (worldFarDistance(view) + 1.0);
+    if (p.active) {
+        // The float working color; the display encode dithers and quantizes it.
+        output[pixel] = float4(color, 1.0);
     }
-    // The tile's mask BASE (not the words themselves), using the same host-pushed width the beam prepass wrote with.
-    uint instanceMaskBase = worldInstanceMaskBase(tileIndex);
-    // The per-pixel world footprint scale (footprint at distance t = pixelFootprint * t): the viewport's vertical field
-    // of view (2 * tan(fov/2)) spread over its pixel height, feeding renderView's resolution-independent hit threshold.
-    // This is a pixel DIAMETER, deliberately 2x the pixel radius Keinert's termination test names — a half-pixel of
-    // conservative silhouette, in the same direction as the Lipschitz clamp's bias.
-    float pixelFootprint = ((2.0 * view.right.w) / max(float(rectDims.y), 1.0));
-
-    float3 color = renderView(view, localUv, marchStart, firstExit, secondEntry, farBound, instanceMaskBase, pixelFootprint, pixel, viewIndex, lane, active);
-
-    if (!active) {
-        return;
-    }
-
-#if !defined(SDF_PRIMARY_PASS) && !defined(SDF_SURFACE_PASS) && !defined(SDF_AMBIENT_PASS)
-    // The float working color; the display encode dithers and quantizes it.
-    output[pixel] = float4(color, 1.0);
 #endif
 }

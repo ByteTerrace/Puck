@@ -359,7 +359,7 @@ public static class SdfWorldPackage {
                 Outputs: [Parts.MeshTarget, Parts.MeshDepth]
             ),
             Hit(mesh: true, name: Parts.Primary, visibility: null, written: Parts.Visibility),
-            Hit(mesh: true, name: Parts.Surface, visibility: null, written: Parts.SurfaceVisibility),
+            Hit(mesh: false, name: Parts.Surface, visibility: null, written: Parts.SurfaceVisibility),
             Hit(mesh: false, name: Parts.Ambient, visibility: null, written: Parts.AmbientVisibility),
             Hit(mesh: false, name: Parts.Views, visibility: Parts.AmbientVisibility, written: Color),
         ],

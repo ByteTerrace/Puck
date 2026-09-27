@@ -102,7 +102,7 @@ float3 sdfSampleGlyphDecal(uint4 descriptor, float2 uv, float halfWidth, float f
 
 // Bounded emissive volumes (Puck.SignedDistance.SdfVolume — a participating medium, never a distance-field shape):
 // sdfVolumes, an 11-float4-per-volume table. Stage 1 is the only kernel that shades, so it is the only one that reads it.
-// Decoded and integrated by shade-volumes.hlsli in renderView and the sky prepass. KEEP IN SYNC with
+// Decoded and integrated by shade-volumes.hlsli in the views stage and the sky prepass. KEEP IN SYNC with
 // SdfWorldTables.PackVolumes / SdfProgramBuilder.MaxVolumes.
 static const uint SdfVolumeCount = 64u;
 #include "shade-volumes.hlsli"

@@ -1,8 +1,8 @@
 #ifndef PUCK_SDF_PRIMARY_HLSLI
 #define PUCK_SDF_PRIMARY_HLSLI
 
-// Full-scene and independent whole-part queries share this marcher.
-// Included after the world constants and VM helpers, before renderView.
+// Full-scene and independent whole-part queries share this marcher, and the primary stage runs it.
+#include "sdf-pixel.hlsli"
 // One ray's primary march: what the primary pass stores into its pixel's visibility record's V, C and L rows.
 struct SdfPrimaryMarch {
     float traveled;
@@ -370,5 +370,93 @@ SdfPrimaryMarch sdfTracePrimary(float3 rayOrigin, float3 rayDirection, float mar
     }
     return result;
 }
+
+#ifdef SDF_PRIMARY_PASS
+// The primary stage: marches the pixel's camera ray against the field, bounded by the nearest of the far distance, the
+// tile's far bound and the mesh the mesh pass drew there, and stores the record's V, C and L rows for every active pixel,
+// misses included. The slice, mask and overshoot debug views march nothing here: the slice evaluates the field on a plane,
+// the mask reads the tile masks, and the overshoot view runs its own two marches.
+void sdfPrimaryStage(SdfPixel p) {
+    sdfEvalCount = 0.0;
+
+    float traveled = max(p.marchStart, 0.0);
+    bool hitSurface = false;
+    int material = 0;
+    float4 hitLanes = float4(0.0, 0.0, 0.0, 0.0);
+    int hitFrameSlot = -1;
+    float materialBlendWeight = 0.0;
+    int materialBlendOther = 0;
+    int marchStep = 0;
+    // The clamped field at the accepted hit and the footprint-adaptive threshold it was accepted against, in the clamped
+    // units of the termination test: the light stage's coverage is their ratio.
+    float terminalRadius = 0.0;
+    float terminalHitThreshold = SurfaceEpsilon;
+    SdfMeshSample meshHit = (SdfMeshSample)0;
+
+    if (p.active) {
+        meshHit = sdfMeshSampleAt(p.pixel);
+    }
+
+    // The march ends at the nearest of the far distance, the tile's far bound and the mesh, and does not start at or past
+    // it: nothing it could accept there would win.
+    float marchBound = min(p.farDistance, (meshHit.covered ? min(p.farBound, meshHit.t) : p.farBound));
+
+    if ((p.marchStart >= 0.0) && (p.marchStart < marchBound) && (p.viewMode != DebugViewModeSlice) && (p.viewMode != DebugViewModeMask) && (p.viewMode != DebugViewModeOvershoot)) {
+        SdfPrimaryMarch primary = sdfTracePrimary(p.rayOrigin, p.rayDirection, p.marchStart, p.firstExit, p.secondEntry,
+            marchBound, p.farDistance, p.instanceMaskBase, p.pixelFootprint);
+        traveled = primary.traveled;
+        terminalRadius = primary.radius;
+        terminalHitThreshold = primary.threshold;
+        material = primary.material;
+        hitLanes = primary.lanes;
+        hitFrameSlot = primary.frameSlot;
+        materialBlendWeight = primary.blendWeight;
+        materialBlendOther = primary.blendOther;
+        marchStep = (int)primary.steps;
+        hitSurface = primary.found;
+    }
+
+    // At equal depth the mesh wins: the SDF surface is kept only when it is strictly nearer. A mesh pixel carries its draw
+    // and triangle, no SDF frame or seam blend, and a coverage threshold of one, so the silhouette blend reads it as solid.
+    bool meshPixel = (meshHit.covered && !(hitSurface && (traveled < meshHit.t)));
+
+    if (meshPixel) {
+        hitSurface = true;
+        traveled = meshHit.t;
+        material = sdfMeshMaterial(meshHit.draw, meshHit.triangleIndex);
+        hitFrameSlot = -1;
+        materialBlendWeight = 0.0;
+        materialBlendOther = 0;
+        terminalRadius = 0.0;
+        terminalHitThreshold = 1.0;
+    }
+
+    if (!p.active) {
+        return;
+    }
+
+    uint record = worldVisibilityRecord(p.pixel, p.viewIndex);
+    SdfVisibility visibility;
+    visibility.t = traveled;
+    visibility.identity = (meshPixel
+        ? sdfVisibilityIdentity(SdfVisibilityKindMesh, meshHit.draw)
+        : sdfVisibilitySdfIdentity(hitSurface, hitFrameSlot));
+    visibility.material = material;
+    visibility.flags = sdfVisibilityFlags(marchStep, sdfEvalCount);
+    SdfVisibilityCoverage coverage;
+    coverage.terminalRadius = terminalRadius;
+    coverage.threshold = terminalHitThreshold;
+    coverage.blendWeight = materialBlendWeight;
+    coverage.blendOther = materialBlendOther;
+    sdfStoreVisibility(record, visibility);
+    sdfStoreVisibilityCoverage(record, coverage);
+
+    if (meshPixel) {
+        sdfStoreVisibilityMeshTriangle(record, meshHit.triangleIndex);
+    } else {
+        sdfStoreVisibilityLanes(record, hitLanes);
+    }
+}
+#endif
 
 #endif

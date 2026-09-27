@@ -14,7 +14,7 @@
 // Mode 0 / >= DebugViewModeCount render final shading.
 static const int DebugViewModeCount = 12;
 static const int DebugViewModeNormals = 2;
-// Mode 7 (slice) is special-cased in TWO other places: renderView SKIPS the march for it (the slice never needs a
+// Mode 7 (slice) is special-cased in TWO other places: the primary stage skips the march for it (the slice never needs a
 // hit), and the beam prepass FORCE-SURVIVES every in-viewport tile for it (sdf-beam.comp) so the indirect dispatch
 // cannot truncate the field picture — the slice must show the IDEAL field wall to
 // wall. KEEP IN SYNC with DebugViewModes.Names in src/Puck.SdfVm/DebugViewModes.cs.
