@@ -134,6 +134,11 @@ public sealed record ResourceReference(
 /// <see langword="null"/> for a raw buffer. Only a package pass reaches a structured buffer.</param>
 /// <param name="Count">A counted buffer's size in elements, a sum of terms that each scale with a product of counts the
 /// host resolves, in place of <paramref name="SizeBytes"/>. Only a package pass reaches a counted buffer.</param>
+/// <param name="ClearDepth">The depth a depth resource's writer clears it to, in [0, 1], or <see langword="null"/> for
+/// <see cref="GpuDepthAttachment.DefaultClearDepth"/>: its render pass's <see cref="GpuDepthAttachment.ClearDepth"/>.
+/// A pass that keeps greater depths (<see cref="ShaderPipelineDepthCompare.Greater"/>) tests against a depth cleared to
+/// 0. Only a depth resource that forwards nothing declares it, because a forwarded version's writer loads what its
+/// predecessor left.</param>
 public sealed record ShaderPipelineResource(
     string Name,
     ShaderPipelineResourceKind Kind = ShaderPipelineResourceKind.Image,
@@ -145,7 +150,8 @@ public sealed record ShaderPipelineResource(
     string? From = null,
     uint Samples = 1,
     uint? StrideBytes = null,
-    IReadOnlyList<ShaderPipelineCountTerm>? Count = null
+    IReadOnlyList<ShaderPipelineCountTerm>? Count = null,
+    float? ClearDepth = null
 ) {
     /// <summary>Gets whether the host supplies the resource rather than a pass producing it.</summary>
     [JsonIgnore]

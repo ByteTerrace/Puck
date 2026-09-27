@@ -117,6 +117,29 @@ public sealed partial class ShaderPipelineCompiler {
                 );
             }
         }
+        // A strict test against the depth its writer clears to at the end that test keeps passes no fragment: the pass
+        // would draw nothing.
+        foreach (var depth in attachments) {
+            if ((depth.Kind != ShaderPipelineResourceKind.Depth) || (depth.From is not null)) {
+                continue;
+            }
+
+            var clearDepth = (depth.ClearDepth ?? GpuDepthAttachment.DefaultClearDepth);
+            var passesNothing = ((pass.DepthCompare ?? ShaderPipelineDepthCompare.Less) switch {
+                ShaderPipelineDepthCompare.Less => (clearDepth <= 0f),
+                ShaderPipelineDepthCompare.Greater => (clearDepth >= 1f),
+                _ => false,
+            });
+
+            if (passesNothing) {
+                Add(
+                    diagnostics,
+                    "SHADERPIPE_DEPTH_CLEAR",
+                    $"Geometry pass '{pass.Name}' tests {(pass.DepthCompare ?? ShaderPipelineDepthCompare.Less)} against '{depth.Name}' cleared to {clearDepth}, which no fragment passes; a Greater test clears to 0 (clearDepth) and a Less test to 1.",
+                    pass.Name
+                );
+            }
+        }
         if (pass.Geometry is not { } geometry) {
             Add(
                 diagnostics,
@@ -333,6 +356,23 @@ public sealed partial class ShaderPipelineCompiler {
                 $"Depth resource '{resource.Name}' declares history; a depth attachment is not retained into the next frame.",
                 resource.Name
             );
+        }
+        if (resource.ClearDepth is { } clearDepth) {
+            if (!(clearDepth is >= 0f and <= 1f)) {
+                Add(
+                    diagnostics,
+                    "SHADERPIPE_DEPTH_CLEAR",
+                    $"Depth resource '{resource.Name}' clears to {clearDepth}; a depth attachment clears to a depth in [0, 1].",
+                    resource.Name
+                );
+            } else if (resource.From is not null) {
+                Add(
+                    diagnostics,
+                    "SHADERPIPE_DEPTH_CLEAR",
+                    $"Depth resource '{resource.Name}' forwards '{resource.From}' and declares clearDepth; its writer loads what the predecessor left rather than clearing.",
+                    resource.Name
+                );
+            }
         }
     }
 }

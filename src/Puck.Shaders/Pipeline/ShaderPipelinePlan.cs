@@ -72,15 +72,19 @@ public sealed record ShaderPipelinePlannedStorage(
 /// <param name="Depth">Whether it is the depth attachment rather than a color attachment.</param>
 /// <param name="Load">How the render pass begins it: <see cref="GpuAttachmentLoad.Load"/> for a version that forwards
 /// its predecessor, whose contents the pass continues, and <see cref="GpuAttachmentLoad.Clear"/> for one whose writer
-/// starts from discarded contents (a color to opaque black, a depth to one).</param>
+/// starts from discarded contents (a color to opaque black, a depth to its <see cref="ClearDepth"/>).</param>
 /// <param name="Store">Whether the render pass keeps what it wrote: <see cref="GpuAttachmentStore.Store"/> for a stored
 /// version, <see cref="GpuAttachmentStore.Discard"/> for one nothing uses after its writer.</param>
+/// <param name="ClearDepth">The depth a cleared depth attachment starts at: its version's declared
+/// <see cref="ShaderPipelineResource.ClearDepth"/>, or <see cref="GpuDepthAttachment.DefaultClearDepth"/> when it declares
+/// none. A color attachment, and a loaded one, keep the default.</param>
 public sealed record ShaderPipelineAttachment(
     string Version,
     int Storage,
     bool Depth,
     GpuAttachmentLoad Load,
-    GpuAttachmentStore Store
+    GpuAttachmentStore Store,
+    float ClearDepth = GpuDepthAttachment.DefaultClearDepth
 );
 /// <summary>A package pass's step in an immutable execution plan: the package whose recorder records it and the versions
 /// bound to its ports. The package binds its own descriptors, so its ports carry no binding; the extent it runs at is

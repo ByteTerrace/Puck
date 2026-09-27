@@ -13,9 +13,14 @@ public readonly record struct GpuColorAttachment(GpuPixelFormat Format, GpuAttac
 /// <param name="Format">The attachment's depth format.</param>
 /// <param name="Load">What the pass does with the contents when it begins.</param>
 /// <param name="Store">What the pass does with the contents when it ends.</param>
-/// <param name="ClearDepth">The depth a <see cref="GpuAttachmentLoad.Clear"/> load writes, in [0, 1]: 1 for a depth test
-/// that keeps the nearer of smaller depths, 0 for a reversed-Z test that keeps the greater.</param>
-public readonly record struct GpuDepthAttachment(GpuPixelFormat Format, GpuAttachmentLoad Load, GpuAttachmentStore Store, float ClearDepth = 1f);
+/// <param name="ClearDepth">The depth a <see cref="GpuAttachmentLoad.Clear"/> load writes, in [0, 1]: 1
+/// (<see cref="DefaultClearDepth"/>) for a depth test that keeps the nearer of smaller depths, 0 for a reversed-Z test
+/// that keeps the greater.</param>
+public readonly record struct GpuDepthAttachment(GpuPixelFormat Format, GpuAttachmentLoad Load, GpuAttachmentStore Store, float ClearDepth = GpuDepthAttachment.DefaultClearDepth) {
+    /// <summary>The depth an attachment clears to when it names none: the far end of a depth test that keeps smaller
+    /// depths.</summary>
+    public const float DefaultClearDepth = 1f;
+}
 /// <summary>
 /// The attachments one render pass draws into, as formats and load and store operations: what a graphics pipeline is
 /// created against (<see cref="IGpuPipelineFactory"/>). The images come later, in an <see cref="IGpuFramebuffer"/>.

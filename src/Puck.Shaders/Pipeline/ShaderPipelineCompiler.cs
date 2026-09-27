@@ -768,6 +768,13 @@ public sealed partial class ShaderPipelineCompiler {
                 diagnostics: diagnostics,
                 resource: resource
             );
+        } else if (resource.ClearDepth is not null) {
+            Add(
+                diagnostics,
+                "SHADERPIPE_DEPTH_CLEAR",
+                $"{resource.Kind} resource '{resource.Name}' declares clearDepth; only a depth resource is cleared to a depth.",
+                resource.Name
+            );
         }
     }
 
