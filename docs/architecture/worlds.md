@@ -628,6 +628,16 @@ its own measured clock, never through the host's presentation clock—independen
 remote worlds do not share a presentation coordinate. A nested screen inside a projected destination
 binds dark: the explicit depth-one policy.
 
+A portal's face can show its destination as a window (`projection: window`): the face's portal facet
+maps a counterpart, and the destination renders each frame through an off-axis camera fitted, from
+the viewer's eye mapped through the door's isometry, to the face's glass mapped the same way. The
+window shows what a traveller at the eye would see through the door and parallaxes as the eye moves;
+the glass shows it edge to edge, with no bezel. The eye is the primary local seat's body at eye
+height, one per screen, since a screen shows one image. A pick through the glass continues through
+the camera the window rendered into the destination and, since the destination's own screens bind
+dark, ends on its world: on the surface the pick's ray meets among the destination's static
+placements. Routing input into the destination's authority is open work.
+
 User/group-scoped destinations make images viewer-dependent. One image per screen index cannot show
 different destinations to split-screen viewers; per-viewport bindings or distinct render passes are
 required.
