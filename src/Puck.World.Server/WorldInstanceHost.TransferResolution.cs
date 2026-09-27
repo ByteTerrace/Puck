@@ -297,7 +297,7 @@ public sealed partial class WorldInstanceHost {
                 group.Slots.Add(item: slot);
             }
 
-            group.Descriptions.Add(item: $"{hit.Placement.Id}/{hit.Face.Face} seat {(hit.Seat + 1)}");
+            group.Descriptions.Add(item: $"{hit.Placement.Id}/{hit.Face.Face} {TravellerName(index: hit.Seat, localSeatCount: instance.Server.Population.LocalSeatCount)}");
         }
 
         foreach (var key in order) {

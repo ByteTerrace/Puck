@@ -17,15 +17,46 @@ public sealed class WorldContinuum(WorldClient client, WorldSeatAuthorityRouter 
     private readonly string?[] m_selectedProjectionNames = new string?[WorldSeatBindings.SeatCount];
     private readonly Vector3[] m_lastPositions = new Vector3[WorldSeatBindings.SeatCount];
     private readonly bool[] m_hasLastPosition = new bool[WorldSeatBindings.SeatCount];
+    private readonly WorldAuthorityRoute?[] m_frameRoutes = new WorldAuthorityRoute?[WorldSeatBindings.SeatCount];
+    private readonly WorldAuthorityEndpoint?[] m_frameElsewhere = new WorldAuthorityEndpoint?[WorldSeatBindings.SeatCount];
+
+    private bool m_inFrame;
+    private int m_frameRouteRevision;
+    private int m_presentationRevision;
 
     /// <summary>Presentation rebuild watch for the complete local seat-route table.</summary>
-    public int Revision => m_routes.Revision;
+    public int Revision => (m_inFrame ? m_frameRouteRevision : m_routes.Revision);
+    /// <summary>The revision of the routes and presentation frames pinned by <see cref="BeginFrame"/>.</summary>
+    public int PresentationRevision => m_presentationRevision;
 
-    private static bool ProjectionExists(IReadOnlyList<WorldAdjacencyProjection> projections, string authority) {
+    /// <summary>Pins each seat's route and choice of presentation frame until <see cref="EndFrame"/>, so delivery
+    /// threads cannot change them between the boot program's emission and its camera dress. Called on the frame thread.</summary>
+    public void BeginFrame() {
+        m_frameRouteRevision = m_routes.Revision;
+        for (var slot = 0; (slot < m_frameRoutes.Length); slot++) {
+            var route = m_routes.TryRoute(slot: slot);
+            var elsewhere = ResolvePresentedElsewhere(route: route);
+
+            if (!ReferenceEquals(objA: route, objB: m_frameRoutes[slot]) || !ReferenceEquals(objA: elsewhere, objB: m_frameElsewhere[slot])) {
+                m_presentationRevision++;
+            }
+            m_frameRoutes[slot] = route;
+            m_frameElsewhere[slot] = elsewhere;
+        }
+        m_inFrame = true;
+    }
+    /// <summary>Ends the frame-thread capture's pinned route reads.</summary>
+    public void EndFrame() => m_inFrame = false;
+
+    private static bool ProjectionExists(IReadOnlyList<WorldAdjacencyProjection> projections, string authority, string? documentId) {
         foreach (var projection in projections) {
             if (string.Equals(
                 a: projection.Neighbour.Authority,
                 b: authority,
+                comparisonType: StringComparison.Ordinal
+            ) && string.Equals(
+                a: projection.Neighbour.Definition.DocumentId,
+                b: documentId,
                 comparisonType: StringComparison.Ordinal
             )) {
                 return true;
@@ -127,6 +158,11 @@ public sealed class WorldContinuum(WorldClient client, WorldSeatAuthorityRouter 
                 var neighbour = projection.Neighbour;
 
                 if (
+                    !string.Equals(
+                        a: neighbour.Definition.DocumentId,
+                        b: route.Endpoint.Definition.DocumentId,
+                        comparisonType: StringComparison.Ordinal
+                    ) ||
                     (((uint)entityIndex) >= ((uint)neighbour.EntityCapacity)) ||
                     !neighbour.IsEntityActive(index: entityIndex) ||
                     (neighbour.EntityAddress(index: entityIndex) != entity)
@@ -269,8 +305,14 @@ public sealed class WorldContinuum(WorldClient client, WorldSeatAuthorityRouter 
     /// <see langword="null"/> while the seat is presented in the boot frame.</summary>
     /// <param name="slot">The seat's slot.</param>
     /// <returns>The routed endpoint the seat is presented in, or <see langword="null"/>.</returns>
-    public WorldAuthorityEndpoint? PresentedElsewhere(int slot) {
-        var endpoint = Route(slot: slot).Endpoint;
+    public WorldAuthorityEndpoint? PresentedElsewhere(int slot) => (m_inFrame
+        ? m_frameElsewhere[slot]
+        : ResolvePresentedElsewhere(route: m_routes.TryRoute(slot: slot)));
+
+    private WorldAuthorityEndpoint? ResolvePresentedElsewhere(WorldAuthorityRoute? route) {
+        if (route?.Endpoint is not { } endpoint) {
+            return null;
+        }
         var authority = endpoint.Authority;
 
         if (
@@ -287,6 +329,7 @@ public sealed class WorldContinuum(WorldClient client, WorldSeatAuthorityRouter 
             ) ||
             ProjectionExists(
                 authority: authority,
+                documentId: endpoint.Definition.DocumentId,
                 projections: m_adjacencies.Visuals()
             )
         ) {
@@ -295,6 +338,7 @@ public sealed class WorldContinuum(WorldClient client, WorldSeatAuthorityRouter 
 
         return endpoint;
     }
+
     /// <summary>Resolves a seat's pose in the frame it is presented in: the boot frame, or the frame of the world it is
     /// presented in elsewhere (<see cref="PresentedElsewhere"/>), where its routed authority's own pose needs no
     /// mapping.</summary>
@@ -332,8 +376,20 @@ public sealed class WorldContinuum(WorldClient client, WorldSeatAuthorityRouter 
         return true;
     }
     /// <summary>Whether a locally followed seat owns the primary rendering of this exact traveler.</summary>
-    public bool IsFollowed(in WorldEntityAddress entity) => m_routes.Claims(entity: in entity);
-    public WorldAuthorityRoute Route(int slot) => m_routes.Route(slot: slot);
+    public bool IsFollowed(in WorldEntityAddress entity) {
+        if (!m_inFrame) {
+            return m_routes.Claims(entity: in entity);
+        }
+        foreach (var route in m_frameRoutes) {
+            if (route?.Entity == entity) {
+                return true;
+            }
+        }
+        return false;
+    }
+    public WorldAuthorityRoute Route(int slot) => (m_inFrame
+        ? (m_frameRoutes[slot] ?? throw new InvalidOperationException(message: $"Seat {slot} has no authority route in this frame."))
+        : m_routes.Route(slot: slot));
     /// <summary>Resolves any complete authority claim into the presentation frame.</summary>
     public bool TryResolve(WorldAuthorityRoute route, float interpolationAlpha, out Vector3 position, out Quaternion orientation) {
         return TryResolve(

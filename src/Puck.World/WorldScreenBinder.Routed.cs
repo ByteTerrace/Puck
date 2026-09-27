@@ -9,7 +9,7 @@ namespace Puck.World;
 // before any instance resolves, so a frame's views and its residencies agree. A routed residency films the boot frame
 // before it captures its own, so the cameras it frames with are this frame's.
 internal sealed partial class WorldScreenBinder {
-    // Each routed scene's residency, and the scenes gone from the presenter's table, released at the next frame.
+    // Each routed scene's residency, and the scenes gone from the presenter's table, released after Dress.
     private readonly Dictionary<WorldRoutedScene, SdfWorldResidency> m_routedResidencies = new(comparer: ReferenceEqualityComparer.Instance);
     private readonly List<WorldRoutedScene> m_retiredRoutedScenes = [];
 

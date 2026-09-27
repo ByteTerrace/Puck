@@ -172,6 +172,9 @@ public sealed partial class WorldInstanceHost {
 
         return (body is not null);
     }
+    private static string TravellerName(int index, int localSeatCount) => ((index < localSeatCount)
+        ? $"seat {(index + 1)}"
+        : $"body:{index}");
     // Whether the world's own program authors this body, the one pairing a World principal may leave a body under.
     private static bool IsWorldAuthoredBody(WorldServer server, int slot) =>
         ((slot >= server.Population.LocalSeatCount) && !server.Population.IsAdmittedPeer(bodyIndex: slot));

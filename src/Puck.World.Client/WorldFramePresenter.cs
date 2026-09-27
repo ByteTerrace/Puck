@@ -1353,21 +1353,25 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         ReconcileDelivery();
         m_bakes?.Pump(definition: m_client.Definition);
 
-        var frame = m_composed.CaptureFrame(
-            deltaSeconds: deltaSeconds,
-            height: height,
-            interpolationAlpha: interpolationAlpha,
-            width: width
-        );
+        m_continuum.BeginFrame();
+        try {
+            var frame = m_composed.CaptureFrame(
+                deltaSeconds: deltaSeconds,
+                height: height,
+                interpolationAlpha: interpolationAlpha,
+                width: width
+            );
 
-        // The camera views film this frame, their anchors resolving against its transforms and their rigs' clocks at its
-        // tick.
-        m_binder.PresentFrame(
-            authoritativeTick: m_simulation.Tick,
-            transforms: m_transforms
-        );
+            // The camera views film this frame, with the transforms and route choices its dress reads.
+            m_binder.PresentFrame(
+                authoritativeTick: m_simulation.Tick,
+                transforms: m_transforms
+            );
 
-        return frame;
+            return frame;
+        } finally {
+            m_continuum.EndFrame();
+        }
     }
 
     /// <summary>Gets a value indicating whether every frame presents bound state at the delivered tick itself rather

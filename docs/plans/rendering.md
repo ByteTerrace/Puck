@@ -4167,7 +4167,7 @@ item 2 landed.
    its residency in place when the counts and pipeline layouts agree. A seat's
    view renders the residency of the world the seat is presented in, and
    replacing an instance's residency moves its counter, so the view's passes
-   rebuild and it holds its last image for one frame
+   rebuild and it holds its last image until the rebuild installs, for at least one frame
    (`RenderGraphRuntimeLawTests.ResidencySwitchHeldFrames`). Retargeting in place
    drives that to zero, so a crossing's first frame shows the destination, and a
    portal window already rendering the destination as a session shares its

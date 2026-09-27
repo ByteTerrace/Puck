@@ -40,6 +40,7 @@ public sealed class WorldRoutedScene : ISdfFrameDresser {
         m_hostFrame = hostFrame;
         m_emitter = new WorldSessionSceneEmitter(
             bodyColor: bodyColor,
+            castsAvatarShadows: true,
             effectiveCameraName: null,
             mirror: endpoint.Mirror
         );

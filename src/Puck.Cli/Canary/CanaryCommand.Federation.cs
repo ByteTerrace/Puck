@@ -37,6 +37,7 @@ internal static partial class CanaryCommand {
             Pkcs8: ecdsa.ExportPkcs8PrivateKey()
         );
     }
+
     private static JsonObject AdmissionRow(FederationIdentity peer, string peerSubject) => new() {
         ["domain"] = peer.Domain,
         ["subject"] = peerSubject,
@@ -139,8 +140,9 @@ internal static partial class CanaryCommand {
             );
         }
     }
+
     // A composition source declares several worlds that reach each other across their borders by document name, and
-    // the authority boots one document the runner patches. The source's staged copy is compiled and every world it
+    // the authority boots one document the runner patches. The source is compiled in place and every world it
     // declares is staged together, through the staging a composition boot does for itself, and the world the leg
     // enters — its `entry`, else the source's declared entry — is the document the authority boots.
     internal static string StageFederatedComposition(string source, string? entry, string directory) {
@@ -279,6 +281,7 @@ internal static partial class CanaryCommand {
             ? leg.WorldPath
             : staged[leg.WorldPath]), authorityTarget);
     }
+
     // A federated mesh leg (leg.Authorities.Count != 0, CANARY-SHAPE.md's N-ary shape): every authority is a
     // listener bound to its own dynamic loopback port, none dials out, and neighbours resolve each other by reading
     // a sibling document's own host.authority — the same adjacency/references mechanism a two-authority leg already

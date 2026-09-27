@@ -45,7 +45,7 @@ public static class WorldStaging {
     /// <summary>Stages every world a composition source declares into <paramref name="directory"/>, restaged whole so
     /// a world the source no longer declares cannot be reached, and answers the staged document of the world a boot
     /// starts in: the one <paramref name="entry"/> names, else the one the source declares its entry. The worlds reach
-    /// each other across their borders by document name, so they are staged together or not at all.</summary>
+    /// each other across their borders by document name, so they share one staging directory.</summary>
     /// <param name="path">The composition source, as the refusals name it.</param>
     /// <param name="worlds">The worlds the source's compile declared.</param>
     /// <param name="entry">The world a boot was asked to start in, or <see langword="null"/> for the declared entry.</param>
@@ -84,9 +84,19 @@ public static class WorldStaging {
             return false;
         }
 
-        var sourceDirectory = Path.GetDirectoryName(path: Path.GetFullPath(path: path))!;
-
         try {
+            directory = Path.GetFullPath(path: directory);
+            var sourcePath = Path.GetFullPath(path: path);
+            var sourceDirectory = Path.GetDirectoryName(path: sourcePath)!;
+            var relativeSource = Path.GetRelativePath(path: sourcePath, relativeTo: directory).Replace(newChar: '/', oldChar: '\\');
+
+            if (
+                (Path.GetDirectoryName(path: Path.TrimEndingDirectorySeparator(path: directory)) is null) ||
+                (!Path.IsPathRooted(path: relativeSource) && (relativeSource != "..") && !relativeSource.StartsWith(comparisonType: StringComparison.Ordinal, value: "../"))
+            ) {
+                reason = $"'{path}' cannot be staged under {directory}: the staging directory must not be a filesystem root or contain the composition source.";
+                return false;
+            }
             if (Directory.Exists(path: directory)) {
                 Directory.Delete(
                     path: directory,

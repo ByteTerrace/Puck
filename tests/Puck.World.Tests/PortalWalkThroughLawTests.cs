@@ -69,11 +69,11 @@ public sealed class PortalWalkThroughLawTests {
         )],
     });
     // Commits one traveller into a row the way an authenticated peer authority does, and answers its body.
-    private static int AdmitPeer(WorldServer server) {
+    private static int AdmitPeer(WorldServer server, int ordinal = 0) {
         var origin = new WorldEntityAddress(
             Authority: SourceAuthority,
             Generation: 3,
-            Index: WorldBodiesLimits.LocalSeatCount
+            Index: (WorldBodiesLimits.LocalSeatCount + ordinal)
         );
         var reservation = server.ReserveTransfer(request: new WorldTransferReservationRequest(
             Border: "door",
@@ -88,7 +88,7 @@ public sealed class PortalWalkThroughLawTests {
                     Epoch: 0,
                     Incarnation: origin
                 ),
-                PreferredSlot: WorldBodiesLimits.LocalSeatCount,
+                PreferredSlot: origin.Index,
                 Principal: Principal.Console,
                 Source: IntentSource.Live
             )],
@@ -97,7 +97,7 @@ public sealed class PortalWalkThroughLawTests {
             SourceAuthority: SourceAuthority,
             SourceRateHz: 240,
             SourceTick: 0,
-            TransferId: ArrivalTransferId
+            TransferId: (ArrivalTransferId + ((ulong)ordinal))
         ));
 
         Assert.True(
@@ -117,7 +117,7 @@ public sealed class PortalWalkThroughLawTests {
                 )],
                 reason: out var reason,
                 sourceAuthority: SourceAuthority,
-                transferId: ArrivalTransferId
+                transferId: (ArrivalTransferId + ((ulong)ordinal))
             ),
             userMessage: reason
         );
@@ -171,8 +171,11 @@ public sealed class PortalWalkThroughLawTests {
     [InlineData(Traveller.Peer, 8f, WorldPortalTravel.Body, false)]
     [InlineData(Traveller.Census, 0f, WorldPortalTravel.Body, true)]
     [InlineData(Traveller.Peer, 0f, WorldPortalTravel.Party, true)]
+    [InlineData(Traveller.Peer, 0f, WorldPortalTravel.Body, true, true)]
+    [InlineData(Traveller.Peer, 0f, WorldPortalTravel.Party, true, true)]
+    [InlineData(Traveller.Census, 0f, WorldPortalTravel.Body, true, true)]
     [Theory]
-    public void ABodyWalkingIntoAPortalArrivesMappedInItsDestination(Traveller traveller, float startX, WorldPortalTravel travel, bool shouldCross) {
+    public void ABodyWalkingIntoAPortalArrivesMappedInItsDestination(Traveller traveller, float startX, WorldPortalTravel travel, bool shouldCross, bool companion = false) {
         using var files = new TemporaryDirectory(prefix: "puck-portal-walk-files-");
         var rowAPath = Path.Combine(
             path1: files.RootPath,
@@ -259,6 +262,9 @@ public sealed class PortalWalkThroughLawTests {
                 Traveller.Census => RaiseCensusBody(server: rowAServer),
                 _ => seat.Index,
             };
+            var walkers = (companion
+                ? new[] { walker, AdmitPeer(ordinal: 1, server: rowAServer) }
+                : new[] { walker });
 
             for (var tick = 0; (tick < 5); tick++) {
                 host.DrainPendingTransfers();
@@ -268,14 +274,16 @@ public sealed class PortalWalkThroughLawTests {
             // Stand the body a short walk in front of the door's aperture (or, for the control, as far to the side
             // of it), facing it: yaw zero faces -Z. It stands high enough that a body whose kit carries no collider,
             // and so falls as it walks, is still above the door's crossing floor when it reaches the aperture.
-            rowAServer.Body(index: walker)!.Pose(
-                pitchRadians: 0f,
-                rollRadians: 0f,
-                x: startX,
-                y: 4.5f,
-                yawRadians: 0f,
-                z: -3f
-            );
+            foreach (var bodyIndex in walkers) {
+                rowAServer.Body(index: bodyIndex)!.Pose(
+                    pitchRadians: 0f,
+                    rollRadians: 0f,
+                    x: startX,
+                    y: 4.5f,
+                    yawRadians: 0f,
+                    z: -3f
+                );
+            }
 
             var sourcePosition = default(FixedVector3);
             var sourceYaw = FixedQ4816.Zero;
@@ -290,10 +298,12 @@ public sealed class PortalWalkThroughLawTests {
                     break;
                 }
 
-                rowAServer.Body(index: walker)!.SubmitIntent(intent: default(PlayerIntent).WithChannel(
-                    ordinal: ForwardOrdinal,
-                    value: FixedQ4816.One
-                ));
+                foreach (var bodyIndex in walkers) {
+                    rowAServer.Body(index: bodyIndex)!.SubmitIntent(intent: default(PlayerIntent).WithChannel(
+                        ordinal: ForwardOrdinal,
+                        value: FixedQ4816.One
+                    ));
+                }
                 host.StepInstances(masterDeltaTicks: Fixtures.StepTicks);
 
                 // The pose the transfer maps is the one the source body holds after the step that minted it, before
@@ -319,7 +329,14 @@ public sealed class PortalWalkThroughLawTests {
 
             // The traveller alone arrived: a local seat standing in row A beside a party door another traveller
             // entered stays in row A.
-            var arrivedIndex = OnlyActive(population: rowBServer.Population);
+            var arrivals = Enumerable.Range(start: 0, count: rowBServer.Population.Capacity)
+                .Where(predicate: index => rowBServer.Population.IsActive(index: index)).ToArray();
+
+            Assert.Equal(actual: arrivals.Length, expected: walkers.Length);
+            foreach (var bodyIndex in walkers) {
+                Assert.False(condition: rowAServer.Population.IsActive(index: bodyIndex));
+            }
+            var arrivedIndex = arrivals[0];
 
             Assert.NotEqual(
                 actual: arrivedIndex,

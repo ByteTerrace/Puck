@@ -115,6 +115,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // The creation-stamp census, refreshed at each rebuild: the body-rooted stamps handed to the pool. A body the pool
     // registered renders its creation there, so the pack/emit path parks its catalog avatar.
     private readonly WorldBodyStampCensus m_census = new();
+    private readonly List<WorldStampPool.BodyStamp> m_presentedStamps = [];
 
     // The palette colors the live build baked, and a counter moved when a bound one moves in the state mirror.
     private readonly WorldBakedColors m_bakedColors;
@@ -309,6 +310,9 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // the route seed/continuum pose. Adjacency rendering suppresses that exact address, so a transfer cannot create
     // a one-frame zero-avatar gap or a two-avatar overlap.
     private bool IsAvatarPresented(int index) {
+        if (IsPresentedElsewhere(index: index)) {
+            return false;
+        }
         if (m_client.IsActive(index: index)) {
             return true;
         }
@@ -337,7 +341,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         return epochs;
     }
     private bool TryPresentedAppearance(int index, out Vector3 bodyColor, out WorldLook look, out byte catalogRig) {
-        if (m_client.IsActive(index: index)) {
+        if (!IsPresentedElsewhere(index: index) && m_client.IsActive(index: index)) {
             bodyColor = m_client.BodyColor(index: index);
             look = m_client.Look(index: index);
             catalogRig = m_client.CatalogRig(index: index);
@@ -367,7 +371,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         return false;
     }
     private bool TryPresentedPose(int index, out Vector3 position, out Quaternion orientation, out WorldEntityAddress address) {
-        if (m_client.IsActive(index: index)) {
+        if (!IsPresentedElsewhere(index: index) && m_client.IsActive(index: index)) {
             position = m_client.Position(index: index);
             orientation = m_client.Orientation(index: index);
             address = m_client.EntityAddress(index: index);
@@ -395,6 +399,11 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     }
     // A seat presented elsewhere (WorldContinuum.PresentedElsewhere) is drawn by the scene of the world it is presented
     // in, never at foreign coordinates in this one.
+    private bool IsPresentedElsewhere(int index) => (
+        (((uint)index) < WorldBodiesLimits.LocalSeatCount) &&
+        m_client.Roster.IsJoined(slot: index) &&
+        (m_continuum.PresentedElsewhere(slot: index) is not null)
+    );
     private bool TryTravelingRoute(int index, out WorldAuthorityRoute route) {
         if (
             (((uint)index) < WorldBodiesLimits.LocalSeatCount) &&
@@ -531,11 +540,17 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
 
         m_bakedColors.Begin();
         m_census.Refresh(source: m_client);
+        m_presentedStamps.Clear();
+        foreach (var stamp in m_census.Stamps) {
+            if (!IsPresentedElsewhere(index: stamp.BodyIndex)) {
+                m_presentedStamps.Add(item: stamp);
+            }
+        }
         m_animator.Reconcile(
             placements: definition.Placements,
             creations: definition.Creations,
             dynamics: definition.Dynamics,
-            bodyStamps: m_census.Stamps
+            bodyStamps: m_presentedStamps
         );
         Compose(
             builder: builder,
@@ -768,9 +783,10 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// (<see cref="WorldClient.WriteRevision"/> — roster, server snapshot, definition delivery), then the continuum
     /// watch, then a counter that moves when a bound color the live build baked moves in the state mirror
     /// (<see cref="WorldBakedColors.TryTakeMove"/>), then the bake schedule's revision, then a counter that moves when a
-    /// stamped body's live scale moves (<see cref="WorldBodyStampCensus.TryTakeMove"/>).
+    /// stamped body's live scale moves (<see cref="WorldBodyStampCensus.TryTakeMove"/>), and the continuum's pinned
+    /// presentation decisions (<see cref="WorldContinuum.PresentationRevision"/>).
     /// <para>
-    /// Seven components, not their sum, and the client's three stay split too. One of them — the client's server
+    /// Eight components, not their sum, and the client's three stay split too. One of them — the client's server
     /// revision — is assigned from a snapshot and can move down, so any addition anywhere on this path can cancel: a
     /// server revision falling by one while the continuum counter rises by one would leave a sum unmoved and hold a
     /// stale program. Flattening every counter through to the composition host's componentwise compare is what makes
@@ -798,6 +814,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         }
 
         destination[(WorldClient.RevisionComponentCount + 3)] = m_censusRevision;
+        destination[(WorldClient.RevisionComponentCount + 4)] = m_continuum.PresentationRevision;
     }
 
     // A prototype's baked mesh when the presentation draws its bakes and this one is ready; the schedule counts the
@@ -894,7 +911,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// composed words are byte-identical to the unscoped build.</summary>
     public bool OwnsMaterialScope => true;
     /// <inheritdoc/>
-    public int RevisionComponentCount => (WorldClient.RevisionComponentCount + 4);
+    public int RevisionComponentCount => (WorldClient.RevisionComponentCount + 5);
     /// <summary>Gets the bounded volumes the latest live build's static placements baked into world space.</summary>
     public IReadOnlyList<SdfVolume> StaticVolumes => m_staticVolumes;
     /// <inheritdoc/>

@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Puck.Cli.Canary;
 using Puck.Testing;
+using Puck.World.Transpiler.Composition;
 using Xunit;
 
 namespace Puck.Cli.Tests;
@@ -13,12 +14,38 @@ public sealed class CanaryFederatedCompositionLawTests {
     private const string Endpoint = "127.0.0.1:1";
     private const string Source = "tests/Puck.World.Canaries/portal-walk/portal-walk.puck";
 
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void StagingRefusesToDeleteTheSourceOrItsAncestor(bool ancestor) {
+        using var files = new TemporaryDirectory(prefix: "puck-composition-source-");
+        var directory = Path.Combine(path1: files.RootPath, path2: "source");
+
+        _ = Directory.CreateDirectory(path: directory);
+        var source = Path.Combine(path1: directory, path2: "world.puck");
+
+        File.WriteAllText(contents: "source remains present", path: source);
+
+        Assert.False(condition: WorldStaging.TryStageComposition(
+            directory: (ancestor ? files.RootPath : directory),
+            entry: null,
+            entryName: out _,
+            entryPath: out _,
+            path: source,
+            reason: out var reason,
+            worlds: [new WorldCompiledWorld(Entry: true, Json: "{}"u8.ToArray(), Name: "entry")]
+        ));
+        Assert.Contains(actualString: reason, expectedSubstring: "contain the composition source");
+        Assert.Equal(actual: File.ReadAllText(path: source), expected: "source remains present");
+    }
+
     private static (string ClientWorld, string AuthorityWorld, CanaryCommand.FederationIdentity Client) Prepare(string runDirectory, string? entry) {
         var world = Path.Combine(
             path1: RepositoryPaths.RequireRoot(),
             path2: Source
         );
         var client = CanaryCommand.GenerateFederationIdentity();
+
         var (clientWorld, authorityWorld) = CanaryCommand.PrepareFederatedWorlds(
             authorityIdentity: CanaryCommand.GenerateFederationIdentity(),
             clientIdentity: client,
@@ -45,6 +72,7 @@ public sealed class CanaryFederatedCompositionLawTests {
     [Theory]
     public void AnAuthorityCompositionStagesEveryWorldAndBootsThePatchedEntry(string? entry, string booted, string neighbour) {
         using var run = new TemporaryDirectory(prefix: "puck-canary-federated-composition-");
+
         var (clientWorld, authorityWorld, client) = Prepare(
             entry: entry,
             runDirectory: run.RootPath

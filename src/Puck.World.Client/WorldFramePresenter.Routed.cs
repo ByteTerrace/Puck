@@ -89,7 +89,7 @@ public sealed partial class WorldFramePresenter {
                     objA: route.Endpoint,
                     objB: endpoint
                 ) &&
-                (route.Entity.Index == index)
+                (route.Entity == endpoint.Mirror.Address(index: index))
             ) {
                 return m_client.BodyColor(index: slot);
             }
@@ -104,14 +104,7 @@ public sealed partial class WorldFramePresenter {
             key: endpoint,
             value: out var scene
         )) {
-            scene = new WorldRoutedScene(
-                bodyColor: index => RoutedBodyColor(
-                    endpoint: endpoint,
-                    index: index
-                ),
-                endpoint: endpoint,
-                hostFrame: () => m_dressedFrame
-            );
+            scene = CreateRoutedScene(endpoint: endpoint);
             m_routedScenes.Add(
                 key: endpoint,
                 value: scene
@@ -124,4 +117,12 @@ public sealed partial class WorldFramePresenter {
 
         m_viewRoutes.Add(item: (scene, scene.AddView(view: m_views[view])));
     }
+    private WorldRoutedScene CreateRoutedScene(WorldAuthorityEndpoint endpoint) => new(
+        bodyColor: index => RoutedBodyColor(
+            endpoint: endpoint,
+            index: index
+        ),
+        endpoint: endpoint,
+        hostFrame: () => m_dressedFrame
+    );
 }
