@@ -2110,7 +2110,7 @@ sources are formatted by [`puck format`](#puck-formatthe-one-formatter), the one
 formatter for every source kind.
 
 ```text
-puck compile <source.puck|document.world.json>... [-o <out.json-or-directory>] [--tree <root> [--written <report> | --check]] [--validate] [--bundle] [--strict] [--watch] [--update-assets]
+puck compile <source.puck|document.world.json>... [-o <out.json-or-directory>] [--tree <root> [--written <report>] [--bake-cache <directory> | --check]] [--validate] [--bundle] [--strict] [--watch] [--update-assets]
 puck decompile <source.json>... [-o <out.puck>] [--overwrite] [--sql] [--embeddings <file.embeddings.json>]
 puck embed <path> [--check] [--provider <fixture|openai-compatible>] [--endpoint <url>] [--omit-dimensions] [--batch-size <n>] [--timeout-seconds <n>]
 puck embed probe <path> <text> [--space <name>] [--against <table>] [--top <n>]
@@ -2187,9 +2187,16 @@ it needs, and the bakes themselves ship once in a bake pack, `bakes.puckbake`. A
 exactly the bakes its compiled worlds name, after every source compiled; any
 other run writes one beside each compiled world and keeps the bakes an earlier
 compile into that directory left there. Either prints one `Wrote bake pack
-'<path>'` line with the pack's outcomes and bytes and the creations the process
-baked and the field evaluations it spent, each distinct creation baked once. A
-run whose compiled worlds name no bake writes no pack.
+'<path>'` line with the pack's outcomes and bytes and the creations its bake
+cache baked or refused and the field evaluations it spent, each distinct
+creation baked once. A run whose compiled worlds name no bake writes no pack.
+`--bake-cache <directory>` gives a `--tree` run a content-addressed bake cache
+(`WorldBakeStore`): the run reads each outcome whose key the cache holds and
+keeps there every outcome it bakes, so a run over unchanged prototypes bakes
+nothing and one after an edit bakes the edited prototypes alone. The pack's
+bytes are the same with or without the cache. The game's build passes
+`obj/bakes`; `--check` refuses the option, since it compares with a fresh run
+(`TreeBakeCacheLawTests`).
 
 A `--tree` run also packages every pipeline its compiled worlds name by source:
 each `views.graphs` row's `source` (a row naming an engine `package` has none),

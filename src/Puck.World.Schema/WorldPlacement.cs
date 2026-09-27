@@ -6,6 +6,7 @@ using System.Text.Json.Serialization;
 using Puck.World.Authoring;
 using Puck.Maths;
 using Puck.Abstractions.Documents;
+using Puck.Abstractions.Gpu;
 
 namespace Puck.World;
 
@@ -272,10 +273,14 @@ public sealed class WorldPlacementInhabitCountJsonConverter : JsonConverter<Worl
 /// means this face is not a door. Optional and trailing deliberately: a face authored before this facet existed
 /// round-trips unchanged, and it composes freely with <paramref name="Source"/> — the door and the screen it shows
 /// are independent facts about the same face.</param>
+/// <param name="Filter">How the face's screen samples its source's image, as a screen row's
+/// <see cref="WorldScreen.Filter"/> does: <c>Nearest</c>, the default, keeps each source pixel crisp; <c>Linear</c>
+/// blends between source pixels. Omitted from the wire when <c>Nearest</c>.</param>
 public sealed record WorldPlacementFace(
     string Face,
     WorldScreenSource Source,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementPortal? Portal = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementPortal? Portal = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] GpuSamplerFilter Filter = GpuSamplerFilter.Nearest
 );
 /// <summary>A placement's region facet — a named volume row, not a trigger system: any placement may carry one,
 /// turning its stamp into a sensing volume the world-events feed watches for body enter/exit edges (see

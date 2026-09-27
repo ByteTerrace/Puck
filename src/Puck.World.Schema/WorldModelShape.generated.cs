@@ -3958,6 +3958,7 @@ public static partial class WorldModelShape {
                 M("face", typeof(global::System.String), typeof(global::Puck.World.WorldPlacementFace), "Face", Read | Write),
                 M("source", typeof(global::Puck.World.WorldScreenSource), typeof(global::Puck.World.WorldPlacementFace), "Source", Read | Write),
                 M("portal", typeof(global::Puck.World.WorldPlacementPortal), typeof(global::Puck.World.WorldPlacementFace), "Portal", Read | Write),
+                M("filter", typeof(global::Puck.Abstractions.Gpu.GpuSamplerFilter), typeof(global::Puck.World.WorldPlacementFace), "Filter", Read | Write),
             ],
             []),
         T(typeof(global::Puck.World.WorldPlacementGrip), true, JsonTypeInfoKind.Object, null,

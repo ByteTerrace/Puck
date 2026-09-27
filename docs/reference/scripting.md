@@ -480,7 +480,8 @@ section)` dispatch budget (spent BEFORE decode—a malformed payload still costs
 answer cell (bookkeeping only—the handshake's `outCap <= inCap-1` relation proves it cannot
 fail), pointer safety (an immediate host-side copy, bounded by `AddonAbi.MaxMutationPayloadBytes`/
 `MaxMutationBytesPerTickPerAddon`/`MaxMutationBytesPerTickAllAddons`), then a per-kind hand-walked
-`JsonDocument` decode (never source-gen POCO). A cleared act enqueues the mutation; it applies the
+`JsonDocument` decode, except a placement face, which reads through the document's own contract
+with repeated keys refused, so an addon face carries the same members a document face does. A cleared act enqueues the mutation; it applies the
 SAME Step, before intents, through the identical path a console-submitted mutation runs. The
 verdict is staged into the guest's NEXT batch regardless of when it was decided.
 

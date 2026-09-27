@@ -17810,6 +17810,15 @@
                   "additionalProperties": false,
                   "default": null,
                   "title": "WorldPlacementPortal"
+                },
+                "filter": {
+                  "description": "How the face\u0027s screen samples its source\u0027s image, as a screen row\u0027s Filter does: Nearest, the default, keeps each source pixel crisp; Linear blends between source pixels. Omitted from the wire when Nearest.",
+                  "enum": [
+                    "Nearest",
+                    "Linear"
+                  ],
+                  "default": "Nearest",
+                  "title": "GpuSamplerFilter"
                 }
               },
               "required": [

@@ -11,7 +11,13 @@ Missing outputs, including sidecars, invalidate the incremental compile target.
 documents the game ships, their compiled worlds, and the one bake pack holding
 the creation bakes those compiled worlds name there, and reports what it
 wrote (`--written`); the build copies exactly the reported files into the
-output's `Assets/worlds`. Only a compile knows which sources emit documents: a
+output's `Assets/worlds`. The run reads and keeps its bakes in the
+content-addressed cache `obj/bakes` (`--bake-cache`), which every configuration
+shares and `dotnet clean` keeps, so a run bakes only the creations whose keys
+it lacks: an engine change that reruns the compile bakes nothing, and an edited
+prototype bakes that prototype alone. The run's one incremental output is the
+report, which every run writes last; a reported file that is gone removes the
+report, so the next build runs again. Only a compile knows which sources emit documents: a
 module library emits none, so a `.world.json` named like it ships, while a
 `.world.json` beside a world source of its name does not. The sources themselves
 are not copied. No build step writes a world document into `src/` or `worlds/`,
