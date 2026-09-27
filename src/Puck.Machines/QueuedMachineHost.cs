@@ -10,10 +10,11 @@ namespace Puck.Machines;
 /// </summary>
 public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime, IMachineContentSlot,
     IMachineVideoOutputs, IMachineVideoOutput, IMachineAudioOutputs, IAudioMachine,
-    IMachineInputPorts, IMachineInputPort, IFeedbackMachine, ITimeTravelMachine, IMachineCheckpointRuntime {
+    IMachineInputPorts, IFeedbackMachine, ITimeTravelMachine, IMachineCheckpointRuntime {
+    private readonly SeatPort[] m_seats;
     private readonly QueuedMachineWorker m_worker;
 
-    private MachinePadState m_input = MachinePadState.Neutral;
+    private MachinePads m_inputs = MachinePads.Neutral;
     private string? m_savePath;
 
     /// <summary>Initializes a queued screen-machine host.</summary>
@@ -23,11 +24,47 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
     /// <param name="workerName">The worker thread's diagnostic name.</param>
     /// <param name="audioSampleRate">The requested audio sample rate, or zero to disable audio synthesis.</param>
     /// <param name="savePath">The initial battery-save path.</param>
-    protected QueuedMachineHost(int width, int height, int maximumPendingSteps, string workerName, int audioSampleRate, string? savePath) {
+    /// <param name="inputPorts">The controller ports' names in seat order, one to <see cref="MachinePads.MaxSeats"/>
+    /// distinct names; <see langword="null"/> declares the single port <c>controls</c>.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="inputPorts"/> names no port or more than
+    /// <see cref="MachinePads.MaxSeats"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="inputPorts"/> repeats a name or holds a blank one.</exception>
+    protected QueuedMachineHost(int width, int height, int maximumPendingSteps, string workerName, int audioSampleRate, string? savePath, IReadOnlyList<string>? inputPorts = null) {
+        inputPorts ??= ["controls"];
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            other: 1,
+            value: inputPorts.Count
+        );
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            other: MachinePads.MaxSeats,
+            value: inputPorts.Count
+        );
+
+        var ports = new Dictionary<string, IMachineInputPort>(comparer: StringComparer.Ordinal);
+
+        m_seats = new SeatPort[inputPorts.Count];
+        for (var seat = 0; (seat < m_seats.Length); ++seat) {
+            var name = inputPorts[seat];
+
+            ArgumentException.ThrowIfNullOrWhiteSpace(argument: name);
+            m_seats[seat] = new SeatPort(
+                host: this,
+                seat: seat
+            );
+            if (!ports.TryAdd(
+                key: name,
+                value: m_seats[seat]
+            )) {
+                throw new ArgumentException(
+                    message: $"The input port name '{name}' is declared twice.",
+                    paramName: nameof(inputPorts)
+                );
+            }
+        }
         m_savePath = savePath;
         VideoOutputs = new Dictionary<string, IMachineVideoOutput> { ["video"] = this }.ToFrozenDictionary(comparer: StringComparer.Ordinal);
         AudioOutputs = new Dictionary<string, IAudioMachine> { ["audio"] = this }.ToFrozenDictionary(comparer: StringComparer.Ordinal);
-        InputPorts = new Dictionary<string, IMachineInputPort> { ["controls"] = this }.ToFrozenDictionary(comparer: StringComparer.Ordinal);
+        InputPorts = ports.ToFrozenDictionary(comparer: StringComparer.Ordinal);
         m_worker = new QueuedMachineWorker(
             audioSampleRate: audioSampleRate,
             height: height,
@@ -68,8 +105,9 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
     /// <inheritdoc/>
     public int SampleRate =>
         m_worker.AudioSampleRate;
-    /// <inheritdoc/>
-    public MachinePadState State => m_input;
+    /// <summary>Gets the controller ports in seat order — the same ports <see cref="InputPorts"/> names — so seat
+    /// <c>i</c> of every image this host submits is <c>Seats[i]</c>'s state.</summary>
+    public IReadOnlyList<IMachineInputPort> Seats => m_seats;
     /// <inheritdoc/>
     public MachineRuntimeStatus Status => ((QueueFault is not null)
         ? MachineRuntimeStatus.Faulted
@@ -95,10 +133,13 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
     /// <inheritdoc/>
     public bool Advance(ulong deltaTicks) => Step(
         deltaTicks: deltaTicks,
-        input: in m_input
+        inputs: in m_inputs
     );
     /// <inheritdoc/>
-    public byte[] CaptureCheckpoint() => m_worker.CaptureCheckpoint().Encode(input: m_input);
+    public byte[] CaptureCheckpoint() => m_worker.CaptureCheckpoint().Encode(
+        inputs: in m_inputs,
+        seats: m_seats.Length
+    );
     /// <inheritdoc/>
     public void Dispose() =>
         m_worker.Dispose();
@@ -125,8 +166,11 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
     public void RestoreCheckpoint(ReadOnlyMemory<byte> checkpoint) {
         var restored = QueuedMachineCheckpoint.Decode(bytes: checkpoint);
 
+        if (restored.Seats != m_seats.Length) {
+            throw new InvalidOperationException(message: $"machine restore requires the checkpoint's {restored.Seats} input seats to match this host's {m_seats.Length}");
+        }
         m_worker.RestoreCheckpoint(checkpoint: restored.Checkpoint);
-        m_input = restored.Input;
+        m_inputs = restored.Inputs;
     }
     /// <inheritdoc/>
     public int RewindBy(int frames) =>
@@ -140,32 +184,57 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
     /// <inheritdoc/>
     public void SetRunahead(int frames) =>
         m_worker.SetRunahead(frames: frames);
-    /// <inheritdoc/>
-    public void SetState(in MachinePadState state) => m_input = state;
-    /// <summary>Synchronously advances with an explicit controller image for standalone hardware callers.</summary>
+    /// <summary>Synchronously advances with an explicit seat image for standalone hardware callers.</summary>
     /// <param name="deltaTicks">The exact tick budget.</param>
-    /// <param name="input">The controller image held throughout the budget.</param>
+    /// <param name="inputs">The seat image held throughout the budget; seats past this host's ports are held
+    /// neutral.</param>
     /// <returns>Whether the machine advanced.</returns>
-    public bool Step(ulong deltaTicks, in MachinePadState input) =>
-        m_worker.Step(
+    public bool Step(ulong deltaTicks, in MachinePads inputs) {
+        var declared = Declared(inputs: in inputs);
+
+        return m_worker.Step(
             deltaTicks: deltaTicks,
-            input: in input
+            input: in declared
         );
+    }
     /// <inheritdoc/>
     public QueuedMachineSubmission Submit(ulong deltaTicks) => Submit(
         deltaTicks: deltaTicks,
-        input: in m_input
+        inputs: in m_inputs
     );
-    /// <summary>Queues an exact tick and controller segment for standalone hardware callers.</summary>
+    /// <summary>Queues an exact tick and seat-image segment for standalone hardware callers.</summary>
     /// <param name="deltaTicks">The exact tick budget.</param>
-    /// <param name="input">The controller image captured by this submission.</param>
+    /// <param name="inputs">The seat image captured by this submission; seats past this host's ports are held
+    /// neutral.</param>
     /// <returns>The submission outcome, including producer backpressure.</returns>
-    public QueuedMachineSubmission Submit(ulong deltaTicks, in MachinePadState input) =>
-        m_worker.Submit(
+    public QueuedMachineSubmission Submit(ulong deltaTicks, in MachinePads inputs) {
+        var declared = Declared(inputs: in inputs);
+
+        return m_worker.Submit(
             deltaTicks: deltaTicks,
-            input: in input
+            input: in declared
         );
+    }
+    // Neutralizes the seats this host declares no port for, so the replay ring and a checkpoint record the same image.
+    private MachinePads Declared(in MachinePads inputs) {
+        var declared = inputs;
+
+        for (var seat = m_seats.Length; (seat < MachinePads.MaxSeats); ++seat) {
+            declared[seat] = MachinePadState.Neutral;
+        }
+
+        return declared;
+    }
     /// <inheritdoc/>
     public long WriteFrame(Span<byte> region) =>
         m_worker.WriteFrame(region: region);
+
+    // One controller port: a view of its seat in the host's held image, so every port's state rides the same
+    // submission, checkpoint, and replay record.
+    private sealed class SeatPort(QueuedMachineHost host, int seat) : IMachineInputPort {
+        public MachinePadState State => host.m_inputs[seat];
+
+        public void SetState(in MachinePadState state) =>
+            host.m_inputs[seat] = state;
+    }
 }

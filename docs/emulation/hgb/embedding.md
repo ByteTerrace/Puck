@@ -109,7 +109,7 @@ window, GPU backend, worker thread, or environment configuration is required.
 
 ```csharp
 using Puck.HumbleGamingBrick;
-using Puck.Abstractions.Machines;
+using Puck.Machines;
 
 using var core = new HumbleGamingBrickCore(
     configuration: new MachineConfiguration(
@@ -118,7 +118,7 @@ using var core = new HumbleGamingBrickCore(
     dmgSpeed: true); // keep the reported pacing rate at the hardware dot rate
 
 core.ConfigureAudio(sampleRate: 48_000);
-core.ApplyInput(input: new MachinePadState());
+core.ApplyInput(input: MachinePads.Neutral);
 core.RunCycles(cycles: 70_224); // one nominal DMG frame at 4,194,304 Hz
 uint[] pixels = core.Framebuffer.ToArray(); // 160 × 144, packed 0x00RRGGBB
 short[] audio = new short[4096];

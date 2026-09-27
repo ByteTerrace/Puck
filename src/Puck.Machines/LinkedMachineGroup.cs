@@ -37,7 +37,7 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
     private readonly IMachineRuntime[] m_machines;
     private readonly int m_maximumPendingSteps;
     private readonly TaskCompletionSource m_severed = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
-    private readonly MachineTimeTravel<MachineLinkPads> m_timeTravel;
+    private readonly MachineTimeTravel<MachinePads> m_timeTravel;
     private readonly string m_workerName;
     private readonly QueuedMachineWorker[] m_workers;
 
@@ -109,7 +109,7 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
             }
 
             m_core = createCore(arg: lent);
-            m_timeTravel = new MachineTimeTravel<MachineLinkPads>(
+            m_timeTravel = new MachineTimeTravel<MachinePads>(
                 core: m_core,
                 cycleRate: m_core.CycleRate
             );
@@ -203,7 +203,7 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
         return m_lifecycle.Submit(item: GroupWorkItem.Step(
             deltaTicks: deltaTicks,
             forceStage: forceStage,
-            inputs: MachineLinkPads.From(inputs: inputs)
+            inputs: MachinePads.From(inputs: inputs)
         ));
     }
     // Each member publishes through its OWN worker's surfaces, so a linked machine's framebuffer, audio ring, feedback,
@@ -421,7 +421,7 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
     private readonly record struct GroupWorkItem(
         GroupWorkKind Kind,
         ulong DeltaTicks,
-        MachineLinkPads Inputs,
+        MachinePads Inputs,
         bool ForceStage,
         Action? Invoke,
         ManualResetEventSlim? Completion
@@ -444,7 +444,7 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
                 Invoke: work,
                 Kind: GroupWorkKind.Invoke
             );
-        public static GroupWorkItem Step(ulong deltaTicks, in MachineLinkPads inputs, bool forceStage) =>
+        public static GroupWorkItem Step(ulong deltaTicks, in MachinePads inputs, bool forceStage) =>
             new(
                 Completion: null,
                 DeltaTicks: deltaTicks,

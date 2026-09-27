@@ -27,7 +27,9 @@ of scope here.
   and the Advanced Gaming Brick already showed that a very different CPU fits on
   it. Machine clocks are rational: a core reports a `MachineCycleRate` of whole
   cycles every whole number of seconds, and the durable checkpoint carries its
-  phase at that rate's scale.
+  phase at that rate's scale. A queued host declares one input port per seat,
+  and a `MachinePads` seat image carries every port's state through queueing,
+  checkpoints, and replay.
 - **Not started:** every package below.
 
 ## What state of the art means here
@@ -142,30 +144,24 @@ identity pins the configuration, the console model, the alignment, and the
 image hashes. Forks share immutable images but own their mutable memory and
 never flush saves or disk writes.
 
-## Shared-layer changes
+## The shared layer
 
-The shared layer is hardware-free, but several of its contracts are shaped
-around the Game Boy family and have to generalise before the Deck fits without
-special cases. Each is a real change to existing code.
+The Deck stands on `Puck.Machines` as the bricks do. Two of its contracts
+changed for the Deck: a machine clock is a `MachineCycleRate` of whole cycles
+every whole number of seconds, and a queued host declares one input port per
+seat, so the NES's second controller, the Four Score, and the Zapper each have a
+port whose state rides every submission, checkpoint, and replay. The rest fits
+unchanged:
 
-- **Native frames.** `ITimeTravelMachineCore.Framebuffer` promises packed
-  `0x00RRGGBB`. The Deck's authoritative frame is its nine-bit code, so the
-  contract gains a native frame and a presentation-conversion seam, and NES
-  palette conversion stays out of the shared worker.
-- **Multi-port input.** `QueuedMachineHost` publishes one `"controls"` port and
-  checkpoints encode one pad. The Four Score's four players on one console, the
-  Famicom's second-controller microphone, and the Zapper need atomic, ordered,
-  multi-port input images through queueing, checkpoints, replay, and runahead,
-  with pointer and analog values quantised at admission. `MachineLinkPads`
-  means one controller per linked machine and is the wrong tool for this.
-- **Optional firmware.** Cold and fast boot handoff, and "no image means
-  bundled firmware", become optional capabilities: an ordinary NES cartridge
-  starts through its reset vector.
-- **Content policy.** `GamingBrickContentPolicies` hard-codes
-  `puck.cartridge.v1` and belongs with that format, not with hosting.
-- **Post probes.** `CoreEmbeddingProbe` assumes one pad and RGB output, and
-  `MachineStageProbes` derives throughput from a constant cycles-per-frame,
-  which the NTSC odd-frame skip breaks; both measure what actually elapsed.
+- **Frames.** The worker's framebuffer stays packed `0x00RRGGBB`. The Deck keeps
+  its nine-bit pixel codes as its own snapshotted state and converts them to
+  colour in its host adapter. A shared native-code path arrives with the first
+  presentation consumer that needs one, such as NTSC composite emulation.
+- **Firmware.** Boot modes and firmware images are options only the bricks'
+  engines parse; an NES cartridge starts through its reset vector with none.
+- **Post probes.** `CoreEmbeddingProbe` works with any RGB core. The Deck's
+  battery reports throughput from elapsed cycles rather than a constant cycles
+  per frame, because the NTSC odd-frame skip makes a frame's length vary.
 - **Link pacing.** `LinkPacer` compares budgets in each participant's own clock
   units. It stays as it is; a group mixing different clocks needs a common
   time basis first, and the Deck needs no console-to-console link.
@@ -204,18 +200,7 @@ understood discrepancy becomes an original Tier A regression.
 
 ## Packages
 
-### 1. Neutral contracts
-
-**Owns:** the shared-layer changes above.
-
-**Delivers:** native frames with a presentation seam, multi-port queued input, optional firmware, the content policy moved to its
-format, and generalised Post probes.
-
-**Check:** both brick batteries unchanged, plus new fixtures for native frames,
-multi-port input, and a cartridge started through its reset vector with no
-firmware.
-
-### 2. The CPU and the bus
+### 1. The CPU and the bus
 
 **Owns:** `Puck.HumbleGamingDeck` and its Post battery, CLI registration, the
 NES 2.0 loader, NROM, the bus, the 2A03, and snapshots.
@@ -226,7 +211,7 @@ master-clock scheduler.
 **Check:** every `nes6502` vector at bus-cycle granularity, and the nestest log
 from `$C000`.
 
-### 3. A complete NTSC machine
+### 2. A complete NTSC machine
 
 **Owns:** the PPU, the integer APU, standard controllers, reset, and the video
 and audio host adapter.
@@ -237,7 +222,7 @@ presents picture and sound.
 **Check:** nestest's menu from a normal boot; raw-pixel, integer-audio, and
 replay gates; mid-cycle snapshot and fork replay.
 
-### 4. NTSC accuracy
+### 3. NTSC accuracy
 
 **Owns:** the DMA arbiter, unstable-opcode behaviour, PPU races, open bus and
 decay, and the co-simulation trace.
@@ -247,7 +232,7 @@ decay, and the co-simulation trace.
 **Check:** every applicable AccuracyCoin verdict, the blargg suites, and every
 disagreement with an oracle explained and pinned.
 
-### 5. Common boards
+### 4. Common boards
 
 **Owns:** MMC1, UxROM, CNROM, AxROM, MMC3 and MMC6, board RAM, and bus
 conflicts.
@@ -257,7 +242,7 @@ conflicts.
 **Check:** the board suites, IRQ traces per MMC3 revision, and save and fork
 restoration.
 
-### 6. Regional hardware
+### 5. Regional hardware
 
 **Owns:** PAL and Dendy console models and every supported alignment phase.
 
@@ -266,7 +251,7 @@ restoration.
 **Check:** the regional corpora and clock, pixel, and audio gates; no NTSC
 pass is extrapolated to another region.
 
-### 7. Long-tail boards
+### 6. Long-tail boards
 
 **Owns:** the boards past the common set, and the refusal of every board outside
 the committed set.
@@ -316,7 +301,7 @@ A board is accepted when all four of these hold:
 meets criteria 1 to 4; and a Tier A stage loads one header for each mapper and
 submapper outside the set and sees each refused by name.
 
-### 8. Expansion audio
+### 7. Expansion audio
 
 **Owns:** VRC6, VRC7, MMC5, Namco 163, and Sunsoft 5B generators, with
 presentation gains.
@@ -325,7 +310,7 @@ presentation gains.
 
 **Check:** integer transition gates plus independent waveform evidence.
 
-### 9. The Famicom Disk System
+### 8. The Famicom Disk System
 
 **Owns:** the RAM adapter, drive timing, its IRQ, writable disk overlays, FDS
 audio, and a user-supplied BIOS.
@@ -335,7 +320,7 @@ audio, and a user-supplied BIOS.
 **Check:** disk operations and mid-transfer snapshot and fork replay; firmware
 identity checks.
 
-### 10. Peripherals
+### 9. Peripherals
 
 **Owns:** the Four Score, the Zapper, the Famicom microphone, then selected
 paddles, mats, and keyboards.
@@ -347,7 +332,7 @@ sensor response, never from the presented image.
 **Check:** serial-protocol fixtures, beam-response fixtures, and replay across
 attachment changes.
 
-### 11. World cabinets
+### 10. World cabinets
 
 **Owns:** engine and content-provider registration, multi-port routing, ordered
 operations, and replay receipts.
@@ -364,7 +349,7 @@ provider operations are refused while recording.
 - **The accuracy matrix.** Which silicon revisions, regions, boards, and
   peripherals each milestone commits to. The proposal starts with RP2A03G and
   RP2C02G on NTSC, and the board set it commits to is
-  [package 7's](#7-long-tail-boards) finish line.
+  [package 6's](#6-long-tail-boards) finish line.
 - **Deterministic defaults** for what hardware leaves to chance: the CPU and PPU
   alignment, power-up RAM, and open-bus decay.
 - **Corpora without a stated licence** (nestest, blargg's suites, the board

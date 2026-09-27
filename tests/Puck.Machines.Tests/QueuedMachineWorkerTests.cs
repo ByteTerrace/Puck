@@ -1,5 +1,3 @@
-using Puck.Abstractions.Machines;
-
 namespace Puck.Machines.Tests;
 
 public sealed class QueuedMachineWorkerTests {
@@ -33,10 +31,10 @@ public sealed class QueuedMachineWorkerTests {
 
         private readonly uint[] m_framebuffer = [0U];
 
-        public void ApplyInput(in MachinePadState input) { }
+        public void ApplyInput(in MachinePads input) { }
         public int CaptureState(ref byte[] buffer) => 0;
         public void ConfigureAudio(int sampleRate) { }
-        public ITimeTravelLookahead<MachinePadState> CreateLookahead() => throw new NotSupportedException();
+        public ITimeTravelLookahead<MachinePads> CreateLookahead() => throw new NotSupportedException();
         public void Dispose() => ++DisposeCount;
         public int DrainAudioSamples(Span<short> destination) => 0;
         public void FlushSave(bool force) { }

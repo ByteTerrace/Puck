@@ -13,7 +13,7 @@ namespace Puck.Machines;
 /// </summary>
 /// <remarks>Every member runs on the group's single execution thread except construction and disposal, which the
 /// group arranges around lending and returning the member cores.</remarks>
-public interface IMachineGroupCore : ITimeTravelMachineCore<MachineLinkPads>, IDisposable {
+public interface IMachineGroupCore : ITimeTravelMachineCore<MachinePads>, IDisposable {
     /// <summary>Gets the number of bytes exchanged over the medium since the group formed. A completed two-sided
     /// exchange counts once per delivered byte, so an eight-bit round trip between two members counts twice.</summary>
     long CompletedTransfers { get; }
@@ -33,6 +33,6 @@ public interface IMachineGroupCore : ITimeTravelMachineCore<MachineLinkPads>, ID
     /// between them, and a peer's future is not a function of the held input a prediction carries.</summary>
     /// <returns>Never returns.</returns>
     /// <exception cref="NotSupportedException">Always.</exception>
-    ITimeTravelLookahead<MachineLinkPads> ITimeTravelMachineCore<MachineLinkPads>.CreateLookahead() =>
+    ITimeTravelLookahead<MachinePads> ITimeTravelMachineCore<MachinePads>.CreateLookahead() =>
         throw new NotSupportedException(message: "A cable-linked group has no lookahead: predicting a peer's future from held input is not a property the medium has.");
 }

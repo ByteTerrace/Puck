@@ -100,11 +100,11 @@ public sealed partial class HumbleGamingBrickCore : IQueuedMachineCore {
         m_machine;
 
     /// <inheritdoc/>
-    public void ApplyInput(in MachinePadState input) =>
+    public void ApplyInput(in MachinePads input) =>
         BrickPad.Apply(
             joypad: m_joypad,
             lightGun: m_lightGun,
-            pad: in input,
+            pad: in input[0],
             tiltSensor: m_tiltSensor
         );
     /// <summary>Advances by a budget of LCD dots, carrying instruction overshoot into the next call. CPU double
@@ -132,7 +132,7 @@ public sealed partial class HumbleGamingBrickCore : IQueuedMachineCore {
             start: 0
         ));
     /// <inheritdoc/>
-    public ITimeTravelLookahead<MachinePadState> CreateLookahead() =>
+    public ITimeTravelLookahead<MachinePads> CreateLookahead() =>
         new HumbleGamingBrickLookahead(
             instance: m_machine.Fork(),
             oneFrameCycles: DotsPerFrame
