@@ -288,7 +288,7 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 // table. The kernels read it through sdfDynamicTransforms.
 
 // The single font atlas the SDF_SHAPE_GLYPH primitive samples as a DISTANCE-level field (world-render path ONLY;
-// SetGlyphAtlas uploads it once), read through sdfGlyphAtlas and the views set's nearest screenSampler. Sampled with
+// SetGlyphAtlas uploads it once), read through sdfGlyphAtlas and the views set's nearest sampler. Sampled with
 // EXPLICIT LOD only (SampleLevel): implicit-derivative filtering is undefined inside the march's non-uniform control
 // flow, and manual bilinear (sdfGlyphSampleField) reads the true single-channel distance from ALPHA, so a nearest
 // sampler is all it needs.

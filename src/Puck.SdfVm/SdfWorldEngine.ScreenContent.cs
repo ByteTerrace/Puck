@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
+using Puck.Commands;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
@@ -203,12 +204,77 @@ public sealed partial class SdfWorldEngine {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is outside <c>0..31</c>.</exception>
     public void SetScreenSource(int screenIndex, nint imageViewHandle) {
         RequireScreenIndex(screenIndex: screenIndex);
-
-        m_screenSourceViews[screenIndex] = imageViewHandle;
-        m_screenSourceMask = ((0 != imageViewHandle)
-            ? m_screenSourceMask | (1u << screenIndex)
-            : m_screenSourceMask & ~(1u << screenIndex)
+        BindScreen(
+            imageViewHandle: imageViewHandle,
+            screenIndex: screenIndex
         );
+    }
+    /// <summary>Supplies (or clears) the mapping screen <paramref name="screenIndex"/> is drawn from for the next produced
+    /// frame: the mapping its row publishes, whose draw form (<see cref="SourceMapping.Draw"/>) the screen shading reads
+    /// for the glass's warp, the layout, the fit's letterbox and the crop. A screen shades its bound source only while it
+    /// has a mapping; with none it shades as unbound glass. A call with the mapping already supplied packs nothing, and
+    /// the region owes only the words a new mapping changes.</summary>
+    /// <param name="screenIndex">The screen slot (0..<see cref="MaxScreenSurfaces"/>-1).</param>
+    /// <param name="mapping">The screen's surface mapping, or <see langword="null"/> for none.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is out of range.</exception>
+    /// <exception cref="InvalidOperationException"><paramref name="mapping"/> is not drawable: its placement is not a
+    /// surface, its warp declares no inverse, or its shape is invalid.</exception>
+    public void SetScreenMapping(int screenIndex, SourceMapping? mapping) {
+        RequireScreenIndex(screenIndex: screenIndex);
+
+        if (ReferenceEquals(
+            objA: m_screenMappings[screenIndex],
+            objB: mapping
+        )) {
+            return;
+        }
+
+        // The first six of the seven float4 rows frame/sdf-environment.hlsli reads as ScreenMappingData: the warp's u and
+        // v rows (coefficients of u, v and 1, then the face distance one warped unit spans), the image map's u and v rows
+        // (coefficients, then whether the screen is mapped and whether it letterboxes), the crop (left, top, right,
+        // bottom), and the crop inset by half a source pixel, which every sample is clamped to; then the seventh row's
+        // sampler, the filter's value. The seventh row's bound flag is BindScreen's.
+        Span<float> floats = stackalloc float[((ScreenMappingByteLength / sizeof(float)) - ScreenStateFloats)];
+
+        var sampler = 0f;
+
+        floats.Clear();
+
+        if (mapping is not null) {
+            var draw = mapping.Draw();
+            var warp = draw.Warp;
+            var image = draw.Image;
+            var crop = draw.Crop;
+            var right = (crop.X + crop.Width);
+            var bottom = (crop.Y + crop.Height);
+            var halfTexel = (draw.Texel * 0.5f);
+
+            floats[0] = warp.M11; floats[1] = warp.M21; floats[2] = warp.M31; floats[3] = FaceSpan(x: warp.M11, y: warp.M21);
+            floats[4] = warp.M12; floats[5] = warp.M22; floats[6] = warp.M32; floats[7] = FaceSpan(x: warp.M12, y: warp.M22);
+            floats[8] = image.M11; floats[9] = image.M21; floats[10] = image.M31; floats[11] = 1f;
+            floats[12] = image.M12; floats[13] = image.M22; floats[14] = image.M32; floats[15] = (draw.Letterboxes ? 1f : 0f);
+            floats[16] = crop.X; floats[17] = crop.Y; floats[18] = right; floats[19] = bottom;
+            floats[20] = (crop.X + halfTexel.X); floats[21] = (crop.Y + halfTexel.Y); floats[22] = (right - halfTexel.X); floats[23] = (bottom - halfTexel.Y);
+            sampler = ((float)draw.Filter);
+        }
+
+        _ = m_screenMappingRegion.Write(
+            bytes: MemoryMarshal.AsBytes(span: floats),
+            offset: (screenIndex * ScreenMappingByteLength)
+        );
+        _ = m_screenMappingRegion.Write(
+            bytes: MemoryMarshal.AsBytes(span: new ReadOnlySpan<float>(reference: in sampler)),
+            offset: ((screenIndex * ScreenMappingByteLength) + ScreenSamplerOffset)
+        );
+        m_screenMappings[screenIndex] = mapping;
+
+        // The face distance one unit of a warped coordinate spans: the reciprocal of its gradient's length, or zero for a
+        // warp that collapses the axis.
+        static float FaceSpan(float x, float y) {
+            var length = MathF.Sqrt(x: ((x * x) + (y * y)));
+
+            return ((length > 0f) ? (1f / length) : 0f);
+        }
     }
     /// <summary>Overwrites screen <paramref name="screenIndex"/>'s world-space sampling frame for the next produced
     /// frame — the per-frame counterpart of the screen-surface table <see cref="UploadProgram"/> otherwise writes only
@@ -247,6 +313,27 @@ public sealed partial class SdfWorldEngine {
             bytes: MemoryMarshal.AsBytes(span: floats),
             offset: (screenIndex * ScreenSurfaceByteLength)
         );
+    }
+
+    // Binds or unbinds a screen's source view and writes its row's bound flag, the seventh row's first float.
+    private void BindScreen(int screenIndex, nint imageViewHandle) {
+        var bound = ((imageViewHandle != 0) ? 1f : 0f);
+
+        m_screenSourceViews[screenIndex] = imageViewHandle;
+        _ = m_screenMappingRegion.Write(
+            bytes: MemoryMarshal.AsBytes(span: new ReadOnlySpan<float>(reference: in bound)),
+            offset: ((screenIndex * ScreenMappingByteLength) + ScreenBoundOffset)
+        );
+    }
+    // One past the highest screen whose source is bound, or zero when none is.
+    private uint BoundScreenCount() {
+        for (var screen = (MaxScreenSurfaces - 1); (screen >= 0); screen--) {
+            if (m_screenSourceViews[screen] != 0) {
+                return ((uint)(screen + 1));
+            }
+        }
+
+        return 0u;
     }
 
     // The decal table as the descriptor band + cell region's words.

@@ -674,7 +674,7 @@ public sealed partial class SdfProgram {
             }
         }
 
-        var seenScreenIndices = 0u;   // A bit per slot: MaxScreenSurfaces is 32, the same width the engine's screenMask push word carries.
+        Span<bool> seenScreenIndices = stackalloc bool[SdfProgramBuilder.MaxScreenSurfaces];
 
         foreach (var surface in m_screenSurfaces) {
             if (
@@ -687,16 +687,14 @@ public sealed partial class SdfProgram {
                 );
             }
 
-            var bit = (1u << surface.ScreenIndex);
-
-            if (0u != (seenScreenIndices & bit)) {
+            if (seenScreenIndices[surface.ScreenIndex]) {
                 throw new ArgumentException(
                     message: $"Two screen surfaces declare index {surface.ScreenIndex}. The packed table is indexed BY screen index, so one would silently overwrite the other.",
                     paramName: screenSurfacesParamName
                 );
             }
 
-            seenScreenIndices |= bit;
+            seenScreenIndices[surface.ScreenIndex] = true;
 
             if (!VectorFunctions.IsFinite(vector: surface.Origin)) {
                 throw new ArgumentOutOfRangeException(

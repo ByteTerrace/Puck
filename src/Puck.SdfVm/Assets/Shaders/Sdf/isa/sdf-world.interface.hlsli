@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/99b784855d0fd9b9d20737ae82b2e285e1bafdcbee86c7a92b2d470c116b3f04). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/80ab69a281897c7963be34493444fe7a78d1468741124374c5d2a324f1b5c5fb). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -29,7 +29,7 @@ struct SdfWorldPass {
     [[vk::offset(16)]] uint instanceMaskWordCount;
     [[vk::offset(20)]] uint meshDraws;
     [[vk::offset(24)]] uint sampleIndex;
-    [[vk::offset(28)]] uint screenMask;
+    [[vk::offset(28)]] uint screenCount;
     [[vk::offset(32)]] uint2 tileGrid;
     [[vk::offset(40)]] uint viewBase;
     [[vk::offset(44)]] uint viewportCount;
@@ -50,45 +50,15 @@ struct SdfWorldPass {
 [[vk::binding(13, 3)]] RWStructuredBuffer<uint> sdfVisibilityRecordsRW : register(u13, space3);
 [[vk::binding(14, 3)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> output : register(u14, space3);
 [[vk::binding(15, 3)]] StructuredBuffer<float4> screenSurfaces : register(t15, space3);
-[[vk::binding(16, 3)]] StructuredBuffer<float4> sdfScreenLights : register(t16, space3);
-[[vk::binding(17, 3)]] StructuredBuffer<uint4> sdfDecalCells : register(t17, space3);
-[[vk::binding(18, 3)]] StructuredBuffer<float> sdfBrickPool : register(t18, space3);
-[[vk::binding(19, 3)]] StructuredBuffer<float4> sdfVolumes : register(t19, space3);
-[[vk::binding(20, 3)]] StructuredBuffer<uint> sdfMeshRegion : register(t20, space3);
-[[vk::binding(21, 3)]] Texture2D<float4> screenSource0 : register(t21, space3);
-[[vk::binding(22, 3)]] Texture2D<float4> screenSource1 : register(t22, space3);
-[[vk::binding(23, 3)]] Texture2D<float4> screenSource2 : register(t23, space3);
-[[vk::binding(24, 3)]] Texture2D<float4> screenSource3 : register(t24, space3);
-[[vk::binding(25, 3)]] Texture2D<float4> screenSource4 : register(t25, space3);
-[[vk::binding(26, 3)]] Texture2D<float4> screenSource5 : register(t26, space3);
-[[vk::binding(27, 3)]] Texture2D<float4> screenSource6 : register(t27, space3);
-[[vk::binding(28, 3)]] Texture2D<float4> screenSource7 : register(t28, space3);
-[[vk::binding(29, 3)]] Texture2D<float4> screenSource8 : register(t29, space3);
-[[vk::binding(30, 3)]] Texture2D<float4> screenSource9 : register(t30, space3);
-[[vk::binding(31, 3)]] Texture2D<float4> screenSource10 : register(t31, space3);
-[[vk::binding(32, 3)]] Texture2D<float4> screenSource11 : register(t32, space3);
-[[vk::binding(33, 3)]] Texture2D<float4> screenSource12 : register(t33, space3);
-[[vk::binding(34, 3)]] Texture2D<float4> screenSource13 : register(t34, space3);
-[[vk::binding(35, 3)]] Texture2D<float4> screenSource14 : register(t35, space3);
-[[vk::binding(36, 3)]] Texture2D<float4> screenSource15 : register(t36, space3);
-[[vk::binding(37, 3)]] Texture2D<float4> screenSource16 : register(t37, space3);
-[[vk::binding(38, 3)]] Texture2D<float4> screenSource17 : register(t38, space3);
-[[vk::binding(39, 3)]] Texture2D<float4> screenSource18 : register(t39, space3);
-[[vk::binding(40, 3)]] Texture2D<float4> screenSource19 : register(t40, space3);
-[[vk::binding(41, 3)]] Texture2D<float4> screenSource20 : register(t41, space3);
-[[vk::binding(42, 3)]] Texture2D<float4> screenSource21 : register(t42, space3);
-[[vk::binding(43, 3)]] Texture2D<float4> screenSource22 : register(t43, space3);
-[[vk::binding(44, 3)]] Texture2D<float4> screenSource23 : register(t44, space3);
-[[vk::binding(45, 3)]] Texture2D<float4> screenSource24 : register(t45, space3);
-[[vk::binding(46, 3)]] Texture2D<float4> screenSource25 : register(t46, space3);
-[[vk::binding(47, 3)]] Texture2D<float4> screenSource26 : register(t47, space3);
-[[vk::binding(48, 3)]] Texture2D<float4> screenSource27 : register(t48, space3);
-[[vk::binding(49, 3)]] Texture2D<float4> screenSource28 : register(t49, space3);
-[[vk::binding(50, 3)]] Texture2D<float4> screenSource29 : register(t50, space3);
-[[vk::binding(51, 3)]] Texture2D<float4> screenSource30 : register(t51, space3);
-[[vk::binding(52, 3)]] Texture2D<float4> screenSource31 : register(t52, space3);
-[[vk::binding(53, 3)]] Texture2D<float4> sdfGlyphAtlas : register(t53, space3);
-[[vk::binding(54, 3)]] Texture2D<float4> meshVisibility : register(t54, space3);
-[[vk::binding(55, 3)]] SamplerState screenSampler : register(s55, space3);
+[[vk::binding(16, 3)]] StructuredBuffer<float4> screenMappings : register(t16, space3);
+[[vk::binding(17, 3)]] StructuredBuffer<float4> sdfScreenLights : register(t17, space3);
+[[vk::binding(18, 3)]] StructuredBuffer<uint4> sdfDecalCells : register(t18, space3);
+[[vk::binding(19, 3)]] StructuredBuffer<float> sdfBrickPool : register(t19, space3);
+[[vk::binding(20, 3)]] StructuredBuffer<float4> sdfVolumes : register(t20, space3);
+[[vk::binding(21, 3)]] StructuredBuffer<uint> sdfMeshRegion : register(t21, space3);
+[[vk::binding(22, 3)]] Texture2D<float4> screenSources[32] : register(t22, space3);
+[[vk::binding(54, 3)]] Texture2D<float4> sdfGlyphAtlas : register(t54, space3);
+[[vk::binding(55, 3)]] Texture2D<float4> meshVisibility : register(t55, space3);
+[[vk::binding(56, 3)]] SamplerState samplers[2] : register(s56, space3);
 
 #endif // PUCK_SHADER_INTERFACE_SDF_WORLD

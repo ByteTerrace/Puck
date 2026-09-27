@@ -214,8 +214,8 @@ into the slot's rect over the SDF world. This is about **layout**—how many
 things this frame renders and where each one's pixels land.
 
 **A screen source** is a program-declared `ScreenSlab` shape's **material**:
-its lit face samples a bound image through a CRT glass treatment (barrel
-curve, bezel, scanlines, vignette, glint, bloom), and separately, that same
+its lit face samples a bound image, drawn from the screen's published mapping,
+through a CRT glass treatment (bezel, scanlines, vignette, glint, bloom), and separately, that same
 bound image's average color is summed into the room as colored light. This
 is about **shading**—what a particular surface in the world *looks like*
 and what it *contributes to the room's lighting*, independent of anything

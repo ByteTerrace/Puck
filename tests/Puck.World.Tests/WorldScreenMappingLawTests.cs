@@ -1,5 +1,7 @@
 using System.Numerics;
+using System.Text.Json;
 using Puck.Abstractions.Counting;
+using Puck.Abstractions.Gpu;
 using Puck.Assets.Documents;
 using Puck.Commands;
 using Puck.Maths;
@@ -65,9 +67,9 @@ public sealed class WorldScreenMappingLawTests {
     );
     // A ray along the face's inward normal onto the centre of source pixel (x, y), through the glass's bezel inset.
     private static SourceRay RayAt(double x, double y) {
-        const double Inner = (1.0 - (2.0 * WorldScreenMappings.Bezel));
-        var u = (WorldScreenMappings.Bezel + (Inner * ((x + 0.5) / Width)));
-        var v = (WorldScreenMappings.Bezel + (Inner * ((y + 0.5) / Height)));
+        var glass = ((SourceWarpInverse.Affine)WorldScreenMappings.Glass.Inverse!);
+        var u = ((((x + 0.5) / Width) - glass.M13) / glass.M11);
+        var v = ((((y + 0.5) / Height) - glass.M23) / glass.M22);
         var right = Vector3.Transform(value: Vector3.UnitX, rotation: Pose);
         var up = Vector3.Transform(value: Vector3.UnitY, rotation: Pose);
         var normal = Vector3.Normalize(value: Vector3.Cross(vector1: right, vector2: up));
@@ -79,6 +81,39 @@ public sealed class WorldScreenMappingLawTests {
         );
     }
 
+    // A row's filter is one spelling in the document, omitted while it is the default nearest, refused when it
+    // names no filter, and carried by the row's mapping into the draw form the GPU samples with; a hit maps to the same
+    // source pixel under either filter.
+    [Fact]
+    public void ARowsFilterReachesItsMappingAndItsDrawFormAndMovesNoHit() {
+        var nearest = Screen(index: 3, source: Pattern);
+        var linear = (nearest with { Filter = GpuSamplerFilter.Linear });
+        var json = JsonSerializer.Serialize(jsonTypeInfo: WorldJsonContext.Default.WorldScreen, value: linear);
+
+        Assert.Contains(actualString: json, expectedSubstring: "\"filter\": \"Linear\"");
+        Assert.DoesNotContain(expectedSubstring: "\"filter\"", actualString: JsonSerializer.Serialize(jsonTypeInfo: WorldJsonContext.Default.WorldScreen, value: nearest));
+        Assert.Equal(
+            actual: JsonSerializer.Deserialize(json: json, jsonTypeInfo: WorldJsonContext.Default.WorldScreen)!.Filter,
+            expected: GpuSamplerFilter.Linear
+        );
+        _ = Assert.ThrowsAny<JsonException>(testCode: () => JsonSerializer.Deserialize(
+            json: json.Replace(comparisonType: StringComparison.Ordinal, newValue: "\"Bicubic\"", oldValue: "\"Linear\""),
+            jsonTypeInfo: WorldJsonContext.Default.WorldScreen
+        ));
+
+        var source = WorldSourceInstances.Of(shown: [Pattern]).HandleOf(screen: 0)!.Value;
+        var sharp = WorldScreenMappings.Of(screen: nearest, source: source, sourceHeight: Height, sourceWidth: Width);
+        var smooth = WorldScreenMappings.Of(screen: linear, source: source, sourceHeight: Height, sourceWidth: Width);
+
+        Assert.Equal(
+            actual: (sharp.Filter, sharp.Draw().Filter, smooth.Filter, smooth.Draw().Filter),
+            expected: (GpuSamplerFilter.Nearest, GpuSamplerFilter.Nearest, GpuSamplerFilter.Linear, GpuSamplerFilter.Linear)
+        );
+        Assert.Equal(
+            actual: smooth.MapRay(ray: RayAt(x: 37, y: 101)),
+            expected: sharp.MapRay(ray: RayAt(x: 37, y: 101))
+        );
+    }
     // A screen at an arbitrary pose publishes its row's mapping named by its source instance, and maps a ray onto the
     // centre of a known pixel to that pixel, identically every time it is published.
     [Fact]

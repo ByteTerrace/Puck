@@ -10,17 +10,14 @@ static const float GridGrazeCos = 0.30;                           // bands vanis
 static const float3 GridWorldLineColor = float3(0.34, 0.56, 0.95);  // cool — the world floor lattice
 static const float3 GridObjectLineColor = float3(0.96, 0.66, 0.28); // warm — the reference's own lattice
 
-// CRT glass-face knobs. The tuned look is a FLAT SQUARE tube: no pincushion bulge, near-square corners, a thin crisp
-// dark bezel, faint aperture-grille stripes, subtle native-line scanlines, and a soft bright-pixel bloom knee — so the
-// screen reads dead-flat and even, and a game on it looks almost exactly like a real handheld panel scaled up.
-// Everything is continuous (smoothstep/cos), so a cross-backend ±1-LSB UV delta never flips a hard edge.
+// CRT glass-face knobs. The glass's warp, the bezel's width among it, is each screen's published mapping
+// (ScreenMappingData); these are its look: near-square corners, a crisp dark bezel edge, faint aperture-grille stripes,
+// subtle native-line scanlines, and a soft bright-pixel bloom knee, so a game on it looks almost exactly like a real
+// handheld panel scaled up. The bezel's mask is continuous (smoothstep), so a cross-backend UV delta never flips it.
 //
-// The three knobs currently at 0 (curvature, vignette, glint) are LIVE and free: DXC emits `fmul fast`, so each
-// zero folds and its whole chain — including the glint's cross + normalize + pow — dead-code-eliminates on BOTH
-// backends (measured: enabling all three grows the views kernel by 224 DXIL / 348 SPIR-V bytes). Raise one and the
-// effect it names comes back. Do NOT #if them: that would trade a free runtime knob for a compile-time one.
-static const float CrtCurvature = 0.0;       // pincushion bulge about the screen centre (0 = flat glass)
-static const float CrtBezel = 0.03;          // a thin bezel
+// The two knobs at 0 (vignette, glint) are live and free: DXC emits `fmul fast`, so each zero folds and its whole
+// chain, the glint's cross, normalize and pow included, is eliminated on both backends. Raising one brings the effect it
+// names back; an #if would trade a free runtime knob for a compile-time one.
 static const float CrtCornerRadius = 0.004;  // corner rounding of the bezel mask (near-square)
 static const float CrtBezelSoft = 0.008;     // a crisp bezel edge
 static const float CrtScanAmplitude = 0.06;  // subtle scanlines — a hint of CRT, not a filter
@@ -48,7 +45,7 @@ static const float3 CrtGrillePhase = float3(0.0, 2.0943951023931953, 4.188790204
 // single-channel coverage-SDF, sampled with a coverage threshold + a screen-projected AA half-width derived
 // ANALYTICALLY from the hit's pixel footprint (NO fwidth — deterministic, from the same pixelFootprint*traveled the
 // coverage-AA epilogue uses). KEEP IN SYNC with SdfWorldEngine's decal-buffer packing (SetDecalDescriptor/SetDecals)
-// and SdfProgram. LAYOUT (sdfDecalCells, one uint4 per entry): the first SdfDecalDescriptorCount (== SdfWorldEngine.MaxScreenSurfaces)
+// and SdfProgram. LAYOUT (sdfDecalCells, one uint4 per entry): the first SdfDecalDescriptorCount (== SDF_MAX_SCREEN_SURFACES)
 // entries are the PER-SCREEN descriptors, then the shared CELL region.
 //   descriptor[screenIndex] = (gridCols, gridRows, cellBase, asuint(distanceRange)); gridCols == 0 => that screen has
 //                             NO decal this frame (the image or unbound-glass path applies) — an all-zero buffer is inert, so
@@ -56,7 +53,7 @@ static const float3 CrtGrillePhase = float3(0.0, 2.0943951023931953, 4.188790204
 //   cell[i]                 = (packedUvTopLeft, packedUvBottomRight [unorm2x16, sdfGlyphUnpackUv], fgRgba8, bgRgba8);
 //                             a BLANK cell packs uvTopLeft == uvBottomRight (a real glyph never has zero UV extent).
 #if defined(SDF_GLYPH_ATLAS)
-static const uint SdfDecalDescriptorCount = 32u; // == SdfWorldEngine.MaxScreenSurfaces (the per-screen descriptor band)
+static const uint SdfDecalDescriptorCount = SDF_MAX_SCREEN_SURFACES; // the per-screen descriptor band
 // Minimum AA half-width in encoded-coverage units. This keeps a 1:1 glyph edge from collapsing to a hard one-bit step.
 static const float DecalMinAa = 0.03125;
 float3 sdfDecalUnpackRgb(uint packed) {
@@ -110,50 +107,33 @@ float3 sdfSampleGlyphDecal(uint4 descriptor, float2 uv, float halfWidth, float f
 static const uint SdfVolumeCount = 64u;
 #include "shade-volumes.hlsli"
 
+// Samples a screen's source through the sampler its row names. A descriptor array is indexed only by a dynamically
+// uniform value, so each pass of the loop takes the first active lane's screen, samples it for every lane showing that
+// screen, and retires them; a wave spanning one screen passes once.
 float4 sampleScreenSource(uint screenIndex, float2 uv) {
-    // Every screenSamplerN carries the SAME filter (NEAREST) — the thirty-two-way split is purely to give DXC one
-    // sampler symbol per register; there is exactly one LOGICAL sampler behavior on either backend.
-    switch (screenIndex) {
-        case 0:  return screenSource0.SampleLevel(screenSampler, uv, 0);
-        case 1:  return screenSource1.SampleLevel(screenSampler, uv, 0);
-        case 2:  return screenSource2.SampleLevel(screenSampler, uv, 0);
-        case 3:  return screenSource3.SampleLevel(screenSampler, uv, 0);
-        case 4:  return screenSource4.SampleLevel(screenSampler, uv, 0);
-        case 5:  return screenSource5.SampleLevel(screenSampler, uv, 0);
-        case 6:  return screenSource6.SampleLevel(screenSampler, uv, 0);
-        case 7:  return screenSource7.SampleLevel(screenSampler, uv, 0);
-        case 8:  return screenSource8.SampleLevel(screenSampler, uv, 0);
-        case 9:  return screenSource9.SampleLevel(screenSampler, uv, 0);
-        case 10: return screenSource10.SampleLevel(screenSampler, uv, 0);
-        case 11: return screenSource11.SampleLevel(screenSampler, uv, 0);
-        case 12: return screenSource12.SampleLevel(screenSampler, uv, 0);
-        case 13: return screenSource13.SampleLevel(screenSampler, uv, 0);
-        case 14: return screenSource14.SampleLevel(screenSampler, uv, 0);
-        case 15: return screenSource15.SampleLevel(screenSampler, uv, 0);
-        case 16: return screenSource16.SampleLevel(screenSampler, uv, 0);
-        case 17: return screenSource17.SampleLevel(screenSampler, uv, 0);
-        case 18: return screenSource18.SampleLevel(screenSampler, uv, 0);
-        case 19: return screenSource19.SampleLevel(screenSampler, uv, 0);
-        case 20: return screenSource20.SampleLevel(screenSampler, uv, 0);
-        case 21: return screenSource21.SampleLevel(screenSampler, uv, 0);
-        case 22: return screenSource22.SampleLevel(screenSampler, uv, 0);
-        case 23: return screenSource23.SampleLevel(screenSampler, uv, 0);
-        case 24: return screenSource24.SampleLevel(screenSampler, uv, 0);
-        case 25: return screenSource25.SampleLevel(screenSampler, uv, 0);
-        case 26: return screenSource26.SampleLevel(screenSampler, uv, 0);
-        case 27: return screenSource27.SampleLevel(screenSampler, uv, 0);
-        case 28: return screenSource28.SampleLevel(screenSampler, uv, 0);
-        case 29: return screenSource29.SampleLevel(screenSampler, uv, 0);
-        case 30: return screenSource30.SampleLevel(screenSampler, uv, 0);
-        default: return screenSource31.SampleLevel(screenSampler, uv, 0);
+    float4 sampled = float4(0.0, 0.0, 0.0, 0.0);
+
+    [loop]
+    for (;;) {
+        uint screen = WaveReadLaneFirst(screenIndex);
+
+        if (screen == screenIndex) {
+            uint filter = (uint)worldScreenMapping(screen).state.y;
+
+            sampled = screenSources[screen].SampleLevel(samplers[filter], uv, 0);
+
+            break;
+        }
     }
+
+    return sampled;
 }
 // For a screen-instance material id (> SDF_SCREEN_MATERIAL, from SdfProgramBuilder's screen-surface ScreenSlab
 // overload), resolves the surface UV at the hit and shades it. Two tiers, decal-first: a screen slot carrying a GLYPH
-// DECAL (a per-screen cell grid — see sdfSampleGlyphDecal) samples TEXT at the hit (no screenMask bit needed — a decal
-// terminal has no bound image); otherwise, when a source is bound THIS FRAME, samples it (NEAREST) through the CRT
-// glass. outColor is valid only when this returns true; the caller falls back to the unbound glass
-// otherwise (the plain sentinel, or a declared surface with neither a decal nor a bound source this frame).
+// DECAL (a per-screen cell grid — see sdfSampleGlyphDecal) samples TEXT at the hit (no bound source needed — a decal
+// terminal has no bound image); otherwise, when a source is bound and mapped this frame, draws it from the screen's
+// mapping through the CRT glass and the sampler its row names. outColor is valid only when this returns true; the
+// caller falls back to the unbound glass otherwise (the plain sentinel, or a declared surface with neither a decal nor a bound source this frame).
 // footprintDiameter = the hit pixel's world diameter (pixelFootprint * traveled) — the decal's analytic AA source.
 bool sampleScreenSurface(int material, float3 hitPoint, float3 rayDirection, float footprintDiameter, out float3 outColor) {
     outColor = float3(0.0, 0.0, 0.0);
@@ -183,25 +163,30 @@ bool sampleScreenSurface(int material, float3 hitPoint, float3 rayDirection, flo
     }
 #endif
 
-    // No decal, so sdfScreenSurfaceShades found the slot's source bound.
-    // When CrtCurvature is non-zero, bulge the image out about the screen centre (pincushion) so it reads as curved
-    // tube glass rather than a decal. At the tuned 0 this is the identity and folds away.
+    // No decal, so sdfScreenSurfaceShades found the slot's source bound and mapped: the face is drawn from its mapping.
+    ScreenMappingData mapping = worldScreenMapping(screenIndex);
     float2 centered = (uv - 0.5);
     float radiusSquared = dot(centered, centered);
-    float2 curved = (0.5 + (centered * (1.0 + (CrtCurvature * radiusSquared))));
 
-    // Bezel: a smooth rounded-rect mask (an SDF on the screen-local uv) that fades to black just inside the slab edge.
-    // Under a non-zero curvature the bulge pushes the corners past it, giving a real tube's dark rounded corners.
-    float2 edgeDistance = ((abs(curved - 0.5) - float2((0.5 - CrtBezel), (0.5 - CrtBezel))) + CrtCornerRadius);
+    // The glass's warp: the face point the glass samples. The image fills the area inside the bezel rather than being
+    // masked by it, so a bezel frames a screen and never eats picture.
+    float3 face = float3(uv, 1.0);
+    float2 image = float2(dot(mapping.warpU.xyz, face), dot(mapping.warpV.xyz, face));
+
+    // Bezel: a smooth rounded-rect mask on the face that fades to black where the warped point leaves the unit square,
+    // each axis's overshoot measured in face units.
+    float2 edgeDistance = (((abs(image - 0.5) - 0.5) * float2(mapping.warpU.w, mapping.warpV.w)) + CrtCornerRadius);
     float outside = (length(max(edgeDistance, 0.0)) - CrtCornerRadius);
     float bezel = (1.0 - smoothstep(0.0, CrtBezelSoft, outside));
 
-    // The image fills the area INSIDE the bezel rather than being masked by it: a bezel frames a screen, it never
-    // eats picture. Sampling the slab's whole face and then blackening its rim would crop CrtBezel of every edge —
-    // half a tile column on a 160-wide handheld image. Folds to the identity at CrtBezel = 0.
-    float2 image = (0.5 + ((curved - 0.5) / (1.0 - (2.0 * CrtBezel))));
-
-    float3 sampled = sampleScreenSource(screenIndex, saturate(image)).rgb;
+    // The layout, the fit and the crop take the warped point to the source; outside the crop of a letterboxing fit, the
+    // half-open [left, right) x [top, bottom) SourceMapping.MapRay holds a hit to, lies a black bar.
+    float3 warped = float3(image, 1.0);
+    float2 source = float2(dot(mapping.imageU.xyz, warped), dot(mapping.imageV.xyz, warped));
+    bool letterbox = ((mapping.imageV.w != 0.0) && (any(source < mapping.crop.xy) || any(source >= mapping.crop.zw)));
+    float3 sampled = (letterbox
+        ? float3(0.0, 0.0, 0.0)
+        : sampleScreenSource(screenIndex, clamp(source, mapping.sampleClamp.xy, mapping.sampleClamp.zw)).rgb);
 
     // Aperture grille — faint vertical RGB phosphor stripes: three cosines 120 degrees apart. Continuous (cos), so a
     // cross-backend UV delta never flips a hard edge; the period rides the screen-local UV, so the stripe stays on the
