@@ -64,7 +64,7 @@ public sealed class ShaderPipelineOutputExportLawTests {
             var target = Assert.Single(collection: painter.Written);
 
             Assert.NotEqual(expected: image.ImageHandle, actual: target);
-            Assert.NotEqual(expected: previous, actual: target);
+            Assert.NotEqual(actual: target, expected: previous);
             Assert.Equal(expected: target, actual: surface.ImageHandle);
             Assert.Equal(expected: (target, image.ImageHandle), actual: Assert.Single(collection: gpu.CopiedImages));
             Assert.Equal(expected: GpuImageLayout.ShaderReadOnly, actual: node.PublishedLayout);

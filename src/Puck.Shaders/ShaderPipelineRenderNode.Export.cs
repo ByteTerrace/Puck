@@ -148,6 +148,7 @@ public sealed partial class ShaderPipelineRenderNode {
     // on its first write, from nothing, to the copy's destination layout and back to the handoff layout.
     private void RecordExportCopy(nint command, IGpuRecorder recorder, int slot, IGpuExportableImage target) {
         var exported = ExportedResource()!;
+
         var (source, name, instance) = PublicationOf(
             selected: exported,
             slot: slot
