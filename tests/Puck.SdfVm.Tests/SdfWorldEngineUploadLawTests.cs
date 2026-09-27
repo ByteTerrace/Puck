@@ -446,9 +446,10 @@ public sealed class SdfWorldEngineUploadLawTests {
         var expected = new List<uint>();
 
         // A draw's record: its matrix row by row, its material, then the word its mesh's first index sits at, its index
-        // count, the word its first vertex sits at, its attribute flags and the word its first triangle material sits at.
-        // The vertices start past the three records (word 66), the triangle materials past the seven vertices (word 122),
-        // and the indices past the one triangle material (word 123).
+        // count, the word its first vertex sits at, its attribute flags, the word its first triangle material sits at, and
+        // its normal matrix (the inverse transpose of its upper 3x3). The vertices start past the three records (word 93),
+        // the triangle materials past the seven vertices (word 149), and the indices past the one triangle material
+        // (word 150).
         void Record(Matrix4x4 matrix, uint material, uint indexWord, uint indexCount, uint vertexWord, uint flags) {
             float[] rows = [
                 matrix.M11, matrix.M12, matrix.M13, matrix.M14,
@@ -458,7 +459,12 @@ public sealed class SdfWorldEngineUploadLawTests {
             ];
 
             expected.AddRange(collection: rows.Select(selector: BitConverter.SingleToUInt32Bits));
-            expected.AddRange(collection: [material, indexWord, indexCount, vertexWord, flags, 122u]);
+            expected.AddRange(collection: [material, indexWord, indexCount, vertexWord, flags, 149u]);
+            Assert.True(condition: Matrix4x4.Invert(matrix: matrix with { M41 = 0f, M42 = 0f, M43 = 0f }, result: out var inverse));
+
+            var normal = Matrix4x4.Transpose(matrix: inverse);
+
+            expected.AddRange(collection: new[] { normal.M11, normal.M12, normal.M13, normal.M21, normal.M22, normal.M23, normal.M31, normal.M32, normal.M33 }.Select(selector: BitConverter.SingleToUInt32Bits));
         }
         // A vertex: its position, its normal and its texture coordinate, zeros for an attribute its mesh lacks.
         void Vertices(SdfMesh mesh) {
@@ -471,9 +477,9 @@ public sealed class SdfWorldEngineUploadLawTests {
             }
         }
 
-        Record(flags: 0u, indexCount: 6, indexWord: 123, material: 4, matrix: moved, vertexWord: 66);
-        Record(flags: (SdfMeshRegion.NormalsFlag | SdfMeshRegion.MaterialsFlag), indexCount: 3, indexWord: 129, material: 5, matrix: Matrix4x4.CreateScale(scale: 2f), vertexWord: 98);
-        Record(flags: 0u, indexCount: 6, indexWord: 123, material: 6, matrix: Matrix4x4.Identity, vertexWord: 66);
+        Record(flags: 0u, indexCount: 6, indexWord: 150, material: 4, matrix: moved, vertexWord: 93);
+        Record(flags: (SdfMeshRegion.NormalsFlag | SdfMeshRegion.MaterialsFlag), indexCount: 3, indexWord: 156, material: 5, matrix: Matrix4x4.CreateScale(scale: 2f), vertexWord: 125);
+        Record(flags: 0u, indexCount: 6, indexWord: 150, material: 6, matrix: Matrix4x4.Identity, vertexWord: 93);
         Vertices(mesh: quad);
         Vertices(mesh: triangle);
         expected.Add(item: 2u);

@@ -17,9 +17,10 @@ public sealed record SdfMesh {
     /// <param name="uvs">One texture coordinate per vertex, or empty for none.</param>
     /// <param name="triangleMaterials">One palette entry per triangle, added to its draw's material, or empty for the
     /// draw's material on every triangle.</param>
-    /// <exception cref="ArgumentException">The index count is zero or not a multiple of three, an index names no
-    /// vertex, a position, normal or texture coordinate is not finite, or an attribute is neither empty nor one per
-    /// vertex (one per triangle for <paramref name="triangleMaterials"/>).</exception>
+    /// <exception cref="ArgumentException">The index count is zero or not a multiple of three, the mesh has more than
+    /// <see cref="MaxTriangles"/> triangles, an index names no vertex, a position, normal or texture coordinate is not
+    /// finite, or an attribute is neither empty nor one per vertex (one per triangle for
+    /// <paramref name="triangleMaterials"/>).</exception>
     public SdfMesh(ReadOnlyMemory<Vector3> positions, ReadOnlyMemory<uint> indices, ReadOnlyMemory<Vector3> normals = default, ReadOnlyMemory<Vector2> uvs = default, ReadOnlyMemory<uint> triangleMaterials = default) {
         if (
             indices.IsEmpty ||
@@ -27,6 +28,12 @@ public sealed record SdfMesh {
         ) {
             throw new ArgumentException(
                 message: "A mesh needs at least one triangle and three indices per triangle.",
+                paramName: nameof(indices)
+            );
+        }
+        if ((indices.Length / 3) > MaxTriangles) {
+            throw new ArgumentException(
+                message: $"A mesh holds at most {MaxTriangles} triangles, each numbered by a value the mesh target's float holds exactly; this one has {indices.Length / 3}.",
                 paramName: nameof(indices)
             );
         }
@@ -91,6 +98,10 @@ public sealed record SdfMesh {
         TriangleMaterials = triangleMaterials;
     }
 
+    /// <summary>The most triangles a mesh holds: the mesh pass writes a covered pixel's triangle as a float, which holds
+    /// every whole number up to 2^24 exactly, so the last triangle is 2^24 - 1.</summary>
+    public const int MaxTriangles = (1 << 24);
+
     /// <summary>Gets three vertex indices per triangle.</summary>
     public ReadOnlyMemory<uint> Indices { get; }
     /// <summary>Gets one object-space normal per vertex, or none.</summary>
@@ -136,20 +147,23 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
 /// A draw's record is its row-vector object-to-world matrix, row by row (words 0 to 15, <c>M11</c> first), then its
 /// material, then its mesh: the word its first index sits at, its index count, the word its first vertex sits at, its
 /// attribute flags (<see cref="NormalsFlag"/>, <see cref="MaterialsFlag"/>), and the word its first triangle material
-/// sits at (words 16 to 21), all counted from the region's start, so a reader needs nothing but the record to find a
-/// draw's triangles: its index <c>k</c> is the word at <c>indexWord + k</c>, and names the vertex whose eight words
+/// sits at (words 16 to 21), then its normal matrix, the inverse transpose of the matrix's upper 3×3, row by row (words
+/// 22 to 30), which carries an object-space normal to world space under any scale, nonuniform and mirrored included
+/// (a singular matrix, which draws no area, writes its own upper 3×3 instead). Its word offsets are counted from the
+/// region's start, so a reader needs nothing but the record to find a draw's triangles: its index <c>k</c> is the word at <c>indexWord + k</c>, and names the vertex whose eight words
 /// start at <c>vertexWord + (8 * index)</c>. A vertex without a normal or texture coordinate holds zeros there, and
-/// the flags say which a mesh has. The record is twenty-two whole words, so it has no padding a structured-buffer
+/// the flags say which a mesh has. The record is thirty-one whole words, so it has no padding a structured-buffer
 /// reader could disagree on.
 /// </para>
 /// </summary>
 public static class SdfMeshRegion {
-    /// <summary>The words of one draw's record: a 4×4 matrix, a material and the draw's mesh.</summary>
-    public const int DrawWords = 22;
+    /// <summary>The words of one draw's record: a 4×4 matrix, a material, the draw's mesh and its normal matrix.</summary>
+    public const int DrawWords = 31;
     /// <summary>The bytes of one draw's record.</summary>
     public const int DrawBytes = (DrawWords * sizeof(uint));
     /// <summary>The most draws one region holds: the mesh pass pushes a draw's index in the bits below
-    /// <see cref="SdfWorldInterfaces.MeshViewShift"/>.</summary>
+    /// <see cref="SdfWorldInterfaces.MeshViewShift"/>, and writes a covered pixel's draw plus one as a float, which holds
+    /// 2^24 exactly.</summary>
     public const int MaxDraws = (1 << SdfWorldInterfaces.MeshViewShift);
     /// <summary>The bytes of one index.</summary>
     public const int IndexBytes = sizeof(uint);
@@ -274,6 +288,10 @@ public static class SdfMeshRegion {
             record[19] = ((uint)(layout.VertexWordOffset + (placement.BaseVertex * VertexWords)));
             record[20] = ((mesh.Normals.IsEmpty ? 0u : NormalsFlag) | (mesh.TriangleMaterials.IsEmpty ? 0u : MaterialsFlag));
             record[21] = ((uint)(layout.MaterialWordOffset + placement.FirstMaterial));
+            WriteNormalMatrix(
+                matrix: matrix,
+                record: record[22..]
+            );
         }
 
         foreach (var (mesh, placement) in meshes) {
@@ -303,6 +321,29 @@ public static class SdfMeshRegion {
             mesh.TriangleMaterials.Span.CopyTo(destination: destination[(layout.MaterialWordOffset + placement.FirstMaterial)..]);
             mesh.Indices.Span.CopyTo(destination: destination[(layout.IndexWordOffset + placement.FirstIndex)..]);
         }
+    }
+    // A draw's normal matrix: the inverse transpose of its matrix's upper 3×3, row by row, in the row-vector convention
+    // (n_world = n.x row0 + n.y row1 + n.z row2). A singular matrix writes its own upper 3×3.
+    private static void WriteNormalMatrix(Matrix4x4 matrix, Span<uint> record) {
+        var upper = new Matrix4x4(
+            m11: matrix.M11, m12: matrix.M12, m13: matrix.M13, m14: 0f,
+            m21: matrix.M21, m22: matrix.M22, m23: matrix.M23, m24: 0f,
+            m31: matrix.M31, m32: matrix.M32, m33: matrix.M33, m34: 0f,
+            m41: 0f, m42: 0f, m43: 0f, m44: 1f
+        );
+        var normal = (Matrix4x4.Invert(matrix: upper, result: out var inverse)
+            ? Matrix4x4.Transpose(matrix: inverse)
+            : upper);
+
+        record[0] = BitConverter.SingleToUInt32Bits(value: normal.M11);
+        record[1] = BitConverter.SingleToUInt32Bits(value: normal.M12);
+        record[2] = BitConverter.SingleToUInt32Bits(value: normal.M13);
+        record[3] = BitConverter.SingleToUInt32Bits(value: normal.M21);
+        record[4] = BitConverter.SingleToUInt32Bits(value: normal.M22);
+        record[5] = BitConverter.SingleToUInt32Bits(value: normal.M23);
+        record[6] = BitConverter.SingleToUInt32Bits(value: normal.M31);
+        record[7] = BitConverter.SingleToUInt32Bits(value: normal.M32);
+        record[8] = BitConverter.SingleToUInt32Bits(value: normal.M33);
     }
 }
 /// <summary>Where one distinct mesh sits in the mesh region, in the units a draw's record names it by.</summary>

@@ -1,19 +1,20 @@
-// The mesh pass's and the hit passes' reads of the mesh region, SdfMeshRegion's raw word layout: one twenty-two-word
+// The mesh pass's and the hit passes' reads of the mesh region, SdfMeshRegion's raw word layout: one thirty-one-word
 // record a draw (its row-vector object-to-world matrix row by row, its material, the word its first index sits at, its
-// index count, the word its first vertex sits at, its attribute flags and the word its first triangle material sits
-// at), then the vertices, eight words each (position, normal, texture coordinate), then the triangle materials, then the
+// index count, the word its first vertex sits at, its attribute flags, the word its first triangle material sits at,
+// and its normal matrix, the inverse transpose of the matrix's upper 3x3, row by row), then the vertices, eight words each (position, normal, texture coordinate), then the triangle materials, then the
 // indices. KEEP IN SYNC with SdfMeshRegion.Write. The includer's interface declares the region, sdfMeshRegion: sdf-world
 // and sdf-mesh both do.
 #ifndef SDF_MESH_HLSLI
 #define SDF_MESH_HLSLI
 
-static const uint SdfMeshDrawWords = 22u;
+static const uint SdfMeshDrawWords = 31u;
 static const uint SdfMeshMaterialWord = 16u;
 static const uint SdfMeshIndexWord = 17u;
 static const uint SdfMeshIndexCountWord = 18u;
 static const uint SdfMeshVertexWord = 19u;
 static const uint SdfMeshFlagsWord = 20u;
 static const uint SdfMeshTriangleMaterialWord = 21u;
+static const uint SdfMeshNormalMatrixWord = 22u;
 static const uint SdfMeshVertexWords = 8u;
 // A record's attribute flags: its mesh carries a normal per vertex, and a palette entry per triangle. KEEP IN SYNC with
 // SdfMeshRegion.NormalsFlag and MaterialsFlag.
@@ -64,17 +65,25 @@ float3 sdfMeshWorldPosition(uint record, uint k) {
 
     return (sdfMeshWorldDirection(record, p) + sdfMeshRow(record, 3u));
 }
-// The world normal of a draw's index `k`: the normal the vertex it names carries, under the draw's matrix. Meaningful
+// The world normal of a draw's index `k`: the normal the vertex it names carries, under the draw's normal matrix (the
+// inverse transpose of its matrix, so a nonuniform scale keeps the normal perpendicular to the surface). Meaningful
 // only for a mesh that carries normals.
 float3 sdfMeshWorldNormal(uint record, uint k) {
     uint word = (sdfMeshVertexAt(record, k) + 3u);
+    uint rows = (record + SdfMeshNormalMatrixWord);
+    float3 n = asfloat(uint3(sdfMeshRegion[word], sdfMeshRegion[(word + 1u)], sdfMeshRegion[(word + 2u)]));
+    float3 row0 = asfloat(uint3(sdfMeshRegion[rows], sdfMeshRegion[(rows + 1u)], sdfMeshRegion[(rows + 2u)]));
+    float3 row1 = asfloat(uint3(sdfMeshRegion[(rows + 3u)], sdfMeshRegion[(rows + 4u)], sdfMeshRegion[(rows + 5u)]));
+    float3 row2 = asfloat(uint3(sdfMeshRegion[(rows + 6u)], sdfMeshRegion[(rows + 7u)], sdfMeshRegion[(rows + 8u)]));
 
-    return sdfMeshWorldDirection(record, asfloat(uint3(sdfMeshRegion[word], sdfMeshRegion[(word + 1u)], sdfMeshRegion[(word + 2u)])));
+    return (((n.x * row0) + (n.y * row1)) + (n.z * row2));
 }
 // The surface normal of a draw's triangle at a world point on it, seen along `rayDirection`: the vertex normals
 // interpolated at the point's barycentric coordinates when the mesh carries them, the face normal otherwise. The pass
 // culls nothing, so when the camera sees the triangle's back (an open mesh from behind, or a mirrored copy, whose matrix
-// reverses its winding) the normal is turned toward the camera.
+// reverses its winding) the normal is turned toward the camera. An interpolated normal can still lean away from the ray
+// seen past a tilted vertex normal at a grazing angle; it is clamped to face the camera, by removing the part of it
+// along the ray and a sliver more.
 float3 sdfMeshSurfaceNormal(uint draw, uint triangleIndex, float3 surfacePoint, float3 rayDirection) {
     uint record = sdfMeshRecord(draw);
     uint first = (3u * triangleIndex);
@@ -108,8 +117,11 @@ float3 sdfMeshSurfaceNormal(uint draw, uint triangleIndex, float3 surfacePoint, 
     }
 
     normal = normalize(normal);
+    normal = ((dot(face, rayDirection) > 0.0) ? -normal : normal);
 
-    return ((dot(face, rayDirection) > 0.0) ? -normal : normal);
+    float along = dot(normal, rayDirection);
+
+    return ((along > 0.0) ? normalize(normal - (rayDirection * (along + 1.0e-3))) : normal);
 }
 
 // What the mesh pass's vertex stage hands its fragment stage: the clip position, the world position the fragment
