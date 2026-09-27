@@ -1,7 +1,7 @@
 # Puck.Machines.Post
 
-The battery scaffold shared by `Puck.HumbleGamingBrick.Post` and
-`Puck.AdvancedGamingBrick.Post`: the pieces of each core's power-on self-test
+The battery scaffold shared by `Puck.HumbleGamingBrick.Post`,
+`Puck.AdvancedGamingBrick.Post`, and `Puck.HumbleGamingDeck.Post`: the pieces of each core's power-on self-test
 that carry no machine-specific state, plus the generic pieces (`PostBattery<TContext>`,
 `IPostStage<TContext>`, `HashDivergenceReport`) closed by each battery over its
 own `PostContext`/snapshot types.
@@ -24,16 +24,40 @@ signatures, parameters, return values, and exceptions.
 | `PostReport` | The folded per-stage results, exit code, and rendered table for one battery run. |
 | `HashDivergenceReport` | Snapshot-hashes two machines and, on a mismatch, prints the component/offset localization and hex windows—the loop and `DescribeDivergence` stay per-brick. |
 | `CommandLineArguments` | `Value(args, name)` looks up a flag's following value; `TryValidateValues` rejects missing values for a known set of flags. |
-| `CorpusManifest` | Resolves explicit corpus paths or the pinned cache; `Load(path, cacheRoot)` sets the cache used for both fetch and resolution. Both runners expose `--corpus-cache`. |
+| `CorpusManifest` | Resolves explicit corpus paths or the pinned cache; `Load(path, cacheRoot)` sets the cache used for both fetch and resolution. The runners expose `--corpus-cache`. |
 | `CoreEmbeddingProbe` | Checks synchronous core input, video, audio, state replay and lookahead without host infrastructure. |
 
-Both runners locate their committed manifests with
+The runners locate their committed manifests with
 `CorpusManifest.InRepository(projectName)`; the Humble battery resolves its
 expectations ledger in the same checkout. The shared runtime locator walks to
 `Puck.slnx` from the executable directory, then the working directory, so CI's
 deterministic compiler source paths do not affect corpus selection or ledger
 updates. A runner launched outside the checkout must use a working directory
 inside it.
+
+## Individually pinned corpus files
+
+A manifest entry chooses one of two forms. The archive form uses `Archive`,
+`Sha256`, and an optional `Root` directory within the ZIP. The file form uses
+`UrlPrefix` and a nonempty `Files` array. Each file names a relative `Path` and
+its own `Sha256`. The URL prefix ends in a slash; each path is appended to it.
+`Name` and `Version` identify the cache directory in either form:
+`corpora/<name>/<version>/`. An optional `Root` sits beneath that directory.
+`License`, `Revision`, and `Hardware` describe provenance and applicability.
+
+The file form downloads one file at a time into a temporary sibling, verifies
+its complete bytes, and publishes it only after its hash matches. A partial
+fetch can resume using files already verified. A missing file makes the corpus
+unavailable; an incorrect cached hash raises an explicit error. Fetching and
+resolving a cached file corpus both verify every present file. An existing
+directory alone never proves that the file inventory is complete. Relative
+paths cannot escape the corpus directory, and duplicate paths are rejected.
+
+The archive form retains its existing download, hash-check, extract, and cache
+behavior. `Fetch(HttpClient)` accepts a caller-owned transport so tests can
+exercise both forms without network access. See the
+[Deck CPU guide](../../docs/emulation/hgd/cpu-and-timing.md#battery-and-corpora)
+for the large instruction corpus that uses the file form.
 
 ## The hang guard
 

@@ -15,7 +15,7 @@ public sealed class MultiPortInputTests {
             core: new SeatRecordingCore(),
             inputPorts: TwoPorts
         );
-        var seats = Assert.IsAssignableFrom<IList<IMachineInputPort>>(host.Seats);
+        var seats = Assert.IsAssignableFrom<IList<IMachineInputPort>>(@object: host.Seats);
 
         _ = Assert.Throws<NotSupportedException>(testCode: () => seats[0] = seats[1]);
         Assert.Same(
@@ -124,7 +124,7 @@ public sealed class MultiPortInputTests {
     }
     [Fact]
     public void AHostRefusesASeatCountOutsideTheImage() {
-        foreach (var inputPorts in (string[][])[[], ["a", "b", "c", "d", "e"]]) {
+        foreach (var inputPorts in ((string[][])[[], ["a", "b", "c", "d", "e"]])) {
             _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new TestHost(
                 core: new SeatRecordingCore(),
                 inputPorts: inputPorts
@@ -133,14 +133,13 @@ public sealed class MultiPortInputTests {
     }
     [Fact]
     public void AHostRefusesARepeatedOrBlankPortName() {
-        foreach (var inputPorts in (string[][])[["controls", "controls"], ["controls", " "]]) {
+        foreach (var inputPorts in ((string[][])[["controls", "controls"], ["controls", " "]])) {
             _ = Assert.ThrowsAny<ArgumentException>(testCode: () => new TestHost(
                 core: new SeatRecordingCore(),
                 inputPorts: inputPorts
             ));
         }
     }
-
     [Fact]
     public void SeatImagesCompareEverySeat() {
         var first = MachinePads.From(inputs: [MachinePadState.Neutral, MachinePadState.Neutral, MachinePadState.Neutral, Pressed(buttons: MachineButtons.West)]);
@@ -168,6 +167,7 @@ public sealed class MultiPortInputTests {
         private readonly uint[] m_framebuffer = [0U];
 
         public MachineButtons[] Seen { get; } = new MachineButtons[MachinePads.MaxSeats];
+
         public string CheckpointIdentity => "test/seat-recording-core";
         public long CycleCount => 0L;
         public MachineCycleRate CycleRate => new(cycles: 60UL);
