@@ -67,11 +67,14 @@ public static class WorldStateDisclosure {
     /// <param name="time">The clocks a cell's value-over-time trait is read at.</param>
     /// <param name="recipient">The recipient, or <see langword="null"/> for the public observer.</param>
     /// <returns>The observed rows, or <see langword="null"/> when the document discloses nothing.</returns>
-    public static IReadOnlyList<WorldObservedRow>? Compose(WorldDefinition definition, StateArena arena, in ArenaTime time, Principal? recipient) {
+    /// <param name="unrestricted">Whether to disclose as a reader every restriction admits — the most any recipient could
+    /// be handed, which a measurement sizing for every possible recipient reads — instead of as <paramref name="recipient"/>.</param>
+    public static IReadOnlyList<WorldObservedRow>? Compose(WorldDefinition definition, StateArena arena, in ArenaTime time, Principal? recipient, bool unrestricted = false) {
         var observer = new Observer(
             arena: arena,
             definition: definition,
-            recipient: recipient
+            recipient: recipient,
+            unrestricted: unrestricted
         );
         var result = new List<WorldObservedRow>();
 
@@ -193,14 +196,17 @@ public static class WorldStateDisclosure {
     /// <param name="arena">The live store, for each cell's own policy and its zone's.</param>
     /// <param name="recipient">The recipient, or <see langword="null"/> for the public observer.</param>
     /// <returns>The disclosed document; <paramref name="definition"/> itself when nothing is withheld.</returns>
-    public static WorldStateDisclosed Disclose(WorldDefinition definition, StateArena arena, Principal? recipient) {
+    /// <param name="unrestricted">Whether to disclose as a reader every restriction admits — the most any recipient could
+    /// be handed, which a measurement sizing for every possible recipient reads — instead of as <paramref name="recipient"/>.</param>
+    public static WorldStateDisclosed Disclose(WorldDefinition definition, StateArena arena, Principal? recipient, bool unrestricted = false) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: arena);
 
         var observer = new Observer(
             arena: arena,
             definition: definition,
-            recipient: recipient
+            recipient: recipient,
+            unrestricted: unrestricted
         );
         var authored = definition.AuthoredState;
         var rows = new WorldStateRow[authored.Count];
@@ -465,11 +471,14 @@ public static class WorldStateDisclosure {
     /// <param name="graph">The presentation graph to flatten.</param>
     /// <param name="recipient">The recipient, or <see langword="null"/> for the public observer.</param>
     /// <exception cref="InvalidOperationException">The graph references a row this recipient may not read whole.</exception>
-    public static void ValidateBindings(WorldDefinition definition, StateArena arena, object graph, Principal? recipient) {
+    /// <param name="unrestricted">Whether to disclose as a reader every restriction admits — the most any recipient could
+    /// be handed, which a measurement sizing for every possible recipient reads — instead of as <paramref name="recipient"/>.</param>
+    public static void ValidateBindings(WorldDefinition definition, StateArena arena, object graph, Principal? recipient, bool unrestricted = false) {
         var observer = new Observer(
             arena: arena,
             definition: definition,
-            recipient: recipient
+            recipient: recipient,
+            unrestricted: unrestricted
         );
 
         foreach (var row in definition.State) {
@@ -521,10 +530,13 @@ public static class WorldStateDisclosure {
         private readonly Dictionary<string, List<(int Ordinal, WorldStateRow Row)>> m_zonesByDomain;
         private readonly StateArena m_arena;
         private readonly WorldDefinition m_definition;
+        // Composing as a reader every restriction admits: the most any recipient could be handed.
+        private readonly bool m_unrestricted;
 
-        public Observer(WorldDefinition definition, StateArena arena, Principal? recipient) {
+        public Observer(WorldDefinition definition, StateArena arena, Principal? recipient, bool unrestricted = false) {
             m_arena = arena;
             m_definition = definition;
+            m_unrestricted = unrestricted;
             Name = recipient?.Describe();
             m_zonesByDomain = new(comparer: StringComparer.Ordinal);
 
@@ -557,7 +569,10 @@ public static class WorldStateDisclosure {
 
         // A restriction the store holds for the recipient's own token, or one a live text row lists it in.
         public bool Allows(StateVisibility? policy) {
-            if (policy is null) {
+            if (
+                (policy is null) ||
+                m_unrestricted
+            ) {
                 return true;
             }
             if (policy.Allows(recipient: Name)) {
@@ -640,6 +655,9 @@ public static class WorldStateDisclosure {
             return false;
         }
         public bool CanRead(WorldStateRow row, int rowOrdinal, CellKey key) {
+            if (m_unrestricted) {
+                return true;
+            }
             if (
                 !Allows(policy: row.Visibility) ||
                 !Allows(policy: m_arena.Visibility(

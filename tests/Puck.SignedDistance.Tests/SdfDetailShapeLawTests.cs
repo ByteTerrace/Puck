@@ -7,7 +7,7 @@ using Xunit;
 namespace Puck.SignedDistance.Tests;
 
 /// <summary>Laws over <see cref="SdfInstruction.Detail"/>: the packed-word flag bit, and its exclusion from both
-/// interpreters' march field (the GPU contract lives in field/sdf-point.hlsli/passes/sdf-render-view.hlsli and is unverified by machine
+/// interpreters' march field (the GPU contract lives in field/sdf-point.hlsli/shade/sdf-light-stage.hlsli and is unverified by machine
 /// here — see <see cref="SdfFieldEvaluator"/>'s CPU mirror, which this file gates directly).</summary>
 public sealed class SdfDetailShapeLawTests {
     private static readonly SdfMaterial[] OneMaterial = [new SdfMaterial(Albedo: Vector3.One)];

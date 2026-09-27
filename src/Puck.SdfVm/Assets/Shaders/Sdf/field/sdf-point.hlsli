@@ -56,7 +56,7 @@ static float sdfMapStepBound = SDF_STEP_BOUND_NONE;
 // material and the SYMMETRIC seam weight min(h, 1-h) in [0, 0.5] (0 at/beyond the band, 0.5 at the seam centre) — h is
 // the SAME clamped smooth-blend factor blendShapeDual uses (KEEP IN SYNC). A HARD compose that flips the winner resets
 // the weight to 0 (a hard material cut); a HARD compose the incumbent keeps leaves an earlier smooth seam's weight
-// intact (the far shape never touched the incumbent's appearance). The shading epilogue (renderView, passes/sdf-render-view.hlsli)
+// intact (the far shape never touched the incumbent's appearance). The light stage (shade/sdf-light-stage.hlsli)
 // captures these at the accept-sample march call and lerps the winner's albedo toward `other` by the weight — HIT-ONLY,
 // one lerp per lit pixel, never a per-step map eval. Both ids are POST-parityMaterialDelta (a wallpaper-recoloured seam
 // blends its recoloured albedos), so the mixed colour stays inside the same relaxed material-flip parity family the
@@ -68,14 +68,14 @@ static int sdfMaterialBlendOther = 0;
 // mapCore/mapGradCore's march-vs-shade mode: false (every march sample — the beam cone, the fine march, shadow, AO,
 // including their rigid-leaf fast paths) skips a
 // SDF_SHAPE_DETAIL_FLAG shape entirely, so it never appears in the marched hit, the collider, or the step bound.
-// renderView and sdfResolveSurface flip it true for exactly the lifetime of hit-only material/normal re-evaluation
+// The light stage and sdfResolveSurface flip it true for exactly the lifetime of hit-only material/normal re-evaluation
 // at the already-found surface point, so a detail shape's local perturbation and material win only there. False
 // everywhere else, so an unauthored program renders byte-identical.
 static bool sdfDetailShadingActive = false;
 
 // mapCore/mapGradCore's secondary-ray exclusion mode: false (the primary/beam/fine march, the normal probes, and the
 // hit-only shade/detail re-evaluations) carries a SDF_SHAPE_NO_SECONDARY_FLAG shape like any ordinary shape. true
-// (renderView's shadow calls and sdfResolveAmbient's AO calls, only for their duration) skips
+// (the light stage's shadow calls and sdfResolveAmbient's AO calls, only for their duration) skips
 // it — the study's secondaryScene posture: a shape marked secondary=false still shades and collides, it just casts
 // no shadow and contributes no AO. False everywhere else, so an unauthored program renders byte-identical.
 static bool sdfSecondaryMarchActive = false;

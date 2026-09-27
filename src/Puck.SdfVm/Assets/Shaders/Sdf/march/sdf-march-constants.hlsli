@@ -109,7 +109,7 @@ float worldShadowPenumbraChord() { return (3.0 * worldShadowPenumbraSlope()); }
 
 // Per-pixel query tally for world.debug-view evals, including primary local-part marches and shading probes.
 // Call sites in the march, the normals and the occlusion count their queries; the interpreter does not. This per-thread
-// scalar follows the material-seam channel's pattern and resets at renderView entry. Counting stays active
+// scalar follows the material-seam channel's pattern and resets at each hit stage's entry. Counting stays active
 // for every view so selecting the evaluation heatmap does not change the work being measured.
 static float sdfEvalCount = 0.0;
 #endif

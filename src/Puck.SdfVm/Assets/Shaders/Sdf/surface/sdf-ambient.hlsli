@@ -16,8 +16,8 @@
 // of the footprint termination test. Background visibility comes from neighboring primary records, not a field probe.
 // stepScale == 1.0 EXACTLY for an isometric, warp-free program and x / 1.0f == x to the bit, so those scenes stay
 // byte-identical whether the divide inlines here or is spelled at the call site.
-// GRADIENT-SCALED CALLERS: softShadowVisibility/calcAO/calcFastAO receive a `stepScale` argument the renderView
-// epilogue pre-composes as `stepScale * max(gradientMagnitude, GradientMagnitudeFloor)` — the program's own march
+// GRADIENT-SCALED CALLERS: softShadowVisibility/calcAO/calcFastAO receive a `stepScale` argument the light and
+// ambient stages pre-compose as `stepScale * max(gradientMagnitude, GradientMagnitudeFloor)` — the program's own march
 // clamp times the hit's LOCAL field gradient magnitude (see GradientMagnitudeFloor's remarks). This function stays
 // unaware of the composition: it is still one division, so a warp-free, unit-gradient hit (both factors == 1.0)
 // keeps every existing byte-identical guarantee.

@@ -22,6 +22,6 @@
 #include "../surface/sdf-ambient.hlsli"
 #include "../shade/sdf-surface-shading.hlsli"
 #include "../debug/sdf-overshoot.hlsli"
-#include "sdf-render-view.hlsli"
+#include "sdf-hit-stages.hlsli"
 
 #endif

@@ -46,7 +46,7 @@ public sealed record SdfFrame(
     /// <summary>The frame's bounded flow and cloud volumes, at most
     /// <see cref="SdfWorldTables.MaxVolumes"/>; submission refuses a list beyond that capacity.
     /// Packed into its own structured buffer (never <c>sdfScreenLights</c>) and shaded by <c>shade-volumes.hlsli</c>'s
-    /// one call site at the end of <c>renderView</c>, after the surface color is final. Empty (the default) uploads an
+    /// one call site at the end of the views stage (<c>sdfViewsStage</c>), after the surface color is final. Empty (the default) uploads an
     /// all-zero table whose first bound ends the shader's scan.</summary>
     public IReadOnlyList<SdfVolume> Volumes { get; init; } = [];
     /// <summary>The frame's opaque triangle meshes: every placement and stamp of a prototype that carries a mesh. Empty by

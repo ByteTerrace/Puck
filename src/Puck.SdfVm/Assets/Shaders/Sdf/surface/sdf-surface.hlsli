@@ -1,17 +1,17 @@
 #ifndef PUCK_SDF_SURFACE_HLSLI
 #define PUCK_SDF_SURFACE_HLSLI
 
-// Surface and ambient share the primary grid and its visibility record (sdf-visibility.hlsli). Every active pixel
-// receives neutral N and S rows before the next dispatch, including misses and diagnostic views. This avoids stale
-// AO when a pose, camera, material, viewport rectangle or lighting setting changes. Each writer compiles only into
-// its own pass: views binds the record read-only.
+// The surface and ambient stages: each reads the pixel's visibility record (sdf-visibility.hlsli), which primary wrote,
+// and writes its own rows. Every active pixel receives neutral N and S rows before the next dispatch, including misses
+// and diagnostic views. This avoids stale AO when a pose, camera, material, viewport rectangle or lighting setting
+// changes. Each writer compiles only into its own pass: views binds the record read-only.
 #ifdef SDF_SURFACE_PASS
 void sdfResolveSurface(float3 surfacePoint, float3 ray, bool hit, int material, int mode, uint mask,
     float primaryRadius, float footprint, uint record) {
     float3 normal = 0.0;
     float gradientMagnitude = 1.0, curvature = 0.0;
     float initialQueries = sdfEvalCount;
-    bool finalMode = mode <= 0 || mode >= DebugViewModeCount || mode == DebugViewModeEvals;
+    bool finalMode = worldFinalShadingMode(mode);
     bool sampledScreen = false;
 #ifdef SDF_SCREEN_SOURCES
     if (hit && finalMode) {
@@ -55,6 +55,44 @@ void sdfResolveMeshSurface(float3 normal, float ambient, uint record) {
     surface.flags = 0u;
     sdfStoreVisibilityNormal(record, geometric);
     sdfStoreVisibilitySurface(record, surface);
+}
+
+// The surface stage: resolves an active pixel's normal and curvature from the field, or a mesh hit's from its triangle,
+// which the record names, and a textured mesh's normal and occlusion from the atlases, facing the camera as the geometric
+// normal does.
+void sdfSurfaceStage(SdfPixel p) {
+    if (!p.active) {
+        return;
+    }
+
+    uint record = worldVisibilityRecord(p.pixel, p.viewIndex);
+    SdfVisibility visibility = sdfLoadVisibility(record);
+
+    sdfEvalCount = (float)sdfVisibilityQueries(visibility);
+
+    if (sdfVisibilityKind(visibility.identity) == SdfVisibilityKindMesh) {
+        uint draw = sdfVisibilitySource(visibility.identity);
+        uint triangleIndex = sdfVisibilityMeshTriangle(record);
+        float3 meshPoint = (p.rayOrigin + (p.rayDirection * visibility.t));
+        float3 meshNormal = sdfMeshSurfaceNormal(draw, triangleIndex, meshPoint, p.rayDirection);
+        float meshAmbient = 1.0;
+
+        if (sdfMeshTextured(draw)) {
+            SdfMeshTexel meshTexel = sdfMeshTexelAt(draw, triangleIndex, meshPoint, (p.pixelFootprint * visibility.t));
+
+            meshNormal = sdfMeshFaceCamera(sdfMeshTexelNormal(draw, meshTexel), sdfMeshFace(sdfMeshRecord(draw), triangleIndex), p.rayDirection);
+            meshAmbient = sdfMeshTexelOcclusion(meshTexel);
+        }
+
+        sdfResolveMeshSurface(meshNormal, meshAmbient, record);
+
+        return;
+    }
+
+    SdfVisibilityCoverage coverage = sdfLoadVisibilityCoverage(record);
+
+    sdfResolveSurface((p.rayOrigin + (p.rayDirection * visibility.t)), p.rayDirection, sdfVisibilityHit(visibility), visibility.material,
+        p.viewMode, p.instanceMaskBase, coverage.terminalRadius, (p.pixelFootprint * visibility.t), record);
 }
 #endif
 
@@ -118,6 +156,20 @@ void sdfResolveAmbient(float3 surfacePoint, uint cameraMask, uint2 pixel, uint v
 #endif
     info.queries += sdfEvalCount - initialQueries;
     sdfStoreVisibilitySurface(record, info);
+}
+
+// The ambient stage: every lane, active or not, reaches the group's ambient gather, so a lane past the render extent
+// resolves at its march start and stores nothing.
+void sdfAmbientStage(SdfPixel p) {
+    float traveled = max(p.marchStart, 0.0);
+
+    sdfEvalCount = 0.0;
+
+    if (p.active) {
+        traveled = sdfLoadVisibility(worldVisibilityRecord(p.pixel, p.viewIndex)).t;
+    }
+
+    sdfResolveAmbient((p.rayOrigin + (p.rayDirection * traveled)), p.instanceMaskBase, p.pixel, p.viewIndex, p.lane, p.active);
 }
 #endif
 

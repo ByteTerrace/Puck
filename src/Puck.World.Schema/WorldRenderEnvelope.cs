@@ -64,6 +64,10 @@ public sealed class WorldRenderEnvelope {
                 reason = error.Message;
 
                 return false;
+            } catch (WorldRenderMeasureRefusedException error) {
+                reason = error.Message;
+
+                return false;
             }
 
             if (constraint.AllowGrowth) {

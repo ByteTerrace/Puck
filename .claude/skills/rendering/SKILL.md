@@ -94,15 +94,33 @@ register.
 ## Editing kernels
 
 - **Know which dispatch owns the code.** Primary traversal, surface (normals,
-  curvature), ambient (AO), and views (shadows, materials, lighting) are
-  separate dispatches sharing `sdf-world-views.comp.hlsl`'s entry point through
-  pass macros; `renderView` compiles only into those four kernels. The mesh pass
-  before primary is a graphics pass (`sdf-mesh.vert.hlsl`, `sdf-mesh.frag.hlsl`)
-  whose target bounds primary's march; a mesh pixel's record carries the mesh
-  kind, and views skips its shadow march. AO lives in `sdf-occlusion.hlsli`
+  curvature), ambient (AO), shadow (the key light's soft shadow), and views
+  (materials, lighting) are separate dispatches sharing `sdf-world-views.comp.hlsl`'s entry point through
+  pass macros, each compiling its own stage over one pixel context (`SdfPixel`):
+  `sdfPrimaryStage` in `march/sdf-primary.hlsli`, `sdfSurfaceStage` and
+  `sdfAmbientStage` in `surface/sdf-surface.hlsli`, `sdfShadowStage` in
+  `surface/sdf-shadow.hlsli`, and `sdfViewsStage`
+  (`passes/sdf-hit-stages.hlsli`), which reads the record once as a surface
+  sample (`SdfSurfaceSample`) and runs `sdfLightStage`
+  (`shade/sdf-light-stage.hlsli`), the volumes and the debug views
+  (`debug/sdf-debug-views.hlsli`). The mesh pass before primary is a graphics
+  pass (`sdf-mesh.vert.hlsl`, `sdf-mesh.frag.hlsl`) whose target bounds
+  primary's march, and only primary reads it: a mesh pixel's record carries the
+  mesh kind, its draw and its triangle, which the later stages read, and the
+  shadow stage marches nothing for it. The ambient and shadow passes skip a
+  frame whose levers turn them off (`SdfWorldPassRecorder.Skips`); views then
+  reads nothing of the record's K row. AO lives in `sdf-occlusion.hlsli`
   (called from the ambient pass's `sdfResolveAmbient` in `sdf-surface.hlsli`);
   normals and curvature in `sdfResolveSurface`, a mesh pixel's in
   `sdfResolveMeshSurface`.
+- **Every light answers through one interface.** `sdfLightResponse`
+  (`shade/sdf-light.hlsli`) is the one place a kernel branches on a light's
+  kind, the environment's (`SDF_LIGHT_*`) and a bound screen's
+  (`SdfLightScreen`); the light stage walks `sdfLightAt` over them once, sums
+  each kind of term over the walk and adds each total once, so the order terms
+  combine in is the walk's, not the kinds'. A new kind is a branch there, and
+  `SdfLightInterfaceLawTests` refuses a kind branch anywhere else and a
+  generated kind without one.
 - **Make sure the image is an SDF image.** A `views.graphs` pane (the
   moth studio's side-by-side reference, for one) is a render-graph instance
   with its own shader, placed over the world by the root graph's `place` pass;

@@ -10,7 +10,7 @@ namespace Puck.SdfVm.Tests;
 /// <summary>
 /// Laws for the once-per-device-and-kernel-set ISA handshake an <see cref="SdfWorldTables"/> runs at construction, over
 /// <see cref="FakeGpuDevice"/>: an engine built on a device that already verified the same kernel set submits no
-/// handshake, and changing any one of the fourteen kernels makes the next engine verify again. The kernel set is
+/// handshake, and changing any one of the kernels makes the next engine verify again. The kernel set is
 /// identified by <see cref="SdfWorldKernels.ContentKey"/>, which hashes every kernel with its length.
 /// </summary>
 public sealed class SdfShaderSetVerificationLawTests {
@@ -24,6 +24,7 @@ public sealed class SdfShaderSetVerificationLawTests {
         static kernels => kernels with { CullArgs = Changed },
         static kernels => kernels with { InstanceCull = Changed },
         static kernels => kernels with { Primary = Changed },
+        static kernels => kernels with { Shadow = Changed },
         static kernels => kernels with { Sky = Changed },
         static kernels => kernels with { Surface = Changed },
         static kernels => kernels with { Views = Changed },
@@ -37,7 +38,7 @@ public sealed class SdfShaderSetVerificationLawTests {
         var baseline = SdfTestPipelines.Kernels();
         var keys = OneKernelChanged.Select(selector: change => change(arg: baseline).ContentKey()).ToHashSet(comparer: StringComparer.Ordinal);
 
-        Assert.Equal(expected: 11, actual: OneKernelChanged.Length);
+        Assert.Equal(expected: 12, actual: OneKernelChanged.Length);
         Assert.Equal(expected: OneKernelChanged.Length, actual: keys.Count);
         Assert.DoesNotContain(collection: keys, expected: baseline.ContentKey());
     }

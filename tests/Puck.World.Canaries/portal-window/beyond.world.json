@@ -1,4 +1,21 @@
 {
+  "admission": [
+    {
+      "algorithm": "",
+      "disclosure": "Replica",
+      "domain": "*",
+      "grants": [
+        {
+          "budget": 64,
+          "capability": "Observe",
+          "subject": "all"
+        }
+      ],
+      "mode": "FederatedAuthority",
+      "publicKey": "",
+      "subject": null
+    }
+  ],
   "documentId": "portal-window-beyond",
   "placements": {
     "rows": [

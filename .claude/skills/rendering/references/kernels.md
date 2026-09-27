@@ -41,8 +41,8 @@ code that no shipped kernel compiles.
 `status` stays `pending` while the bytecode loads and the changed pipelines are
 created on the thread pool (`SdfWorldPipelines.PrepareReload`); a later frame
 installs them (`SdfWorldTables.InstallReload`), which waits for the device to go idle, verifies the ISA
-report of every march pipeline (beam, primary, surface, ambient, and the three
-views variants), then retires the old set; a failure keeps the previous
+report of every march pipeline (beam, primary, surface, ambient, shadow, and the
+three views variants), then retires the old set; a failure keeps the previous
 kernels. Scene buffers, images, baked bricks, and world state survive; the ISA
 probe's descriptor caches and the cadence signature are invalidated. The last
 successful set survives device-loss recovery. `views.graphs` instances
@@ -55,7 +55,7 @@ buffer-layout, or C# ISA changes need a rebuild.
 An SDF view is an `sdf.world` instance of the render graph: the graph compiler
 splices the package's fragment (`SdfWorldPackage.Fragment`) into the one-pass
 graph the runtime makes for the instance, and `world.counters gpu` lists its
-nine passes under the instance's name as `sdf.world$sky` through
+ten passes under the instance's name as `sdf.world$sky` through
 `sdf.world$views`. The frame's first pass to record submits its residency's one
 upload ahead of the instance's submission (`SdfWorldResidency.Submit`), counted
 under the residency as `sdf:<name>` with one pass, `upload`
@@ -75,8 +75,9 @@ of its passes. The upload and the view's passes, in order:
 | `mesh` | `sdf-mesh.vert`, `sdf-mesh.frag` | Rasterizes mesh visibility before primary; skips a frame with no mesh draws, its target and depth barriers with it (`Skips`). |
 | `primary` | `sdf-world-primary.comp` | Camera traversal; writes every active visibility record's V, C and L rows, misses included. |
 | `surface` | `sdf-world-surface.comp` | Normals, curvature, gradient magnitude. |
-| `ambient` | `sdf-world-ambient.comp` | Ambient occlusion with its own candidate mask. |
-| `views` | `sdf-world-views*.comp` | Shadows, materials, lighting, volumes, diagnostics, written into the view's output image. |
+| `ambient` | `sdf-world-ambient.comp` | Ambient occlusion with its own candidate mask; skips a frame whose ambient occlusion is off (`Skips`). |
+| `shadow` | `sdf-world-shadow.comp` | The key light's soft shadow into the record's K row, with its own candidate mask; skips a frame whose soft shadows are off or that has no shadow light (`Skips`). |
+| `views` | `sdf-world-views*.comp` | Materials, lighting through the one light interface, volumes, diagnostics, written into the view's output image. |
 
 Each view's passes render into its instance's own output, the fragment's
 `color` version, at the extent the scheduler gives the instance, one viewport
@@ -84,16 +85,19 @@ row a view. No kernel assembles views or upsamples: the render graph's `place`
 pass puts each output into its seat rect and reconstructs a reduced render
 scale.
 
-Primary, surface, ambient, and views share `sdf-world-views.comp.hlsl`'s entry
-point through `SDF_PRIMARY_PASS`, `SDF_SURFACE_PASS`, `SDF_AMBIENT_PASS`, and
-`SDF_PRIMARY_READ`, each dispatched indirectly from the cull arguments. The
-wrapper defines `SDF_PRIMARY_READ` for every pass except
-primary, so the primary march in `renderView`'s `#else` branch compiles into the
-primary kernel alone; `renderView` compiles only into the four hit-pass kernels.
-Before primary, the `mesh` pass (`sdf-mesh.*.hlsl`, a graphics pass of the
-fragment) rasterizes the frame's mesh draws into the mesh visibility target that
-primary bounds its march by and surface reads the mesh normal from
-(`sdfMeshSampleAt`); the target and its depth attachment are transient fragment
+Primary, surface, ambient, shadow, and views share `sdf-world-views.comp.hlsl`'s
+entry point through `SDF_PRIMARY_PASS`, `SDF_SURFACE_PASS`, `SDF_AMBIENT_PASS`,
+`SDF_SHADOW_PASS`, and `SDF_PRIMARY_READ`, each dispatched indirectly from the cull arguments. The
+wrapper defines `SDF_PRIMARY_READ` for every pass except primary, and
+`SDF_VIEWS_PASS` for the views kernels, and each kernel compiles only its own
+stage over the pixel the entry point gathers (`sdfPixelAt`): `sdfPrimaryStage`,
+`sdfSurfaceStage`, `sdfAmbientStage`, `sdfShadowStage` or `sdfViewsStage`. Only
+the ambient and shadow kernels define `SDF_GROUP_SHADOW_GATHER` and hold a
+groupshared candidate mask. Before primary, the
+`mesh` pass (`sdf-mesh.*.hlsl`, a graphics pass of the fragment) rasterizes the
+frame's mesh draws into the mesh visibility target that primary bounds its
+march by (`sdfMeshSampleAt`); primary alone reads it, and records a mesh hit's
+draw and triangle for the later stages; the target and its depth attachment are transient fragment
 resources the instance allocates with its graph. The pass draws with its own
 `sdf-mesh` interface, one set per frame slot from a pool of its own, pushes the
 draw (`SdfWorldInterfaces.MeshPushedIndex`), and skips a frame with no mesh
@@ -103,17 +107,18 @@ passes not to read the target. A view the cadence gate declares unchanged record
 its passes, and its latest output stands; `world.cadence off` disables the gate
 for measurement.
 
-The visibility record is 60 bytes per pixel of the view's extent
+The visibility record is 64 bytes per pixel of the view's extent
 (`SdfWorldPackage.VisibilityRecordByteLength`), the fragment's counted
 `visibility` buffer, allocated as the extent times one viewport and forwarded
-through primary's, surface's and ambient's versions;
+through primary's, surface's, ambient's and shadow's versions;
 `world.budget` prints the allocated bytes. `sdf-visibility.hlsli` owns its
-fifteen words in five rows: V (t, identity, material, march flags), exact; C
+sixteen words in six rows: V (t, identity, material, march flags), exact; C
 (terminal radius, threshold, then the seam blend weight as a 15-bit fraction
 packed with its other material plus one); L (the four lanes, as authored
-floats); N (a 16-bit octahedral geometric normal and the gradient magnitude);
+floats, or a mesh hit's triangle); N (a 16-bit octahedral geometric normal and the gradient magnitude);
 and S (curvature and raw AO as halves, then the surface flags packed with the
-saturated surface/AO query count). The packing moves presentation pixels by at
+saturated surface, AO and shadow query count); and K (the key light's
+soft-shadow visibility, current only on a frame the shadow pass runs). The packing moves presentation pixels by at
 most one code against the full record and leaves identity and state exact.
 Primary writes V, C and L;
 surface writes N and S; ambient updates S. Every reader and writer uses the

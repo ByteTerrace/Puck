@@ -15,9 +15,9 @@ moving transforms, the screens, lights, volumes and mesh draws — live in one
 **residency** (`SdfWorldResidency`) per frame source, and the frame first
 submits one **upload** that brings those tables up to date. Then every view of
 the scene is an instance of the render graph's `sdf.world` package, and its node
-records the package's nine passes into its own submission, reading the tables
+records the package's ten passes into its own submission, reading the tables
 the upload wrote. Upload and sky filling precede culling; camera traversal,
-surface evaluation, AO and lighting have separate dispatches. The passes finish
+surface evaluation, AO, the key light's shadow and lighting have separate dispatches. The passes finish
 that view's own output image:
 
 ```text
@@ -54,18 +54,19 @@ instances the mask already ruled out. Its cost is dominated by the VM evaluation
 performed along the representative cone.
 
 **cull-args** (`sdf-cull-args.comp.hlsl`) reads the beam's per-tile results and packs the
-indirect-dispatch arguments for primary, surface, ambient and views. A parallel min/max reduction
+indirect-dispatch arguments for primary, surface, ambient, shadow and views. A parallel min/max reduction
 finds the bounding rectangle of surviving tiles. Empty margins outside that
 rectangle launch no threads; holes inside it remain in the dispatch.
 
 **mesh** (`sdf-mesh.vert.hlsl`, `sdf-mesh.frag.hlsl`) rasterizes the frame's mesh draws, one draw call
 each, into the mesh visibility target at the view's extent: per pixel the ray parameter the march records,
-the draw plus one, and the triangle, kept nearest by a reversed-Z depth test. The hit passes resolve that
-triangle from the mesh region: primary reads its material (the draw's, plus the triangle's palette entry when
-its mesh carries one), and surface its normal at the hit point (the vertex normals interpolated when its mesh
+the draw plus one, and the triangle, kept nearest by a reversed-Z depth test. Primary alone reads the
+target: it resolves the triangle's material from the mesh region (the draw's, plus the triangle's palette entry
+when its mesh carries one) and records the draw and the triangle in the pixel's visibility record, from which
+surface resolves its normal at the hit point (the vertex normals interpolated when its mesh
 carries them, carried to world space by the draw's inverse-transpose normal matrix so a nonuniform scale keeps
 them perpendicular to the surface; the face normal otherwise), turned toward the camera and clamped so a grazing ray
-never sees it lean away. The draw plus one and the triangle are stored as floats, so a region holds at most 2^24
+never sees it lean away, and views a textured mesh's albedo, material and emission. The draw plus one and the triangle are stored as floats, so a region holds at most 2^24
 draws and a mesh at most 2^24 triangles, each refused by name past that. A frame with no mesh draws skips the pass,
 its target's and depth's barriers included, and the hit passes read nothing of the target. The target and its depth attachment, 20 bytes a pixel, are scratch the view's instance allocates with its graph.
 Primary bounds its march by that ray parameter
@@ -78,8 +79,10 @@ depth, raised to the mesh projection's near plane when necessary, and writes
 each pixel's visibility record: ray parameter, identity, material and march data,
 misses included. **surface** adds the geometric normal and curvature to it.
 **ambient** evaluates contact occlusion along those normals into the record.
-**views** reads the record and computes materials, lighting, shadows and
-volumes. Compare all four passes when measuring per-pixel field cost: moving
+**shadow** marches the key light's soft shadow from each lit surface into the
+record. **views** reads the record and computes materials, lighting and
+volumes. A frame whose levers turn ambient occlusion or soft shadows off skips
+that pass. Compare all five passes when measuring per-pixel field cost: moving
 work between kernels can reduce register pressure but adds buffer traffic.
 
 No pass assembles views. Each view's output is its instance's own image, sized
@@ -152,7 +155,7 @@ afterwards. Each view carries a `RenderScale`. The host sets the view's
 footprint in the render graph to its rect at that scale, the graph quantizes
 the footprint to an extent, and the view's instance renders its output image at
 exactly that extent. Every per-view pass (sky, mask, beam, primary, surface,
-ambient, views) reads the same extent from the view's row, so the whole
+ambient, shadow, views) reads the same extent from the view's row, so the whole
 pipeline agrees on the smaller render target. The graph's `place` pass
 reconstructs the result at native resolution with a four-tap bilinear filter,
 blended toward clamped Catmull-Rom by the upscale sharpness.

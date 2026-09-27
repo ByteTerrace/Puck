@@ -263,6 +263,7 @@ public sealed class SdfWorldPipelines : IDisposable {
         "sdf-world-primary" => kernels.Primary,
         "sdf-world-surface" => kernels.Surface,
         "sdf-world-ambient" => kernels.Ambient,
+        "sdf-world-shadow" => kernels.Shadow,
         "sdf-world-views" => kernels.Views,
         "sdf-world-views-core" => kernels.ViewsCore,
         "sdf-world-views-folds" => kernels.ViewsFolds,

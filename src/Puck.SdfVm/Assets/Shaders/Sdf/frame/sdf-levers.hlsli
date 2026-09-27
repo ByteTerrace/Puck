@@ -14,7 +14,7 @@
 // Mode 0 / >= DebugViewModeCount render final shading.
 static const int DebugViewModeCount = 12;
 static const int DebugViewModeNormals = 2;
-// Mode 7 (slice) is special-cased in TWO other places: renderView SKIPS the march for it (the slice never needs a
+// Mode 7 (slice) is special-cased in TWO other places: the primary stage skips the march for it (the slice never needs a
 // hit), and the beam prepass FORCE-SURVIVES every in-viewport tile for it (sdf-beam.comp) so the indirect dispatch
 // cannot truncate the field picture — the slice must show the IDEAL field wall to
 // wall. KEEP IN SYNC with DebugViewModes.Names in src/Puck.SdfVm/DebugViewModes.cs.
@@ -47,6 +47,11 @@ bool worldUseTapNormals() {
 
 // The per-frame shader-feature levers (World's world.shadows drives the soft shadows and their reach; world.ao drives
 // ambient occlusion): each defaults to the shipped behavior, every feature on at full reach.
+// Whether a pixel of `viewMode` takes the final shading. The evals heatmap rides it too, since it tallies what a lit
+// pixel really costs.
+bool worldFinalShadingMode(int viewMode) {
+    return ((viewMode <= 0) || (viewMode >= DebugViewModeCount) || (viewMode == DebugViewModeEvals));
+}
 bool worldSoftShadowsDisabled() {
     return (passGroup.disableSoftShadows != 0u);
 }

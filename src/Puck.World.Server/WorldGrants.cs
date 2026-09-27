@@ -723,15 +723,15 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             // Observe additionally admits Screen/Region/Seat/Adjacency, untrusted principals only — the event-only
             // subject kinds the world-events feed gates: a screen for machine-memory watches, a region for
             // enter/exit, a local seat for join/leave, an adjacency row for the federation link family. Region and
-            // Adjacency are unbounded (an unknown name simply never fires); Seat is bounded to the reserved
-            // local-seat band.
+            // Adjacency are unbounded; Seat is bounded to the local-seat band. A session may hold all: its whole-world
+            // view, which its admission tier and the world's disclosure still bound (WorldSessionSink).
             WorldCapability.Observe => (((subject.Kind == GrantSubjectKind.Body) && (((uint)subject.Value) < ((uint)m_population))) ||
                 (subject.Kind == GrantSubjectKind.State) ||
                 (!trustedWildcard && (subject.Kind == GrantSubjectKind.Screen)) ||
                 (!trustedWildcard && (subject.Kind == GrantSubjectKind.Region)) ||
                 (!trustedWildcard && (subject.Kind == GrantSubjectKind.Adjacency)) ||
                 (!trustedWildcard && (subject.Kind == GrantSubjectKind.Seat) && (((uint)subject.Value) < ((uint)WorldBodiesLimits.LocalSeatCount))) ||
-                ((subject.Kind == GrantSubjectKind.All) && trustedWildcard)),
+                ((subject.Kind == GrantSubjectKind.All) && (trustedWildcard || (principal.Kind == PrincipalKind.Session)))),
             WorldCapability.Control => ((subject.Kind == GrantSubjectKind.Screen) ||
                 // A control application's target may be a BODY — a possession/co-drive application, bounded by the
                 // population exactly like Drive/Observe's own body subjects.
@@ -1004,6 +1004,11 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     /// <see cref="GrantRule.DriveGated"/>): ownership only ever adds reach, so no existing caller's denial can flip
     /// to an unwanted allow, and no existing caller's allow is ever taken away.</para></remarks>
     public GrantVerdict Allows(Principal principal, WorldCapability capability, GrantSubject subject) {
+        // A session that ended or faulted holds nothing, whatever rows still wait for its end to be applied.
+        if (IsStaleSession(principal: principal)) {
+            return new GrantVerdict(Rule: GrantRule.NoHold);
+        }
+
         var own = Holds(
             capability: capability,
             grantee: principal,
@@ -1733,72 +1738,6 @@ public sealed partial class WorldGrants : IWorldGrantsView {
 
         return removed;
     }
-
-    /// <summary>Snapshots the complete rows one peer principal currently holds, including every payload lane a peer
-    /// may legally carry. Peer disconnect events carry this image so replay revokes the identical rows through the
-    /// ordinary door.</summary>
-    /// <param name="principal">The principal to snapshot.</param>
-    /// <returns>The rows in stable capability/subject order.</returns>
-    internal IReadOnlyList<WorldGrant> Rows(Principal principal) {
-        var rows = new List<WorldGrant>();
-
-        foreach (var (capability, subject) in Held(grantee: principal)) {
-            var key = (principal, capability, subject);
-            var exclusive = (m_exclusive.TryGetValue(
-                key: new ExclusiveKey(
-                    Capability: capability,
-                    Subject: subject
-                ),
-                value: out var holder
-            ) && (holder == principal));
-
-            rows.Add(item: new WorldGrant(
-                Grantee: principal,
-                Capability: capability,
-                Subject: subject,
-                Exclusive: exclusive,
-                Budget: (m_budgets.TryGetValue(
-                    key: key,
-                    value: out var budget
-                )
-                ? budget
-                : null),
-                EventBudget: (m_eventBudgets.TryGetValue(
-                    key: key,
-                    value: out var eventBudget
-                )
-                ? eventBudget
-                : null),
-                Reach: (m_channelReach.TryGetValue(
-                    key: key,
-                    value: out var reach
-                )
-                ? reach
-                : null),
-                KindMask: (m_kindMasks.TryGetValue(
-                    key: key,
-                    value: out var kinds
-                )
-                ? kinds
-                : null),
-                WriteMask: (m_writeMasks.TryGetValue(
-                    key: key,
-                    value: out var writes
-                )
-                ? writes
-                : null),
-                HoldCeiling: (m_holdCeilings.TryGetValue(
-                    key: key,
-                    value: out var holdCeiling
-                )
-                ? holdCeiling
-                : null)
-            ));
-        }
-
-        return rows;
-    }
-
     /// <inheritdoc/>
     public void SetApplications(Principal principal, IReadOnlyList<ControlApplication> applications) {
         ArgumentNullException.ThrowIfNull(argument: applications);
