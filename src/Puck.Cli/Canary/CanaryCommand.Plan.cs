@@ -22,14 +22,17 @@ internal static partial class CanaryCommand {
     /// <param name="WorldBuilds">The <c>Puck.World</c> builds the run may make: at most one, none when the store
     /// already holds the checkout's source state or <c>--world-artifact</c> names the World.</param>
     /// <param name="StubBuilds">The <c>Puck.Launcher.Stub</c> builds the run makes.</param>
-    internal sealed record CanaryPlan(IReadOnlyList<CanaryProofPlan> Proofs, int PackageSpawns, int WorldBuilds, int StubBuilds) {
-        public int BudgetSeconds => Proofs.Sum(selector: static proof => proof.BudgetSeconds);
+    /// <param name="Warm">The pipeline-cache warm the run boots before any leg, or <see langword="null"/>
+    /// (<see cref="WarmOf"/>).</param>
+    internal sealed record CanaryPlan(IReadOnlyList<CanaryProofPlan> Proofs, int PackageSpawns, int WorldBuilds, int StubBuilds, CanaryWarm? Warm) {
+        public int BudgetSeconds => (Proofs.Sum(selector: static proof => proof.BudgetSeconds) + (WarmBoots * WarmSeconds));
         public int ExclusiveLegs => Proofs.Where(predicate: static proof => proof.Exclusive).Sum(selector: static _ => 2);
         public int LegSpawns => ((WorldProcesses + StubLaunches) + PackageSpawns);
         public int Legs => (Proofs.Count * 2);
         public int StubLaunches => Proofs.Sum(selector: static proof => proof.StubLaunches);
-        public int WorldBoots => Proofs.Sum(selector: static proof => proof.WorldBoots);
-        public int WorldProcesses => Proofs.Sum(selector: static proof => proof.WorldProcesses);
+        public int WarmBoots => (Warm?.Backends.Count ?? 0);
+        public int WorldBoots => (Proofs.Sum(selector: static proof => proof.WorldBoots) + WarmBoots);
+        public int WorldProcesses => (Proofs.Sum(selector: static proof => proof.WorldProcesses) + WarmBoots);
     }
 
     /// <summary>Counts what running <paramref name="manifests"/> costs.</summary>
@@ -39,10 +42,11 @@ internal static partial class CanaryCommand {
     /// (<see cref="SelectBackends"/>).</param>
     /// <returns>The plan.</returns>
     internal static CanaryPlan Plan(IReadOnlyList<CanaryManifest> manifests, bool namedWorldArtifact, IReadOnlyList<string> backends) {
-        var proofs = ExpandProofs(
+        var expanded = ExpandProofs(
             backends: backends,
             manifests: manifests
-        ).Select(selector: static proof => {
+        );
+        var proofs = expanded.Select(selector: static proof => {
             var manifest = proof.Manifest;
             var legs = ((CanaryLeg[])[manifest.Positive, manifest.Discriminating]);
             var stub = (manifest.BootShape == CanaryBootShape.Stub);
@@ -72,6 +76,7 @@ internal static partial class CanaryCommand {
                 .Distinct(comparer: Puck.Abstractions.PuckPaths.Comparer)
                 .Count(),
             Proofs: proofs,
+            Warm: WarmOf(proofs: expanded),
             StubBuilds: (manifests.Any(predicate: static manifest => (manifest.BootShape == CanaryBootShape.Stub))
                 ? 1
                 : 0),
@@ -152,6 +157,10 @@ internal static partial class CanaryCommand {
             Console.WriteLine(value: $"canary plan: backend-declaring proofs run {scope}.");
         }
 
+        if (plan.Warm is { } warm) {
+            Console.WriteLine(value: $"canary plan: before any leg, {plan.WarmBoots} World boot(s) of {warm.Manifest.Id}'s positive world warm the pipeline cache on {string.Join(separator: " and ", values: warm.Backends)}, {WarmSeconds.ToString(provider: CultureInfo.InvariantCulture)}s each; every offscreen and windowed leg starts from it.");
+        }
+
         Console.WriteLine(value: $"canary plan: {plan.WorldBoots} World boot(s); {plan.LegSpawns} leg process spawn(s): {plan.WorldProcesses} World, {plan.StubLaunches} Puck.Launcher.Stub, {plan.PackageSpawns} shaders package.");
         Console.WriteLine(value: $"canary plan: build(s): Puck.World at most {plan.WorldBuilds} (none when the store holds this source state), Puck.Launcher.Stub {plan.StubBuilds}.");
         Console.WriteLine(value: $"canary plan: every leg ends at the quit the runner appends to its script; {plan.BudgetSeconds.ToString(provider: CultureInfo.InvariantCulture)}s of summed per-leg timeouts is the kill ceiling, not the length.");
@@ -167,11 +176,13 @@ internal static partial class CanaryCommand {
         private int m_packageSpawns;
         private int m_stubLaunches;
         private int m_stubWorldBoots;
+        private int m_warmBoots;
         private int m_worldProcesses;
 
         public int PackageSpawns => Volatile.Read(location: ref m_packageSpawns);
         public int StubLaunches => Volatile.Read(location: ref m_stubLaunches);
         public int StubWorldBoots => Volatile.Read(location: ref m_stubWorldBoots);
+        public int WarmBoots => Volatile.Read(location: ref m_warmBoots);
         public int WorldProcesses => Volatile.Read(location: ref m_worldProcesses);
 
         public void PackageSpawned() => Interlocked.Increment(location: ref m_packageSpawns);
@@ -184,6 +195,11 @@ internal static partial class CanaryCommand {
             ))) {
                 Interlocked.Increment(location: ref m_stubWorldBoots);
             }
+        }
+        // A warm boot is a World process the runner starts, counted apart as well.
+        public void WarmStarted() {
+            Interlocked.Increment(location: ref m_warmBoots);
+            WorldStarted();
         }
         public void WorldStarted() => Interlocked.Increment(location: ref m_worldProcesses);
     }
@@ -207,11 +223,15 @@ internal static partial class CanaryCommand {
             : CanaryLegEnding.Other)
     );
     // The run's measured counts, in the same terms PrintPlan uses, so the two outputs compare line for line.
-    private static void PrintTally(CanaryPlan plan, CanaryTally tally, bool built, IReadOnlyList<CanaryLegEnding> endings) {
+    private static void PrintTally(CanaryPlan plan, CanaryTally tally, CanaryPipelineCacheSeed seed, bool built, IReadOnlyList<CanaryLegEnding> endings) {
         var boots = (tally.WorldProcesses + tally.StubWorldBoots);
         var spawns = ((tally.WorldProcesses + tally.StubLaunches) + tally.PackageSpawns);
 
         Console.WriteLine(value: $"canary counts: {boots} World boot(s) (planned {plan.WorldBoots}); {spawns} leg process spawn(s) (planned {plan.LegSpawns}): {tally.WorldProcesses} World, {tally.StubLaunches} Puck.Launcher.Stub, {tally.PackageSpawns} shaders package; build(s): Puck.World {(built ? 1 : 0)}, Puck.Launcher.Stub {plan.StubBuilds}.");
+        if (plan.Warm is not null) {
+            Console.WriteLine(value: $"canary counts: {tally.WarmBoots} pipeline-cache warm boot(s) (planned {plan.WarmBoots}); {seed.Seeded} leg(s) started from the warmed cache, {seed.Unchanged} of them built no pipeline outside it.");
+        }
+
         Console.WriteLine(value: $"canary counts: {endings.Count} leg(s) reported: {endings.Count(predicate: static ending => (ending == CanaryLegEnding.ScriptEnd))} ended at their script's quit, {endings.Count(predicate: static ending => (ending == CanaryLegEnding.Timeout))} at their timeout, {endings.Count(predicate: static ending => (ending == CanaryLegEnding.Other))} otherwise.");
     }
 }

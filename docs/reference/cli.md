@@ -923,6 +923,24 @@ its ceiling is refused with exit 2 before anything builds, naming both numbers.
 A change that deliberately grows a gate raises the ceiling in the same change
 and states the new `--plan` counts.
 
+A selection with an offscreen or windowed proof on a named backend warms the
+engine's pipeline cache before any leg starts. The runner boots the first
+offscreen proof whose positive leg is one plain World process, once per
+backend those proofs boot, into one state directory: each boot waits for the
+engine to be ready, prints its `pipeline-cache.<backend>` counts, and quits,
+under a 180-second timeout of its own (`CanaryCommand.WarmSeconds`). Every
+offscreen and windowed leg then starts with a copy of that `pipeline-cache`
+directory in its fresh state directory, so no leg builds the engine's
+pipelines on a cold driver inside its own timeout. The shader compiler's
+`pipelines` cache is not copied, so a leg that observes a compile still
+compiles. `--plan` counts the warm boots and their timeouts in the World boots
+and the leg budget, and the run's closing counts report how many seeded legs
+exited with the cache byte for byte as they received it: a pipeline the cache
+did not answer is written back to it, so an unchanged cache means every
+pipeline the leg created was a hit. A warm boot that times out, exits nonzero,
+never narrates the engine ready, or prints no counts fails the selection with
+exit 2, naming its backend, before any leg starts.
+
 The selection forms are mutually exclusive and every execution selection must
 be nonempty. `--jobs` combines with any of them, `--plan` with any but `--list`, and `--backend` with any but `--merge` and `--list`. Manifest tokens are case-sensitive. Every non-comment script
 command declares `accepted` or intentionally expected `refused`, bound to its

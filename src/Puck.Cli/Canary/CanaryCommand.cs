@@ -438,6 +438,7 @@ internal static partial class CanaryCommand {
             Cancellation: cancellation.Token,
             Clock: Stopwatch.StartNew(),
             Packages: new CanaryPackages(),
+            Seed: new CanaryPipelineCacheSeed(),
             Tally: new CanaryTally(),
             Total: TimeSpan.FromSeconds(value: plan.BudgetSeconds)
         );
@@ -497,6 +498,19 @@ internal static partial class CanaryCommand {
         Console.CancelKeyPress += OnCancelKeyPress;
 
         try {
+            if (
+                (plan.Warm is { } warm) &&
+                (WarmPipelineCache(
+                    artifact: artifact,
+                    budget: budget,
+                    warm: warm
+                ) is { } warmRefusal)
+            ) {
+                Console.Error.WriteLine(value: $"ERROR: {warmRefusal}. The selection fails without starting a leg.");
+
+                return CliExit.Refused;
+            }
+
             RunLegsConcurrently(
                 cancellation: cancellation,
                 completed: item => {
@@ -544,6 +558,7 @@ internal static partial class CanaryCommand {
             built: (build is not null),
             endings: endings,
             plan: plan,
+            seed: budget.Seed,
             tally: budget.Tally
         );
 
@@ -731,8 +746,9 @@ internal static partial class CanaryCommand {
     // budget refusal it is. Total is therefore the exact sum of what every selected leg may spend
     // (CanaryPlan.BudgetSeconds), so a leg is refused only when an earlier one overran its own declared ceiling. Concurrency keeps
     // that true: a leg waits only while legs started before it run, so the time spent before it starts never exceeds
-    // their timeouts. Packages holds the run's shader packages, and Tally counts what the run starts.
-    private readonly record struct CanaryBudget(Stopwatch Clock, TimeSpan Total, CancellationToken Cancellation, CanaryPackages Packages, CanaryTally Tally) {
+    // their timeouts; the warm boots run first, under their own summed timeouts. Packages holds the run's shader
+    // packages, Seed the pipeline cache the warm boots left, and Tally counts what the run starts.
+    private readonly record struct CanaryBudget(Stopwatch Clock, TimeSpan Total, CancellationToken Cancellation, CanaryPackages Packages, CanaryPipelineCacheSeed Seed, CanaryTally Tally) {
         public TimeSpan Remaining => CliProcess.RemainingBudget(
             budget: Total,
             clock: Clock
@@ -786,6 +802,11 @@ internal static partial class CanaryCommand {
         var stateDirectory = Path.Combine(
             path1: runDirectory,
             path2: "state"
+        );
+        // An offscreen or windowed leg starts from the pipeline cache the run's warm boots left.
+        var seeded = (
+            (manifest.BootShape is CanaryBootShape.Offscreen or CanaryBootShape.Windowed) &&
+            budget.Seed.TrySeed(stateDirectory: stateDirectory)
         );
         var stdoutPath = Path.Combine(
             path1: runDirectory,
@@ -981,6 +1002,10 @@ internal static partial class CanaryCommand {
                     encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
                 );
             }
+        }
+
+        if (seeded) {
+            budget.Seed.Observe(stateDirectory: stateDirectory);
         }
 
         File.WriteAllText(
