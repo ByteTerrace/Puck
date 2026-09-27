@@ -221,9 +221,13 @@ These are one-line cautions; the owning pages hold the derivations.
   here with a row in each backend's map (`VulkanGpuFormats`, `DirectXGpuFormats`).
   `ImagePixelFormat` is not a pixel format of an image: it is an uploaded
   source's region-header code (a sync pair with `image-source.hlsli`).
-- **Bakes are presentation only** and nothing draws one yet. `BAKE` does not
-  derive on boot (`ICompiledWorldChunk.DerivesOnBoot`); a presentation bakes a
-  missing prototype through `WorldBakeSchedule`, never on the frame thread.
+- **Bakes are presentation only.** `BAKE` does not derive on boot
+  (`ICompiledWorldChunk.DerivesOnBoot`); a presentation bakes a missing
+  prototype through `WorldBakeSchedule`, never on the frame thread, and draws a
+  ready one only through `WorldBakeSchedule.TryGetMesh` (which counts the
+  switch, `sdf.bakes.drawn`) while `world.bakes` is on. A baked placement's
+  instances are camera-hidden (`SdfInstanceRange.CameraHidden`): the cull keeps
+  them out of every camera mask, never out of the shadow or ambient gathers.
 
 ## Engine seams that bite
 

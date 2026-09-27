@@ -273,7 +273,8 @@ A creation's bake (its mesh, textures and impostor) is the deterministic contact
 field's view of it: detail shapes, sweeps, text, noise relief, volumes and the
 omitted warp facets are absent from the bake, and a creation the fixed-point
 evaluator refuses (a residual nonuniform `Scale`, a wallpaper fold) has none and
-keeps drawing through its field. Nothing draws a bake yet. See
+keeps drawing through its field. With `world.bakes` on, a ready bake's mesh
+draws in place of its static placements' fields. See
 [prototype bakes](../../../docs/rendering/sdf/handbook/bricks-and-baking.md#prototype-bakes).
 
 ## Verifying

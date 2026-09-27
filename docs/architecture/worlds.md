@@ -161,8 +161,11 @@ surface textures, and an octahedral impostor
 ([prototype bakes](../rendering/sdf/handbook/bricks-and-baking.md#prototype-bakes)). It is
 keyed by the creation's pin (the prototype row's hash), the baker's version, and
 the quality tier, and one key is one set of bytes. Bakes are presentation only:
-contact, queries and simulation keep reading the field, and nothing draws a bake
-yet.
+contact, queries and simulation keep reading the field. With `world.bakes` on, an untinted static placement whose prototype's bake is
+ready draws the baked mesh through the mesh pass, in its palette's first
+material while the bake's textures do not draw yet, and keeps its field as
+camera-hidden instances that still cast shadows and occlude; a creation with
+text or noise relief keeps drawing through its field.
 
 A build output ships each bake once. `puck compile --tree` writes one bake pack,
 `bakes.puckbake`, at the root of its output: a chunk container

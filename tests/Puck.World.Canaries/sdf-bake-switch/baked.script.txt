@@ -1,0 +1,11 @@
+# Every frame renders, so the capture shows the scene as it stands.
+world.cadence off
+world.wait ready 45
+# The block draws through its field until its bake lands, then through its baked mesh.
+world.bakes on
+world.wait 240
+world.debug-view visibility
+world.wait 30
+world.screenshot {run}/block.png
+world.counters sdf.bakes
+world.wait 10

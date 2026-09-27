@@ -1,0 +1,48 @@
+{
+  "id": "sdf-bake-switch",
+  "title": "A prototype whose bake is ready switches from its field to its baked mesh, and the switch is counted",
+  "binding": "The positive leg boots an offscreen 256x144 world of one static block, a chamfered box with no inline mesh, in front of a fixed camera, turns world.bakes on, and waits while the presentation's bake schedule bakes the block in the background. Until the bake lands the block draws through its field; once it is ready the static scene rebuilds, the block draws its baked mesh, and its field stays camera-hidden. The leg then selects the visibility debug view, which colors each pixel by the kind of its visibility record, captures a frame, and reads the bake counters: the block reads as mesh and sdf.bakes.drawn counts one switch. The discriminating leg is the same world and script with world.bakes off, so the block keeps reading as its field and no switch is counted.",
+  "bootShape": "offscreen",
+  "backends": ["vulkan", "directx"],
+  "requirements": ["gpu"],
+  "timeoutSeconds": 60,
+  "positive": {
+    "world": "tests/Puck.World.Canaries/sdf-bake-switch/fixture.puck",
+    "script": "baked.script.txt",
+    "commands": [
+      { "verb": "world.cadence", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.bakes", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.debug-view", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.counters", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "imageRegion", "name": "the-block-is-its-baked-mesh", "capture": "block.png", "extent": [256, 144], "region": [0.46, 0.45, 0.54, 0.58], "reduce": "every", "minimum": [0.85, 0.45, 0.02, 1], "maximum": [1, 0.65, 0.2, 1], "toleranceCodes": 2, "holds": true },
+      { "type": "line", "name": "the-switch-is-counted", "stream": "stdout", "match": "contains", "text": "sdf.bakes.drawn 1", "present": true }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/sdf-bake-switch/fixture.puck",
+    "script": "field.script.txt",
+    "commands": [
+      { "verb": "world.cadence", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.bakes", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.debug-view", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.counters", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "imageRegion", "name": "the-block-is-its-baked-mesh", "capture": "block.png", "extent": [256, 144], "region": [0.46, 0.45, 0.54, 0.58], "reduce": "every", "minimum": [0.85, 0.45, 0.02, 1], "maximum": [1, 0.65, 0.2, 1], "toleranceCodes": 2, "holds": false },
+      { "type": "imageRegion", "name": "the-block-is-its-field", "capture": "block.png", "extent": [256, 144], "region": [0.46, 0.45, 0.54, 0.58], "reduce": "every", "minimum": [0.1, 0.8, 0.15, 1], "maximum": [0.2, 1, 0.35, 1], "toleranceCodes": 2, "holds": true },
+      { "type": "line", "name": "the-switch-is-counted", "stream": "stdout", "match": "contains", "text": "sdf.bakes.drawn 1", "present": false }
+    ]
+  }
+}
