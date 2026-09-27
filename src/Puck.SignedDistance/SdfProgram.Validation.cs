@@ -13,7 +13,7 @@ public sealed partial class SdfProgram {
     // The operand lanes a shape carries as reinterpreted integer BITS rather than a float value, as a bit per lane over
     // (Data0.xyzw, Data1.xyzw). A bit pattern there reads as NaN or an infinity as often as it reads as a number, so the
     // finiteness sweep must skip exactly these and no others. KEEP IN SYNC with the asuint() reads in
-    // Assets/Shaders/Sdf/sdf-vm.hlsli: sdfGlyphUnpackUv(data0.x)/sdfGlyphUnpackUv(data0.y), sdfSampledRegion's
+    // Assets/Shaders/Sdf/field/sdf-shapes.hlsli: sdfGlyphUnpackUv(data0.x)/sdfGlyphUnpackUv(data0.y), sdfSampledRegion's
     // asuint(data1.y) packedDims / asuint(data1.z) brickWordOffset, and sdfConvexPolygonSolid's asuint(data0.x)
     // (table offset, vertex count) — patched from a finite 0f placeholder to its real packed value AFTER this sweep
     // runs (see PatchConvexPolygonProfileOffsets), so registering the lane here is a defense against a future caller

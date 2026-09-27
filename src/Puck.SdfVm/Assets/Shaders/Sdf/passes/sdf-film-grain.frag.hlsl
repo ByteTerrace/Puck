@@ -8,7 +8,7 @@
 // source image and the sampler it reads it through from the pass group. The grain frame is the tick quantized to the
 // flicker period, never a wall-clock or RNG value, so the same simulation moment hashes identically on every run,
 // machine, and backend.
-#include "sdf-hash.hlsli"
+#include "../field/sdf-hash.hlsli"
 #include "sdf-film-grain.interface.hlsli"
 
 // The low 32 bits of floor(tick / period) for the 64-bit tick (low word, high word) and a period below 2^16, divided

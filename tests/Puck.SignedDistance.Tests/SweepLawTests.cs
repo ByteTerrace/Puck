@@ -53,7 +53,7 @@ public sealed class SweepLawTests {
             .Build();
     }
     // A C# mirror of the CLOSED-FORM closest-point-on-quadratic-bezier the shader implements (sdfSweepClosestT,
-    // sdf-vm.hlsli) — an INDEPENDENT re-derivation from iq's construction, not a call into production code, so this
+    // field/sdf-shapes.hlsli) — an INDEPENDENT re-derivation from iq's construction, not a call into production code, so this
     // law tests the algorithm the render path actually runs.
     private static float ClosestT(Vector3 p, Vector3 a, Vector3 b, Vector3 c) {
         var coefA = (b - a);

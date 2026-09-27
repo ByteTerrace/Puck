@@ -37,7 +37,7 @@ public enum SdfLightKind : byte {
 /// <param name="DynamicSlot">Point only: the dynamic-transform slot its position is read from every frame, or −1 for
 /// the static authored position in <paramref name="Direction"/>. Ignored (packed as 0) for every other kind.</param>
 public readonly record struct SdfLight(SdfLightKind Kind, Vector3 Direction, Vector3 Color, float Weight, float Param, bool Shadows, int DynamicSlot = -1);
-/// <summary>One analytic studio-reflection softbox — see <c>worldStudioReflection</c> in sdf-world.hlsli.</summary>
+/// <summary>One analytic studio-reflection softbox — see <c>worldStudioReflection</c> in shade/sdf-lighting.hlsli.</summary>
 /// <param name="Direction">From a lit surface toward the softbox, any nonzero length (normalized on upload).</param>
 /// <param name="Color">The linear RGB color.</param>
 /// <param name="Weight">The strength.</param>
@@ -54,7 +54,7 @@ public enum SdfEnvironmentBlend : byte {
     Hold = 2,
 }
 /// <summary>How the frame's final color is remapped before it reaches the store — see
-/// <c>sdfFilmicTonemap</c>/<c>worldTonemapMode</c> in sdf-world.hlsli.</summary>
+/// <c>sdfFilmicTonemap</c> in shade/sdf-lighting.hlsli and <c>worldTonemapMode</c> in frame/sdf-lights.hlsli.</summary>
 public enum SdfTonemapMode : byte {
     /// <summary>No remap: the stylized shaded color, as every world rendered before this field existed.</summary>
     None = 0,
@@ -64,7 +64,7 @@ public enum SdfTonemapMode : byte {
 }
 /// <summary>The lit path's per-frame environment — every light, the stylization gains, and the sky — as one lane
 /// table the engine uploads as float4 rows of the screen-light buffer (<c>SdfWorldEngine.PackEnvironment</c>, which
-/// also performs the host bakes noted per row). KEEP IN SYNC with sdf-world.hlsli's <c>SdfEnv*</c> rows and
+/// also performs the host bakes noted per row). KEEP IN SYNC with frame/sdf-environment.hlsli's <c>SdfEnv*</c> rows and
 /// accessors.</summary>
 /// <remarks>
 /// Row layout (row-relative to the environment base, four float lanes per row):

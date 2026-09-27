@@ -17,7 +17,7 @@ normal, no shadow, no occlusion yet**—those belong to the later passes: the
 surface pass computes the normal and curvature (`sdfResolveSurface` in
 `sdf-surface.hlsli`), the ambient pass computes occlusion (`sdfResolveAmbient`),
 and the views pass computes shadows, materials, and lighting (`renderView` in
-`sdf-world.hlsli`).
+`passes/sdf-render-view.hlsli`).
 
 Every technique here re-queries the same field function the march used, `map()`
 (and its tile-masked twin `mapMasked()`). So there is one discipline that
@@ -136,8 +136,8 @@ The gather cone matters. It is **not** a bare ray: it is the *penumbra cone*,
 wider than the ray itself, because the closest-approach estimate must include
 occluders just beside the ray. A wider cone is always safe (a superset can't
 drop a needed occluder); too narrow leaks light. The chord is three penumbra
-half-slopes, `worldShadowPenumbraChord() = 3 * worldShadowPenumbraSlope()` in
-`sdf-world.hlsli`: every occluder that can lower the estimate lies inside that
+half-slopes, `worldShadowPenumbraChord()` (`march/sdf-march-constants.hlsli`) `= 3 * worldShadowPenumbraSlope()`
+(`frame/sdf-lights.hlsli`): every occluder that can lower the estimate lies inside that
 cone with margin. `SdfEnvironment.MaxPenumbraSlope` keeps the chord below one.
 
 **When the gather wins and when it doesn't** is a clean story about density:

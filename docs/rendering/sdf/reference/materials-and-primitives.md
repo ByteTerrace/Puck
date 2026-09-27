@@ -28,7 +28,7 @@ hard-union scope must keep its internal seam.
 ## Primitive contract
 
 Every shape has a packed lane layout shared by `SdfInstruction`,
-`SdfProgramBuilder`, and `sdf-vm.hlsli`. A new primitive requires:
+`SdfProgramBuilder`, and `field/sdf-shapes.hlsli`. A new primitive requires:
 
 - a stable shape identifier and documented lane layout;
 - host validation and conservative bound analysis;

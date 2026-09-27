@@ -3,10 +3,10 @@
 // directly), the draw index plus one, and the octahedral normal. The pipeline culls nothing, so the face normal is turned
 // toward the camera: a mirrored copy, whose matrix reverses its winding, and an open mesh seen from behind both shade the
 // side the camera sees.
-#include "sdf-mesh.interface.hlsli"
-#include "sdf-viewport.hlsli"
-#include "sdf-mesh.hlsli"
-#include "sdf-octahedral.hlsli"
+#include "../isa/sdf-mesh.interface.hlsli"
+#include "../frame/sdf-viewport.hlsli"
+#include "../frame/sdf-mesh.hlsli"
+#include "../field/sdf-octahedral.hlsli"
 
 float4 PSMain(MeshVertex input) : SV_Target0 {
     ViewportData view = worldViewport((pushedIndex.index >> SdfMeshViewShift));

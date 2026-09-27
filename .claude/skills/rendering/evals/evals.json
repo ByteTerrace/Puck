@@ -8,7 +8,7 @@
       "expected_output": "A change plan naming the SdfBlendOp enum and SDF_BLEND_* define, SdfProgramBuilder, SdfProgram validation and Lipschitz compose bound, the cull-margin channel (MaxSmoothBlendRadius halo), blendShape and blendShapeDual in both mapCore and mapGradCore, the kernel variant tiers, SdfFieldEvaluator.Compose (interpret or refuse by name), the ISA version decision, and verification via Puck.SignedDistance.Tests, the SdfVm build, and puck parity. It first asks whether the blend can be composed from existing vocabulary.",
       "files": [],
       "assertions": [
-        "Names both the C# enum (SdfBlendOp) and the matching SDF_BLEND_* define in sdf-vm.hlsli",
+        "Names both the C# enum (SdfBlendOp) and the matching SDF_BLEND_* define generated into isa/sdf-isa.hlsli",
         "Names both GPU walks: blendShape (scalar/mapCore) and blendShapeDual (gradient/mapGradCore)",
         "Addresses the cull-margin halo for a soft blend (MaxSmoothBlendRadius or equivalent bound inflation)",
         "Addresses the Lipschitz / step-scale compose bound (ComposeLipschitz or SdfProgram.Lipschitz)",
@@ -23,11 +23,11 @@
       "id": 2,
       "name": "renderview-ao-no-effect",
       "prompt": "ok this is driving me nuts. AO on the moth's wings has a weird dark band. i've been editing the AO code inside renderView in sdf-world.hlsli, rebuilt src/Puck.SdfVm, restarted Puck.World — and literally nothing changes, not even when i made calcAO return 1.0. what's going on, where should i actually be editing, and is there a faster loop than restarting the game every time?",
-      "expected_output": "Explains that ambient occlusion runs in the separate ambient dispatch (sdf-world-ambient.comp / sdf-surface.hlsli path) and that renderView's normal/AO code compiles only into the SDF_MONOLITHIC_VIEWS reference build, so edits there never ship. Points at the right file, recommends the build plus world.shaders.reload / world.shaders.status loop, and optionally world.ao / world.debug-view to isolate.",
+      "expected_output": "Explains that ambient occlusion runs in the separate ambient dispatch (sdf-world-ambient.comp.hlsl, sdfResolveAmbient in surface/sdf-surface.hlsli calling calcAO in surface/sdf-occlusion.hlsli) and that renderView in passes/sdf-render-view.hlsli holds no AO code, so there is nothing there to edit. Points at the right file, recommends the build plus world.shaders.reload / world.shaders.status loop, and optionally world.ao / world.debug-view to isolate.",
       "files": [],
       "assertions": [
         "Identifies that AO is computed in a separate ambient pass/dispatch, not in renderView",
-        "States that the renderView AO/normal code only compiles into the monolithic reference build (SDF_MONOLITHIC_VIEWS / #ifndef SDF_PRIMARY_READ)",
+        "States that renderView does not compute AO: the views pass reads the ambient pass's result",
         "Points to the file that actually hosts the shipped AO code (sdf-surface.hlsli and/or sdf-occlusion.hlsli / sdf-world-ambient.comp.hlsl)",
         "Recommends world.shaders.reload (with world.shaders.status) instead of restarting",
         "Notes that reload requires compiling the shaders first",

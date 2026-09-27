@@ -3,7 +3,7 @@ using System.Numerics;
 namespace Puck.SignedDistance;
 
 public sealed partial class SdfProgram {
-    // Twenty float4 rows. KEEP IN SYNC with sdfMaterialLoad in sdf-vm.hlsli.
+    // Twenty float4 rows. KEEP IN SYNC with sdfMaterialLoad in shade/sdf-material.hlsli.
     // 0..3 base shading; 4..7 inset frame/ramp controls; 8..11 radial stops;
     // 12..13 weathering controls; 14..17 two reveal surfaces; 18..19 deposit.
     private void PackMaterials(int materialOffsetVectors, IReadOnlyList<SdfMaterial> materialTable, int materialCount) {

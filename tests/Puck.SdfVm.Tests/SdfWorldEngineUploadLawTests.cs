@@ -23,7 +23,7 @@ namespace Puck.SdfVm.Tests;
 /// engine rebuilt after a device loss owes every table again and reads back exact.
 /// </summary>
 public sealed class SdfWorldEngineUploadLawTests {
-    // The packed width of a dynamic transform (sdf-vm.hlsli sdfDynamicTransforms).
+    // The packed width of a dynamic transform (isa/sdf-world.interface.hlsli sdfDynamicTransforms).
     private const int DynamicTransformBytes = 48;
     private const uint Extent = 64;
     // A staged copy's header: count, run count, block base and destination word.

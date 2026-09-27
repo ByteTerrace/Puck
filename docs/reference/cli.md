@@ -596,7 +596,7 @@ build's shaders and compares a Linux DXC build of the same commit against them
 leg.
 
 `generate` writes the HLSL includes the C# model owns:
-`src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-isa.hlsli`, the SDF instruction set's
+`src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-isa.hlsli`, the SDF instruction set's
 version, enums and packed-layout constants, generated from
 `Puck.SignedDistance` by `Puck.SdfVm.SdfIsaHlsl`; and every generated shader
 interface (`<name>.interface.hlsli`). An engine package that declares

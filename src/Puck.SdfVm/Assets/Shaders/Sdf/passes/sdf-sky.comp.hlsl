@@ -11,10 +11,10 @@
 // transforms their frames and optional intensity lanes use. SDF_SCREEN_SOURCES is required even though this
 // kernel never samples a screen source: it is
 // the only configuration under which sdfScreenLights — and the real (non-pinned-literal) skyColor/lighting
-// accessors — are declared at all (sdf-world.hlsli's #else half returns the pinned defaults unconditionally, which
-// would make worldSkyEnabled() always false here). SDF_DYNAMIC_TRANSFORMS is required too: sdf-world.hlsli's
+// accessors — are declared at all (shade/sdf-environment.hlsli's #else half returns the pinned defaults unconditionally, which
+// would make worldSkyEnabled() always false here). SDF_DYNAMIC_TRANSFORMS is required too: surface/sdf-shadow-gather.hlsli's
 // shadow-gather body (unconditionally compiled, unreached from this kernel's CSMain) references
-// sdfInstanceShadowSuppressed, whose declaration in sdf-vm.hlsli is itself gated on this macro.
+// sdfInstanceShadowSuppressed, whose declaration in field/sdf-instance-flags.hlsli is itself gated on this macro.
 #define SDF_DYNAMIC_TRANSFORMS
 #define SDF_SCREEN_SOURCES
 #include "sdf-world.hlsli"
@@ -44,7 +44,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     // this result with its own integration clipped to the surface, so emission is never added twice.
     color = shadeVolumes(color, view.position.xyz, rayDirection, worldFarDistance(view), id.xy, view.position.w);
 
-    // render.tonemap: the SAME curve renderView applies to its own miss-branch sky (sdf-world.hlsli), in the same
+    // render.tonemap: the SAME curve renderView applies to its own miss-branch sky (passes/sdf-render-view.hlsli), in the same
     // place in the pixel's op order (before the dither), so a beam-culled tile's sky and a live tile's sky stay
     // bit-identical across the tile seam under Filmic exactly as they do under None.
     if (worldTonemapMode() == SdfTonemapFilmic) {

@@ -15,8 +15,7 @@ void sdfResolveSurface(float3 surfacePoint, float3 ray, bool hit, int material, 
     bool sampledScreen = false;
 #ifdef SDF_SCREEN_SOURCES
     if (hit && finalMode) {
-        float3 unusedColor;
-        sampledScreen = sampleScreenSurface(material, surfacePoint, ray, footprint, unusedColor);
+        sampledScreen = sdfScreenSurfaceShades(material);
     }
 #endif
     bool needsNormal = hit && (mode == DebugViewModeNormals || (finalMode && !sampledScreen));

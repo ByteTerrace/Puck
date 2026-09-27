@@ -149,14 +149,14 @@ by walking Full → Folds → CoreOps:
 - `sdf-world-views-core.comp` — also strips the `SDF_STRIP_ALL_EXOTIC` family.
 
 Primary, surface, and ambient always keep the full ISA. Membership of the strip
-families is defined by the `#if` gates in `sdf-vm.hlsli` and mirrored by
+families is defined by the `#if` gates in the field modules (`field/`) and mirrored by
 `SdfViewsKernelVariants`; read both rather than trusting a list, and change them
 together. `SdfViewsKernelVariantLawTests` pins the host half.
 
 ## Registers and bindings
 
 No SDF kernel declares a binding or a register by hand. Every per-view kernel
-includes `sdf-world.interface.hlsli` (through `sdf-vm.hlsli`) and the baker
+includes `isa/sdf-world.interface.hlsli` (through `field/sdf-vm.hlsli`) and the baker
 `sdf-brick-bake.interface.hlsli`, both generated from `SdfWorldInterfaces` and
 owned by `puck shaders generate`; the engine creates each pipeline from its
 interface's layout and writes every binding by member name. A binding's

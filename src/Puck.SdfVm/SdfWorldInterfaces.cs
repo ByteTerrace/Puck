@@ -99,7 +99,8 @@ public static class SdfWorldInterfaces {
     /// <summary>The bit the view starts at in the index a <see cref="Mesh"/> draw call pushes; the bits below it name the
     /// draw.</summary>
     public const int MeshViewShift = 24;
-    /// <summary>The directory, repository-relative, the kernels and their generated interface includes live in.</summary>
+    /// <summary>The directory, repository-relative, the kernels' module tree lives in: the generated interface includes
+    /// in its <c>isa</c> directory and the pass entry points in <c>passes</c>.</summary>
     public const string KernelDirectory = "src/Puck.SdfVm/Assets/Shaders/Sdf";
 
     /// <summary>Gets the frame data of every per-view SDF dispatch: the standard frame group, and a pass group whose block
@@ -200,7 +201,7 @@ public static class SdfWorldInterfaces {
     ];
 
     private static string IncludePath(ShaderInterface shaderInterface) =>
-        $"{KernelDirectory}/{ShaderFrameInterface.IncludeFileName(interfaceName: shaderInterface.Name)}";
+        $"{KernelDirectory}/isa/{ShaderFrameInterface.IncludeFileName(interfaceName: shaderInterface.Name)}";
     private static ShaderInterfaceMember Read(string name, ShaderValueType element) =>
         ShaderInterfaceMember.ReadOnlyBuffer(
             element: element,

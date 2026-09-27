@@ -1110,6 +1110,6 @@ public sealed class ChamferLawTests {
     }
 
     // The exact reference: q = abs(p) - b; max(box, (q.x+q.y+c)*sqrt(1/2)) — mirrors sdfChamferBox2D/sdfChamferedRect
-    // in Assets/Shaders/Sdf/sdf-vm.hlsli, computed in double so a test failure indicts the evaluator, not this helper.
+    // in Assets/Shaders/Sdf/field/sdf-shapes.hlsli, computed in double so a test failure indicts the evaluator, not this helper.
     private const double SqrtHalf = 0.70710678118654752440;
 }

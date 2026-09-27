@@ -1,4 +1,4 @@
-// The film-grain pass (src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-film-grain.frag.hlsl) read through its generated pass
+// The film-grain pass (src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-film-grain.frag.hlsl) read through its generated pass
 // interface instead of a push constant and hand-numbered bindings. film-grain.interface.hlsli is generated from the
 // interface ShaderInterfaceSpikeTests declares and written beside this file at test time; it is never checked in.
 // The frame group carries the deterministic tick and the extent, the pass group the parameters, the source image and

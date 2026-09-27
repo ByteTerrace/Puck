@@ -7,7 +7,7 @@ namespace Puck.SignedDistance.Tests;
 /// <summary>
 /// THE LAW: <see cref="SdfProgramBuilder.LaneErode"/> lowers to exactly one <see cref="SdfOp.LaneErode"/>
 /// instruction, immediately before the <see cref="SdfOp.ShapeBlend"/> it targets, carrying (lane index, from, to,
-/// noiseScale) in Data0 and reach in Data1.x — the packing <c>SDF_OP_LANE_ERODE</c> in sdf-vm.hlsli decodes. The
+/// noiseScale) in Data0 and reach in Data1.x — the packing <c>SDF_OP_LANE_ERODE</c> in field/sdf-map.hlsli and field/sdf-map-grad.hlsli decodes. The
 /// builder refuses an undefined lane, a non-finite/equal from-to pair, non-finite noise, and a non-finite/negative
 /// reach.
 /// </summary>

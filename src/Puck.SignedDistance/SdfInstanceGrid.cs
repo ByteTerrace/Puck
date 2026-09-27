@@ -33,8 +33,8 @@ public readonly record struct SdfInstanceGridInput(Vector3 Center, float Radius,
 /// max binned radius holes the mask. Scattering each instance into every cell its bound covers instead of only its
 /// center's cell would duplicate entries and re-test each instance from many neighboring cells.</para>
 /// <para>The packed block is a self-contained <see cref="uint"/> array appended to the program word stream after the
-/// world-segment list. KEEP IN SYNC with the grid decode in Assets/Shaders/Sdf/sdf-vm.hlsli (<c>sdfGrid*</c>) and the
-/// cell walk in sdf-world.hlsli (<c>collectInstanceGridMask</c>). Extracted from <see cref="SdfProgram"/> as its own
+/// world-segment list. KEEP IN SYNC with the grid decode in Assets/Shaders/Sdf/field/sdf-program.hlsli (<c>sdfGrid*</c>) and the
+/// cell walk in passes/sdf-instance-cull.comp.hlsl (<c>collectInstanceGridMask</c>). Extracted from <see cref="SdfProgram"/> as its own
 /// type both to keep that class under its analyzer complexity ceilings and because the grid build is a self-contained
 /// packer.</para>
 /// <para>Block layout (all <see cref="uint"/>-granular, indices relative to the block start; the whole block is padded to
@@ -83,7 +83,7 @@ public static class SdfInstanceGrid {
     /// <summary>The per-axis cell-count cap. Bounds the beam's slab-march length (the ray∩grid interval spans at most
     /// ~√3·MaxDimension cells), so a degenerate near-1-D instance layout cannot make the beam walk thousands of slabs.
     /// Coarsening enforces it alongside <see cref="CellCapacityFactor"/>. The kernels read it as <c>SDF_GRID_MAX_DIM</c>,
-    /// and the slab budget <c>SDF_GRID_MAX_SLABS</c> in sdf-vm.hlsli is sized from it.</summary>
+    /// and the slab budget <c>SDF_GRID_MAX_SLABS</c> in field/sdf-program.hlsli is sized from it.</summary>
     public const int MaxDimension = 64;
 
     /// <summary>The smallest cell edge the derivation admits, so an all-coincident binnable set (zero extent) cannot

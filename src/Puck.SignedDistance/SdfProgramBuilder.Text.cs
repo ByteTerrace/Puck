@@ -15,7 +15,7 @@ public sealed partial class SdfProgramBuilder {
     /// packed UV mapping, including stretched cells. Metadata-only atlases use the worst-case RGBA8 bound.
     /// The correction preserves the reconstructed zero set, not the exact source outline. The atlas UVs
     /// are unorm2x16-packed host-side into two lanes so the ISA-wide <paramref name="smooth"/> radius keeps its lane
-    /// (KEEP IN SYNC with SDF_SHAPE_GLYPH / sdfGlyphUnpackUv in Assets/Shaders/Sdf/sdf-vm.hlsli).</para></summary>
+    /// (KEEP IN SYNC with SDF_SHAPE_GLYPH / sdfGlyphUnpackUv in Assets/Shaders/Sdf/field/sdf-shapes.hlsli).</para></summary>
     /// <param name="uvBottomLeft">The atlas UV (in <c>[0, 1]²</c>) at the cell's local <c>(-halfWidth, -halfHeight)</c> corner.</param>
     /// <param name="uvTopRight">The atlas UV at the cell's local <c>(+halfWidth, +halfHeight)</c> corner.</param>
     /// <param name="halfWidth">The cell's local X half-extent, in world units.</param>

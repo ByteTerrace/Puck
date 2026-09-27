@@ -9,7 +9,7 @@ namespace Puck.Commands;
 public readonly record struct SourceRay(FixedVector3 Origin, FixedVector3 Direction) {
     /// <summary>Returns the ray a camera casts through a point of its image: the direction
     /// <c>Forward + (2x − 1)·aspect·tan(fov/2)·Right + (1 − 2y)·tan(fov/2)·Up</c>, the pinhole projection the SDF view
-    /// pass's <c>cameraRayDirection</c> in <c>sdf-world.hlsli</c> casts, left unnormalized. The camera's floats enter
+    /// pass's <c>cameraRayDirection</c> in <c>march/sdf-cone.hlsli</c> casts, left unnormalized. The camera's floats enter
     /// fixed point once, through <see cref="FixedVector3.FromVector3"/> and <see cref="FixedQ4816.FromDouble"/>.</summary>
     /// <param name="camera">The camera; its aspect ratio is the image's width over its height.</param>
     /// <param name="image">The point on the image, <c>x</c> right and <c>y</c> down, each in <c>[0, 1]</c> across the

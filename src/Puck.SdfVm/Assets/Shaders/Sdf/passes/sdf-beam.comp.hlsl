@@ -7,7 +7,7 @@
 // TILE-MASKED field (mapMasked at this tile's mask base) — each march sample walks only the instances whose bounds
 // overlap the tile's cone, so a march step costs O(instances near this tile) instead of O(all instances). That
 // per-sample enumeration WAS the measured O(n) beam wall (measured ~187 ms at 4096 instances, while
-// the per-tile binning itself costs ~0.1 ms). Bit-exactness is coneMarchTileBounds' argument (sdf-world.hlsli): a
+// the per-tile binning itself costs ~0.1 ms). Bit-exactness is coneMarchTileBounds' argument (march/sdf-cone.hlsli): a
 // masked-out instance's bound excludes every point of the tile's cone, and the bound-sizing contract
 // (SdfProgram.PackInstances) makes its compose return the accumulator bit-exactly at any such point — the SAME
 // contract Stage 1's masked march already rides, so plane 0/the gap planes are unchanged for contract-honoring
@@ -23,7 +23,7 @@
 // BIT-IDENTICAL: each tile's bounds are still computed by exactly one invocation with unchanged arithmetic — only
 // the thread mapping moved, so the tile buffer (and every downstream pass) is byte-for-byte the same.
 // The cone march must see moving entities so their tiles aren't culled away — so this kernel opts into the per-frame
-// dynamic-transform buffer (sdf-vm.hlsli) that Stage 1 also uses.
+// dynamic-transform buffer (the field modules, field/) that Stage 1 also uses.
 #define SDF_DYNAMIC_TRANSFORMS
 // The per-tile instance mask, READ here by the cone march (the instance-cull pass wrote it).
 #define SDF_INSTANCE_MASKS
@@ -62,7 +62,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     // The symmetry-LOD origin: this viewport's camera (the per-sample wallpaper LOD rule measures from it).
     sdfLodOrigin = view.position.xyz;
-    // The per-invocation program-layout cache (sdf-vm.hlsli) — this kernel's cone march calls mapMasked once per
+    // The per-invocation program-layout cache (field/sdf-layout.hlsli) — this kernel's cone march calls mapMasked once per
     // step, so the decode must happen exactly once here, before the first call below.
     sdfProgramLayout = sdfLoadProgramLayout();
 
@@ -75,7 +75,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     // Tiles past the viewport's pixel extent hold no rays — leave them empty. `bounds` carries the classic march-start
     // (bounds.entry, plane 0) plus the four-bound teleport's proven-empty gap (firstExit/secondEntry, planes 1/2);
-    // far-distance defaults (the view's authored far plane, sdf-world.hlsli's worldFarDistance) mean "no gap —
+    // far-distance defaults (the view's authored far plane, frame/sdf-viewport.hlsli's worldFarDistance) mean "no gap —
     // teleport disabled" for the outside-viewport tiles (whose planes Stage 1 never reads anyway, since it skips a
     // tile with marchStart < 0).
     bool insideViewport = (

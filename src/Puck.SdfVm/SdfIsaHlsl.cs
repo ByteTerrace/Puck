@@ -14,8 +14,8 @@ namespace Puck.SdfVm;
 /// every host.</para>
 /// </summary>
 public static class SdfIsaHlsl {
-    /// <summary>The file name of the generated include, which sits beside the kernels in
-    /// <c>Assets/Shaders/Sdf</c>.</summary>
+    /// <summary>The file name of the generated include, which sits with the other generated declarations in
+    /// <c>Assets/Shaders/Sdf/isa</c>.</summary>
     public const string FileName = "sdf-isa.hlsli";
 
     private const string Guard = "SDF_ISA_HLSLI";

@@ -39,16 +39,28 @@ public readonly record struct SdfWorldKernels(
     /// <summary>The name a counters report heads <see cref="LoadWork"/>'s section with.</summary>
     public const string LoadWorkSourceName = "shaders.sdf-kernels";
 
-    /// <summary>The standard deploy location (<c>Assets/Shaders/Sdf</c> next to the application, where the
-    /// <c>Puck.SdfVm</c> reference copies the bytecode its build compiles; the bytecode is a build product, never
-    /// tracked in git) — <see cref="Load(string)"/>'s default directory,
-    /// exposed for callers that load an individual SDF-directory asset directly (e.g. the shared <c>fullscreen.vert</c>
-    /// vertex stage a 2D overlay decorator reuses) rather than the whole kernel set.</summary>
-    public static string DefaultDirectory => Path.Combine(
+    /// <summary>The deployed kernel tree (<c>Assets/Shaders/Sdf</c> next to the application, where the <c>Puck.SdfVm</c>
+    /// reference copies the bytecode its build compiles; the bytecode is a build product, never tracked in git). A source
+    /// checkout's tree is <c>src/Puck.SdfVm/Assets/Shaders/Sdf</c>, whose build writes the bytecode in place.</summary>
+    public static string DeployedTree => Path.Combine(
         path1: AppContext.BaseDirectory,
         path2: "Assets",
         path3: "Shaders",
         path4: "Sdf"
+    );
+    /// <summary>The standard deploy location of the pass entry points' bytecode, the deployed tree's passes directory
+    /// (<see cref="PassesDirectory(string)"/>) — <see cref="Load(string)"/>'s default directory, exposed for callers that
+    /// load an individual stage directly (the mesh raster pass's stages, the shared <c>fullscreen.vert</c> vertex stage a
+    /// 2D overlay decorator reuses) rather than the whole kernel set.</summary>
+    public static string DefaultDirectory => PassesDirectory(tree: DeployedTree);
+
+    /// <summary>Returns the directory of a kernel tree that holds its pass entry points and their bytecode: the one
+    /// statement of where, under a tree, a kernel set loads from.</summary>
+    /// <param name="tree">The kernel tree: <see cref="DeployedTree"/> or a source checkout's.</param>
+    /// <returns>The tree's <c>passes</c> directory.</returns>
+    public static string PassesDirectory(string tree) => Path.Combine(
+        path1: tree,
+        path2: "passes"
     );
 
     /// <summary>Gets the kind counting kernel-set loads: one per <see cref="Load(string, string, WorkCounterSet)"/>

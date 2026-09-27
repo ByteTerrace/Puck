@@ -20,7 +20,7 @@ struct ViewportData {
     // it into the view's rect. zw are zero.
     float4 extent;
     // x is zero. yz = the off-axis (asymmetric) frustum's tangent-space center offset (SdfAsymmetricFrustum) — (0,0)
-    // for an ordinary symmetric camera, consumed by sdf-world.hlsli's cameraRayDirection. w = the frame's FAR DISTANCE
+    // for an ordinary symmetric camera, consumed by march/sdf-cone.hlsli's cameraRayDirection. w = the frame's FAR DISTANCE
     // (SdfFrame.FarDistance, read through worldFarDistance below).
     // KEEP IN SYNC with SdfWorldEngine.PackViewports (the 96-byte row).
     float4 lens;

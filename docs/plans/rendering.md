@@ -1816,7 +1816,7 @@ references` finding no consumer of `IGpuRenderTarget`,
 ### P4 — Shared opaque visibility
 
 **Starts from:** the SDF engine's private hit record, `PrimaryHits` in
-`sdf-world.hlsli`: five 16-byte rows per pixel of each viewport's full extent.
+`frame/sdf-visibility.hlsli`: five 16-byte rows per pixel of each viewport's full extent.
 The primary pass writes the hit, lanes and blend rows, the surface pass the
 normal and curvature rows, the ambient pass updates the last, and the views pass
 reads all five, including a neighbour's record for the silhouette sky blend
@@ -1885,7 +1885,7 @@ groups. The remaining work follows below.
    `puck counters` read identically before and after.
 3. P4-1b, landed, freshness: `sdf-cull-args` writes the dispatch box's
    exclusive end beside its origin, and `worldVisibilityCurrent` in
-   `sdf-world.hlsli` holds a record current exactly inside that box, because
+   `frame/sdf-frame.hlsli` holds a record current exactly inside that box, because
    primary writes every active pixel it dispatches, misses included. It is the
    one freshness test: it replaced the `TileEmpty` neighbour test in the
    silhouette sky blend, the `visibility` debug view (mode 11,
@@ -1994,7 +1994,7 @@ is the fixed-point law and the canary oracle, a fixed-point raycast run to the
 far distance, never to a mesh, beside analytic triangles.
 
 **Depends on:** P3, landed. P4-2c onward follows P7b-7 to P7b-10, which have
-landed, and P7b-20, which follows P4-1. `sdf-world.hlsli` changes in P4 first;
+landed, and P7b-20, which follows P4-1. The SDF kernel modules change in P4 first;
 the views and
 cull-args kernels and `SdfWorldEngine`'s partials change in P7b first. Whichever
 lands second re-records the work laws and counter baselines, and rebuilds
@@ -3720,7 +3720,7 @@ Each commit is marked with what it waits on; only step 5 waits on P7b's groups.
 5. The GPU draws from the mapping. Can land now: P7b-20, the engine's groups,
    has landed. The screen shading reads
    each screen's UV layout, crop, letterbox and warp inset from the published
-   mapping instead of `CrtBezel` in `sdf-world.hlsli`, and its mirror,
+   mapping instead of `CrtBezel` in `shade/sdf-environment.hlsli`, and its mirror,
    `WorldScreenMappings.Bezel`, is deleted. It adds a per-screen buffer to the
    SDF engine as a member of the engine's groups.
 6. Hits continue through live instances. Landed, except the portal check:
@@ -3839,9 +3839,8 @@ table). `SdfEngineNode` splits into an `SdfWorldResidency` for the world's
 half and the graph runtime for captures, work, readiness and
 `NotReadyReason`; `SdfWorldEngine`'s partials become per-pass recorders
 and its frame packers frame-block writers; the views become `sdf.world`
-instances. `sdf-vm.hlsli` splits into a generated `isa/` and `field/`, and
-`sdf-world.hlsli` into a generated `frame/`, `march/`, `surface/`, `shade/` and
-`debug/`, with pass entry points under `passes/`.
+instances. The kernels already sit in the layered module tree item 2 landed; item 7
+generates the frame block into `frame/`.
 
 **Build sequence.**
 
@@ -3863,8 +3862,21 @@ instances. `sdf-vm.hlsli` splits into a generated `isa/` and `field/`, and
    camera view still selects export mode through
    `SdfEngineNode.CreateOutputImage` for a probe export, so the engine's export
    path stays.
-2. The HLSL module split and the upward-include refusal, with every compiled
-   kernel's hash unchanged.
+2. Landed, the HLSL module split: the kernels live in layer directories under
+   `src/Puck.SdfVm/Assets/Shaders/Sdf`, lowest first `isa/` (the generated
+   declarations and interfaces), `field/`, `frame/`, `march/`, `surface/`,
+   `shade/`, `debug/` and `passes/` (every entry point, with the `sdf-vm.hlsli`
+   and `sdf-world.hlsli` aggregators in `field/` and `passes/`), and every
+   compiled kernel's bytes are unchanged by the move.
+   `SdfShaderLayeringLawTests` (`tests/Puck.SdfVm.Tests`) refuses an include of
+   a higher layer, a use of a function, constant, global or macro that only a
+   higher layer declares, a source outside every layer and an include that
+   resolves nowhere. The frame's row decoders (the environment rows, the
+   lights and the levers, `frame/sdf-environment.hlsli`, `frame/sdf-lights.hlsli`
+   and `frame/sdf-levers.hlsli`), the shadow and ambient gather
+   (`surface/sdf-shadow-gather.hlsli`) and the query tally sit in the lowest
+   layer that uses them, and the surface pass asks `sdfScreenSurfaceShades`
+   whether a screen covers a hit.
 3. Landed, the generated instruction-set declarations: `puck shaders generate`
    writes `sdf-isa.hlsli` from the C# model through `SdfIsaHlsl`, covering the
    version handshake, every ISA enum member and the packed-layout constants,
@@ -4155,10 +4167,9 @@ have landed, with step 3's CPU half; step 5, the GPU drawing from the
 mapping, waited only on P7b-20 and can land now, and GPU picking follows P4.
 P14 follows P4, P7b, P8, P11b and P12b, because the engine's composition and
 screens need somewhere to go before it moves. Its capability matrix (P14-1),
-generated instruction-set declarations (P14-3), the planner's vocabulary with
-multi-basis counts (P14-4) and post passes as the root graph's own passes
-(P14-12) needed none of them and have landed, and the HLSL module split
-(P14-2) is in progress. P15 and P16 both follow P14: P15 also needs P4, and
+module split (P14-2), generated instruction-set declarations (P14-3), the
+planner's vocabulary with multi-basis counts (P14-4) and post passes as the
+root graph's own passes (P14-12) needed none of them and have landed. P15 and P16 both follow P14: P15 also needs P4, and
 P16, the smallest package in this group, needs P14's float working targets for
 its display transform; its heap fold, HDR swapchain selection and paper-white
 setting needed none and have landed.

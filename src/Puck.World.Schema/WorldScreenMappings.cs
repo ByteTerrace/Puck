@@ -8,7 +8,7 @@ namespace Puck.World;
 /// the same source pixel on every run.</summary>
 public static class WorldScreenMappings {
     /// <summary>The border, as a fraction of the face on every side, that the screen glass pass insets the image by. It
-    /// is <c>CrtBezel</c> in <c>sdf-world.hlsli</c>, and the two change together.</summary>
+    /// is <c>CrtBezel</c> in <c>shade/sdf-environment.hlsli</c>, and the two change together.</summary>
     public const float Bezel = 0.03f;
     /// <summary>The name of the screen glass pass: the SDF view pass's screen shading, which insets the image inside the
     /// bezel. Its pincushion curvature is zero, so the inset is its whole warp.</summary>

@@ -166,13 +166,13 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.shaders.reload",
-            description: "Reloads compiled SDF kernels on the next produced frame: world.shaders.reload [directory]. Defaults to deployed Assets/Shaders/Sdf; a source checkout can name src/Puck.SdfVm/Assets/Shaders/Sdf after CompileShaders completes. Uses the current backend. Replaces changed pipelines while retaining world state, GPU buffers and textures; failed loads or ISA validation keep the previous set. This queues work: world.shaders.status reports completion. Binding/ABI changes require a host rebuild; child engines and overlay/postprocess shaders are outside this command.",
+            description: "Reloads compiled SDF kernels on the next produced frame: world.shaders.reload [tree]. Reads the bytecode under the kernel tree's passes directory; defaults to the deployed Assets/Shaders/Sdf, and a source checkout can name src/Puck.SdfVm/Assets/Shaders/Sdf after CompileShaders completes. Uses the current backend. Replaces changed pipelines while retaining world state, GPU buffers and textures; failed loads or ISA validation keep the previous set. This queues work: world.shaders.status reports completion. Binding/ABI changes require a host rebuild; child engines and overlay/postprocess shaders are outside this command.",
             handler: (_, args) => {
                 if (renderProbe.Node is not { } node) {
                     return CommandResult.Error(output: "[world.shaders.reload: renderer not ready]");
                 }
                 try {
-                    if (!node.RequestShaderReload(directory: ((args.Count == 0)
+                    if (!node.RequestShaderReload(tree: ((args.Count == 0)
                         ? null
                         : args.Tail(start: 0)))) {
                         return CommandResult.Error(output: "[world.shaders.reload: another request is pending — world.shaders.status]");
