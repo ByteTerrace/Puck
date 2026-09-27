@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
+using Puck.Abstractions.Presentation;
 using Puck.Assets.Documents;
 
 namespace Puck.World;
@@ -132,21 +133,21 @@ public sealed record WorldRenderDefaults(
     public const float MinFarDistance = 1f;
 
     /// <summary>Gets the inert absence — shadows off, no crowd radius, no ambient occlusion, native scale, no
-    /// authored presets, the engine's pinned far distance. The engine holds no render posture of its own: the
-    /// standard boot levers and preset table are AUTHORED, in <c>Assets/worlds/standard.world.json</c>, and a world
-    /// inherits them by naming that document as its basis.</summary>
+    /// authored presets, the engine's pinned far distance. The engine holds no render posture of its own: a world
+    /// authors its boot levers and its preset table in its own <c>render</c> section, or inherits them from its
+    /// basis.</summary>
     public static WorldRenderDefaults Absent { get; } = new WorldRenderDefaults();
 
-    /// <summary>Returns the authored preset for a quality tier keyword (case-insensitive
-    /// <c>low</c>/<c>medium</c>/<c>high</c>), or <see langword="null"/> when the token names none or the world
-    /// authors no such preset — the <c>world.quality</c> verb refuses by name either way.</summary>
-    /// <param name="name">The quality tier keyword.</param>
+    /// <summary>Returns the authored preset for a quality tier, or <see langword="null"/> when the world authors none
+    /// for it, which the <c>world.quality</c> verb refuses by name. The tiers are the engine's one quality vocabulary
+    /// (<see cref="QualityTiers"/>), the one a <c>views.graphs</c> row and a shader package's variants name.</summary>
+    /// <param name="tier">The quality tier.</param>
     /// <returns>The matching authored preset, or <see langword="null"/>.</returns>
-    public WorldQualityPreset? Preset(string name) {
-        return (name.ToUpperInvariant() switch {
-            "LOW" => LowRaw,
-            "MEDIUM" => MediumRaw,
-            "HIGH" => HighRaw,
+    public WorldQualityPreset? Preset(QualityTier tier) {
+        return (tier switch {
+            QualityTier.Low => LowRaw,
+            QualityTier.Medium => MediumRaw,
+            QualityTier.High => HighRaw,
             _ => null,
         });
     }

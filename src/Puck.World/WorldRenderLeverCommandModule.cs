@@ -1,4 +1,5 @@
 using System.Globalization;
+using Puck.Abstractions.Presentation;
 using Puck.Commands;
 using Puck.SdfVm;
 using Puck.World.Client;
@@ -668,7 +669,7 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.quality",
-            description: "Applies a graphics PRESET that bundles the individual levers, live: world.quality low|medium|high — no argument echoes the current settings. low = shadows off, ao off, render-scale half; medium = shadows medium, ao on, render-scale three-quarter; high = shadows high, ao on, render-scale native. A preset just writes the individual settings (world.shadows/.ao/.render-scale still override afterward).",
+            description: "Applies one of the world's authored graphics PRESETs (render.low, render.medium, render.high), each bundling the shadow, ambient-occlusion and render-scale levers, live: world.quality low|medium|high — no argument echoes the current settings. A preset the world does not author is refused by name. A preset just writes the individual settings (world.shadows/.ao/.render-scale still override afterward).",
             handler: (context, args) => {
                 if (args.Count == 0) {
                     return new CommandResult(Output: DescribeQuality());
@@ -677,8 +678,12 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
                 // The preset table is world data (WorldDefinition.Render), read off the LIVE definition so a mutated
                 // preset table applies immediately: look the named tier up and write its three levers into the live
                 // settings.
-                if (server.Definition.Render.Preset(name: args[0].ToString()) is not { } preset) {
-                    return CommandResult.Error(output: $"[world.quality: unknown preset '{args[0]}' — low|medium|high]");
+                if (QualityTiers.Parse(name: args[0].ToString()) is not { } tier) {
+                    return CommandResult.Error(output: $"[world.quality: unknown preset '{args[0]}' — {string.Join(separator: "|", values: QualityTiers.Names)}]");
+                }
+
+                if (server.Definition.Render.Preset(tier: tier) is not { } preset) {
+                    return CommandResult.Error(output: $"[world.quality: this world authors no {QualityTiers.Name(tier: tier)} preset]");
                 }
 
                 SubmitLever(

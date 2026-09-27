@@ -35,7 +35,7 @@ is borrowed from the currently installed graph.
 **P14 and P15 are gated by counted-cost ceilings.** Each of their passes'
 deterministic counters, dispatches, march steps, texels written and bytes
 uploaded, is recorded over one pinned workload, `puck counters`' world with its
-camera and views, at the floor tier and the resolution the RTX 2060 runs, and
+camera and views, at the floor tier and the RTX 2060's 1920x1080, and
 held as a calibrated ceiling that workload may not exceed; other content is
 free to cost more, since its counts gate nothing. P14 adds the march-step and
 texel counters, and per-pass upload bytes, that the ledger lacks today. A ceiling is

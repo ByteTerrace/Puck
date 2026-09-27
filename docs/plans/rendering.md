@@ -3937,7 +3937,7 @@ itself. Each pass is held under a counted-cost ceiling: its deterministic
 counters (dispatches, march steps, texels written and bytes uploaded) are
 recorded over `puck counters`' pinned workload
 (`tests/Puck.Counters/counters.world.json`, its camera and views) at the floor
-tier and the resolution the RTX 2060 runs, and held as calibrated ceilings that
+tier and the RTX 2060's 1920x1080, and held as calibrated ceilings that
 workload may not exceed. A ceiling is re-recorded only in the change that
 explains why the count moved, and never from wall-clock or GPU timing. Two of
 those counters do not exist yet, and P14 adds them as `GpuWork` kinds the
@@ -3950,13 +3950,14 @@ steps into a per-pass counter buffer that the completed sample reads back. The
 march runs in floats, so that kind is `PerBackendDeterministic`, held per
 backend like the SDF engine's `upload` pass. Texels written come from the same
 kernel counters, not from host extents, because an indirectly dispatched pass
-writes only the tiles culling leaves it. The workload does not run at the floor tier
-yet: its script selects no quality and its world authors no render preset, so
-it renders at native scale. `world.quality` applies a preset from the world's
-own render table, which the counters world does not author, so P14 pins the
-floor tier by authoring its `low` preset in `tests/Puck.Counters/counters.world.json`
-and selecting it with `world.quality low` in
-`tests/Puck.Counters/counters.script.txt`, before any ceiling is recorded.
+writes only the tiles culling leaves it. The workload is pinned: the RTX 2060
+floor runs a 1920x1080 display, which `tests/Puck.Counters/counters.world.json`
+presents offscreen with its one camera at that extent, and the floor tier is the
+world's own `low` preset (shadows off, ambient occlusion off, render scale
+`half`), which `tests/Puck.Counters/counters.script.txt` selects with
+`world.quality low` before anything is read. Half is 181/255 of each axis, which
+the extent quantization rounds up to 0.75, so the view renders 1440x810 and
+`place` reconstructs it to 1920x1080.
 
 **Target shape.** `sdf.world` is a package fragment that `RenderGraphCompiler`
 splices into the graph, so `ShaderPipelineCompiler` orders, versions and
@@ -4166,8 +4167,8 @@ parity captures pin the jitter index so pixel verdicts stay meaningful; P2's
 work counts recorded on both reference machines. The reconstruction passes are
 held under counted-cost ceilings as P14's are, over the same pinned workload
 and with the counters P14 adds: each pass's dispatches, march steps, texels
-written and bytes uploaded, recorded at the floor tier and the resolution the
-RTX 2060 runs, re-recorded only in the change that explains the move, never
+written and bytes uploaded, recorded at the floor tier and the RTX 2060's
+1920x1080, re-recorded only in the change that explains the move, never
 from wall-clock timing. The recorded Steam Deck run,
 with dynamic resolution on and render scale responding to the pacing signal,
 is [deferred to the end](#deferred-to-the-end). Whether the run holds its

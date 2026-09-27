@@ -1652,7 +1652,11 @@ All render levers are live verbs with no-arg echoes of the current value:
 `world.quality`, `world.shadows`, `world.ao`, `world.render-scale`,
 `world.upscale-sharpness`, `world.target`, `world.shadow-mask`,
 `world.shadow-march`, `world.ao-quality`, `world.view-refresh`,
-`world.debug-view`, `world.fps`. Render scale applies
+`world.debug-view`, `world.fps`. `world.quality low|medium|high` applies the
+world's own `render.low`, `render.medium` or `render.high` preset, each a
+shadow tier, an ambient-occlusion switch and a render-scale tier; the names are
+the engine's one quality vocabulary (`QualityTiers`), and a preset the world
+does not author is refused by name. Render scale applies
 to both seat views and named cameras, multiplied by any layout-transition scale.
 Named tiers are
 facades over continuous values. Do not assume a lower render scale is
