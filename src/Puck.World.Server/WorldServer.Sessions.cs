@@ -10,6 +10,9 @@ public sealed partial class WorldServer {
 
     // Each live session's observation: its hub lease and the handle its observer holds.
     private readonly Dictionary<Principal, (IDisposable Lease, WorldSessionObservation Observation)> m_sessionSinks = new();
+    // Sessions whose observer faulted during a delivery, ended at the start of the next step: ending one inside the
+    // hub's fan-out would tape its end after the tick's own entries rather than where a replay applies it.
+    private readonly List<Principal> m_faultedSessions = [];
 
     /// <inheritdoc cref="WorldGrants.EndSession"/>
     public bool EndSession(Principal session, out string refusal) => m_grants.EndSession(
@@ -116,6 +119,26 @@ public sealed partial class WorldServer {
             attached.Lease.Dispose();
             attached.Observation.MarkEnded();
         }
+    }
+    /// <summary>Notes a session whose observer faulted during a delivery; the next step ends it.</summary>
+    /// <param name="session">The session principal.</param>
+    internal void NoteFaultedSession(Principal session) => m_faultedSessions.Add(item: session);
+    /// <summary>Ends every session whose observer faulted since the last step, through the one end door: its rows are
+    /// revoked and its observation detached, as if its observer had released it. Called at the start of a step.</summary>
+    internal void EndFaultedSessions() {
+        if (m_faultedSessions.Count == 0) {
+            return;
+        }
+
+        foreach (var session in m_faultedSessions) {
+            _ = m_grants.EndSession(
+                refusal: out _,
+                session: session
+            );
+            DetachSessionSink(session: session);
+        }
+
+        m_faultedSessions.Clear();
     }
     /// <summary>Detaches every session's observation.</summary>
     internal void DetachSessionSinks() {

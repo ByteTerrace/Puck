@@ -1,5 +1,7 @@
 using Puck.World.Protocol;
 
+using Puck.Commands;
+
 namespace Puck.World.Server;
 
 /// <summary>A session's observation sink: delivers the observer only what the session's admission tier discloses, only
@@ -35,6 +37,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         } catch (Exception exception) {
             Fault = exception;
             observation.MarkEnded();
+            server.NoteFaultedSession(session: observation.Session);
 
             throw;
         }
@@ -50,23 +53,29 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     }
 
     /// <summary>Discloses a definition as this session's tier shows it — see
-    /// <see cref="Disclose(WorldDefinition, WorldDisclosureTier)"/>. Whether the session observes right now is the
+    /// <see cref="Disclose(WorldDefinition, WorldDisclosureTier, StateArena, Principal?)"/>. Whether the session observes right now is the
     /// delivery's question, not this one's.</summary>
     /// <param name="definition">The definition.</param>
     /// <returns>The disclosed definition, or <see langword="null"/> at the frames tier.</returns>
     /// <exception cref="InvalidOperationException">The composed projection does not hydrate.</exception>
     public WorldDefinition? Disclose(WorldDefinition definition) => Disclose(
+        arena: server.Arena,
         definition: definition,
+        recipient: observation.Session,
         tier: Tier
     );
-    /// <summary>Discloses a definition as a tier shows this session it: verbatim at
-    /// <see cref="WorldDisclosureTier.Replica"/>, a projection composed for the session at
+    /// <summary>Discloses a definition as a tier shows it: verbatim at <see cref="WorldDisclosureTier.Replica"/>, a
+    /// projection composed for <paramref name="recipient"/> from <paramref name="arena"/> at
     /// <see cref="WorldDisclosureTier.Presentation"/>, and nothing at <see cref="WorldDisclosureTier.Frames"/>.</summary>
     /// <param name="definition">The definition.</param>
     /// <param name="tier">The tier.</param>
+    /// <param name="arena">The store the definition's disclosed values and audiences are read from: the live store
+    /// for the live definition, the definition's own for a candidate.</param>
+    /// <param name="recipient">The recipient the projection is composed for, or <see langword="null"/> for the
+    /// public observer.</param>
     /// <returns>The disclosed definition, or <see langword="null"/> at the frames tier.</returns>
-    /// <exception cref="InvalidOperationException">The composed projection does not hydrate.</exception>
-    public WorldDefinition? Disclose(WorldDefinition definition, WorldDisclosureTier tier) {
+    /// <exception cref="InvalidOperationException">The projection cannot be composed or does not hydrate.</exception>
+    public WorldDefinition? Disclose(WorldDefinition definition, WorldDisclosureTier tier, StateArena arena, Principal? recipient) {
         if (tier == WorldDisclosureTier.Frames) {
             return null;
         }
@@ -77,10 +86,10 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
 
         var time = server.Time;
         var projection = WorldProjection.Compose(
-            arena: server.Arena,
+            arena: arena,
             authority: server.AuthorityIdentity,
             definition: definition,
-            recipient: observation.Session,
+            recipient: recipient,
             revision: server.Population.Revision,
             tier: tier,
             time: in time

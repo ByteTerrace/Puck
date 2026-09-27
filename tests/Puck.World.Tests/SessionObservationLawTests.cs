@@ -1,3 +1,4 @@
+using Puck.Assets.Documents;
 using Puck.Commands;
 
 using Xunit;
@@ -399,6 +400,131 @@ public sealed class SessionObservationLawTests {
         Assert.Empty(collection: fixture.Server.GrantRows(principal: newer.Session));
     }
     [Fact]
+    public void ACandidateIsDisclosedFromItsOwnStore_AndOneThatCannotProjectIsRefusedNotMeasuredAsNothing() {
+        // A candidate declares a vector row and binds the ball's position to it, public or restricted.
+        WorldDefinition WithHue(StateVisibility? visibility, bool bound) {
+            var document = Document(tier: WorldDisclosureTier.Presentation);
+            var state = (document.StateRaw ?? new WorldStateSection());
+            var creations = document.Creations.Select(selector: creation => {
+                if (
+                    !bound ||
+                    (creation.Id != "ball")
+                ) {
+                    return creation;
+                }
+
+                var position = System.Text.Json.JsonSerializer.Deserialize<DocumentVector3>(
+                    json: "\"state.hue\"",
+                    options: DocumentJsonOptions.Shared
+                )!;
+
+                return (creation with {
+                    Document = (creation.Document with { Shapes = [.. creation.Document.Shapes!.Select(selector: shape => (shape with { Position = position }))] }),
+                    HashRaw = null,
+                });
+            }).ToList();
+
+            return document with {
+                CreationsRaw = creations,
+                StateRaw = (state with {
+                    World = [.. (state.World ?? []), new WorldStateRow(
+                        Cells: [new StateCell(
+                            Key: StateRow.SlotKey,
+                            Value: CellValue.Text(value: "[0,0,0]")
+                        )],
+                        Kind: CellKind.Text,
+                        Name: CellName.Parse(candidate: "hue"),
+                        Visibility: visibility
+                    )],
+                }),
+            };
+        }
+
+        var restricted = new StateVisibility(Readers: ["seat1"]);
+
+        // The live document declares no such row at all: only the candidate's own store holds it.
+        using var fixture = Fixtures.FreshServer(definition: Document(tier: WorldDisclosureTier.Presentation));
+
+        var (observation, _, refusal) = Observe(fixture: fixture);
+
+        Assert.True(
+            condition: (observation is not null),
+            userMessage: refusal
+        );
+
+        // Read from the candidate's own store: the live store has no such row to read it from.
+        Assert.NotNull(@object: observation!.Disclose(candidate: WithHue(
+            bound: true,
+            visibility: null
+        )));
+
+        var envelope = new WorldRenderEnvelope();
+
+        using (envelope.Configure(
+            allowGrowth: true,
+            instanceCapacity: 0,
+            measure: candidate => ((observation.Disclose(candidate: candidate) is not null)
+                ? (Words: 0, Instances: 0)
+                : (Words: 0, Instances: 0)),
+            programWordCapacity: 0
+        )) {
+            Laws.RefusalWithControl(
+                lawId: "session.unprojectable-candidate-is-refused",
+                deniedOutcome: () => envelope.TryFit(
+                    candidate: WithHue(
+                        bound: true,
+                        visibility: restricted
+                    ),
+                    reason: out _
+                ),
+                controlOutcome: () => envelope.TryFit(
+                    candidate: WithHue(
+                        bound: true,
+                        visibility: null
+                    ),
+                    reason: out _
+                )
+            );
+        }
+    }
+    [Fact]
+    public void AnObserverThatFaultsAfterItsPrimer_EndsItsSessionAtTheNextStep() {
+        bool LiveAfterTwoSteps(IClientSink sink) {
+            using var fixture = Fixtures.FreshServer(definition: Document(tier: WorldDisclosureTier.Replica));
+            var observation = fixture.Server.TryObserveAsSession(
+                refusal: out var refusal,
+                sink: sink,
+                sourceAuthority: Viewer
+            );
+
+            Assert.True(
+                condition: (observation is not null),
+                userMessage: refusal
+            );
+            fixture.Step();
+            fixture.Step();
+
+            var live = fixture.Server.IsLiveSession(principal: observation!.Session);
+
+            Assert.Equal(
+                actual: (fixture.Server.GrantRows(principal: observation.Session).Count > 0),
+                expected: live
+            );
+            Assert.Equal(
+                actual: observation.Ended,
+                expected: !live
+            );
+
+            return live;
+        }
+
+        Laws.RefusalWithControl(
+            lawId: "session.delivery-fault-ends-the-session",
+            deniedOutcome: () => LiveAfterTwoSteps(sink: new FaultingAfterPrimerSink()),
+            controlOutcome: () => LiveAfterTwoSteps(sink: new WorldSessionMirror(placeholder: WorldProjection.Undisclosed))
+        );
+    }
+    [Fact]
     public void ARebuild_EndsTheObservation_SoItsHolderMustBeAdmittedAgain() {
         using var fixture = Fixtures.FreshServer(definition: Document(tier: WorldDisclosureTier.Replica));
 
@@ -480,6 +606,26 @@ public sealed class SessionObservationLawTests {
                 sourceAuthority: Viewer
             );
             Refusal = refusal;
+        }
+        public void DeliverState(WorldDefinition definition, in WorldStateStamp stamp) {
+        }
+    }
+    // An observer that takes its attach primer, then throws on the first tick it is delivered.
+    private sealed class FaultingAfterPrimerSink : IClientSink {
+        private int m_snapshots;
+
+        public void DeliverAnswer(in QueryAnswer answer) {
+        }
+        public void DeliverComposition(WorldComposition composition) {
+        }
+        public void DeliverDefinition(WorldDefinition definition) {
+        }
+        public void DeliverSessionLever(WorldSessionLever lever) {
+        }
+        public void DeliverSnapshot(in WorldSnapshot snapshot) {
+            if (++m_snapshots > 1) {
+                throw new InvalidOperationException(message: "faulting observer");
+            }
         }
         public void DeliverState(WorldDefinition definition, in WorldStateStamp stamp) {
         }

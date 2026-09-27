@@ -40,8 +40,9 @@ public sealed class WorldSessionObservation : IDisposable {
     /// observer. Called on the thread that steps the observed world.</summary>
     /// <param name="candidate">The candidate definition.</param>
     /// <returns>The disclosed definition, or <see langword="null"/> when nothing of it could reach the observer: a
-    /// candidate that refuses the viewer or discloses it frames alone, or a projection that does not hydrate, which
-    /// would end the observation rather than render.</returns>
+    /// candidate that refuses the viewer or discloses it frames alone.</returns>
+    /// <exception cref="WorldRenderMeasureRefusedException">The candidate would disclose a projection that cannot be
+    /// composed, read from the candidate's own store: a measurer refuses it rather than measuring nothing.</exception>
     public WorldDefinition? Disclose(WorldDefinition candidate) {
         ArgumentNullException.ThrowIfNull(argument: candidate);
 
@@ -56,13 +57,38 @@ public sealed class WorldSessionObservation : IDisposable {
             return null;
         }
 
+        if (verdict!.Tier == WorldDisclosureTier.Frames) {
+            return null;
+        }
+
+        // The candidate's own store, at this world's clock: a projection reads the audiences and values the
+        // candidate declares, not the ones the live document still holds. The session a screen admits next is not
+        // known yet, so it is composed for the public observer, which is what a session is to every reader list.
+        var time = m_server.Time;
+
+        if (!StateArena.TryCreate(
+            arena: out var arena,
+            catalog: candidate.StateCatalog,
+            options: null,
+            reason: out var reason,
+            section: candidate.StateRaw,
+            time: in time
+        )) {
+            throw new WorldRenderMeasureRefusedException(message: $"the candidate's state does not load into a store to disclose it to {Session.Describe()}: {reason}");
+        }
+
         try {
             return sink.Disclose(
+                arena: arena,
                 definition: candidate,
-                tier: verdict!.Tier
+                recipient: null,
+                tier: verdict.Tier
             );
-        } catch (InvalidOperationException) {
-            return null;
+        } catch (InvalidOperationException exception) {
+            throw new WorldRenderMeasureRefusedException(
+                innerException: exception,
+                message: $"the candidate cannot be disclosed to {Session.Describe()}: {exception.Message}"
+            );
         }
     }
     /// <summary>Ends the session, whether or not its observation already ended. A world already retiring takes its
