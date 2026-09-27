@@ -1971,9 +1971,30 @@ groups. The remaining work follows below.
    `sdf-mesh-motion` (a mesh moved across the beam's tiles by a row edit; its
    discriminating leg never moves it), on both backends.
    `SdfMeshCanaryOracleLawTests` derives every region they judge from the
-   analytic oracle. The rest of the check above (an opening, equal-depth ties,
-   silhouettes, near-plane clipping, small and multiple viewports, reduced render
-   scale and resize) has no fixture yet.
+   analytic oracle, which follows the scripts' placement and camera row edits,
+   layout overrides and render-scale tiers. Each scene the check names, and the
+   regions that hold it (both canaries run each on both backends, and each
+   discriminating leg turns every mesh observation red):
+
+   | Scene | Held by |
+   |---|---|
+   | Mesh-only against sky | `sdf-mesh-visibility`: `quad-against-the-sky-is-mesh` |
+   | A mesh outside the SDF dispatch bounds | the same quad, whose only shape is out of view, and `far-mesh-is-mesh`, past the SDF far distance |
+   | A mesh through an opening with no SDF hit behind it | `opening-shows-the-mesh`, `opening-below-the-mesh-is-background`, `frame-around-the-opening-is-sdf` |
+   | Motion across SDF tile boundaries | `sdf-mesh-motion`: the quad moved by a row edit |
+   | Equal-depth ties | `tie-face-is-sdf`: a mesh in a block's front face reads as SDF, because the march accepts the face within its threshold, strictly nearer than the mesh |
+   | Silhouettes | `mesh-beside-the-ball-is-mesh`, `ball-over-the-mesh-is-sdf`, `mesh-above-the-ball-is-mesh` |
+   | Near-plane clipping | `near-floor-is-mesh`: a floor running from behind the camera |
+   | Empty background | `corner-is-background`, `sky-beside-the-far-mesh-is-background` |
+   | Large depth ranges | `near-floor-is-mesh`, `block-between-is-sdf` and `far-mesh-is-mesh` in one frame, the far mesh about two hundred units away |
+   | Camera motion | `sdf-mesh-motion`: `panned-quad-is-mesh`, `panned-block-is-sdf`, `panned-quads-old-pixels-are-background` |
+   | Small and multiple viewports | the `split` layout's half-size and quarter-size slots: `half-slot-*`, `quarter-slot-*` |
+   | Reduced render scale | the `half` tier, reconstructed: `scaled-*` |
+   | Full-size resize | none: an offscreen host has no resize, so it needs a host verb or a windowed leg |
+   | Bounded against unbounded traversal | every region: the oracle is the fixed-point raycast to the far distance, never stopped by a mesh |
+
+   The check's measured cost and its `puck search -M 0` sweep for the retired
+   layout are not run yet.
 9. P4-2e, landed, meshes wherever a creation renders. Every scene emitter
    states its draws (`ISdfSceneEmitter.MeshDraws`, the same list while none
    moved), and `SdfCompositionFrameSource` composes them in emitter order and
@@ -4267,9 +4288,9 @@ the runtime and delivery programme owns. P10 binds the pass members of
 and a bound member and an overridden member compose by the rule
 [the decisions register](../decisions/rendering.md) states.
 
-The SDF engine's groups (P7b-20), P12b-2, P4-2c and P11b-13 have landed, so the
-longest remaining chain runs P14-6, then P14-7 to P14-11 and P14-13, and ends
-with P15. P16 follows P14-10's float working targets, and
+The SDF engine's groups (P7b-20), P12b-2, P4-2c, P11b-13, P14-2 and P14-5 have
+landed, so the longest remaining chain runs P14-6, then P14-7 to P14-11 and
+P14-13, and ends with P15. P16 follows P14-10's float working targets, and
 drawing a bake (P17) comes before P6's choice between a bake and the field.
 
 ## Deferred to the end
