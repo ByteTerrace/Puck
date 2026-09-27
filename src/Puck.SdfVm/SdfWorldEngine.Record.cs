@@ -343,6 +343,12 @@ public sealed partial class SdfWorldEngine {
             output.Tainted = ScreenSourcesTainted;
         }
 
+        // Every view of the frame shows its state: a rendered view's output was rendered from it, and a skipped view's
+        // retained output is pixel-identical to a render of it.
+        for (var view = 0u; (view < viewportCount); view++) {
+            m_viewOutputs[view]!.StateTick = m_frameStateTick;
+        }
+
         // A skipped frame runs no view's set: each view's output keeps the frame it last rendered.
         if (m_skipThisFrame) {
             for (var pass = SkyPass; (pass <= ViewsPass); pass++) {
@@ -441,7 +447,7 @@ public sealed partial class SdfWorldEngine {
             }
 
             // The slice ordinal: every slice but a brick's last is whole, so the cursor is a whole number of slices, and the
-            // kernel derives the slice's start and count from the ordinal, its block's slice size and the request's total.
+            // kernel derives the slice's start and count from the ordinal, its block's extent and the request's total.
             BinaryPrimitives.WriteUInt32LittleEndian(
                 destination: m_brickBakeIndex,
                 value: ((uint)(m_brickVoxelCursor[slot] / MaxBrickBakeVoxelsPerSlice))
@@ -451,6 +457,13 @@ public sealed partial class SdfWorldEngine {
                 bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
                 pipelineHandle: m_brickBakePipeline.Handle
+            );
+            recorder.BindDescriptorSet(
+                bindPoint: GpuBindPoint.Compute,
+                commandBufferHandle: commandBuffer,
+                descriptorSetHandle: m_frameSets[m_currentSlot],
+                group: FrameGroup,
+                pipelineLayoutHandle: m_brickBakePipeline.LayoutHandle
             );
             recorder.BindDescriptorSet(
                 bindPoint: GpuBindPoint.Compute,

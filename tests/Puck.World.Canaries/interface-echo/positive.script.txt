@@ -13,6 +13,8 @@ pipeline.wait place compiled 40
 pipeline.wait place installed 10
 pipeline.wait overlay compiled 40
 pipeline.wait overlay installed 10
+pipeline.wait sdf-world compiled 40
+pipeline.wait sdf-world installed 10
 # Every frame-block and pass-block word carries its sentinel; each row's one initialization frame after a reset reads them back.
 pipeline.sentinels ink-simulation on
 pipeline.reset ink-simulation
@@ -49,3 +51,8 @@ pipeline.reset overlay
 pipeline.wait overlay submitted 1 10
 pipeline.capture overlay {run}/overlay.png
 pipeline.wait overlay captured 10
+pipeline.sentinels sdf-world on
+pipeline.reset sdf-world
+pipeline.wait sdf-world submitted 1 10
+pipeline.capture sdf-world {run}/sdf-world.png
+pipeline.wait sdf-world captured 10

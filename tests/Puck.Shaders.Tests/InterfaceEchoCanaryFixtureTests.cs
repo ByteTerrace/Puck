@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Puck.SdfVm;
 
 namespace Puck.Shaders.Tests;
 
@@ -6,10 +7,11 @@ namespace Puck.Shaders.Tests;
 /// pass blocks are the blocks of the shipped interfaces it stands for, member for member at the same offsets and types, its
 /// echo pass is what the generator makes of it, its perturbed twin differs from the generator's output only by the edits it
 /// names, and its image holds one pixel per member. A shipped package whose frame data no echo stands for turns the
-/// coverage law red. Where DXC is on the search path, compiler reflection holds each echo to its layout.</summary>
+/// coverage law red; the SDF engine's <c>sdf.world</c> and <c>sdf.bricks</c> interfaces, which the engine declares in
+/// <see cref="SdfWorldInterfaces"/> rather than the catalog, are targets by name. Where DXC is on the search path, compiler reflection holds each echo to its layout.</summary>
 public sealed class InterfaceEchoCanaryFixtureTests {
     // The echo documents, one per row of the canary's world, in its row order.
-    private static readonly string[] Echoes = ["ink-simulation", "ink-visualize", "ink-finish", "tint", "sdf-film-grain", "place", "overlay"];
+    private static readonly string[] Echoes = ["ink-simulation", "ink-visualize", "ink-finish", "tint", "sdf-film-grain", "place", "overlay", "sdf-world"];
 
     private static string FixturePath(string fileName) => RepositoryPaths.Resolve(relativePath: $"tests/Puck.World.Canaries/interface-echo/{fileName}");
     private static ShaderPipelinePlannedPass[] PassesOf(string path) =>
@@ -45,6 +47,10 @@ public sealed class InterfaceEchoCanaryFixtureTests {
         ("overlay", "package overlay", static () => PackageOf(id: RenderGraphPackageCatalog.Overlay)),
         // Each source conversion package binds its region and image beside a pass block of the extent alone, ink finish's.
         .. RenderGraphPackageCatalog.SourceConversions.Select(selector: static id => ("ink-finish", $"package {id}", ((Func<ShaderInterfaceLayout>)(() => PackageOf(id: id))))),
+        // The SDF engine's two pass interfaces: every per-view dispatch's, and the brick baker's, whose pass block is its
+        // slice extent alone, ink finish's.
+        ("sdf-world", $"package {RenderGraphPackageCatalog.SdfWorld}", static () => SdfWorldInterfaces.WorldLayout),
+        ("ink-finish", $"package {RenderGraphPackageCatalog.SdfBricks}", static () => SdfWorldInterfaces.BrickBakeLayout),
     ];
 
     public static TheoryData<string> EchoNames() => [.. Echoes];

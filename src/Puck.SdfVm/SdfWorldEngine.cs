@@ -694,14 +694,20 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         // spans frames and RequestBrickBake drains the ring (WaitForFrameRing) before rewriting a request buffer, so one
         // buffer per brick slot is race-free.
         if (m_brickPoolEnabled) {
-            var bakeBlockBytes = SdfWorldInterfaces.BrickBakeLayout.Groups.Single(predicate: static group => (group.Group == ShaderInterfaceGroup.Pass)).BlockSizeBytes;
+            var bakeBlockBytes = new byte[SdfWorldInterfaces.BrickBakeParameters.SizeBytes];
             var bakeBlock = scope.Own(created: gpu.BufferFactory.CreateHostVisible(
                 name: NameOf(detail: "block", part: "brick-bake"),
-                sizeBytes: ((ulong)UniformBytes(blockBytes: bakeBlockBytes)),
+                sizeBytes: ((ulong)UniformBytes(blockBytes: SdfWorldInterfaces.BrickBakeParameters.SizeBytes)),
                 usage: GpuBufferUsage.Uniform
             ));
 
-            bakeBlock.Write<uint>(data: [((uint)MaxBrickBakeVoxelsPerSlice)]);
+            // The block's extent is one slice as one row: the voxels one bake dispatch writes at most.
+            SdfWorldInterfaces.BrickBakeParameters.WriteExtent(
+                block: bakeBlockBytes,
+                height: 1u,
+                width: ((uint)MaxBrickBakeVoxelsPerSlice)
+            );
+            bakeBlock.Write<byte>(data: bakeBlockBytes);
             m_brickBakeBlock = bakeBlock;
 
             for (var brick = 0; (brick < SdfBrickPoolLayout.MaxBricks); brick++) {

@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/adb16f92aa23e79d2cb079a33db59e933ced5b5863ca425dd0079f0203fe4e8a). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/99b784855d0fd9b9d20737ae82b2e285e1bafdcbee86c7a92b2d470c116b3f04). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -26,13 +26,13 @@ struct SdfWorldFrame {
 struct SdfWorldPass {
     [[vk::offset(0)]] uint2 extent;
     [[vk::offset(8)]] uint2 imageExtent;
-    [[vk::offset(16)]] uint2 tileGrid;
-    [[vk::offset(24)]] uint viewportCount;
+    [[vk::offset(16)]] uint instanceMaskWordCount;
+    [[vk::offset(20)]] uint meshDraws;
+    [[vk::offset(24)]] uint sampleIndex;
     [[vk::offset(28)]] uint screenMask;
-    [[vk::offset(32)]] uint instanceMaskWordCount;
-    [[vk::offset(36)]] uint sampleIndex;
+    [[vk::offset(32)]] uint2 tileGrid;
     [[vk::offset(40)]] uint viewBase;
-    [[vk::offset(44)]] uint meshDraws;
+    [[vk::offset(44)]] uint viewportCount;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroup : register(b0, space3);
 [[vk::binding(1, 3)]] StructuredBuffer<uint4> sdfWords : register(t1, space3);

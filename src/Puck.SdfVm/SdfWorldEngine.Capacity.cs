@@ -75,7 +75,7 @@ public sealed partial class SdfWorldEngine {
     /// pool from: per frame ring slot the frame set and one views set per view, each holding its group of
     /// <see cref="SdfWorldInterfaces.World"/>, and the mesh set holding the pass group of
     /// <see cref="SdfWorldInterfaces.Mesh"/>; with a brick pool, one bake set per brick slot holding the pass group of
-    /// <see cref="SdfWorldInterfaces.BrickBake"/>.</summary>
+    /// <see cref="SdfWorldInterfaces.BrickBake"/>, whose frame group is the ring slot's frame set.</summary>
     /// <param name="brickPool">Whether the engine keeps a brick pool.</param>
     /// <param name="viewportCapacity">The views the engine is provisioned for.</param>
     /// <returns>The pool's sizes.</returns>
@@ -83,7 +83,7 @@ public sealed partial class SdfWorldEngine {
         var world = PipelineLayouts.World.Groups;
         var frame = GpuDescriptorPoolSizes.ForGroups(groups: world.Where(predicate: static group => (group.Ordinal == FrameGroup)).ToArray());
         var views = GpuDescriptorPoolSizes.ForGroups(groups: world.Where(predicate: static group => (group.Ordinal == PassGroup)).ToArray());
-        var bake = GpuDescriptorPoolSizes.ForGroups(groups: PipelineLayouts.BrickBake.Groups);
+        var bake = GpuDescriptorPoolSizes.ForGroups(groups: PipelineLayouts.BrickBake.Groups.Where(predicate: static group => (group.Ordinal == PassGroup)).ToArray());
         var mesh = GpuDescriptorPoolSizes.ForGroups(groups: PipelineLayouts.Mesh.Groups);
         var sizes = default(GpuDescriptorPoolSizes);
 

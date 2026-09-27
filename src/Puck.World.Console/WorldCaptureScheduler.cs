@@ -37,8 +37,9 @@ public enum WorldCaptureRefusal : byte {
 /// frame and its census, or a refusal and its detail, never both and never neither.</summary>
 /// <param name="Station">The capture row's station name.</param>
 /// <param name="Tick">The simulation tick the capture was armed for.</param>
-/// <param name="RegionTick">The simulation tick the frame that served the capture refreshed its bound regions at, which
-/// <c>puck parity</c> holds to <paramref name="Tick"/>, or <see langword="null"/> when refused.</param>
+/// <param name="RegionTick">The simulation tick of the state the image that served the capture was rendered from, which
+/// <c>puck parity</c> holds to <paramref name="Tick"/>, or <see langword="null"/> when refused or when the serving node
+/// names none.</param>
 /// <param name="Frame">The PNG file name inside the capture directory, or <see langword="null"/> when refused.</param>
 /// <param name="StateHash">The capture-scope state hash at <paramref name="Tick"/>, as 16 lower-case hex digits.</param>
 /// <param name="Census">The per-material pixel census of the frame, or <see langword="null"/> when refused.</param>
@@ -135,7 +136,6 @@ public sealed class WorldCaptureScheduler {
     private readonly WorldStateMirror m_state;
     private readonly WorldServer m_server;
     private readonly IWorldEngineReadiness? m_readiness;
-    private readonly Func<ulong?>? m_regionTick;
     private readonly IWorldCaptureSources? m_sources;
     private readonly string m_worldFile;
 
@@ -164,15 +164,12 @@ public sealed class WorldCaptureScheduler {
     /// <param name="readiness">The engine readiness a hold reads: time held while it is not ready is spent from the
     /// pipeline-build budget, and a capture refused then names its reason. <see langword="null"/> for a boot that
     /// composes no renderer, whose holds all count as ready.</param>
-    /// <param name="regionTick">Reads the simulation tick the frame being composed refreshed its bound regions at, which
-    /// each capture records from the frame that serves it (<see cref="WorldCaptureManifestEntry.RegionTick"/>);
-    /// <see langword="null"/> for a boot that composes no renderer.</param>
     /// <param name="sources">The source instance each screen reads, which a row naming a screen captures, and the images
     /// deterministic sources state they show, which a capture of one is held to; <see langword="null"/> for a boot that
     /// composes no renderer, where a row naming a screen captures nothing.</param>
     /// <exception cref="ArgumentNullException"><paramref name="server"/>, <paramref name="directory"/>,
     /// <paramref name="backend"/>, or <paramref name="worldFile"/> is <see langword="null"/>.</exception>
-    public WorldCaptureScheduler(WorldServer server, string directory, string backend, string worldFile, Func<string?, ICaptureRequestTarget?>? captureTarget, IWorldEngineReadiness? readiness = null, Func<ulong?>? regionTick = null, IWorldCaptureSources? sources = null) {
+    public WorldCaptureScheduler(WorldServer server, string directory, string backend, string worldFile, Func<string?, ICaptureRequestTarget?>? captureTarget, IWorldEngineReadiness? readiness = null, IWorldCaptureSources? sources = null) {
         ArgumentNullException.ThrowIfNull(argument: server);
         ArgumentNullException.ThrowIfNull(argument: directory);
         ArgumentNullException.ThrowIfNull(argument: backend);
@@ -184,7 +181,6 @@ public sealed class WorldCaptureScheduler {
         m_worldFile = worldFile;
         m_captureTarget = captureTarget;
         m_readiness = readiness;
-        m_regionTick = regionTick;
         m_sources = sources;
         m_state = new WorldStateMirror(view: new WorldDocumentStateView(definition: () => server.Definition));
 
@@ -413,10 +409,7 @@ public sealed class WorldCaptureScheduler {
             path1: m_directory,
             path2: frameName
         );
-        var request = new FrameCaptureRequest(
-            path: path,
-            tick: m_regionTick
-        );
+        var request = new FrameCaptureRequest(path: path);
 
         try {
             target.RequestCapture(request: request);

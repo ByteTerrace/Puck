@@ -483,9 +483,11 @@ public sealed partial class SdfEngineNode : ICaptureRequestTarget {
         ++m_produceFrameIndex;
         m_engineProduced = true;
 
-        // A debug verb (world.screenshot) arms a one-shot capture of whatever frame is produced next.
+        // A capture armed on the node (world.screenshot, a captures row naming the world) reads view 0's output, which
+        // shows the state tick of the frame that rendered it.
         m_debugCapture.Serve(
             failureLabel: "[debug] capture failed",
+            tick: m_engine!.OutputStateTick,
             writer: m_writeDebugCapture
         );
 

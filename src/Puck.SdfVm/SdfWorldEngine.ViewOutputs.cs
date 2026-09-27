@@ -34,6 +34,9 @@ public sealed partial class SdfWorldEngine {
 
     // Whether this frame replaced a view's output, whose new image holds nothing yet, so the frame renders.
     private bool m_viewOutputReplaced;
+    // The simulation tick of the state the prepared frame shows (SdfFrame.StateTick), which every view output it records
+    // takes.
+    private ulong? m_frameStateTick;
 
     /// <summary>Gets or sets whether the screen sources the next submitted frame binds hold external content the capture
     /// gate did not fill. Each view output the frame renders records it, and keeps it until a later frame renders that
@@ -348,6 +351,9 @@ public sealed partial class SdfWorldEngine {
         public bool Rendered { get; set; }
         // Whether the frame that last rendered into it bound tainted screen sources.
         public bool Tainted { get; set; }
+        // The simulation tick of the state it shows: the last frame that rendered it, or a later frame the cadence gate
+        // skipped, whose inputs render it pixel for pixel.
+        public ulong? StateTick { get; set; }
         // The ring frame count when it was replaced.
         public ulong RetiredAt { get; set; }
 
