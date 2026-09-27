@@ -16,7 +16,9 @@ namespace Puck.World.Tests;
 /// content class and transport the source contract states. A deterministic producer states the exact image it shows,
 /// and the exact verdict holds against that image and names the first pixel of one that differs. A third producer
 /// registers its shape and its runtime with no change to the document model: a document naming it validates, a settings
-/// member it does not declare is refused by name, and an unregistered id is refused by name. A capture of a world whose
+/// member it does not declare is refused by name, and an unregistered id is refused by name; its source is an instance
+/// of its own source package that the render-graph runtime installs and opens from the instance's settings, with no
+/// planner or runtime change. A capture of a world whose
 /// screen shows a desktop capture shows the declared fill and never acquires the desktop's pixels. A camera source declares
 /// the extent its seat's sensor delivers.
 /// </summary>
@@ -250,6 +252,68 @@ public sealed class ImageProducerLawTests {
             id: "neverRegistered",
             transport: ImageSourceTransport.Uploaded
         )));
+    }
+    // THE LAW (P12b step 9): the third producer reaches the render graph through its own registrations, with no schema,
+    // planner or runtime change. A screen showing its source is an external instance of source.<id> that carries the
+    // source's settings, RegisterPackages registers one upload factory under that package, and the runtime installs the
+    // instance and opens its feed from those settings, as it does for a shipped uploaded producer.
+    [Fact]
+    public void AThirdProducersSourceIsAnInstanceTheRuntimeInstallsThroughItsRegistration() {
+        _ = ThirdRegistered.Value;
+
+        var source = new WorldScreenSource.Producer(
+            Id: ThirdId,
+            Settings: new Dictionary<string, JsonElement>(comparer: StringComparer.Ordinal) { ["level"] = JsonSerializer.SerializeToElement(value: 3) }
+        );
+        var sources = WorldSourceInstances.Of(shown: [source]);
+        var instance = Assert.Single(collection: sources.Instances);
+
+        Assert.Equal(expected: $"source.{ThirdId}", actual: instance.ExternalPackage);
+        Assert.Equal(expected: source, actual: WorldSourceInstances.SourceOf(instance: instance));
+
+        var producers = new WorldImageProducers();
+        var packages = new RenderGraphPackageRecorders();
+        var third = new ThirdUploadProducer();
+
+        producers.Register(producer: third);
+        SourceConversionPackage.RegisterAll(packages: packages);
+        producers.RegisterPackages(
+            adapt: static _ => throw new InvalidOperationException(message: "an uploaded producer's instance is never adapted"),
+            packages: packages
+        );
+
+        Assert.Equal(expected: [$"source.{ThirdId}"], actual: packages.SourceIds);
+        Assert.True(condition: RenderGraphInstanceSet.TryCreate(
+            instances: sources.Instances,
+            refusal: out var setRefusal,
+            set: out var set
+        ), userMessage: setRefusal?.Message);
+        Assert.True(condition: RenderGraphRuntime.TryCreate(
+            pipelines: new GpuPassPipelineCache(),
+            deviceContext: Gpu,
+            graphs: [null],
+            hostsOnDirectX: false,
+            packages: packages,
+            refusal: out var refusal,
+            root: set.Instances[0].Name,
+            runtime: out var runtime,
+            set: set
+        ), userMessage: refusal?.Message);
+
+        using (runtime) {
+            var upload = Assert.IsType<WorldImageSourceUpload>(@object: runtime.Source(instance: 0));
+
+            Assert.Null(@object: upload.Fault);
+            Assert.Equal(
+                expected: (set.Instances[0].Name, $"source.{ThirdId}", ThirdId),
+                actual: (upload.Opening.Context.Instance, upload.Opening.Context.Package, upload.Descriptor!.Producer)
+            );
+            // Opened from the instance's settings, which the producer read through its own shape's member.
+            Assert.Equal(
+                expected: [3],
+                actual: third.Levels
+            );
+        }
     }
     /// <summary>A feed's descriptor is what every consumer reads, so one naming another producer, content class or
     /// transport than its producer's registration is disposed and refused by name when it opens; a feed that agrees
@@ -572,6 +636,39 @@ public sealed class ImageProducerLawTests {
         public nint Handle() => DesktopHandle;
         public void NotifyDeviceLost() { }
         public void Publish(in FrameContext context) { }
+    }
+    // The third producer's runtime: an uploaded producer whose feed writes a one-pixel region, recording the level each
+    // opening read from its source's settings.
+    private sealed class ThirdUploadProducer : IWorldImageProducer {
+        public ImageContentClass Content => ImageContentClass.Presentation;
+        public string Id => ThirdId;
+        public List<int> Levels { get; } = [];
+        public ImageSourceTransport Transport => ImageSourceTransport.Uploaded;
+
+        public bool TryOpen(WorldScreenSource.Producer source, out IWorldImageFeed? feed, out string? fault) {
+            Levels.Add(item: source.Settings!["level"].GetInt32());
+            feed = new ThirdUploadFeed();
+            fault = null;
+
+            return true;
+        }
+    }
+    private sealed class ThirdUploadFeed : IWorldUploadFeed {
+        public ImageSourceDescriptor Descriptor { get; } = new(
+            Cadence: ImageSourceCadence.Tick,
+            Color: ImageColorEncoding.Srgb,
+            Content: ImageContentClass.Presentation,
+            Format: ImagePixelFormat.R8G8B8A8Unorm,
+            Height: 1U,
+            Producer: ThirdId,
+            Transport: ImageSourceTransport.Uploaded,
+            Width: 1U
+        );
+        public string? Fault => null;
+        public Vector3 Light => Vector3.Zero;
+
+        public void Dispose() { }
+        public bool TryWrite(long tick, GpuRegion region) => false;
     }
     // The third producer's shape reads its settings without the world serializer's shipped shapes: it names the one
     // member it declares and refuses any other by name.

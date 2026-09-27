@@ -70,30 +70,6 @@ internal sealed partial class WorldScreenBinder {
 
         return false;
     }
-    /// <summary>Reads a probe's provisioned output ring for <c>probe.status</c>: its extent and how its kernel's writes
-    /// reach the render device.</summary>
-    /// <param name="id">The <c>probes[].id</c> the ring is keyed by.</param>
-    /// <param name="width">The ring's width in pixels, set only when this returns <see langword="true"/>.</param>
-    /// <param name="height">The ring's height in pixels, set only when this returns <see langword="true"/>.</param>
-    /// <param name="order">The ring's order, set only when this returns <see langword="true"/>.</param>
-    /// <returns><see langword="true"/> when the ring is provisioned.</returns>
-    public bool TryReadProbeOutput(string id, out int width, out int height, out SharedFenceOrder order) {
-        if (
-            m_probeFeeds.TryGetValue(
-                key: id,
-                value: out var feed
-            ) &&
-            (feed.Output is { } output)
-        ) {
-            (width, height, order) = (output.Width, output.Height, feed.Order);
-
-            return true;
-        }
-
-        (width, height, order) = (0, 0, SharedFenceOrder.Pending);
-
-        return false;
-    }
     /// <summary>Returns the render adapter's own kernel host, which runs a probe whose trigger socket reads a rendered
     /// source, opening it on the adapter the render device reported the first time one asks.</summary>
     /// <param name="host">The host, set only when this returns <see langword="true"/>; owned by this binder.</param>

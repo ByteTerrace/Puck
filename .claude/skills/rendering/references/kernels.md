@@ -157,7 +157,7 @@ together. `SdfViewsKernelVariantLawTests` pins the host half.
 
 No SDF kernel declares a binding or a register by hand. Every per-view kernel
 includes `isa/sdf-world.interface.hlsli` (through `field/sdf-vm.hlsli`) and the baker
-`sdf-brick-bake.interface.hlsli`, both generated from `SdfWorldInterfaces` and
+`isa/sdf-bricks.interface.hlsli`, both generated from `SdfWorldInterfaces` and
 owned by `puck shaders generate`; the engine creates each pipeline from its
 interface's layout and writes every binding by member name. A binding's
 Direct3D 12 register is its binding number in its group's space, as for every

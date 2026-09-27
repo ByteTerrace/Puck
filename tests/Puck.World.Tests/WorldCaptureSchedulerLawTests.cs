@@ -79,13 +79,16 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
             Served.Add(item: request.Path);
 
             if (Writer is { } writer) {
-                _ = request.Write(writer: writer);
+                _ = request.Write(
+                    tick: (server.NextInputTick - 1UL),
+                    writer: writer
+                );
                 OnServed?.Invoke();
 
                 return;
             }
 
-            _ = request.Write(writer: path => {
+            _ = request.Write(tick: (server.NextInputTick - 1UL), writer: path => {
                 var tick = (server.NextInputTick - 1UL);
                 var rgba = new byte[((8 * 2) * 4)];
                 Span<byte> stamp = stackalloc byte[16];
@@ -206,7 +209,6 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
                         ? WorldTarget
                         : throw new ArgumentException(message: $"The render graph has no instance '{instance}'."))),
                 directory: directory,
-                regionTick: () => (m_row.Server.NextInputTick - 1UL),
                 server: m_row.Server,
                 sources: sources,
                 worldFile: "fixture.world.json"

@@ -7,8 +7,9 @@ namespace Puck.SdfVm;
 // The engine's frequency groups (SdfWorldInterfaces). Every per-view dispatch binds two sets: the ring slot's frame set
 // (set 0), whose block the engine writes once a frame into its frame region, and the ring slot's views set for the view
 // (set 3), whose block, the view's world values, lives in the view's own block region and whose bindings are every
-// table, buffer, image and sampler the dispatches read. The baker binds one set per brick slot: that slot's request
-// buffer and the brick pool, beside a block the engine writes once, and pushes its slice ordinal.
+// table, buffer, image and sampler the dispatches read. The baker binds the ring slot's frame set too, and one set per
+// brick slot: that slot's request buffer and the brick pool, beside a block the engine writes once, and pushes its slice
+// ordinal.
 public sealed partial class SdfWorldEngine {
     private const uint FrameGroup = ((uint)ShaderInterfaceGroup.Frame);
     private const uint PassGroup = ((uint)ShaderInterfaceGroup.Pass);
@@ -20,7 +21,6 @@ public sealed partial class SdfWorldEngine {
     private static readonly uint ScreenSamplerBinding = WorldBinding(member: SdfWorldInterfaces.ScreenSampler);
     // screenSource{i}'s binding, by screen index.
     private static readonly uint[] ScreenSourceBindings = [.. Enumerable.Range(count: MaxScreenSurfaces, start: 0).Select(selector: static screen => WorldBinding(member: SdfWorldInterfaces.ScreenSource(screen: screen)))];
-
     // Where each world value lies in a views set's block.
     private static readonly int ImageExtentOffset = WorldOffset(member: SdfWorldInterfaces.ImageExtent);
     private static readonly int InstanceMaskWordCountOffset = WorldOffset(member: SdfWorldInterfaces.InstanceMaskWordCount);
@@ -32,14 +32,19 @@ public sealed partial class SdfWorldEngine {
 
     // The frame block, written once a frame, and the ring slot's frame set that binds it.
     private readonly GpuRegion m_frameRegion;
+
     private readonly nint[] m_frameSets = new nint[FrameRingSize];
+
     // Per view slot: the region holding the view's world block, one constant buffer per ring slot.
     private readonly GpuRegion[] m_viewBlocks;
+
     // The world values every view shares this frame, the view it names left zero: the cadence signature folds these
     // bytes, so it never depends on which view a set renders.
     private readonly byte[] m_worldBlock = new byte[SdfWorldInterfaces.WorldParameters.SizeBytes];
+
     // The baker's block, the same for every brick slot, written once at construction.
     private readonly IGpuStorageBuffer? m_brickBakeBlock;
+
     // The slice ordinal a bake dispatch pushes.
     private readonly byte[] m_brickBakeIndex = new byte[GpuPipelineLayoutDescription.PushIndexBytes];
 
@@ -58,7 +63,6 @@ public sealed partial class SdfWorldEngine {
         );
     private static int WorldOffset(string member) =>
         ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: member));
-
     // Binds a per-view dispatch's two sets: a ring slot's frame set and the view's views set of the same slot.
     private void BindWorldGroups(nint commandBuffer, IGpuComputePipeline pipeline, nint frameSet, nint viewsSet) {
         var recorder = m_gpu.Recorder;

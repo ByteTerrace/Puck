@@ -1160,7 +1160,31 @@ presentation verb bound over the row (`screen.source <index> <kind>`, a
 the engine binds the image the runtime hands it for a source to every screen
 showing it, under a lease it holds until the submission that sampled it has
 finished. A live bind publishes its source's mapping as a row does. A screen
-showing a view or a session is bound by the binder instead.
+showing a view or a session reads that view's own `sdf.world` instance
+(`WorldViewInstances`), which renders at its footprint's extent.
+
+Every `WorldScreenSource` arm is reproduced by an instance or a producer, and
+each is held by the laws and canaries below. Where a row names no check for
+the drawn image, none exists:
+
+| Arm | Reproduced by | Held by |
+|---|---|---|
+| `none` | no instance: `WorldSourceInstances` names none, and the engine shades the screen as unbound glass | `WorldSourceInstanceLawTests`; `world.screens` echoes `unbound`; no capture inspects the glass |
+| `machine` | `source.machine`, an uploaded instance whose `MachineVideoSourceUpload` writes the output's latest frame once per completed tick | `RenderGraphRuntimeLawTests.AMachineSource*`, `WorldCaptureSchedulerLawTests` (the exact verdict), the `uploaded-sources` and `instrument-clock-source` canaries |
+| `producer`, `testPattern` | `WorldTestPatternProducer`, uploaded | `ImageProducerLawTests.ATestPatternFeedStatesTheExactPatternItShowsAndTheVerdictHoldsIt`, `WorldSourceInstanceLawTests`, the `uploaded-sources` canary |
+| `producer`, `qr` | `WorldQrProducer`, uploaded | `ImageProducerLawTests.AQrFeedStatesTheCodeItRasterized`, the `uploaded-sources` canary |
+| `producer`, `camera` | the binder's `CameraProducer`, imported through `WorldCameraSourceFeed` | `ImageProducerLawTests.ACameraSourceDeclaresTheExtentItsSeatsSensorDelivers`, the `hud-frame-slots` canary (offscreen, it opens no device); a recorded camera run is deferred |
+| `producer`, `capture` | the binder's `CaptureProducer`, imported through `CaptureSlotFeed` | `ImageProducerLawTests.ACaptureOfADesktopCaptureSourceShowsTheFillAndNeverTheDesktopPixels` and `AFilledExternalSourceHandsOutItsFillAndNeverAcquiresItsFeed`, `WorldCaptureFillLawTests`; no canary opens a capture |
+| `view` | an `sdf.world` instance of its own, which `WorldScreenBinder.TryViewProducer` renders | `WorldViewPaneMappingLawTests.Views`, `SdfEngineNodeLeaseLawTests.AViewTakesTheFrameTheNodeRendersNext`, the `view-screens` canary |
+| `session` | an `sdf.world` instance (`WorldViewNames.Session`) rendered through the destination's own frame source | `WorldScreenMappingLawTests.EachSourceKindNamesItsInstance`, `WorldSessionFollowLawTests`; no canary shows a session screen |
+| `text` | no image: the decal tier draws its lines (`WorldScreenTextDecal`, through `TextSourceAt`) | `WorldTextAuthoringLawTests` (`TextScreenSourceValidates`, `TextScreenRefusesWithoutCatalogUnknownFontGridAndColor`, `TextCreationFaceSourceValidates`); no law or canary checks the drawn text |
+| `probe` | `source.probe`, an imported instance over the probe's output ring (`ProbeSourceFeed`) | `WorldSourceInstanceLawTests`, `RenderedProbeKernelHostLawTests`, the `probe-sources` canary |
+
+A producer a host adds needs no schema, planner or runtime change:
+`ImageProducerLawTests.AThirdProducerRegistersWithNoChangeToTheDocumentModel`
+registers a third, fake producer whose documents validate and round-trip, and
+`AThirdProducersSourceIsAnInstanceTheRuntimeInstallsThroughItsRegistration`
+installs its screen's source instance through its own registration.
 
 The engine ships four producers, each with its settings record in
 `WorldImageProducerSettings`:

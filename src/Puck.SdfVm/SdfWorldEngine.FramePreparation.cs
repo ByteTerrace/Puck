@@ -495,6 +495,8 @@ public sealed partial class SdfWorldEngine {
 
         var viewportCount = ((uint)frame.Views.Count);
 
+        m_frameStateTick = frame.StateTick;
+
         if (
             (0 == viewportCount) ||
             (viewportCount > m_viewportCapacity)

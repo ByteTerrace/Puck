@@ -79,13 +79,13 @@ public sealed partial class SdfWorldEngine {
     // The pipeline descriptions every engine shares. A nested holder, so its initializers run after the engine's own
     // statics, whatever order the partial files are compiled in.
     internal static class PipelineLayouts {
-        // Every per-view pipeline binds the sdf-world interface's groups, and the baker the sdf-brick-bake interface's, so
-        // one frame set and one views set per ring slot and view bind against any of the ten per-view pipelines. The mesh
-        // pass draws with the sdf-mesh interface's: one set per ring slot, the view and draw pushed.
+        // Every per-view pipeline binds the sdf-world interface's groups, and the baker the sdf-bricks interface's, so
+        // one frame set and one views set per ring slot and view bind against any of the ten per-view pipelines, and the
+        // frame set against the baker too. The mesh pass draws with the sdf-mesh interface's: one set per ring slot, the
+        // view and draw pushed.
         internal static readonly GpuPipelineLayoutDescription World = SdfWorldInterfaces.WorldLayout.PipelineLayout(stages: GpuShaderStage.Compute);
         internal static readonly GpuPipelineLayoutDescription Mesh = SdfWorldInterfaces.MeshLayout.PipelineLayout(stages: GpuShaderStage.Vertex | GpuShaderStage.Fragment);
         internal static readonly GpuPipelineLayoutDescription BrickBake = SdfWorldInterfaces.BrickBakeLayout.PipelineLayout(stages: GpuShaderStage.Compute);
-
         // Indexed by the *PipelineIndex constants.
         internal static readonly PipelineSpec[] Specs = [
             Spec(name: "sdf-beam", layout: World),
@@ -98,7 +98,7 @@ public sealed partial class SdfWorldEngine {
             Spec(name: "sdf-world-views-core", layout: World),
             Spec(name: "sdf-world-views-folds", layout: World),
             Spec(name: "sdf-sky", layout: World),
-            Spec(name: "sdf-brick-bake", layout: BrickBake, brick: true),
+            Spec(brick: true, layout: BrickBake, name: "sdf-brick-bake"),
         ];
         // The order a build starts the pipelines in (SdfWorldPipelines.Build): the views variants, the longest driver
         // translations, start last, lightest first (core, folds, full), and every other pipeline starts before them in

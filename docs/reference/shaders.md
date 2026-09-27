@@ -142,7 +142,10 @@ descriptor set every frame:
   [arrays](#per-instance-overrides), whose block holds them in ordinal name
   order.
 - The pass group, set 3, whose block `passGroup` holds the pass's `extent` and
-  then its config fields in ordinal name order, followed by its ports.
+  then its config fields in ordinal name order, followed by its ports. Every
+  pass block takes this one spelling (`ShaderFrameInterface.ForPass`): an
+  engine package's declared values, such as the overlay's or the SDF engine's
+  world values, sit among its config fields in ordinal name order.
 
 | Member | Type | Value |
 |--------|------|-------|
@@ -763,9 +766,11 @@ layout; the `pipeline-echo` canary runs one on both backends with
 `pipeline.sentinels` on, and an echo expecting two members' sentinels swapped
 fails it. The `interface-echo` canary runs one echo per shipped interface
 family the same way: the ink simulation, visualize and finish passes (finish's
-blocks, the extent alone, are also the Moth's and the `source-*` conversion
-packages'), the package canary's tint, the `sdf.film-grain` post-process
-package, and the `place` and `overlay` packages. Each echo document declares its target's blocks, and
+blocks, the extent alone, are also the Moth's, the `source-*` conversion
+packages' and the SDF brick baker's, `sdf.bricks`), the package canary's tint,
+the `sdf.film-grain` post-process package, the `place` and `overlay` packages,
+and the SDF engine's per-view pass, `sdf.world`. Each echo document declares
+its target's blocks, a package's declared values as config fields, and
 its perturbed twin expects its last member's first word to hold the next
 word's sentinel.
 
@@ -801,12 +806,13 @@ a `Mismatch` on both backends that names both strides.
 An interface constructed with `pushesIndex: true` declares that its pipeline
 pushes one 4-byte index, the one value a grouped pipeline can push. The SDF
 engine's brick baker (`SdfWorldInterfaces.BrickBake`, the
-interface `sdf-brick-bake`) is the one shipped interface that declares it: it
-pushes each dispatch's slice ordinal. After the groups its include declares:
+interface `sdf-bricks` of the `sdf.bricks` package) is the one shipped
+interface that declares it: it pushes each dispatch's slice ordinal. After the
+groups its include declares:
 
 ```hlsl
 // The pushed index: Vulkan push constants at offset 0, Direct3D 12 root constants at register b0, space 4.
-struct SdfBrickBakePushedIndex {
+struct SdfBricksPushedIndex {
     [[vk::offset(0)]] uint index;
 };
 [[vk::push_constant]] ConstantBuffer<SdfBrickBakePushedIndex> pushedIndex : register(b0, space4);
