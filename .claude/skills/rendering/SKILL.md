@@ -110,6 +110,12 @@ register.
   (called from the ambient pass's `sdfResolveAmbient` in `sdf-surface.hlsli`);
   normals and curvature in `sdfResolveSurface`, a mesh pixel's in
   `sdfResolveMeshSurface`.
+- **Every light answers through one interface.** `sdfLightResponse`
+  (`shade/sdf-light.hlsli`) is the one place a kernel branches on a light's
+  kind, the environment's (`SDF_LIGHT_*`) and a bound screen's
+  (`SdfLightScreen`); the light stage walks `sdfLightAt` over them once. A new
+  kind is a branch there, and `SdfLightInterfaceLawTests` refuses a kind branch
+  anywhere else and a generated kind without one.
 - **Make sure the image is an SDF image.** A `views.graphs` pane (the
   moth studio's side-by-side reference, for one) is a render-graph instance
   with its own shader, placed over the world by the root graph's `place` pass;

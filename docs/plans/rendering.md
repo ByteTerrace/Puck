@@ -4198,10 +4198,7 @@ item 2 landed.
     visibility record, which is the surface sample record (the decisions
     below): primary writes its V, C and L rows, surface the N and S rows, and
     ambient the occlusion in S. The views pass still marches the key light's
-    soft shadow and gathers its candidates, and walks the lights in five
-    loops that each branch on a light's kind (the directional, hemisphere and
-    point diffuse terms, the bound screens' area lights, the rim lights, the
-    point lights' specular lobes and the occluders). The step lands in three
+    soft shadow and gathers its candidates. The step lands in three
     sub-steps:
 
     a. Landed, one record and one body per stage. A mesh hit's triangle rides
@@ -4216,12 +4213,13 @@ item 2 landed.
        views (`debug/sdf-debug-views.hlsli`); the one body the four passes
        compiled through pass macros is gone. `SdfPassPlanLawTests` holds each
        stage's declared reads and writes.
-    b. The lights through one interface. Every light, the environment's and
-       each bound screen's, is one `SdfLight`, and one function answers its
-       response at a surface sample: its diffuse, specular and rim terms and
-       its attenuation. The light stage walks the lights once, and the kind
-       branches outside that function are deleted. Done when parity holds and
-       `puck counters compare` moves nothing but the kernels' bytecode.
+    b. Landed, the lights through one interface. Every light, the
+       environment's and each bound screen's, is one `SdfLight`
+       (`shade/sdf-light.hlsli`), and `sdfLightResponse` answers its diffuse,
+       specular and rim terms and its attenuation at the shaded surface; the
+       light stage walks them once. `SdfLightInterfaceLawTests` holds that no
+       other kernel source branches on a light's kind and that every generated
+       kind has a response.
     c. The shadow stage. A `shadow` pass between ambient and views gathers
        each workgroup's shadow candidates and marches the key light's soft
        shadow into a new row of the record, which grows to sixteen words

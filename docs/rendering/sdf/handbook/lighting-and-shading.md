@@ -177,6 +177,18 @@ deterministic across backends. The three-tap ladder and its one-sample fast
 path are the whole AO story: the cheapest technique with the largest perceptual
 gain, and zero architectural disturbance.
 
+## Every light answers through one interface
+
+The views pass lights a surface by walking one list of lights: the
+environment's (directional, hemisphere, point, rim and occluder, in authored
+order), then every bound screen. Each is one `SdfLight`, and one function,
+`sdfLightResponse` in `shade/sdf-light.hlsli`, answers what it adds at the
+surface: a diffuse term that joins the radiance the material shade lights by, a
+specular lobe (a point light's own), a rim brighten, and a factor on reflected
+light (an occluder's dimming). No other kernel source branches on a light's
+kind, which `SdfLightInterfaceLawTests` holds, so a new kind is one branch of
+that function.
+
 ## Screen lights and the CRT treatment
 
 The reference scene's diegetic screens—the console cabinets' CRTs—are the most
@@ -193,7 +205,7 @@ default) a vignette and a fresnel rim glint. The tuned look is a flat square tub
 of CRT, not a heavy filter.
 
 As a **light**, every bound screen is a colored area light illuminating the
-room. Its position and orientation come from the screen-surface table; its
+room, one of the lights the views pass walks. Its position and orientation come from the screen-surface table; its
 color is the per-frame average of what it's displaying—so a screen showing a
 green field spills green onto the wall beside it. A `dot(screenNormal, −L)` gate
 enforces "light through the glass": a screen only lights what sits in front of
