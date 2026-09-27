@@ -181,7 +181,12 @@ other's screens each show the other's previous frame, never a same-frame loop.
 ```
 
 A hit on a screen showing a view continues through that view's camera into
-the world it films (`RenderGraphHitWalk`), up to the graph's nesting depth.
+the world it films (`RenderGraphHitWalk`), up to the graph's nesting depth. A
+hit on a portal's window continues through the camera the window last rendered
+from into the destination, where no screen stands (a projected destination's
+screens bind dark), and ends on the surface its ray meets among the
+destination's static placements (`RenderGraphHitPath.Surface`).
+
 ## View transitions move regions and switch content
 
 A `ViewLayout` is a snapshot of which view occupies which

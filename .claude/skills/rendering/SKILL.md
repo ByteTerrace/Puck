@@ -1410,7 +1410,12 @@ producer reports those mappings as its placements
 (`WorldViewGraphHost.Screens`), so the walk continues through a screen, and a
 camera view reports them too, so a walk through a screen showing a camera view
 continues into the view through the camera it last filmed from
-(`WorldViewGraphHost.ViewCameras`, the binder); a session reports none. The GPU
+(`WorldViewGraphHost.ViewScenes`, the binder). A session reports no placements
+(the depth-one policy: a projected destination's screens bind dark), and a walk
+through a screen showing one continues through the camera its last frame rendered
+from, a window's fitted camera with its shear, and ends on the surface its ray
+meets among the destination's static placements (`RenderGraphHitPath.Surface`,
+`WorldSessionSceneEmitter.TrySurface`). The GPU
 draws every screen from its mapping: the residency hands each screen's published
 mapping (`ISdfScreenSources.MappingOf`) to `SdfWorldTables.SetScreenMapping`,
 which packs its single-precision draw form (`SourceMapping.Draw`, the warp's

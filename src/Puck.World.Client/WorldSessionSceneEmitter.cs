@@ -1,9 +1,12 @@
 using System.Numerics;
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Presentation;
+using Puck.Commands;
+using Puck.Maths;
 using Puck.SdfVm;
 using Puck.SdfVm.Views;
 using Puck.SignedDistance;
+using Puck.SignedDistance.Queries;
 using Puck.World.Protocol;
 
 namespace Puck.World.Client;
@@ -71,6 +74,11 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     private CameraSnapshot? m_windowOverride;
     // The camera the last dressed frame renders from, which a hit on the session's image continues through.
     private CameraSnapshot? m_dressedCamera;
+    // The last dressed program's fixed-point field, built when a pick first asks for it, and the far distance a pick
+    // marches it to.
+    private SdfFieldEvaluator? m_dressedField;
+    private SdfProgram? m_dressedFieldProgram;
+    private float m_dressedFarDistance;
 
     // Per-avatar movement-driven gait state, scratch reused across frames to keep packing allocation-free — the SAME
     // distance-driven approach Client.WorldSceneEmitter.PackDynamicTransforms uses, over this emitter's own
@@ -297,6 +305,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         ));
 
         m_dressedCamera = camera;
+        m_dressedFarDistance = WorldRenderFarDistance.Resolve(defaults: m_mirror.Definition.Render);
 
         return new SdfFrame(
             Program: program,
@@ -322,7 +331,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             DisableFarBound = true,
             // The mirrored world's own far plane (its render.farDistance), so the panel frames the same depth its
             // authority renders.
-            FarDistance = WorldRenderFarDistance.Resolve(defaults: m_mirror.Definition.Render),
+            FarDistance = m_dressedFarDistance,
             // The mirrored world's static placements' meshes.
             MeshDraws = meshDraws,
             MeshDrawsRevision = meshDrawsRevision,
@@ -479,6 +488,61 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         camera = m_dressedCamera.GetValueOrDefault();
 
         return m_dressedCamera.HasValue;
+    }
+    /// <summary>Finds the surface a ray meets among the destination's static placements a session view shows, marched in
+    /// fixed point (<see cref="SdfFieldEvaluator.Raycast"/>) out to the last dressed frame's far distance. The field is
+    /// the static placements alone, emitted once per dressed program: the fixed-point evaluator takes no dynamic
+    /// transforms, so a mirrored avatar is not a surface a pick lands on.</summary>
+    /// <param name="ray">The ray, in the destination's space.</param>
+    /// <param name="point">The point the ray meets, in the destination's space, when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when a frame has been dressed, the evaluator admits the static placements'
+    /// program, and the ray meets a surface within the far distance.</returns>
+    public bool TrySurface(SourceRay ray, out FixedVector3 point) {
+        point = default;
+
+        if (m_lastProgram is not { } program) {
+            return false;
+        }
+
+        if (!ReferenceEquals(
+            objA: m_dressedFieldProgram,
+            objB: program
+        )) {
+            var definition = m_mirror.Definition;
+            var builder = new SdfProgramBuilder();
+
+            WorldPlacementStamper.EmitStatic(
+                builder: builder,
+                colors: BakedColors(),
+                creations: definition.Creations,
+                definition: definition,
+                placements: definition.Placements
+            );
+            m_dressedFieldProgram = program;
+
+            try {
+                m_dressedField = new SdfFieldEvaluator(program: builder.Build(buildInstanceGrid: false));
+            } catch (ArgumentException) {
+                // A static placement the fixed-point evaluator does not interpret (a path, a non-uniform scale).
+                m_dressedField = null;
+            }
+        }
+
+        if (
+            (m_dressedField is not { } field) ||
+            !field.Raycast(
+                dir: ray.Direction,
+                hit: out var hit,
+                maxDist: FixedQ4816.FromDouble(value: m_dressedFarDistance),
+                origin: FixedPosition.FromLocal(local: ray.Origin)
+            )
+        ) {
+            return false;
+        }
+
+        point = (hit.Point - FixedPosition.Zero);
+
+        return true;
     }
     /// <summary>Writes three components, never their sum: the definition-delivery revision, the mirrored snapshot's
     /// declared-set/palette revision (<see cref="WorldSessionMirror.SnapshotRevision"/>, assigned from the wire and

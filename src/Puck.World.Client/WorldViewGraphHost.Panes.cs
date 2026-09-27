@@ -7,14 +7,21 @@ using Puck.Maths;
 
 namespace Puck.World.Client;
 
-/// <summary>The cameras the views a world renders beside its own film from, which a hit on a screen showing a view
-/// continues through: a camera view's, and a session's in its destination's space.</summary>
-public interface IWorldViewCameras {
+/// <summary>What the views a world renders beside its own show, as a hit on a screen showing a view reads it: the camera
+/// each last rendered from, which the hit continues through (a camera view's, and a session's in its destination's
+/// space), and the surface a ray meets in the world a view renders.</summary>
+public interface IWorldViewScenes {
     /// <summary>Finds the camera a view last rendered from.</summary>
     /// <param name="view">The view's instance name.</param>
     /// <param name="camera">The camera when this returns <see langword="true"/>.</param>
     /// <returns><see langword="true"/> when the view has rendered from a camera.</returns>
     bool TryCamera(string view, out CameraSnapshot camera);
+    /// <summary>Finds the surface a ray meets in the world a view last rendered, in that world's space.</summary>
+    /// <param name="view">The view's instance name.</param>
+    /// <param name="ray">The ray, in the view's world.</param>
+    /// <param name="point">The point, when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when the view answers for its world and the ray meets a surface of it.</returns>
+    bool TrySurface(string view, SourceRay ray, out FixedVector3 point);
 }
 public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
     private readonly Dictionary<string, CameraSnapshot> m_cameras = new(comparer: StringComparer.Ordinal);
@@ -54,9 +61,9 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
     /// reports as its placements, so a hit walk continues from a view through a screen into its source;
     /// <see langword="null"/> reports none.</summary>
     public WorldScreenMappingSet? Screens { get; set; }
-    /// <summary>Gets or sets the cameras the views the world renders beside its own last filmed from, sessions
-    /// included, or <see langword="null"/> for none.</summary>
-    public IWorldViewCameras? ViewCameras { get; set; }
+    /// <summary>Gets or sets what the views the world renders beside its own show — the cameras they last rendered
+    /// from, sessions included, and the surfaces of their worlds — or <see langword="null"/> for none.</summary>
+    public IWorldViewScenes? ViewScenes { get; set; }
 
     /// <summary>Publishes the panes this frame's placements show, to <see cref="Panes"/> and <see cref="Picker"/>: one
     /// <see cref="SourceMapping"/> per placement the root's <c>place</c> passes draw, in drawing order, naming its
@@ -243,7 +250,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
     /// <inheritdoc/>
     /// <remarks>A view's camera is the one its seat rendered from in the frame the panes were published for, a pane's
     /// the named camera its row pairs, recorded by <see cref="SetCamera"/>, and a camera view's or a session's the one it
-    /// last rendered from (<see cref="ViewCameras"/>), a session's in its destination's space.</remarks>
+    /// last rendered from (<see cref="ViewScenes"/>), a session's in its destination's space.</remarks>
     bool IRenderGraphHitScene.TryCamera(int instance, out CameraSnapshot camera) {
         if (
             (m_runtime is { } runtime) &&
@@ -258,8 +265,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
                 return true;
             }
 
-            if (ViewCameras is { } cameras) {
-                return cameras.TryCamera(
+            if (ViewScenes is { } scenes) {
+                return scenes.TryCamera(
                     camera: out camera,
                     view: name
                 );
@@ -267,6 +274,26 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
         }
 
         camera = default;
+
+        return false;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>A view answers through <see cref="ViewScenes"/>: a session finds the surface in its destination's
+    /// world, which is where a pick through a portal lands.</remarks>
+    bool IRenderGraphHitScene.TrySurface(int instance, SourceRay ray, out FixedVector3 point) {
+        if (
+            (ViewScenes is { } scenes) &&
+            (InstanceName(index: instance) is { } name)
+        ) {
+            return scenes.TrySurface(
+                point: out point,
+                ray: ray,
+                view: name
+            );
+        }
+
+        point = default;
 
         return false;
     }

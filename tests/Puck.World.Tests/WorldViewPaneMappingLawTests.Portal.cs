@@ -2,16 +2,18 @@ using System.Numerics;
 using Puck.Abstractions.Cameras;
 using Puck.Commands;
 using Puck.Hosting;
+using Puck.Maths;
 using Puck.SdfVm;
 using Puck.World.Client;
 using Xunit;
 
 namespace Puck.World.Tests;
 
-// A pick through a portal: the portal-window canary's door, whose glass shows a window session onto its destination, is
-// a screen standing in the world, the world's view is a pane, and a display point on the marker's image walks through
-// the pane into the world, onto the glass, and through the camera the session last rendered with into the destination,
-// where no screen stands under the depth-one policy, so the walk ends in the destination's world.
+// A pick through a portal (rendering plan P13's portal check): the portal-window canary's door, whose glass shows a
+// window session onto its destination, is a screen standing in the world, the world's view is a pane, and a display
+// point on the marker's image walks through the pane into the world, onto the glass, and through the camera the session
+// last rendered with into the destination, where no screen stands under the depth-one policy, so the walk ends in the
+// destination's world, on the marker's surface.
 public sealed partial class WorldViewPaneMappingLawTests {
     // The door's window, seen by a seat whose eye is the window's eye, the view on the display's left half, and the
     // session's emitter dressed through the window it fits.
@@ -63,7 +65,7 @@ public sealed partial class WorldViewPaneMappingLawTests {
             );
         }
 
-        m_host.ViewCameras = new SessionCameras(Name: name, Session: session);
+        m_host.ViewScenes = new SessionScenes(Name: name, Session: session);
 
         // The display point the seat shows the marker at: its image point on the left half of the display.
         var direction = (WorldWindowFrustumFitLawTests.Marker - seat.Position);
@@ -75,7 +77,7 @@ public sealed partial class WorldViewPaneMappingLawTests {
     }
 
     [Fact]
-    public void APickThroughAPortalContinuesIntoTheDestinationThroughTheCameraItsWindowRendered() {
+    public void APickThroughAPortalReachesTheDestinationsSurfaceThroughTheCameraItsWindowRendered() {
         var (_, name, marker) = ShowPortal(dress: true);
 
         Frame(pane: null);
@@ -91,6 +93,18 @@ public sealed partial class WorldViewPaneMappingLawTests {
         Assert.Equal(expected: SourceHandle.Instance(name: name), actual: walk.Steps[1].Mapping.Source);
         Assert.True(condition: walk.Steps[1].Hit.IsOnSource);
         Assert.Empty(collection: ((IRenderGraphHitScene)m_host).Placements(instance: walk.Instance));
+
+        // The marker's near surface: half a unit from its centre, toward the window's eye.
+        Assert.True(condition: walk.Surface.HasValue);
+
+        var surface = walk.Surface.GetValueOrDefault().ToVector3();
+
+        Assert.Equal(
+            expected: 0.5f,
+            actual: Vector3.Distance(value1: surface, value2: WorldWindowFrustumFitLawTests.Marker),
+            tolerance: 0.02f
+        );
+        Assert.True(condition: (surface.Z > WorldWindowFrustumFitLawTests.Marker.Z));
     }
     // A session that has rendered nothing has no camera to continue through, so the pick ends on the glass.
     [Fact]
@@ -104,9 +118,11 @@ public sealed partial class WorldViewPaneMappingLawTests {
 
         Assert.Equal(expected: RenderGraphHitEnd.NoCamera, actual: walk.End);
         Assert.Equal(expected: SourceHandle.Instance(name: name), actual: walk.Steps[^1].Mapping.Source);
+        Assert.Null(@object: walk.Surface);
     }
 
-    private sealed record SessionCameras(string Name, WorldSessionSceneEmitter Session) : IWorldViewCameras {
+    // Answers for the session as WorldScreenBinder does: its emitter's camera and surface.
+    private sealed record SessionScenes(string Name, WorldSessionSceneEmitter Session) : IWorldViewScenes {
         public bool TryCamera(string view, out CameraSnapshot camera) {
             if (string.Equals(
                 a: view,
@@ -117,6 +133,22 @@ public sealed partial class WorldViewPaneMappingLawTests {
             }
 
             camera = default;
+
+            return false;
+        }
+        public bool TrySurface(string view, SourceRay ray, out FixedVector3 point) {
+            if (string.Equals(
+                a: view,
+                b: Name,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                return Session.TrySurface(
+                    point: out point,
+                    ray: ray
+                );
+            }
+
+            point = default;
 
             return false;
         }

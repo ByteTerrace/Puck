@@ -77,7 +77,7 @@ internal static class WorldRenderRoot {
         // A walk into a view's world continues through the screens standing in it, and into a camera view through the
         // camera it films from.
         host.Screens = binder.Mappings;
-        host.ViewCameras = binder;
+        host.ViewScenes = binder;
 
         var synthesized = ((definition.Views.Root is null)
             ? graph

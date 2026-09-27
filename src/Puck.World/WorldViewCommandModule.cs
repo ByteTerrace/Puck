@@ -108,6 +108,11 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
         provider: CultureInfo.InvariantCulture,
         handler: $"{((step.Mapping.Source.Kind == SourceHandleKind.Producer) ? "producer" : "instance")}:{step.Mapping.Source.Name} {(step.Hit.IsOnSource ? $"pixel {step.Hit.PixelX},{step.Hit.PixelY}" : "off-source")}"
     );
+    // A point as the echo prints it, to two decimals.
+    private static string DescribePoint(Vector3 point) => string.Create(
+        provider: CultureInfo.InvariantCulture,
+        handler: $"{point.X:0.##},{point.Y:0.##},{point.Z:0.##}"
+    );
     // A published pane's position in drawing order, found by reference; -1 when it is no longer published.
     private static int IndexOf(IReadOnlyList<SourceMapping> panes, SourceMapping pane) {
         for (var index = 0; (index < panes.Count); index++) {
@@ -188,7 +193,7 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
                 ? "no-runtime"
                 : string.Create(
                     provider: CultureInfo.InvariantCulture,
-                    handler: $"{walk.End} steps={walk.Steps.Count}{((walk.Instance >= 0) ? $" in {host.InstanceName(index: walk.Instance)}" : string.Empty)}{((walk.Steps.Count > 0) ? $" last {DescribeStep(step: walk.Steps[^1])}" : string.Empty)}"
+                    handler: $"{walk.End} steps={walk.Steps.Count}{((walk.Instance >= 0) ? $" in {host.InstanceName(index: walk.Instance)}" : string.Empty)}{((walk.Steps.Count > 0) ? $" last {DescribeStep(step: walk.Steps[^1])}" : string.Empty)}{((walk.Surface is { } surface) ? $" surface {DescribePoint(point: surface.ToVector3())}" : string.Empty)}"
                 ));
 
             _ = builder.Append(
@@ -345,7 +350,7 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.view.panes",
-            description: "Echoes the panes the render graph's root last published, in drawing order (the world's shown views, then the views.graphs panes): world.view.panes [<x> <y>] — the display extent and, per pane, its SourceMapping (the source by its instance handle, the pane's normalized rect, the source extent the instance last rendered at, the crop, layout, fit, any warp and the destination). Given a display point in display pixels from the top-left corner, it also echoes what the presentation picker answers there (pick=<kind>:<instance> pixel <x>,<y>, or none off every source) and how the hit walk through the live instance set ends (walk=<end> steps=<n>, the instance whose world it ended in, and last <kind>:<source> pixel <x>,<y>, or off-source, for its last hit: a pane, or a screen standing in a view's world, whose mapping world.screens prints). It ends with the pane the pointer hovers, as the drawn cursor's feed last asked the same picker for the pointer's display point each frame (hovered=pane<i> <kind>:<instance> pixel <x>,<y>, which the overlay outlines in the accent hue, or none: no pointer on the window, a steering drag, a hidden cursor policy, a letterbox bar, or no published pane beneath). The pipeline pane pointer maps through the same published mapping. A query (always echoes); refused by name in a boot with no GPU presentation.",
+            description: "Echoes the panes the render graph's root last published, in drawing order (the world's shown views, then the views.graphs panes): world.view.panes [<x> <y>] — the display extent and, per pane, its SourceMapping (the source by its instance handle, the pane's normalized rect, the source extent the instance last rendered at, the crop, layout, fit, any warp and the destination). Given a display point in display pixels from the top-left corner, it also echoes what the presentation picker answers there (pick=<kind>:<instance> pixel <x>,<y>, or none off every source) and how the hit walk through the live instance set ends (walk=<end> steps=<n>, the instance whose world it ended in, and last <kind>:<source> pixel <x>,<y>, or off-source, for its last hit: a pane, or a screen standing in a view's world, whose mapping world.screens prints, then, when the walk ends in a session's world, surface <x>,<y>,<z>: where its last ray meets the destination's static placements, in the destination's space, so a pick through a portal names the point it lands on). It ends with the pane the pointer hovers, as the drawn cursor's feed last asked the same picker for the pointer's display point each frame (hovered=pane<i> <kind>:<instance> pixel <x>,<y>, which the overlay outlines in the accent hue, or none: no pointer on the window, a steering drag, a hidden cursor policy, a letterbox bar, or no published pane beneath). The pipeline pane pointer maps through the same published mapping. A query (always echoes); refused by name in a boot with no GPU presentation.",
             handler: (context, args) => DescribePanes(args: args),
             routing: CommandRouting.Immediate
         );
