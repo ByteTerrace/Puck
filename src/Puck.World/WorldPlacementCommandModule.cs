@@ -475,7 +475,7 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
                 rendersEveryFrame: session.RendersEveryFrame
             );
 
-            return $" session={session.Destination} camera={cameraText} generation=gen{session.GenerationId}@{session.InstanceName} lease={leaseText}{projectionText}";
+            return $" session={session.Destination} as={session.Session.Describe()} disclosure={session.Tier.ToString().ToLowerInvariant()} camera={cameraText} generation=gen{session.GenerationId}@{session.InstanceName} lease={leaseText}{projectionText}";
         }
 
         foreach (var faceOverride in (placement.FaceSources ?? [])) {

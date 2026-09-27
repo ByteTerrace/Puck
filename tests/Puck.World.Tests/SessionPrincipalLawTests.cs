@@ -67,7 +67,8 @@ public sealed class SessionPrincipalLawTests {
             condition: fixture.Server.TryAdmitSession(
                 refusal: out var refusal,
                 session: out var session,
-                sourceAuthority: Viewer
+                sourceAuthority: Viewer,
+                tier: out _
             ),
             userMessage: refusal
         );
@@ -748,7 +749,8 @@ public sealed class SessionPrincipalLawTests {
                 condition: restored.TryAdmitSession(
                     refusal: out refusal,
                     session: out var next,
-                    sourceAuthority: Viewer
+                    sourceAuthority: Viewer,
+                    tier: out _
                 ),
                 userMessage: refusal
             );

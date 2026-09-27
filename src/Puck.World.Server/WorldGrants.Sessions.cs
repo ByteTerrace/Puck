@@ -61,11 +61,29 @@ public sealed partial class WorldGrants {
         (principal.Kind == PrincipalKind.Session)
     );
 
+    /// <summary>Determines whether a live session holds <c>observe all</c>, its whole-world view: what its observation
+    /// is delivered while it does.</summary>
+    /// <param name="session">The session principal.</param>
+    /// <returns><see langword="true"/> when the session observes.</returns>
+    public bool ObservesAsSession(Principal session) => (
+        IsLiveSession(principal: session) &&
+        Allows(
+            capability: WorldCapability.Observe,
+            principal: session,
+            subject: GrantSubject.All
+        ).IsAllowed
+    );
     /// <summary>Determines whether a principal names a live session of this world: its ordinal is admitted and carries
     /// this epoch.</summary>
     /// <param name="principal">The principal.</param>
     /// <returns><see langword="true"/> when the principal is a live session.</returns>
     public bool IsLiveSession(Principal principal) => (
+        IsAdmittedSession(principal: principal) &&
+        !m_sessions[principal.Index].Faulted
+    );
+
+    // Whether a principal names an admitted session, faulted or not: the one an end still applies to.
+    private bool IsAdmittedSession(Principal principal) => (
         (principal.Kind == PrincipalKind.Session) &&
         m_sessions.TryGetValue(
             key: principal.Index,
@@ -73,7 +91,20 @@ public sealed partial class WorldGrants {
         ) &&
         (entry.Principal == principal)
     );
+    // Whether a principal is a session that no longer acts: never admitted, ended, or faulted.
+    private bool IsStaleSession(Principal principal) => (
+        (principal.Kind == PrincipalKind.Session) &&
+        !IsLiveSession(principal: principal)
+    );
 
+    /// <summary>Marks a session whose observer faulted: from this moment it is not live, so the grant table holds
+    /// nothing for it and every submission naming it is refused as stale, until its end applies at the next step.</summary>
+    /// <param name="session">The session principal.</param>
+    internal void MarkSessionFaulted(Principal session) {
+        if (IsAdmittedSession(principal: session)) {
+            m_sessions[session.Index].Faulted = true;
+        }
+    }
     /// <summary>Admits an unembodied session: the world's own <c>admission</c> policy decides, through the arrival
     /// verdict an in-process authority receives (<see cref="WorldAdmissionDoor.TryAdmitArrival"/>), what a viewer
     /// observing from <paramref name="sourceAuthority"/> is granted. It takes no population entry and no body: only the
@@ -81,9 +112,10 @@ public sealed partial class WorldGrants {
     /// <see cref="TryEmbodySession"/>. Called on the thread that steps this world.</summary>
     /// <param name="sourceAuthority">The authority the viewer observes from.</param>
     /// <param name="session">The admitted session principal, on success.</param>
+    /// <param name="tier">What the verdict discloses of this world to the session's observation.</param>
     /// <param name="refusal">The named refusal, on failure.</param>
     /// <returns><see langword="true"/> when the session was admitted.</returns>
-    internal bool TryAdmitSession(string sourceAuthority, out Principal session, out string refusal) {
+    internal bool TryAdmitSession(string sourceAuthority, out Principal session, out WorldDisclosureTier tier, out string refusal) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: sourceAuthority);
 
         if (WorldAdmissionDoor.TryAdmitArrival(
@@ -92,10 +124,13 @@ public sealed partial class WorldGrants {
             verdict: out var verdict
         ) is { } refused) {
             session = default;
+            tier = WorldDisclosureTier.Frames;
             refusal = $"a session observing from '{sourceAuthority}' is refused: {refused}";
 
             return false;
         }
+
+        tier = verdict!.Tier;
 
         var ordinal = 0;
 
@@ -177,13 +212,13 @@ public sealed partial class WorldGrants {
 
         return true;
     }
-    /// <summary>Ends a live session: revokes every row it holds and retires its epoch, so a submission still carrying
-    /// the principal is refused as stale. Called on the thread that steps this world.</summary>
+    /// <summary>Ends an admitted session, a faulted one included: revokes every row it holds and retires its epoch, so a
+    /// submission still carrying the principal is refused as stale. Called on the thread that steps this world.</summary>
     /// <param name="session">The session principal.</param>
     /// <param name="refusal">The named refusal, on failure.</param>
     /// <returns><see langword="true"/> when the session ended.</returns>
     internal bool EndSession(Principal session, out string refusal) {
-        if (!IsLiveSession(principal: session)) {
+        if (!IsAdmittedSession(principal: session)) {
             refusal = $"{session.Describe()} is not a live session on this world";
 
             return false;
@@ -211,6 +246,26 @@ public sealed partial class WorldGrants {
             val1: session.Generation,
             val2: m_sessionEpochs.GetValueOrDefault(key: session.Index)
         );
+        // A re-driven admission can land on an ordinal a newer session holds (a replay drive over a world a screen
+        // observes): that session ends here, its rows revoked and its observation detached, so it never lingers
+        // unobserved beneath the recorded one.
+        if (
+            m_sessions.TryGetValue(
+            key: session.Index,
+            value: out var displaced
+        ) &&
+            (displaced.Principal != session)
+        ) {
+            foreach (var row in Rows(principal: displaced.Principal)) {
+                Host.Revoke(
+                    actor: Principal.Console,
+                    grant: row
+                );
+            }
+
+            Host.DetachSessionSink(session: displaced.Principal);
+        }
+
         m_sessions[session.Index] = new SessionEntry(
             principal: session,
             templates: admitted.Templates
@@ -249,6 +304,7 @@ public sealed partial class WorldGrants {
         }
 
         _ = m_sessions.Remove(key: ended.Session.Index);
+        Host.DetachSessionSink(session: ended.Session);
     }
     /// <summary>Describes every live session as the events that would re-establish it as it stands: its admission,
     /// carrying every row it holds now, then its embodiment when it has one. A replay tape armed while sessions live
@@ -276,9 +332,13 @@ public sealed partial class WorldGrants {
 
         return events;
     }
-    /// <summary>Ends every live session at a rebuild: the reset wiped their rows, and no template survives it. Their
-    /// epochs stay retired, so a screen observing through one admits a new session under the candidate's policy.</summary>
-    internal void EndSessionsForRebuild() => m_sessions.Clear();
+    /// <summary>Ends every live session at a rebuild, detaching each observation: the reset wiped their rows, and no
+    /// template survives it. Their epochs stay retired, so a screen observing through one admits a new session under
+    /// the candidate's policy.</summary>
+    internal void EndSessionsForRebuild() {
+        m_sessions.Clear();
+        Host.DetachSessionSinks();
+    }
     /// <summary>Revokes the rows any session holds over a body a later generation now occupies, and forgets that
     /// embodiment: the incarnation it drove has left, so it never drives the next occupant. Every door that activates
     /// a body under a new generation calls this once the body is live: a peer admission's server event (beside the
@@ -313,6 +373,8 @@ public sealed partial class WorldGrants {
     private sealed class SessionEntry(Principal principal, IReadOnlyList<WorldAdmissionGrant> templates) {
         public int BodyGeneration { get; set; }
         public int? BodyIndex { get; set; }
+        // Set the moment the session's observer faulted: it acts no more, though its end applies at the next step.
+        public bool Faulted { get; set; }
 
         public Principal Principal { get; } = principal;
         public IReadOnlyList<WorldAdmissionGrant> Templates { get; } = templates;

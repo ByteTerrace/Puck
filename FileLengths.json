@@ -26,7 +26,7 @@
         "src/Puck.World.Schema/WorldNameRegistry.cs": 2042,
         "src/Puck.World.Server/WorldBody.Step.cs": 2167,
         "src/Puck.World.Server/WorldDocument.Compose.cs": 2129,
-        "src/Puck.World.Server/WorldGrants.cs": 2208,
+        "src/Puck.World.Server/WorldGrants.cs": 2147,
         "src/Puck.World.Server/WorldInstanceHost.Transfers.cs": 2356,
         "src/Puck.World.Silo/WorldSiloHost.cs": 2077,
         "src/Puck.World.Transpiler/Lowering/WorldDocumentEmitter.Sql.cs": 2276,
