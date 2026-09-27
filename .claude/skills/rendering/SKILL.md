@@ -264,13 +264,20 @@ These are one-line cautions; the owning pages hold the derivations.
   whichever submission the device makes next. A published value of zero means
   the write finished on the CPU (a device that cannot share the fence); never
   add a wait for it. A new path that samples a shared slot carries its wait on
-  the lease, never through the submitter directly. A view export orders the
-  other direction with the exported image's own shared fence: the engine's
-  `SubmitFrame` calls `IGpuExportableImage.CompleteWrite`, which queues the
-  fence's next value behind the submission (`SdfWorldEngine.ExportWrittenValue`,
-  never a queue drain), `ViewExportRing` publishes it, and a Direct3D 11 reader
-  queues `Win32D3D11FenceWait.Wait` before it reads; the consumer-to-producer
-  order stays the CPU slot lease. A probe kernel runs on a host's own Direct3D
+  the lease, never through the submitter directly. A fence more than one
+  producer signals over time (a probe's output ring, whose run restarts) takes
+  its values from the ring (`LatestSlotPublication.NextFenceValue`), so they
+  never fall. A view export orders the other direction with a shared fence of
+  the exported texture: the engine's `SubmitFrame` calls
+  `IGpuExportableImage.CompleteWrite`, which queues the fence's next value
+  behind the submission (`SdfWorldEngine.ExportWrittenValue`, never a queue
+  drain), `SingleSlotPublication` publishes it, and a Direct3D 11 reader queues
+  `Win32D3D11FenceWait.Wait` before it reads; the consumer-to-producer order
+  stays the CPU slot lease, and retiring an export never waits for a reader. On
+  the Vulkan host the exported texture and fence come from the binder's headless
+  Direct3D 12 device and the render device imports both to write and signal
+  (`IGpuSurfaceTransferFactory.TryImportWritable`, `VulkanQueueSubmitter.Signal`);
+  a camera extent edit makes the export again. A probe kernel runs on a host's own Direct3D
   11 device: a camera graph's, or, when its trigger socket reads a view or a
   probe and no socket binds a camera, the render adapter's
   (`IRenderedProbeKernelHost`, opened by the binder, woken once a frame, cycling

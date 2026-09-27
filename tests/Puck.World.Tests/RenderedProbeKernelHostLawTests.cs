@@ -7,6 +7,7 @@ using Puck.DirectX.Interop;
 using Puck.Platform;
 using Puck.Platform.Probes;
 using Puck.Platform.Windows;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -17,8 +18,8 @@ namespace Puck.World.Tests;
 /// writer's submission that clears it waits behind a gate the law holds shut, and the ring publishes the value the clear
 /// signals (<see cref="IGpuExportableImage.CompleteWrite"/>). A kernel that read without waiting would measure the white
 /// it found; the host's kernel measures nothing while the gate is shut, and black once it opens. The writer is the
-/// Direct3D 12 device that exports the texture. A kernel run restarted over its output ring continues the ring's fence
-/// values.
+/// Direct3D 12 device that exports the texture, or a Vulkan device that imports a texture and a fence a Direct3D 12 device
+/// on its adapter made (<see cref="IGpuSurfaceTransferFactory.TryImportWritable"/>), as a Vulkan host's view export does.
 /// </summary>
 [SupportedOSPlatform("windows10.0.15063")]
 public sealed unsafe class RenderedProbeKernelHostLawTests {
@@ -54,6 +55,77 @@ public sealed unsafe class RenderedProbeKernelHostLawTests {
             services: context.Services,
             waitedGate: gate
         );
+    }
+    [Fact]
+    public void AKernelOnTheRenderAdapterReadsAVulkanWriteIntoAnImportedTextureOnlyOnceTheImportedFenceReachesItsValue() {
+        using var vulkan = HeadlessVulkanDevice.Create(applicationName: nameof(RenderedProbeKernelHostLawTests));
+        using var writer = (SharedFenceWriter.TryCreate(warp: false) ?? Skipped<SharedFenceWriter>(reason: "no Direct3D 11 hardware device on this host"));
+
+        if (writer.AdapterLuid != vulkan.AdapterLuid) {
+            Assert.Skip(reason: $"the Vulkan device '{vulkan.Name}' is not on the Direct3D 11 writer's adapter");
+        }
+
+        using var context = Direct3D12(adapterLuid: vulkan.AdapterLuid);
+        var export = new DirectXGpuSurfaceExportFactory(deviceContext: context);
+        using var texture = export.CreateSharedComputeImage(
+            format: GpuPixelFormat.R8G8B8A8Unorm,
+            height: Extent,
+            width: Extent
+        );
+        using var fence = export.CreateExportableFence();
+        using var gate = ((DirectXExportableFence)export.CreateExportableFence());
+        var transfers = vulkan.Services.SurfaceTransferFactory;
+
+        if (!transfers.TryImportFence(
+            fence: out var waitedGate,
+            refusal: out var gateRefusal,
+            sharedHandle: gate.SharedHandle
+        )) {
+            Assert.Skip(reason: $"the Vulkan device imports no shared fence: {gateRefusal}");
+        }
+
+        using (waitedGate) {
+            Assert.True(
+                condition: transfers.TryImportWritable(
+                    format: texture.Format,
+                    height: Extent,
+                    image: out var imported,
+                    refusal: out var refusal,
+                    sharedFenceHandle: fence.SharedHandle,
+                    sharedHandle: texture.SharedHandle,
+                    usage: texture.Usage,
+                    width: Extent
+                ),
+                userMessage: refusal
+            );
+
+            using (imported) {
+                Assert.Equal(
+                    actual: imported.SharedHandle,
+                    expected: texture.SharedHandle
+                );
+                Assert.Equal(
+                    actual: imported.SharedFenceHandle,
+                    expected: fence.SharedHandle
+                );
+                FillWhite(
+                    sharedHandle: texture.SharedHandle,
+                    writer: writer
+                );
+
+                try {
+                    ClearBehindTheGate(
+                        adapterLuid: vulkan.AdapterLuid,
+                        gate: gate,
+                        image: imported,
+                        services: vulkan.Services,
+                        waitedGate: waitedGate
+                    );
+                } finally {
+                    vulkan.WaitIdle();
+                }
+            }
+        }
     }
     [Fact]
     public void AKernelRunRestartedOverItsOutputRingContinuesTheRingsFenceValues() {

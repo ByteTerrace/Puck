@@ -602,6 +602,12 @@ internal sealed class FakeGpuDevice :
 
         return false;
     }
+    bool IGpuSurfaceTransferFactory.TryImportWritable(nint sharedHandle, nint sharedFenceHandle, GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, [NotNullWhen(true)] out IGpuExportableImage? image, out string refusal) {
+        image = null;
+        refusal = "the fake device imports no image";
+
+        return false;
+    }
     IGpuSurfaceReadback IGpuSurfaceTransferFactory.CreateReadback() => new Readback(reportVersion: m_reportVersion);
     IGpuSurfaceUpload IGpuSurfaceTransferFactory.CreateUpload() => new SurfaceUpload();
 

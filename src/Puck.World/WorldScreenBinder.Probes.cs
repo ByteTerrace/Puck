@@ -4,6 +4,7 @@ using System.Runtime.Versioning;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Sources;
 using Puck.DirectX;
+using Puck.DirectX.Apis;
 using Puck.DirectX.Interop;
 using Puck.Platform;
 using Puck.Platform.Probes;
@@ -66,6 +67,30 @@ internal sealed partial class WorldScreenBinder {
         output = default;
         generation = null;
         fault = (feed.Fault ?? "probe output awaiting provisioning");
+
+        return false;
+    }
+    /// <summary>Reads a probe's provisioned output ring for <c>probe.status</c>: its extent and how its kernel's writes
+    /// reach the render device.</summary>
+    /// <param name="id">The <c>probes[].id</c> the ring is keyed by.</param>
+    /// <param name="width">The ring's width in pixels, set only when this returns <see langword="true"/>.</param>
+    /// <param name="height">The ring's height in pixels, set only when this returns <see langword="true"/>.</param>
+    /// <param name="order">The ring's order, set only when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when the ring is provisioned.</returns>
+    public bool TryReadProbeOutput(string id, out int width, out int height, out SharedFenceOrder order) {
+        if (
+            m_probeFeeds.TryGetValue(
+                key: id,
+                value: out var feed
+            ) &&
+            (feed.Output is { } output)
+        ) {
+            (width, height, order) = (output.Width, output.Height, feed.Order);
+
+            return true;
+        }
+
+        (width, height, order) = (0, 0, SharedFenceOrder.Pending);
 
         return false;
     }
@@ -148,11 +173,11 @@ internal sealed partial class WorldScreenBinder {
         return (Ok: true, Message: $"screen {index} showing probe '{id}'");
     }
     /// <summary>Reads a named camera's offscreen view as a kernel input ring, registering the view for export on first
-    /// request; the ring arrives at a later publish. Export needs the Direct3D 12 host: the offscreen engine's
-    /// exportable image is opened by a probe kernel host's Direct3D 11 <c>OpenSharedResource1</c>, which waits for each
-    /// frame on the image's shared fence, and a Vulkan host's exported handle is Vulkan-to-Vulkan only (see
-    /// <see cref="Puck.Vulkan.VulkanGpuExportableImage"/>'s own remarks) — refused loudly here rather than silently
-    /// producing a ring nothing can read.</summary>
+    /// request; the ring arrives at a later publish. The exported image is a Direct3D 12 simultaneous-access texture a
+    /// probe kernel host's Direct3D 11 <c>OpenSharedResource1</c> opens, and each frame is published with the value its
+    /// write signals on a shared fence the kernel waits for: on the Direct3D 12 host the render device's own texture and
+    /// fence, and on the Vulkan host a texture and fence made on the binder's headless Direct3D 12 device, which the
+    /// render device imports to write and signal (<see cref="IGpuSurfaceTransferFactory.TryImportWritable"/>).</summary>
     /// <param name="cameraName">The <c>cameras[]</c> row name.</param>
     /// <param name="ring">The exported ring, set only when this returns <see langword="true"/>.</param>
     /// <param name="generation">The export's identity — fresh on every (re)creation, for example after device loss —
@@ -175,15 +200,12 @@ internal sealed partial class WorldScreenBinder {
             return false;
         }
 
-        if (
-            !m_hostsOnDirectX ||
-            !OperatingSystem.IsWindowsVersionAtLeast(
+        if (!OperatingSystem.IsWindowsVersionAtLeast(
             major: 10,
             minor: 0,
             build: 10240
-        )
-        ) {
-            fault = "view export needs the DirectX host";
+        )) {
+            fault = "view export needs Windows 10";
 
             return false;
         }
@@ -338,17 +360,71 @@ internal sealed partial class WorldScreenBinder {
             width: width
         );
 
-        registration.ExportFactory = device => new DirectXGpuSurfaceExportFactory(deviceContext: ((DirectXDeviceContext)device)).CreateSharedComputeImage(
-            format: GpuPixelFormat.R8G8B8A8Unorm,
-            height: height,
-            width: width
-        );
+        registration.ExportFactory = (m_hostsOnDirectX
+            ? device => new DirectXGpuSurfaceExportFactory(deviceContext: ((DirectXDeviceContext)device)).CreateSharedComputeImage(
+                format: GpuPixelFormat.R8G8B8A8Unorm,
+                height: height,
+                width: width
+            )
+            : device => CreateImportedViewExport(
+                device: device,
+                height: height,
+                width: width
+            ));
         registration.EndExportWrite = feed.EndWrite;
         registration.TryBeginExportWrite = feed.Slots.TryBeginWrite;
         m_viewExports[camera.Name] = feed;
         ReconcileViews();
 
         return feed;
+    }
+    // The Vulkan host's view export: a Direct3D 12 simultaneous-access texture and a shared fence made on the binder's
+    // headless Direct3D 12 device on the render adapter, which the render device imports to write and to signal, as the
+    // camera route imports the targets it samples. The export owns all three and holds the headless device until it goes.
+    [SupportedOSPlatform("windows10.0.10240")]
+    private ImportedViewExport CreateImportedViewExport(IGpuDeviceContext device, uint width, uint height) {
+        var adapterLuid = (m_renderAdapterLuid ?? throw new InvalidOperationException(message: "a view export needs the render adapter's LUID"));
+        var targetDevice = (m_cameraTargetDevice ??= new DisposeAfterDependents<IDisposable>(resource: new DirectXDeviceContext(
+            adapterLuid: adapterLuid,
+            deviceApi: new DirectXNativeDeviceApi(),
+            minimumFeatureLevel: DirectXFeatureLevel.Level110
+        )));
+        var export = new DirectXGpuSurfaceExportFactory(deviceContext: ((DirectXDeviceContext)targetDevice.Resource));
+        var texture = export.CreateSharedComputeImage(
+            format: GpuPixelFormat.R8G8B8A8Unorm,
+            height: height,
+            width: width
+        );
+        IGpuExportableFence? fence = null;
+
+        try {
+            fence = export.CreateExportableFence();
+
+            if (!device.Services.SurfaceTransferFactory.TryImportWritable(
+                format: texture.Format,
+                height: height,
+                image: out var imported,
+                refusal: out var refusal,
+                sharedFenceHandle: fence.SharedHandle,
+                sharedHandle: texture.SharedHandle,
+                usage: texture.Usage,
+                width: width
+            )) {
+                throw new InvalidOperationException(message: $"the render device cannot write a view export: {refusal}");
+            }
+
+            return new ImportedViewExport(
+                fence: fence,
+                imported: imported,
+                targetDevice: targetDevice,
+                texture: texture
+            );
+        } catch {
+            fence?.Dispose();
+            texture.Dispose();
+
+            throw;
+        }
     }
     private ProbeFeed GetOrAddProbeFeed(string id) {
         if (!m_probeFeeds.TryGetValue(
@@ -573,6 +649,47 @@ internal sealed partial class WorldScreenBinder {
         public nint Handle() => feed.Handle();
         public void NotifyDeviceLost() { }
         public void Publish(in FrameContext context) { }
+    }
+    // A view export on the Vulkan host: the render device's import of a texture and a fence the binder's headless
+    // Direct3D 12 device made, which the engine writes and signals as it would an image of its own. The import goes first,
+    // then the fence and the texture, and the headless device last of all.
+    private sealed class ImportedViewExport : IGpuExportableImage {
+        private readonly IGpuExportableFence m_fence;
+        private readonly IGpuExportableImage m_imported;
+        private readonly DisposeAfterDependents<IDisposable> m_targetDevice;
+        private readonly IGpuExportableImage m_texture;
+
+        private bool m_disposed;
+
+        public ImportedViewExport(IGpuExportableImage imported, IGpuExportableImage texture, IGpuExportableFence fence, DisposeAfterDependents<IDisposable> targetDevice) {
+            m_fence = fence;
+            m_imported = imported;
+            m_targetDevice = targetDevice;
+            m_texture = texture;
+            targetDevice.AddDependent();
+        }
+
+        public GpuPixelFormat Format => m_imported.Format;
+        public uint Height => m_imported.Height;
+        public nint ImageHandle => m_imported.ImageHandle;
+        public nint ImageViewHandle => m_imported.ImageViewHandle;
+        public nint SharedFenceHandle => m_imported.SharedFenceHandle;
+        public nint SharedHandle => m_imported.SharedHandle;
+        public GpuImageUsage Usage => m_imported.Usage;
+        public uint Width => m_imported.Width;
+
+        public ulong CompleteWrite() => m_imported.CompleteWrite();
+        public void Dispose() {
+            if (m_disposed) {
+                return;
+            }
+
+            m_disposed = true;
+            m_imported.Dispose();
+            m_fence.Dispose();
+            m_texture.Dispose();
+            m_targetDevice.RemoveDependent();
+        }
     }
     // One camera's export state, keyed by camera name: the registration it exports, the extent its image was made at, and
     // the one-image publication its readers share. It carries no GPU handle of its own — the view's engine's exported

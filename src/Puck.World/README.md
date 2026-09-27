@@ -1499,10 +1499,13 @@ instance's own seat, the same convention a `screens` row and a HUD `Frame`
 element follow; every camera socket in one probe must resolve to the same seat,
 because one kernel run has one host graph; `profile` is honored while source
 `controls` are refused in favor of probe control bindings or camera-screen
-authoring), `view` (a named `cameras[]` row's offscreen render on the Direct3D
-12 host, exported as a kernel-readable image that holds the last complete frame
-while a kernel reads, each frame published with the value the exporting engine
-signals on the image's shared fence, which the kernel waits for),
+authoring), `view` (a named `cameras[]` row's offscreen render, exported at the
+camera's extent as a Direct3D 12 simultaneous-access texture that holds the
+last complete frame while a kernel reads, each frame published with the value
+the exporting engine signals on the texture's shared fence, which the kernel
+waits for; on the Vulkan host the texture and fence come from the binder's
+headless Direct3D 12 device and the render device imports both, and a camera
+extent edit makes the export again),
 `probe` (another declared probe's
 own texture output, read back as a ring). Any other producer is part of the
 shared frame-source vocabulary but is refused on a probe socket until a kernel

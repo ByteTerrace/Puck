@@ -118,4 +118,5 @@ internal sealed class RefusingGpuDevice :
     IGpuSurfaceReadback IGpuSurfaceTransferFactory.CreateReadback() => throw Reach(member: "IGpuSurfaceTransferFactory.CreateReadback");
     IGpuSurfaceUpload IGpuSurfaceTransferFactory.CreateUpload() => throw Reach(member: "IGpuSurfaceTransferFactory.CreateUpload");
     bool IGpuSurfaceTransferFactory.TryImportFence(nint sharedHandle, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IGpuSharedFence? fence, out string refusal) => throw Reach(member: "IGpuSurfaceTransferFactory.TryImportFence");
+    bool IGpuSurfaceTransferFactory.TryImportWritable(nint sharedHandle, nint sharedFenceHandle, GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IGpuExportableImage? image, out string refusal) => throw Reach(member: "IGpuSurfaceTransferFactory.TryImportWritable");
 }

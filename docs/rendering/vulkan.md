@@ -449,6 +449,14 @@ command buffers keeps the list. `VulkanQueueSubmitter`'s submits take the wait s
 values directly. The order back, from consumer to producer, is the CPU slot lease the consumer
 releases once its own fence has signalled.
 
+The other direction, a Vulkan write a Direct3D 11 device reads (a camera view exported to a probe),
+imports what a Direct3D 12 device made: `IGpuSurfaceTransferFactory.TryImportWritable` imports a
+Direct3D 12 simultaneous-access texture with the usages the writer declares and a Direct3D 12 shared
+fence as a timeline semaphore (`VulkanImportedWritableImage`), and its `CompleteWrite` queues
+`VulkanQueueSubmitter.Signal`, a batch with no command buffers that sets the semaphore to the next
+value behind every earlier submission. The Direct3D 11 reader opens the texture and the fence by
+their handles and waits for the value on its own device.
+
 ---
 
 ## Pipeline cache
