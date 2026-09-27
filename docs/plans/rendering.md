@@ -1967,13 +1967,18 @@ groups. The remaining work follows below.
    branches only it compiled.
 8. P4-2d, landed, the canaries: `sdf-mesh-visibility` (a mesh in front of a
    block, a block in front of a wider mesh, a mesh against the sky, and the
-   background; its discriminating leg boots the same world without meshes) and
+   background; its discriminating leg boots the same world with one mesh left,
+   out of view, so cull-args still covers the whole tile grid) and
    `sdf-mesh-motion` (a mesh moved across the beam's tiles by a row edit; its
    discriminating leg never moves it), on both backends.
    `SdfMeshCanaryOracleLawTests` derives every region they judge from the
    analytic oracle, which follows the scripts' placement and camera row edits,
-   layout overrides and render-scale tiers. Each scene the check names, and the
-   regions that hold it (both canaries run each on both backends, and each
+   layout overrides and render-scale tiers. The engine's march accepts a
+   surface within a pixel footprint of the ray, so its SDF silhouettes reach up
+   to two pixels past the oracle's exact raycast; no region is judged over
+   that fringe, nor over the background of a view drawing no mesh, which shows
+   the sky outside the tiles the beam could not prove empty. Each scene the
+   check names, and the regions that hold it (both canaries run each on both backends, and each
    discriminating leg turns every mesh observation red):
 
    | Scene | Held by |

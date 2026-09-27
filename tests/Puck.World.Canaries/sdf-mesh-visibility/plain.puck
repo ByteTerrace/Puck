@@ -162,6 +162,21 @@ prototypes {
         scale [0.05, 0.05, 0.05]
       }
     }
+    // Out of view, so no capture shows a mesh, but the frame still draws one: the hit passes then run over the whole
+    // view, as in fixture.puck, and its background reads as the background kind rather than the sky.
+    mesh {
+      indices [
+        0
+        1
+        2
+      ]
+      material: 1
+      vertices [
+        [0, -20, 0]
+        [0.05, -20, 0]
+        [0, -19.95, 0]
+      ]
+    }
   }
 
   // The scenes below, whose meshes fixture.puck carries: a creation's author frame has +z facing away from this

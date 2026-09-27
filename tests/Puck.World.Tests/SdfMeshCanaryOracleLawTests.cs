@@ -29,7 +29,10 @@ namespace Puck.World.Tests;
 /// and every slot of the layout a <c>view.override</c> last selected renders its own camera at its rect's extent under
 /// the render scale tier the script last set, quantized as the render graph quantizes a footprint. Where that extent is
 /// not the rect's, a capture pixel shows its kind only when every record in the reconstruction filter's footprint is that
-/// kind, so no region is judged over a pixel that blends kinds, or over one no slot covers.
+/// kind, so no region is judged over a pixel that blends kinds, or over one no slot covers. The engine's march accepts a
+/// surface within a pixel footprint of the ray, so no region is judged within two pixels of an SDF silhouette either,
+/// nor over the background of a view that draws no mesh, which shows the sky outside the tiles the beam could not prove
+/// empty.
 /// </summary>
 public sealed class SdfMeshCanaryOracleLawTests {
     // The visibility debug view's colors (passes/sdf-render-view.hlsli's renderView, mode 11), background first.
@@ -40,9 +43,22 @@ public sealed class SdfMeshCanaryOracleLawTests {
     private const int Mixed = 4;
     // A capture pixel no slot of the layout covers: no region may be judged over one.
     private const int Outside = 5;
+    // A pixel within FootprintReach of an SDF silhouette the oracle's march misses. The engine's march accepts a surface
+    // within one pixel footprint of the ray (max(SurfaceEpsilon, footprint * t), march/sdf-cone.hlsli), so its
+    // silhouettes reach past the oracle's: no region may be judged over one.
+    private const int Fringe = 6;
+    // A background pixel of a view that draws no mesh. The hit passes then run only over the box of tiles the beam could
+    // not prove empty (passes/sdf-cull-args.comp.hlsl), and a pixel outside it shows the sky rather than the background
+    // kind; the box rests on the beam's conservative cone proofs, which the oracle does not replay, so no region may be
+    // judged over one.
+    private const int Flattened = 7;
     // The reconstruction's reach, in source texels, on each side of a destination pixel's sample point: the clamped
     // Catmull-Rom filter of the place pass reads a four-by-four footprint, and bilinear reads within it.
     private const int ReconstructionReach = 2;
+    // How far, in pixels of a view's extent on each axis, the engine's footprint acceptance carries an SDF silhouette
+    // past the oracle's. One footprint is a pixel across its ray, and a ray grazing a chamfered edge or an opening's
+    // corner stays within it along a span; the captures of both backends show silhouettes up to two pixels past.
+    private const int FootprintReach = 2;
 
     private static readonly Vector3[] KindColors = [
         new(x: 0.02f, y: 0.05f, z: 0.28f),
@@ -266,7 +282,8 @@ public sealed class SdfMeshCanaryOracleLawTests {
         fraction: RenderGraphExtent.Quantize(fraction: (fraction * (((scale > 0f) && (scale < 1f)) ? scale : 1f)))
     );
     // The kind a reconstructed pixel shows: the one kind of every record in its filter's footprint around the sample
-    // point (in source texels, clamped to the image), or mixed when the footprint holds more than one.
+    // point (in source texels, clamped to the image), mixed when the footprint holds more than one, or the first record
+    // no region may be judged over.
     private static int Reconstructed(int[,] rendered, double x, double y) {
         var width = rendered.GetLength(dimension: 0);
         var height = rendered.GetLength(dimension: 1);
@@ -278,8 +295,8 @@ public sealed class SdfMeshCanaryOracleLawTests {
             for (var column = (baseColumn - (ReconstructionReach - 1)); (column <= (baseColumn + ReconstructionReach)); column++) {
                 var sample = rendered[Math.Clamp(max: (width - 1), min: 0, value: column), Math.Clamp(max: (height - 1), min: 0, value: row)];
 
-                if (sample == Inconclusive) {
-                    return Inconclusive;
+                if (sample >= Inconclusive) {
+                    return sample;
                 }
 
                 if ((kind >= 0) && (sample != kind)) {
@@ -313,6 +330,8 @@ public sealed class SdfMeshCanaryOracleLawTests {
         var field = new SdfFieldEvaluator(program: builder.Build());
         var farDistance = FixedQ4816.FromDouble(value: WorldRenderFarDistance.Resolve(defaults: definition.Render));
         var kinds = new int[width, height];
+        var sdfDistances = new double?[width, height];
+        var meshDistances = new double?[width, height];
 
         for (var y = 0; (y < height); y++) {
             for (var x = 0; (x < width); x++) {
@@ -349,13 +368,53 @@ public sealed class SdfMeshCanaryOracleLawTests {
                     triangles: triangles
                 );
 
+                sdfDistances[x, y] = sdf;
+                meshDistances[x, y] = mesh;
                 kinds[x, y] = (((mesh is { } meshDistance) && ((sdf is null) || (meshDistance <= sdf)))
                     ? 2
                     : ((sdf is null) ? 0 : 1));
             }
         }
 
-        return kinds;
+        return Unjudged(
+            kinds: kinds,
+            meshDistances: meshDistances,
+            meshless: (draws.Count == 0),
+            sdfDistances: sdfDistances
+        );
+    }
+    // A view's kinds with every pixel no region may be judged over marked: each one beside a pixel whose ray meets an SDF
+    // surface nearer than this pixel's own mesh, which the engine's footprint acceptance may take for that surface (a
+    // neighbour's surface counts where a mesh in front of it hides it there), and each background pixel of a view that
+    // draws no mesh.
+    private static int[,] Unjudged(int[,] kinds, double?[,] sdfDistances, double?[,] meshDistances, bool meshless) {
+        var width = kinds.GetLength(dimension: 0);
+        var height = kinds.GetLength(dimension: 1);
+        var marked = ((int[,])kinds.Clone());
+
+        for (var y = 0; (y < height); y++) {
+            for (var x = 0; (x < width); x++) {
+                if ((kinds[x, y] == 1) || (kinds[x, y] == Inconclusive)) {
+                    continue;
+                }
+
+                if (meshless && (kinds[x, y] == 0)) {
+                    marked[x, y] = Flattened;
+
+                    continue;
+                }
+
+                for (var row = Math.Max(val1: 0, val2: (y - FootprintReach)); (row <= Math.Min(val1: (height - 1), val2: (y + FootprintReach))); row++) {
+                    for (var column = Math.Max(val1: 0, val2: (x - FootprintReach)); (column <= Math.Min(val1: (width - 1), val2: (x + FootprintReach))); column++) {
+                        if ((sdfDistances[column, row] is { } sdf) && ((meshDistances[x, y] is not { } mesh) || (sdf < mesh))) {
+                            marked[x, y] = Fringe;
+                        }
+                    }
+                }
+            }
+        }
+
+        return marked;
     }
     // A camera row as the World resolves it: its rig's eye, target and field of view at the extent its view renders at.
     private static CameraSnapshot Camera(WorldDefinition definition, string name, uint width, uint height) {
@@ -463,10 +522,9 @@ public sealed class SdfMeshCanaryOracleLawTests {
                     continue;
                 }
 
-                Assert.True(
-                    condition: (kinds[x, y] != Inconclusive),
-                    userMessage: $"{expectation.GetProperty(propertyName: "name").GetString()}: pixel ({x}, {y}) is inconclusive in the oracle."
-                );
+                if (kinds[x, y] >= Inconclusive) {
+                    Assert.Fail(message: $"{expectation.GetProperty(propertyName: "name").GetString()}: pixel ({x}, {y}) is {UnjudgedName(kind: kinds[x, y])} in the oracle.");
+                }
 
                 var color = KindColors[kinds[x, y]];
                 ReadOnlySpan<double> codes = [(color.X * 255.0), (color.Y * 255.0), (color.Z * 255.0), 255.0];
@@ -484,4 +542,12 @@ public sealed class SdfMeshCanaryOracleLawTests {
 
         return true;
     }
+    private static string UnjudgedName(int kind) => kind switch {
+        Inconclusive => "inconclusive",
+        Mixed => "mixed",
+        Outside => "outside every slot",
+        Fringe => "on an SDF silhouette's fringe",
+        Flattened => "background in a view that draws no mesh",
+        _ => throw new ArgumentOutOfRangeException(paramName: nameof(kind)),
+    };
 }
