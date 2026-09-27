@@ -1,5 +1,3 @@
-using Puck.Abstractions.Machines;
-
 namespace Puck.AdvancedGamingBrick;
 
 /// <summary>
@@ -8,7 +6,7 @@ namespace Puck.AdvancedGamingBrick;
 /// advances on predicted input. It never drives audio, so only the real machine ever opens a speaker; disposing it
 /// returns the fork to the core's bounded instance pool.
 /// </summary>
-internal sealed class AdvancedGamingBrickLookahead : ITimeTravelLookahead<MachinePadState> {
+internal sealed class AdvancedGamingBrickLookahead : ITimeTravelLookahead<MachinePads> {
     private readonly AgbCartridge m_cartridge;
     private readonly AgbMachineFork m_instance;
     private readonly AdvancedGamingBrickMachine m_machine;
@@ -27,11 +25,11 @@ internal sealed class AdvancedGamingBrickLookahead : ITimeTravelLookahead<Machin
         (m_machine.Cycles / AdvancedGamingBrickMachine.CyclesPerFrame);
 
     /// <inheritdoc/>
-    public void ApplyInput(in MachinePadState input) =>
+    public void ApplyInput(in MachinePads input) =>
         AdvancedPad.Apply(
             cartridge: m_cartridge,
             machine: m_machine,
-            pad: in input
+            pad: in input[0]
         );
     /// <inheritdoc/>
     public void Dispose() =>

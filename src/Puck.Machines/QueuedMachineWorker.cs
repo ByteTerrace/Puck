@@ -61,7 +61,7 @@ public sealed class QueuedMachineWorker : IDisposable {
     private float m_motorLevel;
     private byte[] m_rgbaBack;
     private byte[] m_rgbaFront;
-    private MachineTimeTravel<MachinePadState>? m_timeTravel;
+    private MachineTimeTravel<MachinePads>? m_timeTravel;
 
     private static readonly Vector128<byte> RepackShuffle = Vector128.Create(
         e0: ((byte)2),
@@ -239,7 +239,7 @@ public sealed class QueuedMachineWorker : IDisposable {
             }
         } while (written == scratch.Length);
     }
-    private QueuedMachineSubmission EnqueueStep(ulong deltaTicks, in MachinePadState input, bool forceStage) {
+    private QueuedMachineSubmission EnqueueStep(ulong deltaTicks, in MachinePads input, bool forceStage) {
         if (
             (0 != Volatile.Read(location: ref m_disposed)) ||
             (m_lifecycle.Worker is null) ||
@@ -875,7 +875,7 @@ public sealed class QueuedMachineWorker : IDisposable {
             ThrowIfLent(operation: "load content into");
             DetachCore();
             m_core = core;
-            m_timeTravel = new MachineTimeTravel<MachinePadState>(
+            m_timeTravel = new MachineTimeTravel<MachinePads>(
                 core: core,
                 cycleRate: core.CycleRate
             );
@@ -1072,7 +1072,7 @@ public sealed class QueuedMachineWorker : IDisposable {
             }
 
             m_cyclePhase = hostAccumulator;
-            m_timeTravel = new MachineTimeTravel<MachinePadState>(
+            m_timeTravel = new MachineTimeTravel<MachinePads>(
                 core: core,
                 cycleRate: core.CycleRate
             );
@@ -1119,9 +1119,9 @@ public sealed class QueuedMachineWorker : IDisposable {
     /// <summary>Advances the machine by one fixed-step tick budget holding <paramref name="input"/>, then stages a fresh
     /// framebuffer — the synchronous submit-and-drain convenience for generic callers.</summary>
     /// <param name="deltaTicks">The frame's fixed-step tick budget.</param>
-    /// <param name="input">The controller image held over the budget.</param>
+    /// <param name="input">The seat image held over the budget.</param>
     /// <returns><see langword="true"/> when the machine stepped.</returns>
-    public bool Step(ulong deltaTicks, in MachinePadState input) {
+    public bool Step(ulong deltaTicks, in MachinePads input) {
         if (EnqueueStep(
             deltaTicks: deltaTicks,
             forceStage: true,
@@ -1138,9 +1138,9 @@ public sealed class QueuedMachineWorker : IDisposable {
     }
     /// <summary>Accepts one exact tick/input segment for ordered execution, applying producer backpressure at capacity.</summary>
     /// <param name="deltaTicks">The segment's fixed-step tick budget.</param>
-    /// <param name="input">The controller image held for the whole segment.</param>
+    /// <param name="input">The seat image held for the whole segment.</param>
     /// <returns>The observable submission outcome.</returns>
-    public QueuedMachineSubmission Submit(ulong deltaTicks, in MachinePadState input) =>
+    public QueuedMachineSubmission Submit(ulong deltaTicks, in MachinePads input) =>
         EnqueueStep(
             deltaTicks: deltaTicks,
             forceStage: false,
@@ -1227,7 +1227,7 @@ public sealed class QueuedMachineWorker : IDisposable {
     private readonly record struct WorkItem(
         WorkKind Kind,
         ulong DeltaTicks,
-        MachinePadState Input,
+        MachinePads Input,
         bool ForceStage,
         bool ForceFlush,
         ManualResetEventSlim? Completion,
@@ -1296,7 +1296,7 @@ public sealed class QueuedMachineWorker : IDisposable {
                 Reconfigure: null,
                 TimeTravel: request
             );
-        public static WorkItem Step(ulong deltaTicks, in MachinePadState input, bool forceStage) =>
+        public static WorkItem Step(ulong deltaTicks, in MachinePads input, bool forceStage) =>
             new(
                 Completion: null,
                 DeltaTicks: deltaTicks,

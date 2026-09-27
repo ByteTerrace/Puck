@@ -8,10 +8,10 @@ namespace Puck.Machines;
 
 internal sealed record QueuedMachineCheckpoint(string Identity, byte[] CoreState, ulong CycleRemainder,
     ulong CycleScale, long CompletedSteps, int FastForwardFactor, int RunaheadFrames) {
-    private const string Format = "puck.queued-machine.v3";
+    private const string Format = "puck.queued-machine.v4";
     private const int MaximumBytes = ((128 * 1024) * 1024);
 
-    public static (QueuedMachineCheckpoint Checkpoint, MachinePadState Input) Decode(ReadOnlyMemory<byte> bytes) {
+    public static (QueuedMachineCheckpoint Checkpoint, MachinePads Inputs, int Seats) Decode(ReadOnlyMemory<byte> bytes) {
         if (
             (bytes.Length is < 32 or > MaximumBytes) ||
             !SHA256.HashData(source: bytes.Span[..^32]).AsSpan().SequenceEqual(other: bytes.Span[^32..])
@@ -34,6 +34,85 @@ internal sealed record QueuedMachineCheckpoint(string Identity, byte[] CoreState
         var completed = reader.ReadInt64();
         var factor = reader.ReadInt32();
         var runahead = reader.ReadInt32();
+        var seats = reader.ReadInt32();
+
+        if (seats is < 1 or > MachinePads.MaxSeats) {
+            throw new InvalidDataException(message: "machine checkpoint declares an unsupported seat count");
+        }
+        var inputs = MachinePads.Neutral;
+
+        for (var seat = 0; (seat < seats); ++seat) {
+            inputs[seat] = ReadPad(reader: reader);
+        }
+        var count = reader.ReadInt32();
+
+        if (
+            string.IsNullOrWhiteSpace(value: identity) ||
+            (identity.Length > 256) ||
+            (scale is 0UL or > (((ulong)long.MaxValue) / EngineTicks.PerSecond)) ||
+            (remainder >= (EngineTicks.PerSecond * scale)) ||
+            (completed < 0) ||
+            (factor is < 1 or > MachineTimeTravel<MachinePads>.MaxFastForwardFactor) ||
+            (runahead is < 0 or > MachineTimeTravel<MachinePads>.MaxRunaheadFrames) ||
+            (count <= 0) ||
+            (count != (stream.Length - stream.Position))
+        ) {
+            throw new InvalidDataException(message: "machine checkpoint has invalid identity, pacing, or payload bounds");
+        }
+        return (new(
+            identity,
+            reader.ReadBytes(count: count),
+            remainder,
+            scale,
+            completed,
+            factor,
+            runahead
+        ), inputs, seats);
+    }
+    public byte[] Encode(in MachinePads inputs, int seats) {
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            other: 1,
+            value: seats
+        );
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            other: MachinePads.MaxSeats,
+            value: seats
+        );
+
+        using var buffer = new MemoryStream();
+
+        using (var writer = new BinaryWriter(
+            buffer,
+            Encoding.UTF8,
+            leaveOpen: true
+        )) {
+            writer.Write(value: Format);
+            writer.Write(value: Identity);
+            writer.Write(value: CycleRemainder);
+            writer.Write(value: CycleScale);
+            writer.Write(value: CompletedSteps);
+            writer.Write(value: FastForwardFactor);
+            writer.Write(value: RunaheadFrames);
+            writer.Write(value: seats);
+            for (var seat = 0; (seat < seats); ++seat) {
+                WritePad(
+                    pad: inputs[seat],
+                    writer: writer
+                );
+            }
+            writer.Write(value: CoreState.Length);
+            writer.Write(buffer: CoreState);
+        }
+        if (buffer.Length > (MaximumBytes - 32)) { throw new InvalidDataException(message: "machine checkpoint exceeds the supported size"); }
+        var hash = SHA256.HashData(source: buffer.GetBuffer().AsSpan(
+            0,
+            ((int)buffer.Length)
+        ));
+
+        buffer.Write(buffer: hash);
+        return buffer.ToArray();
+    }
+    private static MachinePadState ReadPad(BinaryReader reader) {
         var buttons = ((MachineButtons)reader.ReadUInt32());
         var left = new Vector2(
             x: reader.ReadSingle(),
@@ -60,7 +139,7 @@ internal sealed record QueuedMachineCheckpoint(string Identity, byte[] CoreState
             throw new InvalidDataException(message: "machine checkpoint carries an off-screen pointer with a position");
         }
 
-        var input = new MachinePadState(
+        return new MachinePadState(
             Buttons: buttons,
             LeftStick: left,
             LeftTrigger: leftTrigger,
@@ -76,63 +155,14 @@ internal sealed record QueuedMachineCheckpoint(string Identity, byte[] CoreState
             RightTrigger: rightTrigger,
             Tilt: tilt
         );
-        var count = reader.ReadInt32();
-
-        if (
-            string.IsNullOrWhiteSpace(value: identity) ||
-            (identity.Length > 256) ||
-            (scale is 0UL or > (((ulong)long.MaxValue) / EngineTicks.PerSecond)) ||
-            (remainder >= (EngineTicks.PerSecond * scale)) ||
-            (completed < 0) ||
-            (factor is < 1 or > MachineTimeTravel<MachinePadState>.MaxFastForwardFactor) ||
-            (runahead is < 0 or > MachineTimeTravel<MachinePadState>.MaxRunaheadFrames) ||
-            (count <= 0) ||
-            (count != (stream.Length - stream.Position))
-        ) {
-            throw new InvalidDataException(message: "machine checkpoint has invalid identity, pacing, or payload bounds");
-        }
-        return (new(
-            identity,
-            reader.ReadBytes(count: count),
-            remainder,
-            scale,
-            completed,
-            factor,
-            runahead
-        ), input);
     }
-    public byte[] Encode(in MachinePadState input) {
-        using var buffer = new MemoryStream();
-
-        using (var writer = new BinaryWriter(
-            buffer,
-            Encoding.UTF8,
-            leaveOpen: true
-        )) {
-            writer.Write(value: Format);
-            writer.Write(value: Identity);
-            writer.Write(value: CycleRemainder);
-            writer.Write(value: CycleScale);
-            writer.Write(value: CompletedSteps);
-            writer.Write(value: FastForwardFactor);
-            writer.Write(value: RunaheadFrames);
-            writer.Write(value: ((uint)input.Buttons));
-            writer.Write(value: input.LeftStick.X); writer.Write(value: input.LeftStick.Y);
-            writer.Write(value: input.RightStick.X); writer.Write(value: input.RightStick.Y);
-            writer.Write(value: input.LeftTrigger); writer.Write(value: input.RightTrigger);
-            writer.Write(value: input.Tilt.X); writer.Write(value: input.Tilt.Y);
-            writer.Write(value: input.LightLevel);
-            writer.Write(value: input.Pointer.OnScreen); writer.Write(value: input.Pointer.X); writer.Write(value: input.Pointer.Y);
-            writer.Write(value: CoreState.Length);
-            writer.Write(buffer: CoreState);
-        }
-        if (buffer.Length > (MaximumBytes - 32)) { throw new InvalidDataException(message: "machine checkpoint exceeds the supported size"); }
-        var hash = SHA256.HashData(source: buffer.GetBuffer().AsSpan(
-            0,
-            ((int)buffer.Length)
-        ));
-
-        buffer.Write(buffer: hash);
-        return buffer.ToArray();
+    private static void WritePad(in MachinePadState pad, BinaryWriter writer) {
+        writer.Write(value: ((uint)pad.Buttons));
+        writer.Write(value: pad.LeftStick.X); writer.Write(value: pad.LeftStick.Y);
+        writer.Write(value: pad.RightStick.X); writer.Write(value: pad.RightStick.Y);
+        writer.Write(value: pad.LeftTrigger); writer.Write(value: pad.RightTrigger);
+        writer.Write(value: pad.Tilt.X); writer.Write(value: pad.Tilt.Y);
+        writer.Write(value: pad.LightLevel);
+        writer.Write(value: pad.Pointer.OnScreen); writer.Write(value: pad.Pointer.X); writer.Write(value: pad.Pointer.Y);
     }
 }

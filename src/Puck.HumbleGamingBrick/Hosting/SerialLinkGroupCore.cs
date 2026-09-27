@@ -113,9 +113,9 @@ internal sealed class SerialLinkGroupCore : IMachineGroupCore {
         );
 
     /// <inheritdoc/>
-    public void ApplyInput(in MachineLinkPads input) {
-        m_first.ApplyInput(input: in input[0]);
-        m_second.ApplyInput(input: in input[1]);
+    public void ApplyInput(in MachinePads input) {
+        m_first.ApplyInput(input: MachinePads.One(input: in input[0]));
+        m_second.ApplyInput(input: MachinePads.One(input: in input[1]));
     }
     /// <inheritdoc/>
     public int CaptureState(ref byte[] buffer) {

@@ -404,7 +404,7 @@ internal sealed class FirmwareReconfigureStage : IPostStage<PostContext> {
             Require(
                 condition: host.Step(
                     deltaTicks: HostStepTicks,
-                    input: in pad
+                    inputs: MachinePads.One(input: in pad)
                 ),
                 detail: "queued host rejected a cartridge segment"
             );

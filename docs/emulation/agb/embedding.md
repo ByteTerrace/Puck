@@ -88,13 +88,13 @@ window, GPU backend, worker thread, or environment configuration is required.
 
 ```csharp
 using Puck.AdvancedGamingBrick;
-using Puck.Abstractions.Machines;
+using Puck.Machines;
 
 using var core = new AdvancedGamingBrickCore(
     cartridgeRom: File.ReadAllBytes(args[0])); // bundled firmware, native cold startup
 
 core.ConfigureAudio(sampleRate: 48_000);
-core.ApplyInput(input: new MachinePadState());
+core.ApplyInput(input: MachinePads.Neutral);
 core.RunCycles(cycles: 280_896); // one nominal native frame at 16,777,216 Hz
 uint[] pixels = core.Framebuffer.ToArray(); // 240 × 160, packed 0x00RRGGBB
 short[] audio = new short[4096];
