@@ -102,7 +102,7 @@ Every package below carries its own check on the programme page; tick it there a
 - [x] P2 per-pass work counters and the collector.
 - [ ] P1b foundation qualification against the candidate that ships the forcing world (`puck qualify` and the release profile are in; the first runs on the reference GPUs are not).
 - [x] P3 attachments and indexed geometry.
-- [ ] P4 shared opaque visibility (through P4-2d, the mesh raster and its canaries, and the visibility record's names landed; P4-2e remains).
+- [ ] P4 shared opaque visibility (through P4-2d, the mesh raster and its canaries, and the visibility record's names landed, the check's scenes held by the mesh canaries but a resize; P4-2e, the resize, the check's measured cost and its retired-layout sweep remain).
 - [x] P5 reproducible authoring and packaged dependencies.
 - [ ] P6 representation experiments.
 - [x] P7 the binding contract and the adapter memory profile, with the one-day spike as its gate (every P7b step landed; the gate's Linux bytecode leg is deferred to the end).
@@ -112,7 +112,7 @@ Every package below carries its own check on the programme page; tick it there a
 - [x] P11 the frame graph document (`puck.render.graph.v1`), views as graph instances scheduled by demand, and self-reference through the previous frame.
 - [ ] P12 image sources: uploaded, imported, and rendered transports, content classes, producer registration, shared conversion passes, and every `WorldScreenSource` kind migrated (P12b steps 1 to 7 and 9 landed; step 8 remains).
 - [ ] P13 hit-to-source mapping published as data, with simulation, host passthrough, and presentation destinations, and passthrough only for local-user sources (P13b steps 1, 2, 4 and 6 and step 3's CPU half landed, step 2 with a machine's light gun reading the mapped pointer; the GPU drawing from the mapping and GPU picking remain).
-- [ ] P14 the SDF engine as a pass package: the capability matrix, the generated frame block, the HLSL module tree, staged shading, float working targets, and the retirements (steps 1, 3, 4 and 12 landed; the HLSL module split is in progress, and steps 5 to 11 and 13 remain).
+- [ ] P14 the SDF engine as a pass package: the capability matrix, the generated frame block, the HLSL module tree, staged shading, float working targets, and the retirements (steps 1 to 4 and 12 landed, the HLSL module split among them; steps 5 to 11 and 13 remain).
 - [ ] P15 temporal reconstruction: jitter, motion vectors, the temporal upscaler, per-instance history, dynamic resolution, and march seeding.
 - [ ] P16 minimal HDR display output: the display-transform node, an HDR swapchain on Windows, paper white for UI, and one HDR source (the Direct3D 12 heap fold, HDR swapchain selection and the paper-white setting landed; the display-transform node, requesting HDR, the HUD at paper white and the HDR source remain).
 - [ ] P17 assets derived from SDFs: the baker, the texture pipeline, and the content-addressed cache shipped in compiled worlds and filled on the device on a miss (the baker, its codecs, the block-compressed upload and the one pixel-format vocabulary landed; drawing a bake and the parity world's shipped bakes remain).

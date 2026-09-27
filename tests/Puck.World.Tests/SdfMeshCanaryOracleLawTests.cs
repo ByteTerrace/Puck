@@ -3,6 +3,7 @@ using System.Numerics;
 using System.Text.Json;
 using Puck.Abstractions.Cameras;
 using Puck.Assets.Documents;
+using Puck.Hosting;
 using Puck.Maths;
 using Puck.SdfVm;
 using Puck.SdfVm.Views;
@@ -23,13 +24,26 @@ namespace Puck.World.Tests;
 /// Only a converged march is an SDF surface, and no region is judged over a pixel whose march ended unproven. The nearer
 /// surface is the pixel's, the mesh at an equal distance, and no surface is the background. The visibility debug view
 /// colors each kind, so every <c>imageRegion</c> bound in the manifest is held to the oracle's colors over its region: a
-/// bound that holds must contain every pixel, and a bound that must fail must miss one by more than its tolerance. A row edit the script makes before a
-/// capture is applied to the document the oracle reads for it.
+/// bound that holds must contain every pixel, and a bound that must fail must miss one by more than its tolerance. A
+/// placement or camera row edit the script makes before a capture is applied to the document the oracle reads for it,
+/// and every slot of the layout a <c>view.override</c> last selected renders its own camera at its rect's extent under
+/// the render scale tier the script last set, quantized as the render graph quantizes a footprint. Where that extent is
+/// not the rect's, a capture pixel shows its kind only when every record in the reconstruction filter's footprint is that
+/// kind, so no region is judged over a pixel that blends kinds, or over one no slot covers.
 /// </summary>
 public sealed class SdfMeshCanaryOracleLawTests {
     // The visibility debug view's colors (passes/sdf-render-view.hlsli's renderView, mode 11), background first.
     // A pixel whose fixed-point march ended without proving its answer: no region may be judged over one.
     private const int Inconclusive = 3;
+    // A capture pixel a reduced render scale reconstructs from records of more than one kind, so its color blends them:
+    // no region may be judged over one.
+    private const int Mixed = 4;
+    // A capture pixel no slot of the layout covers: no region may be judged over one.
+    private const int Outside = 5;
+    // The reconstruction's reach, in source texels, on each side of a destination pixel's sample point: the clamped
+    // Catmull-Rom filter of the place pass reads a four-by-four footprint, and bilinear reads within it.
+    private const int ReconstructionReach = 2;
+
     private static readonly Vector3[] KindColors = [
         new(x: 0.02f, y: 0.05f, z: 0.28f),
         new(x: 0.15f, y: 0.90f, z: 0.25f),
@@ -48,7 +62,7 @@ public sealed class SdfMeshCanaryOracleLawTests {
         )));
         var bounds = 0;
 
-        foreach (var leg in (ReadOnlySpan<string>)["positive", "discriminating"]) {
+        foreach (var leg in ((ReadOnlySpan<string>)["positive", "discriminating"])) {
             var section = manifest.RootElement.GetProperty(propertyName: leg);
             var captures = Captures(
                 definition: AuthoredGameFixtures.Load(relativePath: section.GetProperty(propertyName: "world").GetString()!),
@@ -75,8 +89,8 @@ public sealed class SdfMeshCanaryOracleLawTests {
                     value: out var grid
                 )) {
                     grid = KindsOf(
-                        definition: captures[capture],
                         height: height,
+                        state: captures[capture],
                         width: width
                     );
                     kinds[capture] = grid;
@@ -98,18 +112,26 @@ public sealed class SdfMeshCanaryOracleLawTests {
         Assert.True(condition: (bounds > 0));
     }
 
-    // The document each capture the script names is taken under: the leg's world with every placement position the script
-    // set before that screenshot.
-    private static Dictionary<string, WorldDefinition> Captures(WorldDefinition definition, string script) {
-        var captures = new Dictionary<string, WorldDefinition>(comparer: StringComparer.Ordinal);
-        var current = definition;
+    // What a capture is taken under: the leg's document with every row edit the script made before it, the layout a
+    // view.override selected (null for the one the composer picks with no seat joined) and the render scale.
+    private sealed record CaptureState(WorldDefinition Definition, string? Layout, float RenderScale);
+
+    // The state each capture the script names is taken under: the leg's world with every placement position and camera
+    // row the script set before that screenshot, the layout it last selected, and the render scale it last set.
+    private static Dictionary<string, CaptureState> Captures(WorldDefinition definition, string script) {
+        var captures = new Dictionary<string, CaptureState>(comparer: StringComparer.Ordinal);
+        var current = new CaptureState(
+            Definition: definition,
+            Layout: null,
+            RenderScale: 1f
+        );
 
         foreach (var raw in File.ReadLines(path: script)) {
             var line = raw.Trim();
 
-            if (line.StartsWith(value: "world.screenshot ", comparisonType: StringComparison.Ordinal)) {
+            if (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "world.screenshot ")) {
                 captures[Path.GetFileName(path: line["world.screenshot ".Length..])] = current;
-            } else if (line.StartsWith(value: "world.row.set placements ", comparisonType: StringComparison.Ordinal)) {
+            } else if (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "world.row.set placements ")) {
                 var words = line.Split(separator: ' ', count: 5);
 
                 Assert.Equal(expected: "position", actual: words[3]);
@@ -125,29 +147,155 @@ public sealed class SdfMeshCanaryOracleLawTests {
                 ));
 
                 current = (current with {
-                    PlacementRowsRaw = [.. current.Placements.Select(selector: placement => (string.Equals(
-                        a: placement.Id,
-                        b: words[2],
-                        comparisonType: StringComparison.Ordinal
-                    )
-                        ? (placement with { Position = position })
-                        : placement))],
+                    Definition = (current.Definition with {
+                        PlacementRowsRaw = [.. current.Definition.Placements.Select(selector: placement => (string.Equals(
+                            a: placement.Id,
+                            b: words[2],
+                            comparisonType: StringComparison.Ordinal
+                        )
+                            ? (placement with { Position = position })
+                            : placement))],
+                    }),
                 });
+            } else if (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "world.row.set cameras ")) {
+                var camera = JsonSerializer.Deserialize(
+                    json: line["world.row.set cameras ".Length..],
+                    jsonTypeInfo: WorldJsonContext.Default.WorldCamera
+                )!;
+
+                current = (current with {
+                    Definition = (current.Definition with {
+                        CamerasRaw = [.. current.Definition.Cameras.Select(selector: row => (string.Equals(
+                            a: row.Name,
+                            b: camera.Name,
+                            comparisonType: StringComparison.Ordinal
+                        )
+                            ? camera
+                            : row))],
+                    }),
+                });
+            } else if (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "view.override layout ")) {
+                var layout = line["view.override layout ".Length..].Trim();
+
+                current = (current with {
+                    Layout = ((layout == "auto")
+                        ? null
+                        : layout),
+                });
+            } else if (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "world.render-scale ")) {
+                Assert.True(condition: WorldRenderScaleTiers.TryParse(
+                    name: line["world.render-scale ".Length..],
+                    tier: out var tier
+                ), userMessage: $"the oracle reads a named render-scale tier: {line}");
+
+                current = (current with { RenderScale = WorldRenderScaleTiers.Scale(tier: tier) });
             }
         }
 
         return captures;
     }
-    // Each pixel's kind in a capture of the document's first camera: 0 background, 1 SDF, 2 mesh, or inconclusive where the
+    // Each capture pixel's kind: 0 background, 1 SDF, 2 mesh, or why no region may be judged over it (inconclusive, mixed
+    // or outside). Every slot of the layout renders its camera at its rect's extent under the render scale, quantized as
+    // the render graph quantizes a footprint, and the place pass copies it into the rect at native scale or reconstructs
+    // it from a footprint of records otherwise.
+    private static int[,] KindsOf(CaptureState state, int width, int height) {
+        var definition = state.Definition;
+        var layouts = definition.Views.Layouts;
+        var layout = ((state.Layout is { } name)
+            ? layouts.Single(predicate: row => string.Equals(
+                a: row.Name,
+                b: name,
+                comparisonType: StringComparison.Ordinal
+            ))
+            : layouts.First(predicate: static row => (row.SeatCount == 0)));
+        var kinds = new int[width, height];
+
+        for (var y = 0; (y < height); y++) {
+            for (var x = 0; (x < width); x++) {
+                kinds[x, y] = Outside;
+            }
+        }
+
+        foreach (var slot in layout.Slots) {
+            var left = ((int)Math.Round(a: (slot.X * width)));
+            var top = ((int)Math.Round(a: (slot.Y * height)));
+            var rectWidth = (((int)Math.Round(a: ((slot.X + slot.Width) * width))) - left);
+            var rectHeight = (((int)Math.Round(a: ((slot.Y + slot.Height) * height))) - top);
+            var renderWidth = RenderPixels(
+                display: width,
+                fraction: slot.Width,
+                scale: state.RenderScale
+            );
+            var renderHeight = RenderPixels(
+                display: height,
+                fraction: slot.Height,
+                scale: state.RenderScale
+            );
+            var rendered = ViewKinds(
+                camera: Camera(
+                    definition: definition,
+                    height: ((uint)renderHeight),
+                    name: slot.Camera!,
+                    width: ((uint)renderWidth)
+                ),
+                definition: definition,
+                height: renderHeight,
+                width: renderWidth
+            );
+            var exact = ((renderWidth == rectWidth) && (renderHeight == rectHeight));
+
+            for (var y = 0; (y < rectHeight); y++) {
+                for (var x = 0; (x < rectWidth); x++) {
+                    kinds[(left + x), (top + y)] = (exact
+                        ? rendered[x, y]
+                        : Reconstructed(
+                            rendered: rendered,
+                            x: ((((x + 0.5) / rectWidth) * renderWidth) - 0.5),
+                            y: ((((y + 0.5) / rectHeight) * renderHeight) - 0.5)
+                        ));
+                }
+            }
+        }
+
+        return kinds;
+    }
+    // A view's extent along one axis: its rect's fraction of the display under the render scale, quantized as the render
+    // graph quantizes a footprint.
+    private static int RenderPixels(double fraction, int display, float scale) => RenderGraphExtent.Pixels(
+        display: display,
+        fraction: RenderGraphExtent.Quantize(fraction: (fraction * (((scale > 0f) && (scale < 1f)) ? scale : 1f)))
+    );
+    // The kind a reconstructed pixel shows: the one kind of every record in its filter's footprint around the sample
+    // point (in source texels, clamped to the image), or mixed when the footprint holds more than one.
+    private static int Reconstructed(int[,] rendered, double x, double y) {
+        var width = rendered.GetLength(dimension: 0);
+        var height = rendered.GetLength(dimension: 1);
+        var kind = -1;
+        var baseColumn = ((int)Math.Floor(d: x));
+        var baseRow = ((int)Math.Floor(d: y));
+
+        for (var row = (baseRow - (ReconstructionReach - 1)); (row <= (baseRow + ReconstructionReach)); row++) {
+            for (var column = (baseColumn - (ReconstructionReach - 1)); (column <= (baseColumn + ReconstructionReach)); column++) {
+                var sample = rendered[Math.Clamp(max: (width - 1), min: 0, value: column), Math.Clamp(max: (height - 1), min: 0, value: row)];
+
+                if (sample == Inconclusive) {
+                    return Inconclusive;
+                }
+
+                if ((kind >= 0) && (sample != kind)) {
+                    return Mixed;
+                }
+
+                kind = sample;
+            }
+        }
+
+        return kind;
+    }
+    // Each pixel's kind in one view rendered at its extent: 0 background, 1 SDF, 2 mesh, or inconclusive where the
     // fixed-point march ended without proving its answer. The march runs to the far distance the engine's ends at, and
     // no bound the mesh would set.
-    private static int[,] KindsOf(WorldDefinition definition, int width, int height) {
-        var camera = Camera(
-            definition: definition,
-            height: ((uint)height),
-            width: ((uint)width)
-        );
-
+    private static int[,] ViewKinds(WorldDefinition definition, CameraSnapshot camera, int width, int height) {
         var draws = new List<SdfMeshDraw>();
         var builder = new SdfProgramBuilder();
 
@@ -201,7 +349,7 @@ public sealed class SdfMeshCanaryOracleLawTests {
                     triangles: triangles
                 );
 
-                kinds[x, y] = ((mesh is { } meshDistance && ((sdf is null) || (meshDistance <= sdf)))
+                kinds[x, y] = (((mesh is { } meshDistance) && ((sdf is null) || (meshDistance <= sdf)))
                     ? 2
                     : ((sdf is null) ? 0 : 1));
             }
@@ -209,13 +357,16 @@ public sealed class SdfMeshCanaryOracleLawTests {
 
         return kinds;
     }
-    // The document's first camera as the World resolves it: its rig's eye, target and field of view at the capture's
-    // extent.
-    private static CameraSnapshot Camera(WorldDefinition definition, uint width, uint height) {
+    // A camera row as the World resolves it: its rig's eye, target and field of view at the extent its view renders at.
+    private static CameraSnapshot Camera(WorldDefinition definition, string name, uint width, uint height) {
         var (eye, target, fieldOfView) = WorldCameraRigCompiler.Compile(
             definition: definition,
             mirror: new WorldStateMirror(view: new WorldDocumentStateView(definition: () => definition)),
-            program: definition.Cameras[0].Rig
+            program: definition.Cameras.Single(predicate: row => string.Equals(
+                a: row.Name,
+                b: name,
+                comparisonType: StringComparison.Ordinal
+            )).Rig
         ).Resolve(
             anchor: new SdfAnchor(
                 Orientation: Quaternion.Identity,
@@ -240,7 +391,7 @@ public sealed class SdfMeshCanaryOracleLawTests {
         var ndcX = ((((x + 0.5) / width) * 2.0) - 1.0);
         var ndcY = -((((y + 0.5) / height) * 2.0) - 1.0);
 
-        return Vector3.Normalize(value: ((camera.Forward + (((float)(ndcX * camera.AspectRatio * camera.TanHalfFieldOfView)) * camera.Right)) + (((float)(ndcY * camera.TanHalfFieldOfView)) * camera.Up)));
+        return Vector3.Normalize(value: ((camera.Forward + (((float)((ndcX * camera.AspectRatio) * camera.TanHalfFieldOfView)) * camera.Right)) + (((float)(ndcY * camera.TanHalfFieldOfView)) * camera.Up)));
     }
     // Every draw's world-space triangles.
     private static List<(Vector3 A, Vector3 B, Vector3 C)> Triangles(List<SdfMeshDraw> draws) {
@@ -269,7 +420,7 @@ public sealed class SdfMeshCanaryOracleLawTests {
             var e1 = (b - a);
             var e2 = (c - a);
             var p = Vector3.Cross(vector1: direction, vector2: e2);
-            var determinant = (double)Vector3.Dot(vector1: e1, vector2: p);
+            var determinant = ((double)Vector3.Dot(vector1: e1, vector2: p));
 
             if (Math.Abs(value: determinant) < 1e-12) {
                 continue;

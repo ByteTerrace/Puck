@@ -56,6 +56,31 @@ placements {
     prototype: "high"
     position [2.5, 0, 0]
   }
+
+  placement "window" {
+    prototype: "window"
+    position [-2.2, -60, 0]
+  }
+
+  placement "tie" {
+    prototype: "tie"
+    position [0, -60, 0]
+  }
+
+  placement "silhouette" {
+    prototype: "silhouette"
+    position [2.2, -60, 0]
+  }
+
+  placement "near" {
+    prototype: "near"
+    position [0, -60, 0]
+  }
+
+  placement "far" {
+    prototype: "far"
+    position [0, -600, 0]
+  }
 }
 
 prototypes {
@@ -138,6 +163,144 @@ prototypes {
       }
     }
   }
+
+  // The scenes below, whose meshes fixture.puck carries: a creation's author frame has +z facing away from this
+  // camera, so its meshes at a negative z lie nearer the camera than a shape at zero.
+  prototype "window" {
+    document {
+      name: "window"
+      palette [
+        {
+          color: "#8C7A5D"
+          roughness: 0.55
+          sheen: 0
+          specular: 0.25
+        }
+        {
+          color: "#3E8FB0"
+          roughness: 0.35
+          sheen: 0.15
+          specular: 0.4
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "frame" {
+        material: 0
+        position [0, 0.9, 0]
+        scale [0.7, 0.7, 0.1]
+      }
+      shape Box "opening" {
+        blend: "Subtraction"
+        material: 0
+        position [0, 0.9, 0]
+        scale [0.35, 0.35, 0.3]
+      }
+    }
+  }
+
+  prototype "tie" {
+    document {
+      name: "tie"
+      palette [
+        {
+          color: "#8C7A5D"
+          roughness: 0.55
+          sheen: 0
+          specular: 0.25
+        }
+        {
+          color: "#3E8FB0"
+          roughness: 0.35
+          sheen: 0.15
+          specular: 0.4
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "block" {
+        material: 0
+        position [0, 0.6, 0]
+        scale [0.5, 0.5, 0.5]
+      }
+    }
+  }
+
+  prototype "silhouette" {
+    document {
+      name: "silhouette"
+      palette [
+        {
+          color: "#8C7A5D"
+          roughness: 0.55
+          sheen: 0
+          specular: 0.25
+        }
+        {
+          color: "#3E8FB0"
+          roughness: 0.35
+          sheen: 0.15
+          specular: 0.4
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Sphere "ball" {
+        material: 0
+        position [0, 0.9, -0.5]
+        scale [0.4, 0.4, 0.4]
+      }
+    }
+  }
+
+  prototype "near" {
+    document {
+      name: "near"
+      palette [
+        {
+          color: "#8C7A5D"
+          roughness: 0.55
+          sheen: 0
+          specular: 0.25
+        }
+        {
+          color: "#3E8FB0"
+          roughness: 0.35
+          sheen: 0.15
+          specular: 0.4
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Sphere "hidden" {
+        material: 0
+        position [0, -20, 0]
+        scale [0.05, 0.05, 0.05]
+      }
+    }
+  }
+
+  prototype "far" {
+    document {
+      name: "far"
+      palette [
+        {
+          color: "#8C7A5D"
+          roughness: 0.55
+          sheen: 0
+          specular: 0.25
+        }
+        {
+          color: "#3E8FB0"
+          roughness: 0.35
+          sheen: 0.15
+          specular: 0.4
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "block" {
+        material: 0
+        position [0, 0.6, 0]
+        scale [0.5, 0.5, 0.5]
+      }
+    }
+  }
 }
 
 simulation {
@@ -154,6 +317,28 @@ views {
         width: 1
         x: 0
         y: 0
+      }
+    ]
+    transitionRenderScale: 1
+    transitionSeconds: 0
+  }
+
+  layout "split" {
+    seatCount: 0
+    slots [
+      {
+        camera: "mesh-cam"
+        height: 0.5
+        width: 0.5
+        x: 0
+        y: 0
+      }
+      {
+        camera: "mesh-cam"
+        height: 0.25
+        width: 0.25
+        x: 0.5
+        y: 0.5
       }
     ]
     transitionRenderScale: 1
