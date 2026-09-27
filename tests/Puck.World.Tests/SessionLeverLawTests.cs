@@ -276,6 +276,7 @@ public sealed class SessionLeverLawTests {
         string[] expected = [
             WorldSessionLevers.AmbientOcclusion,
             WorldSessionLevers.AmbientOcclusionQuality,
+            WorldSessionLevers.Bakes,
             WorldSessionLevers.BindingBar,
             WorldSessionLevers.CadenceGate,
             WorldSessionLevers.FarBound,
