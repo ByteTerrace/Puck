@@ -93,19 +93,14 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // The bounded volumes the latest live build's static placements baked (WorldPlacementStamper.EmitStatic);
     // WorldFramePresenter.Dress composes them with the pool's per-frame volumes onto SdfFrame.Volumes.
     private readonly List<SdfVolume> m_staticVolumes = new(capacity: SdfProgramBuilder.MaxVolumes);
-    // Replaced, never cleared, on a static rebuild: a consumer that keys work on the list (the engine's mesh region
-    // count) sees a new list exactly when the placements it came from moved.
-    private IReadOnlyList<SdfMeshDraw> m_staticMeshDraws = [];
+
     // The bakes a static rebuild draws in place of their fields (null for a presentation that bakes nothing), and the
     // lookup the rebuild asks, made once so a rebuild allocates no delegate.
     private readonly WorldBakeSchedule? m_bakes;
     private readonly Func<string, SdfMesh?> m_bakedMeshFor;
-    // MeshDraws' composition of the static draws and the pool's, and the two lists it was composed from.
-    private IReadOnlyList<SdfMeshDraw> m_meshDraws = [];
-    private readonly List<SdfMeshDraw> m_composedMeshDraws = [];
-    private IReadOnlyList<SdfMeshDraw>? m_composedStaticMeshDraws;
-    private long m_composedStampedRevision = -1L;
-    private long m_meshDrawsRevision;
+    // MeshDraws: the static draws each static rebuild replaces, then the pool's.
+    private readonly WorldSceneMeshDraws m_meshDraws;
+
     // Per-frame scratch reused to keep packing allocation-free: movement-driven gait state per avatar.
     private readonly float[] m_avatarGaitPhases = new float[WorldBodiesLimits.CapacityCeiling];
     private readonly Vector3[] m_avatarPreviousPositions = new Vector3[WorldBodiesLimits.CapacityCeiling];
@@ -117,19 +112,15 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     private readonly int[] m_emittedAvatarRigs = new int[WorldBodiesLimits.CapacityCeiling];
     private readonly float[] m_emittedAvatarScales = new float[WorldBodiesLimits.CapacityCeiling];
     private readonly float[] m_emittedAvatarGaitAmplitudes = new float[WorldBodiesLimits.CapacityCeiling];
-    // The creation-STAMP census, refreshed at each rebuild: the body-rooted stamps handed to the pool, plus the
-    // per-entity flag the pack/emit path reads to skip the catalog avatar (the body renders its creation instead).
-    private readonly List<WorldStampPool.BodyStamp> m_bodyStamps = new();
+    // The creation-stamp census, refreshed at each rebuild: the body-rooted stamps handed to the pool. A body the pool
+    // registered renders its creation there, so the pack/emit path parks its catalog avatar.
+    private readonly WorldBodyStampCensus m_census = new();
 
     // The palette colors the live build baked, and a counter moved when a bound one moves in the state mirror.
     private readonly WorldBakedColors m_bakedColors;
 
     private int m_bakedColorRevision;
 
-    private readonly bool[] m_rendersAsStamp = new bool[WorldBodiesLimits.CapacityCeiling];
-    // Each active body's reads of the client's state mirror (its live scale), created on first need and released when
-    // the body leaves.
-    private readonly WorldStateLease?[] m_bodyReads = new WorldStateLease?[WorldBodiesLimits.CapacityCeiling];
     // The catalog-look root follower: a NON-stamp-rendered avatar (a Catalog-sourced look, or a Creation look the
     // stamp pool had no free slot for) whose look names a root Motion.Dynamics row lags the whole avatar toward its
     // raw interpolated pose instead of drawing it directly — resolved once per rebuild (Compose, beside the rig/scale/
@@ -240,7 +231,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 palettes: m_palettes,
                 bakedMeshFor: m_bakedMeshFor
             );
-            m_staticMeshDraws = meshDraws;
+            m_meshDraws.Static = meshDraws;
         }
 
         m_animator.Emit(
@@ -286,7 +277,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 // (Creation looks: root + parts) — this catalog-avatar follower is the root-only twin for a Catalog
                 // look, and the pool-pressure fallback for a Creation look the stamp pool had no free slot for.
                 m_avatarFollows[index] = (
-                    !m_rendersAsStamp[index] &&
+                    !m_animator.HasBodyRegistration(bodyIndex: index) &&
                     WorldDynamicsResponse.TryResolveResponse(
                     name: look.Motion.Dynamics,
                     response: out m_avatarResponse[index],
@@ -333,24 +324,6 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             position: out _
         );
     }
-    // The body's live scale through the state mirror slot its lease holds, acquired while the body is active.
-    private float LiveBodyScale(WorldDefinition definition, int index) {
-        var reads = (m_bodyReads[index] ??= new WorldStateLease());
-
-        reads.Bind(
-            bodyIndex: index,
-            mirror: m_client.StateMirror
-        );
-        reads.Arrive(
-            first: definition,
-            second: null
-        );
-
-        return WorldGaitDrivers.LiveBodyScale(
-            reads: reads,
-            scaleRow: definition.Population.ScaleRow
-        );
-    }
     private static int[] NewPoseEpochs() {
         var epochs = new int[WorldBodiesLimits.CapacityCeiling];
 
@@ -360,90 +333,6 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         );
 
         return epochs;
-    }
-    // Refresh the creation-stamp census: which active entities render their creation geometry through the stamp pool
-    // (inhabitants + crowd creation-looks) instead of a catalog avatar. Called at each rebuild.
-    private void RefreshBodyStamps() {
-        m_bodyStamps.Clear();
-        Array.Clear(array: m_rendersAsStamp);
-
-        var definition = m_client.Definition;
-
-        for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
-            if (!m_client.IsActive(index: index)) {
-                // A body that left stops being read: its scale slot goes back to the mirror.
-                m_bodyReads[index]?.Release();
-
-                continue;
-            }
-
-            if (
-                (ResolveStampCreation(
-                definition: definition,
-                index: index
-            ) is not { } stamp)
-            ) {
-                continue;
-            }
-
-            m_bodyStamps.Add(item: stamp);
-            m_rendersAsStamp[index] = true;
-        }
-    }
-    // The creation a body renders as a stamp, or null (it renders as a catalog avatar): an INHABITANT wears the look's
-    // creation (a Creation look) or its placement's own creation; a crowd body wears its look's creation (a Creation
-    // look). The uniform scale folds the placement scale, the look scale, and the body's own live scale (see
-    // LiveBodyScale) — the same bodies.scaleRow cell WorldPopulation.SyncBodyScale reads server-side.
-    private WorldStampPool.BodyStamp? ResolveStampCreation(int index, WorldDefinition definition) {
-        var look = m_client.Look(index: index);
-        var liveScale = LiveBodyScale(
-            definition: definition,
-            index: index
-        );
-
-        if (m_client.PlacementId(index: index) is { } placementId) {
-            if (WorldDefinitionRows.FindPlacement(
-                placements: definition.Placements,
-                id: placementId
-            ) is not { } placement) {
-                return null;
-            }
-
-            var prototypeId = ((look.Source is WorldLookSource.Creation inhabitLook)
-                ? inhabitLook.PrototypeId.Value
-                : placement.PrototypeId
-            );
-
-            return ((WorldDefinitionRows.FindCreation(
-                creations: definition.Creations,
-                id: prototypeId
-            ) is { } creation)
-                ? new WorldStampPool.BodyStamp(
-                    BodyIndex: index,
-                    Creation: creation,
-                    Scale: ((placement.Scale * look.Scale) * liveScale),
-                    Look: look
-                )
-                : null
-            );
-        }
-
-        if (look.Source is WorldLookSource.Creation crowdLook) {
-            return ((WorldDefinitionRows.FindCreation(
-                creations: definition.Creations,
-                id: crowdLook.PrototypeId
-            ) is { } creation)
-                ? new WorldStampPool.BodyStamp(
-                    BodyIndex: index,
-                    Creation: creation,
-                    Scale: (look.Scale * liveScale),
-                    Look: look
-                )
-                : null
-            );
-        }
-
-        return null;
     }
     private bool TryPresentedAppearance(int index, out Vector3 bodyColor, out WorldLook look, out byte catalogRig) {
         if (m_client.IsActive(index: index)) {
@@ -633,12 +522,12 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         var definition = m_client.Definition;
 
         m_bakedColors.Begin();
-        RefreshBodyStamps();
+        m_census.Refresh(source: m_client);
         m_animator.Reconcile(
             placements: definition.Placements,
             creations: definition.Creations,
             dynamics: definition.Dynamics,
-            bodyStamps: m_bodyStamps
+            bodyStamps: m_census.Stamps
         );
         Compose(
             builder: builder,
@@ -839,7 +728,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 moved: moved,
                 rig: m_emittedAvatarRigs[index],
                 rootOrientation: followedOrientation,
-                rootPosition: (m_rendersAsStamp[index]
+                rootPosition: (m_animator.HasBodyRegistration(bodyIndex: index)
                 ? context.ParkPosition
                 : followedPosition),
                 scale: m_emittedAvatarScales[index],
@@ -895,6 +784,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             ? unchecked((int)((m_bakes.Revision * 2L) + 1L))
             : 0);
     }
+
     // A prototype's baked mesh when the lever is on and its bake is ready; the schedule counts the switch.
     private SdfMesh? BakedMeshFor(string prototypeId) => ((
         m_settings.Bakes &&
@@ -935,6 +825,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         m_anchor = anchor;
         m_settings = settings;
         m_animator = animator;
+        m_meshDraws = new WorldSceneMeshDraws(pool: animator);
         m_text = text;
         m_audio = audio;
         m_bakes = bakes;
@@ -959,12 +850,12 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         // A booted world may already stamp animated/attached placements or inhabited bodies — register them before the probe
         // so the worst-case build sees the same pool the first live build will (body stamps are empty until the first
         // snapshot).
-        RefreshBodyStamps();
+        m_census.Refresh(source: m_client);
         m_animator.Reconcile(
             placements: definition.Placements,
             creations: definition.Creations,
             dynamics: definition.Dynamics,
-            bodyStamps: m_bodyStamps
+            bodyStamps: m_census.Stamps
         );
         // A future stamp may use either emission class. Reserve both independent floors: a scoped creation's
         // single instance does not cover a scope-free creation's per-shape directory entries or probe words.
@@ -994,60 +885,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// <remarks>One draw per static placement instance of a prototype that carries a mesh, from the last static
     /// rebuild, then the stamp pool's (<see cref="WorldStampPool.MeshDraws"/>): an animated, inhabited or attached
     /// stamp's mesh at its root this frame. Recomposed only when the static list is a new one or the pool rewrote its own.</remarks>
-    public IReadOnlyList<SdfMeshDraw> MeshDraws {
-        get {
-            ComposeMeshDraws();
-
-            return m_meshDraws;
-        }
-    }
+    public IReadOnlyList<SdfMeshDraw> MeshDraws => m_meshDraws.Draws;
     /// <inheritdoc/>
-    public long MeshDrawsRevision {
-        get {
-            ComposeMeshDraws();
-
-            return m_meshDrawsRevision;
-        }
-    }
-
-    // Recomposes the static draws and the pool's when the static list is a new one or the pool rewrote its own: either
-    // passes through alone, and both are copied into this emitter's own list, rewritten in place, so a moving stamp
-    // allocates nothing here.
-    private void ComposeMeshDraws() {
-        var stamped = m_animator.MeshDraws;
-        var stampedRevision = m_animator.MeshDrawsRevision;
-
-        if (
-            ReferenceEquals(objA: m_staticMeshDraws, objB: m_composedStaticMeshDraws) &&
-            (stampedRevision == m_composedStampedRevision)
-        ) {
-            return;
-        }
-
-        m_composedStaticMeshDraws = m_staticMeshDraws;
-        m_composedStampedRevision = stampedRevision;
-        m_meshDrawsRevision++;
-
-        if (stamped.Count == 0) {
-            m_meshDraws = m_staticMeshDraws;
-
-            return;
-        }
-        if (m_staticMeshDraws.Count == 0) {
-            m_meshDraws = stamped;
-
-            return;
-        }
-
-        m_composedMeshDraws.Clear();
-
-        for (var index = 0; (index < m_staticMeshDraws.Count); index++) {
-            m_composedMeshDraws.Add(item: m_staticMeshDraws[index]);
-        }
-        for (var index = 0; (index < stamped.Count); index++) {
-            m_composedMeshDraws.Add(item: stamped[index]);
-        }
-
-        m_meshDraws = m_composedMeshDraws;
-    }
+    public long MeshDrawsRevision => m_meshDraws.Revision;
 }

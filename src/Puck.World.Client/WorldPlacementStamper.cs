@@ -167,6 +167,7 @@ public static class WorldPlacementStamper {
             scale: scale
         ));
     }
+
     /// <summary>Poses a prototype's mesh as a draw: its engine-frame triangles under a uniform scale, an optional mirror (a
     /// plane through the origin in the local frame, as the shapes reflect), then the rotation and the origin, composed in
     /// the row-vector convention <see cref="SdfMeshDraw"/> carries. A static placement and a stamp-pool root pose it
@@ -205,6 +206,7 @@ public static class WorldPlacementStamper {
         ),
         key: mesh
     );
+
     // Emits the creation's shapes, EACH its own segment carrying the FULL placement prefix — the shader splits the
     // stream at each ResetPoint and a segment's transforms are local to it, so a shared prefix segment would be dead.
     // Uniform placement scale commutes with the per-shape rotations (shear-free).
@@ -641,12 +643,14 @@ public static class WorldPlacementStamper {
             );
         }
     }
+
     // Whether a creation's bake holds everything its placements show: a bake is the creation's contact field, so text
     // runs and noise relief, which only its presentation carries, keep it drawing through its field.
     private static bool DrawsItsBake(CreationDocument creation) => (
         (creation.TextRuns is not { Count: > 0 }) &&
         (creation.Noise is null)
     );
+
     /// <summary>The emitted instance count of one placement, including pattern/sampled and reflected copies.</summary>
     /// <param name="placement">The placement row.</param>
     /// <param name="worldSeed">The world's reroll seed (<c>generation.worldSeed</c>) — resolves a Noise/Scatter
@@ -661,10 +665,39 @@ public static class WorldPlacementStamper {
             mirror: WorldPlacementStamp.MirrorFor(placement: placement)
         );
     }
-    /// <summary>Whether a creation row animates through timeline frames or drivers — the static/animated fork every consumer
-    /// shares.</summary>
+    /// <summary>Whether a creation row animates — the static/animated fork every consumer shares. A driver or an
+    /// inverse-kinematics effector animates; a timeline frame animates only where one of its transforms differs from its shape's authored position, rotation or
+    /// scale (a state-bound value always differs from a literal). A creation whose frames carry no transforms, or only
+    /// its shapes' authored poses, moves nothing, so it stamps statically.</summary>
     /// <param name="creation">The creation row.</param>
-    public static bool IsAnimated(WorldPrototype creation) => ((creation.Document.Frames is { Count: > 0 }) || (creation.Document.Drivers is { Count: > 0 }));
+    /// <returns><see langword="true"/> when the creation's drivers, effectors or frames move a shape.</returns>
+    public static bool IsAnimated(WorldPrototype creation) {
+        var document = creation.Document;
+
+        if (
+            (document.Drivers is { Count: > 0 }) ||
+            (document.Effectors is { Count: > 0 })
+        ) {
+            return true;
+        }
+
+        var shapes = (document.Shapes ?? []);
+
+        foreach (var frame in (document.Frames ?? [])) {
+            foreach (var transform in (frame.Transforms ?? [])) {
+                foreach (var shape in shapes) {
+                    if (
+                        (shape.Id == transform.Id) &&
+                        (!Equals(objA: shape.Position, objB: transform.Position) || !Equals(objA: shape.Rotation, objB: transform.Rotation) || !Equals(objA: shape.Scale, objB: transform.Scale))
+                    ) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
     /// <summary>Whether a placement renders as a STATIC furniture stamp — not when it is animated (the stamp pool replays
     /// it), not when it INHABITS (a live body renders its creation through a body-rooted stamp instead), and not when it
     /// ATTACHES (the stamp pool roots it on a live body's pose plus the facet's local offset, so its authored transform

@@ -20,7 +20,7 @@ namespace Puck.World.Client;
 /// </summary>
 /// <remarks>Single-threaded on the launcher's window-pump thread: snapshots arrive synchronously inside the server
 /// step, submissions run immediately before it, and the render-pose refresh runs during frame produce.</remarks>
-public sealed class WorldClient : IClientSink, ISdfAnchorSource {
+public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSource {
     /// <summary>The entity-view capacity — single-sourced from <see cref="WorldBodiesLimits.CapacityCeiling"/>
     /// so the validator's admitted population.capacity and this client's fixed
     /// per-entity arrays can never again drift apart: an over-capacity document refuses at load instead of booting

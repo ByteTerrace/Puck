@@ -12,9 +12,10 @@ using Puck.World.Protocol;
 namespace Puck.World.Client;
 
 /// <summary>
-/// The session projection's content half: composes a destination world's static authored placement geometry plus its
-/// live mirrored avatars (see <see cref="WorldSessionMirror"/>'s own remarks) into an <see cref="SdfProgramBuilder"/>,
-/// and dresses the result into one <see cref="SdfFrame"/> framed through the destination's chosen camera — the
+/// The session projection's content half: composes a destination world's static authored placement geometry, its
+/// stamp pool (animated, inhabited and attached creations) and its live mirrored avatars (see
+/// <see cref="WorldSessionMirror"/>'s own remarks) into an <see cref="SdfProgramBuilder"/>, and dresses the result
+/// into one <see cref="SdfFrame"/> framed through the destination's chosen camera — the
 /// <see cref="ISdfSceneEmitter"/>/<see cref="ISdfFrameDresser"/> split <c>WorldFramePresenter</c> and
 /// <c>WorldSceneEmitter</c> already establish, collapsed into one type here because a session
 /// projection has exactly one content source and needs no second host to own presentation separately.
@@ -22,16 +23,16 @@ namespace Puck.World.Client;
 /// <remarks>
 /// <para>
 /// Reuses <see cref="WorldPlacementStamper"/> directly — the same static-stamp compiler
-/// <c>WorldSceneEmitter</c> calls for the boot world's own decoration placements — and
-/// <see cref="WorldRigCatalog"/> directly for avatars, rather than a second implementation of either. No screens,
+/// <c>WorldSceneEmitter</c> calls for the boot world's own decoration placements — a <see cref="WorldStampPool"/>
+/// of its own, rooted on the destination through <see cref="WorldSessionStampSource"/> with its census kept by a
+/// <see cref="WorldBodyStampCensus"/>, and <see cref="WorldRigCatalog"/> directly for avatars, rather than a second
+/// implementation of any of them. No screens,
 /// no editor overlay: a session mirror does not process the destination's own <c>screens</c> section at all, which is
 /// what closes recursion structurally (a destination naming its own session screen has no path this type ever walks
 /// into) — <c>WorldScreenBinder</c> still narrates the depth-1 policy by name when it detects that shape, so
-/// the refusal is observable even though nothing here could recurse regardless. Vehicles (a body-rooted creation
-/// stamp riding an inhabited placement) are out of this type's scope: <c>WorldStampPool</c>'s
-/// <c>PackTransforms</c>/<c>RootPose</c> are hard-typed against a concrete <see cref="WorldClient"/> instance, not an
-/// abstraction a <see cref="WorldSessionMirror"/> could satisfy without widening that pool's contract — a driven body
-/// mirrors as its catalog avatar, never the vehicle's own geometry, until that seam is opened.
+/// the refusal is observable even though nothing here could recurse regardless. A body that renders its creation
+/// through the pool (an inhabitant, or a crowd body wearing a creation look) parks its catalog avatar, as the local
+/// scene's does.
 /// </para>
 /// <para>
 /// <b>The interpolation timebase.</b> A session's view calls <c>ISdfFrameSource.CaptureFrame</c> with its own
@@ -66,8 +67,15 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     private WorldStateMirror? m_bakedColorsMirror;
     private int m_bakedColorRevision;
 
-    // The static placements' mesh draws the last live Emit fixed.
-    private IReadOnlyList<SdfMeshDraw> m_meshDraws = [];
+    // The destination's stamp pool, packed past the avatar catalog's slots, the source it roots on, its creation-stamp
+    // census, and the mesh draws: the static placements' the last live Emit fixed, then the pool's.
+    private readonly WorldBodyStampCensus m_census = new();
+
+    private readonly WorldSceneMeshDraws m_meshDraws;
+
+    private readonly WorldStampPool m_pool = new();
+
+    private readonly WorldSessionStampSource m_source;
 
     private SdfProgram? m_lastProgram;
     // The WINDOW projection's per-produced-frame override — set by WorldScreenBinder.Publish (the one place with access
@@ -106,6 +114,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         m_mirror = mirror;
         m_effectiveCameraName = effectiveCameraName;
         m_fieldOfViewRadians = fieldOfViewRadians;
+        m_meshDraws = new WorldSceneMeshDraws(pool: m_pool);
+        m_source = new WorldSessionStampSource(mirror: mirror);
     }
 
     // Registers the avatar palette and emits the hybrid catalog range — the probe branch (largest detailed rigs plus
@@ -118,9 +128,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         var noseFactor = m_mirror.Definition.PlayerDefaults.NoseFactor;
 
         for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
-            // A Creation look's body would render through the stamp pool on the boot path; this emitter has no
-            // stamp-pool seam (see this type's own remarks), so a mirrored Creation-look body still renders as its
-            // catalog avatar — RigFor's Creation-look fallback lands here for that reason.
+            // A body the pool registered renders its creation there and parks this catalog avatar; its palette entry
+            // is still emitted, so the catalog keeps the frozen shape its probe reserved.
             WorldMirroredAvatarBand.EmitPalette(
                 accentMaterials: accentMaterials,
                 bodyColor: m_mirror.BodyColor(index: index),
@@ -300,6 +309,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         );
 
         m_lastProgram = program;
+        // The pool's replay cursors advance on this view's own produced-frame interval, latched for the next pack.
+        m_pool.Tick(deltaSeconds: deltaSeconds);
 
         var camera = (m_windowOverride ?? ResolveCamera(
             height: height,
@@ -334,7 +345,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             // The mirrored world's own far plane (its render.farDistance), so the panel frames the same depth its
             // authority renders.
             FarDistance = m_dressedFarDistance,
-            // The mirrored world's static placements' meshes.
+            // The mirrored world's static placements' meshes, then its stamp pool's.
             MeshDraws = meshDraws,
             MeshDrawsRevision = meshDrawsRevision,
         };
@@ -352,6 +363,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
                 builder: builder,
                 candidate: definition,
                 bodyColor: m_mirror.BodyColor,
+                colors: BakedColors(),
+                pool: m_pool,
                 slotBase: context.SlotBase
             );
 
@@ -364,6 +377,15 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             // omitted until session delivery transports pinned assets and this view can share the merged glyph atlas.
             var meshDraws = new List<SdfMeshDraw>();
 
+            // The pool reconciles first on every rebuild: animated placements root statically, attached ones on
+            // their target body, and the census's bodies on their live poses, as the local scene's pool does.
+            m_census.Refresh(source: m_source);
+            m_pool.Reconcile(
+                bodyStamps: m_census.Stamps,
+                creations: definition.Creations,
+                dynamics: definition.Dynamics,
+                placements: definition.Placements
+            );
             WorldPlacementStamper.EmitStatic(
                 builder: builder,
                 colors: colors,
@@ -373,7 +395,14 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
                 palettes: m_palettes,
                 meshDraws: meshDraws
             );
-            m_meshDraws = meshDraws;
+            m_meshDraws.Static = meshDraws;
+            m_pool.Emit(
+                builder: builder,
+                colors: colors,
+                maxPlacementScale: definition.Authoring.MaxPlacementScale,
+                probeWorstCase: false,
+                slotBase: (context.SlotBase + WorldRigCatalog.DynamicTransformCapacity)
+            );
         }
 
         EmitAvatars(
@@ -386,7 +415,9 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     public (int Words, int Instances) MeasureCandidate(WorldDefinition candidate) =>
         WorldSessionRenderEnvelope.MeasureCandidate(
             candidate: candidate,
-            bodyColor: m_mirror.BodyColor
+            bodyColor: m_mirror.BodyColor,
+            colors: BakedColors(),
+            pool: m_pool
         );
     /// <inheritdoc/>
     /// <remarks>Packs every mirrored-active avatar's interpolated pose into its frozen catalog leaf slots (see
@@ -464,13 +495,25 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
                 moved: moved,
                 rig: m_emittedRigs[index],
                 rootOrientation: orientation,
-                rootPosition: position,
+                rootPosition: (m_pool.HasBodyRegistration(bodyIndex: index)
+                ? context.ParkPosition
+                : position),
                 scale: m_emittedScales[index],
                 table: slots
             ),
                 owner: index
             );
         }
+
+        // The pool packs after the avatar catalog, whose reserved slots it sits past: animated placements ride their
+        // static pose, attached and body-rooted stamps the destination's interpolated body pose.
+        m_pool.PackTransforms(
+            client: m_source,
+            moved: moved,
+            parkPosition: context.ParkPosition,
+            slotBase: (context.SlotBase + WorldRigCatalog.DynamicTransformCapacity),
+            transforms: slots
+        );
     }
     /// <summary>Sets (or clears) this frame's window camera override — the off-axis frustum
     /// <see cref="WorldWindowFrustumFit.TryFitWindow"/> fit against the border pair's two face rows and the local
@@ -494,7 +537,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// <summary>Finds the surface a ray meets among the destination's static placements a session view shows, marched in
     /// fixed point (<see cref="SdfFieldEvaluator.Raycast"/>) out to the last dressed frame's far distance. The field is
     /// the static placements alone, emitted once per dressed program: the fixed-point evaluator takes no dynamic
-    /// transforms, so a mirrored avatar is not a surface a pick lands on.</summary>
+    /// transforms, so neither a mirrored avatar nor a creation the stamp pool draws is a surface a pick lands on.</summary>
     /// <param name="ray">The ray, in the destination's space.</param>
     /// <param name="point">The point the ray meets, in the destination's space, when this returns <see langword="true"/>.</param>
     /// <returns><see langword="true"/> when a frame has been dressed, the evaluator admits the static placements'
@@ -587,11 +630,13 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// band and one root slot per remaining crowd body — the same hybrid worst case
     /// <c>WorldSceneEmitter.DynamicSlotCount</c> reserves for its own avatar range, sized off the engine-wide
     /// <see cref="WorldBodiesLimits.CapacityCeiling"/>, so a full destination can never outgrow this emitter's probe.</summary>
-    public int DynamicSlotCount => WorldRigCatalog.DynamicTransformCapacity;
+    public int DynamicSlotCount => (WorldRigCatalog.DynamicTransformCapacity + WorldStampPool.DynamicSlotCount);
     /// <inheritdoc/>
     public int RevisionComponentCount => 3;
     /// <inheritdoc/>
-    /// <remarks>The mirrored world's static placements' meshes, fixed by each live <see cref="Emit"/>. A session view
-    /// renders no stamp pool, so an animated or attached stamp draws neither its shapes nor its mesh here.</remarks>
-    public IReadOnlyList<SdfMeshDraw> MeshDraws => m_meshDraws;
+    /// <remarks>The mirrored world's static placements' meshes, fixed by each live <see cref="Emit"/>, then its stamp
+    /// pool's (<see cref="WorldStampPool.MeshDraws"/>).</remarks>
+    public IReadOnlyList<SdfMeshDraw> MeshDraws => m_meshDraws.Draws;
+    /// <inheritdoc/>
+    public long MeshDrawsRevision => m_meshDraws.Revision;
 }

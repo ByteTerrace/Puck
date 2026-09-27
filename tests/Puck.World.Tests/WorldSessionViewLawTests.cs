@@ -1,6 +1,8 @@
+using System.Numerics;
 using Puck.Maths;
 using Puck.SdfVm;
 using Puck.SignedDistance.Queries;
+using Puck.World.Authoring;
 using Puck.World.Client;
 using Xunit;
 
@@ -13,15 +15,14 @@ namespace Puck.World.Tests;
 /// <see cref="SdfCompositionFrameSource"/>, at the session's default extent. The camera stands outside every surface of
 /// the program, and the fixed-point raycast of the view's central ray (<see cref="SdfFieldEvaluator.Raycast"/>) meets the
 /// ball, the program's one instance, within the render far distance, so the screen's centre shows the ball. A session
-/// view renders only static placements: a creation that declares frames or drivers rides the stamp pool, which no
-/// session view renders, so such a ball would compose no instance and the screen would show the destination's sky.
+/// view also draws its destination's stamp pool: the same ball given a frame that moves its shape animates, rides the
+/// pool and still composes as the program's one instance, its root packed at its placement.
 /// </summary>
 public sealed class WorldSessionViewLawTests {
     private const string SessionWorld = "tests/Puck.World.Canaries/uploaded-sources/session.world.json";
 
-    [Fact]
-    public void TheCanarysSessionViewFramesItsBall() {
-        var definition = AuthoredGameFixtures.Load(relativePath: SessionWorld);
+    // The frame a session view of a destination renders, composed as WorldScreenBinder.RegisterSessionView composes it.
+    private static SdfFrame SessionFrame(WorldDefinition definition) {
         var mirror = new WorldSessionMirror(placeholder: definition);
         var emitter = new WorldSessionSceneEmitter(
             effectiveCameraName: null,
@@ -31,12 +32,50 @@ public sealed class WorldSessionViewLawTests {
             dresser: emitter,
             emitters: [emitter]
         );
-        var frame = source.CaptureFrame(
+
+        return source.CaptureFrame(
             deltaSeconds: 0f,
             height: WorldViewInstances.DefaultSessionHeight,
             interpolationAlpha: 0f,
             width: WorldViewInstances.DefaultSessionWidth
         );
+    }
+
+    [Fact]
+    public void ASessionViewOfAnAnimatedCreationIncludesItsInstance() {
+        var definition = AuthoredGameFixtures.Load(relativePath: SessionWorld);
+        var ball = Assert.Single(collection: definition.Creations);
+        var shape = Assert.Single(collection: (ball.Document.Shapes ?? []));
+        var animated = (ball with {
+            Document = (ball.Document with {
+                Frames = [new FrameDocument(
+                    Name: "lift",
+                    Transforms: [new FrameTransformDocument(
+                        Id: shape.Id,
+                        Position: (shape.Position.Value + Vector3.UnitY),
+                        Rotation: shape.Rotation,
+                        Scale: shape.Scale
+                    )]
+                )],
+            }),
+        });
+        var placement = Assert.Single(collection: definition.Placements);
+
+        Assert.True(condition: WorldPlacementStamper.IsAnimated(creation: animated));
+
+        var frame = SessionFrame(definition: (definition with { CreationsRaw = [animated] }));
+
+        // The animated ball rides the destination's stamp pool, packed past the avatar catalog's slots: its instance is
+        // the program's one, and its root sits at its placement.
+        _ = Assert.Single(collection: frame.Program.Instances);
+        Assert.Equal(
+            actual: frame.DynamicTransforms[WorldRigCatalog.DynamicTransformCapacity].Position,
+            expected: placement.Position.Value
+        );
+    }
+    [Fact]
+    public void TheCanarysSessionViewFramesItsBall() {
+        var frame = SessionFrame(definition: AuthoredGameFixtures.Load(relativePath: SessionWorld));
 
         // The ball is the destination's one static placement, and it has no population to mirror.
         _ = Assert.Single(collection: frame.Program.Instances);

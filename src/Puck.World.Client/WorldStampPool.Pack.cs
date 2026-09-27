@@ -16,6 +16,7 @@ public sealed partial class WorldStampPool {
     // packed, and a moving one allocates nothing once the list has grown to its stamps.
     private readonly SdfMeshDraw?[] m_meshDraws = new SdfMeshDraw?[WorldPlacementPolicy.MaxStampRegistrations];
     private readonly List<SdfMeshDraw> m_meshDrawList = new(capacity: WorldPlacementPolicy.MaxStampRegistrations);
+
     private bool m_meshDrawsChanged;
     private long m_meshDrawsRevision;
 
@@ -43,7 +44,7 @@ public sealed partial class WorldStampPool {
     /// emitter that owns the pool (see <see cref="Emit"/>).</param>
     /// <param name="parkPosition">Where an unused slot — or an attached row whose target body is not live this
     /// frame — parks, hidden below the floor (<see cref="SdfEmitContext.ParkPosition"/>).</param>
-    public void PackTransforms(Span<DynamicTransform> transforms, WorldClient client, SdfMovedTransforms moved, int slotBase, Vector3 parkPosition) {
+    public void PackTransforms(Span<DynamicTransform> transforms, IWorldStampSource client, SdfMovedTransforms moved, int slotBase, Vector3 parkPosition) {
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: moved);
 
@@ -196,6 +197,7 @@ public sealed partial class WorldStampPool {
             m_meshDrawsChanged = false;
         }
     }
+
     // Records one pool entry's draw, noting whether it changed.
     private void SetMeshDraw(int index, SdfMeshDraw? draw) {
         if (m_meshDraws[index] != draw) {
@@ -203,9 +205,8 @@ public sealed partial class WorldStampPool {
             m_meshDrawsChanged = true;
         }
     }
-
     // Decides whether a live registration repacks this frame; one new to its pool entry always does.
-    private bool Wake(WorldClient client, int index, Registration live, SdfMovedTransforms moved, Vector3 rootPosition, Quaternion rootRotation) {
+    private bool Wake(IWorldStampSource client, int index, Registration live, SdfMovedTransforms moved, Vector3 rootPosition, Quaternion rootRotation) {
         var swapped = !ReferenceEquals(
             objA: m_packedRegistrations[index],
             objB: live
@@ -247,7 +248,7 @@ public sealed partial class WorldStampPool {
     }
     // Packs one live registration's root and shape slots, stepping its followers, drivers and effectors by
     // deltaSeconds.
-    private void PackRegistration(Span<DynamicTransform> transforms, WorldClient client, Registration live, int rootSlot, int shapeCount, float deltaSeconds, Vector3 rootPosition, Quaternion rootRotation, float placementScale, Vector3 parkPosition) {
+    private void PackRegistration(Span<DynamicTransform> transforms, IWorldStampSource client, Registration live, int rootSlot, int shapeCount, float deltaSeconds, Vector3 rootPosition, Quaternion rootRotation, float placementScale, Vector3 parkPosition) {
         // The pose-continuity watch is read for every body-rooted registration, not only a follower-bearing one: a
         // teleport or a reused body slot invalidates a latched contact point the same way it invalidates a follower —
         // the world point a foot was planted at belongs to where the body was.
