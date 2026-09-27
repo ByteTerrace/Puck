@@ -72,7 +72,6 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
 
     private const int ViewportByteLength = ((sizeof(float) * 4) * 6); // 96-byte ViewportData incl. the renderScale row (KEEP IN SYNC with frame/sdf-viewport.hlsli)
     private const ulong ViewsArgsByteLength = (sizeof(uint) * 3); // the three indirect group counts sdf-cull-args.comp writes
-    private const int PrimaryHitByteLength = (15 * sizeof(uint)); // the visibility record's fifteen words in its V, C, L, N and S rows; paired with sdf-visibility.hlsli's SdfVisibilityWords
     // Packed flow/cloud volume stride; paired with shade-volumes.hlsli.
     private const int VolumeByteLength = ((sizeof(float) * 4) * SdfVolume.VectorsPerEntry);
     private const uint WorkgroupEdge = 8;
@@ -180,7 +179,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private readonly IGpuComputePipeline m_primaryPipeline;
     private readonly IGpuComputePipeline m_surfacePipeline;
     private readonly IGpuComputePipeline m_ambientPipeline;
-    private readonly IGpuBuffer m_primaryHitBuffer;
+    private readonly IGpuBuffer m_visibilityRecordBuffer;
     private readonly uint m_width;
 
     private int m_currentSlot;
@@ -498,10 +497,10 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         // One full-extent slice per viewport, like the source textures: changing regions must never overrun a
         // buffer sized for a previous layout. Shared across frame slots; Record orders primary writes before
         // shading reads and this frame's writes after the preceding frame's reads.
-        m_primaryHitBuffer = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(
+        m_visibilityRecordBuffer = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(
             name: NameOf(part: "primary-hits"),
             sizeBytes: FrameBufferBytes(
-                buffer: SdfFrameBuffer.PrimaryHits,
+                buffer: SdfFrameBuffer.VisibilityRecords,
                 capacity: capacity
             ),
             usage: GpuBufferUsage.Storage
@@ -665,8 +664,8 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
                 WriteWorldBuffer(buffer: m_cullBoundsBuffer, member: SdfWorldInterfaces.CullBoundsWritten, set: viewsSet);
                 WriteWorldBuffer(buffer: m_cullBoundsBuffer, member: SdfWorldInterfaces.CullBounds, set: viewsSet);
                 WriteWorldBuffer(buffer: m_brickPoolBuffer, member: SdfWorldInterfaces.BrickPool, set: viewsSet);
-                WriteWorldBuffer(buffer: m_primaryHitBuffer, member: SdfWorldInterfaces.VisibilityRecordsWritten, set: viewsSet);
-                WriteWorldBuffer(buffer: m_primaryHitBuffer, member: SdfWorldInterfaces.VisibilityRecords, set: viewsSet);
+                WriteWorldBuffer(buffer: m_visibilityRecordBuffer, member: SdfWorldInterfaces.VisibilityRecordsWritten, set: viewsSet);
+                WriteWorldBuffer(buffer: m_visibilityRecordBuffer, member: SdfWorldInterfaces.VisibilityRecords, set: viewsSet);
                 // The mesh visibility target exists only once a frame draws a mesh (SdfWorldEngine.MeshPass.cs); until
                 // then the binding rides the filler, which no kernel reads while the world block's meshDraws is zero.
                 BindMeshVisibility(
@@ -816,7 +815,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         m_cullBoundsBuffer.Dispose();
         m_viewsArgsBuffer.Dispose();
         m_tileBuffer.Dispose();
-        m_primaryHitBuffer.Dispose();
+        m_visibilityRecordBuffer.Dispose();
         m_instanceMaskBuffer.Dispose();
 
         foreach (var requestBuffer in m_brickRequestBuffers) {

@@ -90,7 +90,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
     float marchBound = min(farDistance, (meshHit.covered ? min(farBound, meshHit.t) : farBound));
 
     if ((marchStart >= 0.0) && (marchStart < marchBound) && (viewMode != DebugViewModeSlice) && (viewMode != DebugViewModeMask) && (viewMode != DebugViewModeOvershoot)) {
-        SdfPrimaryHit primary = sdfTracePrimary(rayOrigin, rayDirection, marchStart, firstExit, secondEntry,
+        SdfPrimaryMarch primary = sdfTracePrimary(rayOrigin, rayDirection, marchStart, firstExit, secondEntry,
             marchBound, farDistance, instanceMaskBase, pixelFootprint);
         traveled = primary.traveled;
         terminalRadius = primary.radius;
@@ -286,7 +286,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
                 // DETAIL RE-RESOLVE, moved ahead of AO/lighting (Puck.SignedDistance.SdfMaterial's wrap/soften/eye
                 // lanes need the resolved material before either): one extra hit-only field evaluation, WITH Detail
                 // shapes included, so a rivet or seam's own material wins its footprint. When the host proves
-                // there are no Detail shapes, reuse the primary hit's complete attributes and seam instead.
+                // there are no Detail shapes, reuse the visibility record's complete attributes and seam instead.
                 if (!sdfProgramLayout.noDetailShapes) {
                     sdfDetailShadingActive = true;
                     SdfHit detailHit = mapMasked(surfacePoint, instanceMaskBase);

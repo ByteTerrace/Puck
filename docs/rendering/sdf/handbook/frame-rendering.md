@@ -21,8 +21,8 @@ view's own output image:
 
 These are the engine's `world.counters gpu` pass labels — the columns its per-pass work
 counters report against. Here is what the culling and rendering passes do;
-[the engine README](../../../../src/Puck.SdfVm/README.md) describes the hit
-records shared by the four per-pixel passes.
+[the engine README](../../../../src/Puck.SdfVm/README.md) describes the visibility
+records the four per-pixel passes share: one per pixel of each view, sixty bytes.
 
 **mask** (`sdf-instance-cull.comp.hlsl`) computes, for every 16×16 screen tile, the
 set of instances that could possibly matter to that tile—a bitmask, one bit per
@@ -58,10 +58,11 @@ record; while a mesh draws, cull-args covers the whole view, and a mesh pixel sh
 and ambient occlusion.
 
 **primary** (`sdf-world-primary.comp.hlsl`) traces camera rays from their tile's entry
-depth, raised to the mesh projection's near plane when necessary, and records
-accepted hits. **surface** computes geometric normals and curvature.
-**ambient** evaluates contact occlusion along those normals.
-**views** reads these results and computes materials, lighting, shadows and
+depth, raised to the mesh projection's near plane when necessary, and writes
+each pixel's visibility record: ray parameter, identity, material and march data,
+misses included. **surface** adds the geometric normal and curvature to it.
+**ambient** evaluates contact occlusion along those normals into the record.
+**views** reads the record and computes materials, lighting, shadows and
 volumes. Compare all four passes when measuring per-pixel field cost: moving
 work between kernels can reduce register pressure but adds buffer traffic.
 

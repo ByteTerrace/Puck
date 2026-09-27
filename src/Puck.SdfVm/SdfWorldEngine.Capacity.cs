@@ -14,11 +14,13 @@ public sealed partial class SdfWorldEngine {
     /// <summary>Gets the bytes allocated for the visibility records: one record of <see cref="VisibilityRecordByteLength"/>
     /// bytes for every pixel of the full extent in every viewport the engine reserves.</summary>
     public ulong VisibilityRecordBytes => FrameBufferBytes(
-        buffer: SdfFrameBuffer.PrimaryHits,
+        buffer: SdfFrameBuffer.VisibilityRecords,
         capacity: FrameCapacity
     );
-    /// <summary>Gets the bytes of one visibility record, the words <c>sdf-visibility.hlsli</c> lays out.</summary>
-    public static int VisibilityRecordByteLength => PrimaryHitByteLength;
+
+    /// <summary>The bytes of one visibility record: the fifteen words in its V, C, L, N and S rows that
+    /// <c>sdf-visibility.hlsli</c> lays out (<c>SdfVisibilityWords</c>).</summary>
+    public const int VisibilityRecordByteLength = (15 * sizeof(uint));
 
     private SdfFrameCapacity FrameCapacity => new(
         BrickPoolVoxels: m_brickPoolVoxelCapacity,
@@ -119,7 +121,7 @@ public sealed partial class SdfWorldEngine {
         SdfFrameBuffer.Tiles => checked(((((ulong)capacity.Viewports) * ((TilePlaneCount * capacity.Tiles) + (((ulong)PartBoundFloatCount) * ((uint)capacity.Instances)))) * sizeof(float))),
         SdfFrameBuffer.ViewsArgs => ViewsArgsByteLength,
         SdfFrameBuffer.CullBounds => CullBoundsByteLength,
-        SdfFrameBuffer.PrimaryHits => checked(((((ulong)capacity.Width) * capacity.Height) * (((ulong)capacity.Viewports) * PrimaryHitByteLength))),
+        SdfFrameBuffer.VisibilityRecords => checked(((((ulong)capacity.Width) * capacity.Height) * (((ulong)capacity.Viewports) * VisibilityRecordByteLength))),
         _ => throw new ArgumentOutOfRangeException(
             actualValue: buffer,
             message: "Unknown SDF frame buffer.",

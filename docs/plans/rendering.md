@@ -1853,7 +1853,7 @@ no shared shadows, ambient occlusion, or reflections; a compact visibility
 record is tried before a large deferred buffer.
 
 **Deletes:** the shared record replaces the SDF engine's private one rather
-than sitting beside it. The `PrimaryHits` buffer and its per-pixel layout, and
+than sitting beside it. The engine's former `PrimaryHits` buffer and its per-pixel layout, and
 every pass that reads it, move to the shared visibility record, so one
 visibility format remains. The unbounded traversal survives only as the
 reference the check compares against, inside the test fixtures; no runtime
@@ -1885,7 +1885,8 @@ groups. The remaining work follows below.
    (ray parameter; identity, with its kind in bits 31 and 30 — background, SDF
    or mesh — and a source index; material; flags), coverage (terminal radius,
    threshold, blend weight and partner), lanes, normal and surface, and every
-   pass reads and writes `PrimaryHits` through it. Done when `puck parity` and
+   pass reads and writes the record buffer (`SdfFrameBuffer.VisibilityRecords`)
+   through it. Done when `puck parity` and
    `puck counters` read identically before and after.
 3. P4-1b, landed, freshness: `sdf-cull-args` writes the dispatch box's
    exclusive end beside its origin, and `worldVisibilityCurrent` in
@@ -1977,7 +1978,13 @@ groups. The remaining work follows below.
    validator refuses today, and in session views and neighbour worlds, whose
    emitters then pass their draw lists.
 10. The `PrimaryHit*` names become the visibility record's, and the owning
-    guides describe it.
+    guides describe it. Landed: the buffer is `SdfFrameBuffer.VisibilityRecords`,
+    held in the engine's `m_visibilityRecordBuffer`, its record length is the one
+    public `SdfWorldEngine.VisibilityRecordByteLength` (the alias that forwarded
+    to the private `PrimaryHitByteLength` is gone), the HLSL primary march's
+    result is `SdfPrimaryMarch`, the value its pass stores into a record's V, C
+    and L rows, and the `rendering` skill's kernel and sync-pair references and
+    the `Puck.SdfVm` README name the record.
 
 **Decisions.** Meshes rasterize first, into a sampled `RGBA32F` target (ray
 parameter, draw id plus one, octahedral normal) and a reversed-Z `D32Float`
@@ -4176,7 +4183,7 @@ packaging, and compiled worlds in the runtime and delivery programme.
 
 **Foundation.** P2, P3 and P5 are complete. P1a and P1b stay open beside the
 rest: neither blocks P4 or releasing the foundation. P4-0, P4-1a to P4-1c and
-P4-2a to P4-2d have landed; P4-2e and the visibility record's names remain. P6
+P4-2a to P4-2d and step 10, the visibility record's names, have landed; P4-2e remains. P6
 follows P4.
 Image-only packaging stays
 independent of placed-surface support, and shared GPU and World files have one

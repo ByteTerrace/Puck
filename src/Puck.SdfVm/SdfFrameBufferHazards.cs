@@ -9,7 +9,7 @@ public sealed class SdfFrameBufferHazards {
     private readonly SdfFramePass[] m_passes = new SdfFramePass[BufferCount];
     private readonly bool[] m_touched = new bool[BufferCount];
 
-    private static int BufferCount => (((int)SdfFrameBuffer.PrimaryHits) + 1);
+    private static int BufferCount => (((int)SdfFrameBuffer.VisibilityRecords) + 1);
 
     /// <summary>Forgets every use, as a new command list begins.</summary>
     public void Reset() => Array.Clear(array: m_touched);

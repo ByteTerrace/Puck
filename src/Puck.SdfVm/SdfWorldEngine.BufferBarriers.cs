@@ -33,7 +33,7 @@ public sealed partial class SdfWorldEngine {
         SdfFrameBuffer.Tiles => m_tileBuffer,
         SdfFrameBuffer.ViewsArgs => m_viewsArgsBuffer,
         SdfFrameBuffer.CullBounds => m_cullBoundsBuffer,
-        SdfFrameBuffer.PrimaryHits => m_primaryHitBuffer,
+        SdfFrameBuffer.VisibilityRecords => m_visibilityRecordBuffer,
         _ => throw new ArgumentOutOfRangeException(
             actualValue: buffer,
             message: "Unknown SDF frame buffer.",

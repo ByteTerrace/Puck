@@ -1,6 +1,6 @@
 // The visibility record: what each full-extent pixel of each viewport sees, written by the hit passes and shaded by
 // views. This module owns its layout; every reader and writer goes through the typed load and store functions below
-// and holds only a record address. KEEP IN SYNC with SdfWorldEngine.PrimaryHitByteLength.
+// and holds only a record address. KEEP IN SYNC with SdfWorldEngine.VisibilityRecordByteLength.
 //
 // A record is fifteen words in five rows:
 // V (4 words): the ray parameter t (Euclidean distance along the normalized camera ray), the identity, the material,
