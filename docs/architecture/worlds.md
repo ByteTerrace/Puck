@@ -161,12 +161,20 @@ surface textures, and an octahedral impostor
 ([prototype bakes](../rendering/sdf/handbook/bricks-and-baking.md#prototype-bakes)). It is
 keyed by the creation's pin (the prototype row's hash), the baker's version, and
 the quality tier, and one key is one set of bytes. Bakes are presentation only:
-contact, queries and simulation keep reading the field. With `world.bakes` on, an untinted static placement whose prototype's bake is
-ready draws the baked mesh through the mesh pass (its vertex normals and each
-triangle's palette entry, read from the bake's material identity) while the
-bake's textures do not draw yet, and keeps its field as
+contact, queries and simulation keep reading the field. A presentation draws
+its bakes by default when the loaded world's `BAKE` chunk supplies every bake
+from its pack before the first frame. A source boot draws fields, even when
+this machine's cache or another world's pack holds the same bake keys.
+`world.bakes off` forces fields; `world.bakes on` draws ready bakes, including
+ones made locally. The default therefore keeps captures independent of local
+baking. While bakes draw, an untinted static
+placement whose prototype's bake is ready draws the baked mesh through the mesh
+pass, textured from the bake's five surface textures, and keeps its field as
 camera-hidden instances that still cast shadows and occlude; a creation with
-text or noise relief keeps drawing through its field.
+text or noise relief keeps drawing through its field. The engine is not ready
+until the bake schedule has reconciled and, while the presentation draws its
+bakes, settled, so a capture or a `world.wait ready` never lands between a
+placement's field and its bake.
 
 A build output ships each bake once. `puck compile --tree` writes one bake pack,
 `bakes.puckbake`, at the root of its output: a chunk container
@@ -649,6 +657,16 @@ A joined-world projection renders the destination from the destination's own del
 its own measured clock, never through the host's presentation clock—independently scheduled or
 remote worlds do not share a presentation coordinate. A nested screen inside a projected destination
 binds dark: the explicit depth-one policy.
+
+A portal's face can show its destination as a window (`projection: window`): the face's portal facet
+maps a counterpart, and the destination renders each frame through an off-axis camera fitted, from
+the viewer's eye mapped through the door's isometry, to the face's glass mapped the same way. The
+window shows what a traveller at the eye would see through the door and parallaxes as the eye moves;
+the glass shows it edge to edge, with no bezel. The eye is the primary local seat's body at eye
+height, one per screen, since a screen shows one image. A pick through the glass continues through
+the camera the window rendered into the destination and, since the destination's own screens bind
+dark, ends on its world: on the surface the pick's ray meets among the destination's static
+placements. Routing input into the destination's authority is open work.
 
 User/group-scoped destinations make images viewer-dependent. One image per screen index cannot show
 different destinations to split-screen viewers; per-viewport bindings or distinct render passes are

@@ -13,6 +13,7 @@ public sealed partial class SdfWorldTables {
     // The handshake's frame and pass sets, allocated from the tables' pool once and rewritten by each handshake.
     private readonly nint m_isaFrameSet;
     private readonly nint m_isaPassSet;
+    private readonly nint m_worldSet;
 
     private ReadOnlyMemory<byte> DispatchIsaReport(IGpuComputePipeline pipeline, IGpuImage reportImage, IGpuImage sampledImage, IGpuSurfaceReadback readback, IGpuBuffer tiles, bool initializeImages) {
         var commandBuffer = m_commandPools[0].CommandBufferHandle;
@@ -23,6 +24,9 @@ public sealed partial class SdfWorldTables {
         recorder.BeginCommandBuffer(
             commandBufferHandle: commandBuffer
         );
+        // The World set binds the sampled filler at every mesh atlas until a frame draws a textured mesh, so the fillers
+        // reach their resting layouts before the handshake's first dispatch rather than with the first upload.
+        InitializeFillers(commandBuffer: commandBuffer);
 
         if (initializeImages) {
             recorder.TransitionImageLayout(
@@ -132,6 +136,13 @@ public sealed partial class SdfWorldTables {
             commandBufferHandle: commandBuffer,
             descriptorSetHandle: m_isaFrameSet,
             group: FrameGroup,
+            pipelineLayoutHandle: pipeline.LayoutHandle
+        );
+        recorder.BindDescriptorSet(
+            bindPoint: GpuBindPoint.Compute,
+            commandBufferHandle: commandBuffer,
+            descriptorSetHandle: m_worldSet,
+            group: WorldGroup,
             pipelineLayoutHandle: pipeline.LayoutHandle
         );
         recorder.BindDescriptorSet(

@@ -2,15 +2,16 @@ using System.Diagnostics;
 using System.Numerics;
 using Puck.SdfVm;
 using Puck.World.Client;
-using Puck.World.Server;
 
 namespace Puck.World;
 
 internal sealed partial class WorldScreenBinder {
-    // The document-driven bind: ApplySource's Session arm calls this with the AUTHORED session record VERBATIM —
-    // carrying Projection/Resolution, which TrySession's narrower (destination, camera)-only verb surface cannot
-    // express. Reusing this ONE core keeps a live re-point (TrySession) and a document delivery (ApplySource) from
-    // ever disagreeing about what "session {index}" is.
+    // The session bind: ApplySource's Session arm calls this with the authored session record verbatim, projection and
+    // resolution included, at boot and whenever a live document mutation (world.row.set screens/placements) replaces a
+    // face's declared source. It resolves and attaches into a local candidate first, so a re-point that fails to
+    // resolve leaves the slot's previous feed registered, rendering and holding its lease, and reports the failure by
+    // name. Only a live candidate retires the old registration and takes the name; no frame is produced between the
+    // release and the register, so a re-point shows no gap.
     private (bool Ok, string Message) ApplySessionSource(int index, WorldScreenSource.Session session) {
         if (m_disposed) {
             return (Ok: false, Message: "binder disposed");
@@ -149,9 +150,10 @@ internal sealed partial class WorldScreenBinder {
         }
 
         return null;
-    }    // Drops a slot's session reference and releases its registration/lease — the symmetric half of TrySession's
-    // acquire, run whenever the slot stops observing that destination (a source change away from Session, or a
-    // screen removal).
+    }
+    // Drops a slot's session reference and releases its registration/lease — the symmetric half of
+    // ApplySessionSource's acquire, run whenever the slot stops observing that destination (a source change away from
+    // Session, or a screen removal).
     private void ReleaseSlotSession(ScreenSlot slot) {
         if (slot.Session is not { } feed) {
             return;
@@ -186,12 +188,12 @@ internal sealed partial class WorldScreenBinder {
 
         return null;
     }
-    // Resolves (and headless-safely attaches) a session-sourced face's destination — the boot-loop and the runtime
-    // TrySession path both call this, so a resolve at boot and a resolve triggered by a live document mutation take
+    // Resolves (and headless-safely attaches) a session-sourced face's destination — the boot loop and
+    // ApplySessionSource both call this, so a resolve at boot and a resolve triggered by a live document mutation take
     // the identical route. Returns the newly attached feed on success (slot.DeclaredFault cleared); returns null on
     // failure (slot.DeclaredFault set to the refusal reason). Deliberately never touches slot.Session itself either
-    // way — the boot-loop caller assigns it directly (a fresh slot has nothing to preserve), while TrySession's
-    // re-point caller must be able to inspect a failed resolve without losing the slot's previous feed reference.
+    // way — the boot-loop caller assigns it directly (a fresh slot has nothing to preserve), while a re-point must be
+    // able to inspect a failed resolve without losing the slot's previous feed reference.
     // GPU view registration is a separate step (RegisterSessionView), since GPU services may not exist yet
     // (headless, or boot before the render factory runs).
     private SessionFeed? ResolveSession(ScreenSlot slot, WorldScreenSource.Session session) {
@@ -271,99 +273,20 @@ internal sealed partial class WorldScreenBinder {
             target: out instance
         );
     }
-    // Resolves the source (local, this document) face claiming this slot's screen index, plus its portal facet's
-    // mapped counterpart and that counterpart's own derived face in the destination's mirrored document.
-    // WorldDefinitionValidator already refuses a 'window' projection whose face lacks a mapped counterpart at
-    // document-validation time, so a false return here means the destination mirror has not delivered a definition
-    // naming that face yet.
-    private static bool TryResolveWindowGeometry(WorldDefinition bootDefinition, WorldFaceCatalog localCatalog, ScreenSlot slot, SessionFeed feed, out WorldFaceGeometry source, out WorldFaceGeometry destination) {
-        source = default;
-        destination = default;
-
-        var found = false;
-        var localRow = default(WorldFaceRow);
-
-        foreach (var row in localCatalog.Rows) {
-            if (row.ScreenIndex == slot.Index) {
-                localRow = row;
-                found = true;
-
-                break;
-            }
-        }
-
-        if (!found) {
-            return false;
-        }
-
-        var placement = WorldDefinitionRows.FindPlacement(
-            placements: bootDefinition.Placements,
-            id: localRow.PlacementId
-        );
-        var face = ((placement is null)
-            ? null
-            : WorldDefinitionRows.FindPlacementFace(
-                placement: placement,
-                face: localRow.FaceName
-            )
-        );
-
-        if (
-            (face?.Portal is not { Arrival: WorldPortalArrival.Mapped, Counterpart: { } counterpart }) ||
-            !WorldPortalCounterpart.TryParse(
-            counterpart: counterpart,
-            face: out var destinationFaceName,
-            placementId: out var destinationPlacementId
-        )
-        ) {
-            return false;
-        }
-
-        var destinationCatalog = WorldFaceCatalog.For(definition: feed.Mirror.Definition);
-
-        if (!destinationCatalog.TryFind(
-            faceName: destinationFaceName,
-            placementId: destinationPlacementId,
-            row: out var destinationRow
-        )) {
-            return false;
-        }
-
-        source = WorldFaceGeometry.FromFrame(frame: localRow.Frame);
-        destination = WorldFaceGeometry.FromFrame(frame: destinationRow.Frame);
-
-        return true;
-    }
-    // The runtime session bind — the ApplySource switch's Session arm, reached by a live document mutation
-    // (world.row.set screens/placements) replacing a face's declared source. Resolves/attaches (headless-safe) into
-    // a local candidate first — slot.Session is never touched until the new feed is proven live: a re-point that
-    // fails to resolve leaves the slot's previous feed completely untouched — still registered, still rendering,
-    // still holding its lease — and reports failure by name rather than silently landing on a torn-down slot while
-    // claiming success. Only once the new feed is confirmed does this retire the old registration and hand the name
-    // to the new one; single-threaded confinement means no frame is ever produced between the release and the
-    // register below, so a successful re-point still shows no gap: the session's instance keeps its name, and its
-    // producer renders the new feed's frame source from its next frame.
-    // The runtime screen.session verb's own narrow surface (destination + optional camera only — it re-points
-    // an ordinary camera-projection session live; a WINDOW facet is authored-only, per this lane's own brief, so
-    // this verb has no way to spell one). Shares ApplySessionSource's bind/release/register core with the
-    // document-reconcile path below rather than duplicating it.
-    private (bool Ok, string Message) TrySession(int index, string destinationName, string? cameraName) =>
-        ApplySessionSource(
-            index: index,
-            session: new WorldScreenSource.Session(
-                Destination: destinationName,
-                CameraName: cameraName
-            )
-        );
     // Recomputes every live WINDOW session's off-axis camera from this frame's local eye and the border pair's two
     // face rows — fresh every call, never cached across frames, so a placement mutation reaches the render the very
     // next produced frame.
     //
-    // The eye is read from the authoritative simulation body (WorldPopulation.EntryBody), never from
-    // hostFrame.Views: the overworld's SdfViewSnapshot camera rides a render-relative space, while
-    // WorldFaceCatalog's derived frames are in the document's absolute authored space, and mixing the two silently
-    // would fit a frustum against the wrong point. A no-op with no live window session or no resolvable local body.
+    // The eye is the primary local seat's body (WorldPopulation.EntryBody) at LocalEyeHeight, in the document's
+    // authored space, the space WorldFaceCatalog derives both apertures in. With no resolvable local body, each window
+    // falls back to the ordinary session camera.
     private void UpdateWindowCameras() {
+        foreach (var slot in m_slots.Values) {
+            if (slot.Session is { Projection: WorldScreenProjection.Window, Emitter: { } emitter }) {
+                emitter.SetWindowCamera(camera: null);
+            }
+        }
+
         // The LOCAL (boot) document — the same "one observation door" WorldInstanceHost.BootInstanceName resolves
         // everywhere else in this type (TryResolveDestinationInstance). Absent only in a boot-sequencing gap this
         // binder itself is constructed inside; a window degrades to its ordinary fallback for that one frame.
@@ -394,7 +317,6 @@ internal sealed partial class WorldScreenBinder {
             z: 0f
         ));
         var bootDefinition = boot.Server.Definition;
-        var localCatalog = WorldFaceCatalog.For(definition: bootDefinition);
 
         foreach (var slot in m_slots.Values) {
             if (
@@ -405,40 +327,39 @@ internal sealed partial class WorldScreenBinder {
                 continue;
             }
 
-            var geometryOk = TryResolveWindowGeometry(
-                bootDefinition: bootDefinition,
-                destination: out var destination,
-                feed: feed,
-                localCatalog: localCatalog,
-                slot: slot,
-                source: out var source
-            );
-            var camera = default(Puck.Abstractions.Cameras.CameraSnapshot);
-            var offset = default(Vector2);
-            var fitOk = (geometryOk && WorldWindowFrustumFit.TryFitWindow(
-                camera: out camera,
-                destination: destination,
-                localEye: localEye,
-                offset: out offset,
-                source: source
-            ));
-
-            if (fitOk) {
-                emitter.SetWindowCamera(
-                    camera: camera,
-                    offset: offset
-                );
-            } else {
-                // A transient gap (the destination hasn't delivered its first definition yet, the eye stands behind
-                // the glass this frame) degrades to the emitter's own ordinary default projection for one frame
-                // rather than freezing or throwing — the SAME fallback WorldSessionSceneEmitter.ResolveCamera already
-                // takes for an unknown/absent camera name.
-                emitter.SetWindowCamera(
-                    camera: null,
-                    offset: default
-                );
+            // A transient gap (the destination has not delivered a definition naming the counterpart yet, or the eye
+            // stands behind the glass this frame) degrades to the emitter's ordinary default projection for the frame
+            // rather than freezing or throwing — the fallback WorldSessionSceneEmitter.ResolveCamera takes for an
+            // unknown or absent camera name.
+            emitter.SetWindowCamera(camera: ((
+                (RowOf(screen: slot.Index) is { } row) &&
+                WorldWindowFrustumFit.TryResolveApertures(
+                    counterpart: out var destination,
+                    destination: feed.Mirror.Definition,
+                    local: bootDefinition,
+                    screenIndex: slot.Index,
+                    source: out var source
+                ) &&
+                WorldWindowFrustumFit.TryFitWindow(
+                    camera: out var camera,
+                    destination: destination,
+                    glass: WorldWindowFrustumFit.Glass(screen: row),
+                    localEye: localEye,
+                    source: source
+                ))
+                ? camera
+                : null));
+        }
+    }
+    // The screen row ReconcileScreens last applied for an index, or null.
+    private WorldScreen? RowOf(int screen) {
+        for (var index = 0; (index < m_rows.Count); index++) {
+            if (m_rows[index].Index == screen) {
+                return m_rows[index];
             }
         }
+
+        return null;
     }
     // A session mirror never processes a destination's own screens/faces at all (WorldSessionSceneEmitter renders
     // static placement geometry only), so recursion is impossible by construction regardless of this check — this
@@ -536,7 +457,7 @@ internal sealed partial class WorldScreenBinder {
     // attached observation lease + client-side mirror, and (once GPU services are configured) its registered
     // offscreen view. A mutable class so a lifecycle transition (re-point, teardown, instance-retired) updates it in
     // place; the constructor parameters are immutable facts about ONE resolution (a re-point builds a fresh instance
-    // rather than mutating this one — see TrySession).
+    // rather than mutating this one — see ApplySessionSource).
     private sealed class SessionFeed(string destination, string? requestedCamera, string? effectiveCamera, string instanceName, ulong generationId, WorldSessionMirror mirror, IDisposable lease, string registrationName, WorldScreenProjection projection, WorldScreenResolution? resolution) : IDisposable {
         public string Destination { get; } = destination;
         public string? RequestedCamera { get; } = requestedCamera;

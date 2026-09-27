@@ -39,11 +39,9 @@ public sealed class SdfFrameBlockLawTests {
                         Right: Vector3.Transform(rotation: Basis, value: Vector3.UnitX),
                         TanHalfFieldOfView: 0.5f,
                         Up: Vector3.Transform(rotation: Basis, value: Vector3.UnitY)
-                    ),
+                    ) { FrustumOffset = new Vector2(x: 0.25f, y: 0.5f) },
                     Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)
-                ) {
-                    AsymmetricFrustumOffset = new Vector2(x: 0.25f, y: 0.5f),
-                },
+                ),
             ],
             Time: 7f
         ) {

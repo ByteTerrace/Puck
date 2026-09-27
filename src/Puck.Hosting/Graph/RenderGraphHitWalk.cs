@@ -16,6 +16,13 @@ public interface IRenderGraphHitScene {
     /// <param name="camera">The camera when this returns <see langword="true"/>.</param>
     /// <returns><see langword="true"/> when the instance renders from a camera.</returns>
     bool TryCamera(int instance, out CameraSnapshot camera);
+    /// <summary>Finds the surface a ray meets in an instance's own world: the nearest point of what the instance
+    /// renders along the ray.</summary>
+    /// <param name="instance">The instance's index in its <see cref="RenderGraphInstanceSet"/>.</param>
+    /// <param name="ray">The ray, in that instance's world.</param>
+    /// <param name="point">The point, in that instance's world, when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when the scene can answer for the instance and the ray meets a surface.</returns>
+    bool TrySurface(int instance, SourceRay ray, out FixedVector3 point);
 }
 /// <summary>How a hit walk ended.</summary>
 public enum RenderGraphHitEnd : byte {
@@ -45,10 +52,14 @@ public readonly record struct RenderGraphHitStep(int Instance, int Placement, So
 /// <param name="Steps">The hits, one per instance the walk passed through.</param>
 /// <param name="End">How the walk ended.</param>
 /// <param name="Instance">The index of the instance whose world the walk ended in.</param>
-public sealed record RenderGraphHitPath(IReadOnlyList<RenderGraphHitStep> Steps, RenderGraphHitEnd End, int Instance);
+/// <param name="Surface">Where the last ray meets the surface of that world (<see cref="IRenderGraphHitScene.TrySurface"/>)
+/// when the walk ends <see cref="RenderGraphHitEnd.World"/> inside an instance and the scene answers; otherwise
+/// <see langword="null"/>.</param>
+public sealed record RenderGraphHitPath(IReadOnlyList<RenderGraphHitStep> Steps, RenderGraphHitEnd End, int Instance, FixedVector3? Surface = null);
 /// <summary>Follows a hit through nested render-graph instances: a hit on a rendered source continues as a ray through
 /// the producing instance's camera from the hit's source coordinate, into that instance's world, recursively, up to a
-/// depth limit such as <see cref="RenderGraphInstanceSet.NestingDepth"/>. Every step maps in fixed point through
+/// depth limit such as <see cref="RenderGraphInstanceSet.NestingDepth"/>, and a ray that meets no placement ends on the
+/// surface the scene finds along it in that world. Every step maps in fixed point through
 /// <see cref="SourceMapping.MapRay"/>, so the same set, scene and ray walk the same path on every run.</summary>
 public static class RenderGraphHitWalk {
     private static bool Reads(RenderGraphInstanceSet set, int consumer, int producer) {
@@ -111,7 +122,14 @@ public static class RenderGraphHitWalk {
                 return new RenderGraphHitPath(
                     End: RenderGraphHitEnd.World,
                     Instance: current,
-                    Steps: steps
+                    Steps: steps,
+                    Surface: (scene.TrySurface(
+                        instance: current,
+                        point: out var surface,
+                        ray: currentRay
+                    )
+                        ? surface
+                        : null)
                 );
             }
 

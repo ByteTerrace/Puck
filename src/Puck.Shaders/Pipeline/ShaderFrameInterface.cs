@@ -68,7 +68,8 @@ public static class ShaderFrameInterface {
     ];
 
     /// <summary>Creates the interface of a document pass: the frame group (<see cref="FrameGroupMembers"/>), bound at set
-    /// 0; the World group at set 1, one read-only structured buffer per array in ordinal name order; then the pass group
+    /// 0; the World group at set 1, one read-only structured buffer per array in ordinal name order, then any World-group
+    /// resource a package's <paramref name="ports"/> declare, in the order given; then the pass group
     /// at set 3, whose block holds the pass's <see cref="Extent"/> and then every block value in ordinal name order, each
     /// config field and each value <paramref name="ports"/> declares alike, followed by the pass's other ports in the
     /// order given. It is the one spelling of a pass block, so a document pass, a package pass and the SDF engine's passes
@@ -78,7 +79,8 @@ public static class ShaderFrameInterface {
     /// <param name="name">The interface's name (<see cref="NameOf"/>).</param>
     /// <param name="config">The pass's config schema, or <see langword="null"/> when it has none.</param>
     /// <param name="ports">The pass's port members, each in <see cref="ShaderInterfaceGroup.Pass"/>: resources in document
-    /// order, and any block values a package's recorder writes, which join the config in name order.</param>
+    /// order, and any block values a package's recorder writes, which join the config in name order. A package may also
+    /// declare resources in <see cref="ShaderInterfaceGroup.World"/>, which its host binds in one set of its own.</param>
     /// <param name="arrays">The pass's arrays, bound in the World group in ordinal name order, or <see langword="null"/>
     /// for none.</param>
     /// <param name="pushesIndex">Whether the pass's pipeline pushes one 4-byte index
@@ -86,7 +88,8 @@ public static class ShaderFrameInterface {
     /// <returns>The interface.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="ports"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidDataException"><paramref name="name"/> is not an interface name, a config field's or
-    /// port's name is not an identifier or repeats another member's, or a port is not in the pass group.</exception>
+    /// port's name is not an identifier or repeats another member's, or a port is neither in the pass group nor a
+    /// World-group resource.</exception>
     public static ShaderInterface ForPass(string name, IReadOnlyDictionary<string, ShaderConfigField>? config, IReadOnlyList<ShaderInterfaceMember> ports, IReadOnlyDictionary<string, ShaderArrayField>? arrays = null, bool pushesIndex = false) {
         ArgumentNullException.ThrowIfNull(argument: ports);
 
@@ -106,6 +109,12 @@ public static class ShaderFrameInterface {
             ));
         }
 
+        foreach (var port in ports) {
+            if ((port?.Group == ShaderInterfaceGroup.World) && (port.Kind != ShaderInterfaceMemberKind.Value)) {
+                members.Add(item: port);
+            }
+        }
+
         members.AddRange(collection: [
             ShaderInterfaceMember.Value(
                 group: ShaderInterfaceGroup.Pass,
@@ -118,8 +127,11 @@ public static class ShaderFrameInterface {
         var resources = new List<ShaderInterfaceMember>();
 
         foreach (var port in ports) {
+            if ((port?.Group == ShaderInterfaceGroup.World) && (port.Kind != ShaderInterfaceMemberKind.Value)) {
+                continue;
+            }
             if (port?.Group != ShaderInterfaceGroup.Pass) {
-                throw new InvalidDataException(message: $"Shader interface '{name}' port '{port?.Name}' is not in the pass group.");
+                throw new InvalidDataException(message: $"Shader interface '{name}' port '{port?.Name}' is neither in the pass group nor a World-group resource.");
             }
 
             (((port.Kind == ShaderInterfaceMemberKind.Value)

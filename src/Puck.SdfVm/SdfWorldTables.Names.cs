@@ -11,6 +11,7 @@ public sealed partial class SdfWorldTables {
 
     private const uint FrameGroup = ((uint)ShaderInterfaceGroup.Frame);
     private const uint PassGroup = ((uint)ShaderInterfaceGroup.Pass);
+    private const uint WorldGroup = ((uint)ShaderInterfaceGroup.World);
 
     // The debug name of one of the tables' objects: its role, a detail within the role, and its ring slot or item.
     private static GpuObjectName NameOf(string part, string? detail = null, int index = GpuObjectName.NoIndex) =>

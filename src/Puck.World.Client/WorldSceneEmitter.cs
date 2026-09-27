@@ -783,7 +783,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         destination[(WorldClient.RevisionComponentCount + 1)] = m_bakedColorRevision;
         // What the static placements draw from their bakes: none while the lever is off, and otherwise the schedule's
         // revision, which moves whenever a bake lands, so a ready bake switches its placements on the next rebuild.
-        destination[(WorldClient.RevisionComponentCount + 2)] = ((m_settings.Bakes && (m_bakes is not null))
+        destination[(WorldClient.RevisionComponentCount + 2)] = ((m_settings.DrawsBakes(schedule: m_bakes) && (m_bakes is not null))
             ? unchecked((int)((m_bakes.Revision * 2L) + 1L))
             : 0);
 
@@ -794,9 +794,10 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         destination[(WorldClient.RevisionComponentCount + 3)] = m_censusRevision;
     }
 
-    // A prototype's baked mesh when the lever is on and its bake is ready; the schedule counts the switch.
+    // A prototype's baked mesh when the presentation draws its bakes and this one is ready; the schedule counts the
+    // switch.
     private SdfMesh? BakedMeshFor(string prototypeId) => ((
-        m_settings.Bakes &&
+        m_settings.DrawsBakes(schedule: m_bakes) &&
         (m_bakes is not null) &&
         m_bakes.TryGetMesh(
             mesh: out var mesh,

@@ -8,7 +8,8 @@ namespace Puck.SdfVm;
 // last packed, at the revision last packed (SdfFrame.MeshDrawsRevision), repacks nothing; any other is packed into the
 // host copy and owes only the words that changed. The region is created with the tables, one draw record long so every
 // set that binds it binds a buffer, and grows, once the device is idle, like program capacity; a frame without draws
-// keeps it. A view's mesh pass reads the draws' triangles from it, and primary a mesh hit's material.
+// keeps it. A view's mesh pass reads the draws' triangles from it, and primary a mesh hit's material. A textured mesh's
+// texture coordinates are written moved into the mesh atlases the same draw list packs (SdfWorldTables.MeshAtlas.cs).
 public sealed partial class SdfWorldTables {
     private readonly Dictionary<SdfMesh, SdfMeshRegionMesh> m_meshPlacements = new(comparer: ReferenceEqualityComparer.Instance);
 
@@ -48,6 +49,7 @@ public sealed partial class SdfWorldTables {
             ) ||
             (revision != m_meshDrawsRevision)
         ) {
+            var atlas = StageMeshAtlas(draws: draws);
             var layout = SdfMeshRegion.Plan(
                 draws: draws,
                 meshes: m_meshPlacements
@@ -64,6 +66,7 @@ public sealed partial class SdfWorldTables {
                 );
 
                 SdfMeshRegion.Write(
+                    atlas: atlas,
                     destination: words,
                     draws: draws,
                     layout: layout,

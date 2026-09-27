@@ -1,9 +1,12 @@
 using System.Numerics;
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Presentation;
+using Puck.Commands;
+using Puck.Maths;
 using Puck.SdfVm;
 using Puck.SdfVm.Views;
 using Puck.SignedDistance;
+using Puck.SignedDistance.Queries;
 using Puck.World.Protocol;
 
 namespace Puck.World.Client;
@@ -49,7 +52,7 @@ namespace Puck.World.Client;
 public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresser {
     // The BIND-time resolved camera choice: a validated, currently-present camera NAME, or null for "use the
     // destination's default projection" (its first declared camera, else the spawn-centroid overview) — see this
-    // type's own construction site in WorldScreenBinder.TrySession, which is where the "unknown camera refuses at
+    // type's own construction site in WorldScreenBinder.ResolveSession, which is where the "unknown camera refuses at
     // bind with a loud note, falling back to the default projection" decision is made and narrated.
     private readonly string? m_effectiveCameraName;
     private readonly float m_fieldOfViewRadians;
@@ -77,10 +80,20 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     private readonly WorldSessionStampSource m_source;
 
     private SdfProgram? m_lastProgram;
+    // Retain the geometry's definition through emission and dressing: a later delivery must not change a held image's pick.
+    private WorldDefinition? m_emittedDefinition;
+    private WorldDefinition? m_dressedDefinition;
     // The WINDOW projection's per-produced-frame override — set by WorldScreenBinder.Publish (the one place with access
     // to both the local eye and the border pair's two face rows) before the render graph renders this view.
     // Null (the default, and every non-window session's steady state) leaves Dress on the ordinary camera path below.
-    private (CameraSnapshot Camera, Vector2 Offset)? m_windowOverride;
+    private CameraSnapshot? m_windowOverride;
+    // The camera the last dressed frame renders from, which a hit on the session's image continues through.
+    private CameraSnapshot? m_dressedCamera;
+    // The last dressed program's fixed-point field, built when a pick first asks for it, and the far distance a pick
+    // marches it to.
+    private SdfFieldEvaluator? m_dressedField;
+    private SdfProgram? m_dressedFieldProgram;
+    private float m_dressedFarDistance;
 
     // Per-avatar movement-driven gait state, scratch reused across frames to keep packing allocation-free — the SAME
     // distance-driven approach Client.WorldSceneEmitter.PackDynamicTransforms uses, over this emitter's own
@@ -301,16 +314,19 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         );
 
         m_lastProgram = program;
+        if (programChanged) {
+            m_dressedDefinition = m_emittedDefinition;
+        }
         // The pool's replay cursors advance on this view's own produced-frame interval, latched for the next pack.
         m_pool.Tick(deltaSeconds: deltaSeconds);
 
-        var (camera, offset) = ((m_windowOverride is { } window)
-            ? (window.Camera, window.Offset)
-            : (ResolveCamera(
-                height: height,
-                width: width
-            ), Vector2.Zero)
-        );
+        var camera = (m_windowOverride ?? ResolveCamera(
+            height: height,
+            width: width
+        ));
+
+        m_dressedCamera = camera;
+        m_dressedFarDistance = WorldRenderFarDistance.Resolve(defaults: m_mirror.Definition.Render);
 
         return new SdfFrame(
             Program: program,
@@ -323,7 +339,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
                         X: 0f,
                         Y: 0f
                     )
-                ) { AsymmetricFrustumOffset = offset }],
+                )],
             Time: 0f
         ) {
             DynamicTransforms = transforms,
@@ -336,7 +352,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             DisableFarBound = true,
             // The mirrored world's own far plane (its render.farDistance), so the panel frames the same depth its
             // authority renders.
-            FarDistance = WorldRenderFarDistance.Resolve(defaults: m_mirror.Definition.Render),
+            FarDistance = m_dressedFarDistance,
             // The mirrored world's static placements' meshes, then its stamp pool's.
             MeshDraws = meshDraws,
             MeshDrawsRevision = meshDrawsRevision,
@@ -362,6 +378,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
             return;
         } else {
+            m_emittedDefinition = definition;
             var colors = BakedColors();
 
             colors.Begin();
@@ -508,20 +525,77 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         );
     }
     /// <summary>Sets (or clears) this frame's window camera override — the off-axis frustum
-    /// <c>WorldWindowFrustumFit.TryFitWindow</c> fit against the border pair's two face rows and the local
-    /// viewer's eye. Called once per produced frame by <c>WorldScreenBinder.Publish</c>, before the render graph renders
-    /// this session's view; <see langword="null"/> (no
+    /// <see cref="WorldWindowFrustumFit.TryFitWindow"/> fit against the border pair's two face rows and the local
+    /// viewer's eye, its shear carried as <see cref="CameraSnapshot.FrustumOffset"/>. Called once per produced frame by
+    /// <c>WorldScreenBinder.Publish</c>, before the render graph renders this session's view; <see langword="null"/> (no
     /// eye/aperture available yet, or the fit refused — see <c>SdfAsymmetricFrustum.TryFit</c>) falls back to
     /// <see cref="ResolveCamera"/>'s ordinary named/default projection for that one frame.</summary>
     /// <param name="camera">The fitted camera apexed at the mapped eye, or <see langword="null"/> to use the
     /// ordinary projection.</param>
-    /// <param name="offset">The fitted frustum's tangent-space center offset — ignored when <paramref name="camera"/>
-    /// is <see langword="null"/>.</param>
-    public void SetWindowCamera(CameraSnapshot? camera, Vector2 offset) {
-        m_windowOverride = ((camera is { } resolved)
-            ? (resolved, offset)
-            : null
-        );
+    public void SetWindowCamera(CameraSnapshot? camera) => m_windowOverride = camera;
+    /// <summary>Finds the camera the last frame <see cref="Dress"/> dressed renders from, in the destination's own
+    /// space: a window's fitted camera, its shear included, or the named or default projection. A hit on the session's
+    /// image continues through it into the destination.</summary>
+    /// <param name="camera">The camera when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> once a frame has been dressed.</returns>
+    public bool TryCamera(out CameraSnapshot camera) {
+        camera = m_dressedCamera.GetValueOrDefault();
+
+        return m_dressedCamera.HasValue;
+    }
+    /// <summary>Finds the surface a ray meets among the destination's static placements a session view shows, marched in
+    /// fixed point (<see cref="SdfFieldEvaluator.Raycast"/>) out to the last dressed frame's far distance. The field is
+    /// the static placements alone, emitted once per dressed program: the fixed-point evaluator takes no dynamic
+    /// transforms, so neither a mirrored avatar nor a creation the stamp pool draws is a surface a pick lands on.</summary>
+    /// <param name="ray">The ray, in the destination's space.</param>
+    /// <param name="point">The point the ray meets, in the destination's space, when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when a frame has been dressed, the evaluator admits the static placements'
+    /// program, and the ray proves a surface within the far distance; a bounded, non-converged march answers nothing.</returns>
+    public bool TrySurface(SourceRay ray, out FixedVector3 point) {
+        point = default;
+
+        if ((m_lastProgram is not { } program) || (m_dressedDefinition is not { } definition)) {
+            return false;
+        }
+
+        if (!ReferenceEquals(
+            objA: m_dressedFieldProgram,
+            objB: program
+        )) {
+            var builder = new SdfProgramBuilder();
+
+            WorldPlacementStamper.EmitStatic(
+                builder: builder,
+                creations: definition.Creations,
+                definition: definition,
+                placements: definition.Placements
+            );
+            m_dressedFieldProgram = program;
+
+            try {
+                m_dressedField = new SdfFieldEvaluator(program: builder.Build(buildInstanceGrid: false));
+            } catch (ArgumentException) {
+                // A static placement the fixed-point evaluator does not interpret (a path, a non-uniform scale).
+                m_dressedField = null;
+            }
+        }
+
+        if (
+            (m_dressedField is not { } field) ||
+            !field.Raycast(
+                dir: ray.Direction,
+                hit: out var hit,
+                maxDist: FixedQ4816.FromDouble(value: m_dressedFarDistance),
+                origin: FixedPosition.FromLocal(local: ray.Origin)
+            ) ||
+            (hit.Confidence != WorldQueryConfidence.Exact)
+        ) {
+            return false;
+        }
+
+        point = (hit.Point - FixedPosition.Zero);
+
+        return true;
     }
     /// <summary>Writes four components, never their sum: the definition-delivery revision, the mirrored snapshot's
     /// declared-set/palette revision (<see cref="WorldSessionMirror.SnapshotRevision"/>, assigned from the wire and

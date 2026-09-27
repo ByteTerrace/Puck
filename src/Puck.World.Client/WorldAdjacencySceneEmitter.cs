@@ -296,7 +296,7 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     private bool IsSuppressed(IWorldAdjacencyNeighbour neighbour, int index) =>
         ((m_suppressEntity is { } suppress) && suppress(neighbour.EntityAddress(index: index)));
     // Maps a neighbour placement's authored transform into the SOURCE side's own coordinates through the EXACT SAME
-    // isometry Server.WorldPortalArrivalMath uses for a crossing traveler's arrival, anchored at the two faces' own
+    // isometry WorldFrameIsometry.MapArrival uses for a crossing traveler's arrival, anchored at the two faces' own
     // frames (never a crossing's swept seam — this maps arbitrary geometry, not one traveler's own crossing point).
     // Fixed point throughout except the two float<->fixed boundary conversions (the one sanctioned rendering seam),
     // so the strip a body sees is placed by the IDENTICAL math the strip it stands on already uses.
