@@ -39,13 +39,3 @@ public enum SdfWallpaperGroup : uint {
     /// <summary>The full hex kaleidoscope (6-fold rotations plus both mirror families).</summary>
     P6M = 16,
 }
-/// <summary>The plane a <see cref="SdfOp.WallpaperFold"/> folds, named by the two axes it acts on (the third axis is
-/// untouched). The kernels read each member as <c>SDF_WPG_PLANE_*</c> from the generated <c>sdf-isa.hlsli</c>.</summary>
-public enum SdfWallpaperPlane : uint {
-    /// <summary>Fold X and Z (tile the ground).</summary>
-    XZ = 0,
-    /// <summary>Fold X and Y (tile a wall facing Z).</summary>
-    XY = 1,
-    /// <summary>Fold Y and Z (tile a wall facing X).</summary>
-    YZ = 2,
-}

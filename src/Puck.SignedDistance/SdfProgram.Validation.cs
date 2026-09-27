@@ -74,25 +74,25 @@ public sealed partial class SdfProgram {
         }
         if (
             (instruction.Op == SdfOp.RotatePlane) &&
-            ((instruction.Shape > 2u) || (instruction.Blend > 2u))
+            (!Enum.IsDefined(value: ((SdfPlane)instruction.Shape)) || !Enum.IsDefined(value: ((SdfAxis)instruction.Blend)))
         ) {
             throw new ArgumentException(
-                message: $"Instruction {index} requires plane and driver indices in [0, 2].",
+                message: $"Instruction {index} requires a defined SdfPlane and SdfAxis.",
                 paramName: paramName
             );
         }
         if (
             (instruction.Op == SdfOp.Shear) &&
-            ((instruction.Shape > 2u) || (instruction.Blend > 2u) || (instruction.Shape == instruction.Blend))
+            (!Enum.IsDefined(value: ((SdfAxis)instruction.Shape)) || !Enum.IsDefined(value: ((SdfAxis)instruction.Blend)) || (instruction.Shape == instruction.Blend))
         ) {
             throw new ArgumentException(
-                message: $"Instruction {index} requires distinct shear axes in [0, 2].",
+                message: $"Instruction {index} requires distinct defined shear axes.",
                 paramName: paramName
             );
         }
         if (
             (instruction.Op == SdfOp.AxialProfile) &&
-            ((instruction.Shape > 2u) || (instruction.Data1.Y <= 0f) || (instruction.Data0.W <= 0f))
+            (!Enum.IsDefined(value: ((SdfAxis)instruction.Shape)) || (instruction.Data1.Y <= 0f) || (instruction.Data0.W <= 0f))
         ) {
             throw new ArgumentException(
                 message: $"Instruction {index} requires an axis in [0, 2], positive start scale and inverse span.",

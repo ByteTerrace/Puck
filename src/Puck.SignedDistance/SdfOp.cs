@@ -37,7 +37,7 @@ public enum SdfOp : uint {
     /// lattice reduction is <see cref="RepeatLimited"/> restricted to two axes (P1 is bit-identical to it); the
     /// per-cell stage composes mirrors/rotations keyed on the lattice parity. Every branch is an isometry, so
     /// distances are preserved. Instruction lanes: Shape = <see cref="SdfWallpaperGroup"/>, Blend =
-    /// <see cref="SdfWallpaperPlane"/>, Material = the parity-material stride (the cell key — checker parity or hex
+    /// <see cref="SdfPlane"/>, Material = the parity-material stride (the cell key — checker parity or hex
     /// 3-coloring — strides the material id of later shape wins in the chain; 0 keeps the fold purely geometric).
     /// Data0.xy = cell extents (hex: pitch = x, y must equal it), Data1.xy = RepeatLimited-style cell limits,
     /// Data1.z = the symmetry-LOD distance threshold (0 = off): past it the lattice keeps its copies but the in-cell
@@ -76,7 +76,7 @@ public enum SdfOp : uint {
     /// and the lattice <see cref="WallpaperFold"/>. The fold is a rotation into the base sector (and, when the mirror
     /// flag is set, a reflection of each sector across its bisector — the kaleidoscope fold): both branches are
     /// isometries, so distances are preserved — the field stays 1-Lipschitz (factor 1, no step clamp, exactly like
-    /// <see cref="Repeat"/>) and no cull bound changes. Instruction lanes: Shape = <see cref="SdfPolarAxis"/> (the
+    /// <see cref="Repeat"/>) and no cull bound changes. Instruction lanes: Shape = <see cref="SdfAxis"/> (the
     /// rotation axis), Blend = the mirror flag (0 = plain repeat, 1 = kaleidoscope), Material = the per-sector palette
     /// stride (the sector index 0..count-1 strides the material id of a later shape win; 0 keeps the fold purely
     /// geometric). Data0.x = the sector angle <c>2π/count</c> (host-baked), Data0.y = <c>count/(2π)</c> = 1/angle

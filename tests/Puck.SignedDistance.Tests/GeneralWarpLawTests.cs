@@ -33,9 +33,9 @@ public sealed class GeneralWarpLawTests {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new(Vector3.One));
         var tenfold = builder.ResetPoint().RotatePlane(
-            2,
-            1,
-            1f
+            driver: SdfAxis.Y,
+            plane: SdfPlane.XZ,
+            rate: 1f
         ).Sphere(
             10f,
             material
@@ -44,40 +44,40 @@ public sealed class GeneralWarpLawTests {
         Assert.Equal(
             tenfold,
             Step(chain: b => b.RotatePlane(
-                2,
-                1,
-                1f
+                driver: SdfAxis.Y,
+                plane: SdfPlane.XZ,
+                rate: 1f
             ).Scale(scale: new Vector3(value: 10f)))
         );
         Assert.True(condition: (tenfold < Step(chain: b => b.RotatePlane(
-            2,
-            1,
-            1f
+            driver: SdfAxis.Y,
+            plane: SdfPlane.XZ,
+            rate: 1f
         ))));
     }
     [Fact]
     public void AScaleUpstreamOfAWarpLeavesTheWarpsOwnReachUnchanged() {
         var unscaled = Step(chain: b => b.RotatePlane(
-            2,
-            1,
-            1f
+            driver: SdfAxis.Y,
+            plane: SdfPlane.XZ,
+            rate: 1f
         ));
 
         Assert.True(condition: (unscaled < 1f));
         Assert.Equal(
             unscaled,
             Step(chain: b => b.Scale(scale: new Vector3(value: 0.1f)).RotatePlane(
-                2,
-                1,
-                1f
+                driver: SdfAxis.Y,
+                plane: SdfPlane.XZ,
+                rate: 1f
             ))
         );
         Assert.Equal(
             unscaled,
             Step(chain: b => b.Scale(scale: new Vector3(value: 10f)).RotatePlane(
-                2,
-                1,
-                1f
+                driver: SdfAxis.Y,
+                plane: SdfPlane.XZ,
+                rate: 1f
             ))
         );
     }
@@ -85,7 +85,7 @@ public sealed class GeneralWarpLawTests {
     public void AxialProfileCarriesStartScaleAndAxisWithoutChangingTheBoundByPermutation() {
         float? step = null;
 
-        for (var axis = 0; (axis < 3); axis++) {
+        foreach (var axis in Enum.GetValues<SdfAxis>()) {
             var p = Program(warp: b => b.AxialProfile(
                 amount: 0.4f,
                 axis: axis,
@@ -118,23 +118,23 @@ public sealed class GeneralWarpLawTests {
     }
     [Fact]
     public void ConvenienceRotationsCompileToTheSamePrimitive() {
-        var cases = new (Action<SdfProgramBuilder> Sugar, int Plane, int Driver)[] {
-            (b => b.BendX(rate: 0.3f), 0, 0), (b => b.BendY(rate: 0.3f), 0, 1),
-            (b => b.BendZ(rate: 0.3f), 1, 1), (b => b.TwistY(rate: 0.3f), 2, 1),
+        var cases = new (Action<SdfProgramBuilder> Sugar, SdfPlane Plane, SdfAxis Driver)[] {
+            (b => b.BendX(rate: 0.3f), SdfPlane.XY, SdfAxis.X), (b => b.BendY(rate: 0.3f), SdfPlane.XY, SdfAxis.Y),
+            (b => b.BendZ(rate: 0.3f), SdfPlane.YZ, SdfAxis.Y), (b => b.TwistY(rate: 0.3f), SdfPlane.XZ, SdfAxis.Y),
         };
 
         foreach (var c in cases) {
             Assert.True(condition: Program(warp: c.Sugar).Words.SequenceEqual(other: Program(warp: b => b.RotatePlane(
-                c.Plane,
-                c.Driver,
-                0.3f
+                driver: c.Driver,
+                plane: c.Plane,
+                rate: 0.3f
             )).Words));
         }
     }
     [Fact]
     public void CubicShearBoundsEveryDistinctAxisPair() {
-        for (var target = 0; (target < 3); target++) {
-            for (var driver = 0; (driver < 3); driver++) {
+        foreach (var target in Enum.GetValues<SdfAxis>()) {
+            foreach (var driver in Enum.GetValues<SdfAxis>()) {
                 if (target == driver) { continue; }
                 var program = Program(warp: b => b.Shear(
                     cubic: 0.4f,
@@ -164,8 +164,8 @@ public sealed class GeneralWarpLawTests {
     }
     [Fact]
     public void EveryPlaneAndDriverPairPacksAndBounds() {
-        for (var plane = 0; (plane < 3); plane++) {
-            for (var driver = 0; (driver < 3); driver++) {
+        foreach (var plane in Enum.GetValues<SdfPlane>()) {
+            foreach (var driver in Enum.GetValues<SdfAxis>()) {
                 var p = Program(warp: b => b.RotatePlane(
                     driver: driver,
                     origin: 3f,
@@ -205,20 +205,20 @@ public sealed class GeneralWarpLawTests {
     [Fact]
     public void InvalidSelectorsAreRefusedBeforePacking() {
         Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Program(warp: b => b.RotatePlane(
-            3,
-            0,
-            1f
+            driver: SdfAxis.X,
+            plane: ((SdfPlane)3),
+            rate: 1f
         )));
         Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Program(warp: b => b.RotatePlane(
-            0,
-            -1,
-            1f
+            driver: ((SdfAxis)uint.MaxValue),
+            plane: SdfPlane.XZ,
+            rate: 1f
         )));
         Assert.Throws<ArgumentException>(testCode: () => Program(warp: b => b.Shear(
             1f,
             0f,
-            target: 1,
-            driver: 1
+            target: SdfAxis.Y,
+            driver: SdfAxis.Y
         )));
         Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Program(warp: b => b.AxialProfile(
             0f,

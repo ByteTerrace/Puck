@@ -59,8 +59,12 @@ over `RotatePlane`). A new instruction touches every partner in one change:
    `sdf-isa.hlsli` from the C# model; the new member appears as its enum's
    prefix plus its name in upper snake case (`SdfOp.CellDisplace` is
    `SDF_OP_CELL_DISPLACE`). Never hand-write a `#define` for an ISA value: a new
-   ISA-owned constant the kernels read joins `SdfIsaHlsl.Generate`. CI's
-   `puck shaders generate --check` fails on a stale file.
+   ISA-owned constant, lane or enum the kernels read joins `SdfIsaHlsl.Generate`,
+   and a kernel reads a header lane only through its generated accessor. CI's
+   `puck shaders generate --check` fails on a stale file. Give the new
+   instruction a call in `SdfEncodingProbe` with distinct operands (a new lane
+   enum a call per member); `SdfEncodingProbeLawTests` refuses a member no call
+   carries, and the probe is what the fingerprint hashes.
 4. **Every GPU call site** — `mapCore` in `sdf-map.hlsli` and its hit-only twin `mapGradCore` in
    `sdf-map-grad.hlsli`, including the rigid-leaf fast paths in each, and the compiled
    part walk in `sdf-parts.hlsli`. A blend needs `blendShape` and

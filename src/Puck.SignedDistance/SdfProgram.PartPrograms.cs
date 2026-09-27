@@ -256,7 +256,7 @@ public sealed partial class SdfProgram {
         if (plan.CompiledCount == 0) {
             return;
         }
-        m_words[((instanceOffset * WordsPerVector) + 1)] = ((uint)offset);
+        m_words[((instanceOffset * WordsPerVector) + InstancePartProgramsLane)] = ((uint)offset);
         var header = (offset * WordsPerVector);
 
         m_words[header] = ((uint)plan.CompiledCount) | (CanTracePartsIndependently()

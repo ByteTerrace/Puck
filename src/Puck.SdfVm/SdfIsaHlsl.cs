@@ -16,8 +16,10 @@ namespace Puck.SdfVm;
 /// regenerating. <c>puck shaders generate</c> writes the file beside the kernels and <c>--check</c> fails on drift.
 /// <para>The text is a pure function of the model: the same build generates the same bytes, with LF line endings, on
 /// every host.</para>
-/// <para>The text's fingerprint (<see cref="Fingerprint"/>) names the instruction set: the SDF kernels' interfaces carry
-/// it as their stamp (<see cref="Stamp"/>, <see cref="SdfWorldInterfaces"/>), so every kernel's bytecode reflects the
+/// <para>The instruction set's fingerprint (<see cref="Fingerprint"/>) names its whole encoding: the generated text,
+/// which states every enum, lane accessor, stride and constant the kernels read, and the encoding the model's builder
+/// and packer produce (<see cref="SdfEncodingProbe.Describe()"/>: where each operation's operands land, and the packed
+/// layout). The SDF kernels' interfaces carry it as their stamp (<see cref="Stamp"/>, <see cref="SdfWorldInterfaces"/>), so every kernel's bytecode reflects the
 /// instruction set it was compiled against, and a reload refuses kernels whose stamp is not this host's.</para>
 /// </summary>
 public static class SdfIsaHlsl {
@@ -28,8 +30,12 @@ public static class SdfIsaHlsl {
     private const string Guard = "SDF_ISA_HLSLI";
 
     /// <summary>Gets the fingerprint of this build's instruction set: <see cref="FingerprintOf"/> of the generated
-    /// include. It moves with any member, value or constant the kernels read from the model.</summary>
-    public static uint Fingerprint { get; } = FingerprintOf(include: Generate());
+    /// include and the model's described encoding. It moves with any member, value, lane or constant the kernels read
+    /// from the model, and with any change to where the builder puts an operand or the packer a word.</summary>
+    public static uint Fingerprint { get; } = FingerprintOf(
+        encoding: SdfEncodingProbe.Describe(),
+        include: Generate()
+    );
     /// <summary>Gets the stamp the SDF kernels' interfaces carry for this build's instruction set: <see cref="StampOf"/>
     /// of <see cref="Fingerprint"/>.</summary>
     public static string Stamp { get; } = StampOf(fingerprint: Fingerprint);
@@ -38,15 +44,18 @@ public static class SdfIsaHlsl {
     /// <returns>The HLSL text.</returns>
     /// <exception cref="InvalidOperationException">Two declarations would share one HLSL name.</exception>
     public static string Generate() => Declare();
-    /// <summary>Returns the fingerprint of an instruction-set include: the first four bytes, little-endian, of the SHA-256
-    /// of its UTF-8 text.</summary>
-    /// <param name="include">The include's text.</param>
+    /// <summary>Returns the fingerprint of an instruction set: the first four bytes, little-endian, of the SHA-256 of the
+    /// UTF-8 text of its include, a NUL, and its described encoding.</summary>
+    /// <param name="include">The include's text (<see cref="Generate"/>).</param>
+    /// <param name="encoding">The encoding's description (<see cref="SdfEncodingProbe.Describe()"/>).</param>
     /// <returns>The fingerprint.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="include"/> is <see langword="null"/>.</exception>
-    public static uint FingerprintOf(string include) {
+    /// <exception cref="ArgumentNullException"><paramref name="include"/> or <paramref name="encoding"/> is
+    /// <see langword="null"/>.</exception>
+    public static uint FingerprintOf(string include, string encoding) {
         ArgumentNullException.ThrowIfNull(argument: include);
+        ArgumentNullException.ThrowIfNull(argument: encoding);
 
-        return BinaryPrimitives.ReadUInt32LittleEndian(source: SHA256.HashData(source: Encoding.UTF8.GetBytes(s: include)));
+        return BinaryPrimitives.ReadUInt32LittleEndian(source: SHA256.HashData(source: Encoding.UTF8.GetBytes(s: $"{include}\0{encoding}")));
     }
     /// <summary>Returns the interface stamp (<see cref="Puck.Shaders.ShaderInterface.Stamp"/>) of an instruction set:
     /// <c>Isa</c> followed by its fingerprint in eight upper-case hexadecimal digits.</summary>
@@ -67,9 +76,32 @@ public static class SdfIsaHlsl {
         declarations.Members<SdfBlendOp>(prefix: "SDF_BLEND");
         declarations.Members<SdfLift>(prefix: "SDF_LIFT");
         declarations.Members<SdfNoiseFlavor>(prefix: "SDF_NOISE");
-        declarations.Members<SdfPolarAxis>(prefix: "SDF_POLAR_AXIS");
+        declarations.Members<SdfCellMode>(prefix: "SDF_CELL_MODE");
+        declarations.Members<SdfAxis>(prefix: "SDF_AXIS");
+        declarations.Members<SdfPlane>(prefix: "SDF_PLANE");
         declarations.Members<SdfWallpaperGroup>(prefix: "SDF_WPG");
-        declarations.Members<SdfWallpaperPlane>(prefix: "SDF_WPG_PLANE");
+        declarations.Section(title: "The program header, the first vector of the word stream: the vectors before the instruction headers, and each lane's accessor.");
+        declarations.Count(name: "SDF_PROGRAM_HEADER_VECTORS", value: SdfProgram.ProgramHeaderVectors);
+        declarations.Lane(lane: SdfProgram.ProgramInstructionCountLane, name: "SDF_PROGRAM_INSTRUCTION_COUNT");
+        declarations.Lane(lane: SdfProgram.ProgramMaterialCountLane, name: "SDF_PROGRAM_MATERIAL_COUNT");
+        declarations.Lane(lane: SdfProgram.ProgramDataOffsetLane, name: "SDF_PROGRAM_DATA_OFFSET");
+        declarations.Lane(lane: SdfProgram.ProgramMaterialOffsetLane, name: "SDF_PROGRAM_MATERIAL_OFFSET");
+        declarations.Section(title: "An instruction: its header's lane accessors, and the data vectors each instruction holds in the data table.");
+        declarations.Lane(lane: SdfProgram.InstructionOpLane, name: "SDF_INSTRUCTION_OP");
+        declarations.Lane(lane: SdfProgram.InstructionShapeLane, name: "SDF_INSTRUCTION_SHAPE");
+        declarations.Lane(lane: SdfProgram.InstructionBlendLane, name: "SDF_INSTRUCTION_BLEND");
+        declarations.Lane(lane: SdfProgram.InstructionMaterialLane, name: "SDF_INSTRUCTION_MATERIAL");
+        declarations.Count(name: "SDF_INSTRUCTION_DATA_VECTORS", value: SdfProgram.InstructionDataVectors);
+        declarations.Section(title: "The bound records and the directories: a record's vectors, a directory's header vectors, and its header's lane accessors.");
+        declarations.Count(name: "SDF_BOUND_RECORD_VECTORS", value: SdfProgram.BoundRecordVectors);
+        declarations.Count(name: "SDF_DIRECTORY_HEADER_VECTORS", value: SdfProgram.DirectoryHeaderVectors);
+        declarations.Lane(lane: SdfProgram.SegmentCountLane, name: "SDF_SEGMENT_COUNT");
+        declarations.Lane(lane: SdfProgram.SegmentStepScaleLane, name: "SDF_SEGMENT_STEP_SCALE");
+        declarations.Lane(lane: SdfProgram.SegmentRigidPlanLane, name: "SDF_SEGMENT_RIGID_PLAN_OFFSET");
+        declarations.Lane(lane: SdfProgram.InstanceCountLane, name: "SDF_INSTANCE_COUNT");
+        declarations.Lane(lane: SdfProgram.InstancePartProgramsLane, name: "SDF_INSTANCE_PART_PROGRAMS");
+        declarations.Lane(lane: SdfProgram.InstanceFlagsLane, name: "SDF_INSTANCE_FLAGS");
+        declarations.Lane(lane: SdfProgram.WorldSegmentCountLane, name: "SDF_WORLD_SEGMENT_COUNT");
         declarations.Section(title: "Shape-lane flags and the type mask on a ShapeBlend instruction's header.");
         declarations.Bits(
             name: "SDF_SHAPE_DETAIL_FLAG",
@@ -208,7 +240,8 @@ public static class SdfIsaHlsl {
         return declarations.Text();
     }
     // A C# member name's HLSL spelling: upper snake case, with a word break before an upper-case letter that follows a
-    // lower-case one or that starts a new word after an upper-case run (P4M stays P4M, LogSphere becomes LOG_SPHERE).
+    // lower-case one, or that starts a new word after an upper-case letter or a digit (P4M stays P4M, LogSphere becomes
+    // LOG_SPHERE, F2MinusF1 becomes F2_MINUS_F1).
     private static string UpperSnake(string name) {
         var text = new StringBuilder(capacity: (name.Length * 2));
 
@@ -219,7 +252,7 @@ public static class SdfIsaHlsl {
                 (index > 0) &&
                 char.IsUpper(c: character) &&
                 (char.IsLower(c: name[(index - 1)]) || (
-                    char.IsUpper(c: name[(index - 1)]) &&
+                    (char.IsUpper(c: name[(index - 1)]) || char.IsAsciiDigit(c: name[(index - 1)])) &&
                     ((index + 1) < name.Length) &&
                     char.IsLower(c: name[(index + 1)])
                 ))
@@ -245,7 +278,7 @@ public static class SdfIsaHlsl {
         }
 
         private void Define(string name, string value) {
-            if (!m_names.Add(item: name)) {
+            if (!m_names.Add(item: name.Split(separator: '(')[0])) {
                 throw new InvalidOperationException(message: $"Two SDF instruction-set declarations are both named {name}.");
             }
 
@@ -276,6 +309,17 @@ public static class SdfIsaHlsl {
                 provider: CultureInfo.InvariantCulture
             )}u"
         );
+        public void Lane(string name, int lane) {
+            ArgumentOutOfRangeException.ThrowIfNegative(value: lane);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(
+                other: 3,
+                value: lane
+            );
+            Define(
+                name: $"{name}(v)",
+                value: $"((v).{"xyzw"[lane]})"
+            );
+        }
         public void Count(string name, long value) {
             ArgumentOutOfRangeException.ThrowIfNegative(value: value);
             ArgumentOutOfRangeException.ThrowIfGreaterThan(

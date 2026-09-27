@@ -139,7 +139,7 @@ public static class CreationStampEmitter {
                     bulge: flare.Bulge,
                     top: (flare.Top ?? 0f),
                     span: flare.Span,
-                    axis: flare.Axis,
+                    axis: ((SdfAxis)flare.Axis),
                     startScale: flare.StartScale
                 )
                 : prefix
@@ -149,8 +149,8 @@ public static class CreationStampEmitter {
                     linear: shear.Linear,
                     quadratic: shear.Quadratic,
                     cubic: shear.Cubic,
-                    target: shear.Target,
-                    driver: shear.Driver
+                    target: ((SdfAxis)shear.Target),
+                    driver: ((SdfAxis)shear.Driver)
                 )
                 : flared
             );

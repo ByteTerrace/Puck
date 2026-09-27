@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Puck.Abstractions.Counting;
 using Puck.Shaders;
+using Puck.SignedDistance;
 using Puck.Testing;
 using Xunit;
 
@@ -150,22 +151,44 @@ public sealed class SdfKernelSetLawTests {
             );
         }
 
-        Assert.Equal(expected: SdfIsaHlsl.StampOf(fingerprint: SdfIsaHlsl.FingerprintOf(include: SdfIsaHlsl.Generate())), actual: SdfIsaHlsl.Stamp);
+        Assert.Equal(expected: SdfIsaHlsl.StampOf(fingerprint: SdfIsaHlsl.FingerprintOf(encoding: SdfEncodingProbe.Describe(), include: SdfIsaHlsl.Generate())), actual: SdfIsaHlsl.Stamp);
     }
-    // Kernels compiled against another instruction set, say one whose two opcodes trade values, carry another stamp, so
-    // no include beside them can make them pass for this host's.
+    // Kernels compiled against another instruction set carry another stamp, so no include beside them can make them pass
+    // for this host's: an instruction set whose two opcodes, or whose two cell modes, trade values; one whose instruction
+    // headers carry the shape and the blend in each other's lanes; and one whose builder puts an operation's operands in
+    // each other's lanes.
     [Fact]
-    public void AnInstructionSetWithTwoOpcodesSwappedCarriesAnotherStamp() {
+    public void AnInstructionSetEncodedOtherwiseCarriesAnotherStamp() {
         var include = SdfIsaHlsl.Generate();
-        var opcode = new Regex(options: RegexOptions.Multiline, pattern: @"^(#define SDF_OP_(TRANSLATE|ROTATE) +)(\d+)u$");
-        var values = opcode.Matches(input: include).ToDictionary(elementSelector: static match => match.Groups[3].Value, keySelector: static match => match.Groups[2].Value);
-        var swapped = opcode.Replace(
-            evaluator: match => $"{match.Groups[1].Value}{values[((match.Groups[2].Value == "TRANSLATE") ? "ROTATE" : "TRANSLATE")]}u",
+        var encoding = SdfEncodingProbe.Describe();
+        var calls = SdfEncodingProbe.Calls();
+        var index = calls.ToList().FindIndex(match: static call => (call.Name == $"cell-displace {SdfCellMode.F1}"));
+        var traded = calls[index] with {
+            Emit = static (b, m) => b.ResetPoint().Sphere(material: m, radius: 1f).CellDisplace(amplitude: 0.95f, frequency: 0.02f, mode: SdfCellMode.F1, randomness: 0.15f, seed: 17u),
+        };
+
+        foreach (var (otherInclude, otherEncoding) in ((ReadOnlySpan<(string, string)>)[
+            (Swapped(first: "SDF_OP_TRANSLATE", include: include, second: "SDF_OP_ROTATE"), encoding),
+            (Swapped(first: "SDF_CELL_MODE_F1", include: include, second: "SDF_CELL_MODE_F2_MINUS_F1"), encoding),
+            (Swapped(first: "SDF_INSTRUCTION_SHAPE(v)", include: include, second: "SDF_INSTRUCTION_BLEND(v)"), encoding),
+            (include, SdfEncodingProbe.Describe(calls: [.. calls.Take(count: index), traded, .. calls.Skip(count: (index + 1))])),
+        ])) {
+            Assert.NotEqual(expected: SdfIsaHlsl.Stamp, actual: SdfIsaHlsl.StampOf(fingerprint: SdfIsaHlsl.FingerprintOf(encoding: otherEncoding, include: otherInclude)));
+        }
+    }
+
+    // The include with two defines' values traded.
+    private static string Swapped(string include, string first, string second) {
+        var define = new Regex(options: RegexOptions.Multiline, pattern: $@"^(#define (?:{Regex.Escape(str: first)}|{Regex.Escape(str: second)}) +)(.+)$");
+        var values = define.Matches(input: include).ToDictionary(elementSelector: static match => match.Groups[2].Value, keySelector: static match => match.Groups[1].Value.TrimEnd().Split(separator: ' ')[1]);
+        var swapped = define.Replace(
+            evaluator: match => (match.Groups[1].Value + values[((match.Groups[1].Value.TrimEnd().Split(separator: ' ')[1] == first) ? second : first)]),
             input: include
         );
 
         Assert.Equal(expected: 2, actual: values.Count);
         Assert.NotEqual(actual: swapped, expected: include);
-        Assert.NotEqual(expected: SdfIsaHlsl.Stamp, actual: SdfIsaHlsl.StampOf(fingerprint: SdfIsaHlsl.FingerprintOf(include: swapped)));
+
+        return swapped;
     }
 }
