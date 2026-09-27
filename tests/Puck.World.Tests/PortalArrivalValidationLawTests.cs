@@ -31,7 +31,7 @@ public sealed class PortalArrivalValidationLawTests {
     // through the SAME pipeline the validator re-verifies, never hand-pinned). The face names a BOX shape because a
     // portal facet needs a surface that opens a walkable aperture (WorldFaceApertures) — the aperture refusal
     // is its own law below, so every other law here must clear it to discriminate on what it is actually testing.
-    private static WorldPrototype BuildDoorCreation() => BuildDoorCreation(
+    internal static WorldPrototype BuildDoorCreation() => BuildDoorCreation(
         faceNamesShape: true,
         faceShapeType: SdfSolidPrimitive.Box
     );
