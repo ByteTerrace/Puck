@@ -52,12 +52,19 @@ covers the line is copied whole; after eight, the PPU keeps searching with the
 hardware's diagonal increment, which is why the sprite overflow flag is
 unreliable in the way games observe. OAMADDR is the evaluation pointer, so a
 misaligned OAMADDR evaluates from the middle of an entry, as the chip does.
+Once secondary memory is full, the even dots read its first Y byte instead
+of writing. Finding another in-range value sets overflow and still reads the
+next three primary bytes before scanning later sprites' Y bytes.
+Bits 2 to 4 of each sprite's attribute byte have no storage cells; writes leave
+them clear, including writes through OAM DMA.
 
 Dots 257 to 320 fetch the eight chosen sprites' patterns, eight dots each, with
 two nametable fetches the PPU discards before the pattern bytes; an empty slot
 still fetches tile $FF. OAMADDR is cleared on each of those dots. A horizontally
 flipped sprite's pattern is reversed as it is fetched, and a vertically flipped
 one fetches the mirrored row, in 8 by 8 or 8 by 16 mode.
+During background prefetch on dots 321 to 340 and dot 0, $2004 reads the first
+byte of secondary object memory.
 
 When a pixel is drawn, the first opaque sprite in slot order wins over the
 others. It shows unless its priority bit puts it behind an opaque background

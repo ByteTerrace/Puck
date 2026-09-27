@@ -68,8 +68,11 @@ public sealed class HumbleGamingDeckEngine : IMachineEngine {
 
     /// <inheritdoc/>
     /// <exception cref="ArgumentException"><paramref name="options"/> is not empty.</exception>
-    /// <exception cref="InvalidDataException"><paramref name="contentBytes"/>'s header is damaged, ambiguous, or names a
-    /// board the Deck does not implement.</exception>
+    /// <exception cref="InvalidDataException"><paramref name="contentBytes"/>'s header or payload is damaged or ambiguous.</exception>
+    /// <exception cref="NotSupportedException">The image names an unimplemented mapper, submapper, console, timing
+    /// family, or memory layout.</exception>
+    /// <exception cref="IOException">An existing battery save cannot be read.</exception>
+    /// <exception cref="UnauthorizedAccessException">Access to an existing battery save is denied.</exception>
     public IMachineRuntime Create(string? options, byte[]? contentBytes = null, string? savePath = null, int audioSampleRate = 0) {
         if (!string.IsNullOrWhiteSpace(value: options)) {
             throw new ArgumentException(
@@ -88,6 +91,11 @@ public sealed class HumbleGamingDeckEngine : IMachineEngine {
     /// <exception cref="ArgumentNullException"><paramref name="request"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">The configuration does not satisfy the descriptor, or a declared asset was not
     /// prepared.</exception>
+    /// <exception cref="InvalidDataException">The cartridge's header or payload is damaged or ambiguous.</exception>
+    /// <exception cref="NotSupportedException">The image names an unimplemented mapper, submapper, console, timing
+    /// family, or memory layout.</exception>
+    /// <exception cref="IOException">An existing battery save cannot be read.</exception>
+    /// <exception cref="UnauthorizedAccessException">Access to an existing battery save is denied.</exception>
     public IMachineRuntime CreateMachine(MachineCreationRequest request) {
         ArgumentNullException.ThrowIfNull(argument: request);
         MachineConfigurationValidation.Validate(

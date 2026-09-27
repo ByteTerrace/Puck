@@ -26,8 +26,11 @@ public sealed class HumbleGamingDeckCore : IQueuedMachineCore {
     /// <param name="cartridgeImage">The iNES or NES 2.0 image.</param>
     /// <param name="savePath">The battery-save path, or <see langword="null"/> to keep battery RAM in memory only.</param>
     /// <exception cref="ArgumentNullException"><paramref name="cartridgeImage"/> is <see langword="null"/>.</exception>
-    /// <exception cref="InvalidDataException">The image's header is damaged, ambiguous, or names a board the Deck does not
-    /// implement.</exception>
+    /// <exception cref="InvalidDataException">The image's header or payload is damaged or ambiguous.</exception>
+    /// <exception cref="NotSupportedException">The image names an unimplemented mapper, submapper, console, timing
+    /// family, or memory layout.</exception>
+    /// <exception cref="IOException">An existing battery save cannot be read.</exception>
+    /// <exception cref="UnauthorizedAccessException">Access to an existing battery save is denied.</exception>
     public HumbleGamingDeckCore(byte[] cartridgeImage, string? savePath = null)
         : this(
         configuration: new HgdMachineConfiguration(cartridge: HgdCartridge.Load(image: (cartridgeImage ?? throw new ArgumentNullException(paramName: nameof(cartridgeImage))))),
@@ -37,6 +40,8 @@ public sealed class HumbleGamingDeckCore : IQueuedMachineCore {
     /// <param name="configuration">The cartridge, model, and power-on profile.</param>
     /// <param name="savePath">The battery-save path, or <see langword="null"/> to keep battery RAM in memory only.</param>
     /// <exception cref="ArgumentNullException"><paramref name="configuration"/> is <see langword="null"/>.</exception>
+    /// <exception cref="IOException">An existing battery save cannot be read.</exception>
+    /// <exception cref="UnauthorizedAccessException">Access to an existing battery save is denied.</exception>
     public HumbleGamingDeckCore(HgdMachineConfiguration configuration, string? savePath = null) {
         ArgumentNullException.ThrowIfNull(argument: configuration);
 
@@ -93,6 +98,7 @@ public sealed class HumbleGamingDeckCore : IQueuedMachineCore {
         );
     /// <inheritdoc/>
     /// <remarks>The budget is in master ticks; a nonpositive budget does nothing.</remarks>
+    /// <exception cref="OverflowException">The accumulated master-tick target exceeds the clock's range.</exception>
     public void RunCycles(long cycles) {
         if (cycles > 0) {
             m_machine.RunCycles(masterTicks: ((ulong)cycles));
@@ -109,6 +115,11 @@ public sealed class HumbleGamingDeckCore : IQueuedMachineCore {
         );
     }
     /// <inheritdoc/>
+    /// <remarks>Queued presentation audio is discarded and its stream restarts at the configured rate.</remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="buffer"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The state window does not contain a complete machine state.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The state data exceeds the backing buffer.</exception>
+    /// <exception cref="InvalidDataException">A serialized component position is outside its valid range.</exception>
     public void RestoreState(byte[] buffer, int length) {
         m_machine.RestoreState(reader: new StateReader(
             buffer: buffer,
@@ -118,9 +129,11 @@ public sealed class HumbleGamingDeckCore : IQueuedMachineCore {
         m_colouredFrame = -1;
     }
     /// <inheritdoc/>
+    /// <exception cref="ObjectDisposedException">The core has been disposed.</exception>
     public ITimeTravelLookahead<MachinePads> CreateLookahead() =>
         new HumbleGamingDeckLookahead(fork: m_instance.Fork());
     /// <inheritdoc/>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="sampleRate"/> is negative.</exception>
     public void ConfigureAudio(int sampleRate) =>
         m_machine.Audio.Configure(sampleRate: sampleRate);
     /// <inheritdoc/>

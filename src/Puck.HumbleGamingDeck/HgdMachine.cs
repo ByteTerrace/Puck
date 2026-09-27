@@ -149,7 +149,7 @@ public sealed class HgdMachine : ISnapshotableMachine {
     /// <param name="snapshot">The capture to restore.</param>
     /// <exception cref="ArgumentNullException">The snapshot is null.</exception>
     /// <exception cref="InvalidOperationException">Identity or serialized length does not match.</exception>
-    /// <exception cref="InvalidDataException">The serialized clock phase is outside the CPU divider.</exception>
+    /// <exception cref="InvalidDataException">A serialized component position is outside its valid range.</exception>
     public void Restore(HgdMachineSnapshot snapshot) {
         ArgumentNullException.ThrowIfNull(argument: snapshot);
         if (snapshot.Identity != m_identity) {
@@ -169,11 +169,13 @@ public sealed class HgdMachine : ISnapshotableMachine {
         }
     }
     /// <inheritdoc/>
+    /// <remarks>Restoration discards queued presentation audio and starts a fresh stream at the configured rate.</remarks>
     /// <exception cref="InvalidOperationException">The reader does not contain a complete machine state.</exception>
-    /// <exception cref="InvalidDataException">The serialized clock phase is outside the CPU divider.</exception>
+    /// <exception cref="InvalidDataException">A serialized component position is outside its valid range.</exception>
     public void RestoreState(StateReader reader) {
         foreach (var component in m_components) {
             component.LoadState(reader: reader);
         }
+        Audio.Configure(sampleRate: Audio.SampleRate);
     }
 }

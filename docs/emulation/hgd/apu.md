@@ -32,6 +32,8 @@ The DMC outputs a 7-bit level that each sample bit raises or lowers by 2. When
 its one-byte sample buffer is empty and bytes remain, it asks the
 [DMA unit](input-and-dma.md#dma) for the next byte. It can loop the sample, and
 it can raise an interrupt when the last byte has been fetched.
+The Deck initializes $4012 and $4013 to zero, selecting a one-byte sample
+at $C000 when the channel is first enabled.
 
 ## Frame counter and interrupts
 
@@ -40,9 +42,9 @@ quarter frames, and the length counters and sweeps on half frames. In four-step
 mode those clocks land on CPU cycles 7457, 14913, 22371 and 29829 of a
 29,830-cycle sequence, and the frame interrupt flag is raised on cycles 29828
 to 29830 unless $4017 inhibits it. Five-step mode runs 37,282 cycles, never
-interrupts, and clocks both units at once when it is selected. A $4017 write
+interrupts, and clocks both units when its sequence restarts. A $4017 write
 restarts the sequence three CPU cycles later on one cycle parity and four on
-the other.
+the other; the five-step mode's extra clocks wait for that reset too.
 
 $4015 enables the channels, and a read of it reports which length counters are
 running, whether DMC bytes remain, and both interrupt flags; the read clears

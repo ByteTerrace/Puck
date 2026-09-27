@@ -80,7 +80,8 @@ internal sealed class ControllerStage : IPostStage<PostContext> {
 }
 /// <summary>
 /// Times an OAM DMA started on each CPU cycle parity and checks its copy: the $4014 write's four cycles plus the DMA's
-/// 513 when it starts on one parity and 514 on the other, and object memory equal to the source page afterwards.
+/// 513 when it starts on one parity and 514 on the other, and object memory equal to the source page with the
+/// unimplemented attribute bits cleared afterwards.
 /// https://www.nesdev.org/wiki/PPU_registers#OAMDMA
 /// </summary>
 internal sealed class OamDmaStage : IPostStage<PostContext> {
@@ -124,8 +125,10 @@ internal sealed class OamDmaStage : IPostStage<PostContext> {
             }
             durations.Add(item: cycles);
             for (var index = 0; (index < 256); ++index) {
-                if (machine.Ppu.ObjectMemory[index] != ((byte)(index ^ 0x5A))) {
-                    return PostStageOutcome.Fail(detail: $"object memory byte {index} is ${machine.Ppu.ObjectMemory[index]:X2}; expected ${index ^ 0x5A:X2}");
+                var expected = ((byte)((index ^ 0x5A) & (((index & 3) == 2) ? 0xE3 : 0xFF)));
+
+                if (machine.Ppu.ObjectMemory[index] != expected) {
+                    return PostStageOutcome.Fail(detail: $"object memory byte {index} is ${machine.Ppu.ObjectMemory[index]:X2}; expected ${expected:X2}");
                 }
             }
         }
@@ -133,7 +136,7 @@ internal sealed class OamDmaStage : IPostStage<PostContext> {
             return PostStageOutcome.Fail(detail: $"both parities took {durations.First()} cycles; the DMA's alignment cycle never moved");
         }
 
-        return PostStageOutcome.Pass(detail: "OAM DMA takes 513 and 514 cycles on the two parities and copies the whole page into object memory");
+        return PostStageOutcome.Pass(detail: "OAM DMA takes 513 and 514 cycles on the two parities and copies the whole page into object memory with unimplemented attribute bits cleared");
     }
 
     private static ulong RunToInstruction(HgdMachine machine, ushort address) {
@@ -146,7 +149,7 @@ internal sealed class OamDmaStage : IPostStage<PostContext> {
 }
 /// <summary>
 /// Checks APU behaviour against the published NTSC figures: a 50% pulse at timer period 127 holds each level for
-/// 8 × 128 APU cycles (1024 CPU cycles), a length counter loaded with 10 empties on the tenth half-frame clock after the
+/// 4 × 128 APU cycles (1024 CPU cycles), a length counter loaded with 10 empties on the tenth half-frame clock after the
 /// load, and in four-step mode the frame interrupt recurs every 29,830 CPU cycles.
 /// https://www.nesdev.org/wiki/APU_Pulse and https://www.nesdev.org/wiki/APU_Frame_Counter
 /// </summary>
@@ -158,9 +161,61 @@ internal sealed class ApuStage : IPostStage<PostContext> {
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) =>
-        (CheckPulse() ?? (CheckLength() ?? (CheckFrameInterrupt() ??
-            PostStageOutcome.Pass(detail: "pulse 1 holds 1024-cycle levels of 15 and 0 at period 127, duty 2; a length of 10 empties on the tenth half-frame clock; the four-step frame interrupt recurs every 29830 cycles"))));
+        (CheckPulse() ?? (CheckLength() ?? (CheckFrameInterrupt() ?? (CheckFrameReset() ?? (CheckDmcPowerOn() ??
+            PostStageOutcome.Pass(detail: "pulse 1 holds 1024-cycle levels of 15 and 0 at period 127, duty 2; length counters follow half-frame clocks, including delayed five-step resets on both parities; frame interrupts recur every 29830 cycles; DMC power-on registers decode a one-byte sample at $C000"))))));
 
+    private static PostStageOutcome? CheckDmcPowerOn() {
+        var apu = new HgdApu();
+
+        // Zero in $4012 selects $C000 and zero in $4013 selects one byte, even before either register is written.
+        // https://www.nesdev.org/wiki/APU_DMC
+        apu.WriteRegister(address: 0x4010, value: 0x80);
+        apu.WriteRegister(address: 0x4015, value: 0x10);
+        if (!apu.DmcNeedsSample || (apu.DmcAddress != 0xC000) || ((apu.PeekStatus(openBus: 0) & 0x10) == 0)) {
+            return PostStageOutcome.Fail(detail: "enabling the power-on DMC did not request its one-byte sample at $C000");
+        }
+        apu.CompleteDmcFetch(value: 0xA5);
+        if (apu.DmcNeedsSample || (apu.DmcAddress != 0xC001) || (apu.PeekStatus(openBus: 0) != 0x80)) {
+            return PostStageOutcome.Fail(detail: "the power-on DMC sample did not finish and raise its interrupt after one fetch");
+        }
+
+        return null;
+    }
+    private static PostStageOutcome? CheckFrameReset() {
+        for (var parity = 0; (parity < 2); ++parity) {
+            var program = new DeckProgram().Bytes(0x78);
+
+            if (parity != 0) {
+                program.Op(opcode: 0xA5, operand: ((byte)0));
+            }
+            foreach (var (address, value) in (((int, int)[])[(0x4015, 1), (0x4003, 0x18), (0x4017, 0x80), (0x4017, 0x80)])) {
+                program.Op(opcode: 0xA9, operand: ((byte)value)).Op(address: ((ushort)address), opcode: 0x8D);
+            }
+            program.Label(name: "idle").Jump(label: "idle", opcode: 0x4C);
+            var machine = Build(owner: out var owner, program: program);
+
+            using (owner) {
+                while (!(machine.Cpu.AtInstructionBoundary && (machine.Cpu.ProgramCounter == program.AddressOf(name: "idle")))) {
+                    StepCpuCycle(machine: machine);
+                }
+
+                // Length-table index 3 loads 2. The first reset leaves 1; the second expires it 3 or 4 cycles after
+                // the CPU write cycle, on the second get cycle after that write. https://www.nesdev.org/wiki/APU_Frame_Counter
+                var delay = (((machine.Cpu.Cycles & 1) == 0) ? 3 : 4);
+
+                for (var cycle = 0; (cycle <= delay); ++cycle) {
+                    var active = ((machine.Apu.PeekStatus(openBus: 0) & 1) != 0);
+
+                    if (active != (cycle < delay)) {
+                        return PostStageOutcome.Fail(detail: $"five-step reset parity {parity}: length active={active} after {cycle} cycles; expected expiry at {delay}");
+                    }
+                    StepCpuCycle(machine: machine);
+                }
+            }
+        }
+
+        return null;
+    }
     private static HgdMachine Build(DeckProgram program, out IDisposable owner) {
         var instance = HgdMachineFactory.Create(configuration: new HgdMachineConfiguration(
             cartridge: HgdCartridge.Load(image: program.Build(chr: []))));

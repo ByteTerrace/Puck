@@ -14,6 +14,8 @@ internal sealed class DeckProgram {
     /// <summary>Marks the current address with a label.</summary>
     /// <param name="name">The label.</param>
     /// <returns>This program.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="name"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="name"/> already marks an address.</exception>
     public DeckProgram Label(string name) {
         m_labels.Add(key: name, value: m_code.Count);
 
@@ -67,13 +69,19 @@ internal sealed class DeckProgram {
     /// <summary>Returns the address a label marks.</summary>
     /// <param name="name">The label.</param>
     /// <returns>The CPU address.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="name"/> is <see langword="null"/>.</exception>
+    /// <exception cref="KeyNotFoundException"><paramref name="name"/> does not mark an address.</exception>
     public ushort AddressOf(string name) =>
         ((ushort)(0x8000 + m_labels[name]));
     /// <summary>Packs the program into an NROM-256 image with 32 KiB of PRG ROM and 8 KiB of CHR ROM, vertical mirroring,
     /// and every vector pointing at $8000 unless an NMI label exists.</summary>
-    /// <param name="chr">The pattern data, at most 8 KiB.</param>
+    /// <param name="chr">The pattern data, at most 8 KiB; any remaining pattern bytes are zero.</param>
     /// <returns>The iNES image.</returns>
-    /// <exception cref="InvalidOperationException">A branch target is out of range or a label is missing.</exception>
+    /// <exception cref="InvalidOperationException">A branch target is out of range.</exception>
+    /// <exception cref="KeyNotFoundException">A referenced label is missing.</exception>
+    /// <exception cref="ArgumentException"><paramref name="chr"/> is larger than 8 KiB, or the emitted program does not
+    /// fit in the image.</exception>
+    /// <exception cref="ArgumentNullException">A referenced label is <see langword="null"/>.</exception>
     public byte[] Build(ReadOnlySpan<byte> chr) {
         foreach (var (offset, label, relative) in m_fixups) {
             var target = m_labels[label];

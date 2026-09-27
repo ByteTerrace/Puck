@@ -136,7 +136,7 @@ public sealed partial class HgdPpu : ISnapshotable {
     public byte PeekRegister(int register) =>
         (register & 7) switch {
             2 => ((byte)((m_vblank ? 0x80 : 0) | (m_spriteZeroHit ? 0x40 : 0) | (m_spriteOverflow ? 0x20 : 0) | (m_ioLatch & 0x1F))),
-            4 => m_oam[m_oamAddress],
+            4 => ReadObjectMemory(),
             7 => (((m_v & 0x3FFF) >= 0x3F00)
                 ? ((byte)((ReadPalette(address: ((ushort)(m_v & 0x3FFF))) & PaletteMask) | (m_ioLatch & 0xC0)))
                 : m_readBuffer),

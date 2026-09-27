@@ -28,8 +28,11 @@ machine by master ticks, loads the two controller ports from the first two
 seats of the held input, drains audio, and captures and restores the machine's
 whole state. `NativeFrameIndex` counts completed frames by the PPU's vertical
 blank, so it stays exact even though an odd frame is one dot shorter. A
-cartridge whose header declares a battery keeps its PRG RAM in the save file,
-written atomically only when it has changed.
+restore discards queued audio and restarts the presentation stream at its
+configured rate. The save file contains the cartridge's declared nonvolatile
+PRG RAM followed by its nonvolatile CHR RAM; volatile RAM is excluded. Normal
+flushes write it atomically only when it has changed, and disposal forces a
+final flush.
 
 ```csharp
 using Puck.HumbleGamingDeck;

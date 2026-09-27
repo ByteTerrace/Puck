@@ -46,7 +46,7 @@ public sealed partial class HgdPpu {
             return;
         }
 
-        m_oam[m_oamAddress] = value;
+        m_oam[m_oamAddress] = (((m_oamAddress & 3) == 2) ? ((byte)(value & 0xE3)) : value);
         ++m_oamAddress;
     }
     private void StepSprites() {
@@ -80,6 +80,8 @@ public sealed partial class HgdPpu {
             }
             m_oamAddress = 0;
             FetchSprites(dot: dot);
+        } else if ((dot == 0) || (dot >= 321)) {
+            m_oamBus = m_secondaryOam[0];
         }
     }
     private bool InRange(byte y) {
@@ -91,7 +93,18 @@ public sealed partial class HgdPpu {
     // two the byte (m), so a misaligned OAMADDR at dot 65 evaluates from the middle of an entry, as the hardware does.
     private void EvaluateSprites() {
         if (m_evaluationDone) {
-            m_oamAddress = ((byte)(m_oamAddress + 4));
+            if ((m_spritesFound == 8) && (m_copyRemaining != 0)) {
+                --m_copyRemaining;
+                AdvanceEvaluation(step: 1);
+                if (m_copyRemaining == 0) {
+                    m_oamAddress &= 0xFC;
+                }
+            } else {
+                m_oamAddress = ((byte)(m_oamAddress + 4));
+            }
+            if (m_spritesFound == 8) {
+                m_oamBus = m_secondaryOam[0];
+            }
 
             return;
         }
@@ -121,6 +134,9 @@ public sealed partial class HgdPpu {
         if (InRange(y: m_oamBus)) {
             m_spriteOverflow = true;
             m_evaluationDone = true;
+            m_copyRemaining = 3;
+            AdvanceEvaluation(step: 1);
+            m_oamBus = m_secondaryOam[0];
 
             return;
         }
@@ -130,6 +146,7 @@ public sealed partial class HgdPpu {
         var next = (m_oamAddress + 4);
 
         m_oamAddress = ((byte)((next & 0xFC) | ((m_oamAddress + 1) & 3)));
+        m_oamBus = m_secondaryOam[0];
         if (next > 0xFF) {
             m_evaluationDone = true;
         }

@@ -26,8 +26,11 @@ public sealed class DeckMachineHost : QueuedMachineHost, IMachineMemoryPeek {
     /// <param name="savePath">The battery-save path, or <see langword="null"/> to keep battery RAM in memory only.</param>
     /// <param name="audioSampleRate">The audio output rate in frames per emulated second, or 0 for no audio.</param>
     /// <param name="powerOn">The power-on profile; <see langword="null"/> selects the default.</param>
-    /// <exception cref="InvalidDataException"><paramref name="cartridgeImage"/>'s header is damaged, ambiguous, or names a
-    /// board the Deck does not implement.</exception>
+    /// <exception cref="InvalidDataException"><paramref name="cartridgeImage"/>'s header or payload is damaged or ambiguous.</exception>
+    /// <exception cref="NotSupportedException">The image names an unimplemented mapper, submapper, console, timing
+    /// family, or memory layout.</exception>
+    /// <exception cref="IOException">An existing battery save cannot be read.</exception>
+    /// <exception cref="UnauthorizedAccessException">Access to an existing battery save is denied.</exception>
     public DeckMachineHost(byte[]? cartridgeImage = null, string? savePath = null, int audioSampleRate = 0, HgdPowerOnProfile? powerOn = null)
         : base(
         audioSampleRate: audioSampleRate,

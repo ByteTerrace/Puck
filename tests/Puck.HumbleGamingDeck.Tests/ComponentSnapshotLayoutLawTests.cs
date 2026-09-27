@@ -10,16 +10,17 @@ public sealed class ComponentSnapshotLayoutLawTests {
         ["HgdCpu`1"] = "41:3B5992441A767490A4886FC46FCE8385E456D735CA01BB47F01B73064989649B",
         ["HgdSystemBus"] = "2049:2F3FB2C2903AAA036679257FEDBB99E6A41E6CC37D544D838ADE62ECE84D72A4",
         ["HgdNrom"] = "16384:D0AF537F0022EE61BF38F019FCC229C0ACF114DADEC7A5382B8100F0CA1AF8F8",
+        ["HgdNromBattery"] = "16384:C7E0D4F02421D8D8F848BB00DFB3B12CACA07CEA21F7FAFF175DC21E2EDD14E0",
         ["HgdClock"] = "24:BAF90ED330310EC9191BA4BD1052A81690FBCA9F2CADD4B66F50C640815EBD61",
         ["HgdPpu"] = "246226:035D8E53633CA27D412404EF55FB82F14C104081CF88AEA947FCDD372CF40D19",
-        ["HgdApu"] = "85:B7EE236D74A12064B474890CE8B7F9E071010348FE07F3DA12EF695D3AD72139",
+        ["HgdApu"] = "85:2B0CC9D84D50E405507C827C1C79EF55D2809374E86E8FE7ACE4FBE33442F43D",
         ["HgdDma"] = "12:CEAF2E2C474CFF7E2E26ED75BC6F45577251FED0220CA75AC4A50EED4D97B102",
         ["HgdControllers"] = "5:C1E5F9070476F5E4F1965CF1B3887179A2D9386DE612AD89B976F8C0BC37A1AD",
         ["HgdNametableRam"] = "2048:119B441214B6343E70F6F1A4DCD16F78817BF4DB9240760056389EBE54995479",
     };
 
     /// <summary>Gets the components whose complete state layouts are pinned.</summary>
-    public static TheoryData<string> Cases => ["HgdClock", "HgdCpu`1", "HgdSystemBus", "HgdNrom", "HgdPpu", "HgdApu", "HgdDma", "HgdControllers", "HgdNametableRam"];
+    public static TheoryData<string> Cases => ["HgdClock", "HgdCpu`1", "HgdSystemBus", "HgdNrom", "HgdNromBattery", "HgdPpu", "HgdApu", "HgdDma", "HgdControllers", "HgdNametableRam"];
 
     // Fields whose loaders refuse values outside a range, seeded inside it.
     private static readonly Dictionary<string, int> FieldRanges = new(comparer: StringComparer.Ordinal) {
@@ -48,7 +49,7 @@ public sealed class ComponentSnapshotLayoutLawTests {
         var description = $"{bytes.Length}:{Convert.ToHexString(inArray: SHA256.HashData(source: bytes))}";
 
         Assert.True(condition: RecordedLayouts.TryGetValue(key: name, value: out var recorded), userMessage: $"Unpinned {name}: {description}");
-        Assert.Equal(actual: description, expected: recorded);
+        Assert.True(condition: (description == recorded), userMessage: $"{name}: expected {recorded}; actual {description}");
         var reader = new StateReader(buffer: bytes);
 
         twin.LoadState(reader: reader);
@@ -66,13 +67,18 @@ public sealed class ComponentSnapshotLayoutLawTests {
         image[7] = 8;
         image[10] = 7;
         image[11] = 7;
+        if (name == "HgdNromBattery") {
+            image[6] = 2;
+            image[10] = 0x66;
+            image[11] = 0x66;
+        }
         var machine = new HgdMachine(configuration: new HgdMachineConfiguration(cartridge: HgdCartridge.Load(image: image)));
 
         return name switch {
             "HgdClock" => machine.Clock,
             "HgdCpu`1" => machine.Cpu,
             "HgdSystemBus" => machine.Bus,
-            "HgdNrom" => machine.Bus.Mapper,
+            "HgdNrom" or "HgdNromBattery" => machine.Bus.Mapper,
             "HgdPpu" => machine.Ppu,
             "HgdApu" => machine.Apu,
             "HgdDma" => machine.Dma,
@@ -117,6 +123,9 @@ public sealed class ComponentSnapshotLayoutLawTests {
                     var values = Enum.GetValues(enumType: field.FieldType);
 
                     value = values.GetValue(index: ((int)(seed % ((ulong)values.Length))));
+                } else if (field.FieldType.IsValueType && !field.FieldType.IsPrimitive) {
+                    value = field.GetValue(obj: component)!;
+                    Seed(component: value, salt: key);
                 }
                 if (value is not null) {
                     field.SetValue(obj: component, value: value);

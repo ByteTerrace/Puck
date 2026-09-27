@@ -31,19 +31,22 @@ internal sealed class NestestBootStage : IPostStage<PostContext> {
         var machine = instance.Machine;
 
         machine.RunCycles(masterTicks: (30 * FrameTicks));
-        if (Contains(machine: machine, text: "OK")) {
-            return PostStageOutcome.Fail(detail: "the menu showed OK before any test ran");
+        if (!Contains(machine: machine, text: "Select: Invalid ops") || Contains(machine: machine, text: "OK")) {
+            return PostStageOutcome.Fail(detail: "the official-opcode menu was absent or showed OK before any test ran");
         }
         Press(button: HgdButtons.Start, machine: machine);
         machine.RunCycles(masterTicks: (90 * FrameTicks));
-        if (Contains(machine: machine, text: "Er") || !Contains(machine: machine, text: "OK")) {
+        if (!HasPageVerdict(machine: machine, verdict: "OK"u8)) {
             return PostStageOutcome.Fail(detail: "the official-opcode page did not report OK");
         }
         Press(button: HgdButtons.Select, machine: machine);
         machine.RunCycles(masterTicks: (10 * FrameTicks));
+        if (!Contains(machine: machine, text: "Select: Normal ops") || Contains(machine: machine, text: "OK")) {
+            return PostStageOutcome.Fail(detail: "Select did not open an unrun unofficial-opcode page");
+        }
         Press(button: HgdButtons.Start, machine: machine);
         machine.RunCycles(masterTicks: (90 * FrameTicks));
-        if (Contains(machine: machine, text: "Er") || !Contains(machine: machine, text: "OK")) {
+        if (!HasPageVerdict(machine: machine, verdict: "OK"u8)) {
             return PostStageOutcome.Fail(detail: "the unofficial-opcode page did not report OK");
         }
 
@@ -56,10 +59,27 @@ internal sealed class NestestBootStage : IPostStage<PostContext> {
         machine.Controllers.SetButtons(buttons: HgdButtons.None, port: 0);
         machine.RunCycles(masterTicks: (4 * FrameTicks));
     }
+    // nestest's own readme defines the whole-page verdict beside "Run all tests"; an individual test's OK is insufficient.
+    private static bool HasPageVerdict(HgdMachine machine, ReadOnlySpan<byte> verdict) {
+        Span<byte> row = stackalloc byte[32];
+
+        for (var page = 0; (page < 2); ++page) {
+            for (var offset = 0; (offset < 960); offset += row.Length) {
+                for (var column = 0; (column < row.Length); ++column) {
+                    row[column] = machine.Nametables.Read(offset: (offset + column), page: page);
+                }
+                if ((row.IndexOf(value: "Run all tests"u8) >= 0) && (row.IndexOf(value: verdict) >= 0)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
     // nestest's font places each character at its ASCII code, so text on screen is ASCII in nametable RAM.
     private static bool Contains(HgdMachine machine, string text) {
         for (var page = 0; (page < 2); ++page) {
-            for (var offset = 0; (offset < (960 - text.Length)); ++offset) {
+            for (var offset = 0; (offset <= (960 - text.Length)); ++offset) {
                 var match = true;
 
                 for (var index = 0; (index < text.Length); ++index) {

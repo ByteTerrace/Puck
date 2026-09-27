@@ -16,6 +16,7 @@ public sealed class HumbleGamingDeckLookahead : ITimeTravelLookahead<MachinePads
     /// <summary>Initializes a new instance of the <see cref="HumbleGamingDeckLookahead"/> class over a fork it owns.</summary>
     /// <param name="fork">The fork to advance; the lookahead disposes it.</param>
     /// <exception cref="ArgumentNullException"><paramref name="fork"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ObjectDisposedException"><paramref name="fork"/> has been disposed.</exception>
     public HumbleGamingDeckLookahead(MachineFork<HgdMachine, HgdMachineConfiguration> fork) {
         ArgumentNullException.ThrowIfNull(argument: fork);
 
@@ -47,6 +48,10 @@ public sealed class HumbleGamingDeckLookahead : ITimeTravelLookahead<MachinePads
             pads: in input
         );
     /// <inheritdoc/>
+    /// <exception cref="ArgumentNullException"><paramref name="buffer"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The state window does not contain a complete machine state.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The state data exceeds the backing buffer.</exception>
+    /// <exception cref="InvalidDataException">A serialized component position is outside its valid range.</exception>
     public void RestoreState(byte[] buffer, int length) {
         m_machine.RestoreState(reader: new StateReader(
             buffer: buffer,
@@ -56,6 +61,7 @@ public sealed class HumbleGamingDeckLookahead : ITimeTravelLookahead<MachinePads
         m_colouredFrame = -1;
     }
     /// <inheritdoc/>
+    /// <exception cref="OverflowException">The accumulated master-tick target exceeds the clock's range.</exception>
     public void RunFrame() {
         var frame = m_machine.FrameIndex;
 

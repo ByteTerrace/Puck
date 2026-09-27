@@ -133,8 +133,12 @@ a small assembler in the battery, check the rest of the machine against
 independent oracles: `ppu-picture` compares every pixel of a rendered picture
 with a reference renderer that maps each pixel straight from the same tables,
 `controllers` reads both ports through the pad mapping, `oam-dma` times the DMA
-on both cycle parities and checks the copy, and `apu` checks a pulse waveform,
-a length counter, and the frame-interrupt period against published figures.
+on both cycle parities and checks the copy with unused attribute bits cleared,
+and `apu` checks a pulse waveform, length counters, delayed frame-counter
+resets on both parities, the frame-interrupt period, and the DMC's initial
+sample address and length against published figures. `embedding` also checks
+that restore discards queued audio and that saves retain PRG and CHR NVRAM
+while leaving volatile RAM out of the file.
 `--tier A` and `--filter <text>` select focused runs.
 
 Tier B compares every `nes6502-sst` opcode file: 256 families of 10,000
@@ -147,7 +151,9 @@ The `nestest` stage starts at the $C000 automation entry and compares PC, A,
 X, Y, P, SP, the PPU line and dot, and cumulative CPU cycles through the
 reference log's last line, which checks the CPU and PPU clocks against each
 other. `nestest-boot` boots the same image through its reset vector and runs
-both menu pages from the controller, passing when each reports OK. The stages
+both menu pages from the controller, verifying the menu identity and absence
+of a prior result before each page runs, then requiring OK beside "Run all
+tests". The stages
 skip an absent corpus and reject an incomplete corpus supplied as present.
 
 The corpus manifest uses the shared

@@ -34,6 +34,8 @@ public sealed partial class HgdApu : ISnapshotable {
         m_noise.Period = NoisePeriods[0];
         m_dmc.Period = DmcPeriods[0];
         m_dmc.BitsRemaining = 8;
+        m_dmc.StartAddress = 0xC000;
+        m_dmc.StartLength = 1;
     }
 
     /// <summary>Gets the first pulse channel's level, 0 through 15.</summary>
@@ -242,8 +244,9 @@ public sealed partial class HgdApu : ISnapshotable {
         }
         m_dmc.Irq = false;
     }
-    // A $4017 write resets the sequence three CPU cycles later when it lands on an even cycle and four when it lands on
-    // an odd one; five-step mode also clocks the quarter- and half-frame units at once.
+    // A $4017 write resets the sequence three CPU cycles after an APU cycle or four after the intervening cycle;
+    // five-step mode clocks the quarter- and half-frame units at that reset. The countdown includes the write's own
+    // StepCpuCycle, which the machine runs after the CPU bus transaction.
     // https://www.nesdev.org/wiki/APU_Frame_Counter
     private void WriteFrameCounter(byte value) {
         m_fiveStep = ((value & 0x80) != 0);
@@ -251,17 +254,17 @@ public sealed partial class HgdApu : ISnapshotable {
         if (m_frameIrqInhibit) {
             m_frameIrq = false;
         }
-        m_frameResetDelay = (m_evenCycle ? 3 : 4);
-        if (m_fiveStep) {
-            ClockQuarterFrame();
-            ClockHalfFrame();
-        }
+        m_frameResetDelay = (m_evenCycle ? 5 : 4);
     }
     private void StepFrameCounter() {
         if (m_frameResetDelay != 0) {
             --m_frameResetDelay;
             if (m_frameResetDelay == 0) {
                 m_frameCycle = 0;
+                if (m_fiveStep) {
+                    ClockQuarterFrame();
+                    ClockHalfFrame();
+                }
 
                 return;
             }

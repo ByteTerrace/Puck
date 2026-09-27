@@ -60,6 +60,83 @@ internal sealed class LoaderStage : IPostStage<PostContext> {
         } catch (NotSupportedException exception) when (exception.Message.Contains(comparisonType: StringComparison.Ordinal, value: "MMC1")) {
         }
 
-        return PostStageOutcome.Pass(detail: "NES 2.0 exponent sizes, iNES diagnostic, named board refusal, RAM mirrors, register open bus, NROM PRG/CHR memory");
+        return (CheckObjectMemoryPeek() ?? (CheckOverflowReads() ?? PostStageOutcome.Pass(detail: "NES 2.0 exponent sizes, iNES diagnostic, named board refusal, RAM mirrors, register open bus, OAM register peeks and overflow reads, NROM PRG/CHR memory")));
+    }
+
+    private static PostStageOutcome? CheckObjectMemoryPeek() {
+        using var instance = PostMachine.Build();
+        var ppu = instance.Machine.Ppu;
+
+        for (var index = 0; (index < 256); ++index) {
+            ppu.WriteRegister(register: 4, value: 0xFF);
+        }
+        ppu.WriteRegister(register: 3, value: 0);
+        ppu.WriteRegister(register: 4, value: 0);
+        ppu.WriteRegister(register: 3, value: 2);
+        ppu.WriteRegister(register: 4, value: 0xFF);
+        ppu.WriteRegister(register: 3, value: 2);
+        if ((ppu.PeekRegister(register: 4) != 0xE3) || (ppu.ReadRegister(register: 4) != 0xE3)) {
+            return PostStageOutcome.Fail(detail: "$2004 peek/read must mask the unimplemented attribute bits to $E3");
+        }
+        for (var dot = 0; (dot < ((261 * 341) + 2)); ++dot) {
+            ppu.StepDot(masterTick: ((((ulong)dot) + 1) * 4));
+        }
+        ppu.WriteRegister(register: 1, value: 0x18);
+        for (var dot = 0; (dot < 341); ++dot) {
+            ppu.StepDot(masterTick: ((((ulong)dot) + ((261 * 341) + 3)) * 4));
+        }
+
+        // Secondary OAM clearing drives $FF on dots 1-64, independently of the primary OAM address.
+        // https://www.nesdev.org/wiki/PPU_sprite_evaluation
+        if ((ppu.PeekRegister(register: 4) != 0xFF) || (ppu.ReadRegister(register: 4) != 0xFF)) {
+            return PostStageOutcome.Fail(detail: "$2004 peek/read must expose the object-memory bus during rendering");
+        }
+        for (var dot = 0; (dot < 320); ++dot) {
+            ppu.StepDot(masterTick: ((((ulong)dot) + ((262 * 341) + 3)) * 4));
+        }
+        if ((ppu.PeekRegister(register: 4) != 0) || (ppu.ReadRegister(register: 4) != 0)) {
+            return PostStageOutcome.Fail(detail: "$2004 must expose the first secondary OAM byte during background prefetch");
+        }
+
+        return null;
+    }
+    private static PostStageOutcome? CheckOverflowReads() {
+        using var instance = PostMachine.Build();
+        var ppu = instance.Machine.Ppu;
+        var tick = 0UL;
+
+        for (var index = 0; (index < 256); ++index) {
+            ppu.WriteRegister(register: 4, value: 0xFF);
+        }
+        for (var sprite = 0; (sprite < 9); ++sprite) {
+            ppu.WriteRegister(register: 3, value: ((byte)(sprite * 4)));
+            ppu.WriteRegister(register: 4, value: 0);
+            ppu.WriteRegister(register: 4, value: ((byte)(0x20 + sprite)));
+            ppu.WriteRegister(register: 4, value: 3);
+            ppu.WriteRegister(register: 4, value: ((byte)(0x40 + sprite)));
+        }
+        for (var dot = 0; (dot < ((261 * 341) + 2)); ++dot) {
+            ppu.StepDot(masterTick: (tick += 4));
+        }
+        ppu.WriteRegister(register: 1, value: 0x18);
+        for (var dot = 0; (dot < (339 + 129)); ++dot) {
+            ppu.StepDot(masterTick: (tick += 4));
+        }
+
+        // Eight sprites consume dots 65-128. The ninth sets overflow on dot 130; its remaining three bytes are still
+        // read before evaluation resumes at later Y bytes. Full secondary OAM drives its first Y byte on even dots.
+        // https://www.nesdev.org/wiki/PPU_sprite_evaluation
+        ReadOnlySpan<byte> expected = [0, 0, 0x28, 0, 3, 0, 0x48, 0, 0xFF, 0];
+
+        for (var index = 0; (index < expected.Length); ++index) {
+            ppu.StepDot(masterTick: (tick += 4));
+            var actual = ppu.ReadRegister(register: 4);
+
+            if ((actual != expected[index]) || (((ppu.PeekRegister(register: 2) & 0x20) != 0) != (index >= 1))) {
+                return PostStageOutcome.Fail(detail: $"sprite overflow dot {(129 + index)}: OAM bus ${actual:X2}, expected ${expected[index]:X2}, with overflow set from dot 130");
+            }
+        }
+
+        return null;
     }
 }
