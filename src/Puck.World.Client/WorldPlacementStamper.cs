@@ -307,8 +307,8 @@ public static class WorldPlacementStamper {
     }
 
     // One static placement's instances: its volumes and mesh draws, then either one tight instance per shape or one
-    // instance holding the whole creation. A placement drawing its bake draws the baked mesh, in its palette's first
-    // material, and keeps its instances camera-hidden, so its field still casts shadows and occludes. A struct the
+    // instance holding the whole creation. A placement drawing its bake draws the baked mesh, its palette's first
+    // material the base its triangles' entries add to, and keeps its instances camera-hidden, so its field still casts shadows and occludes. A struct the
     // lattice walk calls, so a placement allocates no closure.
     private readonly struct StaticInstanceVisitor(SdfMesh? bakedMesh, SdfProgramBuilder builder, CreationDocument creation, bool hasText, SdfMesh? mesh, ICollection<SdfMeshDraw>? meshDraws, int meshMaterial, int[] paletteIds, bool perShape, WorldPlacement placement, float reach, Quaternion rotation, bool scoped, PackedFontAtlasCatalog? textCatalog, TextLayoutResult[]? textLayouts, ICollection<SdfVolume>? volumes) : ICreationStampVisitor {
         public void Visit(CreationStampInstance instance) {

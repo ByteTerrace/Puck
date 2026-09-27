@@ -233,6 +233,10 @@ public sealed class CreationBakeLawTests {
         var draw = Assert.Single(collection: ready.Draws);
 
         Assert.True(condition: (draw.Mesh.TriangleCount > 0));
+        // The baked mesh draws its vertex normals and each triangle's palette entry: the block's palette has one.
+        Assert.Equal(expected: draw.Mesh.Positions.Length, actual: draw.Mesh.Normals.Length);
+        Assert.Equal(expected: draw.Mesh.TriangleCount, actual: draw.Mesh.TriangleMaterials.Length);
+        Assert.All(collection: draw.Mesh.TriangleMaterials.ToArray(), action: static material => Assert.Equal(expected: 0u, actual: material));
         Assert.Contains(collection: ready.Program.Instances, filter: static instance => instance.CameraHidden);
         Assert.Contains(collection: ready.Program.Instances, filter: static instance => !instance.CameraHidden);
         Assert.Equal(expected: 1L, actual: schedule.Read(kind: WorldBakeSchedule.Drawn));

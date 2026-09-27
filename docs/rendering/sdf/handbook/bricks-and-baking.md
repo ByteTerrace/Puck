@@ -337,8 +337,9 @@ samples each probe texel of the bake sampling fixture on Vulkan, Direct3D 12
 hardware and WARP and holds it to the CPU decoder.
 
 With `world.bakes` on, an untinted static placement whose prototype's bake is
-ready draws the baked mesh through the mesh pass, in its palette's first
-material while the bake's textures do not draw yet, and keeps its field as
+ready draws the baked mesh through the mesh pass (its vertex normals and each
+triangle's palette entry, read from the bake's material identity) while the
+bake's textures do not draw yet, and keeps its field as
 camera-hidden instances that still cast shadows and occlude; a creation with
 text or noise relief keeps drawing through its field. `WorldBakeSchedule.TryGetMesh` hands out a ready prototype's mesh,
 decoded once, and counts the switch from field to bake once per bake

@@ -423,9 +423,13 @@ public sealed class SdfWorldEngineUploadLawTests {
             indices: new uint[] { 0, 1, 2, 0, 2, 3 },
             positions: new Vector3[] { new(x: 0f, y: 0f, z: 0f), new(x: 1f, y: 0f, z: 0f), new(x: 1f, y: 1f, z: 0f), new(x: 0f, y: 1f, z: 0f) }
         );
+        // The triangle carries every attribute: a normal and a texture coordinate a vertex, and a palette entry.
         var triangle = new SdfMesh(
             indices: new uint[] { 0, 1, 2 },
-            positions: new Vector3[] { new(x: 0f, y: 0f, z: 0f), new(x: 0f, y: 0f, z: 1f), new(x: 1f, y: 0f, z: 0f) }
+            normals: new Vector3[] { Vector3.UnitY, Vector3.UnitY, Vector3.UnitY },
+            positions: new Vector3[] { new(x: 0f, y: 0f, z: 0f), new(x: 0f, y: 0f, z: 1f), new(x: 1f, y: 0f, z: 0f) },
+            triangleMaterials: new uint[] { 2 },
+            uvs: new Vector2[] { new(x: 0.25f, y: 0.5f), new(x: 0.5f, y: 0.5f), new(x: 0.25f, y: 0.75f) }
         );
         var moved = Matrix4x4.CreateTranslation(xPosition: 1f, yPosition: 2f, zPosition: 3f);
         SdfMeshDraw[] draws = [
@@ -436,14 +440,17 @@ public sealed class SdfWorldEngineUploadLawTests {
         var layout = new SdfMeshRegionLayout(
             DrawCount: 3,
             IndexCount: 9,
+            MaterialCount: 1,
             VertexCount: 7
         );
         var expected = new List<uint>();
 
-        // A draw's record: its matrix row by row, its material, then the word its mesh's first index sits at, its index count
-        // and the word its first position sits at. The positions start past the three records (word 60), the indices past
-        // the seven positions (word 81).
-        void Record(Matrix4x4 matrix, uint material, uint indexWord, uint indexCount, uint positionWord) {
+        // A draw's record: its matrix row by row, its material, then the word its mesh's first index sits at, its index
+        // count, the word its first vertex sits at, its attribute flags, the word its first triangle material sits at, and
+        // its normal matrix (the inverse transpose of its upper 3x3). The vertices start past the three records (word 93),
+        // the triangle materials past the seven vertices (word 149), and the indices past the one triangle material
+        // (word 150).
+        void Record(Matrix4x4 matrix, uint material, uint indexWord, uint indexCount, uint vertexWord, uint flags) {
             float[] rows = [
                 matrix.M11, matrix.M12, matrix.M13, matrix.M14,
                 matrix.M21, matrix.M22, matrix.M23, matrix.M24,
@@ -452,21 +459,30 @@ public sealed class SdfWorldEngineUploadLawTests {
             ];
 
             expected.AddRange(collection: rows.Select(selector: BitConverter.SingleToUInt32Bits));
-            expected.AddRange(collection: [material, indexWord, indexCount, positionWord]);
+            expected.AddRange(collection: [material, indexWord, indexCount, vertexWord, flags, 149u]);
+            Assert.True(condition: Matrix4x4.Invert(matrix: matrix with { M41 = 0f, M42 = 0f, M43 = 0f }, result: out var inverse));
+
+            var normal = Matrix4x4.Transpose(matrix: inverse);
+
+            expected.AddRange(collection: new[] { normal.M11, normal.M12, normal.M13, normal.M21, normal.M22, normal.M23, normal.M31, normal.M32, normal.M33 }.Select(selector: BitConverter.SingleToUInt32Bits));
+        }
+        // A vertex: its position, its normal and its texture coordinate, zeros for an attribute its mesh lacks.
+        void Vertices(SdfMesh mesh) {
+            for (var vertex = 0; (vertex < mesh.Positions.Length); vertex++) {
+                var position = mesh.Positions.Span[vertex];
+                var normal = (mesh.Normals.IsEmpty ? Vector3.Zero : mesh.Normals.Span[vertex]);
+                var uv = (mesh.Uvs.IsEmpty ? Vector2.Zero : mesh.Uvs.Span[vertex]);
+
+                expected.AddRange(collection: new[] { position.X, position.Y, position.Z, normal.X, normal.Y, normal.Z, uv.X, uv.Y }.Select(selector: BitConverter.SingleToUInt32Bits));
+            }
         }
 
-        Record(indexCount: 6, indexWord: 81, material: 4, matrix: moved, positionWord: 60);
-        Record(indexCount: 3, indexWord: 87, material: 5, matrix: Matrix4x4.CreateScale(scale: 2f), positionWord: 72);
-        Record(indexCount: 6, indexWord: 81, material: 6, matrix: Matrix4x4.Identity, positionWord: 60);
-
-        foreach (var position in quad.Positions.ToArray().Concat(second: triangle.Positions.ToArray())) {
-            expected.AddRange(collection: [
-                BitConverter.SingleToUInt32Bits(value: position.X),
-                BitConverter.SingleToUInt32Bits(value: position.Y),
-                BitConverter.SingleToUInt32Bits(value: position.Z),
-            ]);
-        }
-
+        Record(flags: 0u, indexCount: 6, indexWord: 150, material: 4, matrix: moved, vertexWord: 93);
+        Record(flags: (SdfMeshRegion.NormalsFlag | SdfMeshRegion.MaterialsFlag), indexCount: 3, indexWord: 156, material: 5, matrix: Matrix4x4.CreateScale(scale: 2f), vertexWord: 125);
+        Record(flags: 0u, indexCount: 6, indexWord: 150, material: 6, matrix: Matrix4x4.Identity, vertexWord: 93);
+        Vertices(mesh: quad);
+        Vertices(mesh: triangle);
+        expected.Add(item: 2u);
         expected.AddRange(collection: quad.Indices.ToArray().Concat(second: triangle.Indices.ToArray()));
 
         rig.Warm();
