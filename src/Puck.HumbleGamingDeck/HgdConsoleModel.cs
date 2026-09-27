@@ -27,6 +27,17 @@ public static class HgdConsoleModelExtensions {
             _ => throw new ArgumentOutOfRangeException(paramName: nameof(model), actualValue: model, message: "Unimplemented Deck console model."),
         };
     }
+    /// <summary>Gets the M2 rising-edge offset from the beginning of a CPU cycle.</summary>
+    /// <param name="model">The implemented hardware revision.</param>
+    /// <returns>The offset in half master ticks.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The model is unimplemented.</exception>
+    public static int M2RiseHalfTick(this HgdConsoleModel model) {
+        // RP2A03G holds M2 high for 15 of 24 half master ticks: https://www.nesdev.org/wiki/CPU_pinout
+        return model switch {
+            HgdConsoleModel.NtscRp2A03G => 9,
+            _ => throw new ArgumentOutOfRangeException(paramName: nameof(model), actualValue: model, message: "Unimplemented Deck console model."),
+        };
+    }
     /// <summary>Gets the deterministic special-bus precharge for the unstable immediate instructions.</summary>
     /// <param name="model">The implemented hardware revision.</param>
     /// <returns>The unhalted bus precharge mask.</returns>

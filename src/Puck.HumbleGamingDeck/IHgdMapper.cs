@@ -43,6 +43,6 @@ public interface IHgdMapper : ISnapshotable {
     void ObservePpuAddress(ushort address, ulong masterTick);
     /// <summary>Observes each CPU M2 edge for board timing.</summary>
     /// <param name="high">The new M2 level.</param>
-    /// <param name="masterTick">The edge's master tick.</param>
-    void ObserveM2(bool high, ulong masterTick);
+    /// <param name="masterHalfTick">The edge's elapsed time in half master ticks.</param>
+    void ObserveM2(bool high, ulong masterHalfTick);
 }

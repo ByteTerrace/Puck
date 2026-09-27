@@ -52,14 +52,14 @@ public sealed class HgdMachine : ISnapshotableMachine {
     }
     /// <summary>Advances the reference clock one tick. M2 falling commits the CPU access before notifying the board.</summary>
     public void StepMasterTick() {
-        var edge = Clock.StepTick();
+        var edge = Clock.StepTick(edgeHalfTick: out var edgeHalfTick);
 
         if (edge == HgdM2Edge.Falling) {
             Cpu.Irq = Bus.Mapper.Irq;
             Cpu.StepCycle();
-            Bus.Mapper.ObserveM2(high: false, masterTick: Clock.MasterTicks);
+            Bus.Mapper.ObserveM2(high: false, masterHalfTick: edgeHalfTick);
         } else if (edge == HgdM2Edge.Rising) {
-            Bus.Mapper.ObserveM2(high: true, masterTick: Clock.MasterTicks);
+            Bus.Mapper.ObserveM2(high: true, masterHalfTick: edgeHalfTick);
         }
     }
     /// <summary>Captures all components, including CPU latches and the master-clock phase.</summary>
@@ -82,7 +82,7 @@ public sealed class HgdMachine : ISnapshotableMachine {
     /// <param name="snapshot">The capture to restore.</param>
     /// <exception cref="ArgumentNullException">The snapshot is null.</exception>
     /// <exception cref="InvalidOperationException">Identity or serialized length does not match.</exception>
-    /// <exception cref="InvalidDataException">The serialized clock phase or pacing target is invalid.</exception>
+    /// <exception cref="InvalidDataException">The serialized clock phase is outside the CPU divider.</exception>
     public void Restore(HgdMachineSnapshot snapshot) {
         ArgumentNullException.ThrowIfNull(argument: snapshot);
         if (snapshot.Identity != m_identity) {
@@ -103,7 +103,7 @@ public sealed class HgdMachine : ISnapshotableMachine {
     }
     /// <inheritdoc/>
     /// <exception cref="InvalidOperationException">The reader does not contain a complete machine state.</exception>
-    /// <exception cref="InvalidDataException">The serialized clock phase or pacing target is invalid.</exception>
+    /// <exception cref="InvalidDataException">The serialized clock phase is outside the CPU divider.</exception>
     public void RestoreState(StateReader reader) {
         foreach (var component in m_components) {
             component.LoadState(reader: reader);

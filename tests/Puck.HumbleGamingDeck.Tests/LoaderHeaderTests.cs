@@ -69,6 +69,18 @@ public sealed class LoaderHeaderTests {
         Assert.Equal(expected: 2, actual: header.MiscellaneousRomCount);
         Assert.Equal(expected: 0x21, actual: header.DefaultExpansionDevice);
     }
+    /// <summary>Retains all seven expansion-device bits and rejects the reserved top bit.</summary>
+    [Fact]
+    public void Nes20ExpansionDeviceUsesSevenBits() {
+        var bytes = Header();
+
+        for (var device = 0; (device < 128); ++device) {
+            bytes[15] = ((byte)device);
+            Assert.Equal(expected: device, actual: HgdCartridgeHeader.Parse(header: bytes).DefaultExpansionDevice);
+        }
+        bytes[15] = 128;
+        Assert.Throws<InvalidDataException>(testCode: () => HgdCartridgeHeader.Parse(header: bytes));
+    }
     /// <summary>Rejects reserved legacy header bits with an ambiguity diagnostic.</summary>
     /// <param name="offset">The header byte offset to damage.</param>
     /// <param name="value">The byte containing reserved bits.</param>

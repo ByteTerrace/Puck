@@ -35,6 +35,27 @@ public sealed class CorpusManifestTests {
         Assert.Equal(expected: 1, actual: manifest.Fetch(client: client));
         Assert.Equal(expected: 3, actual: handler.Requests);
     }
+    /// <summary>Preserves a declared file whose name also looks like another file's download staging path.</summary>
+    [Fact]
+    public void FileDownloadsCannotOverwriteAnotherDeclaredFile() {
+        using var fixture = new Fixture();
+        var first = "complete partial-named file"u8.ToArray();
+        var second = "complete base file"u8.ToArray();
+        var manifest = fixture.Files(("a.partial", first), ("a", second));
+        using var handler = new MemoryHandler(responses: new Dictionary<string, byte[]> {
+            ["/base/a.partial"] = first,
+            ["/base/a"] = second,
+        });
+        using var client = new HttpClient(handler: handler);
+
+        Assert.Equal(expected: 1, actual: manifest.Fetch(client: client));
+        var root = manifest.Resolve(args: [], flag: "--vectors", name: "vectors");
+
+        Assert.NotNull(@object: root);
+        Assert.Equal(expected: first, actual: File.ReadAllBytes(path: Path.Combine(path1: root, path2: "a.partial")));
+        Assert.Equal(expected: second, actual: File.ReadAllBytes(path: Path.Combine(path1: root, path2: "a")));
+        Assert.Equal(expected: 2, actual: Directory.GetFiles(path: root).Length);
+    }
     /// <summary>Checks that a failed file hash leaves neither a published file nor a staging file.</summary>
     [Fact]
     public void ANewBadHashIsRefusedAndNeverPublished() {
@@ -46,7 +67,7 @@ public sealed class CorpusManifestTests {
 
         Assert.Contains(expectedSubstring: "00.json SHA-256", actualString: failure.Message);
         Assert.False(condition: File.Exists(path: Path.Combine(path1: fixture.Cache, path2: "vectors/v1/00.json")));
-        Assert.False(condition: File.Exists(path: Path.Combine(path1: fixture.Cache, path2: "vectors/v1/00.json.partial")));
+        Assert.Empty(collection: Directory.GetFiles(path: Path.Combine(path1: fixture.Cache, path2: "vectors/v1")));
         Assert.Null(@object: manifest.Resolve(args: [], flag: "--vectors", name: "vectors"));
     }
     /// <summary>Checks that both cache consumers reject corruption without fetching replacement bytes.</summary>

@@ -108,7 +108,7 @@ public sealed record HgdCartridgeHeader {
         get;
         private init;
     }
-    /// <summary>Gets the default expansion device identifier.</summary>
+    /// <summary>Gets the seven-bit default expansion device identifier.</summary>
     public byte DefaultExpansionDevice {
         get;
         private init;
@@ -138,7 +138,7 @@ public sealed record HgdCartridgeHeader {
             ((header[10] & 0xCC) != 0) || header[11..16].ContainsAnyExcept(value: ((byte)0)))) {
             throw new InvalidDataException(message: "Ambiguous or damaged iNES header: reserved bytes/bits in bytes 7-15 are nonzero; supply a corrected header, not a database guess.");
         }
-        if (nes20 && (((header[12] & 0xFC) != 0) || ((header[14] & 0xFC) != 0) || ((header[15] & 0xC0) != 0) ||
+        if (nes20 && (((header[12] & 0xFC) != 0) || ((header[14] & 0xFC) != 0) || ((header[15] & 0x80) != 0) ||
             (((header[7] & 3) != 1) && ((header[13] & 0xF0) != 0)) ||
             (((header[7] & 3) == 0) && (header[13] != 0)))) {
             throw new InvalidDataException(message: "Damaged NES 2.0 header: reserved bits in bytes 12-15 are nonzero.");
@@ -168,7 +168,7 @@ public sealed record HgdCartridgeHeader {
             ConsoleType = ((byte)(header[7] & 3)),
             ConsoleDetail = (nes20 ? header[13] : (byte)0),
             MiscellaneousRomCount = (nes20 ? (byte)(header[14] & 3) : (byte)0),
-            DefaultExpansionDevice = (nes20 ? (byte)(header[15] & 63) : (byte)0),
+            DefaultExpansionDevice = (nes20 ? (byte)(header[15] & 127) : (byte)0),
             HasBusConflicts = (!nes20 && ((header[10] & 0x20) != 0)),
             Diagnostic = ((!nes20 && (header[8] == 0) && (legacyRam != 0))
                 ? "iNES leaves PRG-RAM size unspecified; the documented legacy default is 8 KiB. Use NES 2.0 to declare no RAM."

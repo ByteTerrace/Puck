@@ -72,9 +72,9 @@ public sealed partial class HgdCpu<TBus> {
                 m_nmiPending = false;
                 m_nmiSample = false;
             }
-            m_p |= Interrupt;
         } else if (m_step == 5) {
             m_operand = value;
+            m_p |= Interrupt;
         } else if (m_step == 6) {
             m_pc = ((ushort)(m_operand | (value << 8)));
             Finish(poll: false);

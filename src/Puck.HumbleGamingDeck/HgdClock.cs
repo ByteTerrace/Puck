@@ -2,12 +2,12 @@ namespace Puck.HumbleGamingDeck;
 
 /// <summary>The current half of a CPU cycle on the reference master clock.</summary>
 public enum HgdCpuSubphase {
-    /// <summary>M2 low: the CPU prepares its next transaction.</summary>
-    M2Low,
-    /// <summary>M2 high: the CPU transaction completes at the falling edge.</summary>
-    M2High,
+    /// <summary>The internal first half-cycle, when the CPU prepares its next transaction.</summary>
+    Phi1,
+    /// <summary>The internal second half-cycle, when the CPU completes its transaction.</summary>
+    Phi2,
 }
-/// <summary>A transition of the CPU's M2 signal at a master-tick boundary.</summary>
+/// <summary>A transition of the CPU's M2 signal within a master tick.</summary>
 public enum HgdM2Edge {
     /// <summary>The M2 level does not change.</summary>
     None,
@@ -19,6 +19,7 @@ public enum HgdM2Edge {
 /// <summary>Master ticks, the CPU divider, and the accumulated run target, serialized as one timing component.</summary>
 public sealed class HgdClock : ISnapshotable {
     private readonly int m_cpuDivider;
+    private readonly int m_m2RiseHalfTick;
 
     private ulong m_masterTicks;
     private ulong m_runTargetCycles;
@@ -31,6 +32,7 @@ public sealed class HgdClock : ISnapshotable {
         ArgumentNullException.ThrowIfNull(argument: configuration);
 
         m_cpuDivider = configuration.Model.CpuDivider();
+        m_m2RiseHalfTick = configuration.Model.M2RiseHalfTick();
         m_cpuPhase = configuration.PowerOn.AlignmentPhase;
         Rate = configuration.Model.MasterClockRate();
     }
@@ -45,8 +47,8 @@ public sealed class HgdClock : ISnapshotable {
     }
     /// <summary>Gets the master-tick phase within the CPU divider.</summary>
     public int CpuPhase => m_cpuPhase;
-    /// <summary>Gets the explicit CPU half-cycle.</summary>
-    public HgdCpuSubphase Subphase => ((m_cpuPhase < (m_cpuDivider / 2)) ? HgdCpuSubphase.M2Low : HgdCpuSubphase.M2High);
+    /// <summary>Gets the internal CPU half-cycle, distinct from the cartridge's M2 signal.</summary>
+    public HgdCpuSubphase Subphase => ((m_cpuPhase < (m_cpuDivider / 2)) ? HgdCpuSubphase.Phi1 : HgdCpuSubphase.Phi2);
 
     /// <summary>Adds a host budget while preserving previously accumulated overshoot.</summary>
     /// <param name="masterTicks">The additional master ticks to request.</param>
@@ -54,30 +56,39 @@ public sealed class HgdClock : ISnapshotable {
     public void AddBudget(ulong masterTicks) {
         m_runTargetCycles = checked((m_runTargetCycles + masterTicks));
     }
-    /// <summary>Advances exactly one master tick and reports CPU divider edges.</summary>
+    /// <summary>Advances exactly one master tick and reports any M2 edge within that tick.</summary>
+    /// <param name="edgeHalfTick">The edge's elapsed time in half master ticks, or zero when there is no edge.</param>
     /// <returns>The M2 transition, or <see cref="HgdM2Edge.None"/> between edges.</returns>
-    public HgdM2Edge StepTick() {
+    public HgdM2Edge StepTick(out ulong edgeHalfTick) {
+        edgeHalfTick = 0;
         ++m_masterTicks;
         ++m_cpuPhase;
         if (m_cpuPhase == m_cpuDivider) {
             m_cpuPhase = 0;
+            edgeHalfTick = (m_masterTicks * 2);
 
             return HgdM2Edge.Falling;
         }
 
-        return ((m_cpuPhase == (m_cpuDivider / 2)) ? HgdM2Edge.Rising : HgdM2Edge.None);
+        if (m_cpuPhase == ((m_m2RiseHalfTick + 1) / 2)) {
+            edgeHalfTick = ((m_masterTicks * 2) - ((ulong)(m_m2RiseHalfTick & 1)));
+
+            return HgdM2Edge.Rising;
+        }
+
+        return HgdM2Edge.None;
     }
     /// <inheritdoc/>
     public void SaveState(StateWriter writer) {
         TransferState(transfer: new StateSaveTransfer(writer: writer));
     }
     /// <inheritdoc/>
-    /// <exception cref="InvalidDataException">The serialized phase or pacing target is invalid.</exception>
+    /// <exception cref="InvalidDataException">The serialized phase is outside the CPU divider.</exception>
     /// <exception cref="InvalidOperationException">The reader does not contain a complete clock state.</exception>
     public void LoadState(StateReader reader) {
         TransferState(transfer: new StateLoadTransfer(reader: reader));
-        if ((((uint)m_cpuPhase) >= ((uint)m_cpuDivider)) || (m_runTargetCycles > m_masterTicks)) {
-            throw new InvalidDataException(message: "Snapshot clock phase or pacing target is invalid.");
+        if (((uint)m_cpuPhase) >= ((uint)m_cpuDivider)) {
+            throw new InvalidDataException(message: "Snapshot clock phase is outside the CPU divider.");
         }
     }
 

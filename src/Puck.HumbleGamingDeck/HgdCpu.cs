@@ -40,6 +40,7 @@ public sealed partial class HgdCpu<TBus> : ISnapshotable where TBus : struct, IH
 
     private bool m_irq;
     private bool m_nmi;
+    private bool m_nmiSeen;
     private bool m_nmiPending;
     private bool m_irqSample;
     private bool m_nmiSample;
@@ -98,15 +99,12 @@ public sealed partial class HgdCpu<TBus> : ISnapshotable where TBus : struct, IH
         get => m_irq;
         set => m_irq = value;
     }
-    /// <summary>Gets or sets the active-high NMI input. Each rising edge latches a request until serviced.</summary>
+    /// <summary>Gets or sets the active-high NMI input, sampled at CPU-cycle completion even while RDY is low.
+    /// <para>Recognition is inhibited during interrupt vector selection and fetches. A late assertion must
+    /// remain active until recognition resumes; pulses between sampling edges do not latch a request.</para></summary>
     public bool Nmi {
         get => m_nmi;
-        set {
-            if (value && !m_nmi) {
-                m_nmiPending = true;
-            }
-            m_nmi = value;
-        }
+        set => m_nmi = value;
     }
     /// <summary>Gets the completed CPU-cycle count, including RDY repeats and JAM cycles.</summary>
     public ulong Cycles => m_cycles;
@@ -157,6 +155,7 @@ public sealed partial class HgdCpu<TBus> : ISnapshotable where TBus : struct, IH
         m_jamPhase = JamPhase.None;
         m_irq = false;
         m_nmi = false;
+        m_nmiSeen = false;
         m_nmiPending = false;
         m_irqSample = false;
         m_nmiSample = false;
@@ -169,6 +168,7 @@ public sealed partial class HgdCpu<TBus> : ISnapshotable where TBus : struct, IH
     /// <summary>Completes one CPU cycle. A read always reaches the bus even when RDY prevents sequencer advance.</summary>
     public void StepCycle() {
         var access = NextAccess();
+        var inhibitNmi = ((m_step >= 4) && ((m_sequence == Sequence.Reset) || (!IsJammed && (CurrentOperation == Operation.Brk))));
 
         if (access.Write) {
             m_bus.Write(address: access.Address, value: access.Value);
@@ -191,6 +191,14 @@ public sealed partial class HgdCpu<TBus> : ISnapshotable where TBus : struct, IH
             Advance(value: m_data);
         }
         m_irqSample = m_irq;
+        // Vector selection blocks new NMI recognition until the handler's opcode fetch.
+        // https://www.nesdev.org/wiki/Visual6502wiki/6502_Interrupt_Hijacking
+        if (!m_nmi) {
+            m_nmiSeen = false;
+        } else if (!m_nmiSeen && !inhibitNmi) {
+            m_nmiPending = true;
+            m_nmiSeen = true;
+        }
         m_nmiSample = m_nmiPending;
     }
     /// <inheritdoc/>
@@ -228,6 +236,7 @@ public sealed partial class HgdCpu<TBus> : ISnapshotable where TBus : struct, IH
         transfer.Boolean(value: ref m_ready);
         transfer.Boolean(value: ref m_irq);
         transfer.Boolean(value: ref m_nmi);
+        transfer.Boolean(value: ref m_nmiSeen);
         transfer.Boolean(value: ref m_nmiPending);
         transfer.Boolean(value: ref m_irqSample);
         transfer.Boolean(value: ref m_nmiSample);

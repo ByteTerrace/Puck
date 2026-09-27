@@ -80,19 +80,21 @@ public sealed partial class CorpusManifest {
                 continue;
             }
             _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: path)!);
-            var staging = (path + ".partial");
+            var staging = Path.Combine(path1: Path.GetDirectoryName(path: path)!, path2: Path.GetRandomFileName());
+            var ownsStaging = false;
 
             Console.Out.WriteLine(value: $"{corpus.Name} {corpus.Version}: fetching {file.Path}");
             try {
                 using (var source = client.GetStreamAsync(requestUri: new Uri(baseUri: new Uri(uriString: corpus.UrlPrefix!), relativeUri: file.Path)).GetAwaiter().GetResult()) {
-                    using var target = File.Create(path: staging);
+                    using var target = new FileStream(access: FileAccess.Write, mode: FileMode.CreateNew, path: staging);
 
+                    ownsStaging = true;
                     source.CopyTo(destination: target);
                 }
                 VerifyFile(corpus: corpus, file: file, path: staging);
                 File.Move(destFileName: path, sourceFileName: staging);
             } finally {
-                if (File.Exists(path: staging)) {
+                if (ownsStaging) {
                     File.Delete(path: staging);
                 }
             }

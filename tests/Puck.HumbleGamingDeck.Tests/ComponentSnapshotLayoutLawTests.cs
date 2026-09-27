@@ -7,7 +7,7 @@ namespace Puck.HumbleGamingDeck.Tests;
 /// <summary>Pins each component's named-field byte layout independently of save/load symmetry.</summary>
 public sealed class ComponentSnapshotLayoutLawTests {
     private static readonly Dictionary<string, string> RecordedLayouts = new(comparer: StringComparer.Ordinal) {
-        ["HgdCpu`1"] = "40:2234CA241C779197DCB4B7C733B09422857DD249585C4C7799112A6A18D02BAB",
+        ["HgdCpu`1"] = "41:3B5992441A767490A4886FC46FCE8385E456D735CA01BB47F01B73064989649B",
         ["HgdClock"] = "20:D669204D2A082E53210DEEBA6352F5349B3EF7D4DFF219AB706C2C0A243ABBA4",
         ["HgdSystemBus"] = "2049:2F3FB2C2903AAA036679257FEDBB99E6A41E6CC37D544D838ADE62ECE84D72A4",
         ["HgdNrom"] = "16384:D0AF537F0022EE61BF38F019FCC229C0ACF114DADEC7A5382B8100F0CA1AF8F8",

@@ -10,9 +10,14 @@ state. Any overshoot from manual stepping remains part of that accounting.
 ## Clock edges and the CPU
 
 The reference scheduler advances one master tick at a time. Each CPU cycle
-has an explicit M2-low half and M2-high half. The rising edge notifies the
-cartridge; the falling edge completes the CPU transaction and then notifies
-the cartridge. The clock retains its position within the divider in snapshots.
+has equal internal φ1 and φ2 halves. The cartridge's M2 signal differs: on
+RP2A03G it rises 4½ master ticks into the cycle and falls at tick twelve,
+remaining high for 15/24 of the cycle, as described by
+[NESdev's CPU pinout](https://www.nesdev.org/wiki/CPU_pinout).
+The rising edge notifies the cartridge; the falling edge completes the CPU
+transaction and then notifies the cartridge. Edge timestamps count integer
+half master ticks, so no rounding is needed. The clock retains its position
+within the divider in snapshots.
 These separate edges provide insertion points for the later PPU, APU, and DMA
 arbiter. PAL and Dendy dividers belong to console-model capabilities when those
 models are implemented.
@@ -43,7 +48,12 @@ CLI, SEI, and PLP poll before their final status change. A same-page taken
 branch does not poll on its extra cycle; a page-crossing branch has another
 poll before the high-byte correction. NMI edges latch independently of the
 interrupt-disable flag and can replace BRK's or IRQ's vector while preserving
-the stack values those sequences push. The
+the stack values those sequences push. The interrupt-disable flag is set on
+the low-vector read, after the status push. NMI is sampled when a CPU cycle
+completes, including RDY repeats; a pulse between samples is not latched.
+Recognition is blocked during vector selection and fetches. A late pulse
+that ends in that window is lost; a sustained request can interrupt after
+the handler's first instruction. The
 [NESdev interrupt description](https://www.nesdev.org/wiki/CPU_interrupts)
 explains these timing cases.
 
@@ -134,6 +144,6 @@ hashes are the authority for downloaded bytes; a hash mismatch is refused.
 The battery writes `post-report.txt`, `summary.json`, and `results.junit.xml`
 under `artifacts/hgd-post`, or the directory selected by `--artifacts`.
 The test project launches the Tier A executable and separately pins component
-snapshot layouts and loader-header cases.
+snapshot layouts, M2 edge timing at every alignment, and loader-header cases.
 
 [Humble Gaming Deck](README.md) · [Machine emulation](../README.md)

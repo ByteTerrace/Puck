@@ -13,6 +13,8 @@ internal sealed class CpuTimingStage : IPostStage<PostContext> {
             ("power-on-reset-stack-reads", Reset),
             ("nmi-hijacks-brk", NmiHijack),
             ("nmi-hijacks-irq", NmiHijackIrq),
+            ("nmi-sampling-and-replay", NmiSampling),
+            ("late-nmi-vector-window", LateNmi),
             ("taken-branch-irq-delay", BranchIrq),
             ("cli-sei-plp-latency", FlagLatency),
             ("rdy-repeated-read-and-write-through", Ready),
@@ -31,7 +33,7 @@ internal sealed class CpuTimingStage : IPostStage<PostContext> {
 
         return (cases.Any(predicate: item => (item.Verdict != PostCaseVerdict.Pass))
             ? PostStageOutcome.Fail(cases: cases, detail: "interrupt/RDY fixture mismatch")
-            : PostStageOutcome.Pass(cases: cases, detail: "seven original reset, interrupt-poll, NMI-hijack, RDY, and JAM fixtures; all 12 JAM encodings with replay and reset at every phase"));
+            : PostStageOutcome.Pass(cases: cases, detail: $"{checks.Length} original reset, interrupt-poll, NMI-hijack, RDY, and JAM fixtures; all 12 JAM encodings with replay and reset at every phase"));
     }
 
     private static (CpuTestMemory Memory, HgdCpu<Nes6502SstBus> Cpu) Create(params byte[] program) {
@@ -107,6 +109,62 @@ internal sealed class CpuTimingStage : IPostStage<PostContext> {
         Cycles(count: 4, cpu: cpu);
         Require(condition: ((cpu.ProgramCounter == 0xA000) && (memory[0x1FC] == 1) && ((memory[0x1FB] & 0x10) == 0)),
             message: "NMI hijack must preserve IRQ's return PC and clear pushed B flag");
+    }
+    private static void NmiSampling() {
+        var (memory, cpu) = Create(0xEA, 0xEA, 0xEA);
+
+        memory[0xA000] = 0xEA;
+        memory[0xA001] = 0xEA;
+        cpu.Nmi = true;
+        cpu.Nmi = false;
+        Cycles(count: 4, cpu: cpu);
+        Require(condition: (cpu.AtInstructionBoundary && (cpu.ProgramCounter == 0x8002)),
+            message: "an NMI pulse between CPU samples must not become an interrupt");
+        cpu.Ready = false;
+        cpu.Nmi = true;
+        Cycles(count: 2, cpu: cpu);
+        cpu.Ready = true;
+        Cycles(count: 9, cpu: cpu);
+        Require(condition: (cpu.ProgramCounter == 0xA000), message: "RDY lost a sampled NMI edge");
+        var writer = new Puck.Machines.StateWriter();
+
+        cpu.SaveState(writer: writer);
+        var snapshot = writer.ToArray();
+
+        Cycles(count: 4, cpu: cpu);
+        Require(condition: (cpu.AtInstructionBoundary && (cpu.ProgramCounter == 0xA002)),
+            message: "a sustained NMI must not retrigger after service");
+        cpu.Seed(a: 0, p: 0, pc: 0, s: 0, x: 0, y: 0);
+        cpu.LoadState(reader: new Puck.Machines.StateReader(buffer: snapshot));
+        Cycles(count: 4, cpu: cpu);
+        Require(condition: (cpu.AtInstructionBoundary && (cpu.ProgramCounter == 0xA002)),
+            message: "restoration lost the sampled NMI level and retriggered a serviced request");
+    }
+    private static void LateNmi() {
+        for (var start = 4; (start <= 6); ++start) {
+            foreach (var sustained in new[] { false, true }) {
+                var (memory, cpu) = Create(0x00, 0xEA);
+
+                memory[0x9000] = 0xEA;
+                memory[0x9001] = 0xE8;
+                Cycles(count: start, cpu: cpu);
+                cpu.Nmi = true;
+                Cycles(count: (7 - start), cpu: cpu);
+                Require(condition: (cpu.ProgramCounter == 0x9000), message: "late NMI changed a selected BRK vector");
+                cpu.Nmi = sustained;
+                Cycles(count: 2, cpu: cpu);
+                Require(condition: (cpu.ProgramCounter == 0x9001), message: "late NMI skipped the handler's first instruction");
+                Cycles(count: (sustained ? 7 : 2), cpu: cpu);
+                Require(condition: (sustained ? (cpu.ProgramCounter == 0xA000) : ((cpu.ProgramCounter == 0x9002) && (cpu.X == 1))),
+                    message: "late NMI must be lost when released in the vector window, or serviced when sustained");
+            }
+        }
+        var (_, brk) = Create(0x00);
+
+        Cycles(count: 5, cpu: brk);
+        Require(condition: ((brk.P & 4) == 0), message: "BRK set I before the low-vector read");
+        brk.StepCycle();
+        Require(condition: ((brk.P & 4) != 0), message: "BRK failed to set I on the low-vector read");
     }
     private static void BranchIrq() {
         var (_, cpu) = Create(0xD0, 0x02, 0xEA, 0xEA, 0xE8, 0xEA);

@@ -59,7 +59,7 @@ public sealed class HgdNrom : IHgdMapper {
     /// <inheritdoc/>
     public void ObservePpuAddress(ushort address, ulong masterTick) { }
     /// <inheritdoc/>
-    public void ObserveM2(bool high, ulong masterTick) { }
+    public void ObserveM2(bool high, ulong masterHalfTick) { }
     /// <inheritdoc/>
     public void SaveState(StateWriter writer) {
         TransferState(transfer: new StateSaveTransfer(writer: writer));
