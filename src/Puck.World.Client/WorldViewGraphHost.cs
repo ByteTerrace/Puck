@@ -686,7 +686,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// is shown, since its place pass applies the tonemap. Before the world has composed a frame
     /// there are no views, but the world must still be scheduled, since it composes inside its own frame, so the first
     /// view is placed, not shown, over the whole display at native scale, which it renders at until its first frame names
-    /// its views. The display counts as covered only when one rect covers it whole: a lone whole-display view, a shown
+    /// its views. The display counts as covered only when one rect covers it whole: a lone view standing for the world, a shown
     /// view over the whole display, or a pane that covers it (<paramref name="panesCover"/>); otherwise pixels no rect
     /// covers show the letterbox color, even while the first view is not shown.</summary>
     /// <param name="views">The views of the world's last composed frame, in view order.</param>
@@ -718,10 +718,10 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             (views[0].Region == whole) &&
             !((views[0].RenderScale > 0f) && (views[0].RenderScale < 1f))
         );
-        var covered = (panesCover || lone);
         // The lone view stands for the world itself, unshown, only when its place pass has nothing to do; a tonemap is
         // applied by the view's place pass, so a tonemapped lone view is shown like any other.
         var standsFor = (lone && (m_synthesized?.Tonemap != WorldTonemap.Filmic));
+        var covered = (panesCover || standsFor);
 
         for (var view = 0; (view < views.Count); view++) {
             covered |= (
