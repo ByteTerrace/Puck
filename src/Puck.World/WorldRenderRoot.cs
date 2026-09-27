@@ -118,18 +118,29 @@ internal static class WorldRenderRoot {
 
         // The world's views are sdf.world instances: a camera view or a session the binder registered renders a residency
         // of its own, filming the frame the world renders; every other instance renders a view of the world's residency,
-        // the first view unless its name numbers a later one (WorldViewNames).
+        // the first view unless its name numbers a later one (WorldViewNames), or, while that view's seat is presented in
+        // another world, the view of that world's scene. The package holds the world's residency for its lifetime, so
+        // the frame every other residency films is captured whether or not a view renders it.
         binder.ViewHost = residency;
+        binder.Presenter = frameSource;
         packages.Register(
-            factory: new SdfWorldPasses(resolve: instance => (binder.TryResolveView(
-                name: instance,
-                view: out var view
-            )
-                ? view
-                : new SdfWorldView(
-                    Residency: residency,
-                    View: (WorldViewNames.ViewOf(instance: instance) ?? 0)
-                ))),
+            factory: new SdfWorldPasses(
+                host: residency,
+                resolve: instance => (binder.TryResolveView(
+                    name: instance,
+                    view: out var view
+                )
+                    ? view
+                    : (binder.TryResolveRoutedView(
+                        name: instance,
+                        view: out var routed
+                    )
+                        ? routed
+                        : new SdfWorldView(
+                            Residency: residency,
+                            View: (WorldViewNames.ViewOf(instance: instance) ?? 0)
+                        )))
+            ),
             package: RenderGraphPackageCatalog.SdfWorld
         );
         // The root places each pane where the host's composer shows it this frame.

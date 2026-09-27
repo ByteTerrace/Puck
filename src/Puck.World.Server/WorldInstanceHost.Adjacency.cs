@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Puck.Hosting;
 using Puck.Maths;
 using Puck.World.Client;
@@ -161,6 +162,16 @@ public sealed partial class WorldInstanceHost {
         m_authorityEndpoints[identity] = endpoint;
         return endpoint;
     }
+    // The bodies that can travel: every active body holding an entry body, whether a local seat, an admitted peer's
+    // traveller, or a body the world's own program authors. The seam scan and the portal scan both read this one test,
+    // so a seam and a door can never disagree about who crosses them.
+    private static bool TryTraveller(WorldPopulation population, int index, [NotNullWhen(returnValue: true)] out WorldBody? body) {
+        body = (population.IsActive(index: index)
+            ? population.EntryBody(index: index)
+            : null);
+
+        return (body is not null);
+    }
     // Whether the world's own program authors this body, the one pairing a World principal may leave a body under.
     private static bool IsWorldAuthoredBody(WorldServer server, int slot) =>
         ((slot >= server.Population.LocalSeatCount) && !server.Population.IsAdmittedPeer(bodyIndex: slot));
@@ -241,10 +252,11 @@ public sealed partial class WorldInstanceHost {
             );
 
             for (var seat = 0; (seat < population.Capacity); seat++) {
-                if (
-                    !population.IsActive(index: seat) ||
-                    (population.EntryBody(index: seat) is not { } body)
-                ) {
+                if (!TryTraveller(
+                    body: out var body,
+                    index: seat,
+                    population: population
+                )) {
                     continue;
                 }
                 if (
@@ -388,10 +400,10 @@ public sealed partial class WorldInstanceHost {
         ScanInstanceAdjacencies(instance: instance);
         ScanInstancePortals(instance: instance);
     }
-    // One instance's own portal scan: every placement's every portal-carrying face, against every active local
-    // seat. Placement/face iteration order is the document's own declared order; seat order is ascending
-    // 0..LocalSeatCount-1 — deterministic within one process run, though this scan's queue sits outside the
-    // boot-only replay tape (see m_freshCounters).
+    // One instance's own portal scan: every placement's every portal-carrying face, against every body that can
+    // travel (TryTraveller, the set the seam scan reads). Placement/face iteration order is the document's own declared
+    // order; body order is ascending 0..Capacity-1 — deterministic within one process run, though this scan's queue
+    // sits outside the boot-only replay tape (see m_freshCounters).
     //
     // One winner per seat: a step that crosses two doors resolves to the face with the earliest crossing
     // parameter, tie-broken by the face's own document identity (WorldFaceCrossingClaim), never by
@@ -409,7 +421,7 @@ public sealed partial class WorldInstanceHost {
         var population = instance.Server.Population;
         var catalog = WorldFaceCatalog.For(definition: definition);
         var crossingFloor = WorldFacePortalPolicy.CrossingFloor(definition: definition);
-        var winners = new PortalEdgeHit?[population.LocalSeatCount];
+        var winners = new PortalEdgeHit?[population.Capacity];
 
         foreach (var placement in definition.Placements) {
             if (
@@ -465,17 +477,18 @@ public sealed partial class WorldInstanceHost {
             );
         }
     }
-    // One portal face against every local seat. The face's geometry is the shared per-revision derivation
+    // One portal face against every body that can travel. The face's geometry is the shared per-revision derivation
     // (WorldFaceCatalog) — the SAME frame rendering draws and arrival maps through, so a rotated or shape-offset door
     // triggers exactly where it is drawn. The region test sweeps the segment from the body's previous scan origin
     // (WorldBody.FixedPreviousPosition) to its current one, so no speed, rate, or motion program can tunnel a body
     // through a face between two samples.
     private void ScanPortalFace(WorldInstance instance, WorldPopulation population, WorldPlacement placement, WorldPlacementFace face, WorldPlacementPortal portal, WorldFaceAperture aperture, PortalEdgeHit?[] winners) {
-        for (var seat = 0; (seat < population.LocalSeatCount); seat++) {
-            if (
-                !population.IsActive(index: seat) ||
-                (population.EntryBody(index: seat) is not { } body)
-            ) {
+        for (var seat = 0; (seat < population.Capacity); seat++) {
+            if (!TryTraveller(
+                body: out var body,
+                index: seat,
+                population: population
+            )) {
                 instance.PortalOccupancy.Forget(
                     placementId: placement.Id,
                     faceName: face.Face,

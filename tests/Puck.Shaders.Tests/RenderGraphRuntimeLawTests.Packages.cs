@@ -182,16 +182,21 @@ public sealed partial class RenderGraphRuntimeLawTests {
     }
 
     /// <summary>A view package whose recorders note the part each recording runs, counting its instance's scratch for
-    /// one view of one instance, and saying nothing changed when told to.</summary>
+    /// one view of one instance, and saying nothing changed when told to. Its counter's revision moves when told to, as
+    /// an <c>sdf.world</c> instance's does when its residency is replaced.</summary>
     private sealed class ViewPackage : IRenderGraphPackageFactory, IShaderPipelineStorageCounter {
+        private int m_builds;
+
         public ManualResetEventSlim? BuildGate { get; set; }
+        public int Builds => Volatile.Read(location: ref m_builds);
         public int Lost { get; private set; }
         public List<string> Parts { get; } = [];
-        public long Revision => 0L;
+        public long Revision { get; set; }
         public bool Unchanged { get; set; }
 
         public IDisposable? Build(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) {
             BuildGate?.Wait(cancellationToken: cancellationToken);
+            _ = Interlocked.Increment(location: ref m_builds);
 
             return null;
         }

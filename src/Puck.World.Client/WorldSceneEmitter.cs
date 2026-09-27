@@ -349,12 +349,15 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         )) {
             var entity = route.Entity;
 
+            // A travelling seat keeps its roster's color, as it has at home; its look and rig are its authority's.
             if (route.Endpoint.TryEntityAppearance(
-                bodyColor: out bodyColor,
+                bodyColor: out _,
                 catalogRig: out catalogRig,
                 entity: in entity,
                 look: out look
             )) {
+                bodyColor = m_client.BodyColor(index: index);
+
                 return true;
             }
         }
@@ -390,10 +393,13 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         address = default;
         return false;
     }
+    // A seat presented elsewhere (WorldContinuum.PresentedElsewhere) is drawn by the scene of the world it is presented
+    // in, never at foreign coordinates in this one.
     private bool TryTravelingRoute(int index, out WorldAuthorityRoute route) {
         if (
             (((uint)index) < WorldBodiesLimits.LocalSeatCount) &&
-            m_client.Roster.IsJoined(slot: index)
+            m_client.Roster.IsJoined(slot: index) &&
+            (m_continuum.PresentedElsewhere(slot: index) is null)
         ) {
             route = m_continuum.Route(slot: index);
             return true;

@@ -38,7 +38,7 @@ namespace Puck.World.Client;
 /// binder, the seat rigs, and the shimmer baseline whenever the definition revision moves, before the host captures.
 /// </para>
 /// </remarks>
-public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
+public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     // The adjacency render half — neighbour solids and delivered bodies composed through the same isometry contact
     // and handoff use, with remote avatar transforms in its own frozen slot range.
     private readonly WorldAdjacencySceneEmitter m_adjacencies;
@@ -554,8 +554,11 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     private CameraSnapshot ResolveCamera(int slot, NormalizedRect region, uint width, uint height, float deltaSeconds, float interpolationAlpha, out Vector3 eye, out Vector3 target) {
         var route = m_continuum.Route(slot: slot);
         var views = route.Endpoint.Definition.Views;
+        // A seat presented elsewhere frames in the coordinates of the world it is presented in, where the boot world's
+        // static field is not.
+        var presentedHere = (m_continuum.PresentedElsewhere(slot: slot) is null);
 
-        if (m_continuum.TryResolveSeatPose(
+        if (m_continuum.TryResolvePresentedSeatPose(
             interpolationAlpha: interpolationAlpha,
             orientation: out var bodyOrientation,
             position: out var bodyPosition,
@@ -706,10 +709,13 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             target: ref target
         );
 
-        if (ReferenceEquals(
-            objA: rig,
-            objB: chase
-        )) {
+        if (
+            presentedHere &&
+            ReferenceEquals(
+                objA: rig,
+                objB: chase
+            )
+        ) {
             eye = WorldCameraClearance.Resolve(
                 desiredEye: eye,
                 field: m_client.StaticField,
@@ -1398,6 +1404,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         ComposeMarkerCandidates(definition: m_client.Definition);
 
         m_views.Clear();
+        BeginRoutedViews();
         Array.Clear(array: m_seatCameraPoses);
         m_viewports.BeginFrame();
 
@@ -1509,6 +1516,14 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             ) {
                 RenderScale = (m_settings.RenderScale * transitionScale),
             });
+            // A seat presented elsewhere keeps its place among the views, so every view keeps its index, and its view
+            // is latched into the scene of the world it is presented in, which renders it instead.
+            if (m_continuum.PresentedElsewhere(slot: slot) is { } elsewhere) {
+                RouteView(
+                    endpoint: elsewhere,
+                    view: (m_views.Count - 1)
+                );
+            }
             // The listener-policy candidate: the SAME resolved rig the seat renders through (editor rig included),
             // so "focus" listens where the active view looks.
             m_seatCameraPoses[slot] = new WorldSeatCameraPose(
@@ -1534,6 +1549,8 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
                 width: width
             );
         }
+
+        RetireRoutedScenes();
 
         // Published EVERY frame: an empty frame clears the chips the moment the section authors none.
         m_markers.Publish(frame: new OverlayMarkerFrame(Seats: m_markerSeats.AsMemory(
@@ -1622,7 +1639,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             }
         }
 
-        return new SdfFrame(
+        m_dressedFrame = new SdfFrame(
             Program: program,
             ProgramChanged: programChanged,
             Time: m_elapsedSeconds,
@@ -1676,6 +1693,8 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
                 _ => (m_client.ActivePeerCount >= 16),
             }),
         };
+
+        return m_dressedFrame;
     }
     /// <inheritdoc/>
     public void NotifyDeviceLost() {
@@ -1796,11 +1815,11 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             anchor: anchor,
             animator: animator,
             audio: audio,
+            bakes: bakes,
             client: client,
             continuum: continuum,
             settings: settings,
-            text: text,
-            bakes: bakes
+            text: text
         );
         m_adjacencies = new WorldAdjacencySceneEmitter(
             client: client,

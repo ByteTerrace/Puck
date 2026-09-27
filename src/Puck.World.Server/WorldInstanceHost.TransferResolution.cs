@@ -226,8 +226,9 @@ public sealed partial class WorldInstanceHost {
             var portalDefaults = (instance.Server.Definition.Portals?.PortalDefaults ?? new WorldPortalDefaults(Travel: WorldPortalTravel.Body));
 
             // This hit's own candidate cohort — the source instance's whole active local-seat set for a
-            // `party` door, or just the entering seat for `body`. Read live, not cached.
-            var cohortSlots = ((scope == TransferScope.Party)
+            // `party` door a local seat enters, or just the entering body otherwise: a traveller that is no local seat
+            // belongs to no local party. Read live, not cached.
+            var cohortSlots = (((scope == TransferScope.Party) && (hit.Seat < instance.Server.Population.LocalSeatCount))
                 ? ActiveLocalSeats(server: instance.Server)
                 : [hit.Seat]
             );

@@ -9,21 +9,36 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>
-/// CONTRACT UNDER TEST: a body walking into a portal face crosses to the portal's destination and arrives mapped. Two
+/// CONTRACT UNDER TEST: every body that can travel and walks into a portal face crosses to the portal's destination
+/// and arrives mapped: a local seat, an admitted peer's traveller, and a body the world's own census authors alike. Two
 /// file-backed rows run under one <see cref="WorldInstanceHost"/>: row A's door carries a <see cref="WorldPlacementPortal"/>
 /// with <see cref="WorldPortalArrival.Mapped"/> arrival whose counterpart is row B's door, placed elsewhere and turned a
-/// quarter. A seat joins row A and walks forward, under ordinary intent and ordinary host stepping, into the door's
-/// one-sided aperture: the per-step portal scan (<c>WorldInstanceHost.ScanInstancePortals</c>) mints the transfer, and
-/// the body then stands in row B, gone from row A, at exactly the pose <see cref="WorldFrameIsometry.MapArrival"/> maps
-/// its last source pose to through the two doors' derived face frames. The control walks the same way beside the door,
-/// outside its aperture, and stays in row A.
+/// quarter. The body walks forward, under ordinary intent and ordinary host stepping, into the door's one-sided
+/// aperture: the per-step portal scan (<c>WorldInstanceHost.ScanInstancePortals</c>), which reads the same traveller
+/// set the seam scan does, mints the transfer, and the body then stands in row B, gone from row A, at exactly the pose
+/// <see cref="WorldFrameIsometry.MapArrival"/> maps its last source pose to through the two doors' derived face frames.
+/// A scan limited to local seats leaves the peer and the census body walking through the door in row A. The control
+/// walks the same way beside the door, outside its aperture, and stays in row A. A party door a traveller that is no
+/// local seat enters carries that traveller alone: a local seat standing in row A stays there.
 /// </summary>
 public sealed class PortalWalkThroughLawTests {
+    /// <summary>The kind of body a walk carries through the door.</summary>
+    public enum Traveller {
+        /// <summary>A local seat, joined through a session.</summary>
+        Seat,
+        /// <summary>An admitted peer's traveller, committed through federation.</summary>
+        Peer,
+        /// <summary>A body the world's own census authors.</summary>
+        Census,
+    }
+
+    private const ulong ArrivalTransferId = 4_201UL;
     private const string DoorPrototype = "door";
-    private const string Face = "door";
     private const float DoorScale = 5f;
-    private const int WalkBound = 120;
+    private const string Face = "door";
     private const int ForwardOrdinal = 0;
+    private const string SourceAuthority = "peer-world/source";
+    private const int WalkBound = 120;
 
     private static WorldPlacement Door(string id, Vector3 position, float yawDegrees, WorldPlacementPortal? portal) => new(
         FaceSources: [new WorldPlacementFace(
@@ -37,8 +52,9 @@ public sealed class PortalWalkThroughLawTests {
         Scale: DoorScale,
         YawDegrees: yawDegrees
     );
-    // One row: the fixture document, the door creation, one door, and the other row as its one destination.
-    private static WorldDefinition Row(string neighbourPath, WorldPlacement door) => (Fixtures.BuildDocument() with {
+    // One row: a document with room for peers and census bodies, the door creation, one door, and the other row as
+    // its one destination.
+    private static WorldDefinition Row(string neighbourPath, WorldPlacement door) => (Fixtures.PeerPopulationDocument(networkPlayers: 2) with {
         CreationsRaw = [PortalArrivalValidationLawTests.BuildDoorCreation()],
         Destinations = [new WorldDestination(
             Durability: WorldDestinationDurability.Persisted,
@@ -52,11 +68,111 @@ public sealed class PortalWalkThroughLawTests {
             Name: SafeName.Parse(candidate: "neighbour")
         )],
     });
+    // Commits one traveller into a row the way an authenticated peer authority does, and answers its body.
+    private static int AdmitPeer(WorldServer server) {
+        var origin = new WorldEntityAddress(
+            Authority: SourceAuthority,
+            Generation: 3,
+            Index: WorldBodiesLimits.LocalSeatCount
+        );
+        var reservation = server.ReserveTransfer(request: new WorldTransferReservationRequest(
+            Border: "door",
+            BorderCapacity: null,
+            DeadlineSourceTick: 60,
+            Members: [new WorldTransferReservationMember(
+                BodyColor: default,
+                CatalogRig: 4,
+                Identity: null,
+                Mobility: new WorldMobilityIdentity(
+                    DepartedFrom: origin,
+                    Epoch: 0,
+                    Incarnation: origin
+                ),
+                PreferredSlot: WorldBodiesLimits.LocalSeatCount,
+                Principal: Principal.Console,
+                Source: IntentSource.Live
+            )],
+            PartyAllOrNothing: true,
+            PeerAdmission: true,
+            SourceAuthority: SourceAuthority,
+            SourceRateHz: 240,
+            SourceTick: 0,
+            TransferId: ArrivalTransferId
+        ));
 
-    [InlineData(0f, true)]
-    [InlineData(8f, false)]
+        Assert.True(
+            condition: reservation.Accepted,
+            userMessage: reservation.Reason
+        );
+        Assert.True(
+            condition: server.CommitTransfer(
+                members: [new WorldTransferCommitMember(
+                    BodyMotionProgramName: "grounded",
+                    HasMappedArrival: false,
+                    PlanarVelocity: default,
+                    Position: default,
+                    Profile: null,
+                    VerticalVelocity: default,
+                    YawRadians: default
+                )],
+                reason: out var reason,
+                sourceAuthority: SourceAuthority,
+                transferId: ArrivalTransferId
+            ),
+            userMessage: reason
+        );
+
+        var index = Assert.Single(collection: reservation.BodyIndices);
+
+        Assert.True(condition: server.Population.IsAdmittedPeer(bodyIndex: index));
+
+        return index;
+    }
+    // Raises the row's census by one body and answers it.
+    private static int RaiseCensusBody(WorldServer server) {
+        var population = server.Population;
+
+        Assert.Equal(
+            actual: population.SetSimulatedCount(count: 1),
+            expected: 1
+        );
+
+        for (var index = population.LocalSeatCount; (index < population.Capacity); index++) {
+            if (population.IsActive(index: index) && !population.IsAdmittedPeer(bodyIndex: index)) {
+                // The census leaves its bodies idle here; the walk drives this one the way a producer would.
+                server.Body(index: index)!.SetIntentSource(source: IntentSource.Live);
+
+                return index;
+            }
+        }
+
+        throw new InvalidOperationException(message: "the census raised no body");
+    }
+    // The one active body a row holds, or -1.
+    private static int OnlyActive(WorldPopulation population) {
+        var found = -1;
+
+        for (var index = 0; (index < population.Capacity); index++) {
+            if (population.IsActive(index: index)) {
+                Assert.Equal(
+                    actual: found,
+                    expected: -1
+                );
+                found = index;
+            }
+        }
+
+        return found;
+    }
+
+    [InlineData(Traveller.Seat, 0f, WorldPortalTravel.Body, true)]
+    [InlineData(Traveller.Seat, 8f, WorldPortalTravel.Body, false)]
+    [InlineData(Traveller.Peer, 0f, WorldPortalTravel.Body, true)]
+    [InlineData(Traveller.Peer, 8f, WorldPortalTravel.Body, false)]
+    [InlineData(Traveller.Census, 0f, WorldPortalTravel.Body, true)]
+    [InlineData(Traveller.Peer, 0f, WorldPortalTravel.Party, true)]
     [Theory]
-    public void ABodyWalkingIntoAPortalArrivesMappedInItsDestination(float startX, bool shouldCross) {
+    public void ABodyWalkingIntoAPortalArrivesMappedInItsDestination(Traveller traveller, float startX, WorldPortalTravel travel, bool shouldCross) {
         using var files = new TemporaryDirectory(prefix: "puck-portal-walk-files-");
         var rowAPath = Path.Combine(
             path1: files.RootPath,
@@ -76,7 +192,7 @@ public sealed class PortalWalkThroughLawTests {
                     Arrival: WorldPortalArrival.Mapped,
                     Counterpart: $"door-b/{Face}",
                     Destination: "neighbour",
-                    Travel: null
+                    Travel: travel
                 ),
                 position: new Vector3(x: 0f, y: 0f, z: -10f),
                 yawDegrees: 180f
@@ -108,6 +224,7 @@ public sealed class PortalWalkThroughLawTests {
             seats: WorldEmbodiedSeats.None,
             stateRoot: new WorldStateRoot(path: hostStateRoot.RootPath)
         );
+
         var (rowAInstance, rowAServer, rowAStateDirectory) = FileBackedRows.Build(
             definition: rowADefinition,
             name: "row-a",
@@ -123,14 +240,25 @@ public sealed class PortalWalkThroughLawTests {
             host.Admit(row: rowAInstance);
             host.Admit(row: rowBInstance);
 
-            var actor = Principal.Seat(slot: 0);
+            var seat = Principal.Seat(slot: 0);
+            // A party door is entered by a traveller that is no local seat while a local seat stands in row A, so the
+            // seat is joined for that row as well as for the seat's own walk.
+            var joinsSeat = ((traveller == Traveller.Seat) || (travel == WorldPortalTravel.Party));
 
-            Assert.True(condition: rowAServer.ApplySession(request: new SessionRequest.Join(
-                IdentityName: null,
-                Principal: actor,
-                Slot: actor.Index,
-                WireProtocolKey: WorldProtocol.WireProtocolKey
-            )).Accepted);
+            if (joinsSeat) {
+                Assert.True(condition: rowAServer.ApplySession(request: new SessionRequest.Join(
+                    IdentityName: null,
+                    Principal: seat,
+                    Slot: seat.Index,
+                    WireProtocolKey: WorldProtocol.WireProtocolKey
+                )).Accepted);
+            }
+
+            var walker = traveller switch {
+                Traveller.Peer => AdmitPeer(server: rowAServer),
+                Traveller.Census => RaiseCensusBody(server: rowAServer),
+                _ => seat.Index,
+            };
 
             for (var tick = 0; (tick < 5); tick++) {
                 host.DrainPendingTransfers();
@@ -138,12 +266,13 @@ public sealed class PortalWalkThroughLawTests {
             }
 
             // Stand the body a short walk in front of the door's aperture (or, for the control, as far to the side
-            // of it), facing it: yaw zero faces -Z.
-            rowAServer.Body(index: actor.Index)!.Pose(
+            // of it), facing it: yaw zero faces -Z. It stands high enough that a body whose kit carries no collider,
+            // and so falls as it walks, is still above the door's crossing floor when it reaches the aperture.
+            rowAServer.Body(index: walker)!.Pose(
                 pitchRadians: 0f,
                 rollRadians: 0f,
                 x: startX,
-                y: 0f,
+                y: 4.5f,
                 yawRadians: 0f,
                 z: -3f
             );
@@ -155,15 +284,13 @@ public sealed class PortalWalkThroughLawTests {
             for (var tick = 0; (tick < WalkBound); tick++) {
                 host.DrainPendingTransfers();
 
-                if (rowBServer.Population.IsActive(index: actor.Index)) {
+                if (!rowAServer.Population.IsActive(index: walker)) {
                     crossedOnTick = tick;
 
                     break;
                 }
 
-                var body = rowAServer.Body(index: actor.Index)!;
-
-                body.SubmitIntent(intent: default(PlayerIntent).WithChannel(
+                rowAServer.Body(index: walker)!.SubmitIntent(intent: default(PlayerIntent).WithChannel(
                     ordinal: ForwardOrdinal,
                     value: FixedQ4816.One
                 ));
@@ -171,27 +298,42 @@ public sealed class PortalWalkThroughLawTests {
 
                 // The pose the transfer maps is the one the source body holds after the step that minted it, before
                 // the next drain detaches it.
-                if (rowAServer.Population.IsActive(index: actor.Index)) {
-                    sourcePosition = rowAServer.Body(index: actor.Index)!.FixedPosition;
-                    sourceYaw = rowAServer.Body(index: actor.Index)!.FixedYaw;
+                if (rowAServer.Population.IsActive(index: walker)) {
+                    sourcePosition = rowAServer.Body(index: walker)!.FixedPosition;
+                    sourceYaw = rowAServer.Body(index: walker)!.FixedYaw;
                 }
             }
 
             if (!shouldCross) {
-                Assert.Equal(expected: -1, actual: crossedOnTick);
-                Assert.True(condition: rowAServer.Population.IsActive(index: actor.Index));
-                Assert.False(condition: rowBServer.Population.IsActive(index: actor.Index));
+                Assert.Equal(actual: crossedOnTick, expected: -1);
+                Assert.True(condition: rowAServer.Population.IsActive(index: walker));
+                Assert.Equal(
+                    actual: OnlyActive(population: rowBServer.Population),
+                    expected: -1
+                );
 
                 return;
             }
 
-            Assert.True(condition: (crossedOnTick > 0), userMessage: $"the body walked {WalkBound} ticks toward the door and never crossed: it stands at {sourcePosition} facing {sourceYaw}, the face at {sourceFace.Frame.Origin} normal {sourceFace.Frame.Normal} half {sourceFace.Frame.HalfWidth}x{sourceFace.Frame.HalfHeight}x{sourceFace.Frame.HalfDepth}, aperture {sourceFace.Aperture is not null}");
-            Assert.False(
-                condition: rowAServer.Population.IsActive(index: actor.Index),
-                userMessage: "the source seat stayed active after the crossing"
+            Assert.True(condition: (crossedOnTick > 0), userMessage: $"the {traveller} walked {WalkBound} ticks toward the door and never crossed: it stands at {sourcePosition} facing {sourceYaw}, the face at {sourceFace.Frame.Origin} normal {sourceFace.Frame.Normal} half {sourceFace.Frame.HalfWidth}x{sourceFace.Frame.HalfHeight}x{sourceFace.Frame.HalfDepth}, aperture {(sourceFace.Aperture is not null)}");
+
+            // The traveller alone arrived: a local seat standing in row A beside a party door another traveller
+            // entered stays in row A.
+            var arrivedIndex = OnlyActive(population: rowBServer.Population);
+
+            Assert.NotEqual(
+                actual: arrivedIndex,
+                expected: -1
             );
 
-            var arrived = rowBServer.Body(index: actor.Index);
+            if ((traveller != Traveller.Seat) && joinsSeat) {
+                Assert.True(
+                    condition: rowAServer.Population.IsActive(index: seat.Index),
+                    userMessage: "the local seat went with a traveller that is no local seat"
+                );
+            }
+
+            var arrived = rowBServer.Body(index: arrivedIndex);
             var sourceFrame = sourceFace.Frame;
             var counterpartFrame = counterpartFace.Frame;
             var expected = WorldFrameIsometry.MapArrival(

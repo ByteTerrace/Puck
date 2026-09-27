@@ -57,6 +57,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     private readonly string? m_effectiveCameraName;
     private readonly float m_fieldOfViewRadians;
     private readonly WorldSessionMirror m_mirror;
+    // The color each avatar is painted with: the mirror's, unless the host paints some bodies its own way.
+    private readonly Func<int, Vector3> m_bodyColor;
 
     // The static placements' palettes, reused across rebuilds (WorldPlacementStamper.EmitStatic).
     private readonly WorldStaticPalettes m_palettes = new();
@@ -113,10 +115,13 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// the destination's default projection.</param>
     /// <param name="fieldOfViewRadians">The vertical field of view used only by the spawn-centroid overview fallback
     /// (a named camera row carries its own lens).</param>
-    public WorldSessionSceneEmitter(WorldSessionMirror mirror, string? effectiveCameraName, float fieldOfViewRadians = (MathF.PI / 3f)) {
+    /// <param name="bodyColor">The color each avatar is painted with by body index, or <see langword="null"/> for the
+    /// mirror's own (<see cref="WorldSessionMirror.BodyColor"/>).</param>
+    public WorldSessionSceneEmitter(WorldSessionMirror mirror, string? effectiveCameraName, float fieldOfViewRadians = (MathF.PI / 3f), Func<int, Vector3>? bodyColor = null) {
         ArgumentNullException.ThrowIfNull(argument: mirror);
 
         m_mirror = mirror;
+        m_bodyColor = (bodyColor ?? mirror.BodyColor);
         m_effectiveCameraName = effectiveCameraName;
         m_fieldOfViewRadians = fieldOfViewRadians;
         m_meshDraws = new WorldSceneMeshDraws(pool: m_pool);
@@ -137,7 +142,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             // is still emitted, so the catalog keeps the frozen shape its probe reserved.
             WorldMirroredAvatarBand.EmitPalette(
                 accentMaterials: accentMaterials,
-                bodyColor: m_mirror.BodyColor(index: index),
+                bodyColor: m_bodyColor(arg: index),
                 bodyMaterials: bodyMaterials,
                 builder: builder,
                 catalogRig: m_mirror.CatalogRig(index: index),
@@ -370,7 +375,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             WorldSessionRenderEnvelope.EmitProbe(
                 builder: builder,
                 candidate: definition,
-                bodyColor: m_mirror.BodyColor,
+                bodyColor: m_bodyColor,
                 colors: BakedColors(),
                 pool: m_pool,
                 slotBase: context.SlotBase
@@ -424,7 +429,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     public (int Words, int Instances) MeasureCandidate(WorldDefinition candidate) =>
         WorldSessionRenderEnvelope.MeasureCandidate(
             candidate: candidate,
-            bodyColor: m_mirror.BodyColor,
+            bodyColor: m_bodyColor,
             colors: BakedColors(),
             pool: m_pool
         );

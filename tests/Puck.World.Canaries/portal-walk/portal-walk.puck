@@ -1,8 +1,8 @@
-// Two rooms joined by a door: the lobby, with a blue landmark behind its arch, and the garden, with a green landmark
-// ahead of its arrival. The seat walks forward from the lobby's arrival through the arch and arrives mapped in the
-// garden, walking on; the frame the seat's camera composes shows the lobby's blue before the crossing and the garden's
-// green after it. Each room is the verdicts plot (a ground, a walking kit, a chase rig and one seat) presented
-// offscreen at the canary's capture size.
+// Two rooms joined by a door: the lobby, whose landmark pillar is blue, and the garden, whose landmark pillar is green,
+// each standing ahead and well to the left of the room's arch so no arch hides it. The seat walks forward from the
+// lobby's arrival through the arch and arrives mapped in the garden, walking on; the frame the seat's camera composes
+// shows the lobby's blue before the crossing and the garden's green after it. Each room is the verdicts plot (a ground,
+// a walking kit, a chase rig and one seat) presented offscreen at the canary's capture size.
 
 schema: "puck.world.definition.v1"
 
@@ -27,6 +27,43 @@ module room(landmark) {
     width: 256
   }
 
+  // Any federated authority may send a traveller here, into room for a few network players beside the one seat, so a
+  // --connect client's seat arrives in whichever room it is routed to.
+  bodies {
+    capacity: 5
+    localSeats: 1
+    networkPlayers: 4
+    seatSpawns [
+      "arrival"
+    ]
+    sleepAfterSeconds: 0
+  }
+
+  admission [
+    {
+      algorithm: ""
+      domain: "*"
+      grants [
+        {
+          capability: "Control"
+          subject: "all"
+        }
+        {
+          budget: 8
+          capability: "Drive"
+          exclusive: true
+        }
+        {
+          budget: 8
+          capability: "Observe"
+        }
+      ]
+      mode: "FederatedAuthority"
+      publicKey: ""
+      subject: null
+    }
+  ]
+
   prototypes {
     prototype "landmark" {
       document {
@@ -39,10 +76,10 @@ module room(landmark) {
           }
         ]
         schema: "puck.creation.v1"
-        shape Box "slab" {
+        shape Box "pillar" {
           material: 0
           position [0, 3, 0]
-          scale [6, 3, 0.5]
+          scale [1, 3, 1]
         }
       }
     }
@@ -50,7 +87,7 @@ module room(landmark) {
 
   placements {
     placement "landmark" {
-      position [0, 0, -14]
+      position [-8, 0, -8]
       prototype: "landmark"
     }
   }
@@ -94,7 +131,7 @@ module lobby() {
         {
           face: "portal"
           source {
-            "$type": "none"
+            $type: "none"
           }
         }
       ]

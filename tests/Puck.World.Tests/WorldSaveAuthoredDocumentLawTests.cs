@@ -180,6 +180,8 @@ public sealed class WorldSaveAuthoredDocumentLawTests(WorldSaveAuthoredDocumentL
             "src/Puck.World/Assets",
             WorldDocumentCorpus.CanaryDirectory,
             WorldDocumentCorpus.FixtureDirectory,
+            // The verdicts' composition library, which canary sources import.
+            "tests/Puck.World.Verdicts/composition",
             "worlds",
         ];
 

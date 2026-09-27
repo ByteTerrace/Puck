@@ -42,11 +42,18 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
     /// <summary>Initializes a new instance of the <see cref="SdfWorldPasses"/> class.</summary>
     /// <param name="resolve">Returns the view an instance renders, or <see langword="null"/> when the host renders no view
     /// of that name. It runs on the frame thread.</param>
+    /// <param name="host">The residency whose frame the host's other residencies film, or <see langword="null"/>: the
+    /// package holds it for its lifetime, so its frame is started and prepared every frame whether or not any instance
+    /// renders a view of it.</param>
     /// <exception cref="ArgumentNullException"><paramref name="resolve"/> is <see langword="null"/>.</exception>
-    public SdfWorldPasses(Func<string, SdfWorldView?> resolve) {
+    public SdfWorldPasses(Func<string, SdfWorldView?> resolve, SdfWorldResidency? host = null) {
         ArgumentNullException.ThrowIfNull(argument: resolve);
 
         m_resolve = resolve;
+
+        if (host is not null) {
+            Hold(residency: host);
+        }
     }
 
     /// <inheritdoc/>

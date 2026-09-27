@@ -44,6 +44,7 @@ internal sealed partial class WorldScreenBinder {
 
         m_viewTransforms = transforms;
         m_viewAuthoritativeTick = authoritativeTick;
+        ReconcileRoutedResidencies();
     }
     /// <summary>Returns the view a view instance renders: a camera registration's or a session screen's residency, created
     /// the first time the render graph's package asks for it once the views are configured.</summary>
@@ -244,6 +245,7 @@ internal sealed partial class WorldScreenBinder {
         }
 
         m_viewResidencies.Clear();
+        ReleaseRoutedResidencies();
     }
     // Sets every view from the camera registrations and the session screens and hands the views to the mappings when any
     // changed, which composes the running set again; a frame that changes nothing allocates nothing. A view's demand is

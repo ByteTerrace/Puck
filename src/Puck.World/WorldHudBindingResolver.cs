@@ -68,7 +68,7 @@ public sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonitor
     private void ResolveSeatPosition(HudBindingKind kind, int seatIndex, out float fraction, out string text) {
         var slot = (seatIndex - 1);
 
-        if (!m_continuum.TryResolveSeatPose(
+        if (!m_continuum.TryResolvePresentedSeatPose(
             interpolationAlpha: 1f,
             orientation: out _,
             position: out var position,

@@ -1061,11 +1061,12 @@ public sealed partial class WorldInstanceHost {
             retain: (group.Destination.Durability == WorldDestinationDurability.Persisted)
         );
 
-        // The lowest triggering seat's own principal, mirroring world.transfer's own identity-continuity
-        // thread. The specific choice among a merged group's several triggering seats is immaterial —
-        // MemberTravelPrincipal already re-derives every other member's own Seat principal independently, so
-        // whichever seat is named here only affects itself.
-        var actingPrincipal = Principal.Seat(slot: cohortSlots[0]);
+        // The lowest triggering body's travel principal, as a seam names; MemberTravelPrincipal re-derives every other
+        // member's own, so the choice among a merged group's triggering bodies only affects that body.
+        var actingPrincipal = TravelPrincipal(
+            server: instance.Server,
+            slot: cohortSlots[0]
+        );
         var transferId = EnqueueTransfer(
             sourceInstance: instance.Name,
             scope: group.Scope,
@@ -1767,7 +1768,7 @@ public sealed partial class WorldInstanceHost {
     // so the commit-time seed there covers colocated arrivals only. The escrow's own border admission is written by
     // the destination for both topologies, which is what makes this reachable at all.
     private void SeedFederatedArrivalOccupancy(WorldInstance instance) {
-        for (var seat = 0; (seat < instance.Server.Population.LocalSeatCount); seat++) {
+        for (var seat = 0; (seat < instance.Server.Population.Capacity); seat++) {
             var key = (instance.Name, seat);
 
             if (!instance.Server.TryTransferArrivalBorder(
