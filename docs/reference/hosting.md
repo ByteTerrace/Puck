@@ -363,6 +363,13 @@ emulator diagnostics run. `RunAsync` takes an argument
 vector, never a shell expression. It reads both captured streams while the child
 runs, so a child that fills a pipe buffer on either stream still runs to exit, and
 it returns only after both reads finish, so the tail of the output is never lost.
+A read ends only when every process holding the pipe has closed it. A process the
+child started with inherited handles, such as a build node or a compiler server,
+can hold it long after the child exits. Once the child exits, the reads therefore
+get `ExitDrainGrace` to finish on the run's clock and are then released with what
+they have read. Everything the child wrote is already in the pipe by then, so only
+a surviving process's later output is lost. `DrainAfterExitAsync` applies the
+same bound to a caller that pumps its own streams.
 The run is bounded by an optional timeout on a caller-supplied `TimeProvider` and
 by cancellation. Either bound kills the whole process tree and drains both
 streams. A timeout is reported as `TimedOut` in the result, while cancellation

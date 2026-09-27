@@ -11,7 +11,8 @@ namespace Puck.Cli;
 // the transcript itself: it records every line with its sequence and arrival time, can hold stdin open for a
 // continuation handshake, and reports a timeout as data for the proof to judge. A synchronous caller waits on
 // RunAsync. Both runners own the pipe lifecycle, because waiting for a child before draining both streams can
-// deadlock, and returning before the pumps finish loses the tail that often names a crash.
+// deadlock, and returning before the pumps finish loses the tail that often names a crash. Both end their reads
+// through ChildProcess.DrainAfterExitAsync, so a process that inherited the pipes cannot hold a run open.
 internal static class CliProcess {
     // At most three UTF-8 bytes a character, so the head stays inside the smallest default pipe buffer (4 KiB).
     private const int InputHeadCharacters = 1024;
@@ -109,24 +110,29 @@ internal static class CliProcess {
         object eventGate,
         Func<long> nextSequence,
         long startedAt,
-        Action<CliProcessOutputLine>? onOutput
+        Action<CliProcessOutputLine>? onOutput,
+        CancellationToken release
     ) {
         var text = new StringBuilder();
 
-        while (await reader.ReadLineAsync(cancellationToken: CancellationToken.None).ConfigureAwait(continueOnCapturedContext: false) is { } line) {
-            text.AppendLine(value: line);
+        try {
+            while (await reader.ReadLineAsync(cancellationToken: release).ConfigureAwait(continueOnCapturedContext: false) is { } line) {
+                text.AppendLine(value: line);
 
-            lock (eventGate) {
-                var observed = new CliProcessOutputLine(
-                    ElapsedMilliseconds: Stopwatch.GetElapsedTime(startingTimestamp: startedAt).TotalMilliseconds,
-                    Line: line,
-                    Sequence: nextSequence(),
-                    Stream: stream
-                );
+                lock (eventGate) {
+                    var observed = new CliProcessOutputLine(
+                        ElapsedMilliseconds: Stopwatch.GetElapsedTime(startingTimestamp: startedAt).TotalMilliseconds,
+                        Line: line,
+                        Sequence: nextSequence(),
+                        Stream: stream
+                    );
 
-                events.Add(item: observed);
-                onOutput?.Invoke(observed);
+                    events.Add(item: observed);
+                    onOutput?.Invoke(observed);
+                }
             }
+        } catch (OperationCanceledException) when (release.IsCancellationRequested) {
+            // Only a process that inherited the pipe is still writing; every line the child wrote is already recorded.
         }
 
         return text.ToString();
@@ -192,6 +198,7 @@ internal static class CliProcess {
             timeProvider: clock,
             timeout: timeout
         );
+        using var release = new CancellationTokenSource();
         var events = new List<CliProcessOutputLine>();
         var eventGate = new object();
         var sequence = 0L;
@@ -208,7 +215,8 @@ internal static class CliProcess {
             eventGate: eventGate,
             nextSequence: () => Interlocked.Increment(location: ref sequence),
             startedAt: startedAt,
-            onOutput: ((continueWhen is null) ? null : Observe)
+            onOutput: ((continueWhen is null) ? null : Observe),
+            release: release.Token
         );
         var stderr = PumpAsync(
             reader: process.StandardError,
@@ -217,7 +225,8 @@ internal static class CliProcess {
             eventGate: eventGate,
             nextSequence: () => Interlocked.Increment(location: ref sequence),
             startedAt: startedAt,
-            onOutput: ((continueWhen is null) ? null : Observe)
+            onOutput: ((continueWhen is null) ? null : Observe),
+            release: release.Token
         );
         var inputPump = WriteInputAsync(
             writer: process.StandardInput,
@@ -258,9 +267,10 @@ internal static class CliProcess {
             try { process.StandardInput.Close(); } catch (IOException) { /* The killed child's pipe is already gone. */ }
         }
 
-        var streams = await Task.WhenAll(
-            stdout,
-            stderr
+        var streams = await ChildProcess.DrainAfterExitAsync(
+            clock: clock,
+            pumps: [stdout, stderr],
+            release: release
         ).ConfigureAwait(continueOnCapturedContext: false);
 
         cancellationToken.ThrowIfCancellationRequested();
