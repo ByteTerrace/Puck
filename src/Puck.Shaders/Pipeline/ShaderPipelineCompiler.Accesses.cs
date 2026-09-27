@@ -106,6 +106,9 @@ public sealed partial class ShaderPipelineCompiler {
         }
 
         return pass.OutputReferences.Select(selector: output => resources[output.Name]).OrderBy(keySelector: static resource => (resource.Declaration.Kind == ShaderPipelineResourceKind.Depth)).Select(selector: static resource => new ShaderPipelineAttachment(
+            ClearDepth: ((resource.Declaration.Kind == ShaderPipelineResourceKind.Depth)
+                ? (resource.Declaration.ClearDepth ?? GpuDepthAttachment.DefaultClearDepth)
+                : GpuDepthAttachment.DefaultClearDepth),
             Depth: (resource.Declaration.Kind == ShaderPipelineResourceKind.Depth),
             Load: ((resource.Contents == ShaderPipelineContents.Preserved)
                 ? GpuAttachmentLoad.Load

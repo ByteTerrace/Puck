@@ -255,12 +255,13 @@ public sealed class SdfPassPlanLawTests {
         }
     }
     [Fact]
-    public void TheMeshPassDrawsItsTargetAndItsDeclaredDepth() {
+    public void TheMeshPassDrawsItsTargetAndADepthClearedAsItsRenderPassClears() {
         var mesh = Plan.Pipeline.Passes.Single(predicate: static pass => (pass.Package!.Part == SdfWorldPackage.Parts.Mesh));
+        var depth = Plan.Pipeline.Storages[mesh.Accesses[1].Storage].Declaration;
 
         Assert.Equal(
-            actual: mesh.Package!.Depth,
-            expected: SdfWorldPackage.MeshDepthAttachment
+            actual: (depth.Kind, depth.Format, depth.ClearDepth),
+            expected: (ShaderPipelineResourceKind.Depth, SdfWorldPackage.MeshDepthAttachment.Format.ToString(), ((float?)SdfWorldPackage.MeshDepthAttachment.ClearDepth))
         );
         Assert.Equal(
             actual: mesh.Accesses.Select(selector: static access => access.Use.Layout),

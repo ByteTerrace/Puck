@@ -32,13 +32,14 @@ public sealed partial class ShaderPipelineRenderNode {
     // depth they are cleared to has one statement.
     internal static GpuDepthAttachment DepthAttachmentOf(ShaderPipelineAttachment attachment, GpuPixelFormat format) =>
         new(
+            ClearDepth: attachment.ClearDepth,
             Format: format,
             Load: attachment.Load,
             Store: attachment.Store
         );
-
     // The depth attachment a depth storage's images are created for: the planned attachment of the graphics pass that
-    // draws it, or the one the package pass that writes it declares for its own render pass.
+    // draws it, or, for one a package pass draws through its own render pass, a clear to the depth the storage declares,
+    // which that render pass clears to as well.
     private static GpuDepthAttachment DepthOf(ShaderPipelinePlan plan, ShaderPipelinePlannedStorage storage, GpuPixelFormat format) {
         foreach (var pass in plan.Passes) {
             foreach (var attachment in pass.Attachments) {
@@ -49,17 +50,15 @@ public sealed partial class ShaderPipelineRenderNode {
                     );
                 }
             }
-            if (
-                (pass.Package is { Depth: { } declared }) &&
-                pass.Accesses.Any(predicate: access => ((access.Storage == storage.Index) && access.Use.Writes))
-            ) {
-                return declared with { Format = format };
-            }
         }
 
-        throw new InvalidDataException(message: $"Depth storage '{storage.Name}' is drawn by no pass that declares its depth attachment.");
+        return new GpuDepthAttachment(
+            ClearDepth: (storage.Declaration.ClearDepth ?? GpuDepthAttachment.DefaultClearDepth),
+            Format: format,
+            Load: GpuAttachmentLoad.Clear,
+            Store: GpuAttachmentStore.Discard
+        );
     }
-
     private readonly BackgroundBuild<GraphBuild> m_build = new();
 
     // The refused candidate: its pipeline, or null for a refused resize of the installed one, and the revisions it was

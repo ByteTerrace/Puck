@@ -318,6 +318,11 @@ public sealed class ShaderPipelineAttachmentLawTests {
         { "depth-written-by-compute", "SHADERPIPE_DEPTH_WRITER" },
         { "depth-written-by-fullscreen", "SHADERPIPE_DEPTH_WRITER" },
         { "compare-without-depth", "SHADERPIPE_DEPTH_STATE" },
+        { "clear-outside-unit-range", "SHADERPIPE_DEPTH_CLEAR" },
+        { "clear-on-a-forward", "SHADERPIPE_DEPTH_CLEAR" },
+        { "clear-on-a-color", "SHADERPIPE_DEPTH_CLEAR" },
+        { "greater-against-a-far-clear", "SHADERPIPE_DEPTH_CLEAR" },
+        { "less-against-a-near-clear", "SHADERPIPE_DEPTH_CLEAR" },
         { "geometry-on-fullscreen", "SHADERPIPE_GRAPHICS_FIELDS" },
         { "graphics-fields-on-compute", "SHADERPIPE_GRAPHICS_FIELDS" },
         { "no-geometry", "SHADERPIPE_GEOMETRY_SHAPE" },
@@ -426,6 +431,31 @@ public sealed class ShaderPipelineAttachmentLawTests {
                 change: static pass => (pass with { Outputs = [new ResourceReference(Name: "c1")] }),
                 name: "far",
                 passes: passes
+            )),
+            "clear-outside-unit-range" => Layers(resources: static resources => Replace(
+                change: static resource => (resource with { ClearDepth = 2f }),
+                name: "d0",
+                resources: resources
+            )),
+            "clear-on-a-forward" => Layers(resources: static resources => Replace(
+                change: static resource => (resource with { ClearDepth = 0f }),
+                name: "d1",
+                resources: resources
+            )),
+            "clear-on-a-color" => Layers(resources: static resources => Replace(
+                change: static resource => (resource with { ClearDepth = 0f }),
+                name: "c0",
+                resources: resources
+            )),
+            "greater-against-a-far-clear" => Layers(passes: static passes => ReplacePass(
+                change: static pass => (pass with { DepthCompare = ShaderPipelineDepthCompare.Greater }),
+                name: "near",
+                passes: passes
+            )),
+            "less-against-a-near-clear" => Layers(resources: static resources => Replace(
+                change: static resource => (resource with { ClearDepth = 0f }),
+                name: "d0",
+                resources: resources
             )),
             "geometry-on-fullscreen" => Layers(
                 passes: static passes => [.. passes, new ShaderPipelinePass(
@@ -666,6 +696,64 @@ public sealed class ShaderPipelineAttachmentLawTests {
         Assert.Equal(
             actual: pass.Attachments.Select(selector: static attachment => (attachment.Version, attachment.Depth, attachment.Load, attachment.Store)),
             expected: [("color", false, GpuAttachmentLoad.Clear, GpuAttachmentStore.Store), ("depth", true, GpuAttachmentLoad.Clear, GpuAttachmentStore.Discard)]
+        );
+    }
+    [Fact]
+    public void AGreaterTestClearsItsDepthToTheDepthItsDocumentStates() {
+        const string Document = """
+            {
+              "$schema": "puck.render.graph.v1",
+              "name": "reversed",
+              "resources": [
+                { "name": "color", "kind": "Image", "format": "R8G8B8A8Unorm", "dimensions": { "mode": "Absolute", "width": 16, "height": 16 } },
+                { "name": "depth", "kind": "Depth", "format": "D32Float", "dimensions": { "mode": "Absolute", "width": 16, "height": 16 }, "clearDepth": 0 }
+              ],
+              "passes": [
+                {
+                  "name": "draw",
+                  "source": "draw.hlsl",
+                  "entryPoint": "ps",
+                  "kind": "Geometry",
+                  "outputs": [ { "name": "color" }, { "name": "depth" } ],
+                  "depthCompare": "Greater",
+                  "geometry": {
+                    "vertexEntryPoint": "vs",
+                    "strideBytes": 12,
+                    "attributes": [ { "location": 0, "format": "R32G32B32Float", "offsetBytes": 0 } ],
+                    "vertices": [ -1, -1, 0.5, 1, -1, 0.5, -1, 1, 0.5 ],
+                    "indices": [ 2, 0, 1 ]
+                  }
+                }
+              ],
+              "outputs": [ "color" ]
+            }
+            """;
+        var gpu = new FakePipelineGpu();
+        var plan = Plan(definition: JsonSerializer.Deserialize(
+            json: Document,
+            jsonTypeInfo: RenderGraphJsonContext.Default.RenderGraphDefinition
+        )!);
+        using var node = InstalledNode(
+            gpu: gpu,
+            plan: plan
+        );
+
+        gpu.Recording = true;
+        _ = node.ProduceFrame(context: default);
+
+        // The planned attachment, the render pass it begins and the depth test all state the reversed-Z convention.
+        Assert.Equal(
+            actual: plan.Passes.Single().Attachments.Select(selector: static attachment => (attachment.Version, attachment.ClearDepth)),
+            expected: [("color", GpuDepthAttachment.DefaultClearDepth), ("depth", 0f)]
+        );
+        Assert.Equal(
+            actual: Assert.Single(collection: gpu.RenderPasses).Pass.Depth,
+            expected: new GpuDepthAttachment(
+                ClearDepth: 0f,
+                Format: GpuPixelFormat.D32Float,
+                Load: GpuAttachmentLoad.Clear,
+                Store: GpuAttachmentStore.Discard
+            )
         );
     }
     [Fact]

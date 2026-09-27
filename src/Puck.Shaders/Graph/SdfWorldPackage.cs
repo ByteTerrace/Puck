@@ -192,7 +192,6 @@ public static class SdfWorldPackage {
             Pass(inputs: [Parts.InstanceMasks], name: Parts.Beam, outputs: [Parts.Tiles]),
             Pass(inputs: [Parts.Tiles], name: Parts.CullArgs, outputs: [Parts.Arguments, Parts.CullBounds]),
             new RenderGraphFragmentPass(
-                Depth: MeshDepthAttachment,
                 InputAccesses: [],
                 Inputs: [],
                 Name: Parts.Mesh,
@@ -228,6 +227,7 @@ public static class SdfWorldPackage {
             new ShaderPipelineResource(
                 Dimensions: ShaderPipelineDimensions.Relative(),
                 Format: MeshDepthFormat.ToString(),
+                ClearDepth: MeshClearDepth,
                 Kind: ShaderPipelineResourceKind.Depth,
                 Name: Parts.MeshDepth,
                 Transient: true

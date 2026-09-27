@@ -72,15 +72,19 @@ public sealed record ShaderPipelinePlannedStorage(
 /// <param name="Depth">Whether it is the depth attachment rather than a color attachment.</param>
 /// <param name="Load">How the render pass begins it: <see cref="GpuAttachmentLoad.Load"/> for a version that forwards
 /// its predecessor, whose contents the pass continues, and <see cref="GpuAttachmentLoad.Clear"/> for one whose writer
-/// starts from discarded contents (a color to opaque black, a depth to one).</param>
+/// starts from discarded contents (a color to opaque black, a depth to its <see cref="ClearDepth"/>).</param>
 /// <param name="Store">Whether the render pass keeps what it wrote: <see cref="GpuAttachmentStore.Store"/> for a stored
 /// version, <see cref="GpuAttachmentStore.Discard"/> for one nothing uses after its writer.</param>
+/// <param name="ClearDepth">The depth a cleared depth attachment starts at: its version's declared
+/// <see cref="ShaderPipelineResource.ClearDepth"/>, or <see cref="GpuDepthAttachment.DefaultClearDepth"/> when it declares
+/// none. A color attachment, and a loaded one, keep the default.</param>
 public sealed record ShaderPipelineAttachment(
     string Version,
     int Storage,
     bool Depth,
     GpuAttachmentLoad Load,
-    GpuAttachmentStore Store
+    GpuAttachmentStore Store,
+    float ClearDepth = GpuDepthAttachment.DefaultClearDepth
 );
 /// <summary>A package pass's step in an immutable execution plan: the package whose recorder records it and the versions
 /// bound to its ports. The package binds its own descriptors, so its ports carry no binding; the extent it runs at is
@@ -92,15 +96,12 @@ public sealed record ShaderPipelineAttachment(
 /// for a package that runs as one pass.</param>
 /// <param name="Dispatch">Its dispatch shape, or <see langword="null"/> for one invocation per pixel of its extent. An
 /// indirect dispatch's arguments version is planned as the pass's first access, in the indirect-argument state.</param>
-/// <param name="Depth">The depth attachment it draws its depth output through, which the node creates that version's
-/// images for, or <see langword="null"/>.</param>
 public sealed record ShaderPipelinePackageStep(
     string Package,
     IReadOnlyList<ResourceReference> Inputs,
     IReadOnlyList<ResourceReference> Outputs,
     string? Part = null,
-    ShaderPipelineDispatch? Dispatch = null,
-    GpuDepthAttachment? Depth = null
+    ShaderPipelineDispatch? Dispatch = null
 );
 /// <summary>A pass entry in an immutable shader execution plan.</summary>
 /// <param name="Name">The unique pass name.</param>

@@ -23,8 +23,11 @@ public interface ISdfFrameDresser {
     /// <param name="height">The render height in pixels.</param>
     /// <param name="deltaSeconds">The presentation frame delta in seconds.</param>
     /// <param name="interpolationAlpha">The fraction in <c>[0, 1)</c> toward the current fixed simulation tick.</param>
+    /// <param name="meshDraws">Every emitter's mesh draws (<see cref="ISdfSceneEmitter.MeshDraws"/>), composed in list
+    /// order, which the dressed frame carries as <see cref="SdfFrame.MeshDraws"/>: the same instance while no emitter's
+    /// draws changed.</param>
     /// <returns>The frame to render.</returns>
-    SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, uint width, uint height, float deltaSeconds, float interpolationAlpha);
+    SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, uint width, uint height, float deltaSeconds, float interpolationAlpha);
 }
 /// <summary>Composes a fixed list of <see cref="ISdfSceneEmitter"/>s into one <see cref="ISdfFrameSource"/> — the
 /// generalization of the hand-written <c>BuildProgram</c> method every prior frame source wrote for itself: rather
@@ -91,6 +94,11 @@ public sealed class SdfCompositionFrameSource : ISdfFrameSource {
     // once at construction from each emitter's RevisionComponentCount, which its contract pins for the emitter's life.
     private readonly int[] m_revisionOffsets;
     private readonly int[] m_slotBases;
+    // Each emitter's mesh draws as the host last read them, and their composition, which the dresser receives: rebuilt
+    // only when some emitter returns a list it did not return last frame, so an unchanged frame hands the engine the
+    // list it already packed.
+    private readonly IReadOnlyList<SdfMeshDraw>?[] m_meshDrawSources;
+    private IReadOnlyList<SdfMeshDraw> m_meshDraws = [];
     // The shared table: it keeps every slot's last packed transform across frames, so an owner at rest costs nothing.
     private readonly DynamicTransform[] m_transforms;
 
@@ -116,6 +124,7 @@ public sealed class SdfCompositionFrameSource : ISdfFrameSource {
         m_emitters = [.. emitters];
         m_dresser = dresser;
         m_slotBases = new int[m_emitters.Count];
+        m_meshDrawSources = new IReadOnlyList<SdfMeshDraw>?[m_emitters.Count];
         m_revisionOffsets = new int[(m_emitters.Count + 1)];
 
         var slotCursor = 0;
@@ -275,6 +284,47 @@ public sealed class SdfCompositionFrameSource : ISdfFrameSource {
 
         return moved;
     }
+    // Reads every emitter's mesh draws after packing and recomposes them only when one returned a list it did not
+    // return last frame: one emitter's list passes through as it is, several are concatenated in list order.
+    private void ComposeMeshDraws() {
+        var changed = false;
+        var drawing = 0;
+        IReadOnlyList<SdfMeshDraw> only = [];
+
+        for (var index = 0; (index < m_emitters.Count); index++) {
+            var draws = m_emitters[index].MeshDraws;
+
+            if (!ReferenceEquals(
+                objA: draws,
+                objB: m_meshDrawSources[index]
+            )) {
+                m_meshDrawSources[index] = draws;
+                changed = true;
+            }
+            if (draws.Count > 0) {
+                drawing++;
+                only = draws;
+            }
+        }
+
+        if (!changed) {
+            return;
+        }
+
+        if (drawing <= 1) {
+            m_meshDraws = only;
+
+            return;
+        }
+
+        var composed = new List<SdfMeshDraw>();
+
+        foreach (var draws in m_meshDrawSources) {
+            composed.AddRange(collection: draws!);
+        }
+
+        m_meshDraws = composed;
+    }
     // A frame owes the whole table when the program was rebuilt (every slot's meaning may have changed) or the park
     // position moved; the table is parked first so a slot no owner claims reads hidden. Any other frame repacks only
     // the owners each emitter finds moved or settling.
@@ -367,11 +417,13 @@ public sealed class SdfCompositionFrameSource : ISdfFrameSource {
         }
 
         PackTransforms(everything: rebuilt);
+        ComposeMeshDraws();
 
         return m_dresser.Dress(
             deltaSeconds: deltaSeconds,
             height: height,
             interpolationAlpha: interpolationAlpha,
+            meshDraws: m_meshDraws,
             moved: m_moved,
             program: m_program!,
             transforms: m_transforms,

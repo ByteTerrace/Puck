@@ -412,7 +412,9 @@ These are one-line cautions; the owning pages hold the derivations.
   records `regionTick`, the tick of the state the serving image was rendered
   from: a graph node records `ShaderFrameValues.StateTick` with each image it
   renders and passes it to `CaptureRequestSlot.Serve`, so a republished image
-  keeps its own tick, and `SdfEngineNode` serves with view 0's output's tick,
+  keeps its own tick (an uploaded source's node renders as the tick its upload
+  wrote the image for, `RenderGraphRuntime.Sources.cs`), and `SdfEngineNode`
+  serves with view 0's output's tick,
   the `SdfFrame.StateTick` of the frame that rendered it or that its cadence
   gate retained it for, which the presenter fills from the state mirror. A
   `FrameCaptureRequest` carries no tick of its own: a node that names none

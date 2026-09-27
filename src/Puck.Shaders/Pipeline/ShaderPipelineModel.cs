@@ -139,6 +139,11 @@ public sealed record ResourceReference(
 /// successive frames' uses of the one allocation are ordered on the queue by the planned barrier of each frame's first
 /// use. Only the first version of a chain declares it; a transient storage is never history, external, zero-initialized
 /// or a public output.</param>
+/// <param name="ClearDepth">The depth a depth resource's writer clears it to, in [0, 1], or <see langword="null"/> for
+/// <see cref="GpuDepthAttachment.DefaultClearDepth"/>: its render pass's <see cref="GpuDepthAttachment.ClearDepth"/>.
+/// A pass that keeps greater depths (<see cref="ShaderPipelineDepthCompare.Greater"/>) tests against a depth cleared to
+/// 0. Only a depth resource that forwards nothing declares it, because a forwarded version's writer loads what its
+/// predecessor left.</param>
 public sealed record ShaderPipelineResource(
     string Name,
     ShaderPipelineResourceKind Kind = ShaderPipelineResourceKind.Image,
@@ -151,7 +156,8 @@ public sealed record ShaderPipelineResource(
     uint Samples = 1,
     uint? StrideBytes = null,
     IReadOnlyList<ShaderPipelineCountTerm>? Count = null,
-    bool Transient = false
+    bool Transient = false,
+    float? ClearDepth = null
 ) {
     /// <summary>Gets whether the host supplies the resource rather than a pass producing it.</summary>
     [JsonIgnore]
@@ -515,8 +521,6 @@ public sealed record ShaderPipelinePass(
 /// (<see cref="RenderGraphPackage.PushesIndex"/>), which its interface declares.</param>
 /// <param name="Part">The fragment pass it runs (<see cref="RenderGraphFragmentPass.Name"/>), or <see langword="null"/>
 /// for a package that runs as one pass.</param>
-/// <param name="Depth">The depth attachment it draws its depth output through (<see cref="RenderGraphFragmentPass.Depth"/>),
-/// or <see langword="null"/>.</param>
 public sealed record ShaderPipelinePackagePass(
     string Name,
     string Package,
@@ -528,8 +532,7 @@ public sealed record ShaderPipelinePackagePass(
     ShaderPipelineDispatch? Dispatch = null,
     IReadOnlyDictionary<string, ShaderConfigField>? Config = null,
     bool PushesIndex = false,
-    string? Part = null,
-    GpuDepthAttachment? Depth = null
+    string? Part = null
 ) {
     // Whether each port access is declared once per reference, reads on the inputs and writes on the outputs.
     internal bool HasValidAccesses => (

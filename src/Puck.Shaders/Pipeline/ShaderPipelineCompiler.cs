@@ -769,6 +769,13 @@ public sealed partial class ShaderPipelineCompiler {
                 diagnostics: diagnostics,
                 resource: resource
             );
+        } else if (resource.ClearDepth is not null) {
+            Add(
+                diagnostics,
+                "SHADERPIPE_DEPTH_CLEAR",
+                $"{resource.Kind} resource '{resource.Name}' declares clearDepth; only a depth resource is cleared to a depth.",
+                resource.Name
+            );
         }
     }
 
@@ -1085,7 +1092,6 @@ public sealed partial class ShaderPipelineCompiler {
         pass.OutputReferences.Concat(second: pass.InputReferences).Select(selector: reference => storages[resources[reference.Name].Storage].Declaration.Dimensions).FirstOrDefault(predicate: static dimensions => (dimensions is not null));
     // A package pass's step: its package, its ports' versions, the fragment pass it runs and its dispatch.
     private static ShaderPipelinePackageStep StepOf(ShaderPipelinePass pass, ShaderPipelinePackagePass package) => new(
-        Depth: package.Depth,
         Dispatch: package.Dispatch,
         Inputs: new ReadOnlyCollection<ResourceReference>(list: pass.InputReferences.ToArray()),
         Outputs: new ReadOnlyCollection<ResourceReference>(list: pass.OutputReferences.ToArray()),

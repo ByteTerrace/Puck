@@ -430,7 +430,6 @@ public sealed class RenderGraphCompiler(RenderGraphPackageCatalog packages, Shad
             );
             packagePasses.Add(item: new ShaderPipelinePackagePass(
                 Config: config,
-                Depth: part.Depth,
                 Dispatch: ((part.Dispatch is { Arguments: { } arguments } dispatch)
                     ? dispatch with { Arguments = names[arguments].Name }
                     : part.Dispatch),
