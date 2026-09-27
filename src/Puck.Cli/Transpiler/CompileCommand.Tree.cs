@@ -23,8 +23,10 @@ internal static partial class CompileCommand {
     // alone: after every source compiled, a world document, compiled world or bake pack there that this run did not
     // write belongs to a source that was renamed or deleted, and is removed so nothing can load it. Which documents a
     // source emits is not its file name, so the
-    // run reports what it wrote rather than leaving a build to derive it from the sources' names.
-    private static int RunTree(string tree, string output, string? report, IReadOnlyList<string> paths, bool strict, bool validate, bool bundle) {
+    // run reports what it wrote rather than leaving a build to derive it from the sources' names. The bakes are read from
+    // and kept in the content-addressed bake cache under `bakeCache` when the caller names one, so a creation whose key
+    // an earlier run kept there is not baked again; without one, the run bakes every creation its worlds name.
+    private static int RunTree(string tree, string output, string? report, string? bakeCache, IReadOnlyList<string> paths, bool strict, bool validate, bool bundle) {
         var root = Path.GetFullPath(path: tree);
         var directory = Path.GetFullPath(path: output);
         // Each file this run wrote and the source that wrote it, so a second source claiming a document is refused.
@@ -69,7 +71,8 @@ internal static partial class CompileCommand {
             path: Path.Combine(
                 path1: directory,
                 path2: WorldBakePack.FileName
-            )
+            ),
+            store: new WorldBakeStore(directory: bakeCache)
         );
 
         // Every name the tree carries resolves before anything is written, by the one rule the composer resolves a name

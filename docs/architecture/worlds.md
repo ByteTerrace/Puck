@@ -169,7 +169,10 @@ A build output ships each bake once. `puck compile --tree` writes one bake pack,
 (`WorldBakePack`, magic `PWBK`) holding, for each key the run's compiled worlds
 name, the encoded bake or the refusal of a creation that has none. Each
 compiled world's `BAKE` chunk names only its keys and the pack's path, so a
-creation many worlds share is baked once per run and stored once. A compile
+creation many worlds share is baked once per run and stored once. A tree run
+given `--bake-cache` reads each outcome from that content-addressed cache and
+keeps there every one it bakes, so the game's build, which passes `obj/bakes`,
+bakes a prototype only when its key is new. A compile
 without `--tree` writes the pack beside the compiled world and keeps the
 outcomes an earlier compile left in it. The same tree run writes the
 [package store](../reference/shaders.md#the-builds-package-store), `packages/`,
