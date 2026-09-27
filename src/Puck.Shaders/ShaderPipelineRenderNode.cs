@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
@@ -82,6 +83,9 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     private readonly CapturePngWriter m_capturePng = new();
     private bool m_initializationPending = true;
     private string[] m_passLabels = [];
+    private WorkClass[] m_passClasses = [];
+    // The ledger pass the graph's region flushes and staged copies count under, or -1 for a graph that declares no region.
+    private int m_regionCopyPass = -1;
     private readonly List<nint> m_commands = [];
 
     /// <summary>Creates an initially empty node that records through <paramref name="deviceContext"/>'s services. The
@@ -168,7 +172,8 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     public Exception? LastSwapError => m_lastSwapError;
     /// <summary>Gets the number of passes in the installed graph.</summary>
     public int PassCount => m_passes.Length;
-    /// <summary>Gets the installed graph's pass names, in execution order: the labels its work counts are reported under.</summary>
+    /// <summary>Gets the labels the installed graph's work counts are reported under: its pass names, in execution order,
+    /// then <see cref="RegionCopiesPass"/> when the graph declares a host-written region.</summary>
     public ReadOnlySpan<string> PassLabels => m_passLabels;
     /// <summary>Gets or sets whether rendering is paused.</summary>
     public bool Paused { get; set; }
@@ -566,7 +571,24 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             ) + m_regionBytes));
             m_resourceLookup = map;
             m_resources = storages;
-            m_passLabels = plan.Passes.Select(selector: static pass => pass.Name).ToArray();
+            m_regionCopyPass = (DeclaresRegions(
+                built: built,
+                plan: plan
+            )
+                ? plan.Passes.Count
+                : -1);
+            m_passLabels = [
+                .. plan.Passes.Select(selector: static pass => pass.Name),
+                .. ((m_regionCopyPass >= 0)
+                    ? [RegionCopiesPass]
+                    : Array.Empty<string>()),
+            ];
+            m_passClasses = [
+                .. plan.Passes.Select(selector: static _ => WorkClass.Deterministic),
+                .. ((m_regionCopyPass >= 0)
+                    ? [WorkClass.PerBackendDeterministic]
+                    : Array.Empty<WorkClass>()),
+            ];
             m_passes = new RuntimePass[plan.Passes.Count];
 
             var graphPool = GraphDescriptorPool(
@@ -827,6 +849,8 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         var previousRegionBytes = m_regionBytes;
         var previousPasses = m_passes;
         var previousLabels = m_passLabels;
+        var previousClasses = m_passClasses;
+        var previousRegionCopyPass = m_regionCopyPass;
         var previousReady = m_ready;
         var previousPreview = m_preview;
         var previousSelectedOutput = m_selectedOutput;
@@ -905,6 +929,8 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             m_resourceLookup = previousLookup;
             m_passes = previousPasses;
             m_passLabels = previousLabels;
+            m_passClasses = previousClasses;
+            m_regionCopyPass = previousRegionCopyPass;
             m_ready = previousReady;
             m_allocationBytes = previousAllocation;
             m_regionBytes = previousRegionBytes;
@@ -1315,6 +1341,8 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         m_allocationBytes = 0;
         m_regionBytes = 0;
         m_passLabels = [];
+        m_passClasses = [];
+        m_regionCopyPass = -1;
         m_frameLayout = null;
         m_frameRegion = null;
         m_rowRegions = [];
@@ -1552,6 +1580,11 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             !m_ready
         ) {
             return default;
+        }
+        // A growing package may already have packed data for the new counts. Keep the last image until matching
+        // scratch and recorders install, including when their build was refused.
+        if (CountsChanged) {
+            return m_lastSurface;
         }
         // A step renders the candidate it was requested after, so it waits while that candidate builds.
         if (

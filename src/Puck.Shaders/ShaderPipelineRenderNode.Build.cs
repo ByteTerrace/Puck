@@ -368,6 +368,7 @@ public sealed partial class ShaderPipelineRenderNode {
                     objB: other.Rows
                 ) &&
                 (Counts == other.Counts) &&
+                (CountRevision == other.CountRevision) &&
                 ReferenceEquals(
                     objA: Export,
                     objB: other.Export

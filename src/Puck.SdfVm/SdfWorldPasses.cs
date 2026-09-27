@@ -159,6 +159,11 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
         foreach (var residency in m_residencies.Keys) {
             if (!residency.IsReleased) {
                 Begin(residency: residency);
+            }
+        }
+        // A camera can capture its host while preparing, so every residency must start before any is prepared.
+        foreach (var residency in m_residencies.Keys) {
+            if (!residency.IsReleased) {
                 _ = residency.Prepare(context: in context);
             }
         }

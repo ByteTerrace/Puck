@@ -270,6 +270,73 @@ public sealed class RenderGraphFragmentLawTests {
         Assert.Equal(expected: (((Elements * 7) * 4) * 3), actual: node.ResourceStatus.Single(predicate: static status => (status.Name == "scratch")).AllocationBytes);
     }
     [Fact]
+    public void ACountChangeHoldsTheLastImageUntilTheCurrentRevisionIsBuilt() {
+        var plan = Plan(definition: Chain(buffer: Buffer(name: "scratch", transient: true)));
+        var gpu = new FakePipelineGpu();
+        var counter = new Counter(instances: 2);
+        using var node = Node(counter: counter, gpu: gpu, plan: plan);
+
+        node.ProduceUntilInstalled();
+
+        var submitted = node.FrameCounter;
+        using var gate = new ManualResetEventSlim(initialState: false);
+        using var entered = new ManualResetEventSlim(initialState: false);
+
+        counter.BuildGate = gate;
+        counter.BuildEntered = entered;
+        counter.Instances = 7;
+
+        try {
+            _ = node.ProduceFrame(context: default);
+            Assert.True(condition: entered.Wait(timeout: TimeSpan.FromSeconds(value: 30), cancellationToken: TestContext.Current.CancellationToken));
+            Assert.Equal(expected: submitted, actual: node.FrameCounter);
+            // Another residency can have identical capacities, but its recorders belong to another revision.
+            counter.Instances = 7;
+        } finally {
+            gate.Set();
+        }
+
+        Assert.True(condition: SpinWait.SpinUntil(
+            condition: () => {
+                _ = node.ProduceFrame(context: default);
+
+                return (node.FrameCounter > submitted);
+            },
+            timeout: TimeSpan.FromSeconds(value: 30)
+        ));
+        Assert.DoesNotContain(expected: 1L, collection: counter.InstalledRevisions);
+        Assert.Contains(expected: 2L, collection: counter.InstalledRevisions);
+        Assert.Equal(expected: ((Elements * 7) * 4), actual: node.ResourceStatus.Single(predicate: static status => (status.Name == "scratch")).AllocationBytes);
+    }
+    [Fact]
+    public void ARefusedCountChangeNeitherRecordsNorRetriesUntilItsInputsChange() {
+        var plan = Plan(definition: Chain(buffer: Buffer(name: "scratch", transient: true)));
+        var gpu = new FakePipelineGpu();
+        var counter = new Counter(instances: 2);
+        using var node = Node(counter: counter, gpu: gpu, plan: plan);
+
+        node.ProduceUntilInstalled();
+
+        var submitted = node.FrameCounter;
+
+        node.BudgetCapBytes = 1;
+        counter.Instances = 7;
+        _ = node.ProduceFrame(context: default);
+        var refusal = node.LastSwapError;
+
+        Assert.NotNull(@object: refusal);
+
+        for (var frame = 0; (frame < 3); frame++) {
+            _ = node.ProduceFrame(context: default);
+            Assert.Equal(expected: submitted, actual: node.FrameCounter);
+            Assert.Same(expected: refusal, actual: node.LastSwapError);
+        }
+
+        counter.Instances = 8;
+        _ = node.ProduceFrame(context: default);
+        Assert.NotSame(expected: refusal, actual: node.LastSwapError);
+    }
+    [Fact]
     public void ACountedBufferANodeCannotCountIsRefusedByName() {
         var plan = Plan(definition: Chain(buffer: Buffer(name: "scratch", transient: false)));
         var gpu = new FakePipelineGpu();
@@ -315,7 +382,12 @@ public sealed class RenderGraphFragmentLawTests {
                 Revision++;
             }
         } = instances;
+
+        public ManualResetEventSlim? BuildEntered { get; set; }
+        public ManualResetEventSlim? BuildGate { get; set; }
         public long Revision { get; private set; }
+
+        public List<long> InstalledRevisions { get; } = [];
 
         public ShaderPipelineStorageCounts CountsAt(uint width, uint height) => new(
             Height: height,
@@ -327,9 +399,29 @@ public sealed class RenderGraphFragmentLawTests {
     // A package that builds nothing and records nothing but says it drew, counting its instance's storages by a counter.
     private sealed class Silent(IShaderPipelineStorageCounter? counter) : IRenderGraphPackageFactory {
         public IShaderPipelineStorageCounter? CounterOf(string instance) => counter;
-        public IDisposable? Build(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) => null;
-        public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) => new Recorder();
+        public IDisposable? Build(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) {
+            if (counter is not Counter control) {
+                return null;
+            }
 
+            var revision = control.Revision;
+
+            control.BuildEntered?.Set();
+            control.BuildGate?.Wait(cancellationToken: cancellationToken);
+
+            return new Built(Revision: revision);
+        }
+        public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) {
+            if ((counter is Counter control) && (built is Built revision)) {
+                control.InstalledRevisions.Add(item: revision.Revision);
+            }
+
+            return new Recorder();
+        }
+
+        private sealed record Built(long Revision) : IDisposable {
+            public void Dispose() { }
+        }
         private sealed class Recorder : IRenderGraphPackageRecorder {
             public void Dispose() { }
             public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) => RenderGraphPackageOutcome.Drew;

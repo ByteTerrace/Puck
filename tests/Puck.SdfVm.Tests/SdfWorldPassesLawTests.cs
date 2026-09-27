@@ -1,6 +1,7 @@
 using System.Numerics;
 using System.Text.RegularExpressions;
 using Puck.Abstractions.Cameras;
+using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
@@ -80,6 +81,78 @@ public sealed partial class SdfWorldPassesLawTests {
             actual: buffers.Keys.Where(predicate: static name => (name.StartsWith(comparisonType: StringComparison.Ordinal, value: $"{SdfTestView.Instance}/") && name.EndsWith(comparisonType: StringComparison.Ordinal, value: "/viewports"))).Distinct().Order(comparer: StringComparer.Ordinal),
             expected: [$"{SdfTestView.Instance}/sdf.world$sky/viewports"]
         );
+
+        var scheduled = new RenderGraphFrame(
+            DisplayHeight: ((int)Extent),
+            DisplayHertz: 60,
+            DisplayWidth: ((int)Extent),
+            Footprints: [],
+            Index: view.Runtime.Latest!.Frame,
+            Roots: [new RenderGraphRoot(Height: 1.0, Instance: SdfTestView.Instance, Width: 1.0)]
+        );
+
+        void Produce() {
+            scheduled = scheduled with { Index = (scheduled.Index + 1) };
+            _ = view.Runtime.ProduceFrame(context: in context, frame: in scheduled);
+        }
+
+        for (var warm = 0; (warm < 6); warm++) {
+            Produce();
+        }
+
+        Assert.Equal(expected: 0L, actual: AllocationWindow.Least(window: Produce));
+    }
+    [Fact]
+    public void ACameraResolvedBeforeItsHostFilmsTheCurrentFrameOnce() {
+        var pipelines = SdfTestPipelines.Cache();
+        var frame = Frame();
+        var captures = 0;
+        using var host = new SdfWorldResidency(
+            frameSource: new CapturingFrameSource(capture: () => frame with { Time = ++captures }),
+            height: Extent,
+            kernels: SdfTestPipelines.Kernels(),
+            name: "world",
+            pipelines: pipelines,
+            width: Extent
+        );
+        SdfFrame? filmed = null;
+        using var camera = new SdfWorldResidency(
+            film: context => {
+                filmed = host.HostFrame(context: in context);
+
+                return true;
+            },
+            frameSource: new FixedFrameSource(frame: frame),
+            height: Extent,
+            kernels: SdfTestPipelines.Kernels(),
+            name: "camera",
+            pipelines: pipelines,
+            width: Extent
+        );
+        var passes = new SdfWorldPasses(resolve: name => new SdfWorldView(
+            Residency: ((name == "camera") ? camera : host),
+            View: 0
+        ));
+        var context = new FrameContext(
+            AccumulatorTicks: 0UL,
+            DeltaTicks: 0UL,
+            ElapsedTicks: 0UL,
+            FrameDeltaTicks: 0UL,
+            Host: new HostContext(capabilities: new Dictionary<Type, object>()),
+            StepTicks: 0UL,
+            TargetHeight: Extent,
+            TargetWidth: Extent
+        );
+
+        _ = passes.CounterOf(instance: "camera");
+        _ = passes.CounterOf(instance: "world");
+
+        for (var produced = 1; (produced <= 2); produced++) {
+            passes.BeginFrame(context: in context);
+
+            Assert.Equal(actual: captures, expected: produced);
+            Assert.Same(expected: host.Frame, actual: filmed);
+        }
     }
 
     private static SdfFrame Frame() {
@@ -112,6 +185,10 @@ public sealed partial class SdfWorldPassesLawTests {
         );
     }
 
+    private sealed class CapturingFrameSource(Func<SdfFrame> capture) : ISdfFrameSource {
+        public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) =>
+            capture();
+    }
     private sealed class FixedFrameSource(SdfFrame frame) : ISdfFrameSource {
         public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) =>
             frame;

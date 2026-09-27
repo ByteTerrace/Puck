@@ -1,4 +1,5 @@
 using Puck.Abstractions.Sources;
+using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 
 namespace Puck.Shaders.Tests;
@@ -95,6 +96,52 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         runtime.Dispose();
         Assert.Equal(expected: source.Acquired, actual: source.Released);
+    }
+    [Fact]
+    public void ACaptureWaitsForAScheduledUnboundScreenReadToHaveAnOutput() {
+        var gpu = new FakePipelineGpu();
+        var recorders = new Recorders();
+        var source = new FakeProducer(gpu: gpu) { Holding = true };
+
+        recorders.Registry.RegisterProducer(factory: _ => source, package: World);
+        recorders.Registry.Register(factory: new ReadingPackage(samples: true), package: Camera);
+        using var runtime = Runtime(
+            gpu,
+            recorders,
+            Set(
+                new RenderGraphInstance(ExternalPackage: World, Name: ReadSource, Passes: 1, Reads: [], Refresh: RenderGraphRefresh.EveryFrame),
+                Instance(name: "view", reads: new RenderGraphRead(Producer: ReadSource))
+            ),
+            "view",
+            null!,
+            Graph(pipeline: CameraGraph())
+        );
+        var frames = new Frames(
+            footprints: [new RenderGraphFootprint(Consumer: "view", Height: 1.0, Producer: ReadSource, Width: 1.0)],
+            roots: [new RenderGraphRoot(Height: 1.0, Instance: "view", Width: 1.0)],
+            runtime: runtime
+        );
+
+        Assert.True(condition: SpinWait.SpinUntil(
+            condition: () => {
+                _ = frames.Next();
+
+                return (runtime.Node(instance: 1).FrameCounter > 0UL);
+            },
+            timeout: TimeSpan.FromSeconds(value: 30)
+        ));
+
+        var request = new FrameCaptureRequest(path: Path.Combine(path1: Path.GetTempPath(), path2: $"{Guid.NewGuid():N}.png"));
+
+        runtime.RequestCapture(request: request);
+        _ = frames.Next();
+        Assert.Equal(expected: request.Path, actual: runtime.PendingCapturePath);
+        Assert.Contains(expectedSubstring: ReadSource, actualString: runtime.UnservedCaptureReason);
+
+        source.Holding = false;
+        _ = frames.Next();
+        // The fake's unsupported readback refuses the forwarded request; it has reached the complete image.
+        Assert.Null(@object: runtime.PendingCapturePath);
     }
 
     /// <summary>A camera package whose recorder samples its instance's unbound reads when it says so: it records the

@@ -447,7 +447,14 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         var footprints = new List<RenderGraphFootprint>();
 
         foreach (var instance in set.Instances) {
-            if (!RendersScreens(instance: instance, rendered: rendered)) {
+            if (
+                !RendersScreens(instance: instance, rendered: rendered) &&
+                !rendered.Views.Any(predicate: view => (view.FilmsWorld && string.Equals(
+                    a: view.Name,
+                    b: instance.Name,
+                    comparisonType: StringComparison.Ordinal
+                )))
+            ) {
                 continue;
             }
 

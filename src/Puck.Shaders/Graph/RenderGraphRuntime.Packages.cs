@@ -121,7 +121,8 @@ public sealed partial class RenderGraphRuntime {
                     context: in context,
                     instance: m_set.Instances[index].Name,
                     plan: graph.Pipeline.Plan
-                )
+                ) &&
+                MatchesAllocatedExtent(frame: in frame, index: index)
             ) {
                 m_unchanged.Add(item: m_set.Instances[index].Name);
             }
@@ -141,6 +142,27 @@ public sealed partial class RenderGraphRuntime {
         return (frame with {
             Unchanged = m_unchanged,
         });
+    }
+    // Cadence may stand only after the scheduled pixel extent has installed. Fractions alone miss a display resize,
+    // and a node still drawing its old graph while the new one builds must keep being polled until that build installs.
+    private bool MatchesAllocatedExtent(int index, in RenderGraphFrame frame) {
+        if (m_nodes[index] is not { IsReady: true } node) {
+            return false;
+        }
+        if (node.Export is { } export) {
+            return (node.Extent == (export.Width, export.Height));
+        }
+
+        var (width, height) = m_history.Allocated(index: index);
+
+        return (
+            (width > 0.0) &&
+            (height > 0.0) &&
+            (node.Extent == (
+                ((uint)RenderGraphExtent.Pixels(display: frame.DisplayWidth, fraction: width)),
+                ((uint)RenderGraphExtent.Pixels(display: frame.DisplayHeight, fraction: height))
+            ))
+        );
     }
     // Whether a plan runs only package passes, each of whose packages says nothing the instance renders from changed.
     private bool PackagesUnchanged(ShaderPipelinePlan plan, string instance, in FrameContext context) {

@@ -128,6 +128,12 @@ public sealed partial class RenderGraphRuntime {
                 continue;
             }
 
+            var frame = FrameOf(
+                consumer: consumer,
+                producer: m_set.Instances[producer].Name,
+                schedule: schedule
+            );
+
             if (m_producers[producer] is { } external) {
                 if (external.TryAcquireOutput(output: out var output)) {
                     m_producerTainted[producer] = output.Tainted;
@@ -153,16 +159,13 @@ public sealed partial class RenderGraphRuntime {
                         lease: output.Lease,
                         tainted: output.Tainted
                     );
+                } else if (unbound) {
+                    NoteStandIn(frame: frame, index: index, producer: m_set.Instances[producer].Name);
                 }
 
                 continue;
             }
 
-            var frame = FrameOf(
-                consumer: consumer,
-                producer: m_set.Instances[producer].Name,
-                schedule: schedule
-            );
             // A read the frame does not show still binds the producer's latest output, so an image the display will
             // show again is never replaced by nothing.
             var completed = OutputAt(
@@ -191,6 +194,8 @@ public sealed partial class RenderGraphRuntime {
                     lease: completed.Image.ImageViewHandle,
                     tainted: completed.Tainted
                 );
+            } else if (unbound && !completed.Image.IsSameDeviceImage) {
+                NoteStandIn(frame: frame, index: index, producer: m_set.Instances[producer].Name);
             }
         }
 

@@ -120,10 +120,32 @@ public static class SdfWorldInterfaces {
     public static uint BindingOf(ShaderInterfaceLayout layout, string member) {
         ArgumentNullException.ThrowIfNull(argument: layout);
 
-        return layout.Groups.Single(predicate: static group => (group.Group == ShaderInterfaceGroup.Pass)).Resources.Single(predicate: resource => string.Equals(
-            a: resource.Member.Name,
-            b: member,
-            comparisonType: StringComparison.Ordinal
-        )).Binding;
+        return ResourceOf(layout: layout, member: member).Binding;
+    }
+
+    // The pass-group resource an interface member binds. Binding updates run every frame, so this walks the immutable
+    // layout by index and allocates no predicate or enumerator.
+    internal static ShaderInterfaceResourceLayout ResourceOf(ShaderInterfaceLayout layout, string member) {
+        var groups = layout.Groups;
+
+        for (var groupIndex = 0; (groupIndex < groups.Count); groupIndex++) {
+            var group = groups[groupIndex];
+
+            if (group.Group != ShaderInterfaceGroup.Pass) {
+                continue;
+            }
+
+            var resources = group.Resources;
+
+            for (var index = 0; (index < resources.Count); index++) {
+                var resource = resources[index];
+
+                if (string.Equals(a: resource.Member.Name, b: member, comparisonType: StringComparison.Ordinal)) {
+                    return resource;
+                }
+            }
+        }
+
+        throw new InvalidOperationException(message: $"The pass group declares no resource '{member}'.");
     }
 }

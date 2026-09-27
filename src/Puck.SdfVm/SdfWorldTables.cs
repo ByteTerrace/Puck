@@ -529,11 +529,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     // Writes a buffer at an interface member's binding, as the kind its member declares and at its element's stride, the
     // structured view the kernel's generated declaration reads on Direct3D 12.
     private void WriteBuffer(nint set, ShaderInterfaceLayout layout, string member, IGpuBuffer buffer) {
-        var resource = layout.Groups.Single(predicate: static group => (group.Group == ShaderInterfaceGroup.Pass)).Resources.Single(predicate: candidate => string.Equals(
-            a: candidate.Member.Name,
-            b: member,
-            comparisonType: StringComparison.Ordinal
-        ));
+        var resource = SdfWorldInterfaces.ResourceOf(layout: layout, member: member);
 
         m_bindings.WriteBuffer(
             binding: resource.Binding,

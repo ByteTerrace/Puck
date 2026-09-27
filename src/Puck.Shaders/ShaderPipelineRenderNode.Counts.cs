@@ -27,6 +27,8 @@ public sealed partial class ShaderPipelineRenderNode {
     private IShaderPipelineStorageCounter? m_installedCounter;
     private ShaderPipelineStorageCounts m_installedCounts;
     private long m_installedCountRevision;
+    // The last revision queued, so a refused recount is retried by the refusal policy, not every frame.
+    private long m_requestedCountRevision;
     private bool m_recountPending;
 
     // The counter a plan's package passes' factories state for this instance, or null when none does.
@@ -54,14 +56,23 @@ public sealed partial class ShaderPipelineRenderNode {
         Height: extent.Height,
         Width: extent.Width
     ));
+
+    // A changed counter can mean larger scratch or a replaced residency. Its old recorders cannot render current data.
+    private bool CountsChanged => (
+        (m_installedCounter is { } counter) &&
+        (counter.Revision != m_installedCountRevision)
+    );
+
     // Marks the installed graph for a rebuild when its counter has moved since it was allocated.
     private void CheckCounts() {
         if (
             m_ready &&
             (m_pipeline is not null) &&
-            (m_installedCounter is { } counter) &&
-            (counter.Revision != m_installedCountRevision)
+            CountsChanged &&
+            (m_installedCounter!.Revision != m_requestedCountRevision)
         ) {
+            m_requestedCountRevision = m_installedCounter.Revision;
+            ForgetRefusal();
             m_recountPending = true;
         }
     }
