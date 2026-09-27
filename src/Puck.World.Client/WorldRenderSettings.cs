@@ -29,7 +29,7 @@ public enum AmbientOcclusionMode {
 public sealed class WorldRenderSettings {
     private bool m_ambientOcclusion;
     private AmbientOcclusionMode m_ambientOcclusionQuality;
-    private bool? m_bakes;
+    private volatile int m_bakes;
     private bool m_cadenceGate;
     private bool m_farBound;
     private float m_renderScale;
@@ -81,14 +81,18 @@ public sealed class WorldRenderSettings {
     /// (<see cref="DrawsBakes"/>). Presentation only: the field still answers contact, casts shadows and occludes, so
     /// simulation state is the same either way. Session state, never durable config; a change rebuilds the static
     /// scene.</summary>
-    public bool? Bakes { get => m_bakes; set { m_bakes = value; m_revision++; } }
+    public bool? Bakes {
+        get => m_bakes switch { 1 => true, 2 => false, _ => null };
+        set { m_bakes = value switch { true => 1, false => 2, null => 0 }; m_revision++; }
+    }
 
     /// <summary>Returns whether the presentation draws its ready bakes: as <see cref="Bakes"/> says when it is set, and
-    /// otherwise when the schedule's last reconcile found every bake of the world held (<see cref="Client.WorldBakeSchedule.Ships"/>).</summary>
+    /// otherwise when the schedule's last reconcile found the loaded world's pack supplied every bake
+    /// (<see cref="Client.WorldBakeSchedule.Ships"/>).</summary>
     /// <param name="schedule">The presentation's bake schedule, or <see langword="null"/> when it has none.</param>
     /// <returns><see langword="true"/> when ready bakes draw.</returns>
     public bool DrawsBakes(Client.WorldBakeSchedule? schedule) =>
-        (m_bakes ?? (schedule?.Ships ?? false));
+        (Bakes ?? (schedule?.Ships ?? false));
     /// <summary>Whether a frame whose render inputs match the previous one re-composites the retained image instead of
     /// re-rendering (default <see langword="true"/>; pixel-identical either way). Set <see langword="false"/> (via
     /// <c>world.cadence off</c>) to render every frame, so <c>world.counters gpu</c> measures a still scene. Session state, never

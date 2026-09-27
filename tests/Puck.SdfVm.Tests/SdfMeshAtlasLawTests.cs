@@ -93,6 +93,11 @@ public sealed class SdfMeshAtlasLawTests {
                     var originColumn = ((rectangles[index].X >> level) / unitTexels);
                     var originRow = ((rectangles[index].Y >> level) / unitTexels);
 
+                    Assert.InRange(actual: (originColumn + sourceColumns), low: 1, high: columns);
+                    Assert.InRange(actual: (originRow + sourceRows), low: 1, high: rows);
+                    Assert.True(condition: ((sourceColumns * unitTexels) <= (rectangles[index].Width >> level)));
+                    Assert.True(condition: ((sourceRows * unitTexels) <= (rectangles[index].Height >> level)));
+
                     for (var row = 0; (row < sourceRows); row++) {
                         for (var column = 0; (column < sourceColumns); column++) {
                             var target = (((originRow + row) * columns) + (originColumn + column));
@@ -128,8 +133,46 @@ public sealed class SdfMeshAtlasLawTests {
     public void ASetMissingAUsageOrOfTheWrongFormatIsRefusedByName() {
         var set = Set(width: 8, height: 8, seed: 1);
 
-        Assert.Contains(expectedSubstring: "lack its Emission texture", actualString: Assert.Throws<ArgumentException>(testCode: () => new SdfMeshTextures(textures: [.. set.Textures.Take(count: 4)])).Message);
+        foreach (var missing in SdfMeshTextures.Usages) {
+            Assert.Contains(expectedSubstring: $"lack its {missing} texture", actualString: Assert.Throws<ArgumentException>(testCode: () => new SdfMeshTextures(textures: [.. set.Textures.Where(predicate: texture => (texture.Usage != missing))])).Message);
+        }
         Assert.Contains(expectedSubstring: "is stored as", actualString: Assert.Throws<ArgumentException>(testCode: () => new SdfMeshTextures(textures: [(set.Textures[0] with { Format = GpuPixelFormat.R8Unorm }), .. set.Textures.Skip(count: 1)])).Message);
         Assert.Contains(expectedSubstring: "repeated", actualString: Assert.Throws<ArgumentException>(testCode: () => new SdfMeshTextures(textures: [.. set.Textures, set.Textures[0]])).Message);
+    }
+    [Fact]
+    public void UnsupportedTilesAndChainsAreRefusedBeforePacking() {
+        var set = Set(width: 16, height: 16, seed: 1);
+
+        foreach (var textures in new IReadOnlyList<SdfBakedTexture>[] {
+            [.. set.Textures.Select(selector: static texture => (texture with { TileTexels = 8 }))],
+            [.. set.Textures.Select(selector: static texture => (texture with { Width = 0 }))],
+            [.. set.Textures.Select(selector: static texture => (texture with { Height = -4 }))],
+            [.. set.Textures.Select(selector: static texture => (texture with { Levels = [] }))],
+            [.. set.Textures.Select(selector: static texture => (texture with { Levels = [.. texture.Levels, texture.Levels[^1]] }))],
+        }) {
+            Assert.Equal(expected: "textures", actual: Assert.Throws<ArgumentException>(testCode: () => new SdfMeshTextures(textures: textures)).ParamName);
+        }
+    }
+    [Fact]
+    public void EveryUsageRequiresExactLevelBytesAndItsPlannedColorSpace() {
+        var set = Set(width: 16, height: 16, seed: 1);
+
+        for (var usage = 0; (usage < set.Textures.Count); usage++) {
+            for (var level = 0; (level < set.Levels); level++) {
+                foreach (var delta in new[] { -1, 1 }) {
+                    var textures = set.Textures.ToArray();
+                    var levels = textures[usage].Levels.ToArray();
+
+                    levels[level] = new byte[(levels[level].Length + delta)];
+                    textures[usage] = textures[usage] with { Levels = levels };
+                    Assert.Contains(expectedSubstring: "requires exactly", actualString: Assert.Throws<ArgumentException>(testCode: () => new SdfMeshTextures(textures: textures)).Message);
+                }
+            }
+        }
+
+        var wrongColor = set.Textures.ToArray();
+
+        wrongColor[0] = wrongColor[0] with { ColorSpace = Puck.Assets.Textures.TextureColorSpace.Linear };
+        Assert.Contains(expectedSubstring: "is stored as", actualString: Assert.Throws<ArgumentException>(testCode: () => new SdfMeshTextures(textures: wrongColor)).Message);
     }
 }

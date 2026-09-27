@@ -162,10 +162,12 @@ surface textures, and an octahedral impostor
 keyed by the creation's pin (the prototype row's hash), the baker's version, and
 the quality tier, and one key is one set of bytes. Bakes are presentation only:
 contact, queries and simulation keep reading the field. A presentation draws
-its bakes by default when the loaded world carries its `BAKE` chunk (a
-released or compiled tree, whose pack holds every bake before the first
-frame), and its fields otherwise, unless `world.bakes on`; so no capture
-depends on a bake made on the device. While it draws them, an untinted static
+its bakes by default when the loaded world's `BAKE` chunk supplies every bake
+from its pack before the first frame. A source boot draws fields, even when
+this machine's cache or another world's pack holds the same bake keys.
+`world.bakes off` forces fields; `world.bakes on` draws ready bakes, including
+ones made locally. The default therefore keeps captures independent of local
+baking. While bakes draw, an untinted static
 placement whose prototype's bake is ready draws the baked mesh through the mesh
 pass, textured from the bake's five surface textures, and keeps its field as
 camera-hidden instances that still cast shadows and occlude; a creation with

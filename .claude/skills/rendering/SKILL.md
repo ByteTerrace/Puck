@@ -226,7 +226,7 @@ These are one-line cautions; the owning pages hold the derivations.
   prototype through `WorldBakeSchedule`, never on the frame thread, and draws a
   ready one only through `WorldBakeSchedule.TryGetMesh` (which counts the
   switch, `sdf.bakes.drawn`) while it draws its bakes: by default exactly when
-  the loaded world carries its `BAKE` chunk, else when `world.bakes on`
+  the loaded world's `BAKE` chunk supplies every bake from its pack, else when `world.bakes on`
   (`WorldRenderSettings.DrawsBakes`); the engine is not ready until the
   schedule has reconciled and, while it draws them, settled. A baked
   mesh samples its textures from the mesh atlases, World-group members bound in

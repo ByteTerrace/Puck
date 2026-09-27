@@ -116,6 +116,7 @@ bool sdfMeshBarycentric(float3 a, float3 b, float3 c, float3 p, out float3 weigh
 // along the ray and a sliver more.
 float3 sdfMeshFaceCamera(float3 normal, float3 face, float3 rayDirection) {
     normal = normalize(normal);
+    normal = ((dot(normal, face) < 0.0) ? -normal : normal);
     normal = ((dot(face, rayDirection) > 0.0) ? -normal : normal);
 
     float along = dot(normal, rayDirection);
@@ -146,7 +147,7 @@ float3 sdfMeshSurfaceNormal(uint draw, uint triangleIndex, float3 surfacePoint, 
         float3 interpolated = (((weights.x * sdfMeshWorldNormal(record, first)) + (weights.y * sdfMeshWorldNormal(record, (first + 1u)))) + (weights.z * sdfMeshWorldNormal(record, (first + 2u))));
 
         if (dot(interpolated, interpolated) > 1.0e-20) {
-            normal = ((dot(interpolated, face) < 0.0) ? -interpolated : interpolated);
+            normal = interpolated;
         }
     }
 

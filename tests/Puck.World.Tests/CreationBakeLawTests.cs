@@ -297,6 +297,52 @@ public sealed class CreationBakeLawTests {
         Assert.Equal(expected: WorldBakeState.Refused, actual: schedule.StateOf(prototypeId: "glint"));
     }
     [Fact]
+    public void ReadinessWaitsForAReconcileAndAnEmptyWorldSettles() {
+        using var schedule = new WorldBakeSchedule(store: new WorldBakeStore());
+        var settings = new WorldRenderSettings(defaults: new WorldRenderDefaults());
+
+        foreach (var lever in new bool?[] { null, true, false }) {
+            settings.Bakes = lever;
+            Assert.Equal(expected: lever, actual: settings.Bakes);
+            Assert.False(condition: schedule.IsReadyForDrawing(bakes: settings.Bakes));
+        }
+
+        schedule.Pump(definition: new WorldDefinition());
+        Assert.True(condition: schedule.HasReconciled);
+        Assert.True(condition: schedule.IsSettled);
+        Assert.False(condition: schedule.Ships);
+
+        foreach (var lever in new bool?[] { null, true, false }) {
+            settings.Bakes = lever;
+            Assert.True(condition: schedule.IsReadyForDrawing(bakes: settings.Bakes));
+            Assert.Equal(expected: (lever ?? false), actual: settings.DrawsBakes(schedule: schedule));
+        }
+    }
+    [Fact]
+    public void APackLoadedForOneWorldDoesNotShipASourceWorldWithTheSameKeys() {
+        using var directory = new TemporaryDirectory();
+        var path = WriteWorld(directory: directory);
+
+        _ = CompileWithPack(path: path);
+
+        var store = new WorldBakeStore();
+        var boot = CompiledWorldLawTests.Boot(cache: new CompiledWorldCache(chunks: Chunks(store: store), directory: directory.PathOf(name: "state/compiled")), path: path);
+        using var schedule = new WorldBakeSchedule(store: store);
+        var settings = new WorldRenderSettings(defaults: new WorldRenderDefaults());
+
+        schedule.Pump(definition: boot.Admission.Definition);
+        Assert.True(condition: settings.DrawsBakes(schedule: schedule));
+        schedule.Pump(definition: (boot.Admission.Definition with { DocumentDirectory = directory.PathOf(name: "copy") }));
+        Assert.True(condition: schedule.Ships);
+        schedule.Pump(definition: Definition());
+        Assert.True(condition: schedule.IsSettled);
+        Assert.False(condition: schedule.Ships);
+        Assert.False(condition: settings.DrawsBakes(schedule: schedule));
+        Assert.Equal(expected: 0L, actual: schedule.Read(kind: WorldBakeSchedule.Scheduled));
+        settings.Bakes = true;
+        Assert.True(condition: settings.DrawsBakes(schedule: schedule));
+    }
+    [Fact]
     public void AKeyThePackLacksIsBakedInTheBackground() {
         using var directory = new TemporaryDirectory();
         var path = WriteWorld(directory: directory);

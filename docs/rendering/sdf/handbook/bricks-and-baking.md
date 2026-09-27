@@ -336,9 +336,11 @@ sampled as stored codes, without sRGB decode. `BakeSamplingDeviceLawTests`
 samples each probe texel of the bake sampling fixture on Vulkan, Direct3D 12
 hardware and WARP and holds it to the CPU decoder.
 
-A presentation draws its bakes by default when the loaded world carries its
-`BAKE` chunk, and otherwise when `world.bakes on`
-(`WorldRenderSettings.DrawsBakes`). While it does, an untinted static placement
+A presentation draws its bakes by default when the loaded world's `BAKE`
+chunk supplies every bake from its pack (`WorldRenderSettings.DrawsBakes`).
+A source boot draws fields even when a cache or another world's pack holds
+the same keys. `world.bakes off` forces fields; `world.bakes on` permits ready
+local bakes to draw. While bakes draw, an untinted static placement
 whose prototype's bake is ready draws the baked mesh through the mesh pass and
 keeps
 its field as camera-hidden instances that still cast shadows and occlude; a

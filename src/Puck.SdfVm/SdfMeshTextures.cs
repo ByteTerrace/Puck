@@ -23,13 +23,16 @@ public sealed record SdfMeshTextures {
     /// <see cref="Usages"/>, stored as the bake plans it, all of one extent, tile and level count.</summary>
     /// <param name="textures">The bake's surface textures, in any order.</param>
     /// <exception cref="ArgumentException">A usage is missing or repeated, a texture is not stored in its usage's planned
-    /// format, the extents, tiles or level counts differ, or the extent is not whole tiles.</exception>
+    /// format or color space, the extents or level counts differ, the extent is not positive whole four-texel tiles,
+    /// or a mip chain is empty, extends past one texel per tile, or holds a level of the wrong byte length.</exception>
     public SdfMeshTextures(IReadOnlyList<SdfBakedTexture> textures) {
         ArgumentNullException.ThrowIfNull(argument: textures);
 
         var ordered = new SdfBakedTexture[Usages.Count];
 
         foreach (var texture in textures) {
+            ArgumentNullException.ThrowIfNull(argument: texture, paramName: nameof(textures));
+
             var index = IndexOf(usage: texture.Usage);
 
             if ((index < 0) || (ordered[index] is not null)) {
@@ -38,9 +41,11 @@ public sealed record SdfMeshTextures {
                     paramName: nameof(textures)
                 );
             }
-            if (texture.Format != SdfBakedTexture.PlanFor(usage: texture.Usage).Stored) {
+            var plan = SdfBakedTexture.PlanFor(usage: texture.Usage);
+
+            if ((texture.Format != plan.Stored) || (texture.ColorSpace != plan.ColorSpace)) {
                 throw new ArgumentException(
-                    message: $"A mesh's {texture.Usage} texture is stored as {SdfBakedTexture.PlanFor(usage: texture.Usage).Stored}; this one is {texture.Format}.",
+                    message: $"A mesh's {texture.Usage} texture is stored as {plan.Stored} in {plan.ColorSpace}; this one is {texture.Format} in {texture.ColorSpace}.",
                     paramName: nameof(textures)
                 );
             }
@@ -56,22 +61,35 @@ public sealed record SdfMeshTextures {
                 paramName: nameof(textures)
             ));
 
+            if (
+                (texture.Width <= 0) || (texture.Height <= 0) ||
+                (texture.TileTexels != SdfBakeTier.TileTexels) ||
+                ((texture.Width % SdfBakeTier.TileTexels) != 0) ||
+                ((texture.Height % SdfBakeTier.TileTexels) != 0) ||
+                (texture.Levels is null) || (texture.Levels.Count is < 1 or > 3)
+            ) {
+                throw new ArgumentException(
+                    message: $"A mesh's surface textures require positive whole {SdfBakeTier.TileTexels}-texel tiles and one to three levels, ending no later than one texel per tile.",
+                    paramName: nameof(textures)
+                );
+            }
             if ((texture.Width != first.Width) || (texture.Height != first.Height) || (texture.TileTexels != first.TileTexels) || (texture.Levels.Count != first.Levels.Count)) {
                 throw new ArgumentException(
                     message: $"A mesh's surface textures share one extent, tile and level count; its {texture.Usage} texture is {texture.Width}x{texture.Height} in {texture.TileTexels}-texel tiles over {texture.Levels.Count} levels, its {first.Usage} texture {first.Width}x{first.Height} in {first.TileTexels}-texel tiles over {first.Levels.Count} levels.",
                     paramName: nameof(textures)
                 );
             }
-        }
-        if (
-            (first.TileTexels <= 0) ||
-            ((first.Width % first.TileTexels) != 0) ||
-            ((first.Height % first.TileTexels) != 0)
-        ) {
-            throw new ArgumentException(
-                message: $"A mesh's surface textures are whole tiles; they are {first.Width}x{first.Height} in {first.TileTexels}-texel tiles.",
-                paramName: nameof(textures)
-            );
+            for (var level = 0; (level < texture.Levels.Count); level++) {
+                var (width, height) = texture.LevelExtent(level: level);
+                var required = GpuPixelFormats.LevelByteLength(format: texture.Format, height: (uint)height, width: (uint)width);
+
+                if ((texture.Levels[level] is not { } bytes) || ((ulong)bytes.LongLength != required)) {
+                    throw new ArgumentException(
+                        message: $"A mesh's {texture.Usage} level {level} requires exactly {required} bytes.",
+                        paramName: nameof(textures)
+                    );
+                }
+            }
         }
 
         Textures = ordered;

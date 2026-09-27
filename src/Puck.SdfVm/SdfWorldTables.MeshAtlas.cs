@@ -55,14 +55,16 @@ public sealed partial class SdfWorldTables {
         }
 
         // Every view's submissions sample the atlases, so they are replaced only once the device is idle.
-        m_deviceContext.TryWaitIdle();
+        m_deviceContext.WaitIdle();
 
         var views = new nint[SdfMeshTextures.Usages.Count];
+        var uploads = new IGpuSurfaceUpload?[views.Length];
+        using var scope = new GpuCreationScope();
 
         if (atlas is not null) {
             for (var usage = 0; (usage < views.Length); usage++) {
-                m_meshAtlasUploads[usage] ??= m_gpu.SurfaceTransferFactory.CreateUpload();
-                views[usage] = m_meshAtlasUploads[usage]!.Upload(
+                uploads[usage] = scope.Own(created: m_gpu.SurfaceTransferFactory.CreateUpload());
+                views[usage] = uploads[usage]!.Upload(
                     format: SdfMeshTextures.FormatOf(usage: SdfMeshTextures.Usages[usage]),
                     height: ((uint)atlas.Height),
                     levels: ((uint)atlas.Levels),
@@ -73,6 +75,9 @@ public sealed partial class SdfWorldTables {
         }
 
         WriteMeshAtlases(views: views);
+        scope.Complete();
+        DisposeMeshAtlases();
+        uploads.CopyTo(array: m_meshAtlasUploads, index: 0);
         m_meshAtlas = atlas;
         m_meshAtlasSources = [.. m_meshTextureScratch];
 

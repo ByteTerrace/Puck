@@ -66,20 +66,8 @@ internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness
     /// draws its bakes, or <see langword="null"/> until the render factory has run.</summary>
     public WorldRenderSettings? Settings { get; set; }
 
-    // Whether no bake the presentation would draw is still coming: it has no schedule or draws no bake, or its schedule
-    // has settled. Until the schedule first reconciles, whether the world ships its bakes is not yet known.
-    private bool BakesSettled {
-        get {
-            if ((Settings is null) || (Bakes is null)) {
-                return true;
-            }
-            if ((Settings.Bakes is null) && !Bakes.HasReconciled) {
-                return false;
-            }
-
-            return (!Settings.DrawsBakes(schedule: Bakes) || Bakes.IsSettled);
-        }
-    }
+    // A schedule must reconcile before readiness can decide whether it draws bakes, and settle while it draws them.
+    private bool BakesSettled => ((Settings is not { } settings) || (Bakes is not { } bakes) || bakes.IsReadyForDrawing(bakes: settings.Bakes));
     /// <summary>The render graph's root, the render host every captured and presented frame comes from, or
     /// <see langword="null"/> until the render factory has run. <c>world.screenshot</c> arms captures on it, so the
     /// readback is the frame the display shows.</summary>

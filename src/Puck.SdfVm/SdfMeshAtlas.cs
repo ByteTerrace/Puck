@@ -61,6 +61,16 @@ public sealed class SdfMeshAtlas {
                 paramName: nameof(textures)
             );
         }
+        foreach (var set in distinct) {
+            ArgumentNullException.ThrowIfNull(argument: set, paramName: nameof(textures));
+
+            if ((set.Width > MaxExtent) || (set.Height > MaxExtent)) {
+                throw new ArgumentException(
+                    message: $"An atlas spans at most {MaxExtent} texels on either axis; a mesh's textures span {set.Width}x{set.Height}.",
+                    paramName: nameof(textures)
+                );
+            }
+        }
 
         var levels = distinct[0].Levels;
         var tile = distinct[0].TileTexels;
@@ -80,6 +90,13 @@ public sealed class SdfMeshAtlas {
             .ThenBy(keySelector: static entry => entry.Index)
             .ToArray();
         var area = order.Sum(selector: static entry => ((long)entry.Width * entry.Height));
+
+        if (area > ((long)MaxExtent * MaxExtent)) {
+            throw new ArgumentException(
+                message: $"An atlas spans at most {MaxExtent} texels on either axis; these meshes' rectangles cover {area} texels.",
+                paramName: nameof(textures)
+            );
+        }
         var width = (int)BitOperations.RoundUpToPowerOf2(value: (uint)Math.Max(
             val1: order.Max(selector: static entry => entry.Width),
             val2: (int)Math.Ceiling(a: Math.Sqrt(d: area))
@@ -190,7 +207,10 @@ public sealed class SdfMeshAtlas {
                 source.AsSpan(
                     length: (sourceColumns * unit),
                     start: ((sourceRow * sourceColumns) * unit)
-                ).CopyTo(destination: atlas.AsSpan(start: (atlasLevel + ((((row + sourceRow) * atlasColumns) + column) * unit))));
+                ).CopyTo(destination: atlas.AsSpan(
+                    length: (sourceColumns * unit),
+                    start: (atlasLevel + ((((row + sourceRow) * atlasColumns) + column) * unit))
+                ));
             }
 
             atlasLevel += checked((int)GpuPixelFormats.LevelByteLength(format: format, height: levelHeight, width: levelWidth));

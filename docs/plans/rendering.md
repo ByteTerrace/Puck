@@ -1426,10 +1426,11 @@ P17 still owes:
   mesh atlases with the albedo decoded from sRGB in the shader (held by
   `CreationBakeLawTests`, `SdfMeshAtlasLawTests`, `MeshTextureDeviceLawTests`
   and the `sdf-bake-switch` canary). Bakes draw by default when the loaded
-  world carries its `BAKE` chunk (a released or compiled tree, the parity
-  world); a source boot draws fields unless `world.bakes on`, and a live bake
-  then switches when ready, which is the authoring path. So no capture depends
-  on a local bake, by construction. The parity
+  world's `BAKE` chunk supplies every bake from its pack (a released or
+  compiled tree, the parity world); a source boot draws fields unless
+  `world.bakes on`, and a live bake then switches when ready, which is the
+  authoring path. Under the default rule, captures do not depend on local
+  baking. `world.bakes off` forces fields. The parity
   world ships its bakes: `puck parity` compiles its tree with the World
   artifact's own CLI and boots the compiled world, whose `BAKE` chunk holds
   every bake from the pack, and refuses a leg that resolved a bake on the
