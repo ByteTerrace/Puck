@@ -856,7 +856,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
             if (composePending) {
                 // The shared dual compose tail (also mapGradCore's rigid fast path). KEEP-IN-SYNC with mapCore's tail
                 // EXCEPT the material blend channel: this dual twin is HIT-ONLY and resolves the NORMAL, not the shaded
-                // albedo (renderView captures sdfMaterialBlendWeight from the scalar accept-sample march), so it neither
+                // albedo (the primary stage captures sdfMaterialBlendWeight from the scalar accept-sample march), so it neither
                 // computes nor publishes the channel — exactly as it skips sdfMapStepBound for being hit-only.
                 sdfComposeDualCandidate(result, resultGradient, composeCandidate, composeGradient, composeBlend, composeMaterial, composeLanes, composeSlot, composeSmooth);
             }

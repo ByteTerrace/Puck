@@ -103,11 +103,11 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         // march enumerates only the instances overlapping this tile's cone — bit-exact per the function's contract note.
         bounds = coneMarchTileBounds(view, cone, worldInstanceMaskBase(tileIndex), footprint);
 
-        // FULL-FIELD SLICE OVERRIDE (debug view mode 7 — see the termination/slice split note in renderView): the
+        // FULL-FIELD SLICE OVERRIDE (debug view mode 7 — see the termination/slice split note in debug/sdf-debug-views.hlsli): the
         // slice view must color EVERY pixel of the viewport with the ideal field, so no in-viewport tile may stay
         // TileEmpty in that mode — an empty tile would be dropped by the cull-args bbox, truncating the isolines into
         // 16-px tile staircases around the shape. Forcing a 0.0 march-start keeps the downstream passes on their
-        // normal "live tile" path; renderView skips the march
+        // normal "live tile" path; the primary stage skips the march
         // for slice anyway, so the forced tiles never pay a wasted march. Every OTHER mode leaves this kernel
         // byte-identical (the override keys exactly on the pass block's debug mode).
         if (((int)round(view.forward.w) == DebugViewModeSlice) && (bounds.entry == TileEmpty)) {

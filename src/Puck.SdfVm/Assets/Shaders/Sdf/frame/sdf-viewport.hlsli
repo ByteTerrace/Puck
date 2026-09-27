@@ -6,7 +6,7 @@
 #define SDF_VIEWPORT_HLSLI
 
 // The mesh projection's near plane at forward distance ConeNear. The beam starts conservatively at ray distance ConeNear;
-// renderView raises each primary ray's start to the plane. KEEP IN SYNC with SdfWorldTables.ConeNear and ViewProjection.
+// sdfPixelAt raises each primary ray's start to the plane. KEEP IN SYNC with SdfWorldTables.ConeNear and ViewProjection.
 static const float ConeNear = 0.02;
 
 // The view the pass renders, gathered from the pass block into the rows the march, the shading and the mesh projection
@@ -36,7 +36,7 @@ ViewportData worldView() {
     return data;
 }
 
-// The frame's FAR DISTANCE — the depth at which every camera march ends: the fine march's far exit (renderView), the
+// The frame's FAR DISTANCE — the depth at which every camera march ends: the fine march's far exit (the primary stage), the
 // beam's cone proofs (entry, the gap search, the F1 far bound) and the "nothing proven" sentinel every tile plane
 // carries, and the depth/overshoot debug ramps. It is WORLD DATA (render.farDistance → SdfFrame.FarDistance), never a
 // shader constant: the host refuses a non-finite or non-positive value before writing it, so no kernel guards it.

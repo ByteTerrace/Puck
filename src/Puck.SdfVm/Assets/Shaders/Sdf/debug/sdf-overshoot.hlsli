@@ -41,7 +41,7 @@ float marchOvershootDepth(float3 rayOrigin, float3 rayDirection, float marchStar
         }
 
         // Plain omega = 1 steps are provably clear by the 1-Lipschitz bound, so crossing the far plane here IS a
-        // validated escape (unlike renderView's over-relaxed step, which must fall back to the plain step first).
+        // validated escape (unlike the primary march's over-relaxed step, which must fall back to the plain step first).
         if (traveled > farDistance) {
             traveled = farDistance;
             break;

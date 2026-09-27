@@ -93,6 +93,31 @@ public sealed class SdfPassPlanLawTests {
             collection: Plan.Steps
         );
     }
+    // Each stage declares exactly what it reads and writes: only primary reads the mesh target, and every later stage reads
+    // the mesh hit from the visibility record, whose version each stage forwards.
+    [Fact]
+    public void EachStageDeclaresExactlyItsReadsAndWrites() {
+        string[] hit = [SdfWorldPackage.Parts.CullBounds, SdfWorldPackage.Parts.InstanceMasks, SdfWorldPackage.Parts.Tiles];
+
+        Assert.Equal(
+            actual: SdfWorldPackage.Fragment.Passes.Select(selector: static pass => (
+                pass.Name,
+                string.Join(separator: ",", values: pass.Inputs.Select(selector: static input => input.Name)),
+                string.Join(separator: ",", values: pass.Outputs.Select(selector: static output => output.Name))
+            )),
+            expected: [
+                (SdfWorldPackage.Parts.Sky, "", SdfWorldPackage.Parts.SkyImage),
+                (SdfWorldPackage.Parts.Mask, "", SdfWorldPackage.Parts.InstanceMasks),
+                (SdfWorldPackage.Parts.Beam, SdfWorldPackage.Parts.InstanceMasks, SdfWorldPackage.Parts.Tiles),
+                (SdfWorldPackage.Parts.CullArgs, SdfWorldPackage.Parts.Tiles, $"{SdfWorldPackage.Parts.Arguments},{SdfWorldPackage.Parts.CullBounds}"),
+                (SdfWorldPackage.Parts.Mesh, "", $"{SdfWorldPackage.Parts.MeshTarget},{SdfWorldPackage.Parts.MeshDepth}"),
+                (SdfWorldPackage.Parts.Primary, string.Join(separator: ",", values: [.. hit, SdfWorldPackage.Parts.MeshTarget]), SdfWorldPackage.Parts.Visibility),
+                (SdfWorldPackage.Parts.Surface, string.Join(separator: ",", values: hit), SdfWorldPackage.Parts.SurfaceVisibility),
+                (SdfWorldPackage.Parts.Ambient, string.Join(separator: ",", values: hit), SdfWorldPackage.Parts.AmbientVisibility),
+                (SdfWorldPackage.Parts.Views, string.Join(separator: ",", values: [.. hit, SdfWorldPackage.Parts.AmbientVisibility]), SdfWorldPackage.Color),
+            ]
+        );
+    }
     [Fact]
     public void ThePlannedBufferBarriersBetweenPassesArePinned() {
         var planned = new List<(string Buffer, string Producer, string Consumer, GpuAccess SourceAccess, GpuAccess DestinationAccess, GpuStage SourceStage, GpuStage DestinationStage)>();

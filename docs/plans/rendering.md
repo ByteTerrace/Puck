@@ -4194,7 +4194,51 @@ item 2 landed.
     about 116 MiB on both backends, the float view color and the root graph's
     versions taking eight bytes a pixel in each frame slot where they took four,
     and the SDF kernels' bytecode shrinks by the dither they no longer compile.
-11. Staged shading.
+11. Staged shading. Primary, surface and ambient are stages over the
+    visibility record, which is the surface sample record (the decisions
+    below): primary writes its V, C and L rows, surface the N and S rows, and
+    ambient the occlusion in S. The views pass still marches the key light's
+    soft shadow and gathers its candidates, and walks the lights in five
+    loops that each branch on a light's kind (the directional, hemisphere and
+    point diffuse terms, the bound screens' area lights, the rim lights, the
+    point lights' specular lobes and the occluders). The step lands in three
+    sub-steps:
+
+    a. Landed, one record and one body per stage. A mesh hit's triangle rides
+       the record's L row (its identity names the draw), so only primary reads
+       the mesh target, and surface and views read a mesh hit from the record,
+       views a textured mesh's atlas albedo, material and emission among it.
+       Each stage is its own function over one
+       pixel context (`SdfPixel`, `march/sdf-pixel.hlsli`): `sdfPrimaryStage`,
+       `sdfSurfaceStage`, `sdfAmbientStage`, and `sdfViewsStage`, which reads
+       the record once as one surface sample (`SdfSurfaceSample`) and runs the
+       light stage (`shade/sdf-light-stage.hlsli`), the volumes and the debug
+       views (`debug/sdf-debug-views.hlsli`); the one body the four passes
+       compiled through pass macros is gone. `SdfPassPlanLawTests` holds each
+       stage's declared reads and writes.
+    b. The lights through one interface. Every light, the environment's and
+       each bound screen's, is one `SdfLight`, and one function answers its
+       response at a surface sample: its diffuse, specular and rim terms and
+       its attenuation. The light stage walks the lights once, and the kind
+       branches outside that function are deleted. Done when parity holds and
+       `puck counters compare` moves nothing but the kernels' bytecode.
+    c. The shadow stage. A `shadow` pass between ambient and views gathers
+       each workgroup's shadow candidates and marches the key light's soft
+       shadow into a new row of the record, which grows to sixteen words
+       (64 bytes a pixel); views reads it and marches nothing. A frame whose
+       soft shadows are off, or which has no shadow light, skips the pass
+       (`IRenderGraphPackageRecorder.Skips`), and a frame whose ambient
+       occlusion is off skips the ambient pass, whose neutral occlusion the
+       surface pass already wrote. Done when the pass-plan law holds the
+       order and the record's edges, parity holds, and `puck counters
+       compare` on the floor tier (`low`: shadows and ambient occlusion off)
+       shows one indirect dispatch fewer per view (the skipped ambient pass)
+       and the visibility buffer's four more bytes a pixel, with the default
+       tier's one more indirect dispatch per view stated.
+
+    Volume shading stays the views stage's last composite: a pass of its own
+    would read and write the working color once more per pixel and save no
+    work.
 12. Landed, post passes as the root graph's own passes: a world names them in
     `views.post`, each row a graph document's `packages` row less its ports
     (`name`, `package`, `config`), which the synthesized root `main` runs in

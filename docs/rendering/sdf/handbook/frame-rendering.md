@@ -60,12 +60,13 @@ rectangle launch no threads; holes inside it remain in the dispatch.
 
 **mesh** (`sdf-mesh.vert.hlsl`, `sdf-mesh.frag.hlsl`) rasterizes the frame's mesh draws, one draw call
 each, into the mesh visibility target at the view's extent: per pixel the ray parameter the march records,
-the draw plus one, and the triangle, kept nearest by a reversed-Z depth test. The hit passes resolve that
-triangle from the mesh region: primary reads its material (the draw's, plus the triangle's palette entry when
-its mesh carries one), and surface its normal at the hit point (the vertex normals interpolated when its mesh
+the draw plus one, and the triangle, kept nearest by a reversed-Z depth test. Primary alone reads the
+target: it resolves the triangle's material from the mesh region (the draw's, plus the triangle's palette entry
+when its mesh carries one) and records the draw and the triangle in the pixel's visibility record, from which
+surface resolves its normal at the hit point (the vertex normals interpolated when its mesh
 carries them, carried to world space by the draw's inverse-transpose normal matrix so a nonuniform scale keeps
 them perpendicular to the surface; the face normal otherwise), turned toward the camera and clamped so a grazing ray
-never sees it lean away. The draw plus one and the triangle are stored as floats, so a region holds at most 2^24
+never sees it lean away, and views a textured mesh's albedo, material and emission. The draw plus one and the triangle are stored as floats, so a region holds at most 2^24
 draws and a mesh at most 2^24 triangles, each refused by name past that. A frame with no mesh draws skips the pass,
 its target's and depth's barriers included, and the hit passes read nothing of the target. The target and its depth attachment, 20 bytes a pixel, are scratch the view's instance allocates with its graph.
 Primary bounds its march by that ray parameter

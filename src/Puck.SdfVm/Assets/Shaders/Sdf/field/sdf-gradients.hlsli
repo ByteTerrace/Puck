@@ -246,7 +246,7 @@ void blendShapeDual(float current, float3 currentGrad, float candidate, float3 c
 // here so the two cannot drift into subtly different blend VMs (the same reason the scalar paths share
 // sdfComposeCandidate). The strict material-winner compare runs BEFORE the distance/gradient blend — order-dependent
 // blend semantics preserved. HIT-ONLY: resolves the winning material and the world gradient, never the smooth-seam
-// material blend channel (renderView captures that from the scalar accept-sample march), exactly as it skips
+// material blend channel (the primary stage captures that from the scalar accept-sample march), exactly as it skips
 // sdfMapStepBound for being hit-only.
 void sdfComposeDualCandidate(inout SdfHit result, inout float3 resultGradient, float candidate, float3 candidateGrad, uint blend, int material, float4 lanes, int frameSlot, float smooth) {
     bool candidateWins;

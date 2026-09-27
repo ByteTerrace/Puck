@@ -50,7 +50,7 @@ never a Vulkan or DirectX type by name.
   `SdfInstruction.Detail` is invisible to every march (beam, primary, shadow, AO)
   and appears only in the hit-only re-evaluations at an already-found surface
   point: the surface pass's normal (`sdfResolveSurface`) and the views pass's
-  material re-resolve in `renderView`. A seam or rivet too thin for the
+  material re-resolve in the light stage (`sdfLightStage`). A seam or rivet too thin for the
   footprint-relative march to resolve at distance stays a crisp mark instead
   of dotting out. Compiled rigid leaves retain the same detail and secondary
   mode gates as the generic scalar and gradient interpreters. When packing proves

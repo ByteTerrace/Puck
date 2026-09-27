@@ -87,13 +87,14 @@ scale.
 Primary, surface, ambient, and views share `sdf-world-views.comp.hlsl`'s entry
 point through `SDF_PRIMARY_PASS`, `SDF_SURFACE_PASS`, `SDF_AMBIENT_PASS`, and
 `SDF_PRIMARY_READ`, each dispatched indirectly from the cull arguments. The
-wrapper defines `SDF_PRIMARY_READ` for every pass except
-primary, so the primary march in `renderView`'s `#else` branch compiles into the
-primary kernel alone; `renderView` compiles only into the four hit-pass kernels.
-Before primary, the `mesh` pass (`sdf-mesh.*.hlsl`, a graphics pass of the
-fragment) rasterizes the frame's mesh draws into the mesh visibility target that
-primary bounds its march by and surface reads the mesh normal from
-(`sdfMeshSampleAt`); the target and its depth attachment are transient fragment
+wrapper defines `SDF_PRIMARY_READ` for every pass except primary, and
+`SDF_VIEWS_PASS` for the views kernels, and each kernel compiles only its own
+stage over the pixel the entry point gathers (`sdfPixelAt`): `sdfPrimaryStage`,
+`sdfSurfaceStage`, `sdfAmbientStage` or `sdfViewsStage`. Before primary, the
+`mesh` pass (`sdf-mesh.*.hlsl`, a graphics pass of the fragment) rasterizes the
+frame's mesh draws into the mesh visibility target that primary bounds its
+march by (`sdfMeshSampleAt`); primary alone reads it, and records a mesh hit's
+draw and triangle for the later stages; the target and its depth attachment are transient fragment
 resources the instance allocates with its graph. The pass draws with its own
 `sdf-mesh` interface, one set per frame slot from a pool of its own, pushes the
 draw (`SdfWorldInterfaces.MeshPushedIndex`), and skips a frame with no mesh

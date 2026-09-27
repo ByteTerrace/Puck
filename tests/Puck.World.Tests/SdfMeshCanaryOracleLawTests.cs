@@ -35,7 +35,7 @@ namespace Puck.World.Tests;
 /// empty.
 /// </summary>
 public sealed class SdfMeshCanaryOracleLawTests {
-    // The visibility debug view's colors (passes/sdf-render-view.hlsli's renderView, mode 11), background first.
+    // The visibility debug view's colors (debug/sdf-debug-views.hlsli's sdfDebugView, mode 11), background first.
     // A pixel whose fixed-point march ended without proving its answer: no region may be judged over one.
     private const int Inconclusive = 3;
     // A capture pixel a reduced render scale reconstructs from records of more than one kind, so its color blends them:

@@ -76,7 +76,7 @@ static bool sdfAmbientMaskActive = false;
 #endif
 
 #ifdef SDF_DYNAMIC_TRANSFORMS
-// Per-instance soft-shadow participation gate (mirrors sdfShadowMaskActive's static-flag pattern). passes/sdf-render-view.hlsli
+// Per-instance soft-shadow participation gate (mirrors sdfShadowMaskActive's static-flag pattern). shade/sdf-light-stage.hlsli
 // flips it true for exactly the lifetime of ONE softShadowVisibility call, so sdfNextVisibleInstanceRange SKIPS any dynamic
 // instance whose packed position.w > 0.5 (host encoding: 0 = casts, 1 = shadow-suppressed — see PackDynamicTransforms).
 // False everywhere else (including the beam/instance-cull kernels, which define SDF_DYNAMIC_TRANSFORMS but never set it),
@@ -301,10 +301,10 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 // --- instruction lanes ---
 // SDF_SHAPE_DETAIL_FLAG (Puck.SignedDistance.SdfInstruction.Detail) marks a SHADING-ONLY shape: skipped by
 // mapCore/mapGradCore's default (march) mode and included only under sdfDetailShadingActive (the hit-only shade
-// re-evaluation in passes/sdf-render-view.hlsli's renderView). SDF_SHAPE_NO_SECONDARY_FLAG (SdfInstruction.Secondary == false) marks
+// re-evaluation in shade/sdf-light-stage.hlsli). SDF_SHAPE_NO_SECONDARY_FLAG (SdfInstruction.Secondary == false) marks
 // a SECONDARY-EXCLUDED shape: unlike a Detail shape it marches for the camera/beam/fine march and the hit-only shade
 // re-evaluations like any ordinary shape, and drops out ONLY under sdfSecondaryMarchActive, the soft-shadow and
-// ambient-occlusion field walks in passes/sdf-render-view.hlsli and surface/sdf-surface.hlsli (eyelids and other small parts still shade and collide, they just
+// ambient-occlusion field walks in shade/sdf-light-stage.hlsli and surface/sdf-surface.hlsli (eyelids and other small parts still shade and collide, they just
 // cast no shadow and cost no AO tap).
 // SDF_OP_SYMMETRY_PLANE reproduces the axis-aligned folds with an axis normal.
 // Scoped field accumulator (SdfOp.PushField/PopField). PUSH saves the running accumulator into a one-deep slot and
