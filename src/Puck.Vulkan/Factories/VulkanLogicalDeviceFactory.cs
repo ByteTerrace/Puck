@@ -7,7 +7,8 @@ namespace Puck.Vulkan.Factories;
 
 /// <summary>
 /// The default <see cref="IVulkanLogicalDeviceFactory"/>: it creates a logical device, enabling the
-/// swapchain extension always and the optional pipeline-executable-properties,
+/// swapchain extension and <c>shaderSampledImageArrayDynamicIndexing</c> always, refusing a device without the latter,
+/// and the optional pipeline-executable-properties,
 /// storage-image-without-format, block-compressed texture (<c>textureCompressionBC</c>), external memory and semaphore,
 /// timeline-semaphore, and GPU capability-floor (fp16, 16-bit storage, subgroup-size-control) features only when the
 /// physical device supports them.
@@ -70,11 +71,15 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
     // from optimal-tiling images. VulkanLogicalDevice.SamplesBlockCompression records whether it was enabled, and an
     // upload of a block-compressed format refuses a device without it.
     private const uint TextureCompressionBcFeatureIndex = 22u;
+    // The 0-based VkPhysicalDeviceFeatures flag index of shaderSampledImageArrayDynamicIndexing: an array of sampled
+    // images or samplers may be indexed by a dynamically uniform value, as the SDF screen shading always indexes its
+    // screen sources and samplers, so a device without it is refused.
+    private const uint SampledImageArrayDynamicIndexingFeatureIndex = 34u;
 
     // 0-based VkPhysicalDeviceFeatures flag indices enabled only when the device reports them: textureCompressionBC,
-    // and storage-image read/write without a shader format qualifier (shaderStorageImage*WithoutFormat), needed to
-    // write image views whose format (commonly BGRA8) has no GLSL format qualifier; callers that need those probe
-    // separately and fall back otherwise.
+    // storage-image read/write without a shader format qualifier (shaderStorageImage*WithoutFormat), needed to write
+    // image views whose format (commonly BGRA8) has no GLSL format qualifier, and dynamic indexing of storage-image
+    // arrays; callers that need those probe separately and fall back otherwise.
     private static readonly uint[] OptionalBaseFeatureIndices = [TextureCompressionBcFeatureIndex, 31u, 32u, 36u];
 
     private readonly IVulkanLogicalDeviceApi m_logicalDeviceApi;
@@ -210,12 +215,32 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
 
         return (extensions, featureStructureTypes);
     }
-    private IReadOnlyList<uint> ComposeFeatureIndices(VulkanInstanceCommands instance, nint physicalDeviceHandle) {
-        var support = m_physicalDeviceApi.GetFeatureSupport(
+    private IReadOnlyList<uint> ComposeFeatureIndices(VulkanInstanceCommands instance, nint physicalDeviceHandle) =>
+        FeatureIndicesOf(support: m_physicalDeviceApi.GetFeatureSupport(
             instance: instance,
             physicalDeviceHandle: physicalDeviceHandle
-        );
-        var featureIndices = new List<uint>();
+        ));
+
+    /// <summary>Returns the <c>VkPhysicalDeviceFeatures</c> flag indices a device is created with: the required
+    /// <c>shaderSampledImageArrayDynamicIndexing</c>, which the SDF screen shading's indexed screen sources and samplers
+    /// need, then each optional feature the device reports.</summary>
+    /// <param name="support">The device's base features, one flag per <c>VkPhysicalDeviceFeatures</c> member in
+    /// declaration order.</param>
+    /// <returns>The flag indices to enable.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="support"/> is <see langword="null"/>.</exception>
+    /// <exception cref="GpuDeviceUnavailableException">The device does not report
+    /// <c>shaderSampledImageArrayDynamicIndexing</c>; the message names it.</exception>
+    public static IReadOnlyList<uint> FeatureIndicesOf(IReadOnlyList<bool> support) {
+        ArgumentNullException.ThrowIfNull(argument: support);
+
+        if (
+            (SampledImageArrayDynamicIndexingFeatureIndex >= support.Count) ||
+            !support[((int)SampledImageArrayDynamicIndexingFeatureIndex)]
+        ) {
+            throw VulkanResultExtensions.Unavailable(reason: "The Vulkan device does not report shaderSampledImageArrayDynamicIndexing, which the SDF screen shading needs to index its screen sources and samplers.");
+        }
+
+        var featureIndices = new List<uint> { SampledImageArrayDynamicIndexingFeatureIndex };
 
         foreach (var index in OptionalBaseFeatureIndices) {
             if (
@@ -228,6 +253,7 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
 
         return featureIndices;
     }
+
     private VkQueue CreateQueue(
         VulkanDeviceCommands device,
         uint queueFamilyIndex
@@ -334,11 +360,12 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
 
         RequireGroupedBinding(capabilities: capabilities);
 
-        var (extensionNames, featureStructureTypes) = ComposeExtensionsAndFeatures(
+        var featureIndices = ComposeFeatureIndices(
             instance: instance.Commands,
             physicalDeviceHandle: physicalDevice.Handle
         );
-        var featureIndices = ComposeFeatureIndices(
+
+        var (extensionNames, featureStructureTypes) = ComposeExtensionsAndFeatures(
             instance: instance.Commands,
             physicalDeviceHandle: physicalDevice.Handle
         );

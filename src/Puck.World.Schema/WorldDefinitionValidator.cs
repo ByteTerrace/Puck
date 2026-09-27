@@ -1998,6 +1998,9 @@ public static partial class WorldDefinitionValidator {
                 ) {
                     errors.Add(item: $"{path} half extents must be finite and positive.");
                 }
+                if (!Enum.IsDefined(value: screen.Filter)) {
+                    errors.Add(item: $"{path}.filter {((uint)screen.Filter)} is not a sampler filter; a screen samples its source Nearest or Linear.");
+                }
 
                 // The declared source and each magazine entry cross the same source gate (a magazine entry could
                 // otherwise name an undeclared camera).

@@ -33,9 +33,9 @@ public static class SdfWorldInterfaces {
     public const string TileGrid = "tileGrid";
     /// <summary>The <see cref="World"/> pass-group value holding every view the frame renders.</summary>
     public const string ViewportCount = "viewportCount";
-    /// <summary>The <see cref="World"/> pass-group value whose bit <c>s</c> is set when screen source <c>s</c> is
-    /// bound this frame.</summary>
-    public const string ScreenMask = "screenMask";
+    /// <summary>The <see cref="World"/> pass-group value holding one past the highest screen whose source is bound this
+    /// frame, or zero when none is: the bound the screen-light loop runs to.</summary>
+    public const string ScreenCount = "screenCount";
     /// <summary>The <see cref="World"/> pass-group value holding the live program's per-tile instance-mask
     /// width.</summary>
     public const string InstanceMaskWordCount = "instanceMaskWordCount";
@@ -77,6 +77,10 @@ public static class SdfWorldInterfaces {
     public const string Output = "output";
     /// <summary>The screen-surface table, three float4 rows per screen slot.</summary>
     public const string ScreenSurfaces = "screenSurfaces";
+    /// <summary>The screen-mapping table, seven float4 rows per screen slot: the draw form of the mapping each screen
+    /// publishes (<see cref="Puck.Commands.SourceMapping.Draw"/>), which the screen shading draws its face from, and the
+    /// screen's state, whether its source is bound and the sampler it reads through.</summary>
+    public const string ScreenMappings = "screenMappings";
     /// <summary>The screen-light and environment table.</summary>
     public const string ScreenLights = "sdfScreenLights";
     /// <summary>The glyph decal table.</summary>
@@ -93,8 +97,14 @@ public static class SdfWorldInterfaces {
     public const string MeshVisibility = "meshVisibility";
     /// <summary>The glyph atlas.</summary>
     public const string GlyphAtlas = "sdfGlyphAtlas";
-    /// <summary>The one nearest sampler the screen sources and the glyph atlas are sampled through.</summary>
-    public const string ScreenSampler = "screenSampler";
+    /// <summary>The screen sources: one sampled image per screen, indexed by screen index.</summary>
+    public const string ScreenSources = "screenSources";
+    /// <summary>The engine's samplers, one per filter, indexed by the filter's value
+    /// (<see cref="GpuSamplerFilter"/>): a screen samples its source through the one its row chooses, and the glyph atlas
+    /// through the nearest one.</summary>
+    public const string Samplers = "samplers";
+    /// <summary>The length of <see cref="Samplers"/>: one sampler per <see cref="GpuSamplerFilter"/>.</summary>
+    public const uint SamplerCount = 2;
     /// <summary>The <see cref="BrickBake"/> request buffer: a three-row header, then the carves.</summary>
     public const string BakeRequest = "bakeRequest";
     /// <summary>The <see cref="BrickBake"/> brick pool the baker writes.</summary>
@@ -117,7 +127,7 @@ public static class SdfWorldInterfaces {
             Value(name: InstanceMaskWordCount, type: ShaderValueType.Uint),
             Value(name: MeshDraws, type: ShaderValueType.Uint),
             Value(name: SampleIndex, type: ShaderValueType.Uint),
-            Value(name: ScreenMask, type: ShaderValueType.Uint),
+            Value(name: ScreenCount, type: ShaderValueType.Uint),
             Value(name: TileGrid, type: ShaderValueType.Uint2),
             Value(name: ViewBase, type: ShaderValueType.Uint),
             Value(name: ViewportCount, type: ShaderValueType.Uint),
@@ -141,16 +151,18 @@ public static class SdfWorldInterfaces {
                 type: ShaderValueType.Float4
             ),
             Read(element: ShaderValueType.Float4, name: ScreenSurfaces),
+            Read(element: ShaderValueType.Float4, name: ScreenMappings),
             Read(element: ShaderValueType.Float4, name: ScreenLights),
             Read(element: ShaderValueType.Uint4, name: DecalCells),
             Read(element: ShaderValueType.Float, name: BrickPool),
             Read(element: ShaderValueType.Float4, name: Volumes),
             Read(element: ShaderValueType.Uint, name: MeshRegion),
-            .. Enumerable.Range(count: SdfWorldEngine.MaxScreenSurfaces, start: 0).Select(selector: static screen => ShaderInterfaceMember.SampledImage(
+            ShaderInterfaceMember.SampledImage(
                 group: ShaderInterfaceGroup.Pass,
-                name: ScreenSource(screen: screen),
+                length: SdfWorldEngine.MaxScreenSurfaces,
+                name: ScreenSources,
                 type: ShaderValueType.Float4
-            )),
+            ),
             ShaderInterfaceMember.SampledImage(
                 group: ShaderInterfaceGroup.Pass,
                 name: GlyphAtlas,
@@ -163,7 +175,8 @@ public static class SdfWorldInterfaces {
             ),
             ShaderInterfaceMember.Sampler(
                 group: ShaderInterfaceGroup.Pass,
-                name: ScreenSampler
+                length: SamplerCount,
+                name: Samplers
             ),
         ]
     );
@@ -242,14 +255,6 @@ public static class SdfWorldInterfaces {
     /// <returns>The pushed index.</returns>
     public static uint MeshPushedIndex(uint view, uint draw) =>
         (view << MeshViewShift) | draw;
-    /// <summary>Returns the member name of a screen source: <c>screenSource</c> followed by its screen index.</summary>
-    /// <param name="screen">The screen index, below <see cref="SdfWorldEngine.MaxScreenSurfaces"/>.</param>
-    /// <returns>The member name.</returns>
-    public static string ScreenSource(int screen) =>
-        string.Create(
-            provider: System.Globalization.CultureInfo.InvariantCulture,
-            handler: $"screenSource{screen}"
-        );
     /// <summary>Returns the pass-group binding number of a member of <see cref="World"/> or
     /// <see cref="BrickBake"/>.</summary>
     /// <param name="layout">The interface's layout.</param>

@@ -8,7 +8,9 @@ namespace Puck.Vulkan.Tests;
 /// (<see cref="VulkanLogicalDeviceFactory.RequireGroupedBinding"/>): a device reporting at least
 /// <see cref="GpuPipelineLayoutDescription.GroupCount"/> descriptor sets and
 /// <see cref="GpuPipelineLayoutDescription.PushIndexBytes"/> push-constant bytes is accepted, and one below either is
-/// refused as unavailable, naming each limit it misses.</summary>
+/// refused as unavailable, naming each limit it misses; and a device that does not report
+/// <c>shaderSampledImageArrayDynamicIndexing</c>, which the SDF screen shading needs, is refused by name
+/// (<see cref="VulkanLogicalDeviceFactory.FeatureIndicesOf"/>).</summary>
 public sealed class VulkanGroupedBindingFloorLawTests {
     private static GpuDeviceCapabilities Device(uint sets, uint pushBytes) => new(
         Backend: "vulkan",
@@ -42,6 +44,34 @@ public sealed class VulkanGroupedBindingFloorLawTests {
         Assert.Contains(
             actualString: refusal.Message,
             expectedSubstring: $"The Vulkan device cannot bind Puck's grouped binding contract: {missing}"
+        );
+    }
+    // A device reporting every base feature but dynamic indexing of sampled-image arrays, or reporting too few features
+    // to name it, is refused naming the feature; one reporting it enables it first, then the optional features it reports.
+    [Fact]
+    public void ADeviceWithoutSampledImageArrayDynamicIndexingIsRefusedByName() {
+        const int SampledImageArrayDynamicIndexing = 34;
+        var every = Enumerable.Repeat(count: 55, element: true).ToArray();
+        var without = every.ToArray();
+
+        without[SampledImageArrayDynamicIndexing] = false;
+
+        foreach (var support in new[] { without, every[..SampledImageArrayDynamicIndexing] }) {
+            var refusal = Assert.Throws<GpuDeviceUnavailableException>(testCode: () => VulkanLogicalDeviceFactory.FeatureIndicesOf(support: support));
+
+            Assert.Contains(
+                actualString: refusal.Message,
+                expectedSubstring: "does not report shaderSampledImageArrayDynamicIndexing"
+            );
+        }
+
+        Assert.Equal(
+            actual: VulkanLogicalDeviceFactory.FeatureIndicesOf(support: every)[0],
+            expected: ((uint)SampledImageArrayDynamicIndexing)
+        );
+        Assert.Equal(
+            actual: VulkanLogicalDeviceFactory.FeatureIndicesOf(support: [.. Enumerable.Range(count: 55, start: 0).Select(selector: static index => (index == SampledImageArrayDynamicIndexing))]),
+            expected: [((uint)SampledImageArrayDynamicIndexing)]
         );
     }
 }

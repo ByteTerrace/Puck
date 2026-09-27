@@ -148,5 +148,10 @@
 #define SDF_FLARE_MIN_SCALE            0.05
 #define SDF_LANE_ERODE_RAGGED_AMOUNT   0.35
 #define SDF_SCREEN_MATERIAL            65535
+#define SDF_MAX_SCREEN_SURFACES        32u
+
+// Puck.Abstractions.Gpu.GpuSamplerFilter.
+#define SDF_FILTER_NEAREST 0u
+#define SDF_FILTER_LINEAR  1u
 
 #endif // SDF_ISA_HLSLI

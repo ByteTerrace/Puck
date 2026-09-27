@@ -377,11 +377,11 @@ public sealed partial class WorldViewPaneMappingLawTests : IDisposable {
         var tangent = Math.Tan(a: 0.5);
         var u = (0.5 + ((5.0 * (((2.0 * (20.5 / 32.0)) - 1.0) * tangent)) / 2.4));
         var v = (0.5 - ((5.0 * ((1.0 - (2.0 * (40.5 / 64.0))) * tangent)) / 1.8));
-        const double Inner = (1.0 - (2.0 * WorldScreenMappings.Bezel));
+        var glass = ((SourceWarpInverse.Affine)WorldScreenMappings.Glass.Inverse!);
 
         Assert.Equal(
             actual: (walk.Steps[1].Hit.PixelX, walk.Steps[1].Hit.PixelY),
-            expected: (((long)Math.Floor(d: (((u - WorldScreenMappings.Bezel) / Inner) * SourceWidth))), ((long)Math.Floor(d: (((v - WorldScreenMappings.Bezel) / Inner) * SourceHeight))))
+            expected: (((long)Math.Floor(d: (((glass.M11 * u) + glass.M13) * SourceWidth))), ((long)Math.Floor(d: (((glass.M22 * v) + glass.M23) * SourceHeight))))
         );
         Assert.Equal(
             actual: (walk.Steps[1].Hit.PixelX, walk.Steps[1].Hit.PixelY),

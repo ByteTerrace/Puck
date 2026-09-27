@@ -5,7 +5,7 @@ using Puck.SignedDistance;
 namespace Puck.SdfVm;
 
 // The host-written tables: program words, viewport rows, dynamic transforms, the frame instance grid, screen surfaces,
-// screen lights, volumes, glyph decals and mesh draws, each a GpuRegion under the policy GpuResidency.Select chooses for
+// screen mappings, screen lights, volumes, glyph decals and mesh draws, each a GpuRegion under the policy GpuResidency.Select chooses for
 // its size with the frame ring's reader in flight, a ring's buffers in the memory GpuResidency.RingMemory chooses. A
 // frame writes each table into its region, which owes only the words that differ; the upload pass flushes this ring
 // slot's share (its fence has retired), records each staged region's copy, then one transition per copied buffer so
@@ -21,11 +21,12 @@ public sealed partial class SdfWorldEngine {
     private const int DecalRegionIndex = 7;
     private const int DynamicTransformRegionIndex = 2;
     private const int InstanceGridRegionIndex = 3;
-    private const int MeshRegionIndex = 8;
+    private const int MeshRegionIndex = 9;
     private const int ProgramRegionIndex = 0;
     // The per-frame regions RegionAt names, the mesh region last.
-    private const int RegionCount = 9;
+    private const int RegionCount = 10;
     private const int ScreenLightRegionIndex = 5;
+    private const int ScreenMappingRegionIndex = 8;
     private const int ScreenSurfaceRegionIndex = 4;
     private const int ViewportRegionIndex = 1;
     private const int VolumeRegionIndex = 6;
@@ -34,6 +35,7 @@ public sealed partial class SdfWorldEngine {
     private readonly GpuRegion m_viewportRegion;
     private readonly GpuRegion m_dynamicTransformRegion;
     private readonly GpuRegion m_screenSurfaceRegion;
+    private readonly GpuRegion m_screenMappingRegion;
     private readonly GpuRegion m_screenLightRegion;
     private readonly GpuRegion m_volumeRegion;
     // The glyph decal table (Stage 1 only): the leading per-screen descriptor band, then the shared cell region. All
@@ -81,6 +83,7 @@ public sealed partial class SdfWorldEngine {
             WriteWorldBuffer(buffer: m_dynamicTransformRegion.Buffer(slot: slot), member: SdfWorldInterfaces.DynamicTransforms, set: views);
             WriteWorldBuffer(buffer: m_instanceGridRegion.Buffer(slot: slot), member: SdfWorldInterfaces.FrameInstanceGrid, set: views);
             WriteWorldBuffer(buffer: m_screenSurfaceRegion.Buffer(slot: slot), member: SdfWorldInterfaces.ScreenSurfaces, set: views);
+            WriteWorldBuffer(buffer: m_screenMappingRegion.Buffer(slot: slot), member: SdfWorldInterfaces.ScreenMappings, set: views);
             WriteWorldBuffer(buffer: m_screenLightRegion.Buffer(slot: slot), member: SdfWorldInterfaces.ScreenLights, set: views);
             WriteWorldBuffer(buffer: m_decalRegion.Buffer(slot: slot), member: SdfWorldInterfaces.DecalCells, set: views);
             WriteWorldBuffer(buffer: m_volumeRegion.Buffer(slot: slot), member: SdfWorldInterfaces.Volumes, set: views);
@@ -172,6 +175,7 @@ public sealed partial class SdfWorldEngine {
         ScreenLightRegionIndex => m_screenLightRegion,
         VolumeRegionIndex => m_volumeRegion,
         DecalRegionIndex => m_decalRegion,
+        ScreenMappingRegionIndex => m_screenMappingRegion,
         _ => m_meshRegion,
     };
     // The debug name of region index's objects, its reserved copy sets included: its table's role.
@@ -184,6 +188,7 @@ public sealed partial class SdfWorldEngine {
         ScreenLightRegionIndex => "screen-lights",
         VolumeRegionIndex => "volumes",
         DecalRegionIndex => "decals",
+        ScreenMappingRegionIndex => "screen-mappings",
         MeshRegionIndex => "mesh-region",
         _ => "brick-staging",
     });

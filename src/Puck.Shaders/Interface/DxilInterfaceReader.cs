@@ -239,6 +239,7 @@ public sealed unsafe class DxilInterfaceReader : IDisposable {
 
                     bindings.Add(item: new ShaderInterfaceBinding(
                         Binding: bind.BindPoint,
+                        Count: bind.BindCount,
                         // A structured or byte-address input reports its element stride in NumSamples, 0 for a
                         // byte-address one.
                         ElementStride: ((bind.Type is InputStructured or InputReadWriteStructured or InputByteAddress or InputReadWriteByteAddress or InputAppendStructured or InputConsumeStructured or InputReadWriteStructuredWithCounter)

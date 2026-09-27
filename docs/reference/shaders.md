@@ -651,6 +651,12 @@ binding allocator is consulted:
   images, buffers and samplers follow at bindings 1, 2, and so on in
   declaration order.
   A group with no block numbers them from 0.
+- A sampled image or a sampler may be an array a pass indexes (a member's
+  `length`). An array of `n` takes `n` bindings' worth of registers from its
+  binding on, so the member after it starts `n` later, and the pipeline
+  layout binds `n` descriptors there. A pass indexes it only by a value
+  uniform across the wave; the SDF screen shading loops over the distinct
+  screens in a wave to keep it so.
 - A binding's Direct3D 12 register number equals its Vulkan binding number, in
   the register class its kind takes: `b`, `t`, `u` or `s`.
 - A block places its members in declaration order. A scalar sits on a 4-byte
@@ -668,7 +674,8 @@ binding allocator is consulted:
 interface and the group, such as `PixelatePass`, and one constant buffer
 variable per group, such as `passGroup`. Every block member carries
 `[[vk::offset(n)]]`, and every binding pairs `[[vk::binding(b, set)]]` with
-`register(xb, spaceS)`. An array is read through an accessor such as
+`register(xb, spaceS)`; an image or sampler array declares its length. An
+array is read through an accessor such as
 `channelLevelsAt(i)`, which hides the 16-byte row an element is stored in.
 The padding is what makes Direct3D 12's sequential constant-buffer packing
 land each member on the offset Vulkan is told explicitly. The text is a pure
@@ -682,7 +689,9 @@ sampled image, storage image and sampler. Push constants are not a kind. A
 pushed block, the pushed index, is a constant buffer marked `Pushed`, which
 only SPIR-V can tell apart; DXIL reflects it as the constant buffer at `b0` in
 space 4, which `ShaderInterfaceLayout.DxilBindings` states. A buffer record
-carries its `ElementStride` ([buffer elements](#buffer-elements)).
+carries its `ElementStride` ([buffer elements](#buffer-elements)), and every
+record its `Count` of descriptors: an image or sampler array's length, read
+from SPIR-V's array type and DXIL's bind count, and one otherwise.
 
 - `SpirvInterfaceReader` parses a SPIR-V module's `DescriptorSet`, `Binding`,
   `Offset` and `ArrayStride` decorations, its push-constant variable and its
