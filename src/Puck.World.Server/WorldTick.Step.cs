@@ -783,6 +783,8 @@ public sealed partial class WorldTick {
         lock (Host.AuthorityGate) {
             if (Host.AuthorityRetiring) { return false; }
             Host.MutationBudget.BeginTick();
+            // A paused or stopped world still ends a session whose observer faulted.
+            Host.EndFaultedSessions();
             Host.Extensions.Drain();
             return DrainPendingOps(tick: m_lastCompletedTick);
         }

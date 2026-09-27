@@ -41,8 +41,8 @@ public sealed class WorldSessionObservation : IDisposable {
     /// <param name="candidate">The candidate definition.</param>
     /// <returns>The disclosed definition, or <see langword="null"/> when nothing of it could reach the observer: a
     /// candidate that refuses the viewer or discloses it frames alone.</returns>
-    /// <exception cref="WorldRenderMeasureRefusedException">The candidate would disclose a projection that cannot be
-    /// composed, read from the candidate's own store: a measurer refuses it rather than measuring nothing.</exception>
+    /// <exception cref="WorldRenderMeasureRefusedException">The candidate's store cannot be laid out, or its projection
+    /// cannot be composed: a measurer refuses it rather than measuring nothing.</exception>
     public WorldDefinition? Disclose(WorldDefinition candidate) {
         ArgumentNullException.ThrowIfNull(argument: candidate);
 
@@ -61,30 +61,33 @@ public sealed class WorldSessionObservation : IDisposable {
             return null;
         }
 
-        // The candidate's own store, at this world's clock: a projection reads the audiences and values the
-        // candidate declares, not the ones the live document still holds. The session a screen admits next is not
-        // known yet, so it is composed for the public observer, which is what a session is to every reader list.
+        // The candidate's own store, laid out with the lanes validation lays it out with, at this world's clock: a
+        // projection reads the audiences and values the candidate declares, not the ones the live document still holds.
+        // Which session a screen admits next, and which reader lists name it, is not known, so the projection is the
+        // upper bound: every reader restriction admitted. Any failure to lay out or compose it is the candidate's
+        // refusal, never a throw through the envelope or the step.
         var time = m_server.Time;
 
-        if (!StateArena.TryCreate(
-            arena: out var arena,
-            catalog: candidate.StateCatalog,
-            options: null,
-            reason: out var reason,
-            section: candidate.StateRaw,
-            time: in time
-        )) {
-            throw new WorldRenderMeasureRefusedException(message: $"the candidate's state does not load into a store to disclose it to {Session.Describe()}: {reason}");
-        }
-
         try {
+            if (!StateArena.TryCreate(
+                arena: out var arena,
+                catalog: candidate.StateCatalog,
+                options: WorldSlotLanes.Options(definition: candidate),
+                reason: out var reason,
+                section: candidate.StateRaw,
+                time: in time
+            )) {
+                throw new WorldRenderMeasureRefusedException(message: $"the candidate's state does not load into a store to disclose it to {Session.Describe()}: {reason}");
+            }
+
             return sink.Disclose(
                 arena: arena,
                 definition: candidate,
                 recipient: null,
-                tier: verdict.Tier
+                tier: verdict.Tier,
+                unrestricted: true
             );
-        } catch (InvalidOperationException exception) {
+        } catch (Exception exception) when ((exception is not WorldRenderMeasureRefusedException)) {
             throw new WorldRenderMeasureRefusedException(
                 innerException: exception,
                 message: $"the candidate cannot be disclosed to {Session.Describe()}: {exception.Message}"

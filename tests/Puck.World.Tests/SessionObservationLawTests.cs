@@ -399,50 +399,48 @@ public sealed class SessionObservationLawTests {
         Assert.False(condition: fixture.Server.IsLiveSession(principal: newer.Session));
         Assert.Empty(collection: fixture.Server.GrantRows(principal: newer.Session));
     }
-    [Fact]
-    public void ACandidateIsDisclosedFromItsOwnStore_AndOneThatCannotProjectIsRefusedNotMeasuredAsNothing() {
-        // A candidate declares a vector row and binds the ball's position to it, public or restricted.
-        WorldDefinition WithHue(StateVisibility? visibility, bool bound) {
-            var document = Document(tier: WorldDisclosureTier.Presentation);
-            var state = (document.StateRaw ?? new WorldStateSection());
-            var creations = document.Creations.Select(selector: creation => {
-                if (
-                    !bound ||
-                    (creation.Id != "ball")
-                ) {
-                    return creation;
-                }
 
-                var position = System.Text.Json.JsonSerializer.Deserialize<DocumentVector3>(
-                    json: "\"state.hue\"",
-                    options: DocumentJsonOptions.Shared
-                )!;
+    // A candidate declaring a vector row and binding the ball's position to it, public or restricted.
+    private static WorldDefinition WithHue(StateVisibility? visibility, bool bound) {
+        var document = Document(tier: WorldDisclosureTier.Presentation);
+        var state = (document.StateRaw ?? new WorldStateSection());
+        var creations = document.Creations.Select(selector: creation => {
+            if (
+                !bound ||
+                (creation.Id != "ball")
+            ) {
+                return creation;
+            }
 
-                return (creation with {
-                    Document = (creation.Document with { Shapes = [.. creation.Document.Shapes!.Select(selector: shape => (shape with { Position = position }))] }),
-                    HashRaw = null,
-                });
-            }).ToList();
+            var position = System.Text.Json.JsonSerializer.Deserialize<DocumentVector3>(
+                json: "\"state.hue\"",
+                options: DocumentJsonOptions.Shared
+            )!;
 
-            return document with {
-                CreationsRaw = creations,
-                StateRaw = (state with {
-                    World = [.. (state.World ?? []), new WorldStateRow(
-                        Cells: [new StateCell(
-                            Key: StateRow.SlotKey,
-                            Value: CellValue.Text(value: "[0,0,0]")
-                        )],
-                        Kind: CellKind.Text,
-                        Name: CellName.Parse(candidate: "hue"),
-                        Visibility: visibility
+            return (creation with {
+                Document = (creation.Document with { Shapes = [.. creation.Document.Shapes!.Select(selector: shape => (shape with { Position = position }))] }),
+                HashRaw = null,
+            });
+        }).ToList();
+
+        return document with {
+            CreationsRaw = creations,
+            StateRaw = (state with {
+                World = [.. (state.World ?? []), new WorldStateRow(
+                    Cells: [new StateCell(
+                        Key: StateRow.SlotKey,
+                        Value: CellValue.Text(value: "[0,0,0]")
                     )],
-                }),
-            };
-        }
+                    Kind: CellKind.Text,
+                    Name: CellName.Parse(candidate: "hue"),
+                    Visibility: visibility
+                )],
+            }),
+        };
+    }
 
-        var restricted = new StateVisibility(Readers: ["seat1"]);
-
-        // The live document declares no such row at all: only the candidate's own store holds it.
+    [Fact]
+    public void ACandidateIsMeasuredAsTheMostAnySessionCouldReceive_AndOneWhoseStoreCannotBeLaidOutIsRefused() {
         using var fixture = Fixtures.FreshServer(definition: Document(tier: WorldDisclosureTier.Presentation));
 
         var (observation, _, refusal) = Observe(fixture: fixture);
@@ -452,13 +450,24 @@ public sealed class SessionObservationLawTests {
             userMessage: refusal
         );
 
-        // Read from the candidate's own store: the live store has no such row to read it from.
+        // A reader list may name a session, so a restricted binding is measured, not refused.
         Assert.NotNull(@object: observation!.Disclose(candidate: WithHue(
             bound: true,
-            visibility: null
+            visibility: new StateVisibility(Readers: ["seat1"])
         )));
 
         var envelope = new WorldRenderEnvelope();
+        var unplaceable = Document(tier: WorldDisclosureTier.Presentation);
+
+        unplaceable = unplaceable with {
+            StateRaw = ((unplaceable.StateRaw ?? new WorldStateSection()) with {
+                World = [.. (unplaceable.StateRaw?.World ?? []), new WorldStateRow(
+                    Kind: CellKind.Vector,
+                    Name: CellName.Parse(candidate: "drift"),
+                    Space: "nowhere"
+                )],
+            }),
+        };
 
         using (envelope.Configure(
             allowGrowth: true,
@@ -469,12 +478,9 @@ public sealed class SessionObservationLawTests {
             programWordCapacity: 0
         )) {
             Laws.RefusalWithControl(
-                lawId: "session.unprojectable-candidate-is-refused",
+                lawId: "session.unplaceable-candidate-is-refused-not-thrown",
                 deniedOutcome: () => envelope.TryFit(
-                    candidate: WithHue(
-                        bound: true,
-                        visibility: restricted
-                    ),
+                    candidate: unplaceable,
                     reason: out _
                 ),
                 controlOutcome: () => envelope.TryFit(
@@ -486,6 +492,154 @@ public sealed class SessionObservationLawTests {
                 )
             );
         }
+    }
+    [Fact]
+    public void DealtChildrenAPublicReaderIsDenied_CountTowardTheFit() {
+        const string Store = "store";
+        var accounts = new WorldStateRow(
+            Capacity: 4,
+            Cells: [
+                new StateCell(Key: CellName.Parse(candidate: "a"), Value: CellValue.Text(value: "a")),
+                new StateCell(Key: CellName.Parse(candidate: "b"), Value: CellValue.Text(value: "b")),
+            ],
+            Kind: CellKind.Text,
+            Name: CellName.Parse(candidate: "accounts"),
+            Visibility: new StateVisibility(Readers: ["seat1"])
+        );
+        var template = new WorldPlacement(
+            Deal: new WorldPlacementDeal(Row: "accounts"),
+            Distribution: new WorldDistribution(
+                Fill: new WorldSequence(
+                    Name: WorldSequence.None,
+                    Offset: 0,
+                    Step: 0f
+                ),
+                Region: new WorldDistributionRegion.Lattice(
+                    CountA: 4,
+                    CountB: 1,
+                    StepA: new DocumentVector3(value: new System.Numerics.Vector3(x: 2f, y: 0f, z: 0f)),
+                    StepB: new DocumentVector3(value: new System.Numerics.Vector3(x: 0f, y: 0f, z: 1f))
+                )
+            ),
+            Id: "stores",
+            Position: new DocumentVector3(value: new System.Numerics.Vector3(x: 10f, y: 0f, z: 10f)),
+            PrototypeId: Store,
+            Scale: 1f,
+            Solid: new WorldSolid(Margin: 0f),
+            YawDegrees: 0f
+        );
+        var document = Document(tier: WorldDisclosureTier.Presentation);
+
+        using var fixture = Fixtures.FreshServer(definition: document with {
+            CreationsRaw = [.. document.Creations, CreationFixtures.UnitSphere(id: Store)],
+            PlacementRowsRaw = [.. document.Placements, template],
+            StateRaw = ((document.StateRaw ?? new WorldStateSection()) with { World = [.. (document.StateRaw?.World ?? []), accounts] }),
+        });
+
+        fixture.Step();
+        fixture.Step();
+
+        var candidate = fixture.Server.Definition;
+
+        var (observation, _, refusal) = Observe(fixture: fixture);
+
+        Assert.True(
+            condition: (observation is not null),
+            userMessage: refusal
+        );
+
+        // What a public reader is handed deals no child from a row it may not read.
+        var time = fixture.Server.Time;
+        var publicView = WorldProjection.Compose(
+            arena: fixture.Server.Arena,
+            authority: fixture.Server.AuthorityIdentity,
+            definition: candidate,
+            revision: 1,
+            tier: WorldDisclosureTier.Presentation,
+            time: in time
+        )!;
+
+        Assert.True(condition: WorldProjection.TryToDefinition(
+            definition: out var publicDefinition,
+            projection: publicView,
+            reason: out var hydrateReason
+        ), userMessage: hydrateReason);
+        Assert.True(
+            condition: (publicDefinition!.Placements.Count < candidate.Placements.Count),
+            userMessage: "the fixture deals no child a public reader is denied, so it discriminates nothing"
+        );
+        Assert.Equal(
+            actual: observation!.Disclose(candidate: candidate)!.Placements.Count,
+            expected: candidate.Placements.Count
+        );
+    }
+    [Fact]
+    public void AFaultedSession_HoldsNothingFromTheMomentOfTheFault() {
+        (bool Live, bool Allowed) AfterAFaultingStep(IClientSink sink) {
+            using var fixture = Fixtures.FreshServer(definition: Document(tier: WorldDisclosureTier.Replica));
+            var observation = fixture.Server.TryObserveAsSession(
+                refusal: out var refusal,
+                sink: sink,
+                sourceAuthority: Viewer
+            );
+
+            Assert.True(
+                condition: (observation is not null),
+                userMessage: refusal
+            );
+            fixture.Step();
+
+            // Between this step's delivery and the next step's start: the end has not applied yet.
+            return (
+                fixture.Server.IsLiveSession(principal: observation!.Session),
+                fixture.Server.Grants.Allows(
+                capability: WorldCapability.Observe,
+                principal: observation.Session,
+                subject: GrantSubject.All
+            ).IsAllowed
+            );
+        }
+
+        Assert.Equal(
+            actual: AfterAFaultingStep(sink: new FaultingAfterPrimerSink()),
+            expected: (false, false)
+        );
+        Assert.Equal(
+            actual: AfterAFaultingStep(sink: new WorldSessionMirror(placeholder: WorldProjection.Undisclosed)),
+            expected: (true, true)
+        );
+    }
+    [Fact]
+    public void APausedWorld_EndsAFaultedSessionAtItsNextAdministrativeDrain() {
+        bool RowsLeftAfterTwoDrains(IClientSink sink) {
+            using var fixture = Fixtures.FreshServer(definition: Document(tier: WorldDisclosureTier.Replica));
+            var observation = fixture.Server.TryObserveAsSession(
+                refusal: out var refusal,
+                sink: sink,
+                sourceAuthority: Viewer
+            );
+
+            Assert.True(
+                condition: (observation is not null),
+                userMessage: refusal
+            );
+
+            // A console edit applied without a step delivers the definition, which the faulting observer throws on.
+            fixture.Server.EnqueueMutation(mutation: new WorldMutation.RemovePlacement(
+                Id: "ball",
+                Principal: Principal.Console
+            ));
+            _ = fixture.Server.DrainAdministrative();
+            _ = fixture.Server.DrainAdministrative();
+
+            return (fixture.Server.GrantRows(principal: observation!.Session).Count > 0);
+        }
+
+        Laws.RefusalWithControl(
+            lawId: "session.paused-world-ends-faulted-session",
+            deniedOutcome: () => RowsLeftAfterTwoDrains(sink: new FaultingOnDefinitionSink()),
+            controlOutcome: () => RowsLeftAfterTwoDrains(sink: new WorldSessionMirror(placeholder: WorldProjection.Undisclosed))
+        );
     }
     [Fact]
     public void AnObserverThatFaultsAfterItsPrimer_EndsItsSessionAtTheNextStep() {
@@ -626,6 +780,26 @@ public sealed class SessionObservationLawTests {
             if (++m_snapshots > 1) {
                 throw new InvalidOperationException(message: "faulting observer");
             }
+        }
+        public void DeliverState(WorldDefinition definition, in WorldStateStamp stamp) {
+        }
+    }
+    // An observer that takes its attach primer, then throws on the next definition it is delivered.
+    private sealed class FaultingOnDefinitionSink : IClientSink {
+        private int m_definitions;
+
+        public void DeliverAnswer(in QueryAnswer answer) {
+        }
+        public void DeliverComposition(WorldComposition composition) {
+        }
+        public void DeliverDefinition(WorldDefinition definition) {
+            if (++m_definitions > 1) {
+                throw new InvalidOperationException(message: "faulting observer");
+            }
+        }
+        public void DeliverSessionLever(WorldSessionLever lever) {
+        }
+        public void DeliverSnapshot(in WorldSnapshot snapshot) {
         }
         public void DeliverState(WorldDefinition definition, in WorldStateStamp stamp) {
         }

@@ -222,7 +222,10 @@ public static class WorldProjection {
     /// <param name="recipient">The authenticated recipient, or null for public observation.</param>
     /// <param name="arena">The authority's live store, which every disclosed value and audience is read from.</param>
     /// <param name="time">The clocks a disclosed cell's value-over-time trait is read at.</param>
-    public static WorldProjectionDocument? Compose(WorldDefinition definition, WorldDisclosureTier tier, string authority, int revision, StateArena arena, in ArenaTime time, Principal? recipient = null) {
+    /// <param name="unrestricted">Whether to compose as a reader every restriction admits — the most any recipient could
+    /// be handed, which a measurement sizing for every possible recipient reads — instead of as
+    /// <paramref name="recipient"/>.</param>
+    public static WorldProjectionDocument? Compose(WorldDefinition definition, WorldDisclosureTier tier, string authority, int revision, StateArena arena, in ArenaTime time, Principal? recipient = null, bool unrestricted = false) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         if (tier != WorldDisclosureTier.Presentation) {
@@ -234,7 +237,8 @@ public static class WorldProjection {
         var placements = WorldStateDisclosure.Disclose(
             arena: arena,
             definition: definition,
-            recipient: recipient
+            recipient: recipient,
+            unrestricted: unrestricted
         ).Definition.Placements;
         var kits = new WorldProjectedKit[definition.Kits.Count];
 
@@ -298,13 +302,15 @@ public static class WorldProjection {
             arena: arena,
             definition: definition,
             graph: projection,
-            recipient: recipient
+            recipient: recipient,
+            unrestricted: unrestricted
         );
         var observations = WorldStateDisclosure.Compose(
             arena: arena,
             definition: definition,
             recipient: recipient,
-            time: in time
+            time: in time,
+            unrestricted: unrestricted
         );
 
         projection = projection with {

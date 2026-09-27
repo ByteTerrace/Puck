@@ -37,6 +37,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         } catch (Exception exception) {
             Fault = exception;
             observation.MarkEnded();
+            server.GrantTable.MarkSessionFaulted(session: observation.Session);
             server.NoteFaultedSession(session: observation.Session);
 
             throw;
@@ -53,7 +54,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     }
 
     /// <summary>Discloses a definition as this session's tier shows it — see
-    /// <see cref="Disclose(WorldDefinition, WorldDisclosureTier, StateArena, Principal?)"/>. Whether the session observes right now is the
+    /// <see cref="Disclose(WorldDefinition, WorldDisclosureTier, StateArena, Principal?, bool)"/>. Whether the session observes right now is the
     /// delivery's question, not this one's.</summary>
     /// <param name="definition">The definition.</param>
     /// <returns>The disclosed definition, or <see langword="null"/> at the frames tier.</returns>
@@ -62,7 +63,8 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         arena: server.Arena,
         definition: definition,
         recipient: observation.Session,
-        tier: Tier
+        tier: Tier,
+        unrestricted: false
     );
     /// <summary>Discloses a definition as a tier shows it: verbatim at <see cref="WorldDisclosureTier.Replica"/>, a
     /// projection composed for <paramref name="recipient"/> from <paramref name="arena"/> at
@@ -73,9 +75,11 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     /// for the live definition, the definition's own for a candidate.</param>
     /// <param name="recipient">The recipient the projection is composed for, or <see langword="null"/> for the
     /// public observer.</param>
+    /// <param name="unrestricted">Whether to compose as a reader every restriction admits, ignoring
+    /// <paramref name="recipient"/>: the most any session could be handed.</param>
     /// <returns>The disclosed definition, or <see langword="null"/> at the frames tier.</returns>
     /// <exception cref="InvalidOperationException">The projection cannot be composed or does not hydrate.</exception>
-    public WorldDefinition? Disclose(WorldDefinition definition, WorldDisclosureTier tier, StateArena arena, Principal? recipient) {
+    public WorldDefinition? Disclose(WorldDefinition definition, WorldDisclosureTier tier, StateArena arena, Principal? recipient, bool unrestricted) {
         if (tier == WorldDisclosureTier.Frames) {
             return null;
         }
@@ -92,7 +96,8 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             recipient: recipient,
             revision: server.Population.Revision,
             tier: tier,
-            time: in time
+            time: in time,
+            unrestricted: unrestricted
         )!;
 
         return (WorldProjection.TryToDefinition(
