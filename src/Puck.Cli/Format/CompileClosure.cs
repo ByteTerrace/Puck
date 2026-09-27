@@ -24,7 +24,8 @@ namespace Puck.Cli.Format;
 // grant internals to, so a call into a member made visible by `InternalsVisibleTo` binds as the build binds it.
 //
 // `EvaluateAll` asks the same question of several projects in one MSBuild process, so a project closure they
-// share is evaluated once rather than once per project that references it.
+// share is evaluated once rather than once per project that references it. Both evaluations pass
+// `--disable-build-servers`, so an evaluation leaves no MSBuild node or server running once it exits.
 internal sealed record CompileClosure(string? AssemblyName, IReadOnlyList<string> References, IReadOnlyList<string> Sources, string? Refusal) {
     // The item `EvaluateAll` collects: every reference, compile item and target path, each tagged with its kind.
     private const string ClosureItem = "PuckFormatClosure";
@@ -122,7 +123,7 @@ internal sealed record CompileClosure(string? AssemblyName, IReadOnlyList<string
             );
 
             var result = CliProcess.RunAsync(
-                arguments: ["msbuild", traversal, "-nologo", "-t:Closures", $"-getItem:{ClosureItem}"],
+                arguments: ["msbuild", traversal, "-nologo", "--disable-build-servers", "-t:Closures", $"-getItem:{ClosureItem}"],
                 fileName: "dotnet"
             ).GetAwaiter().GetResult();
 
@@ -233,6 +234,7 @@ internal sealed record CompileClosure(string? AssemblyName, IReadOnlyList<string
                 "msbuild",
                 project,
                 "-nologo",
+                "--disable-build-servers",
                 "-t:FindReferenceAssembliesForReferences",
                 "-getItem:ReferencePathWithRefAssemblies",
                 "-getItem:Compile",
