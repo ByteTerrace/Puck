@@ -507,7 +507,16 @@ returns, a graph instance's unleased), so a read of its own output binds the
 output it completed before this frame, in a
 `RenderGraphExternalReads` it hands to `Produce`. The producer takes the leases
 its submission samples (`Take`) and retires them after that submission's
-fence, and the runtime retires the rest once `Produce` returns. `SdfEngineNode` is the
+fence, and the runtime retires the rest once `Produce` returns. A graph
+instance's reads that its graph binds to no version are bound the same way,
+after its graph's inputs, when its graph runs a package whose factory samples
+them (`IRenderGraphPackageFactory.SamplesReads`): each package recording of the
+frame is handed them (`RenderGraphPackageRecording.Reads`), takes the lease of
+what it samples into the frame's lease list, and their taint is the
+instance's. A frame may declare instances unchanged since their latest render
+(`RenderGraphFrame.Unchanged`): such an instance is not due by its refresh, so
+its latest output stands, and it renders only when it never has, when the frame
+names it to render again, or when it is demanded at another extent. `SdfEngineNode` is the
 `sdf.world` producer: it submits through the SDF engine's own frame ring and
 renders every view of the frame, each into its own output image.
 `SdfEngineNode.ViewProducer` gives a producer for each later view, whose own

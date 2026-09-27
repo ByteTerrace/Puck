@@ -16,6 +16,10 @@ public sealed partial class ShaderPipelineRenderNode {
     // The host's recorders, or an empty set for a node given none, which refuses every package pass.
     private readonly RenderGraphPackageRecorders m_packages;
 
+    // The images of the instances this instance reads that its graph binds to no version, which the runtime binds before
+    // each frame it produces and every package recording of that frame is handed; null when there are none.
+    internal RenderGraphExternalReads? Reads { get; set; }
+
     // The buffer the published default output holds in the frame slot the node most recently submitted: what a graph
     // instance's consumers bind when its output is a buffer. Null before the first submission, after a device loss, or
     // when the output is not a buffer the node allocates.
@@ -350,6 +354,7 @@ public sealed partial class ShaderPipelineRenderNode {
             MayStandIn: ((pass.PackageAliasRefusal is null) && (HostInputInAnotherLayout(pass: pass, slot: slot) < 0)),
             Outputs: outputs,
             PassBlock: passBlock,
+            Reads: Reads,
             Recorder: recorder,
             Slot: slot,
             Width: pass.Width

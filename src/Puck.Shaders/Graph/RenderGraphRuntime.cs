@@ -1113,6 +1113,13 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
                 continue;
             }
+
+            // The reads its graph binds to no version reach its package passes, their taint the instance's; what they
+            // leave is retired with the frame.
+            node.Reads = BindUnboundReads(
+                index: index,
+                schedule: schedule
+            );
             // A source's graph renders at the extent its descriptor fixed, which it declared to the scheduler.
             if (
                 (source is null) &&
@@ -1137,7 +1144,14 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             }
 
             var submitted = node.FrameCounter;
-            var surface = node.ProduceFrame(context: in context);
+            Surface surface;
+
+            try {
+                surface = node.ProduceFrame(context: in context);
+            } finally {
+                node.Reads?.RetireUntaken();
+                node.Reads = null;
+            }
 
             if (node.FrameCounter == submitted) {
                 m_unproduced++;

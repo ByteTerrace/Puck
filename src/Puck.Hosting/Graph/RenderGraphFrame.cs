@@ -48,6 +48,11 @@ public readonly record struct RenderGraphSourceState(string Instance, ImageSourc
 /// read external content the capture gate did not fill, so no capture reads an image a slower instance rendered from it.
 /// A source is never named, since it renders at its producer's cadence and its consumers resolve its image as they
 /// bind it.</param>
+/// <param name="Unchanged">The instances whose host declares that nothing they render from has changed since their
+/// latest completed render, so that render stands for this frame, or <see langword="null"/> for none: an SDF view whose
+/// inputs are byte-identical to its last rendered frame's. Such an instance is not due by its refresh; it renders only
+/// when it never has, when <paramref name="Rerender"/> names it, or when the extent it is demanded at moves, since a new
+/// image holds nothing. A source is never named, since its producer declares its own cadence.</param>
 public readonly record struct RenderGraphFrame(
     long Index,
     int DisplayWidth,
@@ -58,5 +63,6 @@ public readonly record struct RenderGraphFrame(
     long PassPixelBudget = 0,
     long Tick = 0,
     IReadOnlyList<RenderGraphSourceState>? Sources = null,
-    IReadOnlyList<string>? Rerender = null
+    IReadOnlyList<string>? Rerender = null,
+    IReadOnlyList<string>? Unchanged = null
 );

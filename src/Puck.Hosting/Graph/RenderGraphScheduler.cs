@@ -29,6 +29,9 @@ namespace Puck.Hosting;
 /// <item><description>An instance the frame names to render again (<see cref="RenderGraphFrame.Rerender"/>, a capture
 /// frame's tainted instances) is due whatever its refresh and renders whatever the budget, whenever it is
 /// shown.</description></item>
+/// <item><description>An instance the frame declares unchanged (<see cref="RenderGraphFrame.Unchanged"/>) is not due by
+/// its refresh: its latest output stands until it is named to render again, or it is demanded at another extent than
+/// its targets are allocated at.</description></item>
 /// </list>
 /// </summary>
 public static class RenderGraphScheduler {
@@ -48,6 +51,7 @@ public static class RenderGraphScheduler {
             Divisor = new int[count];
             Due = new bool[count];
             Forced = new bool[count];
+            Unchanged = new bool[count];
             Height = new int[count];
             IsRoot = new bool[count];
             PositionOf = new int[count];
@@ -75,6 +79,8 @@ public static class RenderGraphScheduler {
         public bool[] Due { get; }
         // Whether the frame names the instance to render again.
         public bool[] Forced { get; }
+        // Whether the frame declares the instance unchanged since its latest render.
+        public bool[] Unchanged { get; }
         public int[] Height { get; }
         public bool[] IsRoot { get; }
         public int[] PositionOf { get; }
@@ -95,6 +101,7 @@ public static class RenderGraphScheduler {
             Array.Clear(array: DemandHeight);
             Array.Clear(array: DemandWidth);
             Array.Clear(array: Forced);
+            Array.Clear(array: Unchanged);
             Array.Clear(array: Height);
             Array.Clear(array: IsRoot);
             Array.Clear(array: Price);
@@ -307,6 +314,27 @@ public static class RenderGraphScheduler {
             forced[index] = true;
         }
     }
+    private static void Unchangeds(RenderGraphInstanceSet set, RenderGraphFrame frame, bool[] unchanged) {
+        if (frame.Unchanged is not { } names) {
+            return;
+        }
+
+        for (var position = 0; (position < names.Count); position++) {
+            var index = set.IndexOf(name: (names[position] ?? string.Empty));
+
+            if (
+                (index < 0) ||
+                set.Instances[index].IsSource
+            ) {
+                throw new ArgumentException(
+                    message: $"Unchanged '{names[position]}' names no instance whose host declares its inputs; a source renders at its producer's cadence.",
+                    paramName: nameof(frame)
+                );
+            }
+
+            unchanged[index] = true;
+        }
+    }
     // Whether a source is due this frame, and its frame divisor: a static source until it has rendered once, a tick
     // source whenever the frame's tick differs from the one it last rendered at, and a rate source as a refresh at its
     // rate is. A source whose producer declares no extent is never due.
@@ -511,6 +539,14 @@ public static class RenderGraphScheduler {
             set: set
         );
 
+        var unchanged = work.Unchanged;
+
+        Unchangeds(
+            frame: frame,
+            set: set,
+            unchanged: unchanged
+        );
+
         var divisor = work.Divisor;
         var due = work.Due;
 
@@ -534,7 +570,7 @@ public static class RenderGraphScheduler {
             due[index] = (
                 forced[index] ||
                 (rendered < 0) ||
-                ((frame.Index - rendered) >= divisor[index])
+                (!unchanged[index] && ((frame.Index - rendered) >= divisor[index]))
             );
         }
 
@@ -580,6 +616,13 @@ public static class RenderGraphScheduler {
                     fraction: demandHeight[index]
                 );
 
+                // An unchanged instance demanded at another extent renders again: a new image holds nothing.
+                if (
+                    unchanged[index] &&
+                    ((scaleWidth[index] != allocatedWidth) || (scaleHeight[index] != allocatedHeight))
+                ) {
+                    due[index] = true;
+                }
                 if (!due[index]) {
                     continue;
                 }

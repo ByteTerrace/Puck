@@ -41,7 +41,12 @@ public readonly record struct RenderGraphPackageResource(string Version, ShaderP
 /// recording must draw.</param>
 /// <param name="Arguments">The buffer holding an indirect dispatch's group counts, which the pass's planned barrier left
 /// in the indirect-argument state, or <see langword="null"/> for a pass that is not dispatched indirectly.</param>
-public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuRecorder Recorder, int Slot, uint Width, uint Height, ReadOnlySpan<RenderGraphPackageResource> Inputs, ReadOnlySpan<RenderGraphPackageResource> Outputs, Span<byte> PassBlock, LeaseRetireList Leases, FrameContext Context, bool MayStandIn, IGpuBuffer? Arguments = null) {
+/// <param name="Reads">The latest completed image of each instance the pass's instance reads that its graph binds to no
+/// version, such as the sources an SDF view's screens show, or <see langword="null"/> when there is none. A recording
+/// takes the lease of each image it samples (<see cref="RenderGraphExternalReads.Take"/>) and holds it in
+/// <paramref name="Leases"/>; the runtime retires the rest once the frame is produced. Each image rests in its producer's
+/// published layout, shader-readable, and the planner plans no barrier for it.</param>
+public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuRecorder Recorder, int Slot, uint Width, uint Height, ReadOnlySpan<RenderGraphPackageResource> Inputs, ReadOnlySpan<RenderGraphPackageResource> Outputs, Span<byte> PassBlock, LeaseRetireList Leases, FrameContext Context, bool MayStandIn, IGpuBuffer? Arguments = null, RenderGraphExternalReads? Reads = null) {
     /// <summary>Gets the command buffer to record into.</summary>
     public nint CommandBuffer { get; } = CommandBuffer;
     /// <summary>Gets the instance's counting recorder.</summary>
@@ -66,6 +71,9 @@ public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuR
     public bool MayStandIn { get; } = MayStandIn;
     /// <summary>Gets the buffer holding an indirect dispatch's group counts, or <see langword="null"/>.</summary>
     public IGpuBuffer? Arguments { get; } = Arguments;
+    /// <summary>Gets the images of the instances the pass's instance reads that its graph binds to no version, or
+    /// <see langword="null"/>.</summary>
+    public RenderGraphExternalReads? Reads { get; } = Reads;
 }
 /// <summary>What a package pass's recording did with its outputs this frame.</summary>
 public enum RenderGraphPackageOutcome : byte {
@@ -124,6 +132,12 @@ public interface IRenderGraphPackageFactory {
     /// <param name="context">The pass it states the regions of.</param>
     /// <returns>The regions, in the order the recorder receives them.</returns>
     IReadOnlyList<RenderGraphPackageRegion> Regions(RenderGraphPackageRecorderContext context) => [];
+
+    /// <summary>Gets whether the package's recorders sample the images of the instances their instance reads that its
+    /// graph binds to no version (<see cref="RenderGraphPackageRecording.Reads"/>), as an SDF view's screens do. The
+    /// runtime binds those reads, and acquires what they read, only for an instance whose graph runs such a
+    /// package.</summary>
+    bool SamplesReads => false;
 }
 /// <summary>A host-written region a package pass's recorder writes (<see cref="IRenderGraphPackageFactory.Regions"/>).</summary>
 /// <param name="Name">The region's part name, which names its buffers after the instance and the pass.</param>
