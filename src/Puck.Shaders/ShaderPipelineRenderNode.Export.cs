@@ -74,15 +74,22 @@ public sealed partial class ShaderPipelineRenderNode {
         (plan.FindResource(name: plan.DefaultOutput) is { } output) &&
         (output.Storage == storage.Index)
     );
-    // The installed graph's exported image, or null when the node exports nothing.
-    private IGpuExportableImage? ExportedImage() {
-        if (
-            (m_export is null) ||
-            (m_pipeline?.Plan.FindResource(name: m_pipeline.Plan.DefaultOutput) is not { } output)
-        ) {
-            return null;
-        }
 
-        return (m_resources[output.Storage].Images?[0] as IGpuExportableImage);
+    /// <summary>Gets the image the installed graph renders its exported output into, which the reader on another device
+    /// opens by its shared handles, or <see langword="null"/> when the node exports nothing or has installed no graph
+    /// since it was given its export. A graph built again renders into another image.</summary>
+    public IGpuExportableImage? ExportedImage {
+        get {
+            if (
+                (m_export is null) ||
+                !m_ready ||
+                (m_pipeline?.Plan.FindResource(name: m_pipeline.Plan.DefaultOutput) is not { } output) ||
+                (output.Storage >= m_resources.Length)
+            ) {
+                return null;
+            }
+
+            return (m_resources[output.Storage].Images?[0] as IGpuExportableImage);
+        }
     }
 }

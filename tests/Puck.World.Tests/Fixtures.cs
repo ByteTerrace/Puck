@@ -65,7 +65,7 @@ internal static class Fixtures {
     /// <summary>The one locomotion kit name every fixture document declares.</summary>
     public const string SeatKitName = "traveler";
     /// <summary>The engine screen-surface index the code-built test-pattern screen occupies — the ENGAGE target
-    /// <see cref="EngageAuthorityLawTests"/> routes against. The GPU-side <c>Puck.SdfVm.SdfWorldEngine</c> that
+    /// <see cref="EngageAuthorityLawTests"/> routes against. The GPU-side <c>Puck.SdfVm.SdfWorldTables</c> that
     /// actually enforces <see cref="SdfProgramBuilder.MaxScreenSurfaces"/> is out of reach here (Puck.SdfVm is not
     /// referenced by this project), so this simply names index 0, comfortably below any reserved derived-face
     /// band.</summary>

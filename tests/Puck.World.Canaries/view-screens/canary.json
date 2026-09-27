@@ -1,7 +1,7 @@
 {
   "id": "view-screens",
   "title": "One camera shown on two screens registers one view that renders once per refreshed frame, and both screens show its image",
-  "binding": "The positive leg boots a windowed 256x144 world whose two screen placements both show the view of camera 'eye', which looks at a red ball so the ball fills its frame. It sets world.view-refresh to 1, so every produced frame refreshes the views. world.view-refresh then reports one camera view registered, not one per screen, and two reads of world.counters gpu thirty ticks apart show the view:eye node's submission advancing by exactly as many submissions as the world node's: the view renders once per world frame, never once per screen. A captured frame shows the red ball at the centre of both screens. The discriminating leg boots the same world with the right screen showing camera 'sky', which looks up at nothing: two camera views register and the right screen's centre is not red, so both observations turn red, while the eye view still renders once per world frame. After the capture both legs render the views at three-quarter scale, so the room's view is a pane a display point walks into. world.screens prints the mapping each screen publishes: the view it shows, named by its camera, over the screen's face (0.72x0.48 half extents at z 0.1, the panel's interior) at the camera's 128x72 extent, drawn through the glass warp. A display point at each screen walks through the room camera onto that screen, at the pixel the pose arithmetic predicts (65,28 on the left and 66,28 on the right), and continues into the camera view it shows, an instance of the live set, through that camera into its world, where the ray meets no further screen (World, in eye). In the discriminating leg the right screen's mapping and walk name sky instead of eye, so those positive observations turn red while the left screen's hold.",
+  "binding": "The positive leg boots a windowed 256x144 world whose two screen placements both show the view of camera 'eye', which looks at a red ball so the ball fills its frame. It sets world.view-refresh to 1, so every produced frame refreshes the views. world.view-refresh then reports one camera view registered, not one per screen, and two reads of world.counters gpu thirty ticks apart show the eye instance's node's submission advancing by exactly as many submissions as the world node's: the view renders once per world frame, never once per screen. A captured frame shows the red ball at the centre of both screens. The discriminating leg boots the same world with the right screen showing camera 'sky', which looks up at nothing: two camera views register and the right screen's centre is not red, so both observations turn red, while the eye view still renders once per world frame. After the capture both legs render the views at three-quarter scale, so the room's view is a pane a display point walks into. world.screens prints the mapping each screen publishes: the view it shows, named by its camera, over the screen's face (0.72x0.48 half extents at z 0.1, the panel's interior) at the camera's 128x72 extent, drawn through the glass warp. A display point at each screen walks through the room camera onto that screen, at the pixel the pose arithmetic predicts (65,28 on the left and 66,28 on the right), and continues into the camera view it shows, an instance of the live set, through that camera into its world, where the ray meets no further screen (World, in eye). In the discriminating leg the right screen's mapping and walk name sky instead of eye, so those positive observations turn red while the left screen's hold.",
   "bootShape": "windowed",
   "backends": ["vulkan", "directx"],
   "requirements": ["gpu"],
@@ -32,14 +32,14 @@
         "type": "response", "name": "first-read", "stream": "stdout", "verb": "world.counters", "occurrence": 1, "count": 2,
         "extract": [
           { "name": "world-first", "field": "submission", "line": "node world work" },
-          { "name": "eye-first", "field": "submission", "line": "node view:eye work" }
+          { "name": "eye-first", "field": "submission", "line": "node eye work" }
         ]
       },
       {
         "type": "response", "name": "second-read", "stream": "stdout", "verb": "world.counters", "occurrence": 2, "count": 2,
         "extract": [
           { "name": "world-second", "field": "submission", "line": "node world work" },
-          { "name": "eye-second", "field": "submission", "line": "node view:eye work" }
+          { "name": "eye-second", "field": "submission", "line": "node eye work" }
         ]
       },
       { "type": "relation", "name": "the-world-rendered-between-the-reads", "operator": "greater", "left": { "value": "world-second" }, "right": { "value": "world-first" } },
@@ -78,14 +78,14 @@
         "type": "response", "name": "first-read", "stream": "stdout", "verb": "world.counters", "occurrence": 1, "count": 2,
         "extract": [
           { "name": "world-first", "field": "submission", "line": "node world work" },
-          { "name": "eye-first", "field": "submission", "line": "node view:eye work" }
+          { "name": "eye-first", "field": "submission", "line": "node eye work" }
         ]
       },
       {
         "type": "response", "name": "second-read", "stream": "stdout", "verb": "world.counters", "occurrence": 2, "count": 2,
         "extract": [
           { "name": "world-second", "field": "submission", "line": "node world work" },
-          { "name": "eye-second", "field": "submission", "line": "node view:eye work" }
+          { "name": "eye-second", "field": "submission", "line": "node eye work" }
         ]
       },
       { "type": "relation", "name": "the-eye-still-renders-once-per-world-frame", "operator": "equal", "left": { "value": "eye-second", "minus": "eye-first" }, "right": { "value": "world-second", "minus": "world-first" } },

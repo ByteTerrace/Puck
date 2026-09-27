@@ -1418,7 +1418,7 @@ public static class WorldBootComposition {
         // refuses by name headless. The console verb belongs to the terminal composition.
 
         // The render probe the world.debug-view verb and world.counters' gpu section read the live render nodes
-        // through — a mutable holder the render-root factory below fills in once the engine node exists.
+        // through — a mutable holder the render-root factory below fills in once the world's residency exists.
         services.AddSingleton<WorldRenderProbe>();
         services.AddSingleton<IGpuWorkRegistry>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>());
         // The engine readiness world.wait ready waits on and a scheduled capture's hold reads.
@@ -1494,7 +1494,7 @@ public static class WorldBootComposition {
             views: WorldRootGraph.ViewsOf(views: sp.GetRequiredService<WorldDefinition>().Views)
         ));
 
-        // The render root: the default render graph over the SDF world (WorldRenderRoot), with the engine node and the
+        // The render root: the default render graph over the SDF world (WorldRenderRoot), with the world's residency and the
         // graph's root stashed on the WorldRenderProbe so world.counters can read their per-pass GPU work. The frame
         // source emits active avatars only (declared-but-parked instances widen the per-pixel shadow mask walk), so the
         // hybrid 4,096-body worst case is held by the capacity floors a construction-time probe measured, plus the

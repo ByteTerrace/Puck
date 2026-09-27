@@ -17,11 +17,11 @@ namespace Puck.World;
 /// or nothing. Every external image resolves through the capture gate
 /// (<see cref="WorldCaptureGate"/>), so a capture shows its declared fill and never its pixels. A row's producer, machine
 /// or probe source is a render-graph source instance (<see cref="WorldSourceInstances"/>), opened and published by the
-/// runtime, and a camera view or a session is a view instance (<see cref="WorldViewInstances"/>) whose producer the binder
-/// creates (<see cref="TryViewProducer"/>): the engine node binds every screen's image from the reads the graph hands it
-/// (<see cref="ISdfScreenSources.ReadOf"/>). The node binds every screen declared at boot each frame, and a screen reading
-/// nothing is unbound, so a runtime <c>screen.source &lt;index&gt; camera</c>/<c>capture</c> binds without rebuilding the
-/// engine. A shared singleton so the render factory, the screen verbs, and <c>world.screens</c> read one instance.
+/// runtime, and a camera view or a session is a view instance (<see cref="WorldViewInstances"/>) rendering a residency the
+/// binder creates (<see cref="TryResolveView"/>): each view's passes bind every screen's image from the reads the graph
+/// hands them (<see cref="ISdfScreenSources.ReadOf"/>). They bind every screen declared at boot each frame, and a screen
+/// reading nothing is unbound, so a runtime <c>screen.source &lt;index&gt; camera</c>/<c>capture</c> binds without
+/// rebuilding anything. A shared singleton so the render factory, the screen verbs, and <c>world.screens</c> read one instance.
 /// </summary>
 /// <remarks>
 /// This type is a pure reader of <see cref="Server.WorldMachineHost"/>'s outputs: a machine source instance's upload
@@ -147,13 +147,13 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
 
     private DynamicTransform[] m_viewTransforms = [];
     private readonly Dictionary<int, ScreenSlot> m_slots = new();
-    // The screen indices declared at boot (construction): the screens the engine node binds, fixed for its lifetime.
+    // The screen indices declared at boot (construction): the screens the world's views bind, fixed for their lifetime.
     // Distinct from m_slots.Keys, which shrinks and grows as ReconcileScreens removes and recreates entries: an index in
     // this set can always have its slot recreated after removal, while a genuinely new index (never in this set) cannot
     // bind live.
     private readonly HashSet<int> m_bootScreenIndices = new();
 
-    // The boot indices in ascending order, the screens the engine node binds every frame.
+    // The boot indices in ascending order, the screens the world's views bind every frame.
     private readonly int[] m_screenIndices;
 
     // Reused scratch for ReconcileScreens' removal pass, so a screen mutation collects the vanished indices without
@@ -477,6 +477,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         DisposeFrameCaptures();
         DisposeParkedCaptures();
         RetireCameraTargetDevice();
+        ReleaseViewResidencies();
         UnregisterAllViewWork();
     }
     /// <summary>Drops every device-owned upload and shared target ring while preserving CPU sessions, machine simulation,

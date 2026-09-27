@@ -349,7 +349,7 @@ public sealed class SdfMeshCanaryOracleLawTests {
                         x: x,
                         y: y
                     );
-                    var near = (((double)SdfWorldEngine.ConeNear) / Vector3.Dot(
+                    var near = (((double)SdfWorldTables.ConeNear) / Vector3.Dot(
                         vector1: direction,
                         vector2: camera.Forward
                     ));

@@ -5,7 +5,7 @@ namespace Puck.SignedDistance;
 /// device-local <c>float</c> buffer partitioned into <see cref="MaxBricks"/> equal slots of <see cref="VoxelsPerBrick"/>
 /// voxels each; slot <c>i</c> owns the contiguous word run at <see cref="SlotWordOffset(int)"/>. Because the layout is a
 /// pure function of the slot index, the carve-bake planner computes each brick instruction's <c>brickWordOffset</c> lane
-/// itself with no engine round-trip at emit time — and the engine's <c>Puck.SdfVm.SdfWorldEngine.DefaultBrickPoolVoxelCapacity</c>
+/// itself with no engine round-trip at emit time — and the engine's <c>Puck.SdfVm.SdfWorldTables.DefaultBrickPoolVoxelCapacity</c>
 /// sizes the pool to hold every slot at full <see cref="BrickDim"/><sup>3</sup> resolution.
 /// </summary>
 public static class SdfBrickPoolLayout {
@@ -18,7 +18,7 @@ public static class SdfBrickPoolLayout {
     public const int MaxBricks = 8;
     /// <summary>The pool's total voxel (word) capacity when every slot is provisioned at full resolution:
     /// <see cref="MaxBricks"/> × <see cref="VoxelsPerBrick"/> = 16,777,216 voxels = 64 MB as f32 — the value
-    /// <c>Puck.SdfVm.SdfWorldEngine.DefaultBrickPoolVoxelCapacity</c> resolves to.</summary>
+    /// <c>Puck.SdfVm.SdfWorldTables.DefaultBrickPoolVoxelCapacity</c> resolves to.</summary>
     public const int TotalVoxels = (MaxBricks * VoxelsPerBrick); // 16,777,216 = 64 MB f32
     /// <summary>The voxel (word) count a full brick slot reserves: <see cref="BrickDim"/><sup>3</sup>.</summary>
     public const int VoxelsPerBrick = ((BrickDim * BrickDim) * BrickDim); // 2,097,152

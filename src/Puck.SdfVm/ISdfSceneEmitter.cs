@@ -58,9 +58,9 @@ public readonly record struct SdfEmitContext(
 /// optional shape emitted, every modifier at its worst-case magnitude, every dynamic slot present — so the one
 /// construction-time probe <see cref="SdfCompositionFrameSource"/> runs (combining every emitter's probe form into a
 /// single program) sizes the engine's dynamic-transform capacity, which never grows, and the initial program-word and
-/// instance reserve, which <see cref="SdfWorldEngine.UploadProgram"/> grows on demand. A new optional emission an
+/// instance reserve, which <see cref="SdfWorldTables.UploadProgram"/> grows on demand. A new optional emission an
 /// emitter grows must grow its own probe branch in the same change: a live rebuild that needs more dynamic-transform
-/// slots than the probe reserved makes <see cref="SdfWorldEngine.UploadProgram"/> throw
+/// slots than the probe reserved makes <see cref="SdfWorldTables.UploadProgram"/> throw
 /// <see cref="ArgumentException"/>. The probe branch of each emitter must dominate its live branch on its own — never
 /// reason about it across the whole composed program.
 /// </para></summary>
@@ -144,7 +144,7 @@ public interface ISdfSceneEmitter {
     /// it after packing, every frame, and composes every emitter's draws in list order.
     /// <para>
     /// Return the same list instance while the draws are unchanged and a new one when any changes: the host recomposes,
-    /// and the engine repacks its mesh region, only for a list it has not seen (<see cref="SdfWorldEngine"/> compares by
+    /// and the engine repacks its mesh region, only for a list it has not seen (<see cref="SdfWorldTables"/> compares by
     /// reference). Never mutate a list after returning it. The default, an empty list, is correct for an emitter that
     /// draws no mesh.
     /// </para></summary>

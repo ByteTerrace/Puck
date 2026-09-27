@@ -2,7 +2,6 @@ using System.Globalization;
 using System.Text.Json;
 using Puck.Hosting;
 using Puck.Shaders;
-using Puck.SdfVm;
 
 namespace Puck.World.Client;
 
@@ -42,7 +41,7 @@ public sealed class WorldRootGraph {
             producers[view] = new RenderGraphInstance(
                 ExternalPackage: RenderGraphPackageCatalog.SdfWorld,
                 Name: ProducerOf(view: view),
-                Passes: SdfEngineNode.PassLabels.Length,
+                Passes: SdfWorldPackage.Fragment.Passes.Count,
                 Reads: [],
                 Refresh: RenderGraphRefresh.EveryFrame
             );

@@ -40,7 +40,7 @@ namespace Puck.World.Client;
 public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     // The moving half of the same per-band reservation. KEEP IN SYNC: the probe branch reserves exactly this many
     // worst-case rigs per band and EmitEntities selects at most this many delivered bodies, so a live band can never
-    // outgrow the envelope SdfWorldEngine.UploadProgram freezes.
+    // outgrow the envelope SdfWorldTables.UploadProgram freezes.
     internal const int MaxEntitiesPerBand = WorldAdjacencyGeometry.MaximumEntitiesPerBand;
     // The per-face worst-case reservation: generous for the shipped quilt's own solid census (ground + two walls +
     // a corner post) with headroom for a live-edited neighbour, without letting one border's content spend the whole
@@ -78,9 +78,9 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
 
     private int m_neighbourRevision;
     private int m_selectionRevision;
+
     // The neighbours' static placements' mesh draws the last live Emit fixed, in the source world's frame.
     private IReadOnlyList<SdfMeshDraw> m_meshDraws = [];
-
     // EmitCurrent's own scratch for one band's source-mapped placements, bounded by MaxInstancesPerBand (the same
     // reservation WorldAdjacencyGeometry.Select's default `maximum` honors) and reused across bands and rebuilds —
     // EmitStatic consumes it synchronously and never retains the reference.

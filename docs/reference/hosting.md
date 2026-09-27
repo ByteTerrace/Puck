@@ -236,7 +236,7 @@ boundary, and until then it presents what it already has. A newer request
 cancels the pending build with `Cancel`, and the discarded result is released
 when the build finishes. Before the device goes away, `CancelAndWait` blocks
 until the build's current unit of work returns, so nothing is created on a
-device being torn down. The SDF engine's pipelines and live shader-pipeline
+device being torn down. The SDF pipeline set's build and live shader-pipeline
 compilations both use it.
 
 A node that samples an image another producer keeps writing, such as a camera
@@ -245,9 +245,10 @@ handle with an optional release callback and token. The node holds each such
 lease in a `LeaseRetireList` until a fence wait proves the submission that
 sampled it has finished, then retires the list, which runs every release once
 in the order the leases were held. A node with frames in flight keeps one list
-per frame-ring slot and moves each frame's list into its slot when it submits.
-The SDF engine node and every graph instance's `ShaderPipelineRenderNode` use it,
-and the overlay package moves its HUD frames' leases into its node's list.
+per frame slot and moves each frame's list into its slot when it submits.
+Every graph instance's `ShaderPipelineRenderNode` uses it: an SDF view's passes
+take each screen's lease into their node's list, and the overlay package moves
+its HUD frames' leases into its node's list.
 
 `RenderGraphScheduler` decides which views render in a frame. Every view is a
 `RenderGraphInstance`: a name, a refresh (a frame divisor or a rate in hertz),
@@ -314,9 +315,9 @@ read lists have grown to the frame's reads, and `RenderGraphFrame` is a value,
 so describing each frame over the same root and footprint lists allocates
 nothing either. The main view and the `views.graphs` panes render through it
 (`RenderGraphRuntime` in `Puck.Shaders`), and so do the source instances the
-screens show and the camera and session views, which the SDF world producer
-reads as leases when it produces; screens themselves render inside the SDF
-frame.
+screens show and the camera and session views, which an `sdf.world` view's
+passes sample through the reads the runtime binds for them; screens themselves
+render inside the SDF frame.
 
 `RenderGraphHitWalk` follows a hit through nested instances. Each instance
 reports, through `IRenderGraphHitScene`, the source placements in its world

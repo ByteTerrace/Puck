@@ -158,6 +158,10 @@ public interface IRenderGraphPackageFactory {
     /// <summary>Releases whatever the factory holds on the device after the device was lost, without waiting for any
     /// submission. The runtime calls it once its nodes have released theirs.</summary>
     void OnDeviceLost() { }
+    /// <summary>Starts a produced frame. The runtime calls it on the frame thread once a frame, before it asks any package
+    /// whether an instance is unchanged and before any instance renders.</summary>
+    /// <param name="context">The host's frame context of the frame being produced.</param>
+    void BeginFrame(in FrameContext context) { }
 }
 /// <summary>A host-written region a package pass's recorder writes (<see cref="IRenderGraphPackageFactory.Regions"/>).</summary>
 /// <param name="Name">The region's part name, which names its buffers after the instance and the pass.</param>
@@ -206,6 +210,7 @@ public sealed record RenderGraphExternalProducerContext(string Instance, string 
 /// region by name then.</param>
 public sealed class RenderGraphPackageRecorders(GpuRegionCopyPass? regionCopy = null) {
     private readonly Dictionary<string, IRenderGraphPackageFactory> m_factories = new(comparer: StringComparer.Ordinal);
+    private readonly List<IRenderGraphPackageFactory> m_distinctFactories = [];
     private readonly Dictionary<string, Func<RenderGraphExternalProducerContext, IRenderGraphExternalProducer>> m_producers = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<string, Func<RenderGraphExternalProducerContext, IRenderGraphSourceUpload>> m_sources = new(comparer: StringComparer.Ordinal);
 
@@ -219,8 +224,8 @@ public sealed class RenderGraphPackageRecorders(GpuRegionCopyPass? regionCopy = 
     /// <summary>Gets the package ids an upload serves, in ordinal order.</summary>
     public IReadOnlyList<string> SourceIds => [.. m_sources.Keys.Order(comparer: StringComparer.Ordinal)];
 
-    // Every registered recorder factory, each once however many ids it serves.
-    internal IEnumerable<IRenderGraphPackageFactory> Factories => m_factories.Values.Distinct();
+    // Every registered recorder factory, each once however many ids it serves, in registration order.
+    internal IReadOnlyList<IRenderGraphPackageFactory> Factories => m_distinctFactories;
 
     /// <summary>Registers the external producer factory for a package id.</summary>
     /// <param name="package">The package id.</param>
@@ -297,6 +302,9 @@ public sealed class RenderGraphPackageRecorders(GpuRegionCopyPass? regionCopy = 
                 message: $"Package '{package}' already has a recorder.",
                 paramName: nameof(package)
             );
+        }
+        if (!m_distinctFactories.Contains(item: factory)) {
+            m_distinctFactories.Add(item: factory);
         }
     }
     /// <summary>Returns whether a recorder serves a package id.</summary>

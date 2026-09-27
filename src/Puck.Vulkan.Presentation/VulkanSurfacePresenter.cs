@@ -61,7 +61,7 @@ public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentSurfaceR
         );
         // Waits only on the presentation ring slot's fence (the present two frames back) instead of draining the
         // whole device, so this frame's CPU production overlaps the previous frame's GPU execution. Per-frame
-        // resource reuse is guarded by each SdfWorldEngine's own frame ring; this wait bounds host latency to the
+        // resource reuse is guarded by each SdfWorldTables's own frame ring; this wait bounds host latency to the
         // ring depth. Full drain remains the resize/device-loss/shutdown path (BeginFrame recreation,
         // RecoverFromDeviceLoss, teardown WaitIdle).
         m_renderer.WaitForFrameSlot();

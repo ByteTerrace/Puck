@@ -1,6 +1,6 @@
 // Shared contract and rendering functions for the world kernels. Beam evaluates tile clearance; primary records
 // camera hits; views reconstructs hit shading and diagnostics into the view's own output image. The scene program and
-// cameras remain data. KEEP IN SYNC with SdfWorldEngine's packing and pass order.
+// cameras remain data. KEEP IN SYNC with SdfWorldTables's packing and pass order.
 #ifndef SDF_WORLD_HLSLI
 #define SDF_WORLD_HLSLI
 #include "../frame/sdf-tile.hlsli"

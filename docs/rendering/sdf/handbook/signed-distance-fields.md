@@ -158,9 +158,10 @@ Four layers, each one built from the layer below it:
                               │ UploadProgram
  ┌───────────────────────────▼───────────────────────────────────┐
  │  ENGINE                                                        │
- │  SdfWorldEngine — owns the GPU buffers, uploads the program    │
- │  and this frame's camera/lighting/dynamic transforms, and      │
- │  dispatches the fixed pipeline of compute passes below         │
+ │  SdfWorldResidency — holds the GPU tables (SdfWorldTables),    │
+ │  uploads the program and this frame's camera/lighting/dynamic  │
+ │  transforms; each view is an sdf.world render-graph instance   │
+ │  that runs the fixed pipeline of compute passes below          │
  └───────────────────────────┬───────────────────────────────────┘
                               │ per frame
  ┌───────────────────────────▼───────────────────────────────────┐

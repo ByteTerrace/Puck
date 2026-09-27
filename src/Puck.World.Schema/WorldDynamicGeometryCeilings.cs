@@ -71,7 +71,7 @@ namespace Puck.World;
 /// pane is well under 1280x800), or accepting the policy is a GPU-bound ceiling of 0 additional instances at this
 /// preset — this file states the fact measured, not a recommendation between those.</para>
 /// <para><b>The CPU ceiling is not binding.</b> The worst measured per-frame instance-grid rebuild
-/// (<c>Puck.SdfVm.SdfWorldEngine.LastInstanceGridRebuildMilliseconds</c>) at the top of the tested range,
+/// (<c>Puck.SdfVm.SdfWorldTables.LastInstanceGridRebuildMilliseconds</c>) at the top of the tested range,
 /// N=16384 (uniform, moving, Direct3D 12) was 0.252 ms raw — derated x2 = 0.504 ms, a hair over the 0.5 ms policy
 /// at the very top of the tested instance cap (<c>SdfProgramBuilder.MaxInstances</c> = 16384). The measured
 /// per-instance CPU rate is ~1.54e-5 ms/instance (0.252 ms / 16384); solving for the derated-0.25ms-raw crossing

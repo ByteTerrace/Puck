@@ -1,0 +1,519 @@
+using System.Numerics;
+using System.Runtime.InteropServices;
+using Puck.Hosting;
+using Puck.SignedDistance;
+
+namespace Puck.SdfVm;
+
+public sealed partial class SdfWorldTables {
+    // Packs the rows the frame's moved set owes into the dynamic-transform region — 3 float4 per slot: position.xyz
+    // (+ shadow participation), the orientation quaternion (xyzw), then the lanes — the table
+    // SDF_OP_TRANSFORM_DYNAMIC indexes by slot; the region owes the words of each packed row that changed. The packed
+    // rows are the ones the producer's SdfMovedTransforms recorded since the last frame this engine consumed from it; a
+    // frame with no moved set declares its table static and packs nothing past the first frame that carries that
+    // table. Every row is packed on this engine's first frame, for a frame from another producer or another static
+    // table, and when the last consumed frame has left the producer's history; no unpacked row is compared. An empty
+    // list is only valid for a program with no dynamic slots (PrepareFrame throws otherwise); it still packs the one
+    // always-present slot as identity so the binding stays valid. Clamped to the slot capacity the construction
+    // options grew the table to. Returns whether any row was packed.
+    private bool PackDynamicTransforms(SdfFrame frame) {
+        var transforms = frame.DynamicTransforms;
+        var moved = frame.MovedTransforms;
+        var count = Math.Min(
+            val1: transforms.Count,
+            val2: m_dynamicTransformCapacity
+        );
+        var everything = (
+            !m_dynamicTransformsPacked ||
+            !ReferenceEquals(
+            objA: moved,
+            objB: m_movedTransformsSource
+        ) ||
+            ((moved is null)
+                ? !ReferenceEquals(
+                    objA: transforms,
+                    objB: m_movedTransformsTable
+                )
+                : !moved.TryCollect(
+                    into: m_owedTransforms,
+                    since: m_movedTransformsSerial
+                ))
+        );
+
+        if (moved is null) {
+            m_owedTransforms.Clear();
+        }
+
+        m_movedTransformsSource = moved;
+        m_movedTransformsSerial = (moved?.Serial ?? 0L);
+        m_movedTransformsTable = transforms;
+
+        Span<float> floats = stackalloc float[DynamicTransformWordCount];
+
+        if (everything) {
+            if (count == 0) {
+                floats.Clear();
+                floats[7] = 1f; // identity quaternion
+                WriteDynamicTransform(
+                    floats: floats,
+                    slot: 0
+                );
+            }
+
+            for (var index = 0; (index < count); index++) {
+                PackDynamicTransform(
+                    floats: floats,
+                    transform: transforms[index]
+                );
+                WriteDynamicTransform(
+                    floats: floats,
+                    slot: index
+                );
+            }
+
+            m_dynamicTransformsPacked = true;
+            m_dynamicTransformRevision++;
+
+            return true;
+        }
+
+        var packed = false;
+
+        for (var run = 0; (run < m_owedTransforms.Count); run++) {
+            var start = m_owedTransforms.Start(index: run);
+            var end = Math.Min(
+                val1: (start + m_owedTransforms.Length(index: run)),
+                val2: count
+            );
+
+            for (var index = start; (index < end); index++) {
+                PackDynamicTransform(
+                    floats: floats,
+                    transform: transforms[index]
+                );
+                WriteDynamicTransform(
+                    floats: floats,
+                    slot: index
+                );
+                packed = true;
+            }
+        }
+
+        if (packed) {
+            m_dynamicTransformRevision++;
+        }
+
+        return packed;
+    }
+    // Writes one packed slot into the dynamic-transform region, which owes the words of it that changed.
+    private void WriteDynamicTransform(ReadOnlySpan<float> floats, int slot) =>
+        _ = m_dynamicTransformRegion.Write(
+            bytes: MemoryMarshal.AsBytes(span: floats),
+            offset: (slot * DynamicTransformByteLength)
+        );
+    // position.w encodes per-instance soft-shadow participation: 0 = casts, 1 = shadow-suppressed (skipped by the
+    // soft-shadow march only), read by field/sdf-layout.hlsli's sdfShadowParticipationActive skip. The lanes row is what an op
+    // evaluating under this slot (SDF_OP_LANE_ERODE, shade-volumes.hlsli's selected intensity lane) reads through
+    // sdfDynamicTransforms[(3*slot)+2]; a shape under no slot reads zero.
+    private static void PackDynamicTransform(Span<float> floats, in DynamicTransform transform) {
+        floats[0] = transform.Position.X; floats[1] = transform.Position.Y; floats[2] = transform.Position.Z; floats[3] = (transform.CastsSoftShadow
+            ? 0f
+            : 1f
+        );
+        floats[4] = transform.Orientation.X; floats[5] = transform.Orientation.Y; floats[6] = transform.Orientation.Z; floats[7] = transform.Orientation.W;
+        floats[8] = transform.Lanes.X; floats[9] = transform.Lanes.Y; floats[10] = transform.Lanes.Z; floats[11] = transform.Lanes.W;
+    }
+    // Pack the per-frame screen-light buffer: entries 0..(MaxScreenSurfaces-1) = each screen's emitted color (the
+    // framebuffer average set via SetScreenLight) with the room-glow intensity gain in w, the last entry = the
+    // environment (ambient/sun dimming from the frame). KEEP IN SYNC with frame/sdf-environment.hlsli's sdfScreenLights layout
+    // (SdfScreenLightEnv must equal MaxScreenSurfaces there).
+    private void PackScreenLights(SdfFrame frame) {
+        var floats = MemoryMarshal.Cast<byte, float>(span: m_screenLightScratch.AsSpan());
+
+        for (var index = 0; (index < MaxScreenSurfaces); index++) {
+            var color = m_screenLightColors[index];
+            var b = (index * 4);
+
+            floats[(b + 0)] = color.X; floats[(b + 1)] = color.Y; floats[(b + 2)] = color.Z; floats[(b + 3)] = ScreenLightIntensity;
+        }
+
+        var envBase = (MaxScreenSurfaces * 4);
+
+        // The env entry's zw lanes carry the SLICE debug view's plane selector (axis + offset — see
+        // SdfFrame.DebugSliceAxis); they were spare pads before, so a frame that never sets them uploads the same zeros.
+        floats[(envBase + 0)] = frame.AmbientScale; floats[(envBase + 1)] = frame.SunScale; floats[(envBase + 2)] = frame.DebugSliceAxis; floats[(envBase + 3)] = frame.DebugSliceOffset;
+
+        // The grid-lock overlay rows (grid-locking §4a): four float4 rows AFTER the env entry (env stays at
+        // MaxScreenSurfaces, load-bearing as the shader's screen-count loop bound). Default 0 = no overlay, so a frame
+        // that never sets the Grid* fields uploads the same zeros. KEEP IN SYNC with frame/sdf-environment.hlsli's SdfGridWorld..
+        var gridWorldBase = ((MaxScreenSurfaces + 1) * 4);
+
+        floats[(gridWorldBase + 0)] = frame.GridFlags; floats[(gridWorldBase + 1)] = frame.GridFloorY; floats[(gridWorldBase + 2)] = frame.GridWorldPitch.X; floats[(gridWorldBase + 3)] = frame.GridWorldPitch.Y;
+
+        var gridObjOriginBase = ((MaxScreenSurfaces + 2) * 4);
+
+        floats[(gridObjOriginBase + 0)] = frame.GridObjectOrigin.X; floats[(gridObjOriginBase + 1)] = frame.GridObjectOrigin.Y; floats[(gridObjOriginBase + 2)] = frame.GridObjectOrigin.Z; floats[(gridObjOriginBase + 3)] = frame.GridObjectPitch.X;
+
+        var gridObjFrameBase = ((MaxScreenSurfaces + 3) * 4);
+
+        floats[(gridObjFrameBase + 0)] = frame.GridObjectFrame.X; floats[(gridObjFrameBase + 1)] = frame.GridObjectFrame.Y; floats[(gridObjFrameBase + 2)] = frame.GridObjectFrame.Z; floats[(gridObjFrameBase + 3)] = frame.GridObjectFrame.W;
+
+        // The .z lane is the analytic-normal A/B toggle (0 = the forward-mode dual normal, the default; 1 = the legacy
+        // 4-tap finite-difference probe), read by frame/sdf-levers.hlsli's worldUseTapNormals. The .w lane is the soft-shadow
+        // GRID-CULL toggle (0 = ON, the default grid-gathered shadow march; 1 = OFF, the flat all-instances reference),
+        // read by worldShadowCullEnabled. Both were reserved before, so an unset frame uploads 0 = analytic normals +
+        // cull ON. KEEP IN SYNC with SdfFrame.UseFiniteDifferenceNormals / SdfFrame.DisableShadowCull.
+        var gridObjParamsBase = ((MaxScreenSurfaces + 4) * 4);
+
+        floats[(gridObjParamsBase + 0)] = frame.GridObjectPitch.Y; floats[(gridObjParamsBase + 1)] = frame.GridObjectPatchRadius; floats[(gridObjParamsBase + 2)] = (frame.UseFiniteDifferenceNormals
+            ? 1f
+            : 0f
+        ); floats[(gridObjParamsBase + 3)] = (frame.DisableShadowCull
+            ? 1f
+            : 0f
+        );
+
+        // Engine-bench shader-feature levers: one reserved row after the grid rows. x = disable soft
+        // shadows, y = disable AO, z = shadow-distance scale (0 = the full 1.0 reach — an unset frame uploads 0), w =
+        // disable screen lights. All default 0, so a frame that never sets the Disable*/ShadowDistanceScale fields
+        // uploads the same zeros = every feature ON at full reach. KEEP IN SYNC with frame/sdf-environment.hlsli's SdfBenchParams
+        // row and frame/sdf-levers.hlsli's decode (worldSoftShadowsDisabled/worldAoDisabled/worldShadowDistanceScale/worldScreenLightsDisabled).
+        var benchParamsBase = ((MaxScreenSurfaces + 5) * 4);
+
+        floats[(benchParamsBase + 0)] = (frame.DisableSoftShadows
+            ? 1f
+            : 0f
+        ); floats[(benchParamsBase + 1)] = (frame.DisableAmbientOcclusion
+            ? 1f
+            : 0f
+        ); floats[(benchParamsBase + 2)] = frame.ShadowDistanceScale; floats[(benchParamsBase + 3)] = (frame.DisableScreenLights
+            ? 1f
+            : 0f
+        );
+
+        // The shadow-proxy lever (PATH B): one reserved row AFTER the bench-params row (whose four lanes are full). x =
+        // enable the shadow proxy (shadow rays skip Subtraction-family carve instances and march the pre-carve union
+        // hull); y = use the camera-tile shadow mask instead of the per-pixel shadow-grid gather; z = use the bounded-cost
+        // fast soft-shadow marcher; w = use the one-sample contact-AO approximation.
+        // Both default 0, so a frame that never sets either lever uploads the same zeros = the full gathered occluder
+        // set. KEEP IN SYNC with frame/sdf-environment.hlsli's SdfShadowProxyParams, frame/sdf-levers.hlsli's
+        // worldShadowProxyEnabled, and frame/sdf-levers.hlsli's worldUseCameraTileShadowMask / worldUseFastSoftShadowMarch / worldUseFastAmbientOcclusion.
+        var shadowProxyBase = ((MaxScreenSurfaces + 6) * 4);
+
+        floats[(shadowProxyBase + 0)] = (frame.EnableShadowProxy
+            ? 1f
+            : 0f
+        ); floats[(shadowProxyBase + 1)] = (frame.UseCameraTileShadowMask
+            ? 1f
+            : 0f
+        ); floats[(shadowProxyBase + 2)] = (frame.UseFastSoftShadowMarch
+            ? 1f
+            : 0f
+        ); floats[(shadowProxyBase + 3)] = (frame.UseFastAmbientOcclusion
+            ? 1f
+            : 0f
+        );
+
+        // The far-field lever row: x = disable the beam-published per-tile far bound (the fine march then runs to
+        // the far distance); yzw reserved. Default 0 = the far bound ON. KEEP IN SYNC with frame/sdf-environment.hlsli's
+        // SdfFarFieldParams and frame/sdf-levers.hlsli's worldFarBoundDisabled.
+        var farFieldBase = ((MaxScreenSurfaces + 7) * 4);
+
+        floats[(farFieldBase + 0)] = (frame.DisableFarBound
+            ? 1f
+            : 0f
+        ); floats[(farFieldBase + 1)] = 0f; floats[(farFieldBase + 2)] = 0f; floats[(farFieldBase + 3)] = 0f;
+
+        PackEnvironment(
+            floats: floats,
+            frame: frame
+        );
+    }
+    // Eleven float4 rows, paired with shade-volumes.hlsli. Unused trailing slots carry zero bounds.
+    private void PackVolumes(SdfFrame frame) {
+        Array.Clear(array: m_volumeScratch);
+
+        var floats = MemoryMarshal.Cast<byte, float>(span: m_volumeScratch.AsSpan());
+        var volumes = frame.Volumes;
+
+        if (volumes.Count > MaxVolumes) {
+            throw new ArgumentOutOfRangeException(
+                nameof(frame),
+                "Too many bounded volumes."
+            );
+        }
+        var count = volumes.Count;
+
+        for (var index = 0; (index < count); index++) {
+            var volume = volumes[index];
+
+            volume.Validate(dynamicTransformCount: frame.DynamicTransforms.Count);
+            var b = ((index * SdfVolume.VectorsPerEntry) * 4);
+            var rotation = Quaternion.Normalize(value: volume.Rotation);
+
+            floats[(b + 0)] = volume.Position.X; floats[(b + 1)] = volume.Position.Y; floats[(b + 2)] = volume.Position.Z; floats[(b + 3)] = volume.DynamicSlot;
+            floats[(b + 4)] = rotation.X; floats[(b + 5)] = rotation.Y; floats[(b + 6)] = rotation.Z; floats[(b + 7)] = rotation.W;
+            floats[(b + 8)] = volume.HalfExtent.X; floats[(b + 9)] = volume.HalfExtent.Y; floats[(b + 10)] = volume.HalfExtent.Z; floats[(b + 11)] = volume.Axis;
+            floats[(b + 12)] = volume.Width; floats[(b + 13)] = volume.Speed; floats[(b + 14)] = BitConverter.UInt32BitsToSingle(value: volume.Seed); floats[(b + 15)] = volume.Steps;
+            floats[(b + 16)] = volume.Intensity; floats[(b + 17)] = volume.Extinction;
+            floats[(b + 18)] = volume.PulseAmplitude; floats[(b + 19)] = volume.PulseFrequency;
+            floats[(b + 20)] = (volume.IntensityLane ?? -1); floats[(b + 21)] = volume.Ramp.Count;
+            floats[(b + 22)] = ((float)volume.Kind);
+            floats[(b + 40)] = volume.Coverage; floats[(b + 41)] = volume.Softness;
+            for (var stop = 0; (stop < volume.Ramp.Count); stop++) {
+                var row = ((b + 24) + (stop * 4));
+                var value = volume.Ramp[stop];
+
+                floats[row] = value.Color.X; floats[(row + 1)] = value.Color.Y;
+                floats[(row + 2)] = value.Color.Z; floats[(row + 3)] = value.Density;
+            }
+        }
+    }
+    // The environment block: SdfEnvironment's lanes copied row for row after the far-field row, with the host bakes
+    // the shader must not pay per pixel — every directional (light and softbox) normalized in double and rounded once
+    // (DXC's DXIL backend constant-folds a normalize() while its SPIR-V backend emits a runtime call; a uniform has
+    // no such asymmetry), the sun-disc angular radius baked into the pow() exponent that puts the disc's edge at half
+    // brightness (k = ln 0.5 / ln cos r), the twinkle rate baked into a period in engine ticks so the shader reduces
+    // the tick counter by an integer modulo, and the cloud drift, shear and spin integrated from the tick counter in
+    // double (offsets wrapped modulo the lattice period, the angle modulo 2π). KEEP IN SYNC with frame/sdf-environment.hlsli's
+    // SdfEnv* rows and SdfEnvironment's row layout.
+    private static void PackEnvironment(SdfFrame frame, Span<float> floats) {
+        var environment = frame.Environment;
+        var lanes = environment.Lanes;
+        var envBase = ((MaxScreenSurfaces + 8) * 4);
+
+        lanes.CopyTo(destination: floats.Slice(
+            length: SdfEnvironment.LaneCount,
+            start: envBase
+        ));
+
+        for (var index = 0; (index < SdfEnvironment.MaxLights); index++) {
+            var local = ((SdfEnvironment.LightsRow + (index * SdfEnvironment.RowsPerLight)) * 4);
+            var row = (envBase + local);
+            var kind = ((SdfLightKind)((byte)lanes[(local + 7)]));
+
+            if (kind != SdfLightKind.Directional) {
+                continue;
+            }
+
+            double x = lanes[(local + 0)], y = lanes[(local + 1)], z = lanes[(local + 2)];
+            var length = Math.Sqrt(d: (((x * x) + (y * y)) + (z * z)));
+
+            if (length <= 0d) {
+                // A zero direction has no Lambert term; the authoring doors refuse one by name, and a frame assembled
+                // in code still must not upload NaNs into every shaded pixel.
+                x = SdfEnvironment.DefaultSunDirection.X; y = SdfEnvironment.DefaultSunDirection.Y; z = SdfEnvironment.DefaultSunDirection.Z;
+                length = Math.Sqrt(d: (((x * x) + (y * y)) + (z * z)));
+            }
+
+            floats[(row + 0)] = ((float)(x / length)); floats[(row + 1)] = ((float)(y / length)); floats[(row + 2)] = ((float)(z / length));
+        }
+
+        var skyControl = (envBase + (SdfEnvironment.SkyControlRow * 4));
+        var cosDiscRadius = Math.Cos(d: environment.SunDiscRadians);
+        var discExponent = ((cosDiscRadius is > 0d and < 1d)
+            ? Math.Clamp(
+                value: (Math.Log(d: 0.5d) / Math.Log(d: cosDiscRadius)),
+                min: 0d,
+                max: 100000d
+            )
+            : 100000d
+        );
+
+        floats[(skyControl + 2)] = ((float)discExponent);
+
+        var twinkle = (envBase + (SdfEnvironment.TwinkleRow * 4));
+        var twinklePeriodTicks = ((environment.TwinkleRate > 0f)
+            ? Math.Max(
+                val1: 1d,
+                val2: Math.Round(a: (((double)EngineTicks.PerSecond) / environment.TwinkleRate))
+            )
+            : 1d
+        );
+
+        floats[(twinkle + 2)] = ((float)twinklePeriodTicks);
+
+        var elapsedSeconds = (((double)frame.SampleIndex) / EngineTicks.PerSecond);
+        var drift = environment.CloudDrift;
+        var shear = environment.CloudShear;
+        var cloudsC = (envBase + ((SdfEnvironment.CloudsRow + 2) * 4));
+        var cloudsD = (envBase + ((SdfEnvironment.CloudsRow + 3) * 4));
+
+        floats[(cloudsC + 0)] = ((float)Math.IEEERemainder(
+            x: (elapsedSeconds * drift.X),
+            y: CloudLatticePeriod
+        ));
+        floats[(cloudsC + 1)] = ((float)Math.IEEERemainder(
+            x: (elapsedSeconds * drift.Y),
+            y: CloudLatticePeriod
+        ));
+        floats[(cloudsC + 2)] = ((float)Math.IEEERemainder(
+            x: (elapsedSeconds * shear.X),
+            y: CloudLatticePeriod
+        ));
+        floats[(cloudsC + 3)] = ((float)Math.IEEERemainder(
+            x: (elapsedSeconds * shear.Y),
+            y: CloudLatticePeriod
+        ));
+        floats[(cloudsD + 0)] = ((float)Math.IEEERemainder(
+            x: (elapsedSeconds * environment.CloudSpin),
+            y: Math.Tau
+        ));
+
+        for (var index = 0; (index < SdfEnvironment.MaxSoftboxes); index++) {
+            var local = ((SdfEnvironment.SoftboxesRow + (index * SdfEnvironment.RowsPerSoftbox)) * 4);
+            var row = (envBase + local);
+
+            double x = lanes[(local + 0)], y = lanes[(local + 1)], z = lanes[(local + 2)];
+            var length = Math.Sqrt(d: (((x * x) + (y * y)) + (z * z)));
+
+            if (length <= 0d) {
+                continue; // an unauthored softbox slot has zero weight and never contributes; leave its direction zero
+            }
+
+            floats[(row + 0)] = ((float)(x / length)); floats[(row + 1)] = ((float)(y / length)); floats[(row + 2)] = ((float)(z / length));
+        }
+    }
+
+    // The cloud offset's wrap period in layer units. The lattice is hashed on integer cell coordinates, so any
+    // integer period is seamless; this one keeps a full period inside float's exact-integer range with room for
+    // the sub-cell fraction.
+    private const double CloudLatticePeriod = 4096d;
+
+    // The deterministic tick clock star twinkle reads, the latest frame's or zero for a sky with no visible twinkle.
+    private uint m_sampleIndex;
+
+    /// <summary>Gets or sets the SDF debug view mode packed into each viewport row (<c>forward.w</c>); 0 renders the
+    /// final lit image.</summary>
+    public int DebugMode { get; set; }
+    /// <summary>Gets the tick clock star twinkle reads in the latest packed frame, or zero when its sky twinkles
+    /// nowhere visible: the value every pass block of the frame carries.</summary>
+    public uint SampleIndex => m_sampleIndex;
+    /// <summary>Gets the live program's per-tile instance-mask width, which every pass block carries.</summary>
+    public uint InstanceMaskWordCount => ((uint)m_liveInstanceMaskWordCount);
+
+    /// <summary>Writes one view's 96-byte viewport row: its camera snapshot, render extent and the frame's far distance,
+    /// member for member from the frame, with no camera math (the snapshot already holds the basis, tan(fov/2) and aspect).
+    /// The render extent is the view's output extent in exact integers, so the sky, the tile passes and the hit passes all
+    /// read the same one. The far distance rides the row's last lane, and the row carries the frame's presentation time,
+    /// debug view mode and off-axis offset. KEEP IN SYNC with frame/sdf-viewport.hlsli's <c>ViewportData</c> /
+    /// <c>worldFarDistance</c>.</summary>
+    /// <param name="frame">The frame.</param>
+    /// <param name="view">The view's index in <see cref="SdfFrame.Views"/>.</param>
+    /// <param name="width">The view's render width, in pixels.</param>
+    /// <param name="height">The view's render height, in pixels.</param>
+    /// <param name="row">The row, <see cref="ViewportByteLength"/> bytes.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
+    public void WriteViewportRow(SdfFrame frame, int view, uint width, uint height, Span<byte> row) {
+        ArgumentNullException.ThrowIfNull(argument: frame);
+
+        var floats = MemoryMarshal.Cast<byte, float>(span: row[..ViewportByteLength]);
+        var snapshot = frame.Views[view];
+        var camera = snapshot.Camera;
+
+        floats[0] = camera.Position.X; floats[1] = camera.Position.Y; floats[2] = camera.Position.Z; floats[3] = frame.Time;          // position.xyz, time
+        floats[4] = camera.Right.X; floats[5] = camera.Right.Y; floats[6] = camera.Right.Z; floats[7] = camera.TanHalfFieldOfView;     // right.xyz, tan(fov/2)
+        floats[8] = camera.Up.X; floats[9] = camera.Up.Y; floats[10] = camera.Up.Z; floats[11] = camera.AspectRatio;                   // up.xyz, aspect
+        floats[12] = camera.Forward.X; floats[13] = camera.Forward.Y; floats[14] = camera.Forward.Z; floats[15] = DebugMode;           // forward.xyz, debug view mode
+        floats[16] = width; floats[17] = height; floats[18] = 0f; floats[19] = 0f;                                                     // render extent xy
+        floats[20] = 0f; floats[21] = snapshot.AsymmetricFrustumOffset.X; floats[22] = snapshot.AsymmetricFrustumOffset.Y; floats[23] = frame.FarDistance; // lens: off-axis offset xy, far distance
+    }
+    /// <summary>Packs a frame into the tables host-side: validates it, writes the dynamic transforms it moved, rebuilds the
+    /// frame instance grid when a binnable instance moved, and packs the screen lights, volumes and mesh draws. Each region
+    /// owes only the words that changed; the frame's first pass sends them (<see cref="SubmitUpload"/>). The views are the
+    /// passes' own: each packs its row (<see cref="WriteViewportRow"/>).</summary>
+    /// <param name="frame">The frame.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ObjectDisposedException">The tables are disposed.</exception>
+    /// <exception cref="ArgumentException">The frame has no view, supplies fewer dynamic transforms than the program
+    /// requires, or a far distance that is not finite and positive.</exception>
+    public void Pack(SdfFrame frame) {
+        ArgumentNullException.ThrowIfNull(frame);
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
+
+        if (frame.Views.Count == 0) {
+            throw new ArgumentException(
+                message: "A frame renders at least one view.",
+                paramName: nameof(frame)
+            );
+        }
+
+        if (frame.DynamicTransforms.Count < m_requiredDynamicTransformCapacity) {
+            throw new ArgumentException(
+                message: $"The uploaded SDF program requires {m_requiredDynamicTransformCapacity} dynamic-transform slots; the frame supplies {frame.DynamicTransforms.Count}.",
+                paramName: nameof(frame)
+            );
+        }
+
+        // The far distance is read by every marching kernel as the depth each march ends at; a non-finite or
+        // non-positive value would make every cone proof and far exit meaningless, so it is refused here rather than
+        // guarded per kernel (the world validator refuses the authored value by name long before it reaches a frame).
+        if (
+            !float.IsFinite(f: frame.FarDistance) ||
+            (frame.FarDistance <= 0f)
+        ) {
+            throw new ArgumentException(
+                message: $"The frame's far distance must be finite and positive; got {frame.FarDistance}.",
+                paramName: nameof(frame)
+            );
+        }
+
+        var transformsChanged = PackDynamicTransforms(frame: frame);
+
+        // Re-bin only when an active maskable dynamic instance can move a grid entry, and only on a frame whose
+        // transforms moved (or after a program upload): the grid is a pure function of the program and the transforms.
+        // Invariant programs staged their grid once at UploadProgram.
+        if (
+            m_rebuildInstanceGridPerFrame &&
+            (transformsChanged || m_instanceGridRebuildOwed)
+        ) {
+            var frameGrid = m_liveProgram.BuildFrameInstanceGrid(
+                transforms: frame.DynamicTransforms,
+                inputScratch: m_instanceGridInputScratch,
+                workspace: m_instanceGridWorkspace
+            );
+
+            ValidateInstanceGridCapacity(words: frameGrid);
+            StageInstanceGrid(words: frameGrid);
+            m_instanceGridRebuildOwed = false;
+        }
+
+        // The screen-light and volume tables are packed every frame; UploadProgram seeds the screen-surface table and
+        // SetScreenSurface patches it, and SetScreenDecal/ClearScreenDecal patch the decal table.
+        PackScreenLights(frame: frame);
+        _ = m_screenLightRegion.Write(
+            bytes: m_screenLightScratch,
+            offset: 0
+        );
+        PackVolumes(frame: frame);
+        _ = m_volumeRegion.Write(
+            bytes: m_volumeScratch,
+            offset: 0
+        );
+        StageMeshRegion(draws: frame.MeshDraws);
+
+        // The deterministic tick clock star twinkle reads (cloud motion is baked into the environment rows). It rides
+        // every pass block and the signature folds it, so the cadence never stands a frame whose tick moved; a sky with no
+        // visible twinkle packs 0, leaving a static frame to stand.
+        var environment = frame.Environment;
+        var twinkles = (
+            (environment.StarBrightness > 0f) &&
+            (environment.StarDensity > 0f) &&
+            (environment.TwinkleShare > 0f) &&
+            (environment.TwinkleDepth > 0f)
+        );
+
+        m_sampleIndex = (twinkles
+            ? frame.SampleIndex
+            : 0u);
+    }
+
+    private void ValidateInstanceGridCapacity(ReadOnlySpan<uint> words) {
+        if (words.Length > m_instanceGridWordCapacity) {
+            throw new InvalidOperationException(message: $"The frame instance grid packed {words.Length} words into a {m_instanceGridWordCapacity}-word construction envelope.");
+        }
+    }
+}

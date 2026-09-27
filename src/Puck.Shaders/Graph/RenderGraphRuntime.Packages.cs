@@ -1,3 +1,4 @@
+using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 
 namespace Puck.Shaders;
@@ -169,8 +170,50 @@ public sealed partial class RenderGraphRuntime {
     }
     // Tells every package's factory the device was lost.
     private void PackagesLostDevice() {
-        foreach (var factory in m_packages.Factories) {
-            factory.OnDeviceLost();
+        var factories = m_packages.Factories;
+
+        for (var index = 0; (index < factories.Count); index++) {
+            factories[index].OnDeviceLost();
+        }
+    }
+
+    /// <summary>Returns a graph instance's latest completed image, the one its consumers bind, for a host that samples it
+    /// the way a consumer does: in a submission of the frame it reads it in, with no lease, since the instance's node
+    /// holds an image it published until two of its own submissions after a newer one.</summary>
+    /// <param name="instance">The instance's name.</param>
+    /// <param name="image">The image, when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when the instance renders a graph and has completed an image.</returns>
+    /// <exception cref="ObjectDisposedException">The runtime is disposed.</exception>
+    public bool TryLatestImage(string instance, out Surface image) {
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
+
+        var index = m_set.IndexOf(name: instance);
+
+        image = default;
+
+        if (
+            (index < 0) ||
+            (m_nodes[index] is null) ||
+            (m_current[index].Frame < 0) ||
+            !m_current[index].Image.IsSameDeviceImage
+        ) {
+            return false;
+        }
+
+        image = m_current[index].Image;
+
+        return true;
+    }
+
+    // Starts the frame for every package's factory.
+    private void PackagesBeginFrame(in FrameContext context) {
+        var factories = m_packages.Factories;
+
+        for (var index = 0; (index < factories.Count); index++) {
+            factories[index].BeginFrame(context: in context);
         }
     }
 }

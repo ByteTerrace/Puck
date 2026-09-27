@@ -45,8 +45,51 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
 
         return m_liveText.ToString();
     }
+    // The bytes the world's view allocates for its visibility records, and for the mesh pass's target and depth
+    // attachment: storages of its sdf.world passes, zero before its graph installs.
+    private (ulong Visibility, ulong MeshAttachments) WorldViewBytes() {
+        var visibility = 0UL;
+        var mesh = 0UL;
+
+        if (renderProbe?.Root?.Runtime.NodeOf(instance: WorldViewGraphs.WorldInstance) is { } node) {
+            foreach (var status in node.ResourceStatus) {
+                if (string.Equals(
+                    a: status.Name,
+                    b: Puck.Shaders.RenderGraphPackageFragment.Spliced(
+                        name: Puck.Shaders.SdfWorldPackage.Parts.Visibility,
+                        pass: Puck.Shaders.RenderGraphPackageCatalog.SdfWorld
+                    ),
+                    comparisonType: StringComparison.Ordinal
+                )) {
+                    visibility += status.AllocationBytes;
+                } else if (
+                    string.Equals(
+                        a: status.Name,
+                        b: Puck.Shaders.RenderGraphPackageFragment.Spliced(
+                            name: Puck.Shaders.SdfWorldPackage.Parts.MeshTarget,
+                            pass: Puck.Shaders.RenderGraphPackageCatalog.SdfWorld
+                        ),
+                        comparisonType: StringComparison.Ordinal
+                    ) ||
+                    string.Equals(
+                        a: status.Name,
+                        b: Puck.Shaders.RenderGraphPackageFragment.Spliced(
+                            name: Puck.Shaders.SdfWorldPackage.Parts.MeshDepth,
+                            pass: Puck.Shaders.RenderGraphPackageCatalog.SdfWorld
+                        ),
+                        comparisonType: StringComparison.Ordinal
+                    )
+                ) {
+                    mesh += status.AllocationBytes;
+                }
+            }
+        }
+
+        return (visibility, mesh);
+    }
     private string DescribeBudget() {
-        var render = ((renderProbe?.Node is { } node)
+        var (visibilityBytes, meshAttachmentBytes) = WorldViewBytes();
+        var render = ((renderProbe?.Residency is { } node)
             ? $"program {node.LiveProgramWords}/{node.ProgramWordCapacity} word(s), {node.LiveProgramInstances} instance(s), globalStepScale {node.LiveProgramStepScale.ToString(
                 format: "G6",
                 provider: CultureInfo.InvariantCulture
@@ -60,12 +103,12 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
                     format: "0.###",
                     provider: CultureInfo.InvariantCulture
                 )} at instruction {binder.InstructionIndex}, unscoped)"
-                : string.Empty)}, visibility records {node.VisibilityRecordBytes.ToString(provider: CultureInfo.InvariantCulture)} byte(s) at {Puck.Shaders.SdfWorldPackage.VisibilityRecordByteLength.ToString(provider: CultureInfo.InvariantCulture)} a pixel, mesh region {node.MeshRegionBytes.ToString(provider: CultureInfo.InvariantCulture)} byte(s) held for {node.MeshDrawCount.ToString(provider: CultureInfo.InvariantCulture)} draw(s), mesh attachments {node.MeshAttachmentBytes.ToString(provider: CultureInfo.InvariantCulture)} byte(s)"
+                : string.Empty)}, visibility records {visibilityBytes.ToString(provider: CultureInfo.InvariantCulture)} byte(s) at {Puck.Shaders.SdfWorldPackage.VisibilityRecordByteLength.ToString(provider: CultureInfo.InvariantCulture)} a pixel, mesh region {node.MeshRegionBytes.ToString(provider: CultureInfo.InvariantCulture)} byte(s) held for {node.MeshDrawCount.ToString(provider: CultureInfo.InvariantCulture)} draw(s), mesh attachments {meshAttachmentBytes.ToString(provider: CultureInfo.InvariantCulture)} byte(s)"
             : "renderer not built yet"
         );
 
-        if (renderProbe?.Node is { } rendered) {
-            render += $", volumes {rendered.LiveVolumes}/{Puck.SdfVm.SdfWorldEngine.MaxVolumes}";
+        if (renderProbe?.Residency is { } rendered) {
+            render += $", volumes {rendered.LiveVolumes}/{Puck.SdfVm.SdfWorldTables.MaxVolumes}";
             var clamps = rendered.LiveProgramFieldScopeClamps;
 
             render += $", scoped clamps {clamps.Count} ({clamps.Count(predicate: static clamp => (clamp.ShapeCount > 1))} shared)";
@@ -84,7 +127,7 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
         var fogDensity = (server.Definition.Render.Sky?.Layers?.OfType<WorldRenderSkyLayer.Fog>().FirstOrDefault()?.Density ?? Puck.SignedDistance.SdfEnvironment.DefaultFogDensity);
         var far = string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"far {farDistance:0.##} unit(s) (reach x{(farDistance / Puck.SdfVm.SdfFrame.DefaultFarDistance):0.##} the {Puck.SdfVm.SdfFrame.DefaultFarDistance:0}-unit default; horizon ray ~{farDistance:0} step(s) per unit of camera height of {Puck.SdfVm.SdfWorldEngine.PrimaryMarchSteps}; fog remnant at the far plane {MathF.Exp(x: (-fogDensity * farDistance)):0.###})"
+            handler: $"far {farDistance:0.##} unit(s) (reach x{(farDistance / Puck.SdfVm.SdfFrame.DefaultFarDistance):0.##} the {Puck.SdfVm.SdfFrame.DefaultFarDistance:0}-unit default; horizon ray ~{farDistance:0} step(s) per unit of camera height of {Puck.SdfVm.SdfWorldTables.PrimaryMarchSteps}; fog remnant at the far plane {MathF.Exp(x: (-fogDensity * farDistance)):0.###})"
         );
         var lattice = ((population.Fields is { } fields)
             ? fields.DescribeCost(

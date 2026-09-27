@@ -7,13 +7,13 @@ namespace Puck.World;
 internal sealed partial class WorldScreenBinder {
     /// <summary>Configures the views the world renders beside its own — called once by the render factory after the frame
     /// source has probed the render envelope (the worst-case program, instance and transform capacities every view's
-    /// engine must fit). Registers one camera view per camera a screen names and one session view per session screen, each
-    /// an <c>sdf.world</c> instance the render graph runs (<see cref="TryViewProducer"/>).</summary>
-    /// <param name="pipelines">The composition's pipeline cache every view's engine leases its pipeline set from.</param>
+    /// residency must fit). Registers one camera view per camera a screen names and one session view per session screen,
+    /// each an <c>sdf.world</c> instance the render graph runs (<see cref="TryResolveView"/>).</summary>
+    /// <param name="pipelines">The composition's pipeline cache every view's residency leases its pipeline set from.</param>
     /// <param name="hostsOnDirectX">Whether the host backend is Direct3D 12 (selects the kernel bytecode).</param>
-    /// <param name="programWordCapacity">The main engine's probed program-word floor.</param>
-    /// <param name="instanceCapacity">The main engine's probed instance floor.</param>
-    /// <param name="dynamicTransformCapacity">The main engine's dynamic-transform slot count.</param>
+    /// <param name="programWordCapacity">The world's probed program-word floor.</param>
+    /// <param name="instanceCapacity">The world's probed instance floor.</param>
+    /// <param name="dynamicTransformCapacity">The world's dynamic-transform slot count.</param>
     /// <param name="host">The world's frame source, whose glyph atlas, screen decals and moving screens a camera view
     /// shares.</param>
     /// <param name="displayWidth">The display's width, in pixels, which a view's declared extent is a fraction of.</param>
@@ -87,8 +87,8 @@ internal sealed partial class WorldScreenBinder {
             return;
         }
 
-        // A frame a camera view captured ahead in an earlier frame the world node never rendered is stale now.
-        ViewHost?.BeginFrame();
+        // A view whose registration or session is gone gives back its residency.
+        ReconcileViewResidencies();
         ReconcileSessionLifecycles();
         RetireParkedCaptures();
 

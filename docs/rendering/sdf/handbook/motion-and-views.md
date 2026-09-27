@@ -118,7 +118,7 @@ basis. Rasterized geometry does, and `ViewProjection`
 is right-handed and view space looks down −Z. The projection is reversed-Z
 with an infinite far plane: depth is `near / d` for forward distance `d`, 1 on
 the near plane and falling toward 0, so a nearer surface always has the
-greater depth. The SDF engine's near plane is `SdfWorldEngine.ConeNear`, the
+greater depth. The SDF engine's near plane is `SdfWorldTables.ConeNear`, the
 distance where every camera cone starts. Normalized device coordinates put +Y
 up, a view's UV origin is its top-left corner, and each sample is a pixel
 center with no jitter. `RayParameter` turns a depth back into the distance
@@ -137,10 +137,10 @@ render graph (`RenderGraphInstance`), and a screen reads the instance it
 shows: a guest machine or a producer as a source instance, a camera or
 another world as a view instance (`WorldViewInstances`).
 
-- **A camera view** is an external `sdf.world` instance named by its camera's
-  registration, rendered by an `SdfEngineNode` of its own
+- **A camera view** is an `sdf.world` instance named by its camera's
+  registration, rendering an `SdfWorldResidency` of its own
   (`SdfCameraFrameSource`). It films the frame the world renders
-  (`SdfEngineNode.HostFrame`)—the same program, transforms, clock and
+  (`SdfWorldResidency.HostFrame`)—the same program, transforms, clock and
   levers—from a rig posed against a live anchor. It films an already-lit world
   and contributes no light of its own.
 - **A session view** is an `sdf.world` instance too, rendering another world's
@@ -160,9 +160,9 @@ last image. The cost of every view is priced in the schedule and
 
 A view filming the world reads every view, itself included, at its previous
 frame, and the world reads every view within the frame. **Inside view V's own
-render, a screen showing V samples V's previous image**: the engine renders
-the frame into another output when one of its own screens samples the current
-one, so a view never samples the image it is in the middle of writing. A mirror
+render, a screen showing V samples V's previous image**: a read of a view's own
+output binds the output it completed before this frame, so a view never samples
+the image it is in the middle of writing. A mirror
 facing itself therefore shows the frame before, and two cameras filming each
 other's screens each show the other's previous frame, never a same-frame loop.
 
@@ -223,8 +223,9 @@ about frame layout.
 
 A render-graph instance is the thing that *produces* the image a screen
 source samples—the instance and the screen surface are two ends of a wire,
-not one object. `SetScreenSource(index, 0)`—a screen reading no instance—unbinds
-that wire: the face shades as dark glass, lit faintly by the sun, the look of a
+not one object. A screen reading no instance is unbound
+(`SdfWorldTables.SetScreenBound`): the face shades as dark glass, lit faintly
+by the sun, the look of a
 display with nothing behind it.
 
 The conflation to watch for: treating a screen surface as if it needs a
@@ -238,8 +239,9 @@ screen source is pure shading fed by a wire. A booted cabinet's CRT is a
 ## Related resources
 
 - [.claude/skills/rendering/SKILL.md](../../../../.claude/skills/rendering/SKILL.md)
-  —"Views" and "Composition, anchors, views, and queries" sections; the two
-  content seams under "Engine semantics."
+  —the "Engine seams that bite" section, whose screens and image-sources
+  entries cover the two content seams, and "Shader manifests and pipelines,"
+  which covers views as render-graph instances.
 - Source: `src/Puck.SdfVm/SdfAnchor.cs`, `src/Puck.SdfVm/Views/SdfCameraRig.cs`,
   `src/Puck.SdfVm/Views/SdfCameraFrameSource.cs`, `src/Puck.SdfVm/Views/ViewTransition.cs`,
   `src/Puck.World.Client/Sources/WorldViewInstances.cs`,

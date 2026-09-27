@@ -507,14 +507,19 @@ internal sealed partial class WorldScreenBinder {
 
                 break;
             case WorldScreenSource.View view:
+                // A view's node holds each image it publishes until two of its own submissions after a newer one, so the
+                // overlay's frame samples its latest one with no lease, as a consumer instance does.
                 if (
-                    (ViewProducerOf(name: ViewRegistrationName(
-                        cameraName: view.CameraName,
-                        seat: seat
-                    )) is { } producer) &&
-                    producer.TryAcquireOutput(output: out var output)
+                    (Runtime is { } runtime) &&
+                    runtime.TryLatestImage(
+                        image: out var image,
+                        instance: ViewRegistrationName(
+                            cameraName: view.CameraName,
+                            seat: seat
+                        )
+                    )
                 ) {
-                    frame = output.Lease;
+                    frame = image.ImageViewHandle;
 
                     return true;
                 }

@@ -18,8 +18,8 @@ namespace Puck.Hosting;
 /// capture or a probe of either, resolved outside a capture frame), or was rendered from such an image. An instance that
 /// reads a tainted image is tainted until it renders again from untainted ones, and no capture reads it.</param>
 public readonly record struct RenderGraphExternalOutput(Surface Image, GpuImageLayout Layout, GpuImageLease Lease, bool Tainted);
-/// <summary>Renders a render-graph instance through its own submissions rather than a graph of its own: the SDF engine
-/// behind <c>sdf.world</c>, which submits through its own frame ring. The graph runtime produces it before its
+/// <summary>Renders a render-graph instance through its own submissions rather than a graph of its own, such as an image
+/// producer whose image another device writes. The graph runtime produces it before its
 /// consumers when the schedule renders it, at the scheduled extent, handing it the latest completed image of every
 /// instance its own instance reads, and each consumer acquires its latest completed output, on frames the schedule skips
 /// or defers as well. A capture the runtime forwards to it is served by the next frame it produces, from the image that

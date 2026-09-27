@@ -5,7 +5,7 @@ using Puck.Text;
 namespace Puck.SignedDistance;
 
 public sealed partial class SdfProgramBuilder {
-    /// <summary>Adds a single glyph cell sampled from a bound font atlas (see <c>Puck.SdfVm.SdfWorldEngine.SetGlyphAtlas</c>) as
+    /// <summary>Adds a single glyph cell sampled from a bound font atlas (see <c>Puck.SdfVm.SdfWorldTables.SetGlyphAtlas</c>) as
     /// a distance-level field — text as real world geometry (marchable, liftable, blendable, and with
     /// <see cref="SdfBlendOp.Subtraction"/> engravable into any surface). The glyph is the atlas letter where the atlas
     /// is bound (the world-lit render) and the conservative extruded cell box everywhere else. Most callers use
@@ -139,7 +139,7 @@ public sealed partial class SdfProgramBuilder {
     /// <paramref name="origin"/> (the first line's baseline pen). Each glyph is a self-contained
     /// <see cref="ResetPoint"/> + transform + <see cref="Glyph"/> segment, so a whole string is a multi-segment run the
     /// caller wraps in one <see cref="BeginInstance"/>/<see cref="EndInstance"/> with a bound covering the block. The
-    /// atlas must be uploaded to the engine (<c>Puck.SdfVm.SdfWorldEngine.SetGlyphAtlas</c>) for the letters to resolve;
+    /// atlas must be uploaded to the engine (<c>Puck.SdfVm.SdfWorldTables.SetGlyphAtlas</c>) for the letters to resolve;
     /// unbound, each cell renders as its conservative box.</summary>
     /// <param name="atlas">The font atlas providing glyph geometry, metrics, and per-glyph atlas rectangles.</param>
     /// <param name="text">The string to lay out (line feeds break lines; unmapped code points are skipped).</param>

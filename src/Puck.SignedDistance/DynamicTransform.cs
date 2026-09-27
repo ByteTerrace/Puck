@@ -7,7 +7,7 @@ namespace Puck.SignedDistance;
 /// entity moves without rebuilding the scene program. The slot is the entity's index in
 /// <c>Puck.SdfVm.SdfFrame.DynamicTransforms</c>.
 /// <para><paramref name="CastsSoftShadow"/> (default <see langword="true"/> = casts) rides the packed position row's spare
-/// <c>.w</c> lane (see <c>SdfWorldEngine.PackDynamicTransforms</c>): <see langword="false"/> means this dynamic instance is
+/// <c>.w</c> lane (see <c>SdfWorldTables.PackDynamicTransforms</c>): <see langword="false"/> means this dynamic instance is
 /// skipped by the soft-shadow march only — the camera/AO marches are unaffected, so a suppressed avatar still renders and
 /// self-occludes, it just stops casting/receiving through the sun-shadow enumeration. Per-frame data (avatars move every
 /// frame); flipping it never rebuilds the program. Default casts is byte-identical to every prior frame's zero-pad upload.</para>

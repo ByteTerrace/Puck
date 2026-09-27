@@ -19,7 +19,7 @@ internal sealed class WorldSdfCommandModule(WorldSdfDocumentEmitter documents, W
             return CommandResult.Error(output: "[world.sdf.dump: expected <path>]");
         }
 
-        var words = m_renderProbe.Node?.CopyLiveProgramWords();
+        var words = m_renderProbe.Residency?.CopyLiveProgramWords();
 
         if (words is not { Length: > 0 }) {
             return CommandResult.Error(output: "[world.sdf.dump: no live render program]");

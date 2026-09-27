@@ -4,7 +4,7 @@
 #ifndef FRAME_SDF_ENVIRONMENT_HLSLI
 #define FRAME_SDF_ENVIRONMENT_HLSLI
 // The ENVIRONMENT block: SdfEnvironment's lanes, row for row, after the far-field row. KEEP IN SYNC with
-// SdfEnvironment (row layout, blend kinds) and SdfWorldEngine.PackEnvironment (the host bakes: unit directions, the
+// SdfEnvironment (row layout, blend kinds) and SdfWorldTables.PackEnvironment (the host bakes: unit directions, the
 // sun-disc exponent, the twinkle period, the integrated cloud offsets and spin).
 static const uint SdfEnvBase = (SDF_MAX_SCREEN_SURFACES + 8u);
 static const uint SdfEnvControl = (SdfEnvBase + 0u);     // x light count, y shadow light index (-1 none), z sky enabled, w fog density
@@ -55,7 +55,7 @@ ScreenSurfaceData worldScreenSurface(uint screenIndex) {
     data.origin = screenSurfaces[(row + 2u)];
     return data;
 }
-// The mapping a screen is drawn from (SdfWorldEngine.SetScreenMapping, the draw form of the mapping its row publishes,
+// The mapping a screen is drawn from (SdfWorldTables.SetScreenMapping, the draw form of the mapping its row publishes,
 // Puck.Commands.SourceDraw), indexed by screen index like ScreenSurfaceData. A face point (u, v), v = 0 at the top, runs
 // the warp's rows to the face point the glass sampled; outside the unit square it lies on the bezel. That point runs the
 // image rows to the source, normalized to its extent; outside the half-open crop, [left, right) x [top, bottom), it lies
@@ -95,17 +95,17 @@ ScreenMappingData worldScreenMapping(uint screenIndex) {
 // plane selector: z = axis (0 camera-locked, 1/2/3 world X/Y/Z), w = the axis plane's signed offset — see
 // SdfFrame.DebugSliceAxis; read only by debug view mode 7). A light's geometry
 // (position/orientation/extent) is the SAME screenSurfaces[i] entry above — a screen is an area emitter, so it needs
-// only its color here. KEEP IN SYNC with SdfWorldEngine's screen-light buffer packing.
+// only its color here. KEEP IN SYNC with SdfWorldTables's screen-light buffer packing.
 static const uint SdfScreenLightEnv = SDF_MAX_SCREEN_SURFACES;
 
 // Grid-lock overlay rows (grid-locking §4a): four float4 rows after the env entry. KEEP IN SYNC with
-// SdfWorldEngine.PackScreenLights + SdfFrame's Grid* fields.
+// SdfWorldTables.PackScreenLights + SdfFrame's Grid* fields.
 static const uint SdfGridWorld = (SdfScreenLightEnv + 1u);     // x = flags (bit0 world floor grid, bit1 object grid), y = floorY, zw = world pitch (X, Z)
 static const uint SdfGridObjOrigin = (SdfScreenLightEnv + 2u); // xyz = reference origin (world), w = object pitch X
 static const uint SdfGridObjFrame = (SdfScreenLightEnv + 3u);  // xyzw = reference frame quaternion
 static const uint SdfGridObjParams = (SdfScreenLightEnv + 4u); // x = object pitch Z, y = patch radius (reference-local), z = analytic-normal A/B, w = shadow-cull A/B
 // Engine-bench shader-feature params: x = disable soft shadows, y = disable AO, z = shadow-distance
-// scale (0 = the full 1.0 reach), w = disable screen lights. KEEP IN SYNC with SdfWorldEngine.PackScreenLights + SdfFrame's
+// scale (0 = the full 1.0 reach), w = disable screen lights. KEEP IN SYNC with SdfWorldTables.PackScreenLights + SdfFrame's
 // DisableSoftShadows/DisableAmbientOcclusion/ShadowDistanceScale/DisableScreenLights fields.
 static const uint SdfBenchParams = (SdfScreenLightEnv + 5u);
 // The engine-bench SHADOW-PROXY params row (PATH B): x = enable the shadow proxy (shadow rays skip Subtraction-family
@@ -113,13 +113,13 @@ static const uint SdfBenchParams = (SdfScreenLightEnv + 5u);
 // 0 and is byte-identical); y = use the camera-tile shadow mask instead of the per-pixel shadow-grid gather; z = use the
 // bounded-cost fast soft-shadow marcher; w
 // reserved. A SEPARATE row from SdfBenchParams (whose four lanes are full). KEEP IN SYNC with
-// SdfWorldEngine.PackScreenLights + SdfFrame's EnableShadowProxy/UseCameraTileShadowMask/UseFastSoftShadowMarch fields.
+// SdfWorldTables.PackScreenLights + SdfFrame's EnableShadowProxy/UseCameraTileShadowMask/UseFastSoftShadowMarch fields.
 static const uint SdfShadowProxyParams = (SdfScreenLightEnv + 6u);
 // The F1 FAR-FIELD lever row: x = disable the beam-published per-tile far bound (1 = the A/B
 // "off" side — the fine march ignores plane 3 and runs to the far distance exactly as pre-F1; 0 = the DEFAULT shipped
 // behavior with the far bound ACTIVE, so an unset frame uploads 0 and the feature is ON); y = disable the F2 shadow
 // light-side exit (RESERVED for F2, not yet consumed); zw reserved. A SEPARATE row from SdfShadowProxyParams (whose
-// lanes carry the shadow proxy). KEEP IN SYNC with SdfWorldEngine.PackScreenLights + SdfFrame's DisableFarBound field.
+// lanes carry the shadow proxy). KEEP IN SYNC with SdfWorldTables.PackScreenLights + SdfFrame's DisableFarBound field.
 static const uint SdfFarFieldParams = (SdfScreenLightEnv + 7u);
 
 float4 worldEnvRow(uint row) { return sdfScreenLights[row]; }

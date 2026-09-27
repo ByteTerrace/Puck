@@ -30,10 +30,10 @@ transitions in only one list of a submission: a shader pipeline's copy list hand
 package region to its readers, and a host buffer port's copied buffer is handed over by its
 readers' planned barriers in the pass lists submitted after it. A buffer's
 first transition in a list starts from the state its declared prior access
-implies, so callers declare the access that actually preceded it: the SDF
-engine declares each pass's buffer uses in `SdfFrameBufferPlan`, and a shader
-pipeline takes each access's prior state from its plan (`ShaderPipelineAccess`),
-which records every pass's ordered accesses with the prior state and barrier. A read through a
+implies, so callers declare the access that actually preceded it: every graph
+pass, an SDF view's passes among them, takes each access's prior state from its
+plan (`ShaderPipelineAccess`), which records every pass's ordered accesses with
+the prior state and barrier. A read through a
 read-write binding is declared with the write the binding permits, because
 the buffer must stay in `UNORDERED_ACCESS` for it. An upload-heap buffer stays
 in `GENERIC_READ` for its whole life. A write followed by another access in
@@ -234,9 +234,10 @@ device up and releases them when the context releases it, on `Recreate` and
 - **Owners are admitted before they allocate.** `IGpuBindings.CanAdmit` checks
   a candidate's whole statement of pools and allocates nothing. The pipeline
   node checks a candidate at install and a float preview when it is selected;
-  an SDF engine's construction checks through `SdfWorldEngine.CheckAdmission`
-  before it allocates, so its holder records the refusal like any other failed
-  engine build and tries again only when the build's inputs change; a
+  an SDF residency's tables check through `SdfWorldTables.CheckAdmission`
+  before they allocate, so the residency records the refusal like any other
+  failed build of its tables and tries again only when the build's inputs
+  change; a
   pipeline candidate's statement includes its graph's one region-copy pool,
   which reserves a copy set per frame slot for every package region and host
   buffer port that stages, so binding a port later takes no range. A candidate

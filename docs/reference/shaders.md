@@ -539,22 +539,28 @@ what it samples into the frame's lease list, and their taint is the
 instance's. A frame may declare instances unchanged since their latest render
 (`RenderGraphFrame.Unchanged`): such an instance is not due by its refresh, so
 its latest output stands, and it renders only when it never has, when the frame
-names it to render again, or when it is demanded at another extent. `SdfEngineNode` is the
-`sdf.world` producer: it submits through the SDF engine's own frame ring and
-renders every view of the frame, each into its own output image.
-`SdfEngineNode.ViewProducer` gives a producer for each later view, whose own
-`Produce` only records the extent the scheduler chose; the engine renders at
-that extent from the next frame. The node counts every acquisition of each
-output. Its engine's extent only grows, and it disposes an engine a larger
-extent replaced only once that engine's outputs are released.
+names it to render again, or when it is demanded at another extent.
+
+Every SDF view is a package instance of `sdf.world`. Its factory,
+`SdfWorldPasses` in `Puck.SdfVm`, resolves each instance to a view of a
+residency (`SdfWorldResidency`): the tables one frame source's views share, its
+program, transforms, screens, lights, volumes and mesh draws. The frame's first
+pass to record submits the residency's one upload ahead of the view's
+submission, and every pass of the view reads the tables that upload wrote. At
+the start of each frame the factory starts and prepares every residency it
+holds (`IRenderGraphPackageFactory.BeginFrame`); it answers `IsUnchanged` from
+the residency's record of what each view last rendered, and sizes a view's
+counted scratch through `CounterOf` from the view's extent and the residency's
+instance capacity. A pass installs only once its residency has built its
+tables, so a view renders nothing before then.
 
 A capture armed on the runtime reads the root instance's output, and one armed
 through `RenderGraphRuntime.CaptureTarget` reads the instance it names. A graph
 instance's node serves it on a frame the instance renders with every image
 input it shows bound to a completed output, never a stand-in, and an external
 producer serves it from the next frame it produces. Until then
-`UnservedCaptureReasonOf` names why. The root may be an external producer, when
-nothing is drawn over its output. Each instance counts its own passes.
+`UnservedCaptureReasonOf` names why. The root may be the world's own instance,
+when nothing is drawn over its output. Each instance counts its own passes.
 
 ### The default root graph
 
@@ -563,10 +569,11 @@ gets the default graph `WorldRootGraph` (in `Puck.World.Client`) synthesizes
 from its document, a graph document value planned by `RenderGraphCompiler` like
 any other:
 
-- `world`: the `sdf.world` external producer, the SDF engine node, which
-  publishes the first view.
-- `world$2` onward: one producer per further split-screen view, when the
-  world's layouts or player roster can compose more than one view.
+- `world`: the `sdf.world` instance rendering the first view of the world's
+  residency.
+- `world$2` onward: one instance per further split-screen view of the same
+  residency, when the world's layouts or player roster can compose more than
+  one view.
 - `main`: the root graph reading `world`'s output over the whole display and
   every pane's output. With more than one view it first runs one `place` pass
   per view. Then it runs one `place` package pass per `views.graphs` instance
@@ -578,19 +585,22 @@ any other:
 
 `main` is the root whenever anything is drawn over the world, panes included,
 and whenever the world has more than one view. When neither holds, as in an offscreen World with no panes and no
-`views.post` rows, `world` is the root and the display shows the engine's
-output directly. A world that sets `views.root` authors its whole render graph,
+`views.post` rows, `world` is the root and the display shows the world's first
+view directly. A world that sets `views.root` authors its whole render graph,
 the `sdf.world` package row included, and the runtime runs its rows alone; such
 a world authors no `views.post`.
 `RenderGraphRuntimeNode` is the host's render root, the one `IRenderRoot` the
 launcher drives: each frame it shows the root over a display of the World's
-configured extent. Nothing wraps it; the screen binder, whose GPU holdings must
-go while the device is alive, is released by the root's teardown
-(`RenderGraphRuntimeNode.Holdings`). A `captures` row reads
+configured extent. Nothing wraps it; the screen binder and the world's
+residency, whose GPU holdings must go while the device is alive, are released
+by the root's teardown (`RenderGraphRuntimeNode.Holdings`). A `captures` row reads
 the root, or names `world` to capture the SDF world before its panes, post
 passes and overlay. `world.counters gpu` counts every graph instance under its
-instance name: `world` is the engine node, `main` the root's node, whose passes
-are the place, post and overlay passes, and each pane its own node.
+instance name: `world` is the first view's node, whose passes are
+`sdf.world$sky` through `sdf.world$views`, `main` the root's node, whose passes
+are the place, post and overlay passes, and each pane its own node. It counts
+each residency's upload beside them: the world's as `sdf:world`, and each
+camera or session view's as `sdf:<name>`.
 
 ### Graph instances in a World
 
@@ -657,7 +667,7 @@ full-display view or a full-display pane, and then the unshown pass stands for
 the world and dispatches nothing.
 
 Every screen reads a graph instance: a source instance, or a camera or session
-view, each an external `sdf.world` instance the scheduler feeds like any other
+view, each an `sdf.world` instance the scheduler feeds like any other
 ([motion and views](../rendering/sdf/handbook/motion-and-views.md#views-are-render-graph-instances)).
 
 ## Pass interfaces

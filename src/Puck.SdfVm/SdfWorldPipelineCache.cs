@@ -6,8 +6,8 @@ using Puck.Shaders;
 namespace Puck.SdfVm;
 
 /// <summary>
-/// The <see cref="SdfWorldPipelines"/> sets the SDF engine nodes and views of one composition share: one set per
-/// device, kernel set (<see cref="SdfWorldKernels.ContentKey"/>) and brick-pipeline choice, however many nodes and views
+/// The <see cref="SdfWorldPipelines"/> sets the SDF residencies of one composition share: one set per device,
+/// kernel set (<see cref="SdfWorldKernels.ContentKey"/>) and brick-pipeline choice, however many residencies and views
 /// render with it. It is a <see cref="GpuBuildCache{TKey, T}"/> keyed by <see cref="SdfWorldPipelineKey"/>: a holder
 /// takes a lease, the first lease on a key starts the set's build on the thread pool, every lease polls the same build
 /// from the frame thread, and the set is disposed when its last lease is released. That release cancels a build still in

@@ -40,7 +40,7 @@ code that no shipped kernel compiles.
 
 `status` stays `pending` while the bytecode loads and the changed pipelines are
 created on the thread pool (`SdfWorldPipelines.PrepareReload`); a later frame
-installs them (`SdfWorldEngine.InstallReload`), which drains the frame ring, verifies the ISA
+installs them (`SdfWorldTables.InstallReload`), which waits for the device to go idle, verifies the ISA
 report of every march pipeline (beam, primary, surface, ambient, and the three
 views variants), then retires the old set; a failure keeps the previous
 kernels. Scene buffers, images, baked bricks, and world state survive; the ISA
@@ -52,15 +52,23 @@ buffer-layout, or C# ISA changes need a rebuild.
 
 ## The frame
 
-Ten counted passes, labelled by `SdfWorldEngine.PassLabels` for
-`world.counters gpu`; the brick staging copy and bake dispatches are recorded in addition when
-work is pending, and count outside every pass. A cadence-skipped frame marks
-`sky` through `views` skipped (`SdfWorldEngine.CadenceSkippedPassLabels`):
+An SDF view is an `sdf.world` instance of the render graph: the graph compiler
+splices the package's fragment (`SdfWorldPackage.Fragment`) into the one-pass
+graph the runtime makes for the instance, and `world.counters gpu` lists its
+nine passes under the instance's name as `sdf.world$sky` through
+`sdf.world$views`. The frame's first pass to record submits its residency's one
+upload ahead of the instance's submission (`SdfWorldResidency.Submit`), counted
+under the residency as `sdf:<name>` with one pass, `upload`
+(`SdfWorldTables.PassLabels`); the brick staging copy and bake dispatches are
+recorded in that upload when work is pending, and count outside every pass. The
+runtime declares a view unchanged when nothing it renders from moved
+(`SdfWorldResidency.IsUnchanged`, `RenderGraphFrame.Unchanged`) and records none
+of its passes. The upload and the view's passes, in order:
 
 | Label | Kernel | Does |
 |---|---|---|
-| `upload` | `region-copy.comp` (`Puck.Shaders`, one pipeline a device) | Copies the words each staged region owes (program words, viewport rows, dynamic transforms, frame grid, screen surfaces, screen lights, volumes, decals, mesh draws) from the ring slot's staging buffer, which states the copy in a header and run table, into the region's device-local buffer, one dispatch per region that owes any, then transitions each copied buffer for reading (`SdfWorldEngine.Regions.cs`). Under the ring policy nothing is copied and the kernels bind the slot's buffer. A still frame copies only the viewport word its time moved. |
-| `sky` | `sdf-sky.comp` | Fills every pixel of the view's output image with sky before any tile is culled. Binds the same frame and views sets. |
+| `upload` | `region-copy.comp` (`Puck.Shaders`, one pipeline a device) | Copies the words each staged table owes (program words, dynamic transforms, frame grid, screen surfaces, screen mappings, screen lights, volumes, decals, mesh draws) from the ring slot's staging buffer, which states the copy in a header and run table, into the region's device-local buffer, one dispatch per region that owes any, then transitions each copied buffer for reading (`SdfWorldTables.Regions.cs`). Under the ring policy nothing is copied and the kernels bind the slot's buffer. A view's viewport row is not a table: each pass writes it into its own `viewports` region, which the instance's node copies ahead of its passes, and a still frame the view renders owes only the word its time moved. |
+| `sky` | `sdf-sky.comp` | Fills every pixel of the view's output image with sky before any tile is culled. Binds the same frame and pass groups as every per-view pass. |
 | `mask` | `sdf-instance-cull.comp` | Builds each tile's instance mask from the `SdfInstanceGrid` CSR grid. Deliberately not fused into the beam. |
 | `beam` | `sdf-beam.comp` | Cone-marches the tile-masked field and writes the four tile planes and part bounds. |
 | `cull-args` | `sdf-cull-args.comp` | Reduces the indirect dispatch bounds. |
@@ -70,29 +78,34 @@ work is pending, and count outside every pass. A cadence-skipped frame marks
 | `ambient` | `sdf-world-ambient.comp` | Ambient occlusion with its own candidate mask. |
 | `views` | `sdf-world-views*.comp` | Shadows, materials, lighting, volumes, diagnostics, written into the view's output image. |
 
-`sky` through `views` record once per view, each set into that view's own
-output image (`SdfWorldEngine.ViewOutputs.cs`) at the view's render extent. No
-kernel assembles views or upsamples: the render graph's `place` pass puts each
-output into its seat rect and reconstructs a reduced render scale.
+Each view's passes render into its instance's own output, the fragment's
+`color` version, at the extent the scheduler gives the instance, one viewport
+row a view. No kernel assembles views or upsamples: the render graph's `place`
+pass puts each output into its seat rect and reconstructs a reduced render
+scale.
 
 Primary, surface, ambient, and views share `sdf-world-views.comp.hlsl`'s entry
 point through `SDF_PRIMARY_PASS`, `SDF_SURFACE_PASS`, `SDF_AMBIENT_PASS`, and
-`SDF_PRIMARY_READ`, and `RecordHitPass` records each pass's buffer transitions
-before it dispatches. The wrapper defines `SDF_PRIMARY_READ` for every pass except
+`SDF_PRIMARY_READ`, each dispatched indirectly from the cull arguments. The
+wrapper defines `SDF_PRIMARY_READ` for every pass except
 primary, so the primary march in `renderView`'s `#else` branch compiles into the
 primary kernel alone; `renderView` compiles only into the four hit-pass kernels.
-Before primary, the `mesh` pass (`SdfWorldEngine.MeshPass.cs`, `sdf-mesh.*.hlsl`)
-rasterizes the frame's mesh draws into the mesh visibility target that primary
-bounds its march by and surface reads the mesh normal from (`sdfMeshSampleAt`),
-created with its depth attachment by the first frame that draws a mesh (each
-views set binds the filler until then);
-it draws with its own `sdf-mesh` interface, one set per ring slot, and pushes
-the view and the draw (`SdfWorldInterfaces.MeshPushedIndex`). A frame the
-cadence gate skips records no view set, and each view's retained output
-stands; `world.cadence off` disables the gate for measurement.
+Before primary, the `mesh` pass (`sdf-mesh.*.hlsl`, a graphics pass of the
+fragment) rasterizes the frame's mesh draws into the mesh visibility target that
+primary bounds its march by and surface reads the mesh normal from
+(`sdfMeshSampleAt`); the target and its depth attachment are transient fragment
+resources the instance allocates with its graph. The pass draws with its own
+`sdf-mesh` interface, one set per frame slot from a pool of its own, pushes the
+draw (`SdfWorldInterfaces.MeshPushedIndex`), and records nothing on a frame
+with no mesh draws, when the pass block's `meshDraws` tells the hit passes not
+to read the target. A view the cadence gate declares unchanged records none of
+its passes, and its latest output stands; `world.cadence off` disables the gate
+for measurement.
 
-The visibility record is 60 bytes per full-extent pixel per viewport
-(`SdfWorldPackage.VisibilityRecordByteLength`, the buffer `SdfFrameBuffer.VisibilityRecords`), allocated as width × height × viewport capacity;
+The visibility record is 60 bytes per pixel of the view's extent
+(`SdfWorldPackage.VisibilityRecordByteLength`), the fragment's counted
+`visibility` buffer, allocated as the extent times one viewport and forwarded
+through primary's, surface's and ambient's versions;
 `world.budget` prints the allocated bytes. `sdf-visibility.hlsli` owns its
 fifteen words in five rows: V (t, identity, material, march flags), exact; C
 (terminal radius, threshold, then the seam blend weight as a 15-bit fraction
@@ -118,25 +131,28 @@ per-pass work `world.counters gpu` counts.
 
 ## Buffer hazards
 
-Every device-local frame buffer one dispatch writes and a later dispatch in the
-same command list reads is declared in `SdfFrameBufferPlan.Uses`, and
-`SdfFrameBufferHazards` turns consecutive uses into `TransitionBuffer` calls:
-one whenever either use writes or the two reach the buffer differently. The
-first use in a list owes nothing; the top-of-frame barrier orders it after the
-previous frame. A dispatch that only reads a buffer binds it read-only and
-declares `Read`: a read-write binding would keep the buffer in
-`UNORDERED_ACCESS` on Direct3D 12 and cost a transition before every reader.
-The beam alone writes the cull buffer (`SDF_TILES_READ_WRITE` compiles its
-writer); the views layout binds the visibility records twice, read-write for primary,
-surface and ambient and read-only for views. Global memory barriers remain only for
-images: the cross-frame gate and, in each view's set, sky to views. Each view's
-output is transitioned to `General` before its set and back to its resting
-layout after, outside every pass. A new
-dispatch, a new device-local buffer, or a binding-kind change edits the plan
-and the inventory in `SdfFrameBufferPlanLawTests` together; a use left out of
-the plan races on both backends. A rendered frame records seven buffer transitions,
-nine with brick upload and bake work. The host-written tables are regions, not
-frame buffers: the upload pass transitions each buffer it copied into, once.
+Every scratch buffer and image of a view is a resource of
+`SdfWorldPackage.Fragment`, and the render-graph planner orders them: each
+fragment pass declares the versions it reads and writes and the access each
+port names (a compute read or write, the indirect arguments, a color
+attachment), and `ShaderPipelineCompiler.Accesses.cs` gives every access its
+prior state and barrier, the first use of a frame included, which orders it
+after the frame before. `SdfWorldPassRecorder` records no barrier; the
+instance's node records the planned ones before each pass. Scratch is transient,
+one allocation per instance shared by every frame slot, and a counted buffer is
+sized by the bases the residency reports (`SdfWorldResidency.CountsAt`,
+through `IRenderGraphPackageFactory.CounterOf`); the view's color is published
+per frame slot. A dispatch that only reads a buffer binds it read-only: a
+read-write binding would keep the buffer in `UNORDERED_ACCESS` on Direct3D 12
+and cost a transition before every reader. The beam alone writes the cull
+buffer (`SDF_TILES_READ_WRITE` compiles its writer); the interface binds the
+visibility records twice, read-write for primary, surface and ambient and
+read-only for views. A new pass, a new scratch resource, or a binding-kind
+change edits the fragment, and `SdfPassPlanLawTests` holds the planned order,
+the between-pass buffer transitions, each buffer's size at every capacity and
+the mesh pass's attachments to its own tables, so the law moves in the same
+change. The host-written tables are regions, not scratch: the residency's upload
+transitions each buffer it copied into, once.
 
 ## Views variants
 
@@ -158,7 +174,7 @@ together. `SdfViewsKernelVariantLawTests` pins the host half.
 No SDF kernel declares a binding or a register by hand. Every per-view kernel
 includes `isa/sdf-world.interface.hlsli` (through `field/sdf-vm.hlsli`) and the baker
 `isa/sdf-bricks.interface.hlsli`, both generated from `SdfWorldInterfaces` and
-owned by `puck shaders generate`; the engine creates each pipeline from its
+owned by `puck shaders generate`; `SdfWorldPipelines.Build` creates each pipeline from its
 interface's layout and writes every binding by member name. A binding's
 Direct3D 12 register is its binding number in its group's space, as for every
 pass, and `ShaderRegisterBindingLawTests` holds every register the build

@@ -20,7 +20,7 @@ public sealed class SdfWorldPipelinesLawTests {
     public void ABuildCreatesEveryEnginePipelineAndPersistsTheDeviceCacheOnce() {
         var device = new PersistingDevice(services: new FakeGpuDevice(reportVersion: SdfIsa.Version).Services);
         var ledger = new GpuWorkLedger(
-                framesInFlight: SdfWorldEngine.FrameRingSize,
+                framesInFlight: SdfWorldTables.FrameRingSize,
                 name: "gpu.sdf-engine"
             );
 
@@ -56,7 +56,7 @@ public sealed class SdfWorldPipelinesLawTests {
     public void ABuildWithABrickPoolAddsTheBrickBakePipelineItsKernelCarries() {
         var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version);
         var ledger = new GpuWorkLedger(
-                framesInFlight: SdfWorldEngine.FrameRingSize,
+                framesInFlight: SdfWorldTables.FrameRingSize,
                 name: "gpu.sdf-engine"
             );
 
@@ -75,7 +75,7 @@ public sealed class SdfWorldPipelinesLawTests {
     public void ACanceledBuildThrowsBeforeCreatingAnything() {
         var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version);
         var ledger = new GpuWorkLedger(
-                framesInFlight: SdfWorldEngine.FrameRingSize,
+                framesInFlight: SdfWorldTables.FrameRingSize,
                 name: "gpu.sdf-engine"
             );
 
@@ -95,7 +95,7 @@ public sealed class SdfWorldPipelinesLawTests {
             BeforeComputePipeline = driver.Enter,
         };
         var ledger = new GpuWorkLedger(
-                framesInFlight: SdfWorldEngine.FrameRingSize,
+                framesInFlight: SdfWorldTables.FrameRingSize,
                 name: "gpu.sdf-engine"
             );
         var build = Task.Run(
@@ -143,7 +143,7 @@ public sealed class SdfWorldPipelinesLawTests {
             BeforeComputePipeline = driver.Enter,
         };
         var ledger = new GpuWorkLedger(
-                framesInFlight: SdfWorldEngine.FrameRingSize,
+                framesInFlight: SdfWorldTables.FrameRingSize,
                 name: "gpu.sdf-engine"
             );
         var progress = new SdfWorldPipelineBuildProgress();
@@ -197,7 +197,7 @@ public sealed class SdfWorldPipelinesLawTests {
             },
         };
         var ledger = new GpuWorkLedger(
-                framesInFlight: SdfWorldEngine.FrameRingSize,
+                framesInFlight: SdfWorldTables.FrameRingSize,
                 name: "gpu.sdf-engine"
             );
         var failure = Assert.Throws<AggregateException>(testCode: () => SdfWorldPipelines.Build(

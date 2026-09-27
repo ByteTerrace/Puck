@@ -13,9 +13,9 @@ namespace Puck.SdfVm.Tests;
 /// <summary>
 /// Laws for <see cref="SdfWorldPipelineCache"/> over <see cref="FakeGpuDevice"/>: leases on one device, kernel set and
 /// brick choice share one set, created once and counted once in the cache's ledger; a different device, kernel set or
-/// brick choice is a different set; the last release disposes the set and a later lease builds anew; two engine nodes
-/// built from one services closure render with one set while their own ledgers count no pipeline; and a node whose set
-/// another engine shares refuses a kernel reload rather than replacing pipelines that engine records with.
+/// brick choice is a different set; the last release disposes the set and a later lease builds anew; two residencies
+/// built from one services closure render with one set while their own ledgers count no pipeline; and a residency whose
+/// set another residency shares refuses a kernel reload rather than replacing pipelines that residency records with.
 /// </summary>
 public sealed class SdfWorldPipelineCacheLawTests {
     private const uint Extent = 32;
@@ -91,8 +91,8 @@ public sealed class SdfWorldPipelineCacheLawTests {
         using var first = Node(pipelines: pipelines);
         using var second = Node(pipelines: pipelines);
 
-        _ = first.ProduceFirstFrame(context: in context);
-        _ = second.ProduceFirstFrame(context: in context);
+        first.ProduceFirstFrame(context: in context);
+        second.ProduceFirstFrame(context: in context);
 
         Assert.Equal(expected: 1, actual: pipelines.SharedSets);
         Assert.Equal(expected: PipelinesPerSet, actual: Created(cache: pipelines));
@@ -107,7 +107,7 @@ public sealed class SdfWorldPipelineCacheLawTests {
         first.Dispose();
         Assert.Equal(expected: 1, actual: pipelines.SharedSets);
         Assert.Equal(expected: 2, actual: pipelines.RegionCopy.Pipelines.SharedPipelines);
-        Assert.True(condition: second.Produce(context: in context, height: Extent, width: Extent));
+        Assert.True(condition: second.Produce(context: in context));
 
         second.Dispose();
         Assert.Equal(expected: 0, actual: pipelines.SharedSets);
@@ -122,11 +122,11 @@ public sealed class SdfWorldPipelineCacheLawTests {
         using var first = Node(pipelines: pipelines);
         using var second = Node(pipelines: pipelines);
 
-        _ = first.ProduceFirstFrame(context: in context);
-        _ = second.ProduceFirstFrame(context: in context);
+        first.ProduceFirstFrame(context: in context);
+        second.ProduceFirstFrame(context: in context);
 
         Assert.True(condition: first.RequestShaderReload(tree: AppContext.BaseDirectory));
-        _ = first.Produce(context: in context, height: Extent, width: Extent);
+        _ = first.Produce(context: in context);
 
         var status = first.ShaderReloadStatus;
 
@@ -152,7 +152,7 @@ public sealed class SdfWorldPipelineCacheLawTests {
             kind: GpuWork.PipelinesCreated,
             source: cache.Work
         );
-    private static SdfEngineNode Node(SdfWorldPipelineCache pipelines) {
+    private static SdfWorldResidency Node(SdfWorldPipelineCache pipelines) {
         var builder = new SdfProgramBuilder();
 
         builder.Sphere(
@@ -181,11 +181,12 @@ public sealed class SdfWorldPipelineCacheLawTests {
             )]
         );
 
-        return new SdfEngineNode(
+        return new SdfWorldResidency(
             brickPoolVoxelCapacity: 0,
             frameSource: new FixedFrameSource(frame: frame),
             height: Extent,
             kernels: SdfTestPipelines.Kernels(),
+            name: "world",
             pipelines: pipelines,
             width: Extent
         );

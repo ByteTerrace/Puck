@@ -1,10 +1,12 @@
 # Puck.SdfVm
 
 Puck.SdfVm is the SDF GPU engine: the device-explicit render pipeline that
-walks a compiled signed-distance program on the GPU—`SdfWorldEngine` (beam
-cull → per-view render over a viewport table of cameras and regions, each view
-into its own output image) and `SdfEngineNode` (the render graph's `sdf.world`
-external producer that wraps it and publishes each view's output). The
+walks a compiled signed-distance program on the GPU. `SdfWorldResidency` makes
+one frame source resident on the render graph's device and holds its
+`SdfWorldTables` (the program, transforms, screens, lights, volumes and mesh
+draws every view of it reads), and `SdfWorldPasses` records each view as an
+`sdf.world` instance of the render graph: beam cull, then the per-view render
+into the instance's own output image. The
 single-source HLSL kernels (`Assets/Shaders/Sdf`) compile to both SPIR-V
 (Vulkan) and DXIL (Direct3D 12) from one shared source, and the C# side of the
 instruction-set contract they decode lives one project away.
@@ -27,7 +29,7 @@ never a Vulkan or DirectX type by name.
   ever cone-marches, so beam cost tracks instances near the tile's cone
   rather than the total instance count.
 - *Live program growth:* construction options reserve program words and instances.
-  `UploadProgram` grows those buffers after draining in-flight frames, retaining
+  `UploadProgram` grows those buffers once the device is idle, retaining
   images, pipelines, and baked data. Dynamic-transform slots remain reserved by
   the host; engine hard limits still refuse invalid content.
 - *Composable content:* `ISdfSceneEmitter`/`SdfCompositionFrameSource` let a
@@ -65,41 +67,48 @@ never a Vulkan or DirectX type by name.
 
 ## The render pipeline
 
-Nine kernels run per frame: `region-copy.comp` (from `Puck.Shaders`: the words each
+A frame runs these kernels: `region-copy.comp` (from `Puck.Shaders`: the words each
 staged region of frame data owes, copied into its device-local buffer; see
 [what a frame uploads](../../docs/rendering/sdf/handbook/frame-rendering.md#what-a-frame-uploads)) → `sdf-sky.comp` (a direct, un-culled pass that
 fills every pixel of the view's output with the authored sky, before any tile is culled)
 → `sdf-instance-cull.comp` (the per-tile instance mask) → `sdf-beam.comp`
-(cone march over the tile-masked field) → `sdf-cull-args.comp` →
+(cone march over the tile-masked field) → `sdf-cull-args.comp` → the mesh pass
+(`sdf-mesh.vert`/`.frag`, rasterizing the frame's mesh draws) →
 `sdf-world-primary.comp` (camera traversal) → `sdf-world-surface.comp`
 (normals and curvature) → `sdf-world-ambient.comp` (ambient occlusion) → the views
-kernel (materials, lighting and diagnostics). Every kernel after the upload
-runs once per view, into that view's own output image at its render extent;
-the render graph's `place` pass, not this engine, places each output in its
-seat rect and reconstructs a reduced render scale.
-`SdfWorldEngine.PassLabels` names them for the per-pass work counts the engine
-publishes through `Work` once a submission completes; the node or view that
-owns an engine owns its ledger, so counts survive a rebuild. The views
+kernel (materials, lighting and diagnostics). The region copies are the
+residency's one upload a frame (`SdfWorldResidency.Submit`); every pass after
+it runs once per view as a pass of the view's `sdf.world` instance, into that
+instance's own output image at its render extent. The package declares those
+passes as a fragment (`Puck.Shaders.SdfWorldPackage.Fragment`) that the graph
+compiler splices, so the render graph's planner decides every barrier between
+them and the recorder (`SdfWorldPassRecorder`) records none. The render graph's
+`place` pass, not this engine, places each output in its seat rect and
+reconstructs a reduced render scale. The residency counts its upload as one
+pass, `upload` (`SdfWorldTables.PassLabels`), in a ledger it owns, so counts
+survive a rebuild of its tables, and each view's node counts the view's passes
+as `sdf.world$sky` through `sdf.world$views`. The views
 kernel ships in three compiled variants
 (`SdfViewsKernelVariant.Full`/`.Folds`/`.CoreOps`). Folds strips heavy operations;
 CoreOps also strips the remaining exotic cases. The program selects the smallest
 variant that supports its operations, reducing shader size and register pressure.
 
-The visibility record buffer (`SdfFrameBuffer.VisibilityRecords`) reserves one
-record per active pixel, `SdfVisibilityWords` words (`sdf-visibility.hlsli`,
+The visibility record buffer (the fragment's `visibility` scratch) reserves one
+record per pixel of the view, `SdfVisibilityWords` words (`sdf-visibility.hlsli`,
 `SdfWorldPackage.VisibilityRecordByteLength`, 60 bytes). Primary traversal preserves
 depth, hit acceptance, terminal field radius and threshold, material and seam
 data, dynamic frame/lanes, and primary iteration/evaluation counts. Surface adds
 the geometric normal, gradient magnitude and curvature; ambient adds AO and
-their combined query count. Each consumer's buffer transition orders the producer's
-record writes before it. Views binds the record read-only, and every hit pass binds the
+their combined query count. The planner's buffer barrier orders each producer's
+record writes before its consumer. Views binds the record read-only, and every hit pass binds the
 beam's tile planes read-only, so a buffer a pass only reads is never held in a
 read-write state. These four dispatches share indirect bounds and live view
 dimensions. Primary, surface and ambient retain the full ISA.
 Material `Soften` changes the later lighting normal; AO uses the geometric normal.
-The buffer reserves `width × height × viewportCapacity × 60` bytes so changing
-view rectangles cannot overrun an allocation sized for an earlier layout.
-It is shared across frame slots under the engine's existing cross-frame barrier.
+The buffer reserves `width × height × 60` bytes at the view's extent, and the
+view's instance allocates it again beside its installed graph when that extent
+changes. It is transient: one allocation shared by every frame slot, whose
+first use in a frame the planner orders after the frame before.
 The `primary`, `surface`, `ambient` and `views` labels expose their separate costs;
 compare the full frame, including buffer traffic and dispatch overhead.
 The iteration count describes the selected march; the evaluation count sums
@@ -161,18 +170,19 @@ Camera visibility alone never excludes an exact AO candidate. Explicit fast AO
 and camera-tile shadows remain approximation options. Shadow and ambient passes
 each use their own 8 KiB candidate mask.
 
-`SdfWorldEngine`'s construction options (`SdfWorldEngineOptions`) set an
+The tables' construction options (`SdfWorldTablesOptions`) set an
 initial program-word and instance reserve and a fixed dynamic-transform
 capacity. `UploadProgram` grows the program-word and instance buffers when a
 program outgrows them; it throws when a program needs more dynamic-transform
-slots than the engine was built with. It is the single owner of every
+slots than the tables were built with. It is the single owner of every
 per-program derived buffer and mask width, called once at construction and
 again whenever a host swaps the live program. Composition probes reserve
 `SdfProgram.PartCompilationWordCapacity` so different part-sharing or admission
 outcomes within the probe's ceilings cannot overrun the program allocation.
-`SdfEngineNode` is the render graph's `sdf.world` external producer, which the
-runtime produces through `Produce`—it owns device-loss recovery and forwards
-`NotifyDeviceLost` to the wrapped engine. It
+`SdfWorldResidency` builds its tables once its pipeline set is ready, captures
+its frame source's frame once a frame (`Prepare`), and owns device-loss
+recovery: `OnDeviceLost` releases its tables and forwards `NotifyDeviceLost` to
+the frame source, and the next frame builds them again. It
 also records the last uploaded program's word/instance count and Lipschitz
 step scale (`LiveProgramWords`/`LiveProgramInstances`/`LiveProgramStepScale`,
 against the current `ProgramWordCapacity`, including live growth)—the live half of `Puck.World`'s
@@ -186,9 +196,10 @@ near, and composites it immediately. This avoids capacity-sized per-pixel arrays
 and duplicated unrolled integrators; intersecting volumes still require repeated
 selection scans. The [authoring contract](../Puck.World.Authoring/README.md#bounded-volumes-volumes)
 describes density controls and lighting limits.
-What is drawn over that node's output belongs to the render graph: the node
-is the `sdf.world` producer a graph instance reads for the first view,
-`SdfEngineNode.ViewProducer` gives one for each later split-screen view, and
+What is drawn over a view's output belongs to the render graph: the host names
+the residency and view each `sdf.world` instance renders (`SdfWorldView`,
+through the resolver it hands `SdfWorldPasses`), so the first view and each
+later split-screen view are instances over the world's one residency, and
 post passes are post-process packages (`Puck.Shaders.PostProcessPackage`)
 that a world document's `views.post` rows name. Each package is declared in
 `Puck.Shaders.RenderGraphPackageCatalog`, and its stages ship in this project's
@@ -202,34 +213,37 @@ Creating a compute pipeline is where the driver translates a kernel to native
 code. With its cache cold, after a kernel or driver change, that can take
 seconds per pipeline, and the engine has about a dozen of them. So the engine
 never creates one. `SdfWorldPipelines.Build` creates the whole set, and every
-`SdfEngineNode`, the world's and each camera or session view's, leases it from
+`SdfWorldResidency`, the world's and each camera or session view's, leases it from
 `SdfWorldPipelineCache`, which the composition hands each of them; the engine
 records through the services of the device context it renders on
 (`IGpuDeviceContext.Services`). The cache keeps one set per device, kernel set and
 brick-pipeline choice: the first lease starts its build on the thread pool
 through `Puck.Hosting.BackgroundBuild`, and every other holder of the same key
 shares it, so a world with many camera views builds one set for all of them.
-The engine node has a brick pool and its views do not, so a World with offscreen
-views builds two sets: the node's and one its views share. The cache also reads each backend's deployed kernels once, and it
+The world's residency has a brick pool and a camera or session view's does not,
+so a World with such views builds two sets: the world's and one its views
+share. The cache also reads each backend's deployed kernels once, and it
 counts the pipelines and shader modules it creates under its own
-`gpu.sdf-pipelines` source rather than in any node's or view's ledger.
+`gpu.sdf-pipelines` source rather than in any residency's or node's ledger.
 
-A holder takes its lease off the frame thread the first time it produces a
-frame. Until the set is ready the node returns an empty surface and a view
-returns its last image, or none. The frame thread keeps draining the
-console and stepping the simulation meanwhile, so a `world.wait` or
+A residency takes its lease off the frame thread the first time a frame
+prepares it. Until the set is ready it builds no tables, and a pass of its
+views installs only once they exist, so a view has no image before then. The
+frame thread keeps
+draining the console and stepping the simulation meanwhile, so a `world.wait` or
 `pipeline.wait` still reaches its deadline. The one exception is the offscreen
 host with a capture armed: it steps no further tick until the capture is served
-or refused, and a capture refused while the engine is not ready names the
-node's `NotReadyReason`, such as "the engine's pipeline set is building (5 of
+or refused, and a capture refused while the world's residency is not ready names
+its `NotReadyReason`, such as "the engine's pipeline set is building (5 of
 14 pipelines created)" (see [the World guide](../Puck.World/README.md#usage)).
-The node is `IsReady` once its set is installed and the engine built from it
-has produced its first frame; that is the fact `world.wait ready` waits on. A
-`views.graphs` pane is not part of the node: it is its own render-graph
+A residency is `IsReady` once its set is installed and its tables hold its
+first captured frame; the World is ready once the world's residency is and the
+render graph's root has rendered over a completed view, which is the fact
+`world.wait ready` waits on. A
+`views.graphs` pane is not part of any residency: it is its own render-graph
 instance with its own node, so it compiles and builds its pipelines without
-waiting for the engine's set. A holder keeps its lease across engine
-rebuilds, such as a capacity or export-factory change, and releases it on
-device loss and disposal. A set's build creates up to
+waiting for the SDF set. A residency keeps its lease until a device loss or
+its last release. A set's build creates up to
 `SdfWorldPipelines.BuildConcurrency` pipelines at once on the thread pool,
 starting the three views variants last, and checks its cancel between
 pipelines, never during one. The last lease on a set cancels a build still in
@@ -239,27 +253,27 @@ being torn down, and a shutdown never waits out a whole cold build. A build
 whose creations fail releases everything it created and names every pipeline
 that failed, in build order, in one refusal.
 
-An engine's construction first asks the device's descriptor heap to admit its
-pool and one copy pool for all its regions (`SdfWorldEngine.CheckAdmission`),
+The tables' construction first asks the device's descriptor heap to admit their
+pool and one copy pool for all their regions (`SdfWorldTables.CheckAdmission`),
 and refuses with `GPU_DESCRIPTOR_HEAP` before it allocates anything. It creates
 both pools itself, reserving every region's copy sets in the one copy pool
 (`GpuRegionCopyPool`, which hands each region its `GpuRegionCopySets`) whatever
 residency policy the device selects, so no later
-frame takes a descriptor range: not the first to draw a mesh, and not one that
+frame takes a descriptor range, not even one that
 grows the program, the instance grid or the mesh region. It releases every object it created, newest
 first, when a later step throws: a creation, the ISA handshake, or the program
 upload. A
-holder builds its engine only when it has none, and a build that fails, whether
-the set's or the engine's, is refused rather than thrown, except for a device
+residency builds its tables only when it has none, and a build that fails, whether
+the set's or the tables', is refused rather than thrown, except for a device
 loss, which still reaches the host's recovery. The refusal is printed once and
 named by `NotReadyReason`. It is tried again only when something the build was
-made from changes: the engine options a frame asks for (the program and the
-capacities), the node's extent, the device, the pipeline set or its kernels, the
+made from changes: the table options a frame asks for (the program and the
+capacities), the device, the pipeline set or its kernels, the
 operator's GPU faults (an arm or disarm through `gpu.faults`), a
 kernel reload request, or a device loss. A frame that changes none of these tries nothing,
 so a lasting failure is attempted once per change and never on a clock.
-Meanwhile the node returns an empty surface, and a view returns the image it
-served before, if any. The holder keeps its lease through the refusal.
+Meanwhile no pass of the residency's views installs. The residency keeps its
+lease through the refusal.
 
 The unified overlay (`Puck.Overlays`) refuses its own resources the same way:
 a creation that fails releases what was created, `ResourceRefusal` names it,
@@ -287,10 +301,10 @@ status then reports `applied`, `unchanged`, or `failed`, with a generation and
 changed pipeline count. Compile before issuing the command. Source edits alone
 do not change a running GPU pipeline.
 
-`SdfEngineNode.RequestShaderReload` queues the work. `SdfWorldPipelines.PrepareReload`
+`SdfWorldResidency.RequestShaderReload` queues the work. `SdfWorldPipelines.PrepareReload`
 creates replacements for the kernels whose bytecode changed, using the existing
-binding descriptions, off the frame thread. `SdfWorldEngine.InstallReload` then
-owns the render-thread transaction: it drains outstanding frames, swaps the
+binding descriptions, off the frame thread. `SdfWorldTables.InstallReload` then
+owns the render-thread transaction: it waits for the device to go idle, swaps the
 pipelines, and checks the ISA of every march pipeline on the GPU (beam,
 primary, surface, ambient, and the three views variants) before retiring the
 old ones. A failed load or validation keeps the previous kernels. Buffers,
@@ -299,9 +313,9 @@ descriptor bindings the ISA probe borrowed and the frame-reuse signature are
 reset, so the next frame rebinds and renders. Unchanged bytecode creates no
 pipeline and causes no GPU drain. Device-loss recovery uses the last
 successfully loaded set, and a loss during a reload fails that request. A
-reload replaces pipelines in place, so the node first takes its set out of the
-cache's sharing; when another engine on the device leases the same set, the
-request fails instead.
+reload replaces pipelines in place, so the residency first takes its set out of
+the cache's sharing; when another residency on the device leases the same set,
+the request fails instead.
 
 This is the primary SDF engine's compute-kernel reload. `views.graphs`
 instances (reloaded with `pipeline.reload`) and overlay/postprocess decorators
@@ -317,8 +331,8 @@ each become one list entry rather than one hand-written program-build method.
 `ISdfFrameSource`, assigning each emitter a contiguous dynamic-transform slot
 range and rebuilding only on a revision change. Its table persists across
 frames and `SdfMovedTransforms` records which ranges each frame's emitters
-repacked, so every engine consuming the frame stages only what moved since it
-last rendered.
+repacked, so every residency's tables consuming the frame stage only what moved
+since they last uploaded.
 
 `SdfAnchor` is one resolved pose and `ISdfAnchorSource` resolves an anchor id
 to it. `Puck.World`'s `WorldScreenBinder` resolves camera anchors through that
@@ -329,11 +343,11 @@ in `WorldScreenBinder.CameraViews.cs`. `SdfAnchorTable`, a name-keyed
 `ISdfAnchorSource`, has no users. `Puck.SdfVm.Views` holds the camera-rig shapes
 (`OrbitRig`/`FollowRig`/`OrientedFollowRig`/`FixedRig`/`FirstPersonRig`) and
 `SdfCameraFrameSource`, the frame source of a camera view: the frame the world's
-node renders (`SdfEngineNode.HostFrame`) filmed from one camera, which an
-`SdfEngineNode` of the view's own renders as an `sdf.world` instance of the
-render graph. A view whose own screen samples its output renders into another
-output, so a mirror shows its previous frame and never compounds the image it
-writes. `SdfCameraProgram.cs`'s `dynamics` op names a
+residency renders (`SdfWorldResidency.HostFrame`) filmed from one camera, which
+an `SdfWorldResidency` of the view's own renders as an `sdf.world` instance of
+the render graph. A view whose own screen samples its output reads its
+instance's previous frame, so a mirror shows its previous frame and never
+compounds the image it writes. `SdfCameraProgram.cs`'s `dynamics` op names a
 pole-matched second-order response `SdfCameraBoomFollower` applies as the
 seat-rig boom's ease; `Views/SecondOrderFollower.cs` is the presentation-only
 float twin of `Puck.Maths.SecondOrderDynamics` this and every stamped-part
@@ -350,21 +364,15 @@ legal curve can accumulate arc well past `2^24` units, where a `float` ULP
 already exceeds a legal short segment; `float` appears only at the two public
 seams, the total length and `Sample`'s returned position/yaw.
 
-`SdfEngineNode.CreateOutputImage` puts a node's engine into export mode
-(`SdfWorldEngineOptions.CreateOutputImage` returning an
-`IGpuExportableImage`): the same rendered image both keeps serving the node's
-output leases (a screen still samples it unchanged) and exposes
-`ExportSharedHandle` for a same-adapter, cross-API consumer to open. Setting the
-factory replaces the engine at the next produced frame, at that frame's extent,
-and keeps the replaced one alive until every acquisition of its outputs is
-released; `ExportGeneration` changes identity every rebuild (a late export
-request, device loss). A camera view that exposes its exported image to an
-asynchronous foreign reader reserves the write before it produces and publishes
-the image with the value the engine signals on the image's shared fence behind
-the submission (`IGpuExportableImage.CompleteWrite`, read back as
-`ExportWrittenValue`; `ExportFenceHandle` is the fence the reader opens), which
-the reader waits for on its own device, and keeps its last completed image while
-the reader holds it. Nothing drains the queue.
+A camera view a probe reads is exported by its instance's node, not by this
+project: the render graph's node renders its output into the image an
+`IShaderPipelineOutputExport` creates (`ShaderPipelineRenderNode.Export`), which
+a same-adapter, cross-API reader opens by its shared handles. The node writes
+it only on a frame the reader has released it, keeps publishing its last image
+otherwise, and publishes each write with the value it signals on the image's
+shared fence behind the submission (`IGpuExportableImage.CompleteWrite`), which
+the reader waits for on its own device. Nothing drains the queue. See
+[shader manifests and pipelines](../../docs/reference/shaders.md) for the node.
 
 ## Debug tooling
 
@@ -413,8 +421,8 @@ and must change together.
 ## Capture completion
 
 A caller creates a `FrameCaptureRequest` and arms it on a capture target:
-the render graph's root, one of its instances, or `SdfEngineNode` itself, which
-serves it from the next frame it produces. Its `Completion` resolves with a `FrameCaptureResult`
+the render graph's root or one of its instances, an SDF view's among them,
+whose node serves it from a frame it renders. Its `Completion` resolves with a `FrameCaptureResult`
 only after the PNG writer returns, or with a failure if readback, writing,
 capture availability, or disposal prevents success. A busy target refuses
 instead of replacing the earlier request. `PendingCapturePath` is a busy

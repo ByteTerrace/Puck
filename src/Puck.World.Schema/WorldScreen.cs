@@ -137,7 +137,7 @@ public abstract record WorldScreenSource {
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenResolution? Resolution = null
     ) : WorldScreenSource;
     /// <summary>Authored reading text on the screen face, rendered through the engine's glyph-decal tier
-    /// (<c>Puck.SdfVm.SdfWorldEngine.SetScreenDecal</c>): a fixed monospace cell grid sampled from the world's packed
+    /// (<c>Puck.SdfVm.SdfWorldTables.SetScreenDecal</c>): a fixed monospace cell grid sampled from the world's packed
     /// font atlas at shade time — the dense-text sibling of a creation's <c>textRuns</c>, which stamp marched
     /// <c>Glyph</c> geometry. Signs, plaques, books, and monitors author this; short sculptural lettering stays a
     /// text run. Requires the world to declare a text font catalog (<see cref="WorldDefinition.Text"/>); the decal

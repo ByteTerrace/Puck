@@ -124,8 +124,7 @@ internal static class StartupBenchmarks {
 
     private static bool IsCaptureCompletion(CliProcessOutputLine line, string capture) =>
         ((line.Stream == CliProcessOutputStream.Stderr) &&
-        (line.Line.StartsWith(comparisonType: StringComparison.Ordinal, value: "[capture] ") ||
-         line.Line.StartsWith(comparisonType: StringComparison.Ordinal, value: "[debug] captured frame ")) &&
+        line.Line.StartsWith(comparisonType: StringComparison.Ordinal, value: "[capture] ") &&
         line.Line.Replace(newChar: '/', oldChar: '\\').EndsWith($" -> {capture.Replace(newChar: '/', oldChar: '\\')}", StringComparison.Ordinal));
 
     internal static StartupSummary? Summarize(IReadOnlyList<StartupSample> rows, int expected, bool headless) {

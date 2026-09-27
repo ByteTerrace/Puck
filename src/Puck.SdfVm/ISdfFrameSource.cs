@@ -26,7 +26,7 @@ public interface ISdfFrameSource {
     void AdvanceBricks(ISdfBrickBakeService bakes) { }
 
     /// <summary>Screen-surface TRANSFORM providers keyed by the program-declared screen index (see
-    /// <see cref="SdfEngineNode"/>'s <c>screenSurfaceTransforms</c> constructor parameter): a screen riding a dynamic
+    /// <see cref="SdfWorldResidency"/>'s <c>screenSurfaceTransforms</c> constructor parameter): a screen riding a dynamic
     /// entity re-poses its world-space sampling frame every frame it moved. Default null (no dynamic screen
     /// surfaces) — a frame source that never declares one need not override this. Reading this straight off the
     /// frame source (rather than threading it through a separate render-spec field) keeps a host node's own type
@@ -40,7 +40,7 @@ public interface ISdfFrameSource {
     /// node's type coupling doesn't grow to thread it.</summary>
     SdfGlyphAtlas? GlyphAtlas => null;
     /// <summary>Per-frame GLYPH DECAL providers keyed by the program-declared screen index — a screen slot showing dense
-    /// reading text (the material-level text tier, <see cref="SdfWorldEngine.SetScreenDecal"/>) instead of a bound
+    /// reading text (the material-level text tier, <see cref="SdfWorldTables.SetScreenDecal"/>) instead of a bound
     /// image. Each provider returns this frame's cell grid, or <see langword="null"/> to leave the slot on the
     /// image or unbound-glass path (the atlas-unavailable degrade). Default null (no decal screens) — a source with none need
     /// not override it. Mirrors <see cref="ScreenSurfaceTransforms"/>/<see cref="GlyphAtlas"/>: read straight off the

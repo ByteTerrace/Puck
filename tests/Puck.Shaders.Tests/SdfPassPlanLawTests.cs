@@ -1,5 +1,4 @@
 using Puck.Abstractions.Gpu;
-using Puck.SdfVm;
 using Puck.SignedDistance;
 using Puck.Hosting;
 
@@ -7,63 +6,39 @@ namespace Puck.Shaders.Tests;
 
 /// <summary>
 /// The <c>sdf.world</c> package's fragment (<see cref="SdfWorldPackage.Fragment"/>), spliced into a view's graph by the
-/// graph compiler, plans exactly as the engine records its dispatches by hand. The planner must order the spliced passes
-/// as <see cref="SdfWorldEngine.PassLabels"/> less the upload, whose region copies touch no frame buffer and are the
-/// regions' own, and plan, between passes of the frame, exactly the buffer transitions
-/// <see cref="SdfFrameBufferPlan.Edges"/> derives, less the brick pool's, which the views only read and which
-/// <c>sdf.bricks</c> publishes. Every scratch buffer is transient, one allocation shared by every frame slot, and at every
-/// capacity the planner's size is the engine's allocation, <see cref="SdfWorldEngine.FrameBufferBytes"/>.
+/// graph compiler, is the one statement of an SDF view's dispatch set: the planner orders its passes sky, mask, beam,
+/// cull arguments, mesh, primary, surface, ambient and views, and plans between them exactly the buffer transitions the
+/// kernels' reads and writes need, each after the pass that last wrote or read what the next writes or reads. Every
+/// scratch buffer is transient, one allocation shared by every frame slot, whose first use of a frame orders it after the
+/// frame before, and at every capacity the planner sizes each buffer as the kernels index it.
 /// </summary>
 public sealed class SdfPassPlanLawTests {
-    private const string Upload = "upload";
     // The name a view's graph gives the pass running the package.
     private const string Sdf = "sdf";
 
-    // The engine buffer each fragment buffer storage is.
-    private static SdfFrameBuffer BufferOf(string storage) => storage switch {
-        $"{Sdf}${SdfWorldPackage.Parts.InstanceMasks}" => SdfFrameBuffer.InstanceMasks,
-        $"{Sdf}${SdfWorldPackage.Parts.Tiles}" => SdfFrameBuffer.Tiles,
-        $"{Sdf}${SdfWorldPackage.Parts.Arguments}" => SdfFrameBuffer.ViewsArgs,
-        $"{Sdf}${SdfWorldPackage.Parts.CullBounds}" => SdfFrameBuffer.CullBounds,
-        $"{Sdf}${SdfWorldPackage.Parts.Visibility}" => SdfFrameBuffer.VisibilityRecords,
-        _ => throw new ArgumentOutOfRangeException(paramName: nameof(storage), actualValue: storage, message: "Not a fragment buffer."),
-    };
-    // The engine's ledger label for each dispatch. Brick work and the upload are null: the brick pool is sdf.bricks', and
-    // the region copies transition what they copy themselves.
-    private static string? LabelOf(SdfFramePass pass) => pass switch {
-        SdfFramePass.BrickUpload or SdfFramePass.BrickBake or SdfFramePass.Upload => null,
-        SdfFramePass.Sky => "sky",
-        SdfFramePass.Mask => "mask",
-        SdfFramePass.Beam => "beam",
-        SdfFramePass.CullArgs => "cull-args",
-        SdfFramePass.Mesh => "mesh",
-        SdfFramePass.Primary => "primary",
-        SdfFramePass.Surface => "surface",
-        SdfFramePass.Ambient => "ambient",
-        SdfFramePass.Views => "views",
-        _ => throw new ArgumentOutOfRangeException(paramName: nameof(pass)),
-    };
-    // The counts a host resolves for a view of this capacity, each derived as the engine derives it.
-    private static ShaderPipelineStorageCounts CountsOf(SdfFrameCapacity capacity) => new(
-        Height: capacity.Height,
-        Width: capacity.Width
-    ) {
-        BrickPoolVoxels = ((ulong)capacity.BrickPoolVoxels),
-        InstanceMaskWords = ((ulong)SdfProgram.InstanceMaskStorageWordCountFor(instanceCount: capacity.Instances)),
-        Instances = ((ulong)capacity.Instances),
-        Tiles = capacity.Tiles,
-        Viewports = capacity.Viewports,
-    };
-    private static SdfFrameCapacity Capacity(uint width, uint height, uint viewports, int instances) => new(
-        BrickPoolVoxels: SdfWorldEngine.DefaultBrickPoolVoxelCapacity,
-        Height: height,
-        Instances: instances,
-        Viewports: viewports,
-        Width: width
-    );
-
-    // The dispatches of one rendered view, in recording order: every labelled pass.
-    private static SdfFramePass[] Frame { get; } = [.. Enum.GetValues<SdfFramePass>().Where(predicate: static pass => (LabelOf(pass: pass) is not null))];
+    // The fragment's passes in dispatch order.
+    private static readonly string[] Order = [
+        SdfWorldPackage.Parts.Sky,
+        SdfWorldPackage.Parts.Mask,
+        SdfWorldPackage.Parts.Beam,
+        SdfWorldPackage.Parts.CullArgs,
+        SdfWorldPackage.Parts.Mesh,
+        SdfWorldPackage.Parts.Primary,
+        SdfWorldPackage.Parts.Surface,
+        SdfWorldPackage.Parts.Ambient,
+        SdfWorldPackage.Parts.Views,
+    ];
+    // Every buffer transition between two passes of a frame: the buffer, the pass it orders after and the pass it orders
+    // before, and the accesses and stages on either side.
+    private static readonly (string Buffer, string Producer, string Consumer, GpuAccess SourceAccess, GpuAccess DestinationAccess, GpuStage SourceStage, GpuStage DestinationStage)[] Edges = [
+        (SdfWorldPackage.Parts.InstanceMasks, SdfWorldPackage.Parts.Mask, SdfWorldPackage.Parts.Beam, GpuAccess.ShaderWrite, GpuAccess.ShaderRead, GpuStage.ComputeShader, GpuStage.ComputeShader),
+        (SdfWorldPackage.Parts.Tiles, SdfWorldPackage.Parts.Beam, SdfWorldPackage.Parts.CullArgs, GpuAccess.ShaderWrite, GpuAccess.ShaderRead, GpuStage.ComputeShader, GpuStage.ComputeShader),
+        (SdfWorldPackage.Parts.Arguments, SdfWorldPackage.Parts.CullArgs, SdfWorldPackage.Parts.Primary, GpuAccess.ShaderWrite, GpuAccess.IndirectCommandRead, GpuStage.ComputeShader, GpuStage.DrawIndirect),
+        (SdfWorldPackage.Parts.CullBounds, SdfWorldPackage.Parts.CullArgs, SdfWorldPackage.Parts.Primary, GpuAccess.ShaderWrite, GpuAccess.ShaderRead, GpuStage.ComputeShader, GpuStage.ComputeShader),
+        (SdfWorldPackage.Parts.Visibility, SdfWorldPackage.Parts.Primary, SdfWorldPackage.Parts.Surface, GpuAccess.ShaderWrite, GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuStage.ComputeShader, GpuStage.ComputeShader),
+        (SdfWorldPackage.Parts.Visibility, SdfWorldPackage.Parts.Surface, SdfWorldPackage.Parts.Ambient, GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuStage.ComputeShader, GpuStage.ComputeShader),
+        (SdfWorldPackage.Parts.Visibility, SdfWorldPackage.Parts.Ambient, SdfWorldPackage.Parts.Views, GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuAccess.ShaderRead, GpuStage.ComputeShader, GpuStage.ComputeShader),
+    ];
     // A view's graph: the one pass running the package, publishing its color.
     private static RenderGraphPlan Plan { get; } = new RenderGraphCompiler(packages: RenderGraphPackageCatalog.Engine).Compile(definition: new RenderGraphDefinition(
         Name: "view",
@@ -83,18 +58,30 @@ public sealed class SdfPassPlanLawTests {
 
     private static IEnumerable<ShaderPipelinePlannedStorage> Buffers => Plan.Pipeline.Storages.Where(predicate: static storage => (storage.Declaration.Kind == ShaderPipelineResourceKind.Buffer));
 
-    [Fact]
-    public void ThePlannedOrderIsTheEnginesPassOrderLessTheUpload() {
-        var labels = SdfWorldEngine.PassLabels.ToArray().Where(predicate: static label => (label != Upload)).ToArray();
+    // The fragment part a spliced storage's name names.
+    private static string PartOf(string storage) => storage[(Sdf.Length + 1)..];
+    // The bytes the kernels index a fragment buffer by at counts: per viewport and tile the masks' words and the cull
+    // buffer's planes, per viewport and instance its part bounds, the three indirect group counts, the dispatch box's four
+    // words, and one visibility record a pixel of every viewport.
+    private static ulong BytesOf(string buffer, ShaderPipelineStorageCounts counts) => buffer switch {
+        SdfWorldPackage.Parts.InstanceMasks => ((counts.Viewports * counts.Tiles) * (counts.InstanceMaskWords * sizeof(uint))),
+        SdfWorldPackage.Parts.Tiles => ((counts.Viewports * ((SdfWorldPackage.TilePlaneCount * counts.Tiles) + (SdfWorldPackage.PartBoundFloatCount * counts.Instances))) * sizeof(float)),
+        SdfWorldPackage.Parts.Arguments => ShaderPipelineDispatch.ArgumentBytes,
+        SdfWorldPackage.Parts.CullBounds => SdfWorldPackage.CullBoundsByteLength,
+        SdfWorldPackage.Parts.Visibility => (((((ulong)counts.Width) * counts.Height) * counts.Viewports) * SdfWorldPackage.VisibilityRecordByteLength),
+        _ => throw new ArgumentOutOfRangeException(paramName: nameof(buffer), actualValue: buffer, message: "Not a fragment buffer."),
+    };
 
+    [Fact]
+    public void ThePlannedOrderIsTheFragmentsDispatchOrder() {
         Assert.Equal(
-            actual: Frame.Select(selector: static pass => LabelOf(pass: pass)!).Distinct(),
-            expected: labels
+            actual: SdfWorldPackage.Fragment.Passes.Select(selector: static pass => pass.Name),
+            expected: Order
         );
         Assert.Equal(
             actual: Plan.Pipeline.PassOrder,
-            expected: labels.Select(selector: static label => RenderGraphPackageFragment.Spliced(
-                name: label,
+            expected: Order.Select(selector: static part => RenderGraphPackageFragment.Spliced(
+                name: part,
                 pass: Sdf
             ))
         );
@@ -107,8 +94,8 @@ public sealed class SdfPassPlanLawTests {
         );
     }
     [Fact]
-    public void ThePlannedBufferBarriersBetweenPassesAreExactlyTheEnginesEdges() {
-        var planned = new List<(SdfFrameBuffer Buffer, string Producer, string Consumer, GpuAccess SourceAccess, GpuAccess DestinationAccess, GpuStage SourceStage, GpuStage DestinationStage)>();
+    public void ThePlannedBufferBarriersBetweenPassesArePinned() {
+        var planned = new List<(string Buffer, string Producer, string Consumer, GpuAccess SourceAccess, GpuAccess DestinationAccess, GpuStage SourceStage, GpuStage DestinationStage)>();
         var passes = Plan.Pipeline.Passes;
 
         foreach (var pass in passes) {
@@ -127,57 +114,52 @@ public sealed class SdfPassPlanLawTests {
                     actual: access.Barrier.Kind,
                     expected: ShaderPipelineBarrierKind.Buffer
                 );
-                planned.Add(item: (BufferOf(storage: storage.Name), passes[access.PriorPass].Package!.Part!, pass.Package!.Part!, access.Barrier.SourceAccess, access.Barrier.DestinationAccess, access.Barrier.SourceStage, access.Barrier.DestinationStage));
+                planned.Add(item: (PartOf(storage: storage.Name), passes[access.PriorPass].Package!.Part!, pass.Package!.Part!, access.Barrier.SourceAccess, access.Barrier.DestinationAccess, access.Barrier.SourceStage, access.Barrier.DestinationStage));
             }
         }
 
-        var expected = SdfFrameBufferPlan.Edges(passes: Frame).Where(predicate: static edge => (edge.Buffer != SdfFrameBuffer.BrickPool)).Select(selector: static edge => (edge.Buffer, LabelOf(pass: edge.Producer)!, LabelOf(pass: edge.Consumer)!, edge.SourceAccess, edge.DestinationAccess, edge.SourceStage, edge.DestinationStage));
-
         Assert.Equal(
             actual: planned,
-            expected: expected
+            expected: Edges
         );
     }
-    [InlineData(64U, 64U, 1U, 1)]
-    [InlineData(100U, 37U, 2U, 33)]
-    [InlineData(17U, 300U, 3U, 65)]
-    [InlineData(1920U, 1080U, 4U, 1000)]
-    [InlineData(2560U, 1440U, 6U, 4097)]
+    [InlineData(64U, 64U, 1)]
+    [InlineData(100U, 37U, 33)]
+    [InlineData(17U, 300U, 65)]
+    [InlineData(1920U, 1080U, 1000)]
+    [InlineData(2560U, 1440U, 4097)]
     [Theory]
-    public void ThePlannerSizesEveryBufferAsTheEngineAllocatesIt(uint width, uint height, uint viewports, int instances) {
-        var capacity = Capacity(
-            height: height,
-            instances: instances,
-            viewports: viewports,
-            width: width
-        );
-        var counts = CountsOf(capacity: capacity);
+    public void ThePlannerSizesEveryBufferAsTheKernelsIndexIt(uint width, uint height, int instances) {
+        // The counts a residency states for one view of this extent.
+        var counts = new ShaderPipelineStorageCounts(
+            Height: height,
+            Width: width
+        ) {
+            InstanceMaskWords = ((ulong)SdfProgram.InstanceMaskStorageWordCountFor(instanceCount: instances)),
+            Instances = ((ulong)instances),
+            Tiles = (((ulong)((width + (SdfWorldPackage.TileSize - 1)) / SdfWorldPackage.TileSize)) * ((height + (SdfWorldPackage.TileSize - 1)) / SdfWorldPackage.TileSize)),
+            Viewports = 1,
+        };
 
         Assert.Equal(
-            actual: Buffers.Select(selector: static storage => BufferOf(storage: storage.Name)).Order(),
-            expected: Enum.GetValues<SdfFrameBuffer>().Where(predicate: static buffer => (buffer != SdfFrameBuffer.BrickPool)).Order()
+            actual: Buffers.Select(selector: static storage => PartOf(storage: storage.Name)).Order(comparer: StringComparer.Ordinal),
+            expected: new[] {
+                SdfWorldPackage.Parts.Arguments,
+                SdfWorldPackage.Parts.CullBounds,
+                SdfWorldPackage.Parts.InstanceMasks,
+                SdfWorldPackage.Parts.Tiles,
+                SdfWorldPackage.Parts.Visibility,
+            }.Order(comparer: StringComparer.Ordinal)
         );
         Assert.All(
             action: storage => Assert.Equal(
                 actual: storage.Declaration.ResolveSizeBytes(counts: counts),
-                expected: SdfWorldEngine.FrameBufferBytes(
-                    buffer: BufferOf(storage: storage.Name),
-                    capacity: capacity
+                expected: BytesOf(
+                    buffer: PartOf(storage: storage.Name),
+                    counts: counts
                 )
             ),
             collection: Buffers
-        );
-        Assert.Equal(
-            actual: new ShaderPipelineResource(
-                Count: RenderGraphPackageCatalog.BrickPool.Count,
-                Kind: ShaderPipelineResourceKind.Buffer,
-                Name: "bricks",
-                StrideBytes: RenderGraphPackageCatalog.BrickPool.StrideBytes
-            ).ResolveSizeBytes(counts: counts),
-            expected: SdfWorldEngine.FrameBufferBytes(
-                buffer: SdfFrameBuffer.BrickPool,
-                capacity: capacity
-            )
         );
     }
     [Fact]
@@ -207,9 +189,8 @@ public sealed class SdfPassPlanLawTests {
     }
     [Fact]
     public void EachBuffersFirstUseInTheFrameStartsFromTheFrameBefore() {
-        // The engine's top-of-frame barrier orders each buffer's first use of a frame after the frame before; the planner
-        // gives exactly that use a cross-frame prior, whose barrier orders the one transient allocation across frames, and
-        // every later use a pass prior.
+        // The planner gives each buffer's first use of a frame a cross-frame prior, whose barrier orders the one transient
+        // allocation after the frame before, and every later use a pass prior.
         foreach (var storage in Buffers) {
             var accesses = Plan.Pipeline.Passes.SelectMany(selector: static pass => pass.Accesses).Where(predicate: access => (access.Storage == storage.Index)).ToArray();
 

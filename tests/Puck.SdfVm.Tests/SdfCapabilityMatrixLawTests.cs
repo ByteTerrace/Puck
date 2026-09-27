@@ -6,9 +6,10 @@ namespace Puck.SdfVm.Tests;
 /// <summary>
 /// The capability matrix of the SDF engine: every feature the engine provides, the frame-graph equivalent that replaces
 /// it, and the check that proves the equivalent. The inventory is read from the engine's public surface: every public
-/// member of <see cref="SdfWorldEngine"/>, <see cref="SdfEngineNode"/>, <see cref="SdfFrame"/>,
-/// <see cref="SdfViewSnapshot"/>, <see cref="SdfWorldEngineOptions"/> and <see cref="SdfWorldRenderSpec"/> belongs to
-/// exactly one row, and every pass in <see cref="SdfWorldEngine.PassLabels"/> names the graph pass that replaces it. A
+/// member of <see cref="SdfWorldTables"/>, <see cref="SdfWorldResidency"/>, <see cref="SdfWorldPasses"/>,
+/// <see cref="SdfWorldView"/>, <see cref="SdfFrame"/>, <see cref="SdfViewSnapshot"/>, <see cref="SdfWorldTablesOptions"/>
+/// and <see cref="SdfWorldRenderSpec"/> belongs to
+/// exactly one row, and every pass in <see cref="SdfWorldTables.PassLabels"/> names the graph pass that replaces it. A
 /// console verb reaches the engine only through these members, so a verb is covered by the row of the member it drives.
 /// A row turns green only when its equivalent passes its check, and nothing a row claims is deleted before then. A row
 /// with no check is a named gap: the list of gaps changes only in the change that adds a check.
@@ -17,11 +18,13 @@ public sealed class SdfCapabilityMatrixLawTests {
     private sealed record Row(string Capability, string Equivalent, string? Check, bool Green, params string[] Members);
 
     private static readonly Type[] Surface = [
-        typeof(SdfWorldEngine),
-        typeof(SdfEngineNode),
+        typeof(SdfWorldTables),
+        typeof(SdfWorldResidency),
+        typeof(SdfWorldPasses),
+        typeof(SdfWorldView),
         typeof(SdfFrame),
         typeof(SdfViewSnapshot),
-        typeof(SdfWorldEngineOptions),
+        typeof(SdfWorldTablesOptions),
         typeof(SdfWorldRenderSpec),
     ];
     // Members a record or a type carries for its own identity rather than as a feature.
@@ -31,24 +34,15 @@ public sealed class SdfCapabilityMatrixLawTests {
         "screen slots", "decals", "viewports", "render scale", "tonemap", "captures", "pass labels",
         "kernel variants", "brick baking", "glyph atlas", "volumes", "lights", "far field", "debug views",
     ];
-    // The graph pass that replaces each engine pass.
+    // The graph pass that replaces each engine pass: the upload is the residency's own; every other pass is a part of the
+    // sdf.world fragment (SdfPassPlanLawTests).
     private static readonly Dictionary<string, string> PassEquivalents = new(comparer: StringComparer.Ordinal) {
-        ["upload"] = "no pass: the frame tables upload through GpuRegion",
-        ["sky"] = "sdf.world sky",
-        ["mask"] = "sdf.world mask",
-        ["beam"] = "sdf.world beam",
-        ["cull-args"] = "sdf.world cull arguments",
-        ["mesh"] = "sdf.world mesh, a raster pass writing the mesh visibility target primary is bounded by",
-        ["primary"] = "sdf.world primary, dispatched indirectly, writing visibility version 0",
-        ["surface"] = "sdf.world surface, visibility version 1",
-        ["ambient"] = "sdf.world ambient, visibility version 2",
-        ["views"] = "sdf.world shadow, light and volume shading, color versions 0 to 2",
+        ["upload"] = "no graph pass: the residency's one upload a frame, through GpuRegion, ahead of every view's submission",
     };
     // The rows no check proves yet.
     private static readonly string[] Gaps = [
         "live program report",
         "render scale",
-        "screen slots",
         "decals",
         "glyph atlas",
         "volumes",
@@ -56,19 +50,19 @@ public sealed class SdfCapabilityMatrixLawTests {
         "debug views",
         "grid overlay",
         "brick baking",
-        "output image and export",
-        "assembly and lifetime",
     ];
     private static readonly Row[] Matrix = [
         new(
             Capability: "program upload and capacity",
-            Equivalent: "the world group's program words and instance tables, uploaded through GpuRegion and sized by the ProgramWords and Instances counts",
-            Check: "SdfWorldEngineUploadLawTests; puck parity (materials, noise, vocabulary)",
-            Green: false,
+            Equivalent: "the residency's program words and instance grid, uploaded through GpuRegion, and each view's scratch counted by the Instances and InstanceMaskWords the residency states",
+            Check: "SdfWorldTablesUploadLawTests; RenderGraphFragmentLawTests; puck parity (materials, noise, vocabulary)",
+            Green: true,
             Members: [
-                "SdfWorldEngine.UploadProgram", "SdfWorldEngine.ProgramWordCapacity", "SdfEngineNode.ProgramWordCapacity",
-                "SdfEngineNode.CopyLiveProgramWords", "SdfFrame.Program", "SdfFrame.ProgramChanged",
-                "SdfWorldEngineOptions.Program", "SdfWorldEngineOptions.ProgramWordCapacity", "SdfWorldEngineOptions.InstanceCapacity",
+                "SdfWorldTables.UploadProgram", "SdfWorldTables.ProgramWordCapacity", "SdfWorldTables.InstanceCapacity",
+                "SdfWorldTables.InstanceMaskWordCount", "SdfWorldResidency.ProgramWordCapacity",
+                "SdfWorldResidency.CopyLiveProgramWords", "SdfWorldResidency.CapacityRevision", "SdfWorldResidency.CountsAt",
+                "SdfWorldPasses.CounterOf", "SdfFrame.Program", "SdfFrame.ProgramChanged",
+                "SdfWorldTablesOptions.Program", "SdfWorldTablesOptions.ProgramWordCapacity", "SdfWorldTablesOptions.InstanceCapacity",
                 "SdfWorldRenderSpec.ProgramWordCapacity", "SdfWorldRenderSpec.InstanceCapacity",
             ]
         ),
@@ -78,33 +72,31 @@ public sealed class SdfCapabilityMatrixLawTests {
             Check: null,
             Green: false,
             Members: [
-                "SdfEngineNode.LiveProgramWords", "SdfEngineNode.LiveProgramInstances", "SdfEngineNode.LiveProgramStepScale",
-                "SdfEngineNode.LiveProgramStepScaleBinder", "SdfEngineNode.LiveProgramFieldScopeClamps", "SdfEngineNode.LiveVolumes",
+                "SdfWorldResidency.LiveProgramWords", "SdfWorldResidency.LiveProgramInstances", "SdfWorldResidency.LiveProgramStepScale",
+                "SdfWorldResidency.LiveProgramStepScaleBinder", "SdfWorldResidency.LiveProgramFieldScopeClamps", "SdfWorldResidency.LiveVolumes",
             ]
         ),
         new(
             Capability: "frame submission",
-            Equivalent: "the graph runtime records the sdf.world passes into the graph's command list",
-            Check: "SdfWorldEngineWorkLawTests; SdfEngineNodeWorkLawTests; puck parity",
-            Green: false,
+            Equivalent: "the residency's one upload a frame, then the sdf.world passes recorded into each view instance's submission by the graph runtime",
+            Check: "SdfWorldTablesWorkLawTests; SdfWorldResidencyWorkLawTests; RenderGraphRuntimeLawTests (package instances); puck parity",
+            Green: true,
             Members: [
-                "SdfWorldEngine.SubmitFrame", "SdfWorldEngine.RenderFrame", "SdfWorldEngine.ReadPixels", "SdfWorldEngine.FrameRingSize",
-                "SdfFrame.Time", "SdfWorldEngine.FrameValues",
-                "SdfEngineNode.HostFrame", "SdfEngineNode.BeginFrame",
+                "SdfWorldTables.Pack", "SdfWorldTables.SubmitUpload", "SdfWorldTables.CurrentSlot", "SdfWorldTables.FrameRingSize",
+                "SdfFrame.Time", "SdfWorldResidency.HostFrame", "SdfWorldResidency.BeginFrame", "SdfWorldResidency.Prepare",
+                "SdfWorldResidency.Submit", "SdfWorldResidency.Frame", "SdfWorldResidency.Tables", "SdfWorldResidency.RequestExtent",
+                "SdfWorldPasses.Build", "SdfWorldPasses.Create", "SdfWorldPasses.Regions", "SdfWorldPasses.BeginFrame",
             ]
         ),
         new(
             Capability: "viewports",
-            Equivalent: "one sdf.world instance per view, scheduled by RenderGraphScheduler, each view's output placed by the root's place pass",
+            Equivalent: "one sdf.world instance per view, scheduled by RenderGraphScheduler, each with its own viewport row and scratch, its output placed by the root's place pass",
             Check: "puck parity (one view); the split-seats canary (two views)",
-            Green: false,
+            Green: true,
             Members: [
                 "SdfFrame.Views", "SdfViewSnapshot.Camera", "SdfViewSnapshot.Region", "SdfViewSnapshot.AsymmetricFrustumOffset",
-                "SdfWorldEngine.RequestViewExtent", "SdfWorldEngine.HasViewOutput", "SdfWorldEngine.TryAcquireViewOutput",
-                "SdfWorldEngine.ReleaseViewOutput", "SdfWorldEngine.ViewOutputHolds", "SdfEngineNode.ViewProducer",
-                "SdfEngineNode.HasViewOutput",
-                "SdfWorldEngine.ConeNear", "SdfWorldEngine.PrimaryMarchSteps",
-                "SdfWorldEngineOptions.ViewportCapacity", "SdfWorldRenderSpec.ViewportCapacity", "SdfWorldRenderSpec.Width",
+                "SdfWorldTables.WriteViewportRow", "SdfWorldTables.ViewportByteLength", "SdfWorldTables.ConeNear",
+                "SdfWorldTables.PrimaryMarchSteps", "SdfWorldView.Residency", "SdfWorldView.View", "SdfWorldRenderSpec.Width",
                 "SdfWorldRenderSpec.Height",
             ]
         ),
@@ -113,57 +105,57 @@ public sealed class SdfCapabilityMatrixLawTests {
             Equivalent: "a reduced instance extent, reconstructed by the root's place pass",
             Check: null,
             Green: false,
-            Members: ["SdfViewSnapshot.RenderScale", "SdfWorldEngine.DefaultViewExtent"]
+            Members: ["SdfViewSnapshot.RenderScale"]
         ),
         new(
             Capability: "screen slots",
-            Equivalent: "P12 image sources bound as the pass group's screen-source array with a sampler table",
-            Check: null,
-            Green: false,
+            Equivalent: "the view instance's reads its graph binds to no version, bound as the pass group's screen-source array with a sampler table",
+            Check: "RenderGraphRuntimeLawTests (unbound reads); the view-screens canary",
+            Green: true,
             Members: [
-                "SdfWorldEngine.SetScreenSource", "SdfWorldEngine.SetScreenSurface", "SdfWorldEngine.SetScreenMapping", "SdfWorldEngine.SetScreenLight",
-                "SdfWorldEngine.MaxScreenSurfaces", "SdfWorldRenderSpec.ScreenSources", "SdfEngineNode.BoundScreenSource",
-                "SdfWorldEngine.ScreenSourcesTainted",
+                "SdfWorldTables.SetScreenBound", "SdfWorldTables.SetScreenSurface", "SdfWorldTables.SetScreenMapping", "SdfWorldTables.SetScreenLight",
+                "SdfWorldTables.MaxScreenSurfaces", "SdfWorldRenderSpec.ScreenSources", "SdfWorldResidency.BoundScreenSource",
+                "SdfWorldResidency.ScreenImage", "SdfWorldResidency.ScreenSources", "SdfWorldPasses.SamplesReads",
             ]
         ),
         new(
             Capability: "decals",
-            Equivalent: "the world group's decal table",
+            Equivalent: "the residency's decal table",
             Check: null,
             Green: false,
-            Members: ["SdfWorldEngine.SetScreenDecal", "SdfWorldEngine.ClearScreenDecal", "SdfWorldEngine.MaxScreenDecalCells"]
+            Members: ["SdfWorldTables.SetScreenDecal", "SdfWorldTables.ClearScreenDecal", "SdfWorldTables.MaxScreenDecalCells"]
         ),
         new(
             Capability: "glyph atlas",
-            Equivalent: "the world group's glyph atlas",
+            Equivalent: "the residency's glyph atlas",
             Check: null,
             Green: false,
-            Members: ["SdfWorldEngine.SetGlyphAtlas"]
+            Members: ["SdfWorldTables.SetGlyphAtlas"]
         ),
         new(
             Capability: "volumes",
-            Equivalent: "the frame group's volume table, read by the volume shading stage",
+            Equivalent: "the residency's volume table, read by the volume shading stage",
             Check: null,
             Green: false,
-            Members: ["SdfFrame.Volumes", "SdfWorldEngine.MaxVolumes"]
+            Members: ["SdfFrame.Volumes", "SdfWorldTables.MaxVolumes"]
         ),
         new(
             Capability: "lights, sky and tonemap",
-            Equivalent: "the generated frame block's environment, the light stage, and P16's display transform for the tonemap",
+            Equivalent: "the residency's screen-light table's environment, the light stage, and P16's display transform for the tonemap",
             Check: "PackEnvironmentLawTests; WorldRenderLightingSkyLawTests; puck parity (sky, materials)",
             Green: false,
             Members: ["SdfFrame.Environment", "SdfFrame.AmbientScale", "SdfFrame.SunScale", "SdfFrame.SampleIndex"]
         ),
         new(
             Capability: "far field",
-            Equivalent: "the generated frame block's far distance and the beam's far bound",
+            Equivalent: "each view's viewport row's far distance and the beam's far bound",
             Check: "WorldRenderFarDistanceLawTests",
             Green: false,
             Members: ["SdfFrame.FarDistance", "SdfFrame.DefaultFarDistance", "SdfFrame.DisableFarBound"]
         ),
         new(
             Capability: "shading levers",
-            Equivalent: "staged shading's stage options in the generated frame block",
+            Equivalent: "staged shading's stage options in the residency's screen-light table",
             Check: null,
             Green: false,
             Members: [
@@ -178,7 +170,7 @@ public sealed class SdfCapabilityMatrixLawTests {
             Equivalent: "the debug module's passes selected per instance",
             Check: null,
             Green: false,
-            Members: ["SdfWorldEngine.DebugMode", "SdfEngineNode.DebugMode", "SdfFrame.DebugSliceAxis", "SdfFrame.DebugSliceOffset"]
+            Members: ["SdfWorldTables.DebugMode", "SdfWorldResidency.DebugMode", "SdfFrame.DebugSliceAxis", "SdfFrame.DebugSliceOffset"]
         ),
         new(
             Capability: "grid overlay",
@@ -192,60 +184,60 @@ public sealed class SdfCapabilityMatrixLawTests {
         ),
         new(
             Capability: "dynamic transforms",
-            Equivalent: "the frame group's dynamic-transform table, uploaded through GpuRegion by the moved set",
-            Check: "WorldSceneMovedTransformsLawTests; SdfMovedTransformsWorkLawTests; puck parity (vocabulary)",
+            Equivalent: "the residency's dynamic-transform table, uploaded through GpuRegion by the moved set",
+            Check: "WorldSceneMovedTransformsLawTests; SdfMovedTransformsWorkLawTests; SdfWorldTablesUploadLawTests; puck parity (vocabulary)",
             Green: false,
             Members: [
-                "SdfFrame.DynamicTransforms", "SdfFrame.MovedTransforms", "SdfWorldEngineOptions.DynamicTransformCapacity",
+                "SdfFrame.DynamicTransforms", "SdfFrame.MovedTransforms", "SdfWorldTablesOptions.DynamicTransformCapacity",
                 "SdfWorldRenderSpec.DynamicTransformCapacity",
             ]
         ),
         new(
             Capability: "brick baking",
-            Equivalent: "sdf.bricks, a world-scoped instance joined to the views by buffer edges",
+            Equivalent: "sdf.bricks, a world-scoped instance joined to the views by buffer edges; the residency's upload bakes today",
             Check: null,
             Green: false,
             Members: [
-                "SdfWorldEngine.BrickBakeAvailable", "SdfWorldEngine.GetBrickState", "SdfWorldEngine.RequestBrickBake",
-                "SdfWorldEngine.UploadBrick", "SdfWorldEngine.DefaultBrickPoolVoxelCapacity",
-                "SdfWorldEngineOptions.BrickPoolVoxelCapacity", "SdfWorldRenderSpec.BrickPoolVoxelCapacity",
+                "SdfWorldTables.BrickBakeAvailable", "SdfWorldTables.GetBrickState", "SdfWorldTables.RequestBrickBake",
+                "SdfWorldTables.UploadBrick", "SdfWorldTables.DefaultBrickPoolVoxelCapacity",
+                "SdfWorldTablesOptions.BrickPoolVoxelCapacity", "SdfWorldRenderSpec.BrickPoolVoxelCapacity",
             ]
         ),
         new(
             Capability: "cadence",
-            Equivalent: "the scheduler's refresh of an unchanged instance",
-            Check: "SdfWorldEngineWorkLawTests (cadence-skipped passes)",
-            Green: false,
-            Members: ["SdfFrame.EnableCadenceGate", "SdfWorldEngine.CadenceSkippedPassLabels"]
+            Equivalent: "the scheduler's unchanged instance (RenderGraphFrame.Unchanged): a view whose residency saw nothing it renders from change is not due",
+            Check: "RenderGraphSchedulerLawTests (unchanged); RenderGraphRuntimeLawTests (package instances)",
+            Green: true,
+            Members: [
+                "SdfFrame.EnableCadenceGate", "SdfWorldTables.ForcesRender", "SdfWorldTables.ViewSignature",
+                "SdfWorldTables.UpdateTablesSignature", "SdfWorldTables.SampleIndex", "SdfWorldResidency.IsUnchanged",
+                "SdfWorldResidency.MarkRendered", "SdfWorldPasses.IsUnchanged",
+            ]
         ),
         new(
             Capability: "pass labels and counted work",
-            Equivalent: "the planner's pass order and per-instance pass counts",
-            Check: "SdfPassPlanLawTests; SdfWorldEngineWorkLawTests; world-counters canary",
-            Green: false,
+            Equivalent: "the planner's pass order and per-instance pass counts, and the residency's upload ledger",
+            Check: "SdfPassPlanLawTests; SdfWorldTablesWorkLawTests; world-counters canary",
+            Green: true,
             Members: [
-                "SdfWorldEngine.PassLabels", "SdfWorldEngine.PassClasses", "SdfEngineNode.PassLabels", "SdfWorldEngine.Work", "SdfWorldEngine.WorkLifetime",
-                "SdfEngineNode.Work", "SdfEngineNode.WorkLifetime", "SdfWorldEngineOptions.WorkLedger", "SdfWorldEngine.DebugLabel",
+                "SdfWorldTables.PassLabels", "SdfWorldTables.PassClasses", "SdfWorldTables.Work", "SdfWorldTables.WorkLifetime",
+                "SdfWorldTables.DebugLabel", "SdfWorldResidency.Work", "SdfWorldResidency.WorkLifetime", "SdfWorldResidency.Name",
+                "SdfWorldTablesOptions.WorkLedger", "SdfWorldRenderSpec.Name",
             ]
         ),
         new(
             Capability: "buffer sizing and uploads",
-            Equivalent: "the planner's counted buffers and GpuRegion uploads",
-            Check: "SdfPassPlanLawTests; SdfWorldEngineUploadLawTests",
-            Green: false,
-            Members: [
-                "SdfWorldEngine.FrameBufferBytes",
-                "SdfWorldEngine.VisibilityRecordBytes",
-                "SdfEngineNode.VisibilityRecordBytes",
-                "SdfWorldEngine.DescriptorPoolSizes", "SdfWorldEngine.DescriptorPools", "SdfWorldEngine.CheckAdmission",
-            ]
+            Equivalent: "the planner's transient counted buffers and GpuRegion uploads",
+            Check: "SdfPassPlanLawTests; RenderGraphFragmentLawTests; SdfWorldTablesUploadLawTests",
+            Green: true,
+            Members: ["SdfWorldTables.DescriptorPoolSizes", "SdfWorldTables.DescriptorPools", "SdfWorldTables.CheckAdmission"]
         ),
         new(
             Capability: "captures",
-            Equivalent: "captures from the graph's root output",
+            Equivalent: "captures of a view instance's or the root's output, served by the instance's node",
             Check: "RenderGraphRuntimeLawTests; WorldCaptureHoldLawTests; WorldCaptureSchedulerLawTests; puck parity",
             Green: true,
-            Members: ["SdfEngineNode.RequestCapture", "SdfEngineNode.PendingCapturePath", "SdfFrame.StateTick"]
+            Members: []
         ),
         new(
             Capability: "kernel variants and reload",
@@ -253,42 +245,35 @@ public sealed class SdfCapabilityMatrixLawTests {
             Check: "SdfViewsKernelVariantLawTests; SdfWorldPipelineCacheLawTests; SdfPipelineBuildLivenessLawTests",
             Green: false,
             Members: [
-                "SdfWorldEngine.InstallReload", "SdfEngineNode.RequestShaderReload", "SdfEngineNode.ShaderReloadStatus",
-                "SdfEngineNode.IsReady", "SdfEngineNode.NotReadyReason",
+                "SdfWorldTables.InstallReload", "SdfWorldResidency.RequestShaderReload", "SdfWorldResidency.ShaderReloadStatus",
+                "SdfWorldResidency.IsReady", "SdfWorldResidency.NotReadyReason", "SdfWorldResidency.WaitReady",
             ]
         ),
         new(
             Capability: "output image and export",
-            Equivalent: "the graph's root output, imported or exported by the graph runtime",
-            Check: null,
-            Green: false,
-            Members: [
-                "SdfWorldEngine.OutputImageHandle", "SdfWorldEngine.OutputImageViewHandle", "SdfWorldEngine.OutputLayout", "SdfWorldEngine.ExportSharedHandle",
-                "SdfWorldEngine.ExportFenceHandle", "SdfWorldEngine.ExportWrittenValue", "SdfWorldEngine.OutputWidth", "SdfWorldEngine.OutputHeight",
-                "SdfWorldEngineOptions.CreateOutputImage", "SdfEngineNode.CreateOutputImage", "SdfEngineNode.ExportSharedHandle",
-                "SdfEngineNode.ExportFenceHandle", "SdfEngineNode.ExportWrittenValue",
-                "SdfEngineNode.ExportGeneration", "SdfEngineNode.OutputWidth", "SdfEngineNode.OutputHeight",
-            ]
+            Equivalent: "each view instance's output, and a node's exported output (ShaderPipelineRenderNode.Export) for a probe's view",
+            Check: "ShaderPipelineOutputExportLawTests; the probe-sources canary",
+            Green: true,
+            Members: []
         ),
         new(
             Capability: "mesh draws",
             Equivalent: "the sdf.world mesh pass, rasterizing the frame's draws into the mesh visibility target that bounds primary over the shared visibility record",
-            Check: "SdfWorldEngineUploadLawTests; SdfWorldEngineWorkLawTests; puck canary sdf-mesh-visibility sdf-mesh-motion",
-            Green: false,
+            Check: "SdfWorldTablesUploadLawTests; SdfPassPlanLawTests; puck canary sdf-mesh-visibility sdf-mesh-motion",
+            Green: true,
             Members: [
-                "SdfFrame.MeshDraws", "SdfEngineNode.MeshRegionBytes", "SdfEngineNode.MeshDrawCount", "SdfEngineNode.MeshAttachmentBytes",
-                "SdfWorldEngine.MeshRegionBytes", "SdfWorldEngine.MeshRegionLayout", "SdfWorldEngine.MeshAttachmentBytes",
-                "SdfWorldEngine.MeshAttachmentBytesOf", "SdfWorldEngine.MeshDrawCount",
+                "SdfFrame.MeshDraws", "SdfWorldResidency.MeshRegionBytes", "SdfWorldResidency.MeshDrawCount",
+                "SdfWorldTables.MeshRegionBytes", "SdfWorldTables.MeshRegionLayout", "SdfWorldTables.MeshDrawCount",
             ]
         ),
         new(
             Capability: "assembly and lifetime",
-            Equivalent: "SdfWorldResidency for the world's half and the graph runtime for the views",
-            Check: null,
-            Green: false,
+            Equivalent: "SdfWorldResidency, held by its host and every view's passes, and the graph runtime for the views",
+            Check: "RenderGraphRuntimeLawTests (package instances); the device-loss-windowed canary",
+            Green: true,
             Members: [
-                "SdfWorldEngine.Dispose", "SdfEngineNode.Dispose", "SdfEngineNode.OnDeviceLost", "SdfWorldRenderSpec.FrameSource",
-                "SdfEngineNode.Produce", "SdfEngineNode.TryAcquireOutput", "SdfEngineNode.OutputLeases", "SdfEngineNode.RetiringEngines",
+                "SdfWorldTables.Dispose", "SdfWorldResidency.Dispose", "SdfWorldResidency.Retain", "SdfWorldResidency.Release", "SdfWorldResidency.IsReleased",
+                "SdfWorldResidency.OnDeviceLost", "SdfWorldPasses.OnDeviceLost", "SdfWorldRenderSpec.FrameSource",
                 "SdfWorldRenderSpec.DecorateFrameSource", "SdfWorldRenderSpec.HostsOnDirectX",
             ]
         ),
@@ -323,7 +308,7 @@ public sealed class SdfCapabilityMatrixLawTests {
     public void EveryEnginePassNamesTheGraphPassThatReplacesIt() {
         Assert.Equal(
             actual: PassEquivalents.Keys,
-            expected: SdfWorldEngine.PassLabels.ToArray()
+            expected: SdfWorldTables.PassLabels.ToArray()
         );
     }
     [Fact]

@@ -5,24 +5,34 @@ fixed sequence of compute and graphics passes. Upload and sky filling precede
 culling; the mask pass builds per-tile instance visibility before the beam and primary marches; surface,
 ambient, and view passes finish each view's image. The sequence exposes
 where the GPU work goes, why mask-first processing keeps beam cost tied to nearby
-instances, how render-scale tiers trade resolution for frame budget, and how two
+instances, how render-scale tiers trade resolution for frame budget, and how
 frames stay in flight without stalling the whole device.
 
 ## One indirect render pipeline
 
-A world frame records its passes into one command buffer. Upload and sky filling
-precede culling; camera traversal, surface evaluation, AO and lighting have separate dispatches.
-Every pass after the upload runs once per view; the sequence finishes that
-view's own output image:
+A world frame has two halves. The scene's shared tables — the program, the
+moving transforms, the screens, lights, volumes and mesh draws — live in one
+**residency** (`SdfWorldResidency`) per frame source, and the frame first
+submits one **upload** that brings those tables up to date. Then every view of
+the scene is an instance of the render graph's `sdf.world` package, and its node
+records the package's nine passes into its own submission, reading the tables
+the upload wrote. Upload and sky filling precede culling; camera traversal,
+surface evaluation, AO and lighting have separate dispatches. The passes finish
+that view's own output image:
 
 ```text
    upload → sky → mask → beam → cull-args → mesh → primary → surface → ambient → views
 ```
 
-These are the engine's `world.counters gpu` pass labels — the columns its per-pass work
-counters report against. Here is what the culling and rendering passes do;
-[the engine README](../../../../src/Puck.SdfVm/README.md) describes the visibility
-records the four per-pixel passes share: one per pixel of each view, sixty bytes.
+The render graph plans the view's passes like any other graph: the package
+declares them as a fragment (`SdfWorldPackage.Fragment`) that the graph
+compiler splices into the view's graph, and the planner decides every barrier
+between them. `world.counters gpu` reports the upload under the residency
+(`sdf:world` for the world's) and each view's passes under its instance, as
+`sdf.world$sky` through `sdf.world$views`. Here is what the culling and
+rendering passes do; [the engine README](../../../../src/Puck.SdfVm/README.md)
+describes the visibility records the four per-pixel passes share: one per pixel
+of each view, sixty bytes.
 
 **mask** (`sdf-instance-cull.comp.hlsl`) computes, for every 16×16 screen tile, the
 set of instances that could possibly matter to that tile—a bitmask, one bit per
@@ -49,10 +59,10 @@ finds the bounding rectangle of surviving tiles. Empty margins outside that
 rectangle launch no threads; holes inside it remain in the dispatch.
 
 **mesh** (`sdf-mesh.vert.hlsl`, `sdf-mesh.frag.hlsl`) rasterizes the frame's mesh draws, one draw call
-each, into the mesh visibility target at the engine extent: per pixel the ray parameter the march records,
+each, into the mesh visibility target at the view's extent: per pixel the ray parameter the march records,
 the draw plus one, and an octahedral normal turned toward the camera, kept nearest by a reversed-Z depth
 test. A frame with no mesh draws records nothing here. The target and its depth attachment, 20 bytes a
-pixel, are created by the first frame that draws a mesh, so an engine that never draws one holds neither. Primary bounds its march by that ray parameter
+pixel, are scratch the view's instance allocates with its graph. Primary bounds its march by that ray parameter
 and keeps an SDF surface only when it is strictly nearer, so a mesh pixel becomes a mesh visibility
 record; while a mesh draws, cull-args covers the whole view, and a mesh pixel shades with neutral shadows
 and ambient occlusion.
@@ -66,12 +76,12 @@ misses included. **surface** adds the geometric normal and curvature to it.
 volumes. Compare all four passes when measuring per-pixel field cost: moving
 work between kernels can reduce register pressure but adds buffer traffic.
 
-The engine never assembles its views. Each view's output is its own image,
-sized to the view's render extent, and the render graph's `place` pass puts it
-in its seat rect on the root image, upsampling it where the view rendered below
-native. In split screen each view is a graph producer of its own (`world`,
-`world$2`, and so on), so the graph schedules and places the seats the same way
-it places panes.
+No pass assembles views. Each view's output is its instance's own image, sized
+to the view's render extent, and the render graph's `place` pass puts it in its
+seat rect on the root image, upsampling it where the view rendered below
+native. In split screen each view is an instance of its own (`world`,
+`world$2`, and so on) over the one residency, so the graph schedules and places
+the seats the same way it places panes.
 
 ## What each pass costs
 
@@ -134,7 +144,7 @@ When the shading epilogue is the cost and you need the frame to fit a tighter
 budget, the lever is to render a view at *reduced* resolution and upsample it
 afterwards. Each view carries a `RenderScale`. The host sets the view's
 footprint in the render graph to its rect at that scale, the graph quantizes
-the footprint to an extent, and the engine renders the view's output image at
+the footprint to an extent, and the view's instance renders its output image at
 exactly that extent. Every per-view pass (sky, mask, beam, primary, surface,
 ambient, views) reads the same extent from the view's row, so the whole
 pipeline agrees on the smaller render target. The graph's `place` pass
@@ -153,18 +163,24 @@ tier a view uses is a host decision, not baked into the content. In `Puck.World`
 `world.render-scale` sets it for every player view and `world.upscale-sharpness`
 sets the reconstruction blend.
 
-## Two frames in flight
+## Frames in flight
 
-The engine overlaps CPU frame production with GPU execution using a **two-deep
-frame ring** (`FrameRingSize = 2`). Each ring slot owns its own command pool,
-its host-visible buffer of every host-written table (a staging buffer or the
-table itself, as the next section describes), descriptor sets, and a submission
-fence. The host builds and submits
-frame *N* into slot *N mod 2* without waiting for frame *N−1* to finish on the
-GPU; it only waits on slot *k*'s fence—which proves frame *k−2* has retired —
-before it rewrites that slot's buffers. This is what lets a moving screen or a
-walking player update its transform in place each frame without racing the GPU
-reading last frame's copy.
+The host keeps producing frames while the GPU finishes earlier ones. Each
+view's node has its own frame slots, as every render-graph node does, and the
+residency's tables keep a **two-deep upload ring** (`FrameRingSize = 2`). Each
+upload slot owns its own command pool, its host-visible buffer of every
+host-written table (a staging buffer or the table itself, as the next section
+describes), and a submission fence. The first pass of frame *N* to record
+submits the frame's upload into slot *N mod 2*, ahead of every view's
+submission, which reads what it wrote. Before it rewrites a slot, an upload
+waits on the previous upload's fence; that fence signals once every submission
+queued before it has finished, so the views that read the slot two uploads
+earlier are done with it. This is what lets a moving screen or a walking player
+update its transform in place each frame without racing the GPU reading last
+frame's copy. A rewrite of what every slot shares — a program or instance grid
+that outgrew its region, a grown mesh region, a new glyph atlas, a reloaded
+kernel — waits for the whole device to go idle instead, because the submissions
+of other nodes read it too.
 
 ### What a frame uploads
 
@@ -173,13 +189,14 @@ matters most on unified-memory devices such as the Steam Deck. So a frame
 writes only what changed since the frame before it.
 
 Every table the kernels read from the host is a `GpuRegion`: the program
-words, viewport rows, dynamic transforms, the frame instance grid, screen
-surfaces, screen lights, bounded volumes, glyph decals and mesh draws. The
-region keeps a host copy of its table, and a write owes only the words that
-differ from that copy, one run for each stretch of changed words. Where each
-region lives is the device's choice, made by `GpuResidency.Select` from its
-memory profile and the table's size, with the frame ring's reader always in
-flight:
+words, dynamic transforms, the frame instance grid, screen surfaces, screen
+mappings, screen lights, bounded volumes, glyph decals and mesh draws, which the
+residency's tables hold, and each view's viewport row, which every pass of the
+view writes into a small region of its own that the view's node copies ahead of
+its passes. The region keeps a host copy of its table, and a write owes only the
+words that differ from that copy, one run for each stretch of changed words.
+Where each region lives is the device's choice, made by `GpuResidency.Select`
+from its memory profile and the table's size, with a reader always in flight:
 
 - **Staged**, on a device the host cannot write in its own memory (a discrete
   adapter without an aperture): each ring slot has a staging buffer, and the
@@ -195,7 +212,7 @@ flight:
   discrete adapter the buffers live in its aperture, so the kernels read them
   from device memory; on unified memory they are the one pool.
 
-Dynamic transforms are never compared as a table: the engine packs only the
+Dynamic transforms are never compared as a table: the residency packs only the
 rows the frame's moved set (`SdfFrame.MovedTransforms`) owes since the frame it
 last consumed, and the region owes the words of those rows that changed. The
 program is written only by a program upload, into a region sized to the live
@@ -204,7 +221,7 @@ are packed into the mesh region (`SdfMeshRegion`: one 80-byte record a draw,
 then each distinct mesh's positions and indices once) only when the frame hands
 a different draw list. Each scene emitter states its draws, a static placement's
 fixed at its rebuild and a stamp's posed at its root each frame, and returns the
-same list while none moved, so a still scene packs nothing. The region starts with one draw record at engine construction
+same list while none moved, so a still scene packs nothing. The region starts with one draw record when the tables are built
 and grows by half again when a list outgrows it. The mesh pass reads its triangles,
 and primary reads the winning mesh's material.
 
@@ -226,37 +243,35 @@ move writes nothing. The frame instance grid is rebuilt only on a frame whose
 transforms moved. `world.counters gpu` reports the written bytes as
 `uploads.host-visible` on its `upload` line.
 
-There are two distinct submission entry points, and they must never be blurred:
+Nothing on the live path waits for its own submission: the upload and each
+view's passes are submitted and the fences do the pacing. A capture reads a
+view back through the render graph, which serves it from a frame it renders.
 
-- **`SubmitFrame`** is fire-and-forget—the live path. It records, submits, and
-  returns; the ring's fences do the pacing. The window host orders frames.
-- **`RenderFrame`** is submit-and-wait—the harness/readback path. It submits and
-  blocks until the frame retires so a test can read the pixels back deterministically.
-
-Because the device-local scratch (tile buffers, instance masks, indirect args,
-per-view textures) is *shared* across ring slots rather than duplicated, each
-frame opens with one execution-dependency barrier ordering its first write after
-the previous frame's last read of that scratch. That barrier serializes GPU frames
-against each other while still overlapping CPU production with GPU
-execution.
+A view's device-local scratch (tile buffers, instance masks, indirect
+arguments, visibility records, the mesh target) is *transient*: one allocation
+per instance, shared by every frame slot rather than duplicated. The planner
+orders each scratch resource's first use in a frame after the previous frame's
+last use of it, which serializes that view's GPU frames against each other
+while still overlapping CPU production with GPU execution. Only the view's
+color output is kept per frame slot, so a consumer can read the previous
+frame's image while the next one renders.
 
 ## Reading per-pass GPU cost
 
 Performance is judged by code, disassembly, and deterministic work counters —
-never by wall-clock or GPU timestamps. The engine counts the work each of the
-nine labeled passes (`upload`, `sky`, `mask`, `beam`, `cull-args`, `primary`,
-`surface`, `ambient`, and `views`) records, with no arming and no
+never by wall-clock or GPU timestamps. The residency counts the work of its
+`upload` pass, and each view's node counts the work each of its passes
+(`sdf.world$sky` through `sdf.world$views`) records, with no arming and no
 effect on the image: dispatches, indirect dispatches, barriers, pipeline and
 descriptor-set binds, push-constant bytes, descriptor writes and host-visible
 upload bytes. The `upload` pass counts the regions' writes and copies; since
 they follow each device's residency policy, the pass is per-backend
-deterministic, and `puck counters` does not hold the two backends to it. Work
-before the first pass (brick uploads and bakes, the begin-of-frame transitions),
-each view's output transitions, or work between frames (descriptor rebinds) is counted outside every pass. A frame
-the cadence gate skips reports
-`sky` through `views` as skipped rather than as zero. Counts are published only
-once the GPU has finished the submission, so `world.counters gpu` shows the newest
-completed frame, under the program and kernel revision it ran with.
+deterministic, and `puck counters` does not hold the two backends to it. The
+upload's brick copies and bakes and the fillers' first transitions are counted
+outside its pass. A view the cadence gate finds unchanged is not rendered at
+all: the render graph keeps its latest output, and its passes record nothing.
+Counts are published only once the GPU has finished the submission, so
+`world.counters gpu` shows the newest completed frame.
 
 In `Puck.World`, read the previous frame's passes with `world.counters gpu`. A still
 scene keeps each view's retained output instead of rendering, so run
@@ -274,17 +289,17 @@ disassembly or trace the code path instead.
 
 - The pass order and what each pass must respect when edited:
   [the rendering skill's kernel reference](../../../../.claude/skills/rendering/references/kernels.md)
-  and `SdfWorldEngine.PassLabels`.
+  and the fragment in
+  [`src/Puck.Shaders/Graph/SdfWorldPackage.cs`](../../../../src/Puck.Shaders/Graph/SdfWorldPackage.cs).
 - Measurement method and the register-pressure lesson:
   [SDF performance](performance.md).
 - The uniform-grid cull rationale and why a per-frame BVH was rejected for it:
   [Hierarchical and instance acceleration](../reference/hierarchical-and-instance-acceleration.md).
-- The two-deep frame ring, its per-slot fences, and the cross-frame scratch
-  barrier: `FrameRingSize` in
-  [`src/Puck.SdfVm/SdfWorldEngine.cs`](../../../../src/Puck.SdfVm/SdfWorldEngine.cs)
-  and the `Record` method in
-  [`src/Puck.SdfVm/SdfWorldEngine.Record.cs`](../../../../src/Puck.SdfVm/SdfWorldEngine.Record.cs).
-- Each view's output image and its extent: `DefaultViewExtent` and the view
-  outputs in
-  [`src/Puck.SdfVm/SdfWorldEngine.ViewOutputs.cs`](../../../../src/Puck.SdfVm/SdfWorldEngine.ViewOutputs.cs),
+- The two-deep upload ring and its per-slot fences: `FrameRingSize` in
+  [`src/Puck.SdfVm/SdfWorldTables.cs`](../../../../src/Puck.SdfVm/SdfWorldTables.cs)
+  and `SubmitUpload` in
+  [`src/Puck.SdfVm/SdfWorldTables.Upload.cs`](../../../../src/Puck.SdfVm/SdfWorldTables.Upload.cs).
+- How a view records its passes and binds the residency's tables:
+  [`src/Puck.SdfVm/SdfWorldPasses.cs`](../../../../src/Puck.SdfVm/SdfWorldPasses.cs)
+  and [`src/Puck.SdfVm/SdfWorldPassRecorder.cs`](../../../../src/Puck.SdfVm/SdfWorldPassRecorder.cs),
   and the `extent` viewport row in the [rendering skill's sync pairs](../../../../.claude/skills/rendering/references/sync-pairs.md).

@@ -62,7 +62,7 @@ public sealed record SdfMesh {
 /// <param name="Material">The material-table index the triangles shade with, as an SDF hit's material does.</param>
 public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld, int Material);
 /// <summary>
-/// The raw word layout of the region a frame's mesh draws upload into (<see cref="SdfWorldEngine.MeshRegionLayout"/>),
+/// The raw word layout of the region a frame's mesh draws upload into (<see cref="SdfWorldTables.MeshRegionLayout"/>),
 /// read as a structured buffer of uints so every backend reads the same word offsets: first one record a draw
 /// (<see cref="DrawWords"/> words), then each distinct <see cref="SdfMesh"/> once, however many draws share it, as its
 /// positions (three floats a vertex), then those meshes' indices (one word each), meshes in the order their first draw

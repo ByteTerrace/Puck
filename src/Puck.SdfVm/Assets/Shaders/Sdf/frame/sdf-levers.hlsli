@@ -42,7 +42,7 @@ static const int DebugViewModeVisibility = 11;
 // screen-light row (SdfGridObjParams.z): 0 (the DEFAULT) selects the analytic dual normal (calculateNormalAnalytic),
 // 1 selects the 4-tap finite-difference probe (calculateNormal) for comparison under world.debug-view normals.
 // Decoded only under SDF_SCREEN_SOURCES — the world-views kernel is the sole SDF-hit shader; every other config keeps
-// analytic. KEEP IN SYNC with SdfFrame.UseFiniteDifferenceNormals and SdfWorldEngine.PackScreenLights.
+// analytic. KEEP IN SYNC with SdfFrame.UseFiniteDifferenceNormals and SdfWorldTables.PackScreenLights.
 bool worldUseTapNormals() {
 #ifdef SDF_SCREEN_SOURCES
     return (sdfScreenLights[SdfGridObjParams].z > 0.5);
@@ -56,7 +56,7 @@ bool worldUseTapNormals() {
 // y = disable AO, z = shadow-distance scale (0 => the full 1.0 reach, so an unset frame uploads 0 and is unchanged),
 // w = disable screen lights. Decoded only under SDF_SCREEN_SOURCES (the world-views kernel is the sole lit SDF shader);
 // every other config keeps the shipped defaults. KEEP IN SYNC with SdfFrame's DisableSoftShadows/DisableAmbientOcclusion/
-// ShadowDistanceScale/DisableScreenLights fields and SdfWorldEngine.PackScreenLights.
+// ShadowDistanceScale/DisableScreenLights fields and SdfWorldTables.PackScreenLights.
 bool worldSoftShadowsDisabled() {
 #ifdef SDF_SCREEN_SOURCES
     return (sdfScreenLights[SdfBenchParams].x > 0.5);
@@ -90,7 +90,7 @@ bool worldScreenLightsDisabled() {
 // the beam-published far bound ACTIVE (the shipped behavior — the fine march exits at traveled >= farBound); 1 pushes
 // the far bound out of reach so the march runs to the far distance exactly as pre-F1 (the paired-run "off" side). Decoded
 // only under SDF_SCREEN_SOURCES (the world-views kernel is the sole SDF-hit shader). KEEP IN SYNC with
-// SdfFrame.DisableFarBound and SdfWorldEngine.PackScreenLights.
+// SdfFrame.DisableFarBound and SdfWorldTables.PackScreenLights.
 bool worldFarBoundDisabled() {
 #ifdef SDF_SCREEN_SOURCES
     return (sdfScreenLights[SdfFarFieldParams].x > 0.5);
@@ -103,7 +103,7 @@ bool worldFarBoundDisabled() {
 // pre-carve union hull — O(few) on a dense carve cluster by construction, collapsing the shadow re-march the frame is
 // bound on. Conservative: skipping a pure carve can only make the field MORE solid, so shadows go darker/never leak.
 // Default 0 = OFF (an unset frame uploads 0 and is byte-identical). Rides SdfShadowProxyParams.x. KEEP IN SYNC with
-// SdfFrame.EnableShadowProxy and SdfWorldEngine.PackScreenLights.
+// SdfFrame.EnableShadowProxy and SdfWorldTables.PackScreenLights.
 bool worldShadowProxyEnabled() {
 #ifdef SDF_SCREEN_SOURCES
     return (sdfScreenLights[SdfShadowProxyParams].x > 0.5);
@@ -151,7 +151,7 @@ bool worldCurvatureShadingEnabled() {
 // The soft-shadow GRID-CULL A/B lever (the sdf.shadowcull verb). Rides SdfGridObjParams.w: 0 (the DEFAULT, an unset
 // frame uploads 0) = ON — the grid-gathered shadow-ray march; 1 = OFF — the flat all-instances march (the ground-truth
 // reference the departed cull gate matched, and the A/B lever's slow reference). KEEP IN SYNC with SdfFrame.DisableShadowCull
-// and SdfWorldEngine.PackScreenLights.
+// and SdfWorldTables.PackScreenLights.
 bool worldShadowCullEnabled() {
     return (sdfScreenLights[SdfGridObjParams].w < 0.5);
 }

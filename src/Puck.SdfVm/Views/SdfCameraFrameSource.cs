@@ -5,8 +5,8 @@ using Puck.SignedDistance;
 namespace Puck.SdfVm.Views;
 
 /// <summary>
-/// The frame source of a camera view: the frame a host world renders (<see cref="SdfEngineNode.HostFrame"/>), filmed
-/// from one camera. An <see cref="SdfEngineNode"/> of the view's own renders it as an <c>sdf.world</c> instance of a
+/// The frame source of a camera view: the frame a host world renders (<see cref="SdfWorldResidency.HostFrame"/>), filmed
+/// from one camera. An <see cref="SdfWorldResidency"/> of the view's own renders it as an <c>sdf.world</c> instance of a
 /// render graph, so the view films the same program, transforms, clock and levers as the world, and the same glyph atlas,
 /// screen decals and moving screen surfaces as the host's frame source. The view's producer sets
 /// <see cref="HostFrame"/> and <see cref="Camera"/> before each frame it renders.

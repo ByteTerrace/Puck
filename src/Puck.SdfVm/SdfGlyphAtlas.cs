@@ -5,7 +5,7 @@ namespace Puck.SdfVm;
 /// <summary>
 /// The CPU pixels + dimensions of the single font atlas the <see cref="SdfShapeType.Glyph"/> primitive samples,
 /// surfaced by an <see cref="ISdfFrameSource"/> for a one-time static upload via
-/// <see cref="SdfWorldEngine.SetGlyphAtlas(System.ReadOnlyMemory{byte}, uint, uint)"/>.
+/// <see cref="SdfWorldTables.SetGlyphAtlas(System.ReadOnlyMemory{byte}, uint, uint)"/>.
 /// </summary>
 /// <remarks>
 /// The pixels are tightly packed, row-major, top-down RGBA (<c><see cref="Width"/> × <see cref="Height"/> × 4</c>

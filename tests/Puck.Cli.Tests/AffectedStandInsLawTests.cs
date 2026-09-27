@@ -152,7 +152,7 @@ public sealed class AffectedStandInsLawTests {
             tree: new AffectedWorkingTree(root: repositoryRoot)
         );
 
-        Assert.Contains(collection: standInsFor(arg: "src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-visibility.hlsli"), expected: "src/Puck.SdfVm/SdfWorldEngine.Pipelines.cs");
+        Assert.Contains(collection: standInsFor(arg: "src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-visibility.hlsli"), expected: "src/Puck.SdfVm/SdfWorldTables.Pipelines.cs");
         Assert.Contains(collection: standInsFor(arg: "src/Puck.Shaders/Assets/puck.render.graph.v1.schema.json"), expected: "src/Puck.Shaders/Graph/RenderGraphModel.cs");
         Assert.Contains(collection: standInsFor(arg: "src/Puck.World/Assets/worlds/puck.world.projection.v1.schema.json"), expected: "src/Puck.World.Schema/WorldProjection.cs");
 

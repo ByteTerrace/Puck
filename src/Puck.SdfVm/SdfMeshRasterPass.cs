@@ -59,7 +59,7 @@ public sealed class SdfMeshRasterPass {
     /// test.</summary>
     public static GpuGraphicsPipelineDescription Description { get; } = new(
         DepthCompare: GpuDepthCompare.Greater,
-        Layout: SdfWorldEngine.PipelineLayouts.Mesh,
+        Layout: SdfWorldTables.PipelineLayouts.Mesh,
         Name: ShaderStem,
         VertexInput: new GpuVertexInputLayout(
             Attributes: [],

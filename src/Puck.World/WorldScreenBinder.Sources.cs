@@ -7,11 +7,11 @@ using Puck.World.Client;
 
 namespace Puck.World;
 
-// The screens as the engine node binds them, and the instances they read. A row's producer, machine or probe source is a
+// The screens as the world's views bind them, and the instances they read. A row's producer, machine or probe source is a
 // render-graph source instance: the runtime opens it through the registered producers (and the machine upload and probe
-// producer below, of the reserved ids), renders it at its cadence, and hands the world producer its latest image, which
-// the node binds to every screen whose row reads it. A camera view or a session is a view instance the runtime hands the
-// node the same way.
+// producer below, of the reserved ids), renders it at its cadence, and hands each sdf.world instance that reads it its latest image, which
+// the view's passes bind to every screen whose row reads it. A camera view or a session is a view instance the runtime
+// hands a view the same way.
 internal sealed partial class WorldScreenBinder : ISdfScreenSources {
     /// <summary>Gets or sets the render-graph runtime the world renders through, whose source instances this binder reads
     /// a screen's feed, fault and light from; <see langword="null"/> in a presentation with no render graph, which runs no

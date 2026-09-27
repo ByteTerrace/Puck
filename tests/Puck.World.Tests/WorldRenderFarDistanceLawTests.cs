@@ -79,7 +79,7 @@ public sealed class WorldRenderFarDistanceLawTests {
     [Fact]
     public void Frame_RefusesANonPositiveFarDistance_ControlDefaultClean() {
         // The engine-side twin of the validator's door: a frame whose far distance is not finite-positive is refused
-        // before packing (SdfWorldEngine.PrepareFrame), never guarded per kernel. The frame record itself carries the
+        // before packing (SdfWorldTables.PrepareFrame), never guarded per kernel. The frame record itself carries the
         // pinned default so a frame that never sets it is the byte-identical pre-field upload.
         var frame = new SdfFrame(
             Program: null!,

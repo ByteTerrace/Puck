@@ -343,6 +343,15 @@ public sealed partial class ShaderPipelineRenderNode {
             )))
                 ? GpuImageUsage.ColorAttachment
                 : GpuImageUsage.None));
+    // The usages every instance of a buffer storage is created with: a storage buffer, and an indirect-argument buffer too
+    // when a planned access reads it as an indirect dispatch's arguments.
+    internal static GpuBufferUsage BufferUsageOf(ShaderPipelinePlan plan, ShaderPipelinePlannedStorage storage) =>
+        GpuBufferUsage.Storage | (plan.Passes.Any(predicate: pass => pass.Accesses.Any(predicate: access => (
+            (access.Storage == storage.Index) &&
+            ((access.Use.Access & GpuAccess.IndirectCommandRead) != 0)
+        )))
+            ? GpuBufferUsage.Indirect
+            : GpuBufferUsage.None);
 
     // History an installing graph takes from the installed one: the storage whose instances move into it.
     private readonly record struct CarriedHistory(RuntimeResource Old);

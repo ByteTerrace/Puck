@@ -1040,6 +1040,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         );
 
         RebuildDriftedSources();
+        PackagesBeginFrame(context: in context);
 
         var schedule = m_schedules[m_turn];
         var prior = m_history;

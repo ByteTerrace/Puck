@@ -531,6 +531,11 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                         throw new InvalidDataException(message: $"Buffer '{declaration.Name}' has no positive size.");
                     }
 
+                    var bufferUsage = BufferUsageOf(
+                        plan: plan,
+                        storage: planned
+                    );
+
                     resource.Buffers = new IGpuBuffer[resource.Count];
                     for (var i = 0; (i < resource.Count); i++) {
                         resource.Buffers[i] = m_gpu.BufferFactory.CreateDeviceLocal(
@@ -540,7 +545,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                                 part: declaration.Name
                             ),
                             sizeBytes: sizeBytes,
-                            usage: GpuBufferUsage.Storage
+                            usage: bufferUsage
                         );
                     }
                 }
@@ -1591,7 +1596,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         ValidateLeases();
 
         // An exported output is written only on a frame its reader has released it, and every write begun is ended.
-        var exported = ExportedImage();
+        var exported = ExportedImage;
 
         if (
             (exported is not null) &&
