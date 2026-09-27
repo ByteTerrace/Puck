@@ -386,6 +386,26 @@ public sealed class CanaryOffscreenLawTests : IDisposable {
         Assert.False(condition: inverted.Passed);
     }
     [Fact]
+    public void ABoundWrittenAsADecimalFractionIsReadAsItsCodeSoAWholeToleranceAwayIsInside() {
+        // 55/255 written to nine places, 0.215686275, is 55.00000013 codes as a product; read as 55 codes, a pixel at 54
+        // or 56 is a whole code of tolerance away and inside, and one at 53 or 57 is outside.
+        foreach (var (code, inside) in ((ReadOnlySpan<(byte, bool)>)[(54, true), (56, true), (53, false), (57, false)])) {
+            Gray(
+                code: code,
+                fileName: $"decimal-{code}.png"
+            );
+
+            Assert.True(condition: CanaryAssertions.Evaluate(
+                leg: Leg(Region(
+                    capture: $"decimal-{code}.png",
+                    holds: inside,
+                    value: 0.215686275
+                )),
+                primaryTranscript: Transcript(runDirectory: m_root)
+            ).Passed);
+        }
+    }
+    [Fact]
     public void AMissingCaptureOrAWrongExtentFailsEitherDirection() {
         Gray(
             code: 16,

@@ -147,7 +147,7 @@ members match by convention, and nothing is shared between passes. A world-owned
 layout with a header generated per world is rejected because it forces a shader
 build per world, which is what a runtime-loaded world may not require. A
 KERNEL-class probe kind's kernel therefore compiles at build, as do the camera
-frame converter's kernels and the Direct3D 12 compositor's blit, and a pipeline
+frame converter's kernels and the display encode every swapchain compositor draws, and a pipeline
 package loads from its binaries.
 
 **A shipped world names its pipelines by source, and the build stores their

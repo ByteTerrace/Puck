@@ -1282,8 +1282,8 @@ root, in both presentation shapes (see P11b commit 6 above):
    slot names, then one post-process package pass per `views.post` row in
    document order, each reading the frame the pass before it wrote, then `overlay`, which draws the console, HUD, toasts and
    cursor in a windowed World. Otherwise `world` is the root.
-3. The launcher, which hands the root's image to a surface compositor that
-   blits it to the swapchain.
+3. The launcher, which hands the root's float image to a surface compositor that
+   writes it into the swapchain through the display encode.
 
 Every SDF view is an `sdf.world` instance of its own, rendering the package's
 passes over its residency's tables into its own output image. Diegetic screens

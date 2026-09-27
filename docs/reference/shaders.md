@@ -827,11 +827,12 @@ pipeline's `GroupLayoutHandles` give one handle per group, which a set of that
 group is allocated against, and `GpuDescriptorPoolSizes.ForGroups` sizes a
 pool for one set of each group. On Direct3D 12 a group's samplers take a range
 of the device's sampler heap. Every shipped pass is created this way: each
-document pass, each package pass, the SDF engine's kernels and the swapchain
-blits. All but one take their layout from a pass interface; the float-output
-preview (`pipeline-float-preview`) declares its one group by hand
-(`ShaderPipelineRenderNode.PreviewLayout`: a sampled image and a sampler in
-the pass group, set 3), which its shader's registers must match. The one
+document pass, each package pass, the SDF engine's kernels and the display
+encode. All but one take their layout from a pass interface; the display encode
+(`display-encode`, which the swapchain compositors, a node's preview and a
+capture's encode draw) declares its one group by hand (`DisplayEncodeLayout`: a
+sampled image, a sampler and the encode block in the pass group, set 3), which
+its shader's registers must match. The one
 pipeline created from a positional binding list instead is
 [the region copy](#the-region-copy) (`GpuRegion.CopyPipeline`), which binds its
 two buffers as one set at group 0; such a list holds only buffers and storage
@@ -1078,7 +1079,9 @@ pipeline once (`SurfaceEncoder.Key`), an entry of the
 [pass-pipeline cache](#the-pass-pipeline-cache), and it has three writers. Each
 swapchain compositor draws it into its back buffer in the swapchain's
 `DisplayOutput` at the host's `PresentationOptions.PaperWhiteNits`, so the
-compositor is the encode's writer rather than a blit after it. A node's preview
+compositor is the encode's writer rather than a blit after it; a World asks for
+an HDR output and its paper white through its host section's `colorSpace` and
+`paperWhiteNits`, and SDR is the default and the fallback. A node's preview
 of an external output draws it in SDR into RGBA8. And a capture of an image no
 surface carries, a float output of any instance, draws it in SDR into an RGBA8
 target of its own and reads that back (`SurfaceEncoder.ReadSdr`); a presenter's

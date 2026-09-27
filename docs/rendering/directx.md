@@ -351,7 +351,7 @@ driver. The file is named from the device identity the context read when it
 created the device, so an adapter whose `CheckInterfaceSupport` will not report
 the user-mode driver version still keeps its library on disk, under a driver
 version of zero. Every compute and graphics pipeline creation asks the library first,
-the presenter's blit included, and stores what it had to create. A pipeline's
+the presenter's display encode included, and stores what it had to create. A pipeline's
 name in the library is a hash of everything that defines it: its bytecode, its
 serialized root signature, and the fixed state the caller sets. A changed
 kernel is therefore a new name rather than a mismatch. The context writes the

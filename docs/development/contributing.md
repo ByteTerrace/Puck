@@ -386,8 +386,9 @@ developer checkout with DXC, an unedited shipped source loads its stored package
 and an edited or new source compiles live, so authoring keeps its loop. In a
 packaged runtime with no DXC, the shipped sources load their packages, nothing
 compiles, and a source with no stored package is refused by
-`SHADERPKG_ABSENT`. The Direct3D 11 camera and probe kernels and the Direct3D 12
-compositor's blit compile at build, so no device compiles them. A change to the
+`SHADERPKG_ABSENT`. The Direct3D 11 camera and probe kernels and the display
+encode the swapchain compositors draw compile at build, so no device compiles
+them. A change to the
 SDF C# ISA
 must update the HLSL decoder in the same change. The SDF VM README lists
 the exact C# and HLSL contract pairs and bytecode rebuild procedure.
