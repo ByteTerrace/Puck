@@ -723,15 +723,15 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             // Observe additionally admits Screen/Region/Seat/Adjacency, untrusted principals only — the event-only
             // subject kinds the world-events feed gates: a screen for machine-memory watches, a region for
             // enter/exit, a local seat for join/leave, an adjacency row for the federation link family. Region and
-            // Adjacency are unbounded (an unknown name simply never fires); Seat is bounded to the reserved
-            // local-seat band.
+            // Adjacency are unbounded; Seat is bounded to the local-seat band. A session may hold all: its whole-world
+            // view, which its admission tier and the world's disclosure still bound (WorldSessionSink).
             WorldCapability.Observe => (((subject.Kind == GrantSubjectKind.Body) && (((uint)subject.Value) < ((uint)m_population))) ||
                 (subject.Kind == GrantSubjectKind.State) ||
                 (!trustedWildcard && (subject.Kind == GrantSubjectKind.Screen)) ||
                 (!trustedWildcard && (subject.Kind == GrantSubjectKind.Region)) ||
                 (!trustedWildcard && (subject.Kind == GrantSubjectKind.Adjacency)) ||
                 (!trustedWildcard && (subject.Kind == GrantSubjectKind.Seat) && (((uint)subject.Value) < ((uint)WorldBodiesLimits.LocalSeatCount))) ||
-                ((subject.Kind == GrantSubjectKind.All) && trustedWildcard)),
+                ((subject.Kind == GrantSubjectKind.All) && (trustedWildcard || (principal.Kind == PrincipalKind.Session)))),
             WorldCapability.Control => ((subject.Kind == GrantSubjectKind.Screen) ||
                 // A control application's target may be a BODY — a possession/co-drive application, bounded by the
                 // population exactly like Drive/Observe's own body subjects.

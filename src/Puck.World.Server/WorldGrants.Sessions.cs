@@ -61,6 +61,18 @@ public sealed partial class WorldGrants {
         (principal.Kind == PrincipalKind.Session)
     );
 
+    /// <summary>Determines whether a live session holds <c>observe all</c>, its whole-world view: what its observation
+    /// is delivered while it does.</summary>
+    /// <param name="session">The session principal.</param>
+    /// <returns><see langword="true"/> when the session observes.</returns>
+    public bool ObservesAsSession(Principal session) => (
+        IsLiveSession(principal: session) &&
+        Allows(
+            capability: WorldCapability.Observe,
+            principal: session,
+            subject: GrantSubject.All
+        ).IsAllowed
+    );
     /// <summary>Determines whether a principal names a live session of this world: its ordinal is admitted and carries
     /// this epoch.</summary>
     /// <param name="principal">The principal.</param>
@@ -81,9 +93,10 @@ public sealed partial class WorldGrants {
     /// <see cref="TryEmbodySession"/>. Called on the thread that steps this world.</summary>
     /// <param name="sourceAuthority">The authority the viewer observes from.</param>
     /// <param name="session">The admitted session principal, on success.</param>
+    /// <param name="tier">What the verdict discloses of this world to the session's observation.</param>
     /// <param name="refusal">The named refusal, on failure.</param>
     /// <returns><see langword="true"/> when the session was admitted.</returns>
-    internal bool TryAdmitSession(string sourceAuthority, out Principal session, out string refusal) {
+    internal bool TryAdmitSession(string sourceAuthority, out Principal session, out WorldDisclosureTier tier, out string refusal) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: sourceAuthority);
 
         if (WorldAdmissionDoor.TryAdmitArrival(
@@ -92,10 +105,13 @@ public sealed partial class WorldGrants {
             verdict: out var verdict
         ) is { } refused) {
             session = default;
+            tier = WorldDisclosureTier.Frames;
             refusal = $"a session observing from '{sourceAuthority}' is refused: {refused}";
 
             return false;
         }
+
+        tier = verdict!.Tier;
 
         var ordinal = 0;
 
@@ -211,6 +227,26 @@ public sealed partial class WorldGrants {
             val1: session.Generation,
             val2: m_sessionEpochs.GetValueOrDefault(key: session.Index)
         );
+        // A re-driven admission can land on an ordinal a newer session holds (a replay drive over a world a screen
+        // observes): that session ends here, its rows revoked and its observation detached, so it never lingers
+        // unobserved beneath the recorded one.
+        if (
+            m_sessions.TryGetValue(
+            key: session.Index,
+            value: out var displaced
+        ) &&
+            (displaced.Principal != session)
+        ) {
+            foreach (var row in Rows(principal: displaced.Principal)) {
+                Host.Revoke(
+                    actor: Principal.Console,
+                    grant: row
+                );
+            }
+
+            Host.DetachSessionSink(session: displaced.Principal);
+        }
+
         m_sessions[session.Index] = new SessionEntry(
             principal: session,
             templates: admitted.Templates
@@ -249,6 +285,7 @@ public sealed partial class WorldGrants {
         }
 
         _ = m_sessions.Remove(key: ended.Session.Index);
+        Host.DetachSessionSink(session: ended.Session);
     }
     /// <summary>Describes every live session as the events that would re-establish it as it stands: its admission,
     /// carrying every row it holds now, then its embodiment when it has one. A replay tape armed while sessions live
@@ -276,9 +313,13 @@ public sealed partial class WorldGrants {
 
         return events;
     }
-    /// <summary>Ends every live session at a rebuild: the reset wiped their rows, and no template survives it. Their
-    /// epochs stay retired, so a screen observing through one admits a new session under the candidate's policy.</summary>
-    internal void EndSessionsForRebuild() => m_sessions.Clear();
+    /// <summary>Ends every live session at a rebuild, detaching each observation: the reset wiped their rows, and no
+    /// template survives it. Their epochs stay retired, so a screen observing through one admits a new session under
+    /// the candidate's policy.</summary>
+    internal void EndSessionsForRebuild() {
+        m_sessions.Clear();
+        Host.DetachSessionSinks();
+    }
     /// <summary>Revokes the rows any session holds over a body a later generation now occupies, and forgets that
     /// embodiment: the incarnation it drove has left, so it never drives the next occupant. Every door that activates
     /// a body under a new generation calls this once the body is live: a peer admission's server event (beside the

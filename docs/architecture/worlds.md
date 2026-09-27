@@ -593,8 +593,7 @@ drives the next occupant.
 
 A session belongs to the world that admitted it. The peer and federated wires refuse any submission
 that names a session principal (`SessionPrincipalRemote`), so a remote or federated session is not
-admitted. A portal screen does not observe through a session yet: it attaches as an ordinary
-observer, and a click through a portal does not reach the destination's rules.
+admitted. A click through a portal does not reach the destination's rules yet.
 
 Crossing asks for embodiment. Successful target admission allocates a population entry and produces
 concrete `Drive/body:<allocated-id>` authority. Do not add `Enter`: the capability vocabulary is the
@@ -652,6 +651,17 @@ An observation feed provides:
 - bounded queues and backpressure;
 - redaction and fidelity enforcement at every projection/read door, including queries;
 - the destination presentation clock and step width.
+
+A session screen observes its destination as a session. When the screen binds,
+`WorldServer.TryObserveAsSession` admits one against the destination's own `admission` rows for
+the viewer's authority, and releasing the screen ends it. The screen's mirror starts knowing nothing
+of the destination and is delivered what the admission's tier discloses: the definition at
+`Replica`, a projection composed for the session at `Presentation`, nothing at `Frames`. Delivery
+runs only while the session holds `observe all`, the one wildcard a session may hold; revoking it
+stops the mirror, and granting it again catches the mirror up with the current disclosed definition
+first. A destination that admits no viewer binds the screen dark and says why, and a destination
+that ends the session, as a rebuild does, is asked to admit the screen again. A destination a
+session screen shows therefore authors an admission row that grants `observe all` with a budget.
 
 A joined-world projection renders the destination from the destination's own delivered snapshots and
 its own measured clock, never through the host's presentation clock—independently scheduled or
