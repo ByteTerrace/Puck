@@ -7,8 +7,8 @@ using Puck.Hosting;
 namespace Puck.Machines;
 
 internal sealed record QueuedMachineCheckpoint(string Identity, byte[] CoreState, ulong CycleRemainder,
-    long CompletedSteps, int FastForwardFactor, int RunaheadFrames) {
-    private const string Format = "puck.queued-machine.v2";
+    ulong CycleScale, long CompletedSteps, int FastForwardFactor, int RunaheadFrames) {
+    private const string Format = "puck.queued-machine.v3";
     private const int MaximumBytes = ((128 * 1024) * 1024);
 
     public static (QueuedMachineCheckpoint Checkpoint, MachinePadState Input) Decode(ReadOnlyMemory<byte> bytes) {
@@ -30,6 +30,7 @@ internal sealed record QueuedMachineCheckpoint(string Identity, byte[] CoreState
         if (reader.ReadString() != Format) { throw new InvalidDataException(message: "machine checkpoint format is unsupported"); }
         var identity = reader.ReadString();
         var remainder = reader.ReadUInt64();
+        var scale = reader.ReadUInt64();
         var completed = reader.ReadInt64();
         var factor = reader.ReadInt32();
         var runahead = reader.ReadInt32();
@@ -80,7 +81,8 @@ internal sealed record QueuedMachineCheckpoint(string Identity, byte[] CoreState
         if (
             string.IsNullOrWhiteSpace(value: identity) ||
             (identity.Length > 256) ||
-            (remainder >= EngineTicks.PerSecond) ||
+            (scale is 0UL or > (((ulong)long.MaxValue) / EngineTicks.PerSecond)) ||
+            (remainder >= (EngineTicks.PerSecond * scale)) ||
             (completed < 0) ||
             (factor is < 1 or > MachineTimeTravel<MachinePadState>.MaxFastForwardFactor) ||
             (runahead is < 0 or > MachineTimeTravel<MachinePadState>.MaxRunaheadFrames) ||
@@ -93,6 +95,7 @@ internal sealed record QueuedMachineCheckpoint(string Identity, byte[] CoreState
             identity,
             reader.ReadBytes(count: count),
             remainder,
+            scale,
             completed,
             factor,
             runahead
@@ -109,6 +112,7 @@ internal sealed record QueuedMachineCheckpoint(string Identity, byte[] CoreState
             writer.Write(value: Format);
             writer.Write(value: Identity);
             writer.Write(value: CycleRemainder);
+            writer.Write(value: CycleScale);
             writer.Write(value: CompletedSteps);
             writer.Write(value: FastForwardFactor);
             writer.Write(value: RunaheadFrames);

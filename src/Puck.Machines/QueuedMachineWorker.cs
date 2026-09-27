@@ -258,9 +258,10 @@ public sealed class QueuedMachineWorker : IDisposable {
         if (request.Restore is { } restore) {
             if (
                 (restore.Identity != core.CheckpointIdentity) ||
+                (restore.CycleScale != core.CycleRate.Seconds) ||
                 (m_lifecycle.CompletedSteps != 0)
             ) {
-                request.Error = "machine restore requires matching content and configuration in an unstepped runtime";
+                request.Error = "machine restore requires matching content, configuration, and clock scale in an unstepped runtime";
                 return;
             }
             core.RestoreState(
@@ -294,6 +295,7 @@ public sealed class QueuedMachineWorker : IDisposable {
             core.CheckpointIdentity,
             bytes[..length],
             ((ulong)m_cyclePhase.Phase),
+            core.CycleRate.Seconds,
             CompletedSteps,
             status.FastForwardFactor,
             status.RunaheadFrames
@@ -639,7 +641,7 @@ public sealed class QueuedMachineWorker : IDisposable {
                             // The rate is read here, on the worker thread, so a rate that tracks emulated state (a
                             // clock-multiplier latch) is read consistently with the cycles it gates.
                             var budget = m_cyclePhase.TakeCycleBudget(
-                                cyclesPerSecond: core.CyclesPerSecond,
+                                rate: core.CycleRate,
                                 ticks: current.DeltaTicks
                             );
 
@@ -875,7 +877,7 @@ public sealed class QueuedMachineWorker : IDisposable {
             m_core = core;
             m_timeTravel = new MachineTimeTravel<MachinePadState>(
                 core: core,
-                cyclesPerSecond: core.CyclesPerSecond
+                cycleRate: core.CycleRate
             );
             m_cyclePhase.Reset();
             Interlocked.Exchange(
@@ -1072,7 +1074,7 @@ public sealed class QueuedMachineWorker : IDisposable {
             m_cyclePhase = hostAccumulator;
             m_timeTravel = new MachineTimeTravel<MachinePadState>(
                 core: core,
-                cyclesPerSecond: core.CyclesPerSecond
+                cycleRate: core.CycleRate
             );
 
             StartWorker(

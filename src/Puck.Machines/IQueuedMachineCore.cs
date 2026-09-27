@@ -22,10 +22,11 @@ public interface IQueuedMachineCore : ITimeTravelMachineCore<MachinePadState>, I
     /// <summary>Gets the full identity of the checkpoint encoding, immutable images, and behavioral configuration.
     /// A different identity refuses restoration before changing the core.</summary>
     string CheckpointIdentity { get; }
-    /// <summary>Gets the core's current machine-cycle rate — constant hardware for a fixed-rate core, or a value that
-    /// tracks a live clock-multiplier latch. The worker converts each segment's engine-tick budget against this through a
-    /// remainder-carrying accumulator, so a varying rate carries no drift.</summary>
-    ulong CyclesPerSecond { get; }
+    /// <summary>Gets the core's current machine-cycle rate — constant hardware for a fixed-rate core, or one whose
+    /// <see cref="MachineCycleRate.Cycles"/> tracks a live clock-multiplier latch. The worker converts each segment's
+    /// engine-tick budget against this through a remainder-carrying accumulator, so a varying rate carries no drift; the
+    /// rate's <see cref="MachineCycleRate.Seconds"/> stays constant for the core's lifetime.</summary>
+    MachineCycleRate CycleRate { get; }
 
     /// <summary>Configures (or, with 0, disables) the core's presentation-side audio synthesis — its own mix/resample
     /// ring, exactly as if a host opened a speaker device. The worker calls this once when a core attaches, with the

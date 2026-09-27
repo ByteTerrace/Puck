@@ -111,7 +111,7 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
             m_core = createCore(arg: lent);
             m_timeTravel = new MachineTimeTravel<MachineLinkPads>(
                 core: m_core,
-                cyclesPerSecond: m_core.CyclesPerSecond
+                cycleRate: m_core.CycleRate
             );
         } catch {
             for (var index = 0; (index < lentCount); ++index) {
@@ -227,7 +227,7 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
 
                         for (var repeat = 0; (repeat < factor); ++repeat) {
                             var budget = m_cyclePhase.TakeCycleBudget(
-                                cyclesPerSecond: m_core.CyclesPerSecond,
+                                rate: m_core.CycleRate,
                                 ticks: current.DeltaTicks
                             );
 

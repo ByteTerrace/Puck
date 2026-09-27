@@ -71,7 +71,7 @@ contract; constructing a core starts no worker or rendering infrastructure.
   instruction overshoot internally; AGB callers subtract the previous
   call's overshoot from the next budget. AGB's rate is
   16,777,216 cycles/second; HGB's hardware rate is 4,194,304 LCD dots/second,
-  including CGB double speed. HGB's `CyclesPerSecond` retains the queued
+  including CGB double speed. HGB's `CycleRate` retains the queued
   host's speed policy: pass `dmgSpeed: true` to keep that reported rate at
   the dot rate when using it for your host's pacing. `NativeFrameIndex` is
   based on the master clock and remains usable while the LCD is disabled.
@@ -196,12 +196,17 @@ The worker applies these policies:
 - `IMachineRuntime.Advance` submits one segment and drains through a barrier
   before returning. Set optional input ports before advancing or submitting;
   submission captures their state before returning.
-- Engine ticks become core cycles through `RationalRateAccumulator.TakeCycleBudget`,
-  a remainder-carrying integer conversion against
-  `Puck.Hosting.EngineTicks.PerSecond`. A core may change `CyclesPerSecond`;
-  the conversion still carries phase rather than accumulating drift. A rewind
-  restores that phase with the core, and a durable checkpoint persists it as
-  its cycle remainder.
+- A core reports its clock as a `MachineCycleRate`: a whole number of cycles
+  every whole number of seconds, so a clock that is not a whole number of
+  hertz (the NTSC NES master clock is 236,250,000 cycles every 11 seconds) is
+  exact. Engine ticks become core cycles through
+  `RationalRateAccumulator.TakeCycleBudget`, a remainder-carrying integer
+  conversion against `Puck.Hosting.EngineTicks.PerSecond`. A core may change its
+  rate's cycles, as CGB double speed does, but keeps its seconds, which set the
+  scale of the carried phase; the conversion carries phase rather than
+  accumulating drift. A rewind restores that phase with the core, and a durable
+  checkpoint persists it with its scale and refuses a runtime whose clock has a
+  different one.
 - Pixels are repacked only when a new native frame completes for queued calls.
   The synchronous path forces a stage to preserve its contract.
 - GPU publication serializes uploads but does not hold the frame lock during

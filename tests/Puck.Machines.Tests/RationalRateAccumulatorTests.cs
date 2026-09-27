@@ -168,22 +168,30 @@ public sealed class RationalRateAccumulatorTests {
     }
     [Theory]
     // A rate that divides the tick base converts exactly; one that does not carries its remainder into the next budget.
-    [InlineData(4_194_304UL, new ulong[] { 840UL, 840UL, 841UL, 1UL, 50_400UL }, new long[] { 69_905L, 69_905L, 69_988L, 83L, 4_194_304L })]
-    [InlineData(16_777_216UL, new ulong[] { 840UL, 840UL, 840UL, 7UL }, new long[] { 279_620L, 279_620L, 279_620L, 2_330L })]
-    public void TakeCycleBudgetConvertsEngineTicksWithACarriedRemainder(ulong cyclesPerSecond, ulong[] ticks, long[] expected) {
+    // The fractional rows are the NES master clocks (NTSC 236,250,000 cycles every 11 s, PAL 53,203,425 every 2 s): their
+    // budgets over one whole period sum to the period's cycles exactly, with nothing left in the phase.
+    [InlineData(4_194_304UL, 1UL, new ulong[] { 840UL, 840UL, 841UL, 1UL, 50_400UL }, new long[] { 69_905L, 69_905L, 69_988L, 83L, 4_194_304L })]
+    [InlineData(16_777_216UL, 1UL, new ulong[] { 840UL, 840UL, 840UL, 7UL }, new long[] { 279_620L, 279_620L, 279_620L, 2_330L })]
+    [InlineData(236_250_000UL, 11UL, new ulong[] { 840UL, 840UL, 552_720UL }, new long[] { 357_954L, 357_955L, 235_534_091L })]
+    [InlineData(53_203_425UL, 2UL, new ulong[] { 1_008UL, 1_008UL, 98_784UL }, new long[] { 532_034L, 532_034L, 52_139_357L })]
+    public void TakeCycleBudgetConvertsEngineTicksWithACarriedRemainder(ulong cycles, ulong seconds, ulong[] ticks, long[] expected) {
         var accumulator = default(RationalRateAccumulator);
         var budgets = new long[ticks.Length];
+        var rate = new MachineCycleRate(
+            cycles: cycles,
+            seconds: seconds
+        );
         var remainder = 0UL;
 
         for (var index = 0; (index < ticks.Length); ++index) {
             budgets[index] = accumulator.TakeCycleBudget(
-                cyclesPerSecond: cyclesPerSecond,
+                rate: rate,
                 ticks: ticks[index]
             );
 
-            var scaled = ((ticks[index] * cyclesPerSecond) + remainder);
+            var scaled = ((ticks[index] * cycles) + remainder);
 
-            remainder = (scaled % EngineTicks.PerSecond);
+            remainder = (scaled % (EngineTicks.PerSecond * seconds));
 
             Assert.Equal(
                 actual: ((ulong)accumulator.Phase),

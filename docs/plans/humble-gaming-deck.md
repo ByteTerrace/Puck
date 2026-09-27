@@ -25,7 +25,9 @@ of scope here.
   `GamingBricks` name because they serve the bricks' cartridge format. Its
   hosting, pacing, snapshot, fork, and time-travel machinery is hardware-free,
   and the Advanced Gaming Brick already showed that a very different CPU fits on
-  it.
+  it. Machine clocks are rational: a core reports a `MachineCycleRate` of whole
+  cycles every whole number of seconds, and the durable checkpoint carries its
+  phase at that rate's scale.
 - **Not started:** every package below.
 
 ## What state of the art means here
@@ -146,13 +148,6 @@ The shared layer is hardware-free, but several of its contracts are shaped
 around the Game Boy family and have to generalise before the Deck fits without
 special cases. Each is a real change to existing code.
 
-- **Rational clock rates.** `IQueuedMachineCore.CyclesPerSecond` and its group
-  equivalent are `ulong`, and neither NES master clock is a whole number of
-  hertz. Rates become reduced numerator-and-denominator pairs, the host budget
-  becomes `divrem(remainder + ticks × numerator, EngineTicks.PerSecond ×
-  denominator)` in checked wide arithmetic, and `QueuedMachineCheckpoint`,
-  which rejects any remainder of a second or more, changes its encoding in the
-  same change.
 - **Native frames.** `ITimeTravelMachineCore.Framebuffer` promises packed
   `0x00RRGGBB`. The Deck's authoritative frame is its nine-bit code, so the
   contract gains a native frame and a presentation-conversion seam, and NES
@@ -213,12 +208,12 @@ understood discrepancy becomes an original Tier A regression.
 
 **Owns:** the shared-layer changes above.
 
-**Delivers:** rational rates, native frames with a presentation seam,
-multi-port queued input, optional firmware, the content policy moved to its
+**Delivers:** native frames with a presentation seam, multi-port queued input, optional firmware, the content policy moved to its
 format, and generalised Post probes.
 
-**Check:** both brick batteries unchanged, plus new fixtures for fractional
-rates, checkpoint round trips at those rates, and multi-port input.
+**Check:** both brick batteries unchanged, plus new fixtures for native frames,
+multi-port input, and a cartridge started through its reset vector with no
+firmware.
 
 ### 2. The CPU and the bus
 

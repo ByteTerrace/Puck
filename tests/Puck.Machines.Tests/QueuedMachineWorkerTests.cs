@@ -26,7 +26,7 @@ public sealed class QueuedMachineWorkerTests {
     private sealed class TestQueuedCore : IQueuedMachineCore {
         public string CheckpointIdentity => "test/queued-core";
         public long CycleCount => 0L;
-        public ulong CyclesPerSecond => 1UL;
+        public MachineCycleRate CycleRate => new(cycles: 1UL);
         public int DisposeCount { get; private set; }
         public ReadOnlySpan<uint> Framebuffer => m_framebuffer;
         public long NativeFrameIndex => 0L;

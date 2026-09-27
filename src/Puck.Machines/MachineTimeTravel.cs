@@ -38,7 +38,7 @@ public sealed class MachineTimeTravel<TInput> : IDisposable where TInput : unman
 
     private readonly long m_budgetBytes;
     private readonly ITimeTravelMachineCore<TInput> m_core;
-    private readonly ulong m_cyclesPerSecond;
+    private readonly MachineCycleRate m_cycleRate;
     private readonly int m_interval;
 
     private int m_capacity;
@@ -67,9 +67,9 @@ public sealed class MachineTimeTravel<TInput> : IDisposable where TInput : unman
     /// less one deltas).</param>
     /// <param name="memoryBudgetBytes">The approximate memory ceiling for the ring; the oldest keyframe span is evicted
     /// once the budget is full.</param>
-    /// <param name="cyclesPerSecond">The core's representative master-clock rate, used only to render the history span in
-    /// seconds for status (presentation-only).</param>
-    public MachineTimeTravel(ITimeTravelMachineCore<TInput> core, int keyframeIntervalFrames = 120, long memoryBudgetBytes = ((48L * 1024L) * 1024L), ulong cyclesPerSecond = 1UL) {
+    /// <param name="cycleRate">The core's representative master-clock rate, used only to render the history span in
+    /// seconds for status (presentation-only); the default renders no span.</param>
+    public MachineTimeTravel(ITimeTravelMachineCore<TInput> core, int keyframeIntervalFrames = 120, long memoryBudgetBytes = ((48L * 1024L) * 1024L), MachineCycleRate cycleRate = default) {
         ArgumentNullException.ThrowIfNull(argument: core);
         ArgumentOutOfRangeException.ThrowIfLessThan(
             value: keyframeIntervalFrames,
@@ -83,10 +83,7 @@ public sealed class MachineTimeTravel<TInput> : IDisposable where TInput : unman
         m_core = core;
         m_interval = keyframeIntervalFrames;
         m_budgetBytes = memoryBudgetBytes;
-        m_cyclesPerSecond = Math.Max(
-            val1: 1UL,
-            val2: cyclesPerSecond
-        );
+        m_cycleRate = cycleRate;
     }
 
     // The newest live segment (valid only while m_segCount > 0).
@@ -362,7 +359,7 @@ public sealed class MachineTimeTravel<TInput> : IDisposable where TInput : unman
         var bytes = (((long)m_capacity) * RetainedBytesPerSegment());
         var spanSeconds = ((m_segCount == 0)
             ? 0.0
-            : (((double)(newest - oldest)) / m_cyclesPerSecond)
+            : m_cycleRate.ToSeconds(cycles: (newest - oldest))
         );
         var lead = ((m_lookaheadPrimed && (m_lookahead is { } lookahead))
             ? (int)(lookahead.NativeFrameIndex - m_core.NativeFrameIndex)

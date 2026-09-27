@@ -20,7 +20,7 @@ public interface IMachineGroupCore : ITimeTravelMachineCore<MachineLinkPads>, ID
     /// <summary>Gets the group's current cycle rate — the rate the group converts each engine-tick budget against. The
     /// medium defines one shared wall-time budget for every member, so this is one rate for the whole group rather
     /// than a per-member rate.</summary>
-    ulong CyclesPerSecond { get; }
+    MachineCycleRate CycleRate { get; }
     /// <summary>Gets the number of members the medium connects.</summary>
     int MemberCount { get; }
     /// <summary>Gets a fingerprint folding every byte the medium has carried, in order — the pipe-assertable traffic

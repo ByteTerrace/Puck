@@ -20,8 +20,9 @@ namespace Puck.Machines;
 /// </para>
 /// <para>
 /// <b>Host pacing.</b> The queued worker and a linked group convert each engine-tick budget into machine cycles with
-/// <c>period</c> set to the engine's ticks per second and the weight set to the ticks times the core's cycle rate. That
-/// phase is the host accumulator a rewind restores and a durable checkpoint persists as its cycle remainder.
+/// <c>period</c> set to the engine's ticks per second times the rate's <see cref="MachineCycleRate.Seconds"/> and the
+/// weight set to the ticks times its <see cref="MachineCycleRate.Cycles"/>. That phase is the host accumulator a rewind
+/// restores and a durable checkpoint persists as its cycle remainder, beside the scale it was carried at.
 /// </para>
 /// </summary>
 public struct RationalRateAccumulator {
@@ -66,19 +67,28 @@ public struct RationalRateAccumulator {
     /// <returns>The number of steps that leave the phase below <paramref name="period"/>.</returns>
     public readonly long QuietSteps(long weight, long period) =>
         (((period - 1L) - m_phase) / weight);
-    /// <summary>Converts an engine-tick budget into the machine cycles it buys at <paramref name="cyclesPerSecond"/>,
-    /// carrying the fraction of a cycle into the next conversion so a rate that changes between budgets carries no
-    /// drift.</summary>
+    /// <summary>Converts an engine-tick budget into the machine cycles it buys at <paramref name="rate"/>, carrying the
+    /// fraction of a cycle into the next conversion so a rate whose <see cref="MachineCycleRate.Cycles"/> changes
+    /// between budgets carries no drift. The phase is scaled by <see cref="MachineCycleRate.Seconds"/>, which a stream
+    /// must keep constant.</summary>
     /// <param name="ticks">The engine ticks to convert, <see cref="EngineTicks.PerSecond"/> to the second.</param>
-    /// <param name="cyclesPerSecond">The machine's current cycle rate, in cycles per emulated second.</param>
+    /// <param name="rate">The machine's current cycle rate.</param>
     /// <returns>The whole machine cycles the budget buys.</returns>
     /// <exception cref="OverflowException">The product of <paramref name="ticks"/> and
-    /// <paramref name="cyclesPerSecond"/> exceeds <see cref="long.MaxValue"/>.</exception>
-    public long TakeCycleBudget(ulong ticks, ulong cyclesPerSecond) =>
+    /// <see cref="MachineCycleRate.Cycles"/>, or of <see cref="EngineTicks.PerSecond"/> and
+    /// <see cref="MachineCycleRate.Seconds"/>, exceeds <see cref="long.MaxValue"/>.</exception>
+    public long TakeCycleBudget(ulong ticks, MachineCycleRate rate) =>
         Advance(
-            period: ((long)EngineTicks.PerSecond),
-            weight: checked((long)(ticks * cyclesPerSecond))
+            period: PhasePeriod(rate: rate),
+            weight: checked((long)checked(ticks * rate.Cycles))
         );
+    /// <summary>Gets the phase units in one machine cycle at <paramref name="rate"/>: a carried phase is always below
+    /// it, which is how a restored phase is validated.</summary>
+    /// <param name="rate">The rate whose phase scale to report.</param>
+    /// <returns><see cref="EngineTicks.PerSecond"/> × <see cref="MachineCycleRate.Seconds"/>.</returns>
+    /// <exception cref="OverflowException">The product exceeds <see cref="long.MaxValue"/>.</exception>
+    public static long PhasePeriod(MachineCycleRate rate) =>
+        checked((long)checked(EngineTicks.PerSecond * rate.Seconds));
     /// <summary>Resets the phase, starting a fresh stream.</summary>
     public void Reset() =>
         m_phase = 0L;
