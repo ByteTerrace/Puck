@@ -655,6 +655,13 @@ public sealed partial class WorldReplayTape {
         m_liveHashes.Clear();
         m_liveAuthoritativeHashes.Clear();
         AttachTaps();
+
+        // A session admitted before the arm is re-established at the tape's first tick, as it stands now, so the
+        // authority it holds reaches the replay too.
+        foreach (var serverEvent in m_liveServer.GrantTable.LiveSessionEvents()) {
+            m_currentAuthority.Add(item: new WorldReplayEntry.SessionEvent(Value: serverEvent));
+        }
+
         m_mode = WorldReplayMode.Recording;
 
         return true;
@@ -743,6 +750,9 @@ public sealed partial class WorldReplayTape {
                     break;
                 case WorldServerEvent.PeerDisconnected disconnected:
                     m_currentAuthority.Add(item: new WorldReplayEntry.PeerDisconnected(Value: disconnected));
+                    break;
+                case WorldServerEvent.SessionAdmitted or WorldServerEvent.SessionEmbodied or WorldServerEvent.SessionEnded:
+                    m_currentAuthority.Add(item: new WorldReplayEntry.SessionEvent(Value: serverEvent));
                     break;
             }
         };

@@ -679,6 +679,8 @@ public sealed partial class WorldTick {
                             );
                         }
                     }
+
+                    Host.GrantTable.RevokeStaleEmbodiments(index: peer.BodyIndex);
                 }
 
                 var installedGrants = new List<WorldGrant>();
@@ -730,6 +732,18 @@ public sealed partial class WorldTick {
                         actor: Principal.Console
                     );
                 }
+
+                break;
+            case WorldServerEvent.SessionAdmitted admitted:
+                Host.GrantTable.ApplySessionAdmitted(admitted: admitted);
+
+                break;
+            case WorldServerEvent.SessionEmbodied embodied:
+                Host.GrantTable.ApplySessionEmbodied(embodied: embodied);
+
+                break;
+            case WorldServerEvent.SessionEnded ended:
+                Host.GrantTable.ApplySessionEnded(ended: ended);
 
                 break;
             default:

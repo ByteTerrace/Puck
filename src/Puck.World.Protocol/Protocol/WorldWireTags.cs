@@ -33,6 +33,7 @@ public static class WorldWireTags {
             case 1: value = PrincipalKind.Seat; return true;
             case 2: value = PrincipalKind.Addon; return true;
             case 3: value = PrincipalKind.Peer; return true;
+            case 4: value = PrincipalKind.Session; return true;
             default: value = default; return false;
         }
     }
@@ -125,6 +126,7 @@ public static class WorldWireTags {
             case PrincipalKind.Seat: wire = 1; return true;
             case PrincipalKind.Addon: wire = 2; return true;
             case PrincipalKind.Peer: wire = 3; return true;
+            case PrincipalKind.Session: wire = 4; return true;
             default: wire = default; return false;
         }
     }

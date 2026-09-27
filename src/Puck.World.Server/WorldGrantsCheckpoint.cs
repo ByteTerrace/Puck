@@ -15,5 +15,6 @@ public sealed record WorldGrantsCheckpoint(
     IReadOnlyList<(Grantee Grantee, WorldCapability Capability, GrantSubject Subject, ulong Bits)> WriteMasks,
     IReadOnlyList<(Grantee Grantee, WorldCapability Capability, GrantSubject Subject)> SeededSections,
     IReadOnlyList<(int BodyIndex, string Reason)> DriveGates,
+    IReadOnlyList<(int Ordinal, int Epoch)> SessionEpochs,
     int Revision
 );
