@@ -15,7 +15,7 @@
               "point": [
                 0,
                 1,
-                -10
+                -6
               ]
             }
           },
@@ -58,19 +58,14 @@
   "prototypes": [
     {
       "document": {
-        "frames": [
-          {
-            "name": "idle",
-            "transforms": []
-          }
-        ],
         "name": "ball",
         "palette": [
           {
-            "color": "#D03020",
+            "color": "#FF0000",
+            "emissive": 0.5,
             "roughness": 0.6,
             "sheen": 0,
-            "specular": 0.1
+            "specular": 0
           }
         ],
         "schema": "puck.creation.v1",
