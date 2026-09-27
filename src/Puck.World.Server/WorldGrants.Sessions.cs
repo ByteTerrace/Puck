@@ -340,6 +340,9 @@ public sealed partial class WorldGrants {
 
         return events;
     }
+    /// <summary>Lists the live sessions, in ordinal order.</summary>
+    /// <returns>Each live session's principal.</returns>
+    internal List<Principal> LiveSessionPrincipals() => [.. m_sessions.OrderBy(keySelector: static pair => pair.Key).Select(selector: static pair => pair.Value.Principal).Where(predicate: principal => IsLiveSession(principal: principal))];
 
     /// <summary>Gets one past the highest ordinal a session ever took on this world — the bound a read over every live
     /// session walks, in ordinal order.</summary>

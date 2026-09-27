@@ -679,8 +679,8 @@ per-tick intent, the one its seat already submits and the tape already records, 
 while its pointer ray passes through the glass from the front, the ray is mapped through the door the
 portal's counterpart names, in fixed point, and its channels are carried by name into the
 destination's own. The forward travels the destination's own link, so the destination's tape
-records it like any other input, and a destination that is not stepping (paused, stopped, or held)
-is sent nothing until it steps again. The destination latches it on the session, never on a body,
+records it like any other input, and a destination that is not taking input (paused, stopped, held,
+or driving its own tape) is sent nothing until it takes input again, a release it is owed included. The destination latches it on the session, never on a body,
 and a rule reads it through `$pointer:any:<screen>:x|y|on` and
 `$pointer:any:<screen>:press:<channel>`, which count a session only while it holds `Control` over
 that screen. A press the destination has not yet stepped over is kept for one step's rules, with the
@@ -688,7 +688,8 @@ ray it was made along, so a press and release that both arrive between two desti
 reach them once, where the press was made. When the forward stops (a disengage, a lost `Control`
 hold, a ray off the glass) one release clears what the session pointed and pressed. A tick a world
 replays from its tape forwards nothing, its drive's last tick included: its destinations are not
-replaying with it.
+replaying with it. A destination driving its own tape restores the sessions it recorded; when the
+drive ends, each one no observer holds ends, so nothing its recorded viewer pressed stays held.
 
 A joined-world projection renders the destination from the destination's own delivered snapshots and
 its own measured clock, never through the host's presentation clock—independently scheduled or

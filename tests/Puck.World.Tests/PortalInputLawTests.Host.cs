@@ -509,6 +509,106 @@ public sealed partial class PortalInputLawTests {
             userMessage: "the destination's tape holds none of the input the portal forwarded it"
         );
     }
+
+    // Records the destination's own tape while the boot world clicks through the glass three times, then starts driving
+    // it back, with the boot world still engaged.
+    private static WorldReplayTape RecordAndDriveBeyond(PortalScene scene) {
+        var beyond = scene.BeyondRow;
+        var tape = scene.TapeOver(row: beyond);
+
+        beyond.Tape = tape;
+        Assert.True(
+            condition: tape.TryBeginRecording(
+                name: "beyond",
+                refusal: out var refusal
+            ),
+            userMessage: refusal
+        );
+        Assert.True(condition: scene.Engage());
+
+        for (var tick = 0; (tick < 3); tick++) {
+            scene.Point(
+                press: 1d,
+                throughGlass: true
+            );
+            scene.Step();
+        }
+
+        _ = tape.StopRecording();
+        Assert.True(
+            condition: tape.TryBeginDrive(
+                documentPath: null,
+                forkName: null,
+                name: "beyond",
+                refusal: out refusal,
+                toTick: null
+            ),
+            userMessage: refusal
+        );
+
+        return tape;
+    }
+
+    [Fact]
+    public void ADestinationDrivenBackThroughItsTape_LeavesNoRecordedSessionHoldingItsPress() {
+        using var scene = new PortalScene();
+        var tape = RecordAndDriveBeyond(scene: scene);
+
+        scene.Disengage();
+
+        for (var tick = 0; ((tick < 8) && (tape.Mode == WorldReplayMode.Replaying)); tick++) {
+            scene.Step();
+        }
+
+        // The drive restored the recorded session and replayed its press; once it ends, that session's viewer is not
+        // watching, so it ends and nothing it pressed stays held.
+        scene.Step();
+        scene.Step();
+
+        Assert.Equal(
+            actual: (tape.Mode, Cell(
+                row: OnRow,
+                server: scene.Beyond
+            ), Cell(
+                row: PressRow,
+                server: scene.Beyond
+            )),
+            expected: (WorldReplayMode.Idle, 0L, 0L)
+        );
+    }
+    [Fact]
+    public void AReleaseOwedToADestinationDrivingItsTape_WaitsForTheDriveToEnd() {
+        using var scene = new PortalScene();
+        var tape = RecordAndDriveBeyond(scene: scene);
+
+        // While the destination drives, the boot world's ray leaves the glass: the release it owes cannot reach a link
+        // that drops live input.
+        for (var tick = 0; ((tick < 8) && (tape.Mode == WorldReplayMode.Replaying)); tick++) {
+            scene.Point(
+                press: 0d,
+                throughGlass: false
+            );
+            scene.Step();
+        }
+
+        Assert.Equal(
+            actual: tape.Mode,
+            expected: WorldReplayMode.Idle
+        );
+
+        var sent = scene.CountForwards();
+
+        scene.Point(
+            press: 0d,
+            throughGlass: false
+        );
+        scene.Step();
+
+        Assert.Equal(
+            actual: sent(),
+            expected: 1
+        );
+    }
     [Fact]
     public void APausedDestination_IsSentNothing_UntilItStepsAgain() {
         using var scene = new PortalScene();

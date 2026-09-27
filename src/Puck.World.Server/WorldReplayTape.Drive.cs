@@ -75,9 +75,14 @@ public sealed partial class WorldReplayTape {
     /// a fast-forwarding drive that has not reached its target yet.</summary>
     public bool WantsFastForwardStep => ((m_drive is { FastForward: true } drive) && (drive.Cursor < drive.Target));
 
-    // Every live drive ends here: seats return to live input, and a completed fork hands its prefix over to a fresh
-    // recording; anything else — a plain drive's end, or a cancel — leaves the tape Idle.
+    // Every live drive ends here: seats return to live input, a completed fork hands its prefix over to a fresh
+    // recording, and anything else — a plain drive's end, or a cancel — leaves the tape Idle. Either way the sessions the
+    // drive restored that no observer holds end last, where a fork's recording captures their ends.
     private void EndDrive(bool completed) {
+        EndDriveCore(completed: completed);
+        m_liveServer.EndUnobservedSessions();
+    }
+    private void EndDriveCore(bool completed) {
         var drive = m_drive!;
 
         m_drive = null;

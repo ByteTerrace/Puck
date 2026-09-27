@@ -283,18 +283,20 @@ public sealed partial class WorldInstanceHost {
 
         return true;
     }
-    // Whether an instance consumes the input it is sent: it steps, rather than holding for a pause, a stop, its mirrors,
-    // or its retirement.
-    private static bool Steps(WorldInstance instance) => (
+    // Whether an instance takes the live input it is sent: it steps, rather than holding for a pause, a stop, its
+    // mirrors or its retirement, and it is not driving its own tape, whose link drops live input.
+    private static bool TakesInput(WorldInstance instance) => (
         (instance.Server.Definition.SimulationRateHz > 0) &&
         !instance.IsPaused &&
         !instance.AwaitingMirrors &&
-        !instance.Server.IsRetiring
+        !instance.Server.IsRetiring &&
+        (instance.Tape is not { Mode: WorldReplayMode.Replaying })
     );
     // Forwards what an instance's engagement routed through its portal faces this step to each face's session, and
     // one release to a face whose forwarding stopped (a disengage, a lost Control hold, a ray off the glass, a replayed
-    // tick, or an owner that did not step). Each travels the destination's own link, where its tape records it and a
-    // replay drive masks it. A destination that is not stepping is sent nothing, and a release owed to it waits.
+    // tick, or an owner that did not step). Each travels the destination's own link, where its tape records it. A
+    // destination that is not taking input (paused, stopped, held, or driving its own tape) is sent nothing, and a
+    // release owed to it waits.
     private void ForwardScreenSessions(WorldInstance owner, SortedDictionary<int, WorldScreenSession> sessions, bool stepped) {
         var engagement = owner.Server.Engagement;
 
@@ -312,7 +314,7 @@ public sealed partial class WorldInstanceHost {
                 continue;
             }
 
-            if (!Steps(instance: destination)) {
+            if (!TakesInput(instance: destination)) {
                 continue;
             }
 
