@@ -27,6 +27,10 @@ public sealed partial class ShaderPipelineRenderNode {
 
         public IGpuBuffer[]? Buffers;
         public IGpuImage[]? Images;
+        // The image an export copies this storage into, the export that created it, and whether a copy has written it.
+        public IGpuExportableImage? Export;
+        public IShaderPipelineOutputExport? ExportOwner;
+        public bool ExportWritten;
         // The input this output stands for while the package pass writing it draws nothing.
         public PackageAlias Alias;
 
@@ -71,6 +75,7 @@ public sealed partial class ShaderPipelineRenderNode {
                     buffer?.Dispose();
                 }
             }
+            Export?.Dispose();
         }
     }
     // A package pass has no declaration and no compiled shader; its step's ports, its recorder and their resolved

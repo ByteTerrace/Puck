@@ -365,13 +365,14 @@ already exceeds a legal short segment; `float` appears only at the two public
 seams, the total length and `Sample`'s returned position/yaw.
 
 A camera view a probe reads is exported by its instance's node, not by this
-project: the render graph's node renders its output into the image an
+project: the render graph's node renders its output into its own images, which
+the view's screens sample, and copies each frame into the image an
 `IShaderPipelineOutputExport` creates (`ShaderPipelineRenderNode.Export`), which
-a same-adapter, cross-API reader opens by its shared handles. The node writes
-it only on a frame the reader has released it, keeps publishing its last image
-otherwise, and publishes each write with the value it signals on the image's
-shared fence behind the submission (`IGpuExportableImage.CompleteWrite`), which
-the reader waits for on its own device. Nothing drains the queue. See
+a same-adapter, cross-API reader opens by its shared handles. The node copies
+only on a frame the reader has released the image, and publishes each copy with
+the value it signals on the image's shared fence behind the submission
+(`IGpuExportableImage.CompleteWrite`), which the reader waits for on its own
+device. Nothing drains the queue. See
 [shader manifests and pipelines](../../docs/reference/shaders.md) for the node.
 
 ## Debug tooling

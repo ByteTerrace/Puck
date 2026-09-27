@@ -4137,7 +4137,11 @@ frame packers become frame-block writers (item 7), and the views are
     and counted work are the runtime node's
     (`RenderGraphRuntime.CaptureTarget`, `ShaderPipelineRenderNode.Export`,
     `WorldRenderProbe`, each instance's pass counts), and the engine monolith and
-    its pass and hazard model are gone. Still to delete: the matrix law,
+    its pass and hazard model are gone. The export is a copy: a view's node
+    renders into its own per-slot outputs, which its screens sample, and copies
+    each frame its reader has released into the exported image in its
+    `export copy` pass, one copy and three image barriers per exported camera
+    per frame. Still to delete: the matrix law,
     `SdfShaderSetVerification`, `SdfWorldKernels`, and the SDF pipeline set and
     its cache.
 

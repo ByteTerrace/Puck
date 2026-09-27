@@ -100,6 +100,13 @@ public sealed partial class ShaderPipelineRenderNode {
                     }
                 }
             }
+            if (resource.Export is { } export) {
+                bytes = checked((bytes + ImageBytes(
+                    format: resource.Spec.Format,
+                    height: export.Height,
+                    width: export.Width
+                )));
+            }
         }
 
         return bytes;

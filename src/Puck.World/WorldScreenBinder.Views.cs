@@ -182,7 +182,7 @@ internal sealed partial class WorldScreenBinder {
         );
     }
     // Films a camera view's frame: the camera its registration resolves this frame against the frame the world renders,
-    // and the export a probe reads it through, which the view's node renders into.
+    // and the export a probe reads it through, which the view's node copies into.
     private bool FilmCamera(in FrameContext context, string name, SdfCameraFrameSource source) {
         if (!TryFilm(
             camera: out var camera,

@@ -225,13 +225,7 @@ public sealed partial class ShaderPipelineRenderNode {
             slot: slot
         );
 
-        // An exported output rests in the handoff layout its reader on another device takes it in.
-        var outputLayout = (IsExported(
-            plan: m_pipeline!.Plan,
-            storage: published.Storage
-        )
-            ? GpuImageLayout.External
-            : m_outputLayout);
+        var outputLayout = m_outputLayout;
 
         m_publishedLayout = (published.Spec.IsExternal
             ? m_externalImages[published.Spec.Name].Layout

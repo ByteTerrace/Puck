@@ -283,7 +283,7 @@ internal sealed partial class WorldScreenBinder {
         }
     }
     // Retires the export's publication, so no reader acquires the image again, and stops its registration exporting: the
-    // view's node renders into images of its own again from its next frame, so nothing writes the exported image again.
+    // view's node stops copying into the exported image from its next frame, so nothing writes it again.
     // It never waits: a reader still holding the image finishes with it on its own device, which keeps its own reference
     // to the shared texture and fence.
     private void Detach(ViewExportFeed feed) {
@@ -666,8 +666,8 @@ internal sealed partial class WorldScreenBinder {
             m_targetDevice.RemoveDependent();
         }
     }
-    // A camera view's export: the image its node renders into, created on the render device, which a probe's kernel host
-    // reads through the ring's latest completed slot.
+    // A camera view's export: the image its node copies each frame into, created on the render device, which a probe's
+    // kernel host reads through the ring's latest completed slot.
     private sealed class ViewExportFeed(string name, uint width, uint height, Func<IGpuDeviceContext, IGpuExportableImage> create) : IShaderPipelineOutputExport {
         public object? CompletedGeneration { get; private set; }
 

@@ -505,13 +505,19 @@ a pending capture reads, which only a render serves. A device loss reaches every
 package's factory (`IRenderGraphPackageFactory.OnDeviceLost`).
 
 A node given an export (`ShaderPipelineRenderNode.Export`, an
-`IShaderPipelineOutputExport`) renders its default output into the one image the
-export creates, which another device reads, at the export's extent whatever
-extent it is asked for. It publishes that image in `External` layout, takes it
-back from its reader before the submission that writes it
-(`IGpuExportableImage.BeginWrite`) and completes it after (`CompleteWrite`),
-handing the export the shared fence value the write signals, and renders nothing
-on a frame the reader still holds it.
+`IShaderPipelineOutputExport`) renders at the export's extent whatever extent it
+is asked for, into its default output's own images, one per frame slot, which
+it publishes in its output layout and its readers sample like any output. At the
+end of each frame's submission it copies that frame's output into the one image
+the export creates, which another device reads, in a pass of its own
+(`ShaderPipelineRenderNode.ExportCopyPass`, one `gpu.copies` and three image
+barriers a frame). It takes the image back from its reader before that
+submission (`IGpuExportableImage.BeginWrite`), leaves it in `External` layout,
+and completes it after (`CompleteWrite`), handing the export the shared fence
+value the copy signals. On a frame the reader still holds the image the node
+renders and publishes as usual and copies nothing. Nothing on the node's device
+samples the exported image, so a view reading itself binds an earlier frame's
+output, never the image its submission writes or copies into.
 
 An instance can instead be an external producer: a `RenderGraphInstance` whose
 `ExternalPackage` names the `IRenderGraphExternalProducer` registered for that

@@ -278,9 +278,12 @@ These are one-line cautions; the owning pages hold the derivations.
   never fall. A view export orders the other direction with a shared fence of
   the exported texture: a node given an export (`ShaderPipelineRenderNode.Export`,
   an `IShaderPipelineOutputExport`; the binder's `ViewExportFeed` for a camera
-  view a probe reads) renders its default output into the image the export
-  creates, only on a frame the reader has released it (`TryBeginWrite`), and
-  after the submission that writes it calls
+  view a probe reads) renders its default output into its own per-slot images,
+  which every reader on its device samples, and copies each frame into the image
+  the export creates in its `ExportCopyPass` (one copy per exported camera per
+  frame), only on a frame the reader has released it (`TryBeginWrite`); nothing
+  on the render device ever samples the exported image. After the submission
+  that copies it the node calls
   `IGpuExportableImage.CompleteWrite`, which queues the fence's next value
   behind the submission (never a queue
   drain), `SingleSlotPublication` publishes it, and a Direct3D 11 reader queues
