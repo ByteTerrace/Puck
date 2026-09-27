@@ -149,6 +149,22 @@ public sealed class AbstractionsContractTests {
             1,
             0
         ));
+
+        // A camera's image begins at its eye unless it sets a near plane, which must be finite and not negative.
+        var camera = CameraSnapshot.LookAt(
+            fieldOfViewRadians: 1f,
+            position: Vector3.Zero,
+            target: -Vector3.UnitZ,
+            viewportHeight: 1,
+            viewportWidth: 1
+        );
+
+        Assert.Equal(expected: 0f, actual: camera.Near);
+        Assert.Equal(expected: 2.5f, actual: (camera with { Near = 2.5f }).Near);
+
+        foreach (var near in ((float[])[-0.01f, float.NaN, float.PositiveInfinity])) {
+            _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => camera with { Near = near });
+        }
     }
     [Fact]
     public void PushConstantsRequireDefinedStagesAndWordAlignment() {

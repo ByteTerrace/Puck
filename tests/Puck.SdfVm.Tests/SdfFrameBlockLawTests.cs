@@ -128,6 +128,38 @@ public sealed class SdfFrameBlockLawTests {
             expected: ((300u + (SdfWorldPackage.TileSize - 1u)) / SdfWorldPackage.TileSize)
         );
     }
+    // The view's near plane is its camera's, never nearer than the floor the mesh pass's depth needs: a window's glass
+    // lies past the floor, and a camera with no near plane renders from the floor.
+    [Fact]
+    public void TheNearDistanceIsTheCamerasNearPlaneAtLeastTheFloor() {
+        foreach (var (near, expected) in ((ReadOnlySpan<(float, float)>)[(0f, SdfFrameBlock.MinimumNear), (0.01f, SdfFrameBlock.MinimumNear), (8.9f, 8.9f)])) {
+            var authored = Frame();
+            var frame = (authored with { Views = [(authored.Views[0] with { Camera = (authored.Views[0].Camera with { Near = near }) })] });
+            var block = new byte[SdfFrameBlock.SizeBytes];
+
+            SdfFrameBlock.Write(
+                block: block,
+                frame: frame,
+                height: 200u,
+                sceneTime: frame.Time,
+                tables: new SdfPassValues(
+                    DebugMode: 0,
+                    Environment: new float[SdfEnvironment.LaneCount],
+                    InstanceMaskWordCount: 1u,
+                    MeshDraws: 0u,
+                    SampleIndex: 0u,
+                    ScreenCount: 0u
+                ),
+                view: 0,
+                width: 300u
+            );
+
+            Assert.Equal(
+                actual: BitConverter.ToSingle(value: block, startIndex: ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: SdfWorldPackage.NearDistance))),
+                expected: expected
+            );
+        }
+    }
     [Fact]
     public void TheMeshInterfaceLaysOutTheWorldPassBlockMemberForMember() {
         static IReadOnlyList<ShaderInterfaceBlockMember> PassBlock(ShaderInterfaceLayout layout) =>

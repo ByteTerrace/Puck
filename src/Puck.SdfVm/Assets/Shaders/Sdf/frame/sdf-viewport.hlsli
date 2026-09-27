@@ -5,10 +5,6 @@
 #ifndef SDF_VIEWPORT_HLSLI
 #define SDF_VIEWPORT_HLSLI
 
-// The mesh projection's near plane at forward distance ConeNear. The beam starts conservatively at ray distance ConeNear;
-// sdfPixelAt raises each primary ray's start to the plane. KEEP IN SYNC with SdfWorldTables.ConeNear and ViewProjection.
-static const float ConeNear = 0.02;
-
 // The view the pass renders, gathered from the pass block into the rows the march, the shading and the mesh projection
 // read it through.
 struct ViewportData {
@@ -20,9 +16,9 @@ struct ViewportData {
     // sizes each view's image at the extent the render graph schedules for it, and the graph's place pass reconstructs
     // it into the view's rect. zw are zero.
     float4 extent;
-    // x is zero. yz = the off-axis (asymmetric) frustum's tangent-space center offset (SdfAsymmetricFrustum) — (0,0)
-    // for an ordinary symmetric camera, consumed by march/sdf-cone.hlsli's cameraRayDirection. w = the frame's FAR DISTANCE
-    // (read through worldFarDistance below).
+    // x = the view's near distance (read through worldNearDistance below). yz = the off-axis (asymmetric) frustum's
+    // tangent-space center offset (SdfAsymmetricFrustum) — (0,0) for an ordinary symmetric camera, consumed by
+    // march/sdf-cone.hlsli's cameraRayDirection. w = the frame's FAR DISTANCE (read through worldFarDistance below).
     float4 lens;
 };
 ViewportData worldView() {
@@ -32,8 +28,23 @@ ViewportData worldView() {
     data.up = float4(passGroup.viewUp, passGroup.aspectRatio);
     data.forward = float4(passGroup.viewForward, (float)passGroup.debugMode);
     data.extent = float4((float2)passGroup.imageExtent, 0.0, 0.0);
-    data.lens = float4(0.0, passGroup.frustumOffset, passGroup.farDistance);
+    data.lens = float4(passGroup.nearDistance, passGroup.frustumOffset, passGroup.farDistance);
     return data;
+}
+
+// The view's near distance: the forward distance of the plane every camera ray starts on (SdfFrameBlock.NearOf): the
+// beam's cone entry begins at that ray distance, a conservative start since no ray of the cone meets the plane nearer,
+// sdfPixelAt raises each primary ray's start to the plane itself, the bounded volumes composite from it, and the mesh
+// pass clips there. A border window's plane is its aperture, so nothing between its eye and the glass is seen; a
+// camera with no near plane of its own renders from SdfFrameBlock.MinimumNear. The host writes a positive value, so no
+// kernel guards it.
+float worldNearDistance(ViewportData view) {
+    return view.lens.x;
+}
+
+// The ray distance at which a camera ray along the unit `rayDirection` crosses the near plane.
+float worldNearRayDistance(ViewportData view, float3 rayDirection) {
+    return (worldNearDistance(view) / dot(rayDirection, view.forward.xyz));
 }
 
 // The frame's FAR DISTANCE — the depth at which every camera march ends: the fine march's far exit (the primary stage), the

@@ -154,12 +154,12 @@ void sdfIntegrateVolume(SdfVolumeData v, float3 localOrigin, float3 localDirecti
     transmissionOut = transmission;
 }
 
-// Composites every bounded volume whose slab intersects the ray — clipped to `surfaceDistance`
-// so a volume never paints through solid geometry. Select the next farthest intersecting volume, integrate it,
-// and composite immediately. This preserves the previous entry-distance ordering (including index ties) without
+// Composites every bounded volume whose slab intersects the ray between `nearDistance`, the ray distance where the
+// camera ray starts (worldNearRayDistance), and `surfaceDistance`, so a volume never paints before the near plane or
+// through solid geometry. Select the next farthest intersecting volume, integrate it, and composite immediately. This preserves the previous entry-distance ordering (including index ties) without
 // per-pixel arrays or an unrolled copy of the integrator for every capacity slot. Overlapping media still composite
 // as whole volumes; this is not a combined-density integral through their overlap.
-float3 shadeVolumes(float3 color, float3 rayOrigin, float3 rayDirection, float surfaceDistance, uint2 pixel, float time) {
+float3 shadeVolumes(float3 color, float3 rayOrigin, float3 rayDirection, float nearDistance, float surfaceDistance, uint2 pixel, float time) {
     float dither = ((sdfR2Dither(pixel) * 2.0) - 1.0);
     float previousNear = 3.402823e+38;
     uint previousIndex = SdfVolumeCount;
@@ -173,7 +173,7 @@ float3 shadeVolumes(float3 color, float3 rayOrigin, float3 rayDirection, float s
             float3 localOrigin = sdfVolumeLocalPoint(v, rayOrigin);
             float3 localDirection = sdfVolumeLocalDirection(v, rayDirection);
             float2 interval = sdfVolumeSlabInterval(localOrigin, localDirection, v.halfExtent);
-            if (min(interval.y, surfaceDistance) <= max(interval.x, 0.0)) continue;
+            if (min(interval.y, surfaceDistance) <= max(interval.x, nearDistance)) continue;
             bool beforeCursor = interval.x < previousNear || (interval.x == previousNear && index < previousIndex);
             bool nearerChoice = interval.x > selectedNear || (interval.x == selectedNear && index > selected);
             if (beforeCursor && (selected == SdfVolumeCount || nearerChoice)) {
@@ -188,7 +188,7 @@ float3 shadeVolumes(float3 color, float3 rayOrigin, float3 rayDirection, float s
         float2 interval = sdfVolumeSlabInterval(localOrigin, localDirection, v.halfExtent);
         v.intensity *= sdfVolumeIntensityScale(v);
         float3 radiance; float transmission;
-        sdfIntegrateVolume(v, localOrigin, localDirection, max(interval.x, 0.0), min(interval.y, surfaceDistance),
+        sdfIntegrateVolume(v, localOrigin, localDirection, max(interval.x, nearDistance), min(interval.y, surfaceDistance),
             time, dither, radiance, transmission);
         color = radiance + transmission * color;
         previousNear = selectedNear;

@@ -58,10 +58,6 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     /// against the budget that has to reach it (a ray skimming open ground at height <c>h</c> takes roughly one step
     /// per <c>h</c> units of depth, so the far distance is that ray's step count per unit of height).</summary>
     public const int PrimaryMarchSteps = 128;
-    /// <summary>The distance at which every camera cone begins, and so the near plane a rasterized view shares with
-    /// the SDF march (<see cref="Puck.Abstractions.Cameras.ViewProjection.Create"/>'s <c>near</c>). KEEP IN SYNC with
-    /// <c>ConeNear</c> in sdf-viewport.hlsli.</summary>
-    public const float ConeNear = 0.02f;
     /// <summary>The default carve-bake brick pool capacity in voxels (f32 words) — <see cref="SdfBrickPoolLayout.TotalVoxels"/>
     /// = 16.7M voxels = 64 MB, i.e. <see cref="SdfBrickPoolLayout.MaxBricks"/> slots at full resolution.</summary>
     public const int DefaultBrickPoolVoxelCapacity = SdfBrickPoolLayout.TotalVoxels;

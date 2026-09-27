@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/809d96b23b08e9338055a3a25eefd249b42854e50102ba9041df6c2164f572ce). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/0e524eff3faf24e1a5d51c4a1fb22b66b9119b61cfd7691c37cabe88432b799e). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -74,16 +74,16 @@ struct SdfWorldPass {
     [[vk::offset(992)]] uint2 imageExtent;
     [[vk::offset(1000)]] uint instanceMaskWordCount;
     [[vk::offset(1004)]] uint meshDraws;
-    [[vk::offset(1008)]] uint sampleIndex;
-    [[vk::offset(1012)]] float sceneTime;
-    [[vk::offset(1016)]] uint screenCount;
-    [[vk::offset(1020)]] float shadowDistanceScale;
-    [[vk::offset(1024)]] float sunScale;
-    [[vk::offset(1028)]] float tanHalfFieldOfView;
-    [[vk::offset(1032)]] uint2 tileGrid;
-    [[vk::offset(1040)]] uint viewBase;
-    [[vk::offset(1044)]] uint _pad1044;
-    [[vk::offset(1048)]] uint _pad1048;
+    [[vk::offset(1008)]] float nearDistance;
+    [[vk::offset(1012)]] uint sampleIndex;
+    [[vk::offset(1016)]] float sceneTime;
+    [[vk::offset(1020)]] uint screenCount;
+    [[vk::offset(1024)]] float shadowDistanceScale;
+    [[vk::offset(1028)]] float sunScale;
+    [[vk::offset(1032)]] float tanHalfFieldOfView;
+    [[vk::offset(1036)]] uint _pad1036;
+    [[vk::offset(1040)]] uint2 tileGrid;
+    [[vk::offset(1048)]] uint viewBase;
     [[vk::offset(1052)]] uint _pad1052;
     [[vk::offset(1056)]] float3 viewForward;
     [[vk::offset(1068)]] uint _pad1068;

@@ -10,7 +10,7 @@ struct SdfPixel {
     float3 rayDirection;
     int viewMode;
     float farDistance;
-    // The tile's march start, raised to the mesh projection's near plane (ConeNear), or TileEmpty for a tile the beam
+    // The tile's march start, raised to the view's near plane (worldNearRayDistance), or TileEmpty for a tile the beam
     // proved empty and for a lane past the render extent.
     float marchStart;
     // The four-bound teleport's proven-empty gap for this tile (planes 1/2; sdf-beam wrote them). firstExit = the far
@@ -72,9 +72,9 @@ SdfPixel sdfPixelAt(ViewportData view, uint2 pixel, uint viewIndex) {
     p.viewMode = (int)round(view.forward.w);
     p.farDistance = worldFarDistance(view);
 
-    // Cone entry is a conservative ray distance; rasterization clips at forward distance ConeNear.
+    // Cone entry is a conservative ray distance; the ray starts on the near plane, where rasterization clips too.
     if (marchStart >= 0.0) {
-        marchStart = max(marchStart, (ConeNear / dot(p.rayDirection, view.forward.xyz)));
+        marchStart = max(marchStart, worldNearRayDistance(view, p.rayDirection));
     }
 
     p.marchStart = marchStart;

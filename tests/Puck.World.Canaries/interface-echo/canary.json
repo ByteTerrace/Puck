@@ -117,7 +117,7 @@
       { "type": "line", "name": "overlay-sentinels-are-on", "stream": "stdout", "match": "exact", "text": "[pipeline.sentinels: overlay on]", "present": true },
       { "type": "imageRegion", "name": "overlay-every-member-reads-back-its-sentinel", "capture": "overlay.png", "extent": [16, 1], "region": [0, 0, 1, 1], "reduce": "every", "minimum": [0, 1, 0, 1], "maximum": [0, 1, 0, 1], "toleranceCodes": 0, "holds": true },
       { "type": "line", "name": "sdf-world-sentinels-are-on", "stream": "stdout", "match": "exact", "text": "[pipeline.sentinels: sdf-world on]", "present": true },
-      { "type": "imageRegion", "name": "sdf-world-every-member-reads-back-its-sentinel", "capture": "sdf-world.png", "extent": [54, 1], "region": [0, 0, 1, 1], "reduce": "every", "minimum": [0, 1, 0, 1], "maximum": [0, 1, 0, 1], "toleranceCodes": 0, "holds": true }
+      { "type": "imageRegion", "name": "sdf-world-every-member-reads-back-its-sentinel", "capture": "sdf-world.png", "extent": [55, 1], "region": [0, 0, 1, 1], "reduce": "every", "minimum": [0, 1, 0, 1], "maximum": [0, 1, 0, 1], "toleranceCodes": 0, "holds": true }
     ]
   },
   "discriminating": {
@@ -228,8 +228,8 @@
       { "type": "imageRegion", "name": "place-the-members-before-the-last-read-back", "capture": "place.png", "extent": [17, 1], "region": [0, 0, 0.9411, 1], "reduce": "every", "minimum": [0, 1, 0, 1], "maximum": [0, 1, 0, 1], "toleranceCodes": 0, "holds": true },
       { "type": "imageRegion", "name": "overlay-every-member-reads-back-its-sentinel", "capture": "overlay.png", "extent": [16, 1], "region": [0, 0, 1, 1], "reduce": "every", "minimum": [0, 1, 0, 1], "maximum": [0, 1, 0, 1], "toleranceCodes": 0, "holds": false },
       { "type": "imageRegion", "name": "overlay-the-members-before-the-last-read-back", "capture": "overlay.png", "extent": [16, 1], "region": [0, 0, 0.9374, 1], "reduce": "every", "minimum": [0, 1, 0, 1], "maximum": [0, 1, 0, 1], "toleranceCodes": 0, "holds": true },
-      { "type": "imageRegion", "name": "sdf-world-every-member-reads-back-its-sentinel", "capture": "sdf-world.png", "extent": [54, 1], "region": [0, 0, 1, 1], "reduce": "every", "minimum": [0, 1, 0, 1], "maximum": [0, 1, 0, 1], "toleranceCodes": 0, "holds": false },
-      { "type": "imageRegion", "name": "sdf-world-the-members-before-the-last-read-back", "capture": "sdf-world.png", "extent": [54, 1], "region": [0, 0, 0.9814, 1], "reduce": "every", "minimum": [0, 1, 0, 1], "maximum": [0, 1, 0, 1], "toleranceCodes": 0, "holds": true }
+      { "type": "imageRegion", "name": "sdf-world-every-member-reads-back-its-sentinel", "capture": "sdf-world.png", "extent": [55, 1], "region": [0, 0, 1, 1], "reduce": "every", "minimum": [0, 1, 0, 1], "maximum": [0, 1, 0, 1], "toleranceCodes": 0, "holds": false },
+      { "type": "imageRegion", "name": "sdf-world-the-members-before-the-last-read-back", "capture": "sdf-world.png", "extent": [55, 1], "region": [0, 0, 0.9814, 1], "reduce": "every", "minimum": [0, 1, 0, 1], "maximum": [0, 1, 0, 1], "toleranceCodes": 0, "holds": true }
     ]
   }
 }
