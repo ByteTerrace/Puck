@@ -76,6 +76,14 @@
             "width": 1,
             "x": 0,
             "y": 0.75
+          },
+          {
+            "camera": null,
+            "height": 0.125,
+            "instance": "sdf-world",
+            "width": 1,
+            "x": 0,
+            "y": 0.875
           }
         ],
         "transitionRenderScale": 1,
@@ -138,6 +146,11 @@
         "camera": null,
         "name": "overlay",
         "source": "overlay.graph.json"
+      },
+      {
+        "camera": null,
+        "name": "sdf-world",
+        "source": "sdf-world.graph.json"
       }
     ]
   }

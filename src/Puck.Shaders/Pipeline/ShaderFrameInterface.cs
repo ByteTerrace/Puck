@@ -69,13 +69,16 @@ public static class ShaderFrameInterface {
 
     /// <summary>Creates the interface of a document pass: the frame group (<see cref="FrameGroupMembers"/>), bound at set
     /// 0; the World group at set 1, one read-only structured buffer per array in ordinal name order; then the pass group
-    /// at set 3, whose block holds the pass's <see cref="Extent"/> and each config field in ordinal name order, followed
-    /// by the pass's ports in the order given. No block is pushed, so a pass reads
-    /// <c>frameGroup.time</c>, <c>passGroup.extent</c> or a config field such as <c>passGroup.decay</c>, its ports by
-    /// their generated names, and a pushed index, when it has one, as <c>pushedIndex.index</c>.</summary>
+    /// at set 3, whose block holds the pass's <see cref="Extent"/> and then every block value in ordinal name order, each
+    /// config field and each value <paramref name="ports"/> declares alike, followed by the pass's other ports in the
+    /// order given. It is the one spelling of a pass block, so a document pass, a package pass and the SDF engine's passes
+    /// lay out alike and a graph document whose config names the same values reads the same block. No block is pushed, so
+    /// a pass reads <c>frameGroup.time</c>, <c>passGroup.extent</c> or a config field such as <c>passGroup.decay</c>, its
+    /// ports by their generated names, and a pushed index, when it has one, as <c>pushedIndex.index</c>.</summary>
     /// <param name="name">The interface's name (<see cref="NameOf"/>).</param>
     /// <param name="config">The pass's config schema, or <see langword="null"/> when it has none.</param>
-    /// <param name="ports">The pass's port members, each in <see cref="ShaderInterfaceGroup.Pass"/>, in document order.</param>
+    /// <param name="ports">The pass's port members, each in <see cref="ShaderInterfaceGroup.Pass"/>: resources in document
+    /// order, and any block values a package's recorder writes, which join the config in name order.</param>
     /// <param name="arrays">The pass's arrays, bound in the World group in ordinal name order, or <see langword="null"/>
     /// for none.</param>
     /// <param name="pushesIndex">Whether the pass's pipeline pushes one 4-byte index
@@ -111,19 +114,36 @@ public static class ShaderFrameInterface {
             ),
         ]);
 
-        AddConfig(
-            config: config,
-            group: ShaderInterfaceGroup.Pass,
-            members: members
-        );
+        var values = new List<ShaderInterfaceMember>();
+        var resources = new List<ShaderInterfaceMember>();
 
         foreach (var port in ports) {
             if (port?.Group != ShaderInterfaceGroup.Pass) {
                 throw new InvalidDataException(message: $"Shader interface '{name}' port '{port?.Name}' is not in the pass group.");
             }
 
-            members.Add(item: port);
+            (((port.Kind == ShaderInterfaceMemberKind.Value)
+                ? values
+                : resources)).Add(item: port);
         }
+
+        if (config is not null) {
+            foreach (var (field, declared) in config) {
+                values.Add(item: ShaderInterfaceMember.Value(
+                    group: ShaderInterfaceGroup.Pass,
+                    name: field,
+                    type: declared.Type
+                ));
+            }
+        }
+
+        // Every block value, config field or declared value, in ordinal name order after the extent; a repeated name
+        // is the interface's own refusal.
+        members.AddRange(collection: values.OrderBy(
+            comparer: StringComparer.Ordinal,
+            keySelector: static value => value.Name
+        ));
+        members.AddRange(collection: resources);
 
         return new ShaderInterface(
             members: members,
@@ -156,23 +176,6 @@ public static class ShaderFrameInterface {
             : fileName[..dot]);
     }
 
-    // Each config field as a value of the group, in ordinal name order.
-    private static void AddConfig(IReadOnlyDictionary<string, ShaderConfigField>? config, ShaderInterfaceGroup group, List<ShaderInterfaceMember> members) {
-        if (config is null) {
-            return;
-        }
-
-        foreach (var (field, declared) in config.OrderBy(
-            comparer: StringComparer.Ordinal,
-            keySelector: static pair => pair.Key
-        )) {
-            members.Add(item: ShaderInterfaceMember.Value(
-                group: group,
-                name: field,
-                type: declared.Type
-            ));
-        }
-    }
     private static ShaderInterfaceMember Value(string name, ShaderValueType type) =>
         ShaderInterfaceMember.Value(
             group: ShaderInterfaceGroup.Frame,

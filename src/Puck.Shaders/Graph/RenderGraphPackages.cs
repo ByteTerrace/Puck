@@ -346,7 +346,7 @@ public sealed class RenderGraphPackageCatalog {
     );
 
     /// <summary>Gets what <see cref="Overlay"/>'s fragment stage reads from its pass group beside the extent: three
-    /// per-frame values its recorder writes, in name order as a document writes config fields (<c>counts</c>: panel and
+    /// per-frame values its recorder writes, which the pass block holds in name order as it holds config fields (<c>counts</c>: panel and
     /// element counts and the atlas cell's width and height; <c>misc</c>: the text, atlas and clip bases and the glyph
     /// count; <c>sdf</c>: the distance range, the outline band and the panel and element bases), then its input image, its
     /// frame slot images, the one sampler they are all read through, and its storage buffer.</summary>

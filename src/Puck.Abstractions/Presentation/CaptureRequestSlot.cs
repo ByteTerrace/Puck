@@ -77,8 +77,8 @@ public sealed class CaptureRequestSlot {
     /// leave the slot busy. A failed write is reported to standard error; the request itself carries the outcome.</summary>
     /// <param name="failureLabel">The stderr prefix a failed write is reported under.</param>
     /// <param name="writer">The readback and PNG writer, which must close the file before returning.</param>
-    /// <param name="tick">The tick of the state the image the writer reads was rendered from, when the serving node knows
-    /// it (<see cref="FrameCaptureRequest.Write"/>); <see langword="null"/> reads the request's tick source.</param>
+    /// <param name="tick">The tick of the state the image the writer reads was rendered from
+    /// (<see cref="FrameCaptureRequest.Write"/>); <see langword="null"/> when the serving node names none.</param>
     /// <exception cref="Gpu.DeviceLostException">The readback lost the graphics device; the request already carries
     /// the same failure.</exception>
     public void Serve(string failureLabel, Action<string> writer, ulong? tick = null) {

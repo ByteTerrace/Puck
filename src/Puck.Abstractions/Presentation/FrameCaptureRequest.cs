@@ -6,9 +6,8 @@ namespace Puck.Abstractions.Presentation;
 /// it does not promise durable storage or that another process cannot subsequently change the file.</summary>
 /// <param name="Path">The requested output path.</param>
 /// <param name="Error">The capture failure, or null on success.</param>
-/// <param name="Tick">The tick of the state the served image shows: the tick its server says the image was rendered
-/// at, else the request's tick source as read when a frame served it; <see langword="null"/> when neither knows it or
-/// no frame served the request.</param>
+/// <param name="Tick">The tick of the state the served image shows, the tick its server says the image was rendered at;
+/// <see langword="null"/> when the server names none or no frame served the request.</param>
 public sealed record FrameCaptureResult(string Path, Exception? Error, ulong? Tick = null) {
     /// <summary>Gets whether the PNG write completed successfully.</summary>
     public bool Succeeded => (Error is null);
@@ -18,20 +17,14 @@ public sealed record FrameCaptureResult(string Path, Exception? Error, ulong? Ti
 /// cancel an accepted capture or make its output path available for reuse.</summary>
 public sealed class FrameCaptureRequest {
     private readonly TaskCompletionSource<FrameCaptureResult> m_completion = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
-    private readonly Func<ulong?>? m_tick;
 
     private int m_claimed;
 
     /// <summary>Creates an unserved request. The caller owns directory creation and path policy.</summary>
     /// <param name="path">The PNG path.</param>
-    /// <param name="tick">Reads the tick of the state the frame being composed presents, which the request records in its
-    /// result (<see cref="FrameCaptureResult.Tick"/>) when a frame serves it with an image rendered this frame and its
-    /// server names no tick of its own; read on the render pump as the frame serves it. <see langword="null"/> records
-    /// none.</param>
-    public FrameCaptureRequest(string path, Func<ulong?>? tick = null) {
+    public FrameCaptureRequest(string path) {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         Path = path;
-        m_tick = tick;
     }
 
     /// <summary>Gets this request's terminal result. Failures are result data, so fire-and-forget console requests
@@ -65,9 +58,9 @@ public sealed class FrameCaptureRequest {
     /// A writer exception becomes a failed result. Device loss also propagates to the host's recovery loop;
     /// ordinary capture failures do not interrupt rendering.</summary>
     /// <param name="writer">The readback and PNG writer. It must close the file before returning.</param>
-    /// <param name="tick">The tick of the state the image the writer reads was rendered from, when the server knows it,
-    /// as a node republishing an image it rendered on an earlier frame does; <see langword="null"/> reads the request's
-    /// tick source instead.</param>
+    /// <param name="tick">The tick of the state the image the writer reads was rendered from, which the result records
+    /// (<see cref="FrameCaptureResult.Tick"/>): the tick of the frame that rendered it, however many frames before it is
+    /// served; <see langword="null"/> when the server names none.</param>
     /// <returns>The terminal result, including any writer exception.</returns>
     /// <exception cref="InvalidOperationException">Another owner already claimed or refused this request.</exception>
     /// <exception cref="DeviceLostException">Readback lost the graphics device. Completion contains the same
@@ -83,8 +76,6 @@ public sealed class FrameCaptureRequest {
         }
 
         Exception? error = null;
-
-        tick ??= m_tick?.Invoke();
 
         try {
             writer(Path);

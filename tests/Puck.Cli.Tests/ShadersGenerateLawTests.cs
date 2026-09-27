@@ -114,6 +114,7 @@ public sealed class ShadersGenerateLawTests {
     [Fact]
     public void ADriftedEngineKernelIncludeFailsByName() {
         var world = EngineKernels.Single(predicate: static kernel => string.Equals(a: kernel.Path, b: WorldPath, comparisonType: StringComparison.Ordinal));
+
         var (exitCode, error) = Check([
             (IsaPath, SdfIsaHlsl.Generate()),
             (OverlayPath, InterfaceOf(id: RenderGraphPackageCatalog.Overlay)),
@@ -159,7 +160,7 @@ public sealed class ShadersGenerateLawTests {
         Assert.Empty(collection: problems);
         Assert.Equal(
             actual: includes.Select(selector: static include => include.Path),
-            expected: [IsaPath, OverlayPath, "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-brick-bake.interface.hlsli", "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-mesh.interface.hlsli", WorldPath, FilmGrainPath, PlacePath, .. SourceIncludes.Select(selector: static include => include.Path)]
+            expected: [IsaPath, OverlayPath, "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-bricks.interface.hlsli", "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-mesh.interface.hlsli", WorldPath, FilmGrainPath, PlacePath, .. SourceIncludes.Select(selector: static include => include.Path)]
         );
     }
 }
