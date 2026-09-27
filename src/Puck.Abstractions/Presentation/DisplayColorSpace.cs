@@ -1,3 +1,6 @@
+using System.Text.Json.Serialization;
+using Puck.Abstractions.Documents;
+
 namespace Puck.Abstractions.Presentation;
 
 /// <summary>
@@ -5,6 +8,7 @@ namespace Puck.Abstractions.Presentation;
 /// range a pixel value spans. Each backend maps a member to its native value (Vulkan's <c>VkColorSpaceKHR</c>, DXGI's
 /// <c>DXGI_COLOR_SPACE_TYPE</c>).
 /// </summary>
+[JsonConverter(typeof(StrictEnumConverter<DisplayColorSpace>))]
 public enum DisplayColorSpace : uint {
     /// <summary>Standard dynamic range: BT.709 primaries and the sRGB transfer function, a pixel value of one at the SDR
     /// white level (Vulkan <c>SRGB_NONLINEAR_KHR</c>, <c>DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709</c>). The default and the

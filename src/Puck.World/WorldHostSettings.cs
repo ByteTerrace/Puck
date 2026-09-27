@@ -37,6 +37,9 @@ namespace Puck.World;
 /// <param name="Icon">The authored window-icon path AS WRITTEN in the document (document-relative unless rooted), or
 /// <see langword="null"/> for the host executable's own icon. Resolved to an absolute path at the composition root,
 /// where the document's location is known — the platform backend never learns what a world document is.</param>
+/// <param name="ColorSpace">The color space the swapchain asks the display for; an HDR one is taken only when the
+/// display reports it.</param>
+/// <param name="PaperWhiteNits">The luminance, in nits, SDR white shows at in an HDR output.</param>
 public sealed record WorldHostSettings(
     WorldHostPresentation Presentation,
     bool HostsOnDirectX,
@@ -54,7 +57,9 @@ public sealed record WorldHostSettings(
     string? Genlock,
     string? Listen,
     string? Title,
-    string? Icon
+    string? Icon,
+    DisplayColorSpace ColorSpace,
+    double PaperWhiteNits
 ) {
     /// <summary>Whether this boot composes the authoritative core alone — no window, no GPU device, no swapchain, no
     /// audio device. One of the three predicates <c>Program.cs</c> branches boot-shape registration on.</summary>
@@ -152,7 +157,9 @@ public sealed record WorldHostSettings(
             Genlock: defaults.Genlock,
             Listen: (listenOverride ?? defaults.Listen),
             Title: defaults.Title,
-            Icon: defaults.Icon
+            Icon: defaults.Icon,
+            ColorSpace: defaults.ColorSpace,
+            PaperWhiteNits: (defaults.PaperWhiteNits ?? DisplayOutput.SdrWhiteNits)
         );
     }
 }

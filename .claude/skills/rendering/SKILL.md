@@ -778,14 +778,17 @@ These are one-line cautions; the owning pages hold the derivations.
   A swapchain on either backend is created in a `DisplayOutput` (format and
   `DisplayColorSpace`) chosen by `DisplayOutput.TrySelect`: SDR in
   `SdrFormats` unless an HDR color space is requested
-  (`PresentationOptions.ColorSpace`, `Srgb` everywhere) and reported
+  (`PresentationOptions.ColorSpace`, which a World sets from its host section's
+  `colorSpace`, `Srgb` by default) and reported
   (`VulkanSwapchainFactory.SelectOutput` over the surface's pairs, the
   Direct3D 12 compositor's `ReportedOutputs` over `IDXGIOutput6`); a Vulkan
   surface offering none of them refuses at creation, never mid-frame.
   `ISurfacePresenter.Output` exposes the chosen one. Paper white is
-  `PresentationOptions.PaperWhiteNits` (80 to 10,000 nits, default
-  `DisplayOutput.SdrWhiteNits`), and `DisplayOutput.WhiteScale` is the one
-  conversion to an output's UI white: one in SDR at every level.
+  `PresentationOptions.PaperWhiteNits` (the host section's `paperWhiteNits`, 80
+  to 10,000 nits, default `DisplayOutput.SdrWhiteNits`), and
+  `DisplayOutput.WhiteScale` is the one conversion to an output's value of SDR
+  white, which the display encode scales the frame by, so the HUD shows at paper
+  white: one in SDR at every level.
   The working images are float (`RenderGraphPackageCatalog.WorkingFormat`): every
   SDF view's color and the root graph's versions, which a node publishes as they
   are (`Surface.IsImageFormat`); only the display encode quantizes

@@ -1188,6 +1188,8 @@ public static class WorldBootComposition {
             options.Width = ((uint)hostSettings.Width);
         });
         services.AddSingleton(implementationFactory: static sp => new PresentationOptions {
+            ColorSpace = sp.GetRequiredService<WorldHostSettings>().ColorSpace,
+            PaperWhiteNits = sp.GetRequiredService<WorldHostSettings>().PaperWhiteNits,
             PresentMode = sp.GetRequiredService<WorldHostSettings>().PresentMode,
             SurfaceFormat = sp.GetRequiredService<WorldHostSettings>().SurfaceFormat,
         });

@@ -1293,12 +1293,14 @@ instances the scheduler renders by demand at their footprint's extent and the
 `world.view-refresh` divisor. A view that would see itself reads its own
 previous frame, and a chain of different views lags one frame per hop.
 
-`Surface` already distinguishes CPU pixels, a shared handle, and a same-device
-image, but a surface carries only the two 8-bit RGBA formats, the SDF engine's
-internal targets are `R8G8B8A8Unorm`. Both swapchains choose a display output
-through `DisplayOutput.TrySelect` and take an HDR one only when it is requested
-and the display reports it, but nothing requests one, so every swapchain
-presents SDR (P16's parts that need no float working target). The tonemap is an ACES fit applied at the end of the SDF view pass.
+`Surface` distinguishes CPU pixels, a shared handle, and a same-device image; CPU
+pixels and a shared handle carry the two 8-bit RGBA formats, and a same-device
+image also the float working format every SDF view and the root graph render
+into (`R16G16B16A16Float`). Both swapchains choose a display output through
+`DisplayOutput.TrySelect` and take an HDR one only when the host section's
+`colorSpace` requests it and the display reports it, and both write the root's
+frame through the display encode in the output they took. The tonemap is the
+root graph's `sdf.tonemap` pass before the overlay.
 There is no jitter, motion vector, or history in the SDF kernels; render scale
 is a bilinear-to-Catmull-Rom upsample in the graph's `place` pass.
 
@@ -4293,14 +4295,12 @@ and P14.
 
 ### P16 — Display output
 
-**Starts from:** 8-bit UNORM SDR swapchains on both backends and the tonemap
-inside the SDF view pass. The pieces that need no float working target are in
-place:
+**Starts from:** P14-10's float working targets. The pieces are in place:
 
 - The Direct3D 12 compositor and surface upload keep their descriptors in the
   device's heaps (P7b-14a). The compositor admits one pool for the
-  `SurfaceBlitLayout` group through `IGpuBindings.CanAdmit` and binds its one
-  set; a CPU surface reaches the blit through the device's `IGpuSurfaceUpload`,
+  `DisplayEncodeLayout` group through `IGpuBindings.CanAdmit` and binds its one
+  set; a CPU surface reaches the encode through the device's `IGpuSurfaceUpload`,
   which holds no descriptor. `DirectXDescriptorHeaps.Create` makes only CPU-only
   heaps, and `DirectXGpuBindings.ShaderVisibleHeapsCreated` counts the
   device's pair, two per device (`DirectXShaderVisibleHeapsLawTests`). A
@@ -4316,27 +4316,44 @@ place:
   Direct3D 12 reports HDR10 and scRGB when the containing `IDXGIOutput6`
   reports `G2084_NONE_P2020`, and moves the swap chain into a chosen HDR output
   only when `CheckColorSpaceSupport` allows presenting it. HDR is chosen only
-  when requested and reported; `PresentationOptions.ColorSpace` requests
-  `Srgb`, and no host or document setting requests anything else
-  (`DisplayOutputLawTests`, `VulkanSwapchainFormatLawTests`).
-- Paper white. `PresentationOptions.PaperWhiteNits`, 80 to 10,000 nits and
-  `DisplayOutput.SdrWhiteNits` by default, is the level the HUD and overlays
-  compose at once they read it, and `DisplayOutput.WhiteScale` turns it into an
-  output's UI white: one in SDR at every level.
+  when requested and reported, and SDR is the default and the fallback
+  (`DisplayOutputLawTests`, `VulkanSwapchainFormatLawTests`). A World requests
+  a color space through its host section's `colorSpace` (`Srgb` by default,
+  `Hdr10` or `ScRgb`), boot-only, which reaches `PresentationOptions.ColorSpace`
+  (`WorldHostDisplayLawTests`).
+- Paper white. The host section's `paperWhiteNits`
+  (`PresentationOptions.PaperWhiteNits`, 80 to 10,000 nits and
+  `DisplayOutput.SdrWhiteNits` by default) is the level SDR white shows at in an
+  HDR output, and `DisplayOutput.WhiteScale` turns it into the output's value:
+  one in SDR at every level.
+- The display output, landed with P14-10. The working space is the stylized
+  shading's display-referred values in float, one at SDR white with headroom
+  above it. The tonemap is the synthesized root's `sdf.tonemap` pass, after
+  every view, pane and post pass and before the overlay, so the HUD composes
+  over the tonemapped frame at SDR white and is never tonemapped. The encode is
+  one shader (`SurfaceEncoder`, `display-encode.frag.hlsl`): SDR adds the R2
+  dither and clamps, HDR10 decodes the sRGB transfer to linear light, moves it to
+  BT.2020 primaries, scales it by the white scale and encodes it with the ST 2084
+  perceptual quantizer, and scRGB decodes and scales. Both swapchain
+  compositors draw it as their write into the back buffer, in their output at
+  the host's paper white, so the HUD shows at paper white; a capture of a float
+  output reads through its SDR. On an SDR display the frame matches the previous
+  image within the parity contract (P14-10).
 
-**Owns:** the scene-linear working space, the display-transform node, HDR
-swapchain selection, and paper white for UI.
+**Owns:** the working space, the display transform (the root's tonemap pass and
+the compositors' encode), HDR swapchain selection, and paper white for UI.
 
-**Delivers:** the smallest HDR path that exercises the contracts. That means a
-scene-linear working space and one display-transform node at the end of the
-graph, which tonemaps and encodes for the target; both wait on P14-10's float
-working targets. The swapchain compositors, `SurfaceCompositor` on Vulkan and
-`DirectXSurfaceCompositor` on Direct3D 12, become that node's writer rather
-than a blit after it. On Windows a host setting, named once, then requests
-HDR10 or scRGB, which the selection above takes when the display reports it.
-The HUD and overlays read the paper-white level through
-`DisplayOutput.WhiteScale`, and one HDR source, desktop capture on an HDR
-display, converts through P12. SDR stays the default and the fallback.
+**Delivers:** the smallest HDR path that exercises the contracts: a float
+working space, the tonemap as a root-graph pass before the overlay, since a
+tonemap after it would dim the HUD, and the encode for the target as the
+swapchain compositors' write, `SurfaceCompositor` on Vulkan and
+`DirectXSurfaceCompositor` on Direct3D 12, rather than a blit after it. A host
+setting, named once, requests HDR10 or scRGB, which the selection above takes
+when the display reports it. The HUD and overlays show at the paper-white
+level through the encode's `DisplayOutput.WhiteScale`, and one HDR source,
+desktop capture on an HDR display, converts through P12. SDR stays the default
+and the fallback. Everything but the HDR source landed with P14-10; the HDR
+desktop capture remains.
 Calibration UI, per-display metadata, and HDR on the Steam Deck OLED under
 Linux are later work and stay listed in open items until scheduled.
 **Check:** on an SDR display the same graph produces the previous image within
@@ -4439,9 +4456,8 @@ block (P14-7), and P14-8's kernels as pass-pipeline cache entries, one command
 list per instance per frame slot and the conditional mesh pass. P14-8's last
 part, the world tables' group-1 set, waits on the bake atlases' World-group set
 that P17's texture draw adds. P15 and P16 both follow P14: P15 also needs P4, and
-P16, the smallest package in this group, needs P14's float working targets for
-its display transform; its heap fold, HDR swapchain selection and paper-white
-setting needed none and have landed.
+P16's display output landed with P14-10's float working targets; only its HDR
+desktop capture and the HDR-display checks remain.
 P17's CPU half, the bakes and their texture codecs, has landed, and so have
 their block-compressed upload and sampling check on both backends and the one
 pixel-format vocabulary, `GpuPixelFormat`. A ready bake's mesh draws in place
@@ -4458,9 +4474,9 @@ and a bound member and an overridden member compose by the rule
 [the decisions register](../decisions/rendering.md) states.
 
 The SDF engine's groups (P7b-20), P12b-2, P4-2c, P11b-13, P14-2 and P14-5 have
-landed, and so have P14-6, P14-7, P14-9 and the first parts of P14-8, so the
-longest remaining chain runs P14-8's world set, P14-10 and P14-11, then the rest
-of P14-13, and ends with P15. P16 follows P14-10's float working targets, and a
+landed, and so have P14-6, P14-7, P14-9, P14-10 and the first parts of P14-8, so the
+longest remaining chain runs P14-8's world set and P14-11, then the rest
+of P14-13, and ends with P15. P16's HDR desktop capture follows P14-10, and a
 bake's textures (P17) come before P6's choice between a bake and the field.
 
 ## Deferred to the end
