@@ -186,6 +186,12 @@ public sealed class CreationBakeLawTests {
         Assert.Equal(expected: (0L, 0L), actual: (later.Read(kind: WorldBakeSchedule.Baked), later.Read(kind: WorldBakeSchedule.Refused)));
         Assert.Equal(expected: 3L, actual: later.Read(kind: WorldBakeSchedule.Held));
         Assert.Equal(expected: WorldBakeState.Ready, actual: later.StateOf(prototypeId: "block"));
+
+        // Bakes this machine made and kept are never the world's own: reconciled again with every bake now held from the
+        // cache, the world still ships none, so its fields draw by default on this machine as on a clean one.
+        later.Pump(definition: Definition());
+        Assert.True(condition: later.HasReconciled);
+        Assert.False(condition: later.Ships);
     }
     /// <summary>A ready bake draws in place of its field, and the switch is counted once. Before its bake lands, a
     /// placement draws through its field: no mesh draw, and a camera-visible instance. Once the bake is ready it draws
@@ -285,6 +291,7 @@ public sealed class CreationBakeLawTests {
 
         schedule.Pump(definition: boot.Admission.Definition);
         Assert.False(condition: schedule.IsBusy);
+        Assert.True(condition: schedule.Ships);
         Assert.Equal(expected: (3L, 0L, 0L, 0L), actual: Counts(schedule: schedule));
         Assert.Equal(expected: WorldBakeState.Ready, actual: schedule.StateOf(prototypeId: "pip"));
         Assert.Equal(expected: WorldBakeState.Refused, actual: schedule.StateOf(prototypeId: "glint"));
@@ -305,6 +312,7 @@ public sealed class CreationBakeLawTests {
         using var schedule = new WorldBakeSchedule(store: store);
 
         schedule.Pump(definition: boot.Admission.Definition);
+        Assert.False(condition: schedule.Ships);
         Assert.Equal(expected: WorldBakeState.Pending, actual: schedule.StateOf(prototypeId: "block"));
         Drain(definition: boot.Admission.Definition, schedule: schedule);
         Assert.Equal(expected: (2L, 1L, 1L, 0L), actual: Counts(schedule: schedule));

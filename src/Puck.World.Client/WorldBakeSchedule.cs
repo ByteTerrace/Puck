@@ -111,9 +111,9 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
     /// for <see cref="Ships"/> to be known. Safe to read from any thread.</summary>
     public bool HasReconciled => m_reconciled;
     /// <summary>Gets whether the world ships its bakes: the definition the schedule last reconciled to names at least one
-    /// bake, and every one was already held when it did, as a compiled world's <c>BAKE</c> chunk holds them from its pack
-    /// when the world loads, so none is made on the device. False before the first pump. Safe to read from any
-    /// thread.</summary>
+    /// bake, and a bake pack supplied every one (<see cref="WorldBakeStore.IsShipped"/>), as a compiled world's
+    /// <c>BAKE</c> chunk does when the world loads. A bake this machine made or kept in its cache never counts, so the
+    /// answer is the same on every machine. False before the first pump. Safe to read from any thread.</summary>
     public bool Ships => m_ships;
     /// <summary>Gets the revision of what the schedule can hand out: one more whenever a bake lands or the definition it
     /// reconciled to changed.</summary>
@@ -315,7 +315,7 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
         m_prototypes.Clear();
         m_current.Clear();
 
-        var held = 0;
+        var shipped = 0;
         var named = 0;
 
         foreach (var request in WorldBakeStore.RequestsOf(definition: definition, quality: Quality)) {
@@ -325,9 +325,10 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
             m_current.Add(item: key);
             named++;
 
+            if (m_store.IsShipped(key: key)) {
+                shipped++;
+            }
             if (m_store.TryGetHeld(key: key, outcome: out _)) {
-                held++;
-
                 if (m_counted.Add(item: key)) {
                     m_counts.Count(kind: Held);
                 }
@@ -355,7 +356,7 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
         }
 
         _ = m_queue.RemoveAll(match: request => !m_current.Contains(item: request.Key.Pin));
-        m_ships = ((named > 0) && (held == named));
+        m_ships = ((named > 0) && (shipped == named));
         m_reconciled = true;
     }
 

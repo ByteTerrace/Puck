@@ -27,6 +27,8 @@ public sealed class WorldBakeStore {
     private static readonly ConcurrentDictionary<string, WorldBakeStore> Opened = new(comparer: StringComparer.Ordinal);
     private static readonly ConditionalWeakTable<WorldPrototype, string> Pins = new();
     private readonly ConcurrentDictionary<ContentPin, ReadOnlyMemory<byte>> m_held = new();
+    // The keys a bake pack supplied (HoldFromPack): the bakes a loaded world ships, never ones made or kept on this machine.
+    private readonly ConcurrentDictionary<ContentPin, byte> m_shipped = new();
     private readonly ConcurrentDictionary<string, Lazy<WorldBakePack?>> m_packs = new(comparer: StringComparer.Ordinal);
 
     private readonly Lazy<ContentAddressedStore?> m_disk;
@@ -180,6 +182,7 @@ public sealed class WorldBakeStore {
         foreach (var key in keys) {
             if (pack.TryGet(key: key, outcome: out var outcome)) {
                 m_held[key] = outcome;
+                m_shipped[key] = 0;
                 held++;
             }
         }
@@ -228,6 +231,12 @@ public sealed class WorldBakeStore {
     /// <returns><see langword="true"/> when the store holds the outcome in memory.</returns>
     public bool TryGetHeld(ContentPin key, out ReadOnlyMemory<byte> outcome) =>
         m_held.TryGetValue(key: key, value: out outcome);
+    /// <summary>Returns whether a bake pack supplied a key (<see cref="HoldFromPack"/>): whether a loaded world ships
+    /// that bake, rather than this machine having baked or cached it.</summary>
+    /// <param name="key">The bake's key pin.</param>
+    /// <returns><see langword="true"/> when a pack held it.</returns>
+    public bool IsShipped(ContentPin key) =>
+        m_shipped.ContainsKey(key: key);
     /// <summary>Finds an outcome: in memory, else under <see cref="Directory"/>, holding what it reads there.</summary>
     /// <param name="key">The bake's key pin.</param>
     /// <param name="outcome">The encoded outcome, when this returns <see langword="true"/>.</param>
