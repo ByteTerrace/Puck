@@ -194,7 +194,10 @@ public sealed unsafe class Win32D3D11CompletionSignal : IDisposable {
                     ReturnedInterface: &fenceIid,
                     ppFence: &opened
                 );
-            } catch (COMException exception) {
+            } catch (Exception exception) when ((exception is COMException or ArgumentException or UnauthorizedAccessException)) {
+                // The HRESULT mapping throws a handle that is no fence (E_INVALIDARG) as an ArgumentException and one
+                // this process may not open (E_ACCESSDENIED) as an UnauthorizedAccessException; each is the device
+                // refusing the fence, not a fault of the caller.
                 _ = ((IUnknown*)queried)->Release();
 
                 return new SharedFenceOrder(

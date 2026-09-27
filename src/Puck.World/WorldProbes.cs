@@ -409,16 +409,6 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
 
         if (instance.RowInfo.Manifest.Output is { } output) {
             builder.Append(value: " output=").Append(value: output.Of);
-
-            if (m_screens.TryReadProbeOutput(
-                height: out var outputHeight,
-                id: instance.OutputRingKey,
-                order: out var outputOrder,
-                width: out var outputWidth
-            )) {
-                builder.Append(value: ' ').Append(value: outputWidth).Append(value: 'x').Append(value: outputHeight);
-                builder.Append(value: " order:").Append(value: outputOrder.ToString());
-            }
         }
 
         if (instance.Ring.TryReadLatest(reading: out var reading)) {
