@@ -1,0 +1,128 @@
+using Puck.SdfVm;
+using Puck.World.Client;
+
+namespace Puck.World;
+
+// The worlds seats are presented in elsewhere (WorldContinuum.PresentedElsewhere): a view of the boot frame whose seat is
+// presented in another world renders the scene of that world (WorldRoutedScene) instead, from a residency of its own that
+// every seat presented there shares. The presenter latches which views route where in its Dress, which the package starts
+// before any instance resolves, so a frame's views and its residencies agree. A routed residency films the boot frame
+// before it captures its own, so the cameras it frames with are this frame's.
+internal sealed partial class WorldScreenBinder {
+    // Each routed scene's residency, and the scenes gone from the presenter's table, released after Dress.
+    private readonly Dictionary<WorldRoutedScene, SdfWorldResidency> m_routedResidencies = new(comparer: ReferenceEqualityComparer.Instance);
+    private readonly List<WorldRoutedScene> m_retiredRoutedScenes = [];
+
+    /// <summary>Gets or sets the presenter whose views route a seat presented elsewhere into its world's scene;
+    /// <see langword="null"/> in a presentation with no render graph.</summary>
+    public WorldFramePresenter? Presenter { get; set; }
+
+    /// <summary>Returns the view a world view instance renders when its seat is presented elsewhere: the view's index in
+    /// the residency of the scene of the world the seat is presented in, created the first time a view resolves to
+    /// it.</summary>
+    /// <param name="name">The instance's name.</param>
+    /// <param name="view">The view, when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when the instance's view is presented in another world and the views are
+    /// configured.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="name"/> is <see langword="null"/>.</exception>
+    public bool TryResolveRoutedView(string name, out SdfWorldView view) {
+        ArgumentNullException.ThrowIfNull(argument: name);
+
+        view = default;
+
+        if (
+            (m_viewPipelines is null) ||
+            (ViewHost is not { } host) ||
+            (Presenter is not { } presenter) ||
+            !presenter.TryRoutedView(
+                index: out var index,
+                scene: out var scene,
+                view: (WorldViewNames.ViewOf(instance: name) ?? 0)
+            )
+        ) {
+            return false;
+        }
+
+        if (!m_routedResidencies.TryGetValue(
+            key: scene,
+            value: out var residency
+        )) {
+            residency = CreateRoutedResidency(
+                host: host,
+                scene: scene
+            );
+            m_routedResidencies.Add(
+                key: scene,
+                value: residency
+            );
+        }
+
+        view = new SdfWorldView(
+            Residency: residency,
+            View: index
+        );
+
+        return true;
+    }
+
+    // A routed scene's residency: built like the world's own, with its brick pool and the full quality its frame carries,
+    // sized to the scene's worst case, and its work counted under the scene's name in world.counters.
+    private SdfWorldResidency CreateRoutedResidency(SdfWorldResidency host, WorldRoutedScene scene) {
+        var source = scene.FrameSource;
+        var name = RoutedViewName(scene: scene);
+        var residency = new SdfWorldResidency(
+            dynamicTransformCapacity: source.WorstCaseDynamicTransformCapacity,
+            film: context => (host.HostFrame(context: in context) is not null),
+            frameSource: source,
+            height: ((uint)m_viewDisplayHeight),
+            instanceCapacity: source.WorstCaseInstanceCapacity,
+            kernels: ViewKernels(),
+            name: name,
+            pipelines: m_viewPipelines!,
+            programWordCapacity: source.WorstCaseProgramWordCapacity,
+            width: ((uint)m_viewDisplayWidth)
+        );
+
+        RegisterViewWork(
+            lifetime: residency.WorkLifetime,
+            name: name,
+            transforms: source.MovedTransforms,
+            work: residency.Work
+        );
+        Console.Error.WriteLine(value: $"[world.view: a seat is presented in '{scene.Endpoint.Identity}'; its view renders that world's scene]");
+
+        return residency;
+    }
+    // Releases the residency of every scene the presenter no longer presents a seat in: its views have left the render
+    // graph's resolves, whose passes give back their holds once the device has finished with them.
+    private void ReconcileRoutedResidencies() {
+        if (Presenter is not { } presenter) {
+            return;
+        }
+
+        foreach (var scene in m_routedResidencies.Keys) {
+            if (!presenter.Presents(scene: scene)) {
+                m_retiredRoutedScenes.Add(item: scene);
+            }
+        }
+        foreach (var scene in m_retiredRoutedScenes) {
+            if (m_routedResidencies.Remove(
+                key: scene,
+                value: out var residency
+            )) {
+                UnregisterViewWork(name: RoutedViewName(scene: scene));
+                residency.Dispose();
+            }
+        }
+
+        m_retiredRoutedScenes.Clear();
+    }
+    private void ReleaseRoutedResidencies() {
+        foreach (var residency in m_routedResidencies.Values) {
+            residency.Dispose();
+        }
+
+        m_routedResidencies.Clear();
+    }
+    private static string RoutedViewName(WorldRoutedScene scene) => $"routed${scene.Endpoint.Identity}";
+}

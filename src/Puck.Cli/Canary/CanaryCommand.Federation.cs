@@ -4,6 +4,8 @@ using System.Text;
 using System.Text.Json.Nodes;
 using Puck.Abstractions;
 using Puck.Hosting;
+using Puck.World;
+using Puck.World.Transpiler.Composition;
 
 namespace Puck.Cli.Canary;
 
@@ -12,7 +14,7 @@ internal static partial class CanaryCommand {
 
     /// <summary>One authority's throwaway federation-identity keypair — a fresh ECDSA P-256 key, its self-certifying
     /// domain fingerprint, and its SPKI bytes ready to pin into a peer's admission row.</summary>
-    private readonly record struct FederationIdentity(string Domain, string PublicKeyBase64, byte[] Pkcs8);
+    internal readonly record struct FederationIdentity(string Domain, string PublicKeyBase64, byte[] Pkcs8);
 
     /// <summary>The subject the canary's connecting-out process signs its claims as. It authors no host.authority
     /// of its own (it never listens for federation in this fixture), so Puck.World's own boot-instance fallback
@@ -24,7 +26,7 @@ internal static partial class CanaryCommand {
     // failing to compose.
     private const string WorldBodiesSectionName = "bodies";
 
-    private static FederationIdentity GenerateFederationIdentity() {
+    internal static FederationIdentity GenerateFederationIdentity() {
         using var ecdsa = System.Security.Cryptography.ECDsa.Create(curve: System.Security.Cryptography.ECCurve.NamedCurves.nistP256);
         var spki = ecdsa.ExportSubjectPublicKeyInfo();
         var fingerprint = System.Security.Cryptography.SHA256.HashData(source: spki);
@@ -35,6 +37,7 @@ internal static partial class CanaryCommand {
             Pkcs8: ecdsa.ExportPkcs8PrivateKey()
         );
     }
+
     private static JsonObject AdmissionRow(FederationIdentity peer, string peerSubject) => new() {
         ["domain"] = peer.Domain,
         ["subject"] = peerSubject,
@@ -137,18 +140,71 @@ internal static partial class CanaryCommand {
             );
         }
     }
-    private static (string ClientWorld, string AuthorityWorld) PrepareFederatedWorlds(CanaryLeg leg, string runDirectory, string endpoint, FederationIdentity clientIdentity, FederationIdentity authorityIdentity) {
+
+    // A composition source declares several worlds that reach each other across their borders by document name, and
+    // the authority boots one document the runner patches. The source is compiled in place and every world it
+    // declares is staged together, through the staging a composition boot does for itself, and the world the leg
+    // enters — its `entry`, else the source's declared entry — is the document the authority boots.
+    internal static string StageFederatedComposition(string source, string? entry, string directory) {
+        _ = WorldCompileCache.Shared.TryCompile(
+            compiled: out var compiled,
+            failure: out var failure,
+            path: source
+        );
+
+        if (failure is not null) {
+            throw new InvalidOperationException(message: $"authority composition '{source}' does not compile:{Environment.NewLine}{failure.Diagnostics.FormatReport(
+                filePath: source,
+                sourceText: File.ReadAllText(path: source)
+            )}");
+        }
+        if (compiled!.Worlds.Count == 0) {
+            throw new InvalidOperationException(message: $"authority source '{source}' declares no worlds; a federated leg stages a composition's worlds or boots a document.");
+        }
+        if (!WorldStaging.TryStageComposition(
+            directory: directory,
+            entry: entry,
+            entryName: out _,
+            entryPath: out var entryPath,
+            path: source,
+            reason: out var reason,
+            worlds: compiled.Worlds
+        )) {
+            throw new InvalidOperationException(message: $"authority composition refused: {reason}");
+        }
+
+        return entryPath;
+    }
+    internal static (string ClientWorld, string AuthorityWorld) PrepareFederatedWorlds(CanaryLeg leg, string runDirectory, string endpoint, FederationIdentity clientIdentity, FederationIdentity authorityIdentity) {
         var machineCatalog = CliWorldVocabulary.EnsureInstalled();
         var catalogFingerprint = CliWorldVocabulary.Fingerprint(catalog: machineCatalog);
         var federatedDirectory = Path.Combine(
             path1: runDirectory,
             path2: "federated-worlds"
         );
-        var staged = StageFederatedWorlds(
-            federatedDirectory: federatedDirectory,
-            worldPaths: [leg.WorldPath, leg.AuthorityWorldPath!]
-        );
-        var authorityTarget = staged[leg.AuthorityWorldPath!];
+        // A composition source is compiled where it stands, so its imports resolve, and its worlds are staged
+        // together into the run's own directory; only documents are mirrored.
+        var documents = ((string[])[leg.WorldPath, leg.AuthorityWorldPath!]).Where(predicate: static path => !WorldDocumentName.IsSourceFile(path: path)).ToArray();
+        var staged = ((documents.Length == 0)
+            ? new Dictionary<string, string>(comparer: StringComparer.OrdinalIgnoreCase)
+            : StageFederatedWorlds(
+                federatedDirectory: federatedDirectory,
+                worldPaths: documents
+            ));
+        var authorityTarget = (WorldDocumentName.IsSourceFile(path: leg.AuthorityWorldPath!)
+            ? StageFederatedComposition(
+                directory: Path.Combine(
+                    path1: runDirectory,
+                    path2: "federated-composition"
+                ),
+                entry: leg.Entry,
+                source: leg.AuthorityWorldPath!
+            )
+            : staged[leg.AuthorityWorldPath!]);
+
+        if (!leg.Connect && !staged.ContainsKey(key: leg.WorldPath)) {
+            throw new InvalidOperationException(message: $"federated leg '{leg.Name}' boots the composition source '{leg.WorldPath}' beside its authority without connect; a staged client reaches the patched authority through its own staged references, which a source does not carry, so a composition client connects.");
+        }
 
         var root = (JsonNode.Parse(json: File.ReadAllText(path: authorityTarget))?.AsObject()
             ?? throw new InvalidOperationException(message: "authority world is not a JSON object"));
@@ -225,6 +281,7 @@ internal static partial class CanaryCommand {
             ? leg.WorldPath
             : staged[leg.WorldPath]), authorityTarget);
     }
+
     // A federated mesh leg (leg.Authorities.Count != 0, CANARY-SHAPE.md's N-ary shape): every authority is a
     // listener bound to its own dynamic loopback port, none dials out, and neighbours resolve each other by reading
     // a sibling document's own host.authority — the same adjacency/references mechanism a two-authority leg already

@@ -1,5 +1,4 @@
 using Puck.Abstractions;
-using System.Text.Json.Nodes;
 using Puck.Abstractions.Machines;
 using Puck.World.Server;
 using Puck.World.Transpiler;
@@ -30,68 +29,23 @@ internal static class PuckWorldLoader {
         IMachineValidationCatalog? catalog, Func<WorldDefinition, WorldDefinition>? overrides, WorldStateRoot stateRoot, WorldCacheRoots caches) {
         source = null!;
 
-        var declared = string.Join(
-            separator: ", ",
-            values: worlds.Select(selector: static world => world.Name)
-        );
-        WorldCompiledWorld entry;
-
-        if (named is not null) {
-            if (worlds.FirstOrDefault(predicate: world => string.Equals(
-                a: world.Name,
-                b: named,
-                comparisonType: StringComparison.Ordinal
-            )) is not { } chosen) {
-                failure = $"[world] definition refused: --entry '{named}' names no world '{path}' declares; it declares {declared}.";
-
-                return false;
-            }
-
-            entry = chosen;
-        } else if (worlds.FirstOrDefault(predicate: static world => world.Entry) is { } declaredEntry) {
-            entry = declaredEntry;
-        } else {
-            failure = $"[world] definition refused: '{path}' declares worlds {declared} and none is its entry — write `entry world <name> = ...` for the world a boot starts in, or name one with --entry.";
-
-            return false;
-        }
-
         var directory = Path.Combine(
             path1: stateRoot.FullPath,
             path2: "compositions",
             path3: Path.GetFileNameWithoutExtension(path: path)
         );
         var sourceDirectory = (Path.GetDirectoryName(path: path) ?? ".");
-        var entryPath = string.Empty;
 
-        try {
-            if (Directory.Exists(path: directory)) {
-                Directory.Delete(
-                    path: directory,
-                    recursive: true
-                );
-            }
-
-            foreach (var world in worlds) {
-                if (!WorldStaging.TryWrite(
-                    directory: directory,
-                    name: world.Name,
-                    path: out var staged,
-                    reason: out var reason,
-                    sourceDirectory: sourceDirectory,
-                    world: ((JsonObject)JsonNode.Parse(utf8Json: world.Json)!)
-                )) {
-                    failure = $"[world] definition refused: '{path}' world '{world.Name}' does not compose: {reason}";
-
-                    return false;
-                }
-
-                if (world == entry) {
-                    entryPath = staged;
-                }
-            }
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            failure = $"[world] definition refused: '{path}' could not be staged under {directory}: {exception.Message}";
+        if (!WorldStaging.TryStageComposition(
+            directory: directory,
+            entry: named,
+            entryName: out var entryName,
+            entryPath: out var entryPath,
+            path: path,
+            reason: out var stageReason,
+            worlds: worlds
+        )) {
+            failure = $"[world] definition refused: {stageReason}";
 
             return false;
         }
@@ -108,7 +62,7 @@ internal static class PuckWorldLoader {
             catalogFingerprint: catalogFingerprint,
             documentPath: Path.Combine(
                 path1: sourceDirectory,
-                path2: WorldDocumentName.DocumentFile(name: entry.Name)
+                path2: WorldDocumentName.DocumentFile(name: entryName)
             )
         );
 
@@ -128,7 +82,7 @@ internal static class PuckWorldLoader {
             return false;
         }
 
-        Console.Error.WriteLine(value: $"[world] composition: {path} staged {worlds.Count} worlds under {directory}; entry '{entry.Name}'");
+        Console.Error.WriteLine(value: $"[world] composition: {path} staged {worlds.Count} worlds under {directory}; entry '{entryName}'");
         Console.Error.WriteLine(value: $"[world] definition: {path} (--world)");
         if (compiled.Resolution is { } resolution) {
             Console.Error.WriteLine(value: resolution.Describe());

@@ -678,6 +678,20 @@ the camera the window rendered into the destination and, since the destination's
 dark, ends on its world: on the surface the pick's ray meets among the destination's static
 placements. Routing input into the destination's authority is open work.
 
+A seat that crosses into a world the boot presentation cannot map it into (another document that no
+adjacency relates to the boot world) is presented in that world. Its view draws the destination's own
+scene from the destination's delivered definition and state mirror, framed by the seat's own rig in
+the destination's coordinates, under the destination's sky and lighting and at the presentation's
+own quality. Seats presented through the same endpoint share one residency, with a view each. Split seats in
+different worlds each show their own world. Named boot cameras and the spectator fallback keep
+showing the boot world. A local seat keeps its roster's color wherever it is presented. The first frame a
+view renders from another world's residency rebuilds that view's passes, so a crossing
+holds the image of the world it left until the rebuild installs, for at least one frame.
+
+Every body that can travel crosses a portal face and a seam alike: a local seat, an admitted peer's
+traveller, or a body the world's own census authors. A party door entered by a traveller that is not
+a local seat carries that traveller alone.
+
 User/group-scoped destinations make images viewer-dependent. One image per screen index cannot show
 different destinations to split-screen viewers; per-viewport bindings or distinct render passes are
 required.

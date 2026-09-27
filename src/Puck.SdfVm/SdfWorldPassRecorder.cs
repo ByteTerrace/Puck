@@ -256,6 +256,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
             comparisonType: StringComparison.Ordinal
         )) {
             residency.MarkRendered(view: view);
+            m_owner.MarkRendered(instance: m_context.Instance, view: in m_view);
         }
 
         return RenderGraphPackageOutcome.Drew;

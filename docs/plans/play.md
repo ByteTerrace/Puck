@@ -102,10 +102,11 @@ derivation and the per-tick neighbour tape, ghost records.
      that no world references), and
      `music-conditional-layer-and-embellishment` proves the mechanism only on
      a minimal fixture's seat-join edge.
-   - A frame capture shows that moving a body, crossing a portal, or crossing
-     a seam changes the composed frame, locally and over `--connect`.
-     `seamless-adjacency` proves the seam crossing and `front-door` the
-     studio-arrival gate, both at the console level without a capture.
+   - A frame capture shows that moving a body or crossing a seam changes the
+     composed frame, locally and over `--connect`. `seamless-adjacency` proves
+     the seam crossing and `front-door` the studio-arrival gate, both at the
+     console level without a capture. `portal-walk` and `portal-walk-connect`
+     capture a portal crossing's frame, locally and over `--connect`.
 2. **Frames, as the envelope ratification:** one document shape (root frame,
    sibling frames, body-parented frames on demand) whose envelope takes an
    angular-speed bound, a minimum feature size or aspect-ratio bound, and a

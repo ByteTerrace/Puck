@@ -26,8 +26,8 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
     private readonly Func<string, SdfWorldView?> m_resolve;
 
     // Each instance the runtime asked about: the view it renders, resolved on the frame thread at most once a frame, and
-    // its counter, whose revision moves when the instance's residency is replaced, so the instance rebuilds its passes
-    // against the new one. The runtime does not ask about every instance every frame (never about one a capture reads),
+    // its counter, whose revision moves when the instance's residency or view index changes, so the instance rebuilds
+    // its passes against that view. The runtime does not ask about every instance every frame (never about one a capture reads),
     // so an entry stays while the package lives, keeping its revision's count of switches.
     private readonly Dictionary<string, Entry> m_entries = new(comparer: StringComparer.Ordinal);
     // Guards the entries, which a pass's build reads on the thread pool.
@@ -42,11 +42,18 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
     /// <summary>Initializes a new instance of the <see cref="SdfWorldPasses"/> class.</summary>
     /// <param name="resolve">Returns the view an instance renders, or <see langword="null"/> when the host renders no view
     /// of that name. It runs on the frame thread.</param>
+    /// <param name="host">The residency whose frame the host's other residencies film, or <see langword="null"/>: the
+    /// package holds it for its lifetime, so its frame is started and prepared every frame whether or not any instance
+    /// renders a view of it.</param>
     /// <exception cref="ArgumentNullException"><paramref name="resolve"/> is <see langword="null"/>.</exception>
-    public SdfWorldPasses(Func<string, SdfWorldView?> resolve) {
+    public SdfWorldPasses(Func<string, SdfWorldView?> resolve, SdfWorldResidency? host = null) {
         ArgumentNullException.ThrowIfNull(argument: resolve);
 
         m_resolve = resolve;
+
+        if (host is not null) {
+            Hold(residency: host);
+        }
     }
 
     /// <inheritdoc/>
@@ -110,13 +117,24 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
     /// <inheritdoc/>
     public IShaderPipelineStorageCounter? CounterOf(string instance) => Refresh(instance: instance);
     /// <inheritdoc/>
-    public bool IsUnchanged(string instance, in FrameContext context) => (
-        (Refresh(instance: instance).View is { } view) &&
-        view.Residency.IsUnchanged(
-            context: in context,
-            view: view.View
-        )
-    );
+    public bool IsUnchanged(string instance, in FrameContext context) {
+        var entry = Refresh(instance: instance);
+
+        return (
+            (entry.View is { } view) &&
+            view.Residency.IsUnchanged(context: in context, view: view.View) &&
+            (entry.RenderedSwitches == entry.Switches)
+        );
+    }
+
+    // A residency's signature may belong to another instance. This instance can stand only after its own passes
+    // render the binding it currently resolves, including a different view index within the same residency.
+    internal void MarkRendered(string instance, in SdfWorldView view) {
+        if (m_entries.TryGetValue(key: instance, value: out var entry) && (entry.View == view)) {
+            entry.RenderedSwitches = entry.Switches;
+        }
+    }
+
     /// <inheritdoc/>
     public void OnDeviceLost() {
         foreach (var residency in m_residencies.Keys) {
@@ -212,6 +230,8 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
             }
 
             entry.Residency = view?.Residency;
+        }
+        if (entry.View != view) {
             entry.Switches++;
         }
         if (view is { } current) {
@@ -248,10 +268,13 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
 
         // The frame the entry was last resolved in.
         public long Frame { get; set; }
-        // The residency last resolved, and how often another replaced it.
+        // The residency last resolved, and how often the resolved residency or view index changed.
         public SdfWorldResidency? Residency { get; set; }
         public long Revision => ((Switches << 32) + (Residency?.CapacityRevision ?? 0L));
         public long Switches { get; set; }
+
+        public long RenderedSwitches { get; set; } = -1;
+
         public SdfWorldView? View {
             get {
                 lock (m_gate) {

@@ -1,0 +1,15 @@
+# Every frame renders, so each capture shows the scene as it stands.
+world.cadence off
+# The wait releases on the engine's readiness, a cold driver cache included; the leg's own timeout bounds it.
+world.wait ready 600
+world.wait 20
+# The seat stands at the lobby's arrival, facing the arch and the blue landmark behind it.
+body.where
+world.screenshot {run}/before.png
+world.wait 10
+# Walking forward carries the body through the arch's aperture; it arrives mapped in the garden and walks on.
+body.fly 1 0 0 0 0 0 1.5
+world.wait 100
+body.where
+world.screenshot {run}/after.png
+world.wait 10

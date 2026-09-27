@@ -4169,6 +4169,15 @@ item 2 landed.
      rewritten only when what it binds moves (a region's growth, the glyph
      atlas, the mesh atlases), after the device is idle. A pass set holds only
      the view's own storages, output, screens and mesh target.
+   Still to land, written against that set: a recorder retargets its residency
+   in place when the counts and pipeline layouts agree. A seat's view renders
+   the residency of the world the seat is presented in, and replacing an
+   instance's residency moves its counter, so the view's passes rebuild and it
+   holds its last image until the rebuild installs, for at least one frame
+   (`RenderGraphRuntimeLawTests.ResidencySwitchHeldFrames`). Retargeting in
+   place drives that to zero, so a crossing's first frame shows the
+   destination, and a portal window already rendering the destination as a
+   session shares its residency rather than adding a second.
 9. Landed with step 6, the cadence as the scheduler's: `SdfWorldPasses` asks
    each residency whether a view's latest render stands
    (`IRenderGraphPackageFactory.IsUnchanged`), and the runtime declares that
