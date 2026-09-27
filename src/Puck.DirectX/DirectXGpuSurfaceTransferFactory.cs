@@ -46,6 +46,15 @@ public sealed class DirectXGpuSurfaceTransferFactory(DirectXDeviceContext device
             return false;
         }
     }
+    /// <inheritdoc/>
+    /// <remarks>Always refuses: a Direct3D 12 device writes the images it exports itself
+    /// (<see cref="DirectXGpuSurfaceExportFactory.CreateSharedComputeImage"/>).</remarks>
+    public bool TryImportWritable(nint sharedHandle, nint sharedFenceHandle, GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, [NotNullWhen(true)] out IGpuExportableImage? image, out string refusal) {
+        image = null;
+        refusal = "a Direct3D 12 device exports the images it writes and imports none to write";
+
+        return false;
+    }
 }
 
 [SupportedOSPlatform("windows10.0.10240")]

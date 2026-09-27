@@ -61,9 +61,9 @@ public sealed partial class SdfWorldEngine {
     /// <summary>Records and submits one frame fire-and-forget — the live node path. The submit arms the current ring
     /// slot's fence: nothing waits here, and the only wait a later frame pays is that slot fence in
     /// <c>PrepareFrame</c>, <see cref="FrameRingSize"/> frames later — so a pipelining host overlaps this frame's GPU
-    /// execution with the next frame's CPU production. In export mode the consumer lives on another backend with no
-    /// shared timeline, so this does drain the producer queue (<see cref="IGpuExportableImage.FinalizeForExport"/>)
-    /// before the shared handle is handed off.</summary>
+    /// execution with the next frame's CPU production. In export mode the submission is followed by the exported image's
+    /// shared fence signal (<see cref="IGpuExportableImage.CompleteWrite"/>), whose value
+    /// (<see cref="ExportWrittenValue"/>) the consumer on another device waits for before it reads.</summary>
     /// <param name="frame">The per-frame data: views (cameras + regions), time, and the dynamic entity transforms.</param>
     /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">The frame has zero views or more than the provisioned capacity.</exception>
@@ -93,16 +93,29 @@ public sealed partial class SdfWorldEngine {
         );
 
         Record(viewportCount: viewportCount);
+        // The exported image is taken back from its reader ahead of the submission that writes it.
+        m_exportableImage?.BeginWrite();
         addWaits?.Invoke(obj: m_gpu.QueueSubmitter);
         m_gpu.QueueSubmitter.Submit(
             commandBufferHandles: [m_commandPools[m_currentSlot].CommandBufferHandle],
             fence: m_frameFences[m_currentSlot]
         );
-        m_exportableImage?.FinalizeForExport();
+
+        if (m_exportableImage is { } exported) {
+            ExportWrittenValue = exported.CompleteWrite();
+        }
     }
 
+    /// <summary>Gets the exported image's shared fence handle (<see cref="IGpuExportableImage.SharedFenceHandle"/>),
+    /// which a consumer on another device opens to wait for <see cref="ExportWrittenValue"/>; 0 outside export mode, and
+    /// for an image whose writes finish before they are handed off.</summary>
+    public nint ExportFenceHandle => (m_exportableImage?.SharedFenceHandle ?? 0);
     /// <summary>Gets the exported image's shared NT handle (zero-copy cross-backend present); 0 outside export mode.</summary>
     public nint ExportSharedHandle => (m_exportableImage?.SharedHandle ?? 0);
+    /// <summary>Gets the shared fence value the last submitted frame's write of the exported image signals, which a
+    /// consumer on another device waits for before it reads that frame; zero before the first frame, outside export
+    /// mode, and when the write finished before it was handed off.</summary>
+    public ulong ExportWrittenValue { get; private set; }
     /// <summary>Gets the native image handle of view 0's output image, or zero before a frame has sized it. After a
     /// frame, the image rests in the <see cref="GpuImageLayout.ShaderReadOnly"/> layout (or the cross-backend
     /// <see cref="GpuImageLayout.External"/> layout in export mode) — a downstream pass may transition it and read it in

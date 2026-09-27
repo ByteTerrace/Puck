@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Puck.Abstractions.Recording;
 using Puck.Platform.Audio;
+using Puck.Platform.Probes;
 using Puck.Platform.Windows.Audio;
 using Puck.Platform.Windows.Recording;
 
@@ -29,8 +30,8 @@ public static class WindowsPlatformServiceRegistration {
 
         return services;
     }
-    /// <summary>Registers the Media Foundation webcam service and the Windows Graphics Capture desktop-window feed
-    /// service.</summary>
+    /// <summary>Registers the Media Foundation webcam service, the Windows Graphics Capture desktop-window feed
+    /// service, and the render adapter's probe kernel host service.</summary>
     /// <param name="services">The service collection.</param>
     /// <returns>The same service collection, for chaining.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> is <see langword="null"/>.</exception>
@@ -40,6 +41,7 @@ public static class WindowsPlatformServiceRegistration {
 
         services.TryAddSingleton<ICameraCaptureService, Win32MediaFoundationCameraService>();
         services.TryAddSingleton<INativeImageCaptureService, Win32NativeImageCaptureService>();
+        services.TryAddSingleton<IProbeKernelHostService, Win32ProbeKernelHostService>();
 
         return services;
     }

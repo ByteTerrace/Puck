@@ -420,6 +420,14 @@ internal sealed partial class WorldScreenBinder : IWorldViewCameras {
                 );
                 Console.Error.WriteLine(value: $"[world.camera: '{name}' registered again]");
             } else {
+                // An exported image has the camera's extent, so an extent edit makes the export again at the new one.
+                if (
+                    (next.RenderWidth != registration.Row.RenderWidth) ||
+                    (next.RenderHeight != registration.Row.RenderHeight)
+                ) {
+                    RetireViewExportForRecreation(cameraName: registration.Row.Name);
+                }
+
                 ApplyCameraPose(
                     camera: next,
                     registration: registration
@@ -607,8 +615,9 @@ internal sealed partial class WorldScreenBinder : IWorldViewCameras {
     private sealed class CameraRegistration {
         public Func<int>? AnchorIdSource { get; set; }
         public ISdfAnchorSource? AnchorSource { get; set; }
-        // Ends a reservation TryBeginExportWrite made, with whether the frame completed and the engine it rendered on.
-        public Action<bool, object?>? EndExportWrite { get; set; }
+        // Ends a reservation TryBeginExportWrite made, with whether the frame completed, the engine it rendered on, and the
+        // shared fence value the engine's write of the exported image signals.
+        public Action<bool, object?, ulong>? EndExportWrite { get; set; }
         public Func<IGpuDeviceContext, IGpuImage>? ExportFactory { get; set; }
         public ISdfCameraRig? Rig { get; set; }
         public required WorldCamera Row { get; set; }
@@ -688,7 +697,7 @@ internal sealed partial class WorldScreenBinder : IWorldViewCameras {
                     width: (exported ? registration.Row.RenderWidth : width)
                 );
             } finally {
-                registration.EndExportWrite?.Invoke(arg1: produced, arg2: m_node.ExportGeneration);
+                registration.EndExportWrite?.Invoke(arg1: produced, arg2: m_node.ExportGeneration, arg3: m_node.ExportWrittenValue);
             }
 
             return produced;

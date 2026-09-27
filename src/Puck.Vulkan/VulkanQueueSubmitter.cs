@@ -5,42 +5,52 @@ namespace Puck.Vulkan;
 
 /// <summary>Submits Vulkan command buffers to a graphics queue.</summary>
 public sealed unsafe class VulkanQueueSubmitter {
-    // VK_PIPELINE_STAGE_ALL_COMMANDS_BIT: an external wait holds every stage of the batch, as Direct3D 12's queue wait
-    // holds the whole submission.
-    private const uint PipelineStageAllCommands = 0x00010000;
     private const uint StructureTypeSubmitInfo = 4;
 
-    private static void SubmitCore(VulkanDeviceCommands device, VkQueue graphicsQueue, ReadOnlySpan<nint> commandBufferHandles, nint fenceHandle, ReadOnlySpan<nint> waitSemaphores, ReadOnlySpan<ulong> waitValues) {
+    private static void SubmitCore(VulkanDeviceCommands device, VkQueue graphicsQueue, ReadOnlySpan<nint> commandBufferHandles, nint fenceHandle, ReadOnlySpan<nint> waitSemaphores, ReadOnlySpan<ulong> waitValues, ReadOnlySpan<nint> signalSemaphores = default, ReadOnlySpan<ulong> signalValues = default) {
         if (waitSemaphores.Length != waitValues.Length) {
             throw new ArgumentException(
                 message: $"{waitSemaphores.Length} wait semaphores need as many values, not {waitValues.Length}.",
                 paramName: nameof(waitValues)
             );
         }
+        if (signalSemaphores.Length != signalValues.Length) {
+            throw new ArgumentException(
+                message: $"{signalSemaphores.Length} signal semaphores need as many values, not {signalValues.Length}.",
+                paramName: nameof(signalValues)
+            );
+        }
 
         var waitStages = stackalloc uint[waitSemaphores.Length];
 
+        // An external wait holds every stage of the batch, as Direct3D 12's queue wait holds the whole submission.
         for (var index = 0; (index < waitSemaphores.Length); index++) {
-            waitStages[index] = PipelineStageAllCommands;
+            waitStages[index] = VulkanPipelineStageFlags.AllCommands;
         }
 
         fixed (nint* commandBuffersPointer = commandBufferHandles)
         fixed (nint* waitSemaphoresPointer = waitSemaphores)
-        fixed (ulong* waitValuesPointer = waitValues) {
+        fixed (ulong* waitValuesPointer = waitValues)
+        fixed (nint* signalSemaphoresPointer = signalSemaphores)
+        fixed (ulong* signalValuesPointer = signalValues) {
             var timelineInfo = new VkTimelineSemaphoreSubmitInfo {
+                PSignalSemaphoreValues = ((nint)signalValuesPointer),
                 PWaitSemaphoreValues = ((nint)waitValuesPointer),
                 SType = VkTimelineSemaphoreSubmitInfo.StructureType,
+                SignalSemaphoreValueCount = ((uint)signalValues.Length),
                 WaitSemaphoreValueCount = ((uint)waitValues.Length),
             };
             var submitInfo = new VkSubmitInfo {
                 CommandBufferCount = ((uint)commandBufferHandles.Length),
                 PCommandBuffers = ((nint)commandBuffersPointer),
-                PNext = (waitSemaphores.IsEmpty
+                PNext = ((waitSemaphores.IsEmpty && signalSemaphores.IsEmpty)
                     ? 0
                     : ((nint)(&timelineInfo))),
+                PSignalSemaphores = ((nint)signalSemaphoresPointer),
                 PWaitDstStageMask = ((nint)waitStages),
                 PWaitSemaphores = ((nint)waitSemaphoresPointer),
                 SType = StructureTypeSubmitInfo,
+                SignalSemaphoreCount = ((uint)signalSemaphores.Length),
                 WaitSemaphoreCount = ((uint)waitSemaphores.Length),
             };
 
@@ -96,6 +106,29 @@ public sealed unsafe class VulkanQueueSubmitter {
             graphicsQueue: graphicsQueue,
             waitSemaphores: waitSemaphores,
             waitValues: waitValues
+        );
+    }
+    /// <summary>Submits command buffers and sets a timeline semaphore to a value once they, and every submission made to
+    /// the queue before them, have completed. Nothing waits.</summary>
+    /// <param name="device">The command table of the logical device that owns the queue and semaphore.</param>
+    /// <param name="graphicsQueue">The queue that signals.</param>
+    /// <param name="commandBufferHandles">The native command-buffer handles the batch runs before it signals, or
+    /// empty.</param>
+    /// <param name="semaphore">The native timeline <c>VkSemaphore</c>.</param>
+    /// <param name="value">The value the semaphore is set to; greater than every value it was set to before.</param>
+    public void Signal(VulkanDeviceCommands device, VkQueue graphicsQueue, ReadOnlySpan<nint> commandBufferHandles, nint semaphore, ulong value) {
+        Span<nint> semaphores = [semaphore];
+        Span<ulong> values = [value];
+
+        SubmitCore(
+            commandBufferHandles: commandBufferHandles,
+            device: device,
+            fenceHandle: 0,
+            graphicsQueue: graphicsQueue,
+            signalSemaphores: semaphores,
+            signalValues: values,
+            waitSemaphores: [],
+            waitValues: []
         );
     }
     /// <summary>Submits command buffers and waits for the queue to become idle.</summary>

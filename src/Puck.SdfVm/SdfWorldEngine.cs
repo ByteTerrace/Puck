@@ -22,8 +22,8 @@ namespace Puck.SdfVm;
 /// Two submission models, and they must never blur: <see cref="RenderFrame"/> is the deterministic harness path — one
 /// submit-and-wait plus a readback (validation, headless render). <see cref="SubmitFrame"/> is the live node path —
 /// fire-and-forget behind the engine's own <see cref="FrameRingSize"/>-deep frame ring (each slot's fence orders that
-/// slot's rewrites against its previous submission, so a pipelining host needs no per-frame device drain), plus the
-/// export-mode queue drain when the output crosses a backend seam. Adding a wait to <see cref="SubmitFrame"/> is a
+/// slot's rewrites against its previous submission, so a pipelining host needs no per-frame device drain); an output
+/// that crosses to another device is ordered by the export's shared fence, never a drain. Adding a wait to <see cref="SubmitFrame"/> is a
 /// frame-rate regression; removing the wait from <see cref="RenderFrame"/> is a nondeterminism bug.
 /// </para>
 /// </summary>

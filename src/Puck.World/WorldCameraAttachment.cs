@@ -17,7 +17,7 @@ namespace Puck.World;
 /// open. One physical camera carries one control surface shared by every sensor it streams.</param>
 public readonly record struct WorldCameraAttachment(
     ICameraSharedStream? Shared,
-    ICameraKernelHost? Kernels,
+    IProbeKernelHost? Kernels,
     object? TargetSet,
     ICameraControlSurface? Controls
 );

@@ -219,8 +219,6 @@ public sealed unsafe class VulkanSurfaceTransferLawTests {
     private sealed class RecordingExternalMemoryApi : IVulkanExternalMemoryApi {
         public List<(nint Image, nint Memory)> Destroyed { get; } = [];
 
-        public VulkanExternalImageExportResult CreateExportableImage(VulkanExternalImageExportRequest request) =>
-            throw new NotSupportedException();
         public void DestroyImage(VulkanDeviceCommands device, nint imageHandle, nint memoryHandle) {
             if (0 != imageHandle) {
                 Destroyed.Add(item: (imageHandle, memoryHandle));
@@ -231,8 +229,6 @@ public sealed unsafe class VulkanSurfaceTransferLawTests {
                 ImageHandle: ImageHandle,
                 MemoryHandle: MemoryHandle
             );
-        public VulkanExternalImageImportResult ImportOpaqueImage(VulkanExternalImageImportRequest request) =>
-            throw new NotSupportedException();
     }
     // Refuses every view, as a device out of memory would, and records each destroy.
     private sealed class RefusingViewApi : IVulkanFramebufferSetApi {

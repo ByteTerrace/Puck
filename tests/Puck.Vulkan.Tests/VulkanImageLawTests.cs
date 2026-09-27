@@ -68,32 +68,6 @@ public sealed class VulkanImageLawTests {
         );
     }
     [Fact]
-    public void AnExportableImageWhoseViewFailsIsDestroyedWithItsMemory() {
-        var exports = new RecordingExternalMemoryApi();
-        var views = new RecordingFramebufferSetApi(result: VkResult.ErrorOutOfDeviceMemory);
-
-        var failure = Assert.Throws<VulkanException>(testCode: () => VulkanGpuExportableImage.CreateImageAndView(
-            device: null!,
-            externalMemoryApi: exports,
-            format: GpuPixelFormat.R8G8B8A8Unorm,
-            framebufferSetApi: views,
-            height: 8,
-            instance: null!,
-            physicalDeviceHandle: 1,
-            usage: GpuImageUsage.Storage | GpuImageUsage.Sampled,
-            width: 8
-        ));
-
-        Assert.Equal(
-            actual: (failure.Result, Created: exports.Requests.Count),
-            expected: (VkResult.ErrorOutOfDeviceMemory, Created: 1)
-        );
-        Assert.Equal(
-            actual: exports.Destroyed,
-            expected: [(Image, Memory)]
-        );
-    }
-    [Fact]
     public void AnImageRequestThatBreaksAUsageRuleCreatesNothing() {
         var images = new RecordingOffscreenImageApi();
         var views = new RecordingFramebufferSetApi(result: VkResult.Success);
@@ -139,23 +113,6 @@ public sealed class VulkanImageLawTests {
             );
         }
         public void DestroyColorImage(VulkanDeviceCommands device, nint imageHandle, nint memoryHandle) => Destroyed.Add(item: (imageHandle, memoryHandle));
-    }
-    private sealed class RecordingExternalMemoryApi : IVulkanExternalMemoryApi {
-        public List<(nint Image, nint Memory)> Destroyed { get; } = [];
-        public List<VulkanExternalImageExportRequest> Requests { get; } = [];
-
-        public VulkanExternalImageExportResult CreateExportableImage(VulkanExternalImageExportRequest request) {
-            Requests.Add(item: request);
-
-            return new VulkanExternalImageExportResult(
-                ImageHandle: Image,
-                MemoryHandle: Memory,
-                SharedHandle: 0
-            );
-        }
-        public void DestroyImage(VulkanDeviceCommands device, nint imageHandle, nint memoryHandle) => Destroyed.Add(item: (imageHandle, memoryHandle));
-        public VulkanExternalImageImportResult ImportImage(VulkanExternalImageImportRequest request) => throw new NotSupportedException();
-        public VulkanExternalImageImportResult ImportOpaqueImage(VulkanExternalImageImportRequest request) => throw new NotSupportedException();
     }
     private sealed class RecordingFramebufferSetApi(VkResult result) : IVulkanFramebufferSetApi {
         public List<VulkanImageViewCreateRequest> Requests { get; } = [];
