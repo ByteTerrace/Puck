@@ -8,8 +8,10 @@ namespace Puck.Abstractions.Gpu;
 /// <see cref="SubmissionKinds"/> is the column a <see cref="GpuWorkSample"/> reads them by. Lifetime kinds count
 /// objects created over the ledger's whole life and are read through its <see cref="IWorkCounterSource"/>.
 /// <para>
-/// Every count is of calls the node makes through a neutral interface, so it is the same on every backend for the
-/// same inputs. A barrier is counted as the node requests it; what a backend does to satisfy it is not counted.
+/// Every count but the kernel kinds (<see cref="KernelKinds"/>) is of calls the node makes through a neutral interface,
+/// so it is the same on every backend for the same inputs. A barrier is counted as the node requests it; what a backend
+/// does to satisfy it is not counted. The kernel kinds are counted by a pass's own kernels on the GPU, into the node's
+/// counter buffers (<see cref="GpuKernelCounters"/>), and reach the pass's row once its submission completes.
 /// </para>
 /// </summary>
 public static class GpuWork {
@@ -29,13 +31,15 @@ public static class GpuWork {
     internal const int ImagesCreatedIndex = 2;
     internal const int IndirectDispatchesColumn = 1;
     internal const int LifetimeKindCount = 6;
+    internal const int MarchStepsColumn = 15;
     internal const int MemoryBarriersColumn = 6;
     internal const int PipelineBindsColumn = 8;
     internal const int PipelinesCreatedIndex = 0;
     internal const int PushConstantBytesColumn = 10;
     internal const int RenderPassesColumn = 3;
     internal const int ShaderModulesCreatedIndex = 1;
-    internal const int SubmissionColumnCount = 15;
+    internal const int SubmissionColumnCount = 17;
+    internal const int TexelsWrittenColumn = 16;
 
     /// <summary>Gets the kind counting compute dispatches whose group counts the CPU supplies.</summary>
     public static WorkKind Dispatches { get; } = new(name: "gpu.dispatches", unit: "count", workClass: WorkClass.Deterministic);
@@ -65,8 +69,17 @@ public static class GpuWork {
     public static WorkKind HostVisibleUploadBytes { get; } = new(name: "gpu.uploads.host-visible", unit: "bytes", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting whole-resource clears of storage images and buffers.</summary>
     public static WorkKind Clears { get; } = new(name: "gpu.clears", unit: "count", workClass: WorkClass.Deterministic);
-    /// <summary>Gets the kind counting whole-image copies.</summary>
+    /// <summary>Gets the kind counting whole-image and whole-buffer copies.</summary>
     public static WorkKind Copies { get; } = new(name: "gpu.copies", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the field evaluations a pass's kernels make: each sample of a march (the beam's,
+    /// primary's, the ambient occlusion's and the soft shadow's) and each query (a normal's taps). The kernels count it on
+    /// the GPU, so it is per-backend-deterministic: the marches run in floats, and an indirect pass runs only the tiles
+    /// culling leaves it.</summary>
+    public static WorkKind MarchSteps { get; } = new(name: "gpu.march.steps", unit: "count", workClass: WorkClass.PerBackendDeterministic);
+    /// <summary>Gets the kind counting the pixels a pass's kernels write an output for: an image texel, or a pixel's
+    /// visibility record. The kernels count it on the GPU, so it is per-backend-deterministic, as
+    /// <see cref="MarchSteps"/> is.</summary>
+    public static WorkKind TexelsWritten { get; } = new(name: "gpu.texels.written", unit: "count", workClass: WorkClass.PerBackendDeterministic);
     /// <summary>Gets the kind counting compute and graphics pipelines created. A node's ledger counts the pipelines that
     /// node created; a backend's <see cref="GpuPipelineCacheWork"/> counts every pipeline its devices created.</summary>
     public static WorkKind PipelinesCreated { get; } = new(name: "gpu.created.pipelines", unit: "count", workClass: WorkClass.PerBackendDeterministic);
@@ -91,6 +104,10 @@ public static class GpuWork {
     /// <summary>Gets the kind counting descriptor sets allocated.</summary>
     public static WorkKind DescriptorSetsCreated { get; } = new(name: "gpu.created.descriptor-sets", unit: "count", workClass: WorkClass.PerBackendDeterministic);
 
+    /// <summary>Gets the kinds a pass's kernels count on the GPU, in the order a counter row holds them
+    /// (<see cref="GpuKernelCounters"/>): <see cref="MarchSteps"/>, then <see cref="TexelsWritten"/>.</summary>
+    public static ReadOnlySpan<WorkKind> KernelKinds =>
+        Order.Kernel;
     /// <summary>Gets the lifetime kinds, in the order a report lists them.</summary>
     public static ReadOnlySpan<WorkKind> LifetimeKinds =>
         Order.Lifetime;
@@ -102,6 +119,7 @@ public static class GpuWork {
     // A nested holder initializes after every kind above, whatever order the members are declared in. Each array is
     // filled through the column constants, so a kind's index is its column by construction.
     private static class Order {
+        internal static readonly WorkKind[] Kernel = [MarchSteps, TexelsWritten];
         internal static readonly WorkKind[] Lifetime = CreateLifetime();
         internal static readonly WorkKind[] Submission = CreateSubmission();
 
@@ -135,6 +153,8 @@ public static class GpuWork {
             kinds[HostVisibleUploadBytesColumn] = HostVisibleUploadBytes;
             kinds[ClearsColumn] = Clears;
             kinds[CopiesColumn] = Copies;
+            kinds[MarchStepsColumn] = MarchSteps;
+            kinds[TexelsWrittenColumn] = TexelsWritten;
 
             return kinds;
         }

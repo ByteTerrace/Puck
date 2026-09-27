@@ -75,4 +75,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         output[pixel] = float4(color, 1.0);
     }
 #endif
+
+    // Every hit pass writes one output for each active pixel: its visibility record, or views its texel.
+    sdfCountWork(p.active ? 1u : 0u);
 }

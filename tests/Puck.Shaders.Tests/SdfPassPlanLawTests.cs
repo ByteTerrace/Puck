@@ -10,7 +10,8 @@ namespace Puck.Shaders.Tests;
 /// cull arguments, mesh, primary, surface, ambient, shadow and views, and plans between them exactly the buffer transitions the
 /// kernels' reads and writes need, each after the pass that last wrote or read what the next writes or reads. Every
 /// scratch buffer is transient, one allocation shared by every frame slot, whose first use of a frame orders it after the
-/// frame before, and at every capacity the planner sizes each buffer as the kernels index it.
+/// frame before, and at every capacity the planner sizes each buffer as the kernels index it. Every compute pass counts its
+/// kernels' work into the node's kernel counters, which are no planned storage.
 /// </summary>
 public sealed class SdfPassPlanLawTests {
     // The name a view's graph gives the pass running the package.
@@ -275,6 +276,29 @@ public sealed class SdfPassPlanLawTests {
         Assert.Equal(
             actual: mesh.Accesses.Select(selector: static access => access.Use.Layout),
             expected: [GpuImageLayout.RenderTarget, GpuImageLayout.DepthAttachment]
+        );
+    }
+    // Every compute pass counts its kernels' march steps and texels written into the node's kernel counters, which the
+    // node clears ahead of the view's first pass and copies into the slot's readback behind its last; the mesh pass, a draw,
+    // counts none. The counters are no planned storage: every pass only adds to them, so no barrier falls between passes.
+    [Fact]
+    public void EveryComputePassCountsItsKernelsWorkAndTheMeshPassNone() {
+        Assert.True(condition: Plan.Pipeline.CountsKernelWork);
+        Assert.Equal(
+            actual: Plan.Pipeline.Passes.Where(predicate: static pass => pass.Package!.CountsKernelWork).Select(selector: static pass => pass.Package!.Part),
+            expected: Order.Where(predicate: static part => (part != SdfWorldPackage.Parts.Mesh))
+        );
+        Assert.DoesNotContain(
+            collection: Plan.Pipeline.Storages,
+            filter: static storage => storage.Versions.Any(predicate: static version => version.Contains(comparisonType: StringComparison.Ordinal, value: "counter"))
+        );
+        Assert.Contains(
+            collection: SdfWorldPackage.Members,
+            filter: static member => ((member.Name == SdfWorldPackage.WorkCounters) && (member.Group == ShaderInterfaceGroup.Pass))
+        );
+        Assert.Contains(
+            collection: SdfWorldPackage.Values,
+            filter: static member => (member.Name == SdfWorldPackage.WorkCounterRow)
         );
     }
 }

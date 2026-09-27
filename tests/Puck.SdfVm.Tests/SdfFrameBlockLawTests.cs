@@ -99,6 +99,20 @@ public sealed class SdfFrameBlockLawTests {
         );
 
         var parameters = SdfWorldInterfaces.WorldParameters;
+
+        // The row names the pass, so the view's writer leaves it to the recorder.
+        Assert.Equal(
+            actual: BitConverter.ToUInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.WorkCounterRow))),
+            expected: 0u
+        );
+        SdfFrameBlock.WriteWorkCounterRow(
+            block: block,
+            row: 6u
+        );
+        Assert.Equal(
+            actual: BitConverter.ToUInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.WorkCounterRow))),
+            expected: 6u
+        );
         var pass = parameters.Layout.Groups.Single(predicate: static group => (group.Group == ShaderInterfaceGroup.Pass));
 
         foreach (var member in pass.BlockMembers.Where(predicate: static member => !member.Name.StartsWith(comparisonType: StringComparison.Ordinal, value: "_pad"))) {

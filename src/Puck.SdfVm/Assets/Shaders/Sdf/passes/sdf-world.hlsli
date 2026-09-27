@@ -11,6 +11,7 @@
 
 // The world modules, in the order the kernels declare them: each reads only what the modules before it declare.
 #include "../frame/sdf-frame.hlsli"
+#include "../frame/sdf-work.hlsli"
 #include "../shade/sdf-environment.hlsli"
 #include "../shade/sdf-lighting.hlsli"
 #include "../march/sdf-march-constants.hlsli"

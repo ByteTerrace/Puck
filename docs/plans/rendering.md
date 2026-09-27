@@ -3991,15 +3991,14 @@ recorded over `puck counters`' pinned workload
 (`tests/Puck.Counters/counters.world.json`, its camera and views) at the floor
 tier and the RTX 2060's 1920x1080, and held as calibrated ceilings that
 workload may not exceed. A ceiling is re-recorded only in the change that
-explains why the count moved, and never from wall-clock or GPU timing. Two of
-those counters do not exist yet, and P14 adds them as `GpuWork` kinds the
-ledger reports per pass: march steps and texels written. Its uploads count per
-pass too, the brick uploads included under the pass that records them, since
-`gpu.uploads.host-visible` counts only CPU writes to host-visible buffers
-today. The ledger counts host-side API calls, and a march's step count is
-decided inside the shader's data-dependent loop, so the kernels count their own
-steps into a per-pass counter buffer that the completed sample reads back. The
-march runs in floats, so that kind is `PerBackendDeterministic`, held per
+explains why the count moved, and never from wall-clock or GPU timing. P15-1
+built them: march steps and texels written are `GpuWork` kinds the ledger
+reports per pass (`gpu.march.steps`, `gpu.texels.written`), and the uploads
+count per pass, the brick uploads under the `bricks` pass that records them. The
+ledger counts host-side API calls, and a march's step count is decided inside
+the shader's data-dependent loop, so the kernels count their own steps into a
+per-pass row of the node's counter buffers that the completed sample reads back.
+The march runs in floats, so that kind is `PerBackendDeterministic`, held per
 backend like the residency's `upload` pass. Texels written come from the same
 kernel counters, not from host extents, because an indirectly dispatched pass
 writes only the tiles culling leaves it. The workload is pinned: the RTX 2060
@@ -4346,14 +4345,12 @@ place:
   stands.
 - `SdfWorldPasses`' per-instance entry, which counts every change of the view
   an instance resolves, a residency follow in place (`CanFollow`) included.
-- `puck counters`' pinned workload at the floor tier. The ledger counts
-  host-side API calls only: there is no counted kind for march steps or texels
-  written, and no ceiling file. Upload bytes are already counted per pass:
-  `gpu.uploads.host-visible` (`GpuWork.HostVisibleUploadBytes`) is recorded by
-  the counting storage buffer into the ledger's active pass, and
-  `SdfWorldTables.SubmitUpload` brackets the region copies with the `upload`
-  pass. The brick writes and the fillers it records before that bracket are
-  attributed to no pass.
+- `puck counters`' pinned workload at the floor tier, held to counted-cost
+  ceilings (P15-1). Besides the host-side API calls, every SDF compute pass's
+  kernels count their march steps and texels written (`gpu.march.steps`,
+  `gpu.texels.written`) into the node's kernel counters, and the upload counts
+  its fillers, brick writes and region copies under passes of their own
+  (`fillers`, `bricks`, `upload`).
 - The offscreen host holds its clock at an armed capture, but each frame it
   composes still carries its interval (`FrameDeltaTicks`), and
   `WorldFramePresenter.CaptureFrame` advances presentation time, animation and

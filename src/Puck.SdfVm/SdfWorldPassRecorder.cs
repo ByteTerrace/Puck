@@ -9,9 +9,10 @@ namespace Puck.SdfVm;
 // command buffer for the pass. Every part writes its pass block (SdfFrameBlock): the view's camera, the frame's levers and
 // environment and the world values. Every compute part binds the residency's World set of the ring slot the frame's upload
 // wrote, which holds its tables, and the world interface's pass group: the fragment storages its ports bind and, at every
-// member its ports do not, a dummy of the residency's; and the screens, whose host images are rewritten every frame. The mesh part draws the frame's
+// member its ports do not, a dummy of the residency's; the node's work counters for the frame slot, whose row it writes
+// into its pass block; and the screens, whose host images are rewritten every frame. The mesh part draws the frame's
 // mesh draws into its target through the mesh pipeline, with a set of its own per frame slot binding its pass block. A
-// recorder records no barrier: the planner's are the instance's.
+// recorder records no barrier: the planner's are the instance's, and the node's orders the work counters.
 internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
     private const uint WorkgroupEdge = 8;
 
@@ -247,6 +248,10 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
                 tables: tables
             );
         } else {
+            SdfFrameBlock.WriteWorkCounterRow(
+                block: recording.PassBlock,
+                row: WorkCountersOf(recording: in recording).Row
+            );
             RecordCompute(
                 recording: in recording,
                 tables: tables
@@ -517,6 +522,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
             }
         }
 
+        tables.WriteWorldBuffer(buffer: WorkCountersOf(recording: in recording).Buffer, member: SdfWorldPackage.WorkCounters, set: set);
         bindings.WriteStorageImage(
             arrayElement: 0,
             binding: OutputBinding,
@@ -565,6 +571,10 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
             bound[screen] = image;
         }
     }
+    // Where a compute part counts its march steps and texels written: every one counts
+    // (RenderGraphFragmentPass.CountsKernelWork), so its node always hands it a row.
+    private GpuKernelCounterRow WorkCountersOf(in RenderGraphPackageRecording recording) =>
+        (recording.WorkCounters ?? throw new InvalidOperationException(message: $"Pass '{m_context.Pass}' counts its kernels' work, but its recording carries no work counters."));
     // The member a pass reads a fragment buffer through, or null for one it reads through no member.
     private static string? ReadMemberOf(string version) => version switch {
         SdfWorldPackage.Parts.InstanceMasks => SdfWorldPackage.InstanceMasks,

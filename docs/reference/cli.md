@@ -1389,7 +1389,8 @@ run, so a performance change can be judged by counted work rather than by time.
 `puck bench` stays the only tool that measures wall-clock time.
 
 ```text
-puck counters [--output <file>]            run the workload on both backends and write the report
+puck counters [--output <file>] [--check | --record] [--ceilings <file>]
+                                           run the workload on both backends and write the report
 puck counters compare <left> <right>       compare two reports
 ```
 
@@ -1417,7 +1418,7 @@ class:
 | Class | Meaning | Compared |
 |---|---|---|
 | `deterministic` | The same inputs give the same count on every run and backend: simulation counts at a pinned tick, and the GPU counts of one submission. | Across backends in one run, and between two reports. |
-| `per-backend-deterministic` | The same on every run of one backend: the GPU objects a node creates, and the counts of a pass whose work follows the device (the SDF engine's `upload`, which follows its residency policy). | Between two reports, backend by backend. |
+| `per-backend-deterministic` | The same on every run of one backend: the GPU objects a node creates, the march steps and texels written the SDF kernels count, and the counts of a pass whose work follows the device (the SDF engine's `bricks` and `upload`, which follow its residency policy). | Between two reports, backend by backend. |
 | `pacing` | Depends on timing or on state outside the run: which submission a read lands on, skipped presents, the compile cache's hits. | Never. |
 | `allocation-zero-nonzero` | A managed-allocation reading from `AllocationWindow.Measure` over a named window (`world.counters.read`), recorded with the GC mode. | Only as zero or not zero. |
 
@@ -1442,9 +1443,41 @@ moved, or a class that moved is a difference. It prints one line per
 difference, naming the backend, class, kind, pass and node. When the reports ran
 different sources, a note on standard error says so.
 
-Exit codes: `puck counters` exits 0 when the backends agree, 1 when a
-deterministic count or pass state differs, and 2 for a build, leg or reading
-refusal, including a missing GPU device or shader tool. `counters compare`
+### Counted-cost ceilings
+
+`--check` holds the run's report to the counted-cost ceilings in
+`tests/Puck.Counters/counters.ceilings.json`, a `puck.counters.ceilings.v1`
+document whose schema, `tests/Puck.Counters/puck.counters.ceilings.v1.schema.json`,
+`puck schema` generates. For each backend, recorded on one device at the
+workload's resolution, the file states what every render node's GPU submission
+kinds may read, pass by pass and outside every pass: each deterministic or
+per-backend-deterministic count reads at most its ceiling, and a ceiling of zero
+is a required zero. The SDF view's march steps (`gpu.march.steps`) and texels
+written (`gpu.texels.written`), which its kernels count on the GPU, are among
+them, so a pass that cannot do such work (`sdf.world$cull-args` marches
+nothing) and a pass the floor tier skips (the shadow and ambient passes, and
+the mesh pass of a meshless frame) hold required zeros. A per-backend-deterministic
+count is judged only on the device the backend's ceilings were recorded on; on
+any other, one line says how many were not judged. The run prints one line for
+each count over its ceiling, each required zero broken and each count no ceiling
+was recorded for, naming its backend, class, kind, pass and node, then whether
+the ceilings hold.
+
+`--record` writes the run's counts as the ceilings instead, each reading its own
+ceiling. A ceiling is re-recorded only in the change that explains why its count
+moved, never from wall-clock or GPU timing. `--ceilings <file>` names another
+ceilings file for either option.
+
+```text
+puck counters --check [--ceilings <file>]   hold the counts to their ceilings
+puck counters --record [--ceilings <file>]  record the counts as the ceilings
+```
+
+Exit codes: `puck counters` exits 0 when the backends agree and every judged
+count holds its ceiling, 1 when a deterministic count or pass state differs or a
+ceiling fails, and 2 for a build, leg or reading refusal, including a missing GPU
+device or shader tool, or a ceilings file that is missing or not a ceilings
+document. `counters compare`
 exits 0 when every comparable count agrees, 1 on a difference, and 2 for a usage
 error or a file that is not a readable report.
 
@@ -2121,7 +2154,8 @@ describes. The same run writes the projection schema beside the root
 (`puck.world.projection.v1.schema.json`), the silo document's schema
 (`src/Puck.World.Silo/Assets/puck.silo.configuration.v1.schema.json`), and the
 schema of the report `puck counters` writes
-(`tests/Puck.Counters/puck.counters.report.v1.schema.json`), the schema of the
+(`tests/Puck.Counters/puck.counters.report.v1.schema.json`) and of the ceilings
+it checks (`tests/Puck.Counters/puck.counters.ceilings.v1.schema.json`), the schema of the
 release profile `puck qualify` reads
 (`tests/Puck.Qualification/puck.release.profile.v1.schema.json`), and the
 frame-graph schema (`src/Puck.Shaders/Assets/puck.render.graph.v1.schema.json`). Running `puck schema` also DELETES any section file the current

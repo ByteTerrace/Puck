@@ -57,6 +57,9 @@ void CSMain(uint threadIndex : SV_GroupIndex) {
 
     GroupMemoryBarrierWithGroupSync();
 
+    // The reduction walks no field and writes no texel: the pass counts nothing, so its row stays zero.
+    sdfCountWork(0u);
+
     if (0u != threadIndex) {
         return;
     }

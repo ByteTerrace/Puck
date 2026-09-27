@@ -589,6 +589,15 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                     planned: plan.Passes[i]
                 );
             }
+            if (plan.CountsKernelWork) {
+                m_passes[0].KernelCounters = new GpuKernelCounters(
+                    buffers: m_gpu.BufferFactory,
+                    owner: m_name,
+                    part: "kernel counters",
+                    rows: plan.Passes.Count,
+                    slots: ((int)m_inFlight)
+                );
+            }
             // The preview the selected output publishes through is part of the graph: an external selection
             // was built with its targets and pipelines, and gets its descriptors and command pools here, before the
             // installed graph retires.

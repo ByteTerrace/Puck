@@ -115,6 +115,9 @@ public static class SdfWorldPackage {
     /// <summary>The pass-group value set to one to march past the beam's per-tile far bound to the far distance
     /// (<c>uint</c>).</summary>
     public const string DisableFarBound = "disableFarBound";
+    /// <summary>The pass-group value holding the pass's row of the work counters (<see cref="WorkCounters"/>): its
+    /// index in its instance's passes (<see cref="GpuKernelCounterRow.Row"/>) (<c>uint</c>).</summary>
+    public const string WorkCounterRow = "workCounterRow";
     /// <summary>The pass-group block array holding the frame's environment, <c>SdfEnvironment</c>'s lane table row for row
     /// with its host bakes, <see cref="EnvironmentRows"/> <c>float4</c> rows.</summary>
     public const string Environment = "environment";
@@ -145,6 +148,9 @@ public static class SdfWorldPackage {
     public const string VisibilityRecords = "sdfVisibilityRecords";
     /// <summary>The visibility records, written by primary, surface and ambient.</summary>
     public const string VisibilityRecordsWritten = "sdfVisibilityRecordsRW";
+    /// <summary>The work counters every compute pass adds its march steps and texels written to, a row a pass
+    /// (<see cref="GpuKernelCounters"/>): the node's counter buffer for the frame slot.</summary>
+    public const string WorkCounters = "sdfWorkCountersRW";
     /// <summary>The view's output image, written by sky and views.</summary>
     public const string Output = "output";
     /// <summary>The screen-surface table, three float4 rows per screen slot.</summary>
@@ -275,6 +281,7 @@ public static class SdfWorldPackage {
         Value(name: FastSoftShadowMarch, type: ShaderValueType.Uint),
         Value(name: FastAmbientOcclusion, type: ShaderValueType.Uint),
         Value(name: DisableFarBound, type: ShaderValueType.Uint),
+        Value(name: WorkCounterRow, type: ShaderValueType.Uint),
         ShaderInterfaceMember.Value(
             group: ShaderInterfaceGroup.Pass,
             length: EnvironmentRows,
@@ -309,7 +316,8 @@ public static class SdfWorldPackage {
         WorldImage(name: MeshEmission),
     ];
     /// <summary>Gets what every compute pass of the fragment reads: from its pass group, beside the extent, the values
-    /// (<see cref="Values"/>), the view's scratch, its output, the screens it shows and the mesh target; and the World
+    /// (<see cref="Values"/>), the view's scratch, its output, the screens it shows, the mesh target and the work counters;
+    /// and the World
     /// group's members (<see cref="Tables"/>).</summary>
     public static IReadOnlyList<ShaderInterfaceMember> Members { get; } = [
         .. Values,
@@ -339,10 +347,12 @@ public static class SdfWorldPackage {
             name: MeshVisibility,
             type: ShaderValueType.Float4
         ),
+        Written(element: ShaderValueType.Uint, name: WorkCounters),
         .. Tables,
     ];
     /// <summary>Gets the fragment the package runs as: one view's dispatch set, its scratch transient and counted, its
-    /// one output the view's color.</summary>
+    /// one output the view's color. Every compute pass counts its kernels' march steps and texels written into the work
+    /// counters (<see cref="RenderGraphFragmentPass.CountsKernelWork"/>); the mesh pass, a draw, counts none.</summary>
     public static RenderGraphPackageFragment Fragment { get; } = new(
         InputVersions: [],
         OutputVersions: [Color],
@@ -455,7 +465,9 @@ public static class SdfWorldPackage {
         StrideBytes: VisibilityRecordByteLength,
         Transient: (from is null)
     );
+    // A compute pass, whose kernel counts its own work (RenderGraphFragmentPass.CountsKernelWork).
     private static RenderGraphFragmentPass Pass(string name, string[] outputs, string[]? inputs = null) => new(
+        CountsKernelWork: true,
         InputAccesses: [.. (inputs ?? []).Select(selector: static _ => RenderGraphPortAccess.ComputeRead)],
         Inputs: [.. (inputs ?? []).Select(selector: static input => new ResourceReference(Name: input))],
         Name: name,

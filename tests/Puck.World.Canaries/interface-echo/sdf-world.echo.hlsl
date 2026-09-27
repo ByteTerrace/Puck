@@ -1,4 +1,4 @@
-// The echo pass of shader interface 'sdf-world' (sha256/a9b731dccc81cabaf6af7daf1b222bc4d3d9d17eb1d9a568df7946f7e797d671), generated from the interface; never edit it.
+// The echo pass of shader interface 'sdf-world' (sha256/038b27c6e1d7bc48be4d23f9275d84cfa1a19123568e27376ad01dbee012f34d), generated from the interface; never edit it.
 // Pixel i of 'echo' is green when every word of the ith block member, in set order, reads back as the sentinel the host wrote there.
 #include "sdf-world.interface.hlsli"
 
@@ -61,4 +61,5 @@ void main(uint3 id : SV_DispatchThreadID) {
     echo[uint2(51, 0)] = ((asuint(passGroup.viewRight.x) == 0x401113A5u) && (asuint(passGroup.viewRight.y) == 0x401123A5u) && (asuint(passGroup.viewRight.z) == 0x401133A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
     echo[uint2(52, 0)] = ((asuint(passGroup.viewUp.x) == 0x401153A5u) && (asuint(passGroup.viewUp.y) == 0x401163A5u) && (asuint(passGroup.viewUp.z) == 0x401173A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
     echo[uint2(53, 0)] = ((asuint(passGroup.viewportCount) == 0x401183A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(54, 0)] = ((asuint(passGroup.workCounterRow) == 0x401193A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
 }

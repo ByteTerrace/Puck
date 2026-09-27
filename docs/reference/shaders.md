@@ -1546,7 +1546,14 @@ it takes. The node wraps every GPU service it holds once, so each dispatch,
 draw, barrier, bind, descriptor write, push-constant byte and clear it records
 is counted where it is made, into the pass being recorded. The zero clears that
 start the first frame after an install or a reset count in the first pass. The
-preview and the output transitions count outside every pass. What the
+preview and the output transitions count outside every pass. A graph a package
+pass of which counts its kernels' own work (`RenderGraphFragmentPass.CountsKernelWork`,
+every compute pass of `sdf.world`) keeps a counter buffer and a readback buffer
+per frame slot, one row a pass (`GpuKernelCounters`); the node clears the slot's
+counters ahead of the first pass and copies them to its readback behind the
+last, which counts one clear, one copy and two buffer barriers outside every
+pass, and the ledger adds each row's `gpu.march.steps` and `gpu.texels.written`
+to its pass once the submission completes. What the
 node does between submissions to install or rebuild a graph, the sets it
 writes and the pass blocks it sends to every frame slot, counts in no
 submission, whether the install succeeds, fails partway or follows a device

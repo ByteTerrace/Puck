@@ -19,6 +19,8 @@ float3 sdfSoftenedNormal(float3 p, uint instanceMaskBase) {
         (k.yxy * mapDistanceMasked(p + (k.yxy * e), instanceMaskBase)) +
         (k.xxx * mapDistanceMasked(p + (k.xxx * e), instanceMaskBase));
 
+    sdfWorkSteps += 4u;
+
     return sdfSafeNormalize(sum);
 }
 

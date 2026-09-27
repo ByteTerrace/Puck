@@ -7,8 +7,10 @@ two egress families, `puck.world.projection.v1` (`WorldProjection.cs`) and
 a world hands a peer instead of itself. It also carries `puck.counters.report.v1`
 (`WorldCountersReport.cs`), the report
 [`puck counters`](../../docs/reference/cli.md#puck-counterswork-counter-collector)
-writes about a World run, so the report shares the document context's strictness
-and schema generation. It contains no rendering, no input
+writes about a World run, and `puck.counters.ceilings.v1`
+(`WorldCountersCeilings.cs`), the counted-cost ceilings `puck counters --check`
+holds that run to, so both share the document context's strictness and schema
+generation. It contains no rendering, no input
 handling, and no server logic; it exists so the data the simulation runs on
 remains independent of presentation. It also carries the
 document-embedded vocabulary that a document's own rows type themselves

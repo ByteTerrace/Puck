@@ -158,7 +158,10 @@ public sealed record RenderGraphPackage(string Id, IReadOnlyList<RenderGraphPack
 /// <param name="OutputAccesses">How it writes each of <paramref name="Outputs"/>, one write access per output.</param>
 /// <param name="Dispatch">Its dispatch shape: <see langword="null"/> or <see cref="ShaderPipelineDispatchKind.Extent"/>
 /// for one invocation per pixel, fixed groups, or an indirect dispatch whose arguments one of its versions holds.</param>
-public sealed record RenderGraphFragmentPass(string Name, IReadOnlyList<ResourceReference> Inputs, IReadOnlyList<RenderGraphPortAccess> InputAccesses, IReadOnlyList<ResourceReference> Outputs, IReadOnlyList<RenderGraphPortAccess> OutputAccesses, ShaderPipelineDispatch? Dispatch = null);
+/// <param name="CountsKernelWork">Whether its kernels count their own work into the node's counter buffers
+/// (<see cref="GpuKernelCounters"/>): the node then clears and copies them around its frame's passes, and hands the pass
+/// its row (<see cref="RenderGraphPackageRecording.WorkCounters"/>).</param>
+public sealed record RenderGraphFragmentPass(string Name, IReadOnlyList<ResourceReference> Inputs, IReadOnlyList<RenderGraphPortAccess> InputAccesses, IReadOnlyList<ResourceReference> Outputs, IReadOnlyList<RenderGraphPortAccess> OutputAccesses, ShaderPipelineDispatch? Dispatch = null, bool CountsKernelWork = false);
 /// <summary>The passes a package runs as. The graph compiler splices them into a graph in place of each pass naming the
 /// package: each fragment pass becomes a package pass named <c>&lt;pass&gt;$&lt;fragment pass&gt;</c>, each fragment
 /// resource a version named <c>&lt;pass&gt;$&lt;resource&gt;</c>, a name standing for an input port the version the pass

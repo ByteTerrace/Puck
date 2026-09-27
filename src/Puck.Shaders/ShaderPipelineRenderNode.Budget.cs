@@ -10,8 +10,8 @@ namespace Puck.Shaders;
 // and per fullscreen pass that reads the Position input, one constant buffer per frame slot for the frame group's block
 // and for each pass's pass block (ConstantBytes), the buffers of every host-written region the graph reads (each package
 // pass's regions, its row regions under the rows bound when it is built, and each host buffer port's, GpuRegion.BytesOf
-// under the device's residency choice, a port's whether or not a host has bound it yet), and one preview image per
-// frame slot.
+// under the device's residency choice, a port's whether or not a host has bound it yet), the kernel counters of a graph
+// whose kernels count their own work (KernelCounterBytes), and one preview image per frame slot.
 // ShaderPipelineRenderNode.Retirement.cs's LiveBytes counts the same kinds from a replaced graph's objects. The capture
 // readback is the node's, not a graph's: it creates its staging buffer on the first capture, sized to the published
 // surface, and OwnedBytes counts it from then on, so every later replacement's peak includes it. Like every other count
@@ -139,11 +139,20 @@ public sealed partial class ShaderPipelineRenderNode {
             }
         }
 
-        return checked((bytes + ConstantBytes(
+        return checked(((bytes + ConstantBytes(
+            inFlight: inFlight,
+            plan: plan
+        )) + KernelCounterBytes(
             inFlight: inFlight,
             plan: plan
         )));
     }
+    // The bytes of the kernel counters of a graph a pass of which counts its kernels' work: per frame slot a counter
+    // buffer and a readback buffer, one row a pass each (GpuKernelCounters).
+    private static ulong KernelCounterBytes(ShaderPipelinePlan plan, uint inFlight) =>
+        (plan.CountsKernelWork
+            ? checked(((((ulong)inFlight) * 2UL) * (((ulong)plan.Passes.Count) * ((ulong)GpuKernelCounters.RowBytes))))
+            : 0UL);
     // The bytes of the constant buffers a graph's passes bind, one per frame slot: the frame group's block, which every
     // pass shares, and each pass's own pass block, each in whole constant-buffer views.
     private static ulong ConstantBytes(ShaderPipelinePlan plan, uint inFlight) {

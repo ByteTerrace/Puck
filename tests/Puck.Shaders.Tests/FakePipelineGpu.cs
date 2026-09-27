@@ -69,7 +69,8 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     public List<(nint Handle, GpuBufferUsage Usage, byte[] Data)> GeometryBuffers { get; } = [];
     /// <summary>Gets every graphics pipeline created, with the render pass and description it was created for.</summary>
     public List<(GpuRenderPassDescription Pass, GpuGraphicsPipelineDescription Description)> GraphicsPipelines { get; } = [];
-    /// <summary>Gets the ordered creations, fence waits, device drains and disposals, while <see cref="Recording"/> is on.</summary>
+    /// <summary>Gets the ordered creations, fence waits, device drains, disposals, buffer clears and buffer copies, while
+    /// <see cref="Recording"/> is on.</summary>
     public List<string> Events { get; } = [];
     /// <summary>Gets every descriptor write while <see cref="Recording"/> is on, in writing order: the set, the binding,
     /// and the image view or buffer handle written.</summary>
@@ -89,7 +90,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     /// <summary>Gets or sets whether the queue holds every submission unfinished: while set, no fence reads as
     /// signaled, though a wait still returns at once.</summary>
     public bool QueueHeld { get; set; }
-    /// <summary>Gets or sets whether <see cref="CreateReadback"/> creates a readback. Unset, it throws, so a capture
+    /// <summary>Gets or sets whether <see cref="CreateReadback()"/> creates a readback. Unset, it throws, so a capture
     /// that reaches the published image fails there. Set, each read creates a staging buffer of the read's width times
     /// its height times its texel size, counted in <see cref="LiveBytes"/>, and replaces it when a read's size differs.</summary>
     public bool ReadbackSupported { get; set; }
@@ -243,9 +244,10 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     public void BindIndexBuffer(nint commandBufferHandle, nint bufferHandle, ulong offsetBytes, ulong sizeBytes, GpuIndexFormat format) => RecordGraphics(buffer: bufferHandle, command: ((format == GpuIndexFormat.UInt16) ? "indices16" : "indices32"), count: 0, offsetBytes: offsetBytes, sizeBytes: sizeBytes);
     public void BindPipeline(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineHandle) { }
     public void BindVertexBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes, uint strideBytes) => RecordGraphics(buffer: bufferHandle, command: "vertices", count: strideBytes, offsetBytes: 0, sizeBytes: sizeBytes);
-    public void ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) { }
+    public void ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) => Record(text: $"clear buffer {bufferHandle}");
     public void ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) => ClearedImages.Add(item: imageHandle);
     public void CopyImage(nint commandBufferHandle, nint sourceImageHandle, nint destinationImageHandle, uint width, uint height) => CopiedImages.Add(item: (sourceImageHandle, destinationImageHandle));
+    public void CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes) => Record(text: $"copy buffer {sourceBufferHandle} to {destinationBufferHandle}");
     public IGpuCommandPool Create(in GpuObjectName name) => new FakeCommandPool(created: Create(kind: "command pool"));
     public IGpuComputePipeline Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description, in GpuObjectName name) => new FakePipeline(
         created: CreateCompiled(kind: "compute pipeline"),
@@ -372,6 +374,13 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         );
     }
     public IGpuBuffer CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => new FakeBuffer(
+        created: Create(
+            bytes: sizeBytes,
+            kind: "buffer"
+        ),
+        sizeBytes: sizeBytes
+    );
+    public IGpuReadbackBuffer CreateReadback(ulong sizeBytes, in GpuObjectName name) => new FakeBuffer(
         created: Create(
             bytes: sizeBytes,
             kind: "buffer"
@@ -613,12 +622,13 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         public override string ToString() => $"#{Number} {Kind} (disposed {DisposeCount}x)";
     }
 
-    private sealed class FakeBuffer(Created created, ulong sizeBytes) : IGpuStorageBuffer {
+    private sealed class FakeBuffer(Created created, ulong sizeBytes) : IGpuStorageBuffer, IGpuReadbackBuffer {
         public nint BufferHandle => created.Handle;
         public ulong SizeBytes => sizeBytes;
 
         public void Dispose() => created.Dispose();
         public void Write<T>(ReadOnlySpan<T> data) where T : unmanaged => throw new NotSupportedException();
+        public void Read(Span<byte> destination) => destination.Clear();
         public void Write<T>(ReadOnlySpan<T> data, ulong destinationOffsetBytes) where T : unmanaged => throw new NotSupportedException();
     }
     // A host-visible buffer: the bytes a host write puts in it, which a law reads back as the GPU would.

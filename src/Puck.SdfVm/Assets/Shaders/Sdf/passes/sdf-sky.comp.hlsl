@@ -43,4 +43,5 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     color = shadeVolumes(color, view.position.xyz, rayDirection, worldFarDistance(view), id.xy, view.position.w);
 
     output[id.xy] = float4(color, 1.0);
+    sdfCountWork(1u);
 }

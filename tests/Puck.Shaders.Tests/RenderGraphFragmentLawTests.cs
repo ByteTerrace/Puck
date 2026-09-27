@@ -10,9 +10,11 @@ namespace Puck.Shaders.Tests;
 /// bound output that forwards anything itself is refused. A transient storage is refused when anything could read what
 /// an earlier frame left in it, and a node allocates it once while every other storage it owns is allocated once per
 /// frame slot. A counted buffer is allocated at its count resolved against the node's counter at the extent it is built
-/// for, and the installed graph is rebuilt at the new size when the counter's revision moves.
+/// for, and the installed graph is rebuilt at the new size when the counter's revision moves. A graph a fragment pass of
+/// which counts its kernels' work keeps kernel counters, clears them ahead of every pass and copies them behind the last.
 /// </summary>
 public sealed class RenderGraphFragmentLawTests {
+    private const string Counting = "test.counting";
     private const ulong Elements = 5;
     private const uint Extent = 32;
     private const string Fragmented = "test.fragment";
@@ -69,8 +71,43 @@ public sealed class RenderGraphFragmentLawTests {
         Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite)],
         Summary: "A three-pass fragment."
     );
+    // A fragment of two passes, the first of whose kernels count their own work: the first writes a color the second
+    // continues into the output port's version.
+    private static RenderGraphPackage CountingPackage { get; } = new(
+        Fragment: new RenderGraphPackageFragment(
+            InputVersions: [],
+            OutputVersions: ["final"],
+            Passes: [
+                new RenderGraphFragmentPass(
+                    CountsKernelWork: true,
+                    InputAccesses: [],
+                    Inputs: [],
+                    Name: "count",
+                    OutputAccesses: [RenderGraphPortAccess.ComputeWrite],
+                    Outputs: ["color"]
+                ),
+                new RenderGraphFragmentPass(
+                    InputAccesses: [],
+                    Inputs: [],
+                    Name: "plain",
+                    OutputAccesses: [RenderGraphPortAccess.ComputeWrite],
+                    Outputs: ["final"]
+                ),
+            ],
+            Resources: [
+                Image(name: "color"),
+                Image(from: "color", name: "final"),
+            ]
+        ),
+        Id: Counting,
+        Inputs: [],
+        Members: [],
+        Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite)],
+        Summary: "A two-pass fragment whose first pass counts its kernels' work."
+    );
     private static RenderGraphPackageCatalog Catalog { get; } = new(packages: [
         FragmentPackage,
+        CountingPackage,
         new RenderGraphPackage(
             Id: Writer,
             Inputs: [],
@@ -347,12 +384,77 @@ public sealed class RenderGraphFragmentLawTests {
         Assert.False(condition: node.IsReady);
         Assert.Contains(expectedSubstring: "'scratch'", actualString: node.LastSwapError?.Message);
     }
+    // A graph a pass of which counts its kernels' work keeps a counter and a readback buffer a frame slot, one 16-byte row a
+    // pass. Every frame clears the slot's counters ahead of every pass and copies them into its readback behind the last,
+    // each with its buffer barrier, and hands the counting pass its row; a pass that does not count gets none, and a graph
+    // with no counting pass keeps no counters.
+    [Fact]
+    public void AFrameClearsItsKernelCountersAheadOfEveryPassAndCopiesThemBehindTheLast() {
+        var plan = Plan(definition: Graph(
+            outputs: ["out"],
+            packages: new RenderGraphPackagePass(
+                Name: "counted",
+                Outputs: ["out"],
+                Package: Counting
+            ),
+            resources: [Image(name: "out")]
+        ));
 
-    private static ShaderPipelineRenderNode Node(FakePipelineGpu gpu, RenderGraphPlan plan, IShaderPipelineStorageCounter? counter) {
+        Assert.True(condition: plan.Pipeline.CountsKernelWork);
+        Assert.Equal(
+            actual: plan.Pipeline.Passes.Select(selector: static pass => (pass.Name, pass.Package!.CountsKernelWork)),
+            expected: [("counted$count", true), ("counted$plain", false)]
+        );
+        Assert.False(condition: Plan(definition: Chain(buffer: Buffer(name: "scratch", transient: true))).Pipeline.CountsKernelWork);
+
+        var gpu = new FakePipelineGpu();
+        var recordings = new List<(string Pass, GpuKernelCounterRow? Counters)>();
+        using var node = Node(counter: null, gpu: gpu, plan: plan, recordings: recordings);
+
+        node.ProduceUntilInstalled();
+
+        // Three frame slots of a counter and a readback, two rows of 16 bytes each.
+        var rowBytes = ((ulong)(2 * GpuKernelCounters.RowBytes));
+
+        Assert.Equal(
+            actual: gpu.CreatedObjects.Count(predicate: created => ((created.Kind == "buffer") && (created.Bytes == rowBytes))),
+            expected: 6
+        );
+
+        gpu.Recording = true;
+        recordings.Clear();
+        node.ProduceFrame(context: default);
+
+        var counted = recordings.Single(predicate: static recording => (recording.Pass == "counted$count")).Counters!.Value;
+        var counter = counted.Buffer.BufferHandle;
+
+        Assert.Equal(actual: counted.Row, expected: 0U);
+        Assert.Null(@object: recordings.Single(predicate: static recording => (recording.Pass == "counted$plain")).Counters);
+
+        var frame = gpu.Events.Where(predicate: static line => (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "clear buffer") || line.StartsWith(comparisonType: StringComparison.Ordinal, value: "copy buffer") || line.StartsWith(comparisonType: StringComparison.Ordinal, value: "record "))).ToArray();
+
+        Assert.Equal(actual: frame[0], expected: $"clear buffer {counter}");
+        Assert.Equal(actual: frame[1..^1], expected: ["record counted$count", "record counted$plain"]);
+        Assert.StartsWith(actualString: frame[^1], expectedStartString: $"copy buffer {counter} to ");
+        Assert.Equal(
+            actual: gpu.Barriers.Where(predicate: barrier => (barrier.Handle == counter)).Select(selector: static barrier => (barrier.Barrier.SourceAccess, barrier.Barrier.DestinationAccess)),
+            expected: [
+                (GpuAccess.TransferWrite, GpuAccess.ShaderRead | GpuAccess.ShaderWrite),
+                (GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuAccess.TransferRead),
+            ]
+        );
+        Assert.Equal(
+            actual: (Owned: node.OwnedBytes, Steady: node.InstalledAccount.SteadyBytes),
+            expected: (Owned: gpu.LiveBytes, Steady: gpu.LiveBytes)
+        );
+    }
+
+    private static ShaderPipelineRenderNode Node(FakePipelineGpu gpu, RenderGraphPlan plan, IShaderPipelineStorageCounter? counter, List<(string Pass, GpuKernelCounterRow? Counters)>? recordings = null) {
         var packages = new RenderGraphPackageRecorders();
 
         packages.Register(factory: new Silent(counter: counter), package: Writer);
         packages.Register(factory: new Silent(counter: null), package: Reader);
+        packages.Register(factory: new Silent(counter: null, gpu: gpu, recordings: recordings), package: Counting);
 
         var node = new ShaderPipelineRenderNode(
             deviceContext: gpu,
@@ -396,8 +498,9 @@ public sealed class RenderGraphFragmentLawTests {
             Instances = Instances,
         };
     }
-    // A package that builds nothing and records nothing but says it drew, counting its instance's storages by a counter.
-    private sealed class Silent(IShaderPipelineStorageCounter? counter) : IRenderGraphPackageFactory {
+    // A package that builds nothing and records nothing but says it drew, counting its instance's storages by a counter,
+    // and, given a list, noting each recording's pass and work counters in it and in the device's events.
+    private sealed class Silent(IShaderPipelineStorageCounter? counter, FakePipelineGpu? gpu = null, List<(string Pass, GpuKernelCounterRow? Counters)>? recordings = null) : IRenderGraphPackageFactory {
         public IShaderPipelineStorageCounter? CounterOf(string instance) => counter;
         public IDisposable? Build(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) {
             if (counter is not Counter control) {
@@ -416,15 +519,27 @@ public sealed class RenderGraphFragmentLawTests {
                 control.InstalledRevisions.Add(item: revision.Revision);
             }
 
-            return new Recorder();
+            return new Recorder(
+                gpu: gpu,
+                pass: context.Pass,
+                recordings: recordings
+            );
         }
 
         private sealed record Built(long Revision) : IDisposable {
             public void Dispose() { }
         }
-        private sealed class Recorder : IRenderGraphPackageRecorder {
+        private sealed class Recorder(FakePipelineGpu? gpu, string pass, List<(string Pass, GpuKernelCounterRow? Counters)>? recordings) : IRenderGraphPackageRecorder {
             public void Dispose() { }
-            public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) => RenderGraphPackageOutcome.Drew;
+            public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
+                recordings?.Add(item: (pass, recording.WorkCounters));
+
+                if (gpu is { Recording: true }) {
+                    gpu.Events.Add(item: $"record {pass}");
+                }
+
+                return RenderGraphPackageOutcome.Drew;
+            }
         }
     }
 }

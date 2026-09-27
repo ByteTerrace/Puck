@@ -62,13 +62,23 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
         );
     }
     // Records every pass into the frame's list inside its own ledger pass. A pass that throws leaves its submission
-    // unsealed, so the partial record is dropped rather than published under a pass that never finished.
+    // unsealed, so the partial record is dropped rather than published under a pass that never finished. The kernel
+    // counters of a graph that counts are cleared ahead of every pass and copied into the slot's readback behind them,
+    // outside every pass, and the ledger reads that slot once this submission completes.
     private void RecordPasses(nint command, in FrameContext context, int slot) {
         var passes = m_passes;
+        var counters = ((passes.Length > 0)
+            ? passes[0].KernelCounters
+            : null);
 
         WriteFrameGroup(slot: slot);
 
         try {
+            counters?.RecordClear(
+                commandBuffer: command,
+                recorder: m_gpu.Recorder,
+                slot: slot
+            );
             for (var index = 0; (index < passes.Length); index++) {
                 m_work.EnterPass(pass: index);
                 Record(
@@ -78,6 +88,17 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
                     slot: slot
                 );
                 m_work.LeavePass();
+            }
+            if (counters is not null) {
+                counters.RecordCopy(
+                    commandBuffer: command,
+                    recorder: m_gpu.Recorder,
+                    slot: slot
+                );
+                m_work.ReadOnCompletion(
+                    readback: counters,
+                    slot: slot
+                );
             }
         } catch {
             m_work.Invalidate();

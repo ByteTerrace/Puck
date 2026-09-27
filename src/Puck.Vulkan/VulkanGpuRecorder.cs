@@ -207,6 +207,15 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
         );
     }
     /// <inheritdoc/>
+    public void CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes) =>
+        recordingApi.CopyBuffer(
+            commandBufferHandle: commandBufferHandle,
+            destinationBufferHandle: destinationBufferHandle,
+            device: Device,
+            sizeBytes: sizeBytes,
+            sourceBufferHandle: sourceBufferHandle
+        );
+    /// <inheritdoc/>
     public void ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) {
         if (format is not (GpuPixelFormat.R8G8B8A8Unorm or GpuPixelFormat.B8G8R8A8Unorm or GpuPixelFormat.R16G16B16A16Float or GpuPixelFormat.R32G32B32A32Float)) {
             throw new ArgumentOutOfRangeException(

@@ -521,6 +521,8 @@ public sealed record ShaderPipelinePass(
 /// (<see cref="RenderGraphPackage.PushesIndex"/>), which its interface declares.</param>
 /// <param name="Part">The fragment pass it runs (<see cref="RenderGraphFragmentPass.Name"/>), or <see langword="null"/>
 /// for a package that runs as one pass.</param>
+/// <param name="CountsKernelWork">Whether its kernels count their own work into the node's counter buffers
+/// (<see cref="RenderGraphFragmentPass.CountsKernelWork"/>).</param>
 public sealed record ShaderPipelinePackagePass(
     string Name,
     string Package,
@@ -532,7 +534,8 @@ public sealed record ShaderPipelinePackagePass(
     ShaderPipelineDispatch? Dispatch = null,
     IReadOnlyDictionary<string, ShaderConfigField>? Config = null,
     bool PushesIndex = false,
-    string? Part = null
+    string? Part = null,
+    bool CountsKernelWork = false
 ) {
     // Whether each port access is declared once per reference, reads on the inputs and writes on the outputs.
     internal bool HasValidAccesses => (

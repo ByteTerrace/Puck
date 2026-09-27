@@ -47,6 +47,31 @@ public sealed class DirectXBufferStatesLawTests {
             expected: 2
         );
     }
+    // A node's kernel counters: cleared (a UAV clear), added to by every pass, then copied to a readback. The clear's
+    // barrier stays in UNORDERED_ACCESS, and the copy's moves the buffer into COPY_SOURCE.
+    [Fact]
+    public void AKernelCounterBufferIsClearedAsAUavAndCopiedFromCopySource() {
+        var states = new DirectXBufferStates();
+        var afterClear = states.Plan(
+            after: DirectXBufferStates.RequiredState(access: (GpuAccess.ShaderRead | GpuAccess.ShaderWrite), stages: GpuStage.ComputeShader),
+            bufferHandle: ArgsBuffer,
+            firstState: DirectXBufferStates.RequiredState(access: GpuAccess.TransferWrite, stages: GpuStage.Transfer)
+        );
+        var beforeCopy = states.Plan(
+            after: DirectXBufferStates.RequiredState(access: GpuAccess.TransferRead, stages: GpuStage.Transfer),
+            bufferHandle: ArgsBuffer,
+            firstState: UnorderedAccess
+        );
+
+        Assert.Equal(
+            actual: afterClear.Kind,
+            expected: DirectXBufferBarrierKind.UnorderedAccess
+        );
+        Assert.Equal(
+            actual: (beforeCopy.Kind, beforeCopy.Before, beforeCopy.After),
+            expected: (DirectXBufferBarrierKind.Transition, UnorderedAccess, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_SOURCE)
+        );
+    }
     [Fact]
     public void EachPlacementReachesIndirectArgumentFromTheStateItIsCreatedIn() {
         var indirect = DirectXBufferStates.RequiredState(access: GpuAccess.IndirectCommandRead, stages: GpuStage.ComputeShader);

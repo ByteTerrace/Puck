@@ -71,10 +71,18 @@ public static class SdfFrameBlock {
     private static readonly int ViewRight = Offset(member: SdfWorldPackage.ViewRight);
     private static readonly int ViewUp = Offset(member: SdfWorldPackage.ViewUp);
     private static readonly int ViewportCount = Offset(member: SdfWorldPackage.ViewportCount);
+    private static readonly int WorkCounterRow = Offset(member: SdfWorldPackage.WorkCounterRow);
 
     /// <summary>Gets the bytes of the pass block, a multiple of 16.</summary>
     public static int SizeBytes => ((int)Layout.SizeBytes);
 
+    /// <summary>Writes the pass's row of the work counters into its pass block (<see cref="SdfWorldPackage.WorkCounterRow"/>),
+    /// which <see cref="Write"/> leaves alone: the row names the pass, never what the view renders from, so a view's
+    /// signature (<see cref="SdfWorldTables.ViewSignature"/>) never reads it.</summary>
+    /// <param name="block">The pass block, at least <see cref="SizeBytes"/> bytes.</param>
+    /// <param name="row">The pass's row.</param>
+    public static void WriteWorkCounterRow(Span<byte> block, uint row) =>
+        WriteUInt32(block: block, offset: WorkCounterRow, value: row);
     /// <summary>Writes a view's values into a pass block: its render extent and tile grid, the frame's bound screens,
     /// instance-mask width, twinkle tick and mesh draws the tables packed, the view's camera, the far distance and the
     /// debug view mode, the frame's levers, and the environment the tables baked. The extent is not written: the node
