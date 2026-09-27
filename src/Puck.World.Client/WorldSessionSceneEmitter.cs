@@ -68,7 +68,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     // The WINDOW projection's per-produced-frame override — set by WorldScreenBinder.Publish (the one place with access
     // to both the local eye and the border pair's two face rows) before the render graph renders this view.
     // Null (the default, and every non-window session's steady state) leaves Dress on the ordinary camera path below.
-    private (CameraSnapshot Camera, Vector2 Offset)? m_windowOverride;
+    private CameraSnapshot? m_windowOverride;
 
     // Per-avatar movement-driven gait state, scratch reused across frames to keep packing allocation-free — the SAME
     // distance-driven approach Client.WorldSceneEmitter.PackDynamicTransforms uses, over this emitter's own
@@ -289,13 +289,10 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
         m_lastProgram = program;
 
-        var (camera, offset) = ((m_windowOverride is { } window)
-            ? (window.Camera, window.Offset)
-            : (ResolveCamera(
-                height: height,
-                width: width
-            ), Vector2.Zero)
-        );
+        var camera = (m_windowOverride ?? ResolveCamera(
+            height: height,
+            width: width
+        ));
 
         return new SdfFrame(
             Program: program,
@@ -308,7 +305,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
                         X: 0f,
                         Y: 0f
                     )
-                ) { AsymmetricFrustumOffset = offset }],
+                )],
             Time: 0f
         ) {
             DynamicTransforms = transforms,
@@ -461,21 +458,14 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         }
     }
     /// <summary>Sets (or clears) this frame's window camera override — the off-axis frustum
-    /// <c>WorldWindowFrustumFit.TryFitWindow</c> fit against the border pair's two face rows and the local
-    /// viewer's eye. Called once per produced frame by <c>WorldScreenBinder.Publish</c>, before the render graph renders
-    /// this session's view; <see langword="null"/> (no
+    /// <see cref="WorldWindowFrustumFit.TryFitWindow"/> fit against the border pair's two face rows and the local
+    /// viewer's eye, its shear carried as <see cref="CameraSnapshot.FrustumOffset"/>. Called once per produced frame by
+    /// <c>WorldScreenBinder.Publish</c>, before the render graph renders this session's view; <see langword="null"/> (no
     /// eye/aperture available yet, or the fit refused — see <c>SdfAsymmetricFrustum.TryFit</c>) falls back to
     /// <see cref="ResolveCamera"/>'s ordinary named/default projection for that one frame.</summary>
     /// <param name="camera">The fitted camera apexed at the mapped eye, or <see langword="null"/> to use the
     /// ordinary projection.</param>
-    /// <param name="offset">The fitted frustum's tangent-space center offset — ignored when <paramref name="camera"/>
-    /// is <see langword="null"/>.</param>
-    public void SetWindowCamera(CameraSnapshot? camera, Vector2 offset) {
-        m_windowOverride = ((camera is { } resolved)
-            ? (resolved, offset)
-            : null
-        );
-    }
+    public void SetWindowCamera(CameraSnapshot? camera) => m_windowOverride = camera;
     /// <summary>Writes three components, never their sum: the definition-delivery revision, the mirrored snapshot's
     /// declared-set/palette revision (<see cref="WorldSessionMirror.SnapshotRevision"/>, assigned from the wire and
     /// able to move down), and a counter that moves when a bound color the live build baked moves in the session's

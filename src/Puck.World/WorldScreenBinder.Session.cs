@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.Numerics;
 using Puck.SdfVm;
 using Puck.World.Client;
-using Puck.World.Server;
 
 namespace Puck.World;
 
@@ -274,77 +273,13 @@ internal sealed partial class WorldScreenBinder {
             target: out instance
         );
     }
-    // Resolves the source (local, this document) face claiming this slot's screen index, plus its portal facet's
-    // mapped counterpart and that counterpart's own derived face in the destination's mirrored document.
-    // WorldDefinitionValidator already refuses a 'window' projection whose face lacks a mapped counterpart at
-    // document-validation time, so a false return here means the destination mirror has not delivered a definition
-    // naming that face yet.
-    private static bool TryResolveWindowGeometry(WorldDefinition bootDefinition, WorldFaceCatalog localCatalog, ScreenSlot slot, SessionFeed feed, out WorldFaceGeometry source, out WorldFaceGeometry destination) {
-        source = default;
-        destination = default;
-
-        var found = false;
-        var localRow = default(WorldFaceRow);
-
-        foreach (var row in localCatalog.Rows) {
-            if (row.ScreenIndex == slot.Index) {
-                localRow = row;
-                found = true;
-
-                break;
-            }
-        }
-
-        if (!found) {
-            return false;
-        }
-
-        var placement = WorldDefinitionRows.FindPlacement(
-            placements: bootDefinition.Placements,
-            id: localRow.PlacementId
-        );
-        var face = ((placement is null)
-            ? null
-            : WorldDefinitionRows.FindPlacementFace(
-                placement: placement,
-                face: localRow.FaceName
-            )
-        );
-
-        if (
-            (face?.Portal is not { Arrival: WorldPortalArrival.Mapped, Counterpart: { } counterpart }) ||
-            !WorldPortalCounterpart.TryParse(
-            counterpart: counterpart,
-            face: out var destinationFaceName,
-            placementId: out var destinationPlacementId
-        )
-        ) {
-            return false;
-        }
-
-        var destinationCatalog = WorldFaceCatalog.For(definition: feed.Mirror.Definition);
-
-        if (!destinationCatalog.TryFind(
-            faceName: destinationFaceName,
-            placementId: destinationPlacementId,
-            row: out var destinationRow
-        )) {
-            return false;
-        }
-
-        source = WorldFaceGeometry.FromFrame(frame: localRow.Frame);
-        destination = WorldFaceGeometry.FromFrame(frame: destinationRow.Frame);
-
-        return true;
-    }
     // Recomputes every live WINDOW session's off-axis camera from this frame's local eye and the border pair's two
     // face rows — fresh every call, never cached across frames, so a placement mutation reaches the render the very
     // next produced frame.
     //
-    // The eye is read from the authoritative simulation body (WorldPopulation.EntryBody), never from
-    // hostFrame.Views: the overworld's SdfViewSnapshot camera rides a render-relative space, while
-    // WorldFaceCatalog's derived frames are in the document's absolute authored space, and mixing the two silently
-    // would fit a frustum against the wrong point. A no-op with no live window session or no resolvable local body.
+    // The eye is the primary local seat's body (WorldPopulation.EntryBody) at LocalEyeHeight, in the document's
+    // authored space, the space WorldFaceCatalog derives both apertures in. A no-op with no live window session or no
+    // resolvable local body.
     private void UpdateWindowCameras() {
         // The LOCAL (boot) document — the same "one observation door" WorldInstanceHost.BootInstanceName resolves
         // everywhere else in this type (TryResolveDestinationInstance). Absent only in a boot-sequencing gap this
@@ -376,7 +311,6 @@ internal sealed partial class WorldScreenBinder {
             z: 0f
         ));
         var bootDefinition = boot.Server.Definition;
-        var localCatalog = WorldFaceCatalog.For(definition: bootDefinition);
 
         foreach (var slot in m_slots.Values) {
             if (
@@ -387,39 +321,26 @@ internal sealed partial class WorldScreenBinder {
                 continue;
             }
 
-            var geometryOk = TryResolveWindowGeometry(
-                bootDefinition: bootDefinition,
-                destination: out var destination,
-                feed: feed,
-                localCatalog: localCatalog,
-                slot: slot,
-                source: out var source
-            );
-            var camera = default(Puck.Abstractions.Cameras.CameraSnapshot);
-            var offset = default(Vector2);
-            var fitOk = (geometryOk && WorldWindowFrustumFit.TryFitWindow(
-                camera: out camera,
-                destination: destination,
-                localEye: localEye,
-                offset: out offset,
-                source: source
-            ));
-
-            if (fitOk) {
-                emitter.SetWindowCamera(
-                    camera: camera,
-                    offset: offset
-                );
-            } else {
-                // A transient gap (the destination hasn't delivered its first definition yet, the eye stands behind
-                // the glass this frame) degrades to the emitter's own ordinary default projection for one frame
-                // rather than freezing or throwing — the SAME fallback WorldSessionSceneEmitter.ResolveCamera already
-                // takes for an unknown/absent camera name.
-                emitter.SetWindowCamera(
-                    camera: null,
-                    offset: default
-                );
-            }
+            // A transient gap (the destination has not delivered a definition naming the counterpart yet, or the eye
+            // stands behind the glass this frame) degrades to the emitter's ordinary default projection for the frame
+            // rather than freezing or throwing — the fallback WorldSessionSceneEmitter.ResolveCamera takes for an
+            // unknown or absent camera name.
+            emitter.SetWindowCamera(camera: ((
+                WorldWindowFrustumFit.TryResolveApertures(
+                    counterpart: out var destination,
+                    destination: feed.Mirror.Definition,
+                    local: bootDefinition,
+                    screenIndex: slot.Index,
+                    source: out var source
+                ) &&
+                WorldWindowFrustumFit.TryFitWindow(
+                    camera: out var camera,
+                    destination: destination,
+                    localEye: localEye,
+                    source: source
+                ))
+                ? camera
+                : null));
         }
     }
     // A session mirror never processes a destination's own screens/faces at all (WorldSessionSceneEmitter renders

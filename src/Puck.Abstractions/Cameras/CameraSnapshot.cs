@@ -5,6 +5,8 @@ namespace Puck.Abstractions.Cameras;
 
 /// <summary>An immutable, finite camera basis and projection snapshot derived by <see cref="LookAt"/>.</summary>
 public readonly record struct CameraSnapshot {
+    private readonly Vector2 m_frustumOffset;
+
     /// <summary>Initializes a finite camera snapshot from an already-derived basis and projection.</summary>
     public CameraSnapshot(Vector3 Position, Vector3 Right, Vector3 Up, Vector3 Forward, float TanHalfFieldOfView, float AspectRatio) {
         ValidateFinite(
@@ -78,6 +80,28 @@ public readonly record struct CameraSnapshot {
     public float AspectRatio { get; }
     /// <summary>Gets the normalized camera-forward basis vector.</summary>
     public Vector3 Forward { get; }
+    /// <summary>Gets the off-axis frustum's tangent-space center offset: the ray through every image point gains
+    /// <c>X·Right + Y·Up</c> as a trailing term, so the frustum shears without turning. Zero, the default, is a symmetric
+    /// camera. A border window's camera (<c>Puck.SdfVm.Views.SdfAsymmetricFrustum</c>) carries a non-zero offset, which
+    /// the SDF view pass's <c>cameraRayDirection</c>, the rasterized projection (<see cref="ViewProjection"/>) and a hit
+    /// through the camera's image (<c>Puck.Commands.SourceRay.Through</c>) all read from here.</summary>
+    /// <exception cref="ArgumentException">A component set at initialization is not finite.</exception>
+    public Vector2 FrustumOffset {
+        get => m_frustumOffset;
+        init {
+            if (
+                !float.IsFinite(f: value.X) ||
+                !float.IsFinite(f: value.Y)
+            ) {
+                throw new ArgumentException(
+                    message: "The frustum offset must be finite.",
+                    paramName: nameof(FrustumOffset)
+                );
+            }
+
+            m_frustumOffset = value;
+        }
+    }
     /// <summary>Gets the world-space camera position.</summary>
     public Vector3 Position { get; }
     /// <summary>Gets the normalized camera-right basis vector.</summary>

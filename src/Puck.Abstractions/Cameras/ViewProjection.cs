@@ -37,7 +37,8 @@ public readonly record struct ViewProjection {
     /// <summary>Gets the inverse of <see cref="WorldToClip"/>, formed analytically rather than by a general
     /// inversion.</summary>
     public Matrix4x4 ClipToWorld { get; }
-    /// <summary>Gets the off-axis frustum's tangent-space center offset; zero for a symmetric frustum.</summary>
+    /// <summary>Gets the off-axis frustum's tangent-space center offset, the camera's
+    /// <see cref="CameraSnapshot.FrustumOffset"/>; zero for a symmetric frustum.</summary>
     public Vector2 FrustumOffset { get; }
     /// <summary>Gets the near-plane distance, where depth is 1.</summary>
     public float Near { get; }
@@ -57,11 +58,8 @@ public readonly record struct ViewProjection {
     /// <summary>Creates the matrices of <paramref name="camera"/> with its previous frame equal to itself.</summary>
     /// <param name="camera">The camera basis, field of view, and aspect ratio.</param>
     /// <param name="near">The near-plane distance; positive and finite.</param>
-    /// <param name="frustumOffset">The off-axis frustum's tangent-space center offset, added to the ray through each
-    /// sample along the camera's right and up axes; zero for a symmetric frustum.</param>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="near"/> is not positive and finite, or
-    /// <paramref name="frustumOffset"/> is not finite.</exception>
-    public static ViewProjection Create(CameraSnapshot camera, float near, Vector2 frustumOffset = default) {
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="near"/> is not positive and finite.</exception>
+    public static ViewProjection Create(CameraSnapshot camera, float near) {
         if (
             !float.IsFinite(f: near) ||
             (near <= 0f)
@@ -72,17 +70,7 @@ public readonly record struct ViewProjection {
                 paramName: nameof(near)
             );
         }
-        if (
-            !float.IsFinite(f: frustumOffset.X) ||
-            !float.IsFinite(f: frustumOffset.Y)
-        ) {
-            throw new ArgumentOutOfRangeException(
-                actualValue: frustumOffset,
-                message: "The frustum offset must be finite.",
-                paramName: nameof(frustumOffset)
-            );
-        }
-
+        var frustumOffset = camera.FrustumOffset;
         var right = camera.Right;
         var up = camera.Up;
         var forward = camera.Forward;

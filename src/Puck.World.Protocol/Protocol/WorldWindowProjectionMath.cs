@@ -58,7 +58,7 @@ public readonly record struct WorldFaceGeometry(Vector3 Origin, Vector3 Right, V
 /// unaffected (it is the shared axis both apertures rotate about); Right and Normal both flip. The mapped eye lands
 /// outside the destination room (on the side its own Normal faces away from), looking in — exactly where a window's
 /// virtual eye belongs, and exactly why <c>WorldWindowFrustumFit.TryFitWindow</c> fits its off-axis frustum against
-/// <c>-destination.Normal</c> rather than <c>+destination.Normal</c>.</para>
+/// <c>-destination.Normal</c> and <c>-destination.Right</c>: the aperture as that eye sees it.</para>
 /// </remarks>
 public static class WorldWindowProjectionMath {
     /// <summary>Maps a world-space point through the source aperture's frame into the destination aperture's frame

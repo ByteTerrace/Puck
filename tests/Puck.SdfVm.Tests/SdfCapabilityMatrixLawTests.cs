@@ -96,7 +96,7 @@ public sealed class SdfCapabilityMatrixLawTests {
             Check: "puck parity (one view); the split-seats canary (two views)",
             Green: true,
             Members: [
-                "SdfFrame.Views", "SdfViewSnapshot.Camera", "SdfViewSnapshot.Region", "SdfViewSnapshot.AsymmetricFrustumOffset",
+                "SdfFrame.Views", "SdfViewSnapshot.Camera", "SdfViewSnapshot.Region",
                 "SdfWorldTables.ConeNear",
                 "SdfWorldTables.PrimaryMarchSteps", "SdfWorldView.Residency", "SdfWorldView.View", "SdfWorldRenderSpec.Width",
                 "SdfWorldRenderSpec.Height",
