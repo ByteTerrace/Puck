@@ -1046,6 +1046,8 @@ public static class WorldBootComposition {
         // below, so an offscreen boot honors the same engine-wide options and debug views a windowed one does (the
         // presentation-only console modules stay unregistered).
         services.AddSingleton<ICommandModule, WorldRenderLeverCommandModule>();
+        // world.resize: an offscreen display has no window to follow, so a script resizes it here.
+        services.AddSingleton<ICommandModule, WorldOffscreenCommandModule>();
 
         services.AddOptions<NativeWindowOptions>().Configure<WorldHostSettings, WorldDefinitionSource>(configureOptions: static (options, hostSettings, source) => {
             options.Height = ((uint)hostSettings.Height);
@@ -1074,8 +1076,8 @@ public static class WorldBootComposition {
             var hostSettings = sp.GetRequiredService<WorldHostSettings>();
 
             return new OffscreenRenderOptions(
-                Height: ((uint)hostSettings.Height),
-                Width: ((uint)hostSettings.Width)
+                height: ((uint)hostSettings.Height),
+                width: ((uint)hostSettings.Width)
             );
         });
 

@@ -33,7 +33,7 @@ reasoning behind every decision is in
 
 ## Implementation status
 
-P2, P3, P5, P7, P8, P9, P10 and P11 are complete; P1a, P1b, P4, P6 and P12 to
+P2, P3, P4, P5, P7, P8, P9, P10 and P11 are complete; P1a, P1b, P6 and P12 to
 P17 are not. The programmable compute and graphics foundation has functional GPU
 fixtures on both backends. The
 work-counting model, the GPU work ledger, and the counting wrappers live in
@@ -1874,9 +1874,9 @@ promised speedup; expected visible objects verified, not only cross-backend
 agreement; `puck search -M 0` finding no reader of the retired hit-record
 layout outside the test reference.
 
-**Build sequence.** The first eight steps have landed, including the raster pass
-and its canaries, on P7b's device-bound services, shared recorder and SDF engine
-groups. The remaining work follows below.
+**Build sequence.** Every step has landed, including the raster pass and its
+canaries, on P7b's device-bound services, shared recorder and SDF engine groups,
+and the canaries hold every scene the check names.
 
 1. P4-0, landed, the depth clear value: a depth attachment names the depth it
    clears to in `GpuDepthAttachment.ClearDepth` (1 by default, refused outside
@@ -1999,11 +1999,17 @@ groups. The remaining work follows below.
    | Camera motion | `sdf-mesh-motion`: `panned-quad-is-mesh`, `panned-block-is-sdf`, `panned-quads-old-pixels-are-background` |
    | Small and multiple viewports | the `split` layout's half-size and quarter-size slots: `half-slot-*`, `quarter-slot-*` |
    | Reduced render scale | the `half` tier, reconstructed: `scaled-*` |
-   | Full-size resize | none: an offscreen host has no resize, so it needs a host verb or a windowed leg |
+   | Full-size resize | `world.resize 1920 1080` grows the offscreen display live, and `full-near-floor-is-mesh`, `full-far-mesh-is-mesh`, `full-block-is-sdf` and `full-sky-beside-the-far-mesh-is-background` hold the frame at the new extent |
    | Bounded against unbounded traversal | every region: the oracle is the fixed-point raycast to the far distance, never stopped by a mesh |
 
-   The check's measured cost and its `puck search -M 0` sweep for the retired
-   layout are not run yet.
+   The `puck search -M 0` sweep for the retired layouts finds no reader outside
+   this plan's history: the five-row buffer and its accessors (`sdfPrimaryHits`,
+   `sdfPrimaryHitOffset`, `sdfLoadPrimaryRow`, `sdfStorePrimaryRow`), their
+   binding indices (`PrimaryHitBindingIndex`, `PrimaryHitReadBindingIndex`),
+   the twenty-word stride and the `PrimaryHit*` names, so the compact record in
+   `frame/sdf-visibility.hlsli` is the one layout. The check's measured cost is
+   held with P14's counted-cost ceilings, whose per-pass counts over the pinned
+   workload take in the `mesh` pass beside the SDF passes.
 9. P4-2e, landed, meshes wherever a creation renders. Every scene emitter
    states its draws (`ISdfSceneEmitter.MeshDraws`, the same list while none
    moved), and `SdfCompositionFrameSource` composes them in emitter order and
@@ -4282,9 +4288,9 @@ packaging, and compiled worlds in the runtime and delivery programme.
 
 **Foundation.** P2, P3 and P5 are complete. P1a and P1b stay open beside the
 rest: neither blocks P4 or releasing the foundation. P4-0, P4-1a to P4-1c and
-P4-2a to P4-2e and step 10, the visibility record's names, have landed; the check's
-remaining fixtures stay open. P6
-follows P4.
+P4-2a to P4-2e and step 10, the visibility record's names, have landed, and the
+mesh canaries hold every scene its check names, so P4 is complete; its measured
+cost is held with P14's counted-cost ceilings. P6 follows P4.
 Image-only packaging stays
 independent of placed-surface support, and shared GPU and World files have one
 owner at a time.

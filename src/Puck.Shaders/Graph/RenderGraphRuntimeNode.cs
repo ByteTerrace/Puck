@@ -9,13 +9,15 @@ namespace Puck.Shaders;
 /// <param name="context">The host's frame context.</param>
 public delegate void RenderGraphFramePreparer(in FrameContext context);
 
-/// <summary>A host's render root over a <see cref="RenderGraphRuntime"/>: each produced frame describes one display of a
-/// fixed extent showing the runtime's root over the whole display, beside the other roots and the reads the host shows
+/// <summary>A host's render root over a <see cref="RenderGraphRuntime"/>: each produced frame describes one display, whose
+/// extent the host may change between frames (<see cref="Resize"/>), showing the runtime's root over the whole
+/// display, beside the other roots and the reads the host shows
 /// that frame, and returns the root's latest completed image. It owns the runtime. A frame whose schedule and extents
 /// repeat an earlier one allocates nothing.</summary>
 public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget {
-    private readonly int m_displayHeight;
-    private readonly int m_displayWidth;
+    private int m_displayHeight;
+    private int m_displayWidth;
+
     private readonly List<RenderGraphRoot> m_roots = [];
 
     private long m_frame;
@@ -109,4 +111,25 @@ public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget 
     }
     /// <inheritdoc/>
     public void RequestCapture(FrameCaptureRequest request) => Runtime.RequestCapture(request: request);
+    /// <summary>Changes the display extent from the next produced frame on: the runtime schedules every instance's
+    /// footprint against it, so the root and every view it places render at the new extent.</summary>
+    /// <param name="width">The display's width, in pixels.</param>
+    /// <param name="height">The display's height, in pixels.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="width"/> or <paramref name="height"/> is zero or
+    /// past <see cref="int.MaxValue"/>.</exception>
+    public void Resize(uint width, uint height) {
+        ArgumentOutOfRangeException.ThrowIfZero(value: width);
+        ArgumentOutOfRangeException.ThrowIfZero(value: height);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            other: ((uint)int.MaxValue),
+            value: width
+        );
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            other: ((uint)int.MaxValue),
+            value: height
+        );
+
+        m_displayWidth = ((int)width);
+        m_displayHeight = ((int)height);
+    }
 }

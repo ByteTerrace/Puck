@@ -327,54 +327,63 @@ public sealed class SdfMeshCanaryOracleLawTests {
         );
 
         var triangles = Triangles(draws: draws);
-        var field = new SdfFieldEvaluator(program: builder.Build());
+        var program = builder.Build();
         var farDistance = FixedQ4816.FromDouble(value: WorldRenderFarDistance.Resolve(defaults: definition.Render));
         var kinds = new int[width, height];
         var sdfDistances = new double?[width, height];
         var meshDistances = new double?[width, height];
 
-        for (var y = 0; (y < height); y++) {
-            for (var x = 0; (x < width); x++) {
-                var direction = Direction(
-                    camera: camera,
-                    height: height,
-                    width: width,
-                    x: x,
-                    y: y
-                );
-                var near = (((double)SdfWorldEngine.ConeNear) / Vector3.Dot(
-                    vector1: direction,
-                    vector2: camera.Forward
-                ));
-                var marched = field.Raycast(
-                    dir: FixedVector3.FromVector3(value: direction),
-                    hit: out var hit,
-                    maxDist: (farDistance - FixedQ4816.FromDouble(value: near)),
-                    origin: FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: (camera.Position + (((float)near) * direction))))
-                );
+        // Rows cast in parallel, each worker over an evaluator of its own; every pixel writes only its own cells, so the
+        // result is the serial one.
+        _ = Parallel.For(
+            fromInclusive: 0,
+            toExclusive: height,
+            localInit: () => new SdfFieldEvaluator(program: program),
+            localFinally: static _ => { },
+            body: (y, _, field) => {
+                for (var x = 0; (x < width); x++) {
+                    var direction = Direction(
+                        camera: camera,
+                        height: height,
+                        width: width,
+                        x: x,
+                        y: y
+                    );
+                    var near = (((double)SdfWorldEngine.ConeNear) / Vector3.Dot(
+                        vector1: direction,
+                        vector2: camera.Forward
+                    ));
+                    var marched = field.Raycast(
+                        dir: FixedVector3.FromVector3(value: direction),
+                        hit: out var hit,
+                        maxDist: (farDistance - FixedQ4816.FromDouble(value: near)),
+                        origin: FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: (camera.Position + (((float)near) * direction))))
+                    );
 
-                // A march that could not prove its answer proves neither a surface nor its absence.
-                if (marched && (hit.Confidence != WorldQueryConfidence.Exact)) {
-                    kinds[x, y] = Inconclusive;
+                    // A march that could not prove its answer proves neither a surface nor its absence.
+                    if (marched && (hit.Confidence != WorldQueryConfidence.Exact)) {
+                        kinds[x, y] = Inconclusive;
 
-                    continue;
+                        continue;
+                    }
+
+                    double? sdf = (marched ? (((double)hit.Distance) + near) : null);
+                    var mesh = Nearest(
+                        direction: direction,
+                        near: near,
+                        origin: camera.Position,
+                        triangles: triangles
+                    );
+
+                    sdfDistances[x, y] = sdf;
+                    meshDistances[x, y] = mesh;
+                    kinds[x, y] = (((mesh is { } meshDistance) && ((sdf is null) || (meshDistance <= sdf)))
+                        ? 2
+                        : ((sdf is null) ? 0 : 1));
                 }
 
-                double? sdf = (marched ? (((double)hit.Distance) + near) : null);
-                var mesh = Nearest(
-                    direction: direction,
-                    near: near,
-                    origin: camera.Position,
-                    triangles: triangles
-                );
-
-                sdfDistances[x, y] = sdf;
-                meshDistances[x, y] = mesh;
-                kinds[x, y] = (((mesh is { } meshDistance) && ((sdf is null) || (meshDistance <= sdf)))
-                    ? 2
-                    : ((sdf is null) ? 0 : 1));
-            }
-        }
+                return field;
+            });
 
         return Unjudged(
             kinds: kinds,

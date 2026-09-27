@@ -313,6 +313,10 @@ public sealed record WorldHostDefaults(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Title = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Icon = null
 ) {
+    /// <summary>The largest display width or height, in pixels, a host document or a live resize may name: the
+    /// largest two-dimensional texture Direct3D 12 holds.</summary>
+    public const int MaxDisplayExtent = 16384;
+
     /// <summary>Gets the inert absence — no presentation (<see cref="WorldHostPresentation.None"/>: no window, no
     /// GPU device), zero extent, no pacing, no listener. The engine holds no boot shape of its own: the standard
     /// windowed boot is AUTHORED, in <c>Assets/worlds/standard.world.json</c>, and a world inherits it by naming
