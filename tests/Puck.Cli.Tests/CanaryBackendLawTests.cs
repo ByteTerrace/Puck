@@ -103,14 +103,15 @@ public sealed class CanaryBackendLawTests {
             namedWorldArtifact: false
         );
 
-        // Two boots per proof: four backend-declaring proofs plus two others, then two plus two.
+        // Two boots per proof: four backend-declaring proofs plus two others, then two plus two; and one pipeline-cache
+        // warm boot per backend the GPU proofs boot.
         Assert.Equal(
             actual: both.WorldBoots,
-            expected: 12
+            expected: (12 + 2)
         );
         Assert.Equal(
             actual: one.WorldBoots,
-            expected: 8
+            expected: (8 + 1)
         );
     }
     [Fact]
