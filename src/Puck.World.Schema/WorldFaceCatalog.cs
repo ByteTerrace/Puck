@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using Puck.World.Authoring;
+using Puck.Abstractions.Gpu;
 using Puck.Maths;
 using Puck.SignedDistance;
 
@@ -24,6 +25,8 @@ namespace Puck.World;
 /// <paramref name="SlotStarved"/>).</param>
 /// <param name="SlotStarved">Whether this row wanted a slot and the reserved band had none left. Geometry is
 /// unaffected: the face still opens, it just shows nothing.</param>
+/// <param name="Filter">How the face's screen samples its source: the placement's face row's
+/// <see cref="WorldPlacementFace.Filter"/>, or <see cref="GpuSamplerFilter.Nearest"/> when no row overrides the face.</param>
 public readonly record struct WorldFaceRow(
     string PlacementId,
     string FaceName,
@@ -33,7 +36,8 @@ public readonly record struct WorldFaceRow(
     WorldFaceApertureRecipe? Aperture,
     WorldScreenSource Source,
     int ScreenIndex,
-    bool SlotStarved
+    bool SlotStarved,
+    GpuSamplerFilter Filter = GpuSamplerFilter.Nearest
 );
 /// <summary>
 /// The one derivation of a document's placement faces — <c>(placements x declared creation faces)</c> walked once,
@@ -137,10 +141,11 @@ public sealed class WorldFaceCatalog {
                     document: creation.EngineDocument,
                     id: face.ShapeId
                 );
-                var source = (FindOverride(
+                var faceOverride = FindOverride(
                     faceSources: placement.FaceSources,
                     face: face.Name
-                )
+                );
+                var source = (faceOverride?.Source
                     ?? (ParseDefaultSource(
                     token: face.DefaultSource,
                     cameras: cameras,
@@ -177,6 +182,7 @@ public sealed class WorldFaceCatalog {
                         shape: shape
                     ),
                     Aperture: WorldFaceApertures.For(primitive: shape?.Type),
+                    Filter: (faceOverride?.Filter ?? GpuSamplerFilter.Nearest),
                     Source: source,
                     ScreenIndex: seated,
                     SlotStarved: starved
@@ -313,7 +319,7 @@ public sealed class WorldFaceCatalog {
 
         return names;
     }
-    private static WorldScreenSource? FindOverride(IReadOnlyList<WorldPlacementFace>? faceSources, string face) {
+    private static WorldPlacementFace? FindOverride(IReadOnlyList<WorldPlacementFace>? faceSources, string face) {
         foreach (var entry in (faceSources ?? [])) {
             if (
                 (entry is not null) &&
@@ -323,7 +329,7 @@ public sealed class WorldFaceCatalog {
                 comparisonType: StringComparison.Ordinal
             )
             ) {
-                return entry.Source;
+                return entry;
             }
         }
 

@@ -1344,7 +1344,7 @@ inverse and one affine map folding the layout, fit and crop) into the
 `screenMappings` table of the `sdf-world` interface, and the screen shading draws
 the bezel, the letterbox and the sample from it, through the sampler its row's
 filter names (`WorldScreen.Filter`, `Nearest` or `Linear`, carried as
-`SourceMapping.Filter`). A screen with no mapping shades as unbound glass. The
+`SourceMapping.Filter`; a derived face takes its `faceSources` row's `filter`). A screen with no mapping shades as unbound glass. The
 screens are one `screenSources` array beside one `samplers` array, one sampler
 per `GpuSamplerFilter`, whose length is `SdfProgramBuilder.MaxScreenSurfaces`
 and nothing else. A shader interface's image or sampler array
