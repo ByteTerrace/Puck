@@ -15,9 +15,17 @@ public sealed class VulkanInstanceFactory : IVulkanInstanceFactory {
     // free without a messenger, so it is enabled whenever the loader supports it — decoupled from validation — so
     // debug groups reach a GPU capture even in a default (validation-off) run. The messenger stays validation-only.
     private const string DebugUtilsExtension = "VK_EXT_debug_utils";
+    // VK_EXT_swapchain_colorspace lets a surface report its HDR color spaces beside SRGB_NONLINEAR_KHR. Enabling it adds
+    // pairs to what a surface reports and changes nothing else, so it is enabled whenever the loader supports it; an SDR
+    // output still takes an SRGB_NONLINEAR_KHR pair.
+    private const string SwapchainColorSpaceExtension = "VK_EXT_swapchain_colorspace";
 
     private static readonly string[] CommonExtensions = [
         "VK_KHR_surface",
+    ];
+    private static readonly string[] OptionalExtensions = [
+        DebugUtilsExtension,
+        SwapchainColorSpaceExtension,
     ];
     private static readonly string[] ValidationLayers = [
         "VK_LAYER_KHRONOS_validation",
@@ -34,10 +42,10 @@ public sealed class VulkanInstanceFactory : IVulkanInstanceFactory {
             _ => throw new PlatformNotSupportedException(message: $"Vulkan instance creation is not implemented for display kind '{displayKind}'.")
         };
 
-        return (m_instanceApi.HasInstanceExtension(extensionName: DebugUtilsExtension)
-            ? [.. surfaceExtensions, DebugUtilsExtension]
-            : surfaceExtensions
-        );
+        return [
+            .. surfaceExtensions,
+            .. OptionalExtensions.Where(predicate: extension => m_instanceApi.HasInstanceExtension(extensionName: extension)),
+        ];
     }
 
     /// <inheritdoc/>

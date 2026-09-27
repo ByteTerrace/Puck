@@ -1,7 +1,6 @@
 using System.Text.Json;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
-using Puck.Hosting;
 using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
@@ -113,7 +112,7 @@ public sealed class PostProcessPackageLawTests {
         RenderPasses: 4,
         Writes: [.. Enumerable.Repeat(count: 4, element: $"1 {Input.ImageViewHandle}")]
     );
-    private static void ProduceUntilPublished(IRenderNode node) => Assert.True(
+    private static void ProduceUntilPublished(ShaderPipelineRenderNode node) => Assert.True(
         condition: SpinWait.SpinUntil(
             condition: () => !node.ProduceFrame(context: default).IsEmpty,
             timeout: TimeSpan.FromSeconds(value: 30)
@@ -123,7 +122,7 @@ public sealed class PostProcessPackageLawTests {
     // What a law compares of one pass's recording: the render pass and pipeline it was created for, the graphics
     // commands, the input written at a binding, and the frame and pass blocks each frame's draw reads, read from the
     // constant buffers of the sets it bound as the frame is recorded.
-    private static Recorded Record(FakePipelineGpu gpu, IRenderNode node, Action<int>? before = null) {
+    private static Recorded Record(FakePipelineGpu gpu, ShaderPipelineRenderNode node, Action<int>? before = null) {
         var blocks = new List<string>();
         var layout = ShaderPipelineParameterLayout.ForPackage(
             config: FilmGrain().Config,

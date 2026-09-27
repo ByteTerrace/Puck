@@ -6,9 +6,11 @@ namespace Puck.SdfVm;
 // The mesh pass (SdfMeshRasterPass): per view, between cull-args and primary, the frame's mesh draws (SdfFrame.MeshDraws)
 // rasterize into the mesh visibility target at the engine extent, one draw call a draw, pulling their triangles from the
 // mesh region. Primary reads the target to bound its march and records a mesh record where the mesh is nearer or equal;
-// surface reads it for the mesh normal. The target and its reversed-Z depth attachment are created with the engine and
-// sized to its extent, and the target rests shader-readable between passes, so the views sets bind it once. A frame with
-// no mesh draws records no draw: the world block's meshDraws is zero and no kernel reads the target.
+// surface reads it for the mesh normal. The target and its reversed-Z depth attachment are created at the engine extent by
+// the first frame that draws a mesh, and kept for the engine's life; the target rests shader-readable between passes. An
+// engine whose frames draw no mesh holds neither (20 bytes a pixel of its extent): a frame with no mesh draws records no
+// draw, the world block's meshDraws is zero and no kernel reads the target, so until one exists each views set binds the
+// filler in its place, and the first frame of each ring slot after its creation rebinds the target.
 public sealed partial class SdfWorldEngine {
     // Where the world block holds the frame's mesh draws, and the mesh interface's bindings.
     private static readonly int MeshDrawsOffset = WorldOffset(member: SdfWorldInterfaces.MeshDraws);
@@ -16,23 +18,26 @@ public sealed partial class SdfWorldEngine {
 
     private readonly IGpuPipeline m_meshPipeline;
     private readonly IGpuRenderPass m_meshRenderPass;
-    private readonly IGpuImage m_meshTarget;
-    private readonly IGpuImage m_meshDepth;
-    private readonly IGpuFramebuffer m_meshFramebuffer;
+
+    // The attachments, or null before a frame draws a mesh.
+    private IGpuImage? m_meshTarget;
+    private IGpuImage? m_meshDepth;
+    private IGpuFramebuffer? m_meshFramebuffer;
+    // The bytes the attachments hold, zero before they exist; written on the frame thread, read by world.budget.
+    private ulong m_meshAttachmentBytes;
+
     // One mesh set per ring slot: that slot's viewport table and mesh region.
     private readonly nint[] m_meshSets = new nint[FrameRingSize];
     // The index a draw call pushes: the view and the draw (SdfWorldInterfaces.MeshPushedIndex).
     private readonly byte[] m_meshPushedIndex = new byte[GpuPipelineLayoutDescription.PushIndexBytes];
+
     private bool m_meshTargetInitialized;
     // The draws the frame being recorded rasterizes, from its staged draw list.
     private uint m_meshDrawCount;
 
-    /// <summary>Gets the bytes the mesh pass's target and depth attachment hold, which the engine allocates at its
-    /// extent: <see cref="SdfMeshRasterPass.BytesPerPixel"/> a pixel.</summary>
-    public ulong MeshAttachmentBytes => MeshAttachmentBytesOf(
-        height: m_height,
-        width: m_width
-    );
+    /// <summary>Gets the bytes the mesh pass's target and depth attachment hold: zero until a frame draws a mesh, then
+    /// <see cref="SdfMeshRasterPass.BytesPerPixel"/> a pixel of the engine's extent.</summary>
+    public ulong MeshAttachmentBytes => Volatile.Read(location: ref m_meshAttachmentBytes);
     /// <summary>Gets the draws the latest frame's mesh pass rasterized in each view it rendered.</summary>
     public uint MeshDrawCount => m_meshDrawCount;
 
@@ -44,8 +49,16 @@ public sealed partial class SdfWorldEngine {
         ((((ulong)width) * height) * SdfMeshRasterPass.BytesPerPixel);
 
     // Creates the mesh pass's target and depth attachment at the engine extent and the framebuffer binding them for the
-    // pass's render pass, each joining the construction's scope.
-    private (IGpuImage Target, IGpuImage Depth, IGpuFramebuffer Framebuffer) CreateMeshAttachments(GpuCreationScope scope, IGpuRenderPass renderPass) {
+    // pass's render pass, the first time a frame draws a mesh; a creation that throws releases what it created.
+    private void EnsureMeshAttachments() {
+        if (
+            (m_meshDrawCount == 0) ||
+            (m_meshTarget is not null)
+        ) {
+            return;
+        }
+
+        using var scope = new GpuCreationScope();
         var target = scope.Own(created: m_gpu.ImageFactory.Create(
             format: SdfMeshRasterPass.TargetFormat,
             height: m_height,
@@ -62,10 +75,65 @@ public sealed partial class SdfWorldEngine {
         var framebuffer = scope.Own(created: m_gpu.RenderPassFactory.CreateFramebuffer(
             colors: [target],
             depth: depth,
-            renderPass: renderPass
+            renderPass: m_meshRenderPass
         ));
 
-        return (target, depth, framebuffer);
+        scope.Complete();
+        m_meshTarget = target;
+        m_meshDepth = depth;
+        m_meshFramebuffer = framebuffer;
+        Volatile.Write(
+            location: ref m_meshAttachmentBytes,
+            value: MeshAttachmentBytesOf(
+                height: m_height,
+                width: m_width
+            )
+        );
+    }
+    // Binds the mesh visibility target, or the filler before one exists, into each views set of the frame's ring slot that
+    // does not bind it already. Both are engine-owned, so the change-detected skip is sound (BindScreenSources' rule).
+    private void BindMeshVisibility(uint viewportCount) {
+        for (var view = 0; (view < ((int)viewportCount)); view++) {
+            BindMeshVisibility(
+                boundIndex: ((m_currentSlot * m_viewOutputs.Length) + view),
+                viewsSet: m_viewsSets[m_currentSlot][view]
+            );
+        }
+    }
+    private void BindMeshVisibility(int boundIndex, nint viewsSet) {
+        var view = (m_meshTarget?.ImageViewHandle ?? m_screenSourceFiller.ImageViewHandle);
+
+        if (view == m_boundMeshVisibilityViews[boundIndex]) {
+            return;
+        }
+
+        m_bindings.WriteSampledImage(
+            arrayElement: 0,
+            binding: MeshVisibilityBinding,
+            descriptorSetHandle: viewsSet,
+            imageViewHandle: view
+        );
+        m_boundMeshVisibilityViews[boundIndex] = view;
+    }
+    // Moves the filler from its first, undefined layout to the shader-readable one every sampled binding needs, once,
+    // before any dispatch can reach a views set that binds it: in the construction's ISA handshake, and in the first frame
+    // for an engine whose handshake did not run.
+    private void InitializeFiller(nint commandBuffer) {
+        if (m_fillerInitialized) {
+            return;
+        }
+
+        m_gpu.Recorder.TransitionImageLayout(
+            commandBufferHandle: commandBuffer,
+            destinationAccessMask: GpuAccess.ShaderRead,
+            destinationStageMask: GpuStage.ComputeShader,
+            imageHandle: m_screenSourceFiller.ImageHandle,
+            newLayout: GpuImageLayout.ShaderReadOnly,
+            oldLayout: GpuImageLayout.Undefined,
+            sourceAccessMask: GpuAccess.None,
+            sourceStageMask: GpuStage.TopOfPipe
+        );
+        m_fillerInitialized = true;
     }
     // Allocates a ring slot's mesh set against the mesh pipeline's pass group.
     private nint AllocateMeshSet(int slot) =>
@@ -85,11 +153,13 @@ public sealed partial class SdfWorldEngine {
         WriteBuffer(buffer: m_viewportRegion.Buffer(slot: slot), layout: SdfWorldInterfaces.MeshLayout, member: SdfWorldInterfaces.Viewports, set: m_meshSets[slot]);
         WriteBuffer(buffer: region, layout: SdfWorldInterfaces.MeshLayout, member: SdfWorldInterfaces.MeshRegion, set: m_meshSets[slot]);
     }
-    // Moves the target from its first, undefined layout to the shader-readable one it rests in between passes, once,
-    // before any dispatch can reach the views sets that bind it: in the construction's ISA handshake, and in the first
-    // frame for an engine whose handshake did not run.
+    // Moves the target from its first, undefined layout to the shader-readable one it rests in between passes, once, in
+    // the frame that created it, before any dispatch can reach the views sets that bind it.
     private void InitializeMeshTarget(nint commandBuffer) {
-        if (m_meshTargetInitialized) {
+        if (
+            m_meshTargetInitialized ||
+            (m_meshTarget is null)
+        ) {
             return;
         }
 
@@ -115,6 +185,7 @@ public sealed partial class SdfWorldEngine {
 
         var recorder = m_gpu.Recorder;
         var output = m_viewOutputs[view]!;
+        var target = m_meshTarget!;
 
         recorder.BeginDebugGroup(
             commandBufferHandle: commandBuffer,
@@ -126,7 +197,7 @@ public sealed partial class SdfWorldEngine {
             commandBufferHandle: commandBuffer,
             destinationAccessMask: GpuAccess.ColorAttachmentWrite,
             destinationStageMask: GpuStage.ColorAttachmentOutput,
-            imageHandle: m_meshTarget.ImageHandle,
+            imageHandle: target.ImageHandle,
             newLayout: GpuImageLayout.RenderTarget,
             oldLayout: GpuImageLayout.ShaderReadOnly,
             sourceAccessMask: GpuAccess.ShaderRead,
@@ -136,7 +207,7 @@ public sealed partial class SdfWorldEngine {
             commandBufferHandle: commandBuffer,
             destinationAccessMask: GpuAccess.DepthAttachmentRead | GpuAccess.DepthAttachmentWrite,
             destinationStageMask: GpuStage.FragmentTests,
-            imageHandle: m_meshDepth.ImageHandle,
+            imageHandle: m_meshDepth!.ImageHandle,
             newLayout: GpuImageLayout.DepthAttachment,
             oldLayout: GpuImageLayout.Undefined,
             sourceAccessMask: GpuAccess.DepthAttachmentWrite,
@@ -150,7 +221,7 @@ public sealed partial class SdfWorldEngine {
                 Y: 0
             ),
             commandBufferHandle: commandBuffer,
-            framebuffer: m_meshFramebuffer
+            framebuffer: m_meshFramebuffer!
         );
         recorder.BindPipeline(
             bindPoint: GpuBindPoint.Graphics,
@@ -195,11 +266,12 @@ public sealed partial class SdfWorldEngine {
             commandBufferHandle: commandBuffer,
             destinationAccessMask: GpuAccess.ShaderRead,
             destinationStageMask: GpuStage.ComputeShader,
-            imageHandle: m_meshTarget.ImageHandle,
+            imageHandle: target.ImageHandle,
             newLayout: GpuImageLayout.ShaderReadOnly,
             oldLayout: GpuImageLayout.RenderTarget,
             sourceAccessMask: GpuAccess.ColorAttachmentWrite,
             sourceStageMask: GpuStage.ColorAttachmentOutput
         );
         recorder.EndDebugGroup(commandBufferHandle: commandBuffer);
-    }}
+    }
+}

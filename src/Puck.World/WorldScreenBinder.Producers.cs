@@ -20,7 +20,7 @@ internal sealed partial class WorldScreenBinder {
         return false;
     }
     // Whether a screen shows external content or a HUD frame names it: the consumers WorldCaptureFills converts the fills
-    // for before any capture is armed.
+    // for before any capture is armed, and the only reads the capture gate resolves to a fill.
     private bool ConsumesExternal() {
         if (BindsExternal()) {
             return true;
@@ -34,8 +34,9 @@ internal sealed partial class WorldScreenBinder {
 
         return false;
     }
-    // Converts the fill of every external source a screen shows or a HUD frame names whenever one does, not only while
-    // the gate fills (WorldCaptureFills.Begin says why): the default fill, then each fill color a screen's source declares.
+    // Converts the fill of every external source a screen shows or a HUD frame names whenever one does, whether or not the
+    // gate fills, and no fill while none does (WorldCaptureFills says why): the default fill, then each fill color a
+    // screen's source declares.
     private void EnsureFills(in FrameContext context) {
         var runtime = Runtime;
 

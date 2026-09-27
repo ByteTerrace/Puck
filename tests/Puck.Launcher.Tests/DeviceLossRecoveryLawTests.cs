@@ -12,7 +12,7 @@ namespace Puck.Launcher.Tests;
 
 /// <summary>
 /// Both GPU hosts follow one device-loss policy (<see cref="DeviceLossRecovery"/>): a loss writes a
-/// <c>[device-lost]</c> console line naming its reason, drains what it can, has the render tree release its device
+/// <c>[device-lost]</c> console line naming its reason, drains what it can, has the render root release its device
 /// resources (which refuses an armed capture as <see cref="CaptureRequestSlot.DeviceLostReason"/>), and then rebuilds
 /// the device, retrying while it is absent within the reacquire budget. The windowed host rebuilds through its presenter
 /// (<see cref="PresenterDeviceRebuild"/>), the offscreen host through the <see cref="IDeviceRebuild"/> its activation
@@ -212,7 +212,7 @@ public sealed class DeviceLossRecoveryLawTests {
             Height: 32U,
             Width: 32U
         ));
-        builder.Services.AddSingleton<IRenderNode>(implementationInstance: root);
+        builder.Services.AddSingleton<IRenderRoot>(implementationInstance: root);
         builder.Services.AddSingleton<IDeviceRebuild>(implementationInstance: rebuild);
         builder.Services.AddLauncherOffscreenTerminal();
 
@@ -265,7 +265,7 @@ public sealed class DeviceLossRecoveryLawTests {
             Height: 32U,
             Width: 32U
         ));
-        builder.Services.AddSingleton<IRenderNode>(implementationInstance: root);
+        builder.Services.AddSingleton<IRenderRoot>(implementationInstance: root);
         builder.Services.AddSingleton<IDeviceRebuild>(implementationInstance: rebuild);
         builder.Services.AddSingleton(implementationInstance: faults);
         builder.Services.AddLauncherOffscreenTerminal();
@@ -347,13 +347,8 @@ public sealed class DeviceLossRecoveryLawTests {
             log.Add(item: $"recover {width}x{height}");
     }
     // A render root holding one capture slot, as a capture-capable node does, and refusing it on a loss.
-    private sealed class ArmedRoot(List<string> log) : IRenderNode {
+    private sealed class ArmedRoot(List<string> log) : IRenderRoot {
         private readonly CaptureRequestSlot m_slot = new();
-
-        public NodeDescriptor Descriptor { get; } = new(
-            Name: "device-loss-recovery",
-            SurfaceId: SurfaceId.New()
-        );
 
         public FrameCaptureRequest Arm() {
             var request = new FrameCaptureRequest(path: "capture.png");
@@ -373,9 +368,8 @@ public sealed class DeviceLossRecoveryLawTests {
         public Surface ProduceFrame(in FrameContext context) => default;
     }
     // An offscreen render root whose first frame loses the device with a capture armed; every later frame is produced.
-    private sealed class LosingRoot : IRenderNode {
+    private sealed class LosingRoot : IRenderRoot {
         private readonly List<string> m_log;
-
         private readonly CaptureRequestSlot m_slot = new();
 
         private bool m_lost;
@@ -388,11 +382,6 @@ public sealed class DeviceLossRecoveryLawTests {
                 request: Request
             );
         }
-
-        public NodeDescriptor Descriptor { get; } = new(
-            Name: "device-loss-offscreen",
-            SurfaceId: SurfaceId.New()
-        );
 
         public int FramesAfterLoss { get; private set; }
         public FrameCaptureRequest Request { get; }

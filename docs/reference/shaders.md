@@ -527,8 +527,11 @@ and whenever the world has more than one view. When neither holds, as in an offs
 output directly. A world that sets `views.root` authors its whole render graph,
 the `sdf.world` package row included, and the runtime runs its rows alone; such
 a world authors no `views.post`.
-`RenderGraphRuntimeNode` is the host's render root: each frame it shows the
-root over a display of the World's configured extent. A `captures` row reads
+`RenderGraphRuntimeNode` is the host's render root, the one `IRenderRoot` the
+launcher drives: each frame it shows the root over a display of the World's
+configured extent. Nothing wraps it; the screen binder, whose GPU holdings must
+go while the device is alive, is released by the root's teardown
+(`RenderGraphRuntimeNode.Holdings`). A `captures` row reads
 the root, or names `world` to capture the SDF world before its panes, post
 passes and overlay. `world.counters gpu` counts every graph instance under its
 instance name: `world` is the engine node, `main` the root's node, whose passes
@@ -2089,7 +2092,7 @@ without the recording's source reader refuses it.
 ## The NuGet package
 
 `ByteTerrace.Puck.Shaders` depends on `Puck.Abstractions`, `Puck.Assets`, and
-`Puck.Hosting` (`IRenderNode`, `FrameContext`, `EngineTicks`). It carries no
+`Puck.Hosting` (`IRenderRoot`, `FrameContext`, `EngineTicks`). It carries no
 GPU, windowing, or shader-compiler dependency of its own; `DxilInterfaceReader`
 loads the `dxcompiler.dll` of an installed DXC at run time. The package also
 ships `build/Shaders.targets` under

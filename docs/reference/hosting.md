@@ -2,9 +2,9 @@
 
 Puck.Hosting is the shared host substrate between deterministic simulation and
 presentation. A **host** owns the outer loop: it measures time, advances the
-simulation in fixed steps, routes services and exclusive capabilities through a
-tree of render nodes, and publishes completed surfaces without letting GPU or
-capture work become simulation state.
+simulation in fixed steps, routes services and exclusive capabilities to its
+render root, and publishes completed surfaces without letting GPU or capture
+work become simulation state.
 
 It depends on `Puck.Abstractions` for presentation, machine, capture, and GPU
 contracts, on [Commands and input](commands.md) for fixed-step
@@ -14,9 +14,10 @@ capability authentication.
 
 ## Key features
 
-- *One recursive render contract:* `IRenderNode` produces a `Surface`, may host
-  children, and receives device-loss notifications without changing simulation
-  state.
+- *One render root:* `IRenderRoot` produces the `Surface` a host presents and
+  receives device-loss notifications without changing simulation state. The
+  World's root is the render graph runtime's node, so everything a frame shows
+  is an instance of that graph rather than a child of the root.
 - *Deterministic fixed-step context:* `EngineTicks` provides an integer time
   base that divides common update rates exactly. `FrameContext` keeps
   authoritative simulation ticks separate from presentation-only wall time and
@@ -30,9 +31,6 @@ capability authentication.
   `ConsoleTapeStore`; `ConsoleLineEditor` owns the prompt row's caret-addressed
   buffer and command history. Renderers read `IConsoleTapeSource`; the window
   host bridges keystrokes in (`ConsoleInputSink` in `Puck.Launcher`).
-- *Safe parallel stepping:* `ISteppableRenderNode` separates serial shared-state
-  preparation from parallel private-state execution; GPU work stays on the
-  render thread.
 - *Presentation observability:* frame capture, latest-value publication, and
   emitted light remain outside the simulation trajectory.
 
@@ -49,16 +47,16 @@ graph LR
     Commands --> Pump
     Pump --> Simulation["🌍 Deterministic simulation"]
     Pump --> Context["🧭 FrameContext"]
-    Context --> Tree["🌳 IRenderNode tree"]
-    Simulation --> Tree
-    Tree --> Surface["🖼️ Root Surface"]
+    Context --> Root["🌳 IRenderRoot"]
+    Simulation --> Root
+    Root --> Surface["🖼️ Root Surface"]
     Surface --> Present["🖥️ Swapchain / capture"]
 ```
 
-## Quick start: a render node
+## Quick start: a render root
 
-An `IRenderNode` can return CPU pixels or a GPU image-view handle. This minimal
-node produces a one-pixel CPU surface and has no device-owned resources to
+An `IRenderRoot` can return CPU pixels or a GPU image-view handle. This minimal
+root produces a one-pixel CPU surface and has no device-owned resources to
 release:
 
 ```csharp
@@ -66,12 +64,8 @@ using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 
-sealed class StatusPixelNode : IRenderNode {
+sealed class StatusPixelRoot : IRenderRoot {
     private readonly byte[] pixels = [0x20, 0x80, 0xE0, 0xFF];
-
-    public NodeDescriptor Descriptor { get; } = new(
-        Name: "status-pixel",
-        SurfaceId: SurfaceId.New());
 
     public Surface ProduceFrame(in FrameContext context) => Surface.CpuPixels(
         pixels: pixels,
@@ -180,12 +174,16 @@ The fields most often confused in `FrameContext` have distinct meanings:
 
 ## Render lifecycle and publication
 
-Every `IRenderNode` has a stable `NodeDescriptor`, produces one `Surface`, and
-is disposable. Hosting nodes that own children forward `OnDeviceLost` through
-the tree. Nodes that own device resources release stale handles there and
-rebuild them on a later frame, and a node holding an armed capture refuses it
-(`CaptureRequestSlot.RefuseForDeviceLoss`); device loss must not advance or reset
-simulation.
+A host has one `IRenderRoot`, which produces one `Surface` a frame and is
+disposable. A root that owns device resources releases stale handles in
+`OnDeviceLost` and rebuilds them on a later frame, and a root holding an armed
+capture refuses it (`CaptureRequestSlot.RefuseForDeviceLoss`); device loss must
+not advance or reset simulation. The World's root, `RenderGraphRuntimeNode`,
+forwards the loss to its runtime, which releases every instance's node and
+producer. The host disposes its root while the device is still alive, so the
+root also disposes the services it is handed as holdings
+(`RenderGraphRuntimeNode.Holdings`), such as the screen binder's camera feeds,
+which the container would otherwise release after the device.
 
 Both GPU hosts recover from a loss through one policy, `DeviceLossRecovery` in
 `Puck.Launcher`. It writes a `[device-lost] reason 0x…` line to standard error,
@@ -199,7 +197,7 @@ rebuilds on the hidden window's surface, and on Direct3D 12 the device context
 is recreated with no swap chain. More than eight losses with no frame between
 them, a device that does not return in time, or a host with nothing to rebuild
 through ends the run; the windowed host closes, and the offscreen host faults.
-A run that ends has still drained and released the render tree first, so every
+A run that ends has still drained and released the render root first, so every
 capture armed at the loss is refused by name rather than left unserved.
 
 On Direct3D 12 both hosts follow one retry rule, in
@@ -221,16 +219,6 @@ against the faults inside the frame body the policy guards, and the armed frame
 throws the device loss there, so the recovery runs exactly as for a real one.
 The `device-loss` and `device-loss-windowed` canaries run it on both backends
 with a capture armed at the loss.
-
-For hosts that parallelize CPU stepping, `ISteppableRenderNode` divides the
-work into three phases:
-
-1. `PrepareStep(in FrameContext)` runs serially and may drain shared input or
-   timelines. It reports whether the node has work.
-2. `ExecuteStep()` may run in parallel, but touches only the node's private
-   state.
-3. `ProduceFrame(in FrameContext)` remains on the render thread and performs
-   GPU work.
 
 `FrameCaptureController` owns an optional capture session, including its
 engine-time cadence, frame indexing, budget, and capture-only fault isolation.
@@ -258,7 +246,8 @@ lease in a `LeaseRetireList` until a fence wait proves the submission that
 sampled it has finished, then retires the list, which runs every release once
 in the order the leases were held. A node with frames in flight keeps one list
 per frame-ring slot and moves each frame's list into its slot when it submits.
-The SDF engine node and the unified overlay both use it.
+The SDF engine node and every graph instance's `ShaderPipelineRenderNode` use it,
+and the overlay package moves its HUD frames' leases into its node's list.
 
 `RenderGraphScheduler` decides which views render in a frame. Every view is a
 `RenderGraphInstance`: a name, a refresh (a frame divisor or a rate in hertz),
@@ -355,7 +344,7 @@ intermediate publications is correct.
 
 | Area | Types | Purpose |
 |---|---|---|
-| Render tree | `IRenderNode`, `ISteppableRenderNode`, `NodeDescriptor`, `SurfaceId` | Recursive surface production and lifecycle |
+| Render root | `IRenderRoot` | The surface a host presents each frame, and its device-loss and teardown lifecycle |
 | Fixed-step time | `EngineTicks`, `TickClock`, `FrameContext`, `FixedStepContext`, `IFixedStepSimulation` | Integer simulation time and presentation context |
 | Input time | `InputClock`, `OsTimeCorrelator` | Monotonic capture timestamps and native event correlation |
 | Host scope | `IHostContext`, `HostContext`, `ChainedHostContext`, `HostCapabilityContribution` | Inherited services and exclusive held capabilities |

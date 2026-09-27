@@ -318,7 +318,10 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
 }
 [SupportedOSPlatform("windows10.0.10240")]
 file sealed class DirectXGpuSurfaceUpload(DirectXSurfaceUpload upload) : IGpuSurfaceUpload {
+    // The view of the upload's current texture, kept while an upload reuses the texture and replaced only when the
+    // upload rebuilds it for another extent, format or level count, so a steady upload allocates nothing.
     private GCHandle m_currentToken;
+    private DirectXImageView? m_currentView;
 
     public nint Upload(
         ReadOnlyMemory<byte> pixels,
@@ -335,16 +338,23 @@ file sealed class DirectXGpuSurfaceUpload(DirectXSurfaceUpload upload) : IGpuSur
             width: width
         );
 
+        if (
+            (m_currentView is { } current) &&
+            (current.ResourceHandle == upload.TextureHandle) &&
+            (current.Format == upload.TextureFormat)
+        ) {
+            return GCHandle.ToIntPtr(value: m_currentToken);
+        }
+
         if (m_currentToken.IsAllocated) {
             m_currentToken.Free();
         }
 
-        var imageView = new DirectXImageView {
-            Format = DirectXGpuFormats.ToDxgiFormat(gpuPixelFormat: format),
+        m_currentView = new DirectXImageView {
+            Format = upload.TextureFormat,
             ResourceHandle = upload.TextureHandle,
         };
-
-        m_currentToken = GCHandle.Alloc(value: imageView);
+        m_currentToken = GCHandle.Alloc(value: m_currentView);
 
         return GCHandle.ToIntPtr(value: m_currentToken);
     }
@@ -353,6 +363,7 @@ file sealed class DirectXGpuSurfaceUpload(DirectXSurfaceUpload upload) : IGpuSur
             m_currentToken.Free();
         }
 
+        m_currentView = null;
         upload.Dispose();
     }
 }

@@ -358,8 +358,8 @@ internal sealed partial class WorldScreenBinder {
     /// <summary>Binds a declared screen to a live desktop-window capture keyed by a title fragment — the runtime
     /// <c>screen.source &lt;index&gt; capture</c> path. The screen shows the capture's source instance over its row from
     /// the render graph's next frame, which adopts the capture opened here. The capture rebinds each grab, so
-    /// the target window need not be open yet (it reads no signal until it appears, and rebinds if it disappears and
-    /// returns); only an unopenable capture service fails here.</summary>
+    /// the target window need not be open yet (it shows unbound glass until it appears, and rebinds if it disappears
+    /// and returns); only an unopenable capture service fails here.</summary>
     /// <param name="index">The engine screen-surface index (must be a declared screen).</param>
     /// <param name="windowTitle">The captured window's title fragment (case-insensitive substring match).</param>
     /// <returns>Whether the bind succeeded, and a message describing the outcome.</returns>
@@ -394,8 +394,8 @@ internal sealed partial class WorldScreenBinder {
     }
     /// <summary>Binds a declared screen to a live whole-monitor capture keyed by index — the runtime <c>screen.source &lt;index&gt; desktop</c>
     /// path. The screen shows the capture's source instance over its row from the render graph's next frame, which adopts
-    /// the capture opened here. The capture rebinds each grab, so it reads no signal until the monitor is present and
-    /// reacquires if it disconnects and returns; an out-of-range index or an unopenable capture service fails
+    /// the capture opened here. The capture rebinds each grab, so it shows unbound glass until the monitor is present
+    /// and reacquires if it disconnects and returns; an out-of-range index or an unopenable capture service fails
     /// here.</summary>
     /// <param name="index">The engine screen-surface index (must be a declared screen).</param>
     /// <param name="monitorIndex">The 0-based monitor to capture whole (0 = primary).</param>
@@ -591,7 +591,7 @@ internal sealed partial class WorldScreenBinder {
         }
         public nint Handle() {
             if (GpuRoute) {
-                // The image view of the platform's latest completed GPU copy; 0 (no-signal) until that first copy lands.
+                // The image view of the platform's latest completed GPU copy; 0 (unbound glass) until that first copy lands.
                 return ((Live && (GpuTargets is { } ring))
                     ? ring.LatestHandle()
                     : 0

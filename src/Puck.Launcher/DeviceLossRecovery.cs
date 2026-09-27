@@ -13,7 +13,7 @@ namespace Puck.Launcher;
 /// swap chain.</summary>
 public interface IDeviceRebuild {
     /// <summary>Destroys the lost device and creates its replacement in place, so every holder of the published device
-    /// context keeps a valid reference. Called on the pump thread, after the render tree has released its device
+    /// context keeps a valid reference. Called on the pump thread, after the render root has released its device
     /// resources.</summary>
     /// <exception cref="DeviceLostException">No device could be created yet; the recovery waits and calls again.</exception>
     void Rebuild();
@@ -36,13 +36,13 @@ public sealed record PresenterDeviceRebuild(IDeviceLostRecoverable Presenter, Na
 /// <summary>
 /// The one device-loss policy both GPU hosts follow, on the pump thread, when a frame surfaces a
 /// <see cref="DeviceLostException"/>: it writes a <see cref="LossLinePrefix"/> console line naming the reason, drains
-/// what it can, has the render tree release its device resources (<see cref="IRenderNode.OnDeviceLost"/>, which also
+/// what it can, has the render root release its device resources (<see cref="IRenderRoot.OnDeviceLost"/>, which also
 /// fails every capture armed at the loss with <c>CaptureRequestSlot.DeviceLostReason</c>), and then rebuilds the device
 /// through an <see cref="IDeviceRebuild"/>, retrying every <see cref="ReacquireBackoff"/> while the adapter is absent,
 /// for up to <see cref="ReacquireBudget"/>. The fixed-step simulation is never touched. A host gives up when there is
 /// nothing to rebuild through, when the device does not return within the budget, or when
 /// <see cref="MaxConsecutiveRecoveries"/> losses follow one another with no frame produced between them; it has drained
-/// and released the tree, refusing every armed capture, before it gives up, the same as when it recovers.
+/// and released the render root, refusing every armed capture, before it gives up, the same as when it recovers.
 /// </summary>
 public sealed class DeviceLossRecovery {
     /// <summary>The prefix of the console line written to standard error for each loss: <c>[device-lost] reason
@@ -60,7 +60,7 @@ public sealed class DeviceLossRecovery {
     public static readonly TimeSpan ReacquireBudget = TimeSpan.FromSeconds(value: 10);
 
     private readonly ILogger m_logger;
-    private readonly IRenderNode m_root;
+    private readonly IRenderRoot m_root;
     private readonly IHostContext m_rootHostContext;
     private readonly Action<TimeSpan> m_sleep;
     private readonly TimeProvider m_time;
@@ -70,14 +70,14 @@ public sealed class DeviceLossRecovery {
 
     /// <summary>Initializes a new instance of the <see cref="DeviceLossRecovery"/> class for one host run.</summary>
     /// <param name="logger">The host's logger, which records the reason's detail and the recovery's outcome.</param>
-    /// <param name="root">The render root whose tree releases its device resources.</param>
+    /// <param name="root">The render root, which releases its device resources.</param>
     /// <param name="rootHostContext">The root host context whose published device context is drained.</param>
     /// <param name="writeLine">Writes one console line; the host passes its console output.</param>
     /// <param name="time">The clock the reacquire budget is measured on; the system clock when <see langword="null"/>.</param>
     /// <param name="sleep">Waits out one backoff; <see cref="Thread.Sleep(TimeSpan)"/> when <see langword="null"/>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="logger"/>, <paramref name="root"/>,
     /// <paramref name="rootHostContext"/> or <paramref name="writeLine"/> is <see langword="null"/>.</exception>
-    public DeviceLossRecovery(ILogger logger, IRenderNode root, IHostContext rootHostContext, Action<string> writeLine, TimeProvider? time = null, Action<TimeSpan>? sleep = null) {
+    public DeviceLossRecovery(ILogger logger, IRenderRoot root, IHostContext rootHostContext, Action<string> writeLine, TimeProvider? time = null, Action<TimeSpan>? sleep = null) {
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentNullException.ThrowIfNull(root);
         ArgumentNullException.ThrowIfNull(rootHostContext);
@@ -153,7 +153,7 @@ public sealed class DeviceLossRecovery {
 
         // Every object on the device is released before the device goes, and every capture armed at the loss is refused,
         // whether or not the run goes on: a run that gives up must not leave a capture to end as unserved or to meet a
-        // disposed tree. The rebuild below replaces the device in place.
+        // disposed root. The rebuild below replaces the device in place.
         m_root.OnDeviceLost();
 
         if ((rebuild is null) || givesUp) {

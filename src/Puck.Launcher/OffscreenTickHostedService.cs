@@ -39,7 +39,7 @@ public sealed class OffscreenTickHostedService : BackgroundService {
     private readonly IPrecisionWaiter? m_precisionWaiter;
     private readonly CommandRegistry m_registry;
     private readonly OffscreenRenderOptions m_renderOptions;
-    private readonly IRenderNode m_root;
+    private readonly IRenderRoot m_root;
     private readonly IHostContext m_rootHostContext;
     private readonly IFixedStepSimulation? m_simulation;
     private readonly ISnapshotInputCapture[] m_snapshotInputCaptures;
@@ -53,7 +53,7 @@ public sealed class OffscreenTickHostedService : BackgroundService {
         ILogger<OffscreenTickHostedService> logger,
         LauncherOptions options,
         OffscreenRenderOptions renderOptions,
-        IRenderNode root,
+        IRenderRoot root,
         IHostContext rootHostContext,
         IEnumerable<InputRouter> inputRouters,
         IEnumerable<IFixedStepSimulation> simulations,

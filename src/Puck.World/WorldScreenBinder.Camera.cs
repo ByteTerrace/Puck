@@ -975,7 +975,7 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
     }
     // Reader construction can succeed while a multiplexing driver delivers only one selected sensor. Count cadence
     // opportunities with no new frame, including a formerly live stream that freezes; after roughly three seconds at
-    // the default cadence the no-signal state and its likeliest cause become observable.
+    // the default cadence the unbound state and its likeliest cause become observable.
     private void NoteCameraStarvation(CameraDevice device, CameraFeed feed) {
         if (++feed.StarvedPulls <= 90) {
             return;

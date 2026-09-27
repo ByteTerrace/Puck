@@ -86,7 +86,7 @@ internal static class WorldBootHarness {
         return (
             assembly.StartsWith(comparisonType: StringComparison.Ordinal, value: "Puck.DirectX") ||
             assembly.StartsWith(comparisonType: StringComparison.Ordinal, value: "Puck.Vulkan") ||
-            (type == typeof(IRenderNode)) ||
+            (type == typeof(IRenderRoot)) ||
             (type == typeof(ISurfacePresenter)) ||
             (type.Name == "WorldOffscreenGpuActivation")
         );

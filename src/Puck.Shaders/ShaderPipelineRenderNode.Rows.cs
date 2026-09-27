@@ -183,7 +183,7 @@ public sealed partial class ShaderPipelineRenderNode {
                         : null),
                     name: new GpuObjectName(
                         detail: spec.Name,
-                        owner: m_descriptor.Name,
+                        owner: m_name,
                         part: "rows"
                     ),
                     staged: staged

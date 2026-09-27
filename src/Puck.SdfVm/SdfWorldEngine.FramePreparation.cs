@@ -578,6 +578,8 @@ public sealed partial class SdfWorldEngine {
             offset: 0
         );
         StageMeshRegion(draws: frame.MeshDraws);
+        EnsureMeshAttachments();
+        BindMeshVisibility(viewportCount: viewportCount);
 
         // The deterministic tick clock star twinkle reads (cloud motion is baked into the environment rows). It rides
         // the world block and is folded into ComputeFrameSignature with it, so the cadence gate never skips a frame whose

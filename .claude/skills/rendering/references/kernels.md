@@ -83,7 +83,9 @@ primary, so the primary march in `renderView`'s `#else` branch compiles into the
 primary kernel alone; `renderView` compiles only into the four hit-pass kernels.
 Before primary, the `mesh` pass (`SdfWorldEngine.MeshPass.cs`, `sdf-mesh.*.hlsl`)
 rasterizes the frame's mesh draws into the mesh visibility target that primary
-bounds its march by and surface reads the mesh normal from (`sdfMeshSampleAt`);
+bounds its march by and surface reads the mesh normal from (`sdfMeshSampleAt`),
+created with its depth attachment by the first frame that draws a mesh (each
+views set binds the filler until then);
 it draws with its own `sdf-mesh` interface, one set per ring slot, and pushes
 the view and the draw (`SdfWorldInterfaces.MeshPushedIndex`). A frame the
 cadence gate skips records no view set, and each view's retained output

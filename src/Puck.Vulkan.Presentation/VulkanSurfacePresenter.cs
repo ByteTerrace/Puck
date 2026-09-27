@@ -39,6 +39,9 @@ public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentSurfaceR
     }
 
     /// <inheritdoc/>
+    public DisplayOutput? Output => m_renderer.Output;
+
+    /// <inheritdoc/>
     public void Activate(NativeSurfaceBinding binding, uint width, uint height) {
         // The contract is "safe to call repeatedly — each call replaces any previously acquired resources",
         // so release any prior activation before re-acquiring.

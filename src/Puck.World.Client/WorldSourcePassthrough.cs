@@ -4,26 +4,30 @@ using System.Numerics;
 using System.Text;
 using Puck.Commands;
 using Puck.Input;
-using Puck.World.Client;
 
-namespace Puck.World;
+namespace Puck.World.Client;
 
 /// <summary>
 /// The windowed host's passthrough door: the panes the local user opened as passthrough sources, the window each one's
 /// capture shows, and the <see cref="SourcePassthroughRouter"/> the window pump offers every raw event to
-/// (<see cref="IWindowInputFilter"/>). Only <see cref="WorldPassthroughCommandModule"/>'s <c>source.passthrough open</c>,
-/// which the host's own console alone may run, adds a source; nothing a world document declares reaches it.
+/// (<see cref="IWindowInputFilter"/>). Only the <c>source.passthrough open</c> verb, which the host's own console alone
+/// may run, adds a source; nothing a world document declares reaches it.
 /// </summary>
 /// <remarks>
-/// <para>A source stays open while a published pane shows it and its capture keeps showing the window it showed when it
-/// was opened. Before each event is routed, a source whose pane is no longer published, whose instance stopped, whose
-/// capture reopened onto another window, or whose row a row of the same name replaced is closed, so a window the local
-/// user did not open, or can no longer see, never receives input. Closing a source releases every key and button its
-/// window holds and returns the keyboard to the game when the source had it.</para>
+/// <para>A source stays open, its grant held, until the local user closes it or it is really removed: before each event
+/// is routed, a source whose instance stopped, whose capture reopened onto another window (a row of the same name
+/// replacing its row opens a new capture), or whose name a published pane now gives a different source is closed.
+/// Closing a source releases every key and button its window holds and returns the keyboard to the game when the
+/// source had it.</para>
+/// <para>A pane that is merely not published for a while keeps its grant, since its instance and window are the ones
+/// the local user opened: the router routes nothing to it while it is unshown, and an event that arrives then first
+/// takes its focus and held input away (<see cref="SourcePassthroughRouter.Route"/>), so a window the local user cannot
+/// see never receives input. Once the same instance's pane is published again a click on it reaches the window again;
+/// a pane unshown only between two events is never seen unshown, and keeps its focus as it keeps its grant.</para>
 /// <para>Window-pump-thread only: the console's immediate verbs and the pump's events run there.</para>
 /// </remarks>
-internal sealed class WorldSourcePassthrough : IWindowInputFilter, ISourcePassthroughWindows {
-    private readonly WorldScreenBinder m_binder;
+public sealed class WorldSourcePassthrough : IWindowInputFilter, ISourcePassthroughWindows {
+    private readonly IWorldPassthroughWindows m_windows;
     private readonly WorldViewGraphHost m_graphs;
     private readonly SortedDictionary<string, Opened> m_opened = new(comparer: StringComparer.Ordinal);
     private readonly WorldSeatViewports m_viewports;
@@ -32,11 +36,15 @@ internal sealed class WorldSourcePassthrough : IWindowInputFilter, ISourcePassth
     private readonly record struct Opened(SourceHandle Source, ISourcePassthroughWindow Window);
 
     /// <summary>Initializes a new instance of the <see cref="WorldSourcePassthrough"/> class.</summary>
-    /// <param name="binder">The binder whose source instances' capture feeds name their windows.</param>
+    /// <param name="windows">Finds the window each source instance's capture shows.</param>
     /// <param name="graphs">The render graph host whose published panes the router reads.</param>
     /// <param name="viewports">The viewports whose client extent scales a pointer position into display pixels.</param>
-    public WorldSourcePassthrough(WorldScreenBinder binder, WorldViewGraphHost graphs, WorldSeatViewports viewports) {
-        m_binder = binder;
+    public WorldSourcePassthrough(IWorldPassthroughWindows windows, WorldViewGraphHost graphs, WorldSeatViewports viewports) {
+        ArgumentNullException.ThrowIfNull(argument: windows);
+        ArgumentNullException.ThrowIfNull(argument: graphs);
+        ArgumentNullException.ThrowIfNull(argument: viewports);
+
+        m_windows = windows;
         m_graphs = graphs;
         m_viewports = viewports;
         Router = new SourcePassthroughRouter(windows: this);
@@ -45,21 +53,25 @@ internal sealed class WorldSourcePassthrough : IWindowInputFilter, ISourcePassth
     /// <summary>Gets the router that hosts the keyboard focus.</summary>
     public SourcePassthroughRouter Router { get; }
 
-    // The first opened source that must close: no published pane shows it, or its capture no longer shows the window
-    // it was opened on.
+    // The first opened source that is really gone: its capture no longer shows the window it was opened on (the instance
+    // stopped, or its capture reopened), or a published pane gives its name a different source. A pane that is only
+    // unpublished is not gone; the router keeps input from it while it is unshown.
     private string? Stale() {
         foreach (var (instance, opened) in m_opened) {
             if (
-                !m_graphs.TryGetPane(
-                    instance: instance,
-                    mapping: out _
-                ) ||
                 !ReferenceEquals(
-                    objA: m_binder.PassthroughWindowOf(
+                    objA: m_windows.PassthroughWindowOf(
                         fault: out _,
                         instance: instance
                     ),
                     objB: opened.Window
+                ) ||
+                (
+                    m_graphs.TryGetPane(
+                        instance: instance,
+                        mapping: out var mapping
+                    ) &&
+                    (mapping.Source != opened.Source)
                 )
             ) {
                 return instance;
@@ -84,7 +96,7 @@ internal sealed class WorldSourcePassthrough : IWindowInputFilter, ISourcePassth
 
             return false;
         }
-        if (m_binder.PassthroughWindowOf(
+        if (m_windows.PassthroughWindowOf(
             fault: out var fault,
             instance: instance
         ) is not { } window) {
@@ -154,6 +166,14 @@ internal sealed class WorldSourcePassthrough : IWindowInputFilter, ISourcePassth
             _ = (window.TryDescribe(window: out var described)
                 ? builder.Append(provider: CultureInfo.InvariantCulture, handler: $" frame {described.FrameWidth}x{described.FrameHeight} client {described.Client.Width}x{described.Client.Height} at {described.Client.X},{described.Client.Y} scale {described.DpiScale:0.###}")
                 : builder.Append(value: " gone"));
+
+            // Held, but routed nothing until its pane is published again.
+            if (!m_graphs.TryGetPane(
+                instance: instance,
+                mapping: out _
+            )) {
+                _ = builder.Append(value: " (pane not shown)");
+            }
         }
 
         return builder.ToString();

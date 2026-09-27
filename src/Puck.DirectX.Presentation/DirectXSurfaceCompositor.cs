@@ -20,9 +20,12 @@ using static Puck.DirectX.DirectXConstants;
 namespace Puck.DirectX.Presentation;
 
 /// <summary>
-/// Owns the DXGI flip-model swap chain, back-buffer RTVs, a shader-visible SRV slot for the blit texture and a
-/// shader-visible sampler slot for its sampler, and a lease on the blit pipeline, the <see cref="GpuPassPipelineCache"/>
-/// entry for <see cref="SurfaceBlitLayout"/> in the swap chain's format. On every frame it:
+/// Owns the DXGI flip-model swap chain, back-buffer RTVs, one descriptor pool of the device's shader-visible heaps
+/// (<see cref="DirectXShaderVisibleHeaps"/>) holding the blit group's set, its source image and its sampler, and a lease
+/// on the blit pipeline, the <see cref="GpuPassPipelineCache"/> entry for <see cref="SurfaceBlitLayout"/> in the swap
+/// chain's format. It creates no shader-visible heap of its own: the pool is admitted through
+/// <see cref="IGpuBindings.CanAdmit"/> like every other owner's, and a CPU surface is uploaded through the device's
+/// <see cref="IGpuSurfaceUpload"/>. On every frame it:
 /// <list type="bullet">
 ///   <item>resets the per-frame command allocator and command list,</item>
 ///   <item>delegates recording to the injected <see cref="IDirectXCommandListRecorder"/>,</item>
@@ -50,12 +53,20 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     // The blit's build-compiled DXIL (Assets/Shaders/surface-blit.*.hlsl), read from the shader directory.
     private const string BlitPixelFileName = "surface-blit.frag.dxil";
     private const string BlitVertexFileName = "surface-blit.vert.dxil";
+    // The name the blit's pool is admitted and named under.
+    private const string BlitOwner = "surface-blit";
+
+    // The SDR outputs a flip-model swap chain presents on any display: 8-bit unsigned normalized, in either channel order.
+    private static readonly DisplayOutput[] SdrOutputs = [
+        DisplayOutput.Sdr(format: GpuPixelFormat.B8G8R8A8Unorm),
+        DisplayOutput.Sdr(format: GpuPixelFormat.R8G8B8A8Unorm),
+    ];
 
     private readonly IDirectXCommandListRecorder m_commandListRecorder;
     private readonly GpuPassPipelineCache m_pipelines;
     private readonly string m_shaderDirectory;
-    private readonly GpuPixelFormat m_surfaceFormat;
-    private readonly DXGI_FORMAT m_swapChainFormat;
+    private readonly GpuPixelFormat m_preferredFormat;
+    private readonly DisplayColorSpace m_requestedColorSpace;
     private readonly PresentMode m_presentMode;
     private readonly uint m_syncInterval;
 
@@ -72,8 +83,12 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
 
     // The blit pipeline's lease on the device's pass pipelines, held from Initialize to Dispose.
     private GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? m_blitLease;
+    private IGpuBindings? m_bindings;
     private DirectXDrawCommand[]? m_blitDrawCommands;
-    private DirectXSurfaceUpload? m_cpuUpload;
+    // The blit group's pool, a range of the device's heaps, and its one set, whose source image Blit rewrites.
+    private nint m_blitPool;
+    private nint m_blitSet;
+    private IGpuSurfaceUpload? m_cpuUpload;
     private nint m_frameFence;
     private HANDLE m_frameFenceEvent;
 
@@ -85,10 +100,12 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     // Set when the swap chain is created: the ALLOW_TEARING swap-chain flag (carried into ResizeBuffers too) and the
     // matching Present flag, both non-zero only for Immediate mode on a display that supports tearing.
     private uint m_presentFlags;
+    // What the swap chain presents, chosen when it is created (SelectOutput), and its back buffers' two formats.
+    private DisplayOutput m_output;
+    private GpuPixelFormat m_surfaceFormat;
+    private DXGI_FORMAT m_swapChainFormat;
     private nint m_rtvHeap;
     private uint m_rtvStride;
-    private nint m_samplerHeap;
-    private nint m_srvHeap;
     private uint m_swapChainFlags;
     private nint m_swapChain;
     private uint m_width;
@@ -126,21 +143,21 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         m_pipelines = pipelines;
         m_shaderDirectory = shaderDirectory;
         m_presentMode = presentationOptions.PresentMode;
-        // Map the neutral surface format to the back-buffer DXGI format (both are valid flip-model formats);
+        m_preferredFormat = presentationOptions.SurfaceFormat;
+        m_requestedColorSpace = presentationOptions.ColorSpace;
         // Vsync presents with sync interval 1, the other modes with 0.
-        m_surfaceFormat = ((GpuPixelFormat.B8G8R8A8Unorm == presentationOptions.SurfaceFormat)
-            ? GpuPixelFormat.B8G8R8A8Unorm
-            : GpuPixelFormat.R8G8B8A8Unorm
-        );
-        m_swapChainFormat = m_surfaceFormat switch {
-            GpuPixelFormat.B8G8R8A8Unorm => DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_UNORM,
-            _ => DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM,
-        };
         m_syncInterval = ((PresentMode.Vsync == m_presentMode)
             ? 1u
             : 0u
         );
     }
+
+    /// <summary>Gets what the swap chain presents, its format and color space, or <see langword="null"/> while no swap
+    /// chain exists.</summary>
+    public DisplayOutput? Output => ((0 == m_swapChain)
+        ? null
+        : m_output
+    );
 
     /// <summary>
     /// Creates the DXGI swap chain, blit pipeline, and all supporting D3D12 objects against the shared device.
@@ -161,6 +178,10 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
 
         m_width = width;
         m_height = height;
+        SetOutput(output: Select(
+            reported: SdrOutputs,
+            requested: DisplayColorSpace.Srgb
+        ));
 
         var device = ((ID3D12Device*)deviceContext.Device.Handle);
 
@@ -170,11 +191,15 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             height: height,
             width: width
         );
+        SelectOutput();
         CreateRtvHeap(device: device);
         AcquireBackBuffers(device: device);
-        CreateSrvHeap(device: device);
-        CreateSamplerHeap(device: device);
         var blitPipeline = AcquireBlitPipeline(deviceContext: deviceContext);
+        var blitSet = AllocateBlitSet(
+            blitPipeline: blitPipeline,
+            deviceContext: deviceContext
+        );
+        var heaps = deviceContext.DescriptorHeaps;
 
         CreateCommandInfrastructure(device: device);
 
@@ -189,10 +214,10 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
                 ),
                 Group: SurfaceBlitLayout.Group,
                 PipelineLayoutHandle: blitPipeline.LayoutHandle,
-                SamplerHeapHandle: m_samplerHeap,
-                SamplerTableGpuHandle: GetGpuHeapStart(heap: ((ID3D12DescriptorHeap*)m_samplerHeap)).ptr,
-                ViewHeapHandle: m_srvHeap,
-                ViewTableGpuHandle: GetGpuHeapStart(heap: ((ID3D12DescriptorHeap*)m_srvHeap)).ptr
+                SamplerHeapHandle: heaps.SamplerHeap,
+                SamplerTableGpuHandle: blitSet.SamplerGpuBase,
+                ViewHeapHandle: heaps.ViewHeap,
+                ViewTableGpuHandle: blitSet.GpuBase
             ),
         ];
     }
@@ -255,55 +280,46 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             return;
         }
 
-        var device = ((ID3D12Device*)deviceContext.Device.Handle);
-
-        nint sourceResource;
-        DXGI_FORMAT sourceFormat;
+        nint sourceView;
 
         if (surface.IsSameDeviceImage) {
-            var view = ((DirectXImageView)GCHandle.FromIntPtr(value: surface.ImageViewHandle).Target!);
-
-            sourceResource = view.ResourceHandle;
-            sourceFormat = view.Format;
+            sourceView = surface.ImageViewHandle;
         } else if (surface.IsCpuPixels) {
-            m_cpuUpload ??= new DirectXSurfaceUpload(deviceContext: deviceContext);
+            m_cpuUpload ??= deviceContext.Services.SurfaceTransferFactory.CreateUpload();
             // The upload texture is one resource shared by every ring slot: an in-flight frame may still be
             // sampling it, so overwriting it must wait for every presented frame, not just this slot's.
             WaitForAllFrames();
-            m_cpuUpload.Upload(
-                pixels: surface.Pixels.Span,
-                width: surface.Width,
+            sourceView = m_cpuUpload.Upload(
+                format: surface.Format,
                 height: surface.Height,
-                format: surface.Format
+                pixels: surface.Pixels,
+                width: surface.Width
             );
-            sourceResource = m_cpuUpload.TextureHandle;
-            sourceFormat = m_cpuUpload.TextureFormat;
         } else if (surface.IsSharedHandle) {
             m_surfaceImport ??= deviceContext.Services.SurfaceTransferFactory.CreateImport();
-            var imported = m_surfaceImport.Import(
+            sourceView = m_surfaceImport.Import(
                 sharedHandle: surface.SharedHandle,
                 format: surface.Format,
                 width: surface.Width,
                 height: surface.Height
-            );
-            var view = ((DirectXImageView)GCHandle.FromIntPtr(value: imported.ImageViewHandle).Target!);
-
-            sourceResource = view.ResourceHandle;
-            sourceFormat = view.Format;
+            ).ImageViewHandle;
         } else {
             throw new InvalidOperationException(message: "The surface has an unsupported payload kind.");
         }
 
-        // Skip rewriting the single SRV descriptor when the source resource is unchanged (parity with the
-        // Vulkan compositor's last-written-view cache).
+        var sourceResource = ((DirectXImageView)GCHandle.FromIntPtr(value: sourceView).Target!).ResourceHandle;
+
+        // Skip rewriting the set's source image when the source resource is unchanged (parity with the Vulkan
+        // compositor's last-written-view cache).
         if (sourceResource != m_lastBlitResource) {
-            // The single SRV descriptor is consumed at command-list execution, so rewriting it while the other
-            // ring slot's frame is still in flight would redirect that frame's read mid-execution.
+            // The set's view is consumed at command-list execution, so rewriting it while the other ring slot's frame
+            // is still in flight would redirect that frame's read mid-execution.
             WaitForAllFrames();
-            WriteSrv(
-                device: device,
-                format: sourceFormat,
-                resource: ((ID3D12Resource*)sourceResource)
+            m_bindings!.WriteSampledImage(
+                arrayElement: 0U,
+                binding: SurfaceBlitLayout.SourceImageBinding,
+                descriptorSetHandle: m_blitSet,
+                imageViewHandle: sourceView
             );
 
             m_lastBlitResource = sourceResource;
@@ -547,8 +563,12 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         // The device's pass pipelines dispose the blit once no other lease holds it.
         m_blitLease?.Release();
         m_blitLease = null;
-        Release(pointer: ref m_samplerHeap);
-        Release(pointer: ref m_srvHeap);
+        // The pool's range returns to the device's heaps, and its set with it.
+        m_bindings?.DestroyPool(poolHandle: m_blitPool);
+        m_blitPool = 0;
+        m_blitSet = 0;
+        m_bindings = null;
+        m_lastBlitResource = 0;
         Release(pointer: ref m_rtvHeap);
         Release(pointer: ref m_swapChain);
 
@@ -691,11 +711,113 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             _ = ((IUnknown*)factory)->Release();
         }
     }
+    private DisplayOutput Select(IReadOnlyCollection<DisplayOutput> reported, DisplayColorSpace requested) {
+        // Every list offered holds SdrOutputs, so an output is always chosen.
+        _ = DisplayOutput.TrySelect(
+            chosen: out var chosen,
+            preferredSdrFormat: m_preferredFormat,
+            reported: reported,
+            requested: requested
+        );
+
+        return chosen;
+    }
+    private void SetOutput(DisplayOutput output) {
+        m_output = output;
+        m_surfaceFormat = output.Format;
+        m_swapChainFormat = DirectXGpuFormats.ToDxgiFormat(gpuPixelFormat: output.Format);
+    }
+    // Chooses what the swap chain, just created in SDR and holding no back buffer yet, presents: the requested HDR output
+    // when the display reports it and the swap chain can present its color space, otherwise the SDR it was created in.
+    private void SelectOutput() {
+        var chosen = Select(
+            reported: ReportedOutputs(),
+            requested: m_requestedColorSpace
+        );
+
+        if (!chosen.IsHdr) {
+            return;
+        }
+
+        var sdr = m_output;
+        var swapChain = ((IDXGISwapChain3*)m_swapChain);
+        var colorSpace = DirectXGpuFormats.ToDxgiColorSpace(colorSpace: chosen.ColorSpace);
+
+        SetOutput(output: chosen);
+        swapChain->ResizeBuffers(
+            BufferCount: FrameCount,
+            Height: m_height,
+            NewFormat: m_swapChainFormat,
+            SwapChainFlags: m_swapChainFlags,
+            Width: m_width
+        );
+        swapChain->CheckColorSpaceSupport(
+            ColorSpace: colorSpace,
+            pColorSpaceSupport: out var support
+        );
+
+        if (0U != (support & ((uint)DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG.DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT))) {
+            swapChain->SetColorSpace1(ColorSpace: colorSpace);
+
+            return;
+        }
+
+        SetOutput(output: sdr);
+        swapChain->ResizeBuffers(
+            BufferCount: FrameCount,
+            Height: m_height,
+            NewFormat: m_swapChainFormat,
+            SwapChainFlags: m_swapChainFlags,
+            Width: m_width
+        );
+    }
+    // The outputs the display the swap chain presents on reports: SDR always, and both HDR outputs when the display's
+    // own color space is HDR10 (IDXGIOutput6::GetDesc1), which is how Windows reports HDR turned on. A display DXGI cannot
+    // describe reports SDR alone.
+    private List<DisplayOutput> ReportedOutputs() {
+        var reported = new List<DisplayOutput>(collection: SdrOutputs);
+        IDXGIOutput* output = null;
+        IDXGIOutput6* output6 = null;
+
+        try {
+            ((IDXGISwapChain3*)m_swapChain)->GetContainingOutput(ppOutput: &output);
+
+            var iid = IDXGIOutput6.IID_Guid;
+
+            if (((IUnknown*)output)->QueryInterface(
+                ppvObject: ((void**)&output6),
+                riid: &iid
+            ).Failed) {
+                return reported;
+            }
+
+            if (DXGI_COLOR_SPACE_TYPE.DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020 == output6->GetDesc1().ColorSpace) {
+                reported.Add(item: new DisplayOutput(
+                    ColorSpace: DisplayColorSpace.Hdr10,
+                    Format: DisplayOutput.HdrFormatOf(colorSpace: DisplayColorSpace.Hdr10)
+                ));
+                reported.Add(item: new DisplayOutput(
+                    ColorSpace: DisplayColorSpace.ScRgb,
+                    Format: DisplayOutput.HdrFormatOf(colorSpace: DisplayColorSpace.ScRgb)
+                ));
+            }
+        } catch (COMException) {
+            // No containing output (a window off every display) reports SDR alone.
+        } finally {
+            if (null != output6) {
+                _ = ((IUnknown*)output6)->Release();
+            }
+            if (null != output) {
+                _ = ((IUnknown*)output)->Release();
+            }
+        }
+
+        return reported;
+    }
     private void CreateRtvHeap(ID3D12Device* device) {
         m_rtvHeap = ((nint)DirectXDescriptorHeaps.Create(
             count: FrameCount,
             device: device,
-            shaderVisible: false,
             type: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_RTV
         ));
         m_rtvStride = device->GetDescriptorHandleIncrementSize(DescriptorHeapType: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
@@ -726,38 +848,6 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         for (var i = 0; (i < m_backBuffers.Length); i++) {
             Release(pointer: ref m_backBuffers[i]);
         }
-    }
-    private void CreateSrvHeap(ID3D12Device* device) {
-        // One SRV: the blit samples a SINGLE source texture into the swapchain back buffer. `WriteSrv` always writes
-        // slot 0. This is deliberate scope — the compositor is a single-source present, not a multi-layer compositor;
-        // adding more source layers would require sizing this heap from the layer count and a per-slot WriteSrv.
-        var srvHeap = DirectXDescriptorHeaps.Create(
-            count: 1,
-            device: device,
-            shaderVisible: true,
-            type: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV
-        );
-
-        m_srvHeap = ((nint)srvHeap);
-        // A fresh SRV heap has no descriptor written yet; force the next Blit to write one.
-        m_lastBlitResource = 0;
-    }
-    // The blit's sampler: one clamp-addressed, linear-filtered descriptor in a one-slot shader-visible sampler heap beside
-    // the SRV heap, which the draw binds together.
-    private void CreateSamplerHeap(ID3D12Device* device) {
-        var samplerHeap = DirectXDescriptorHeaps.Create(
-            count: 1,
-            device: device,
-            shaderVisible: true,
-            type: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER
-        );
-        var sampler = DirectXGpuBindings.ClampSampler(filter: GpuSamplerFilter.Linear);
-
-        m_samplerHeap = ((nint)samplerHeap);
-        device->CreateSampler(
-            DestDescriptor: GetCpuHeapStart(heap: samplerHeap),
-            pDesc: &sampler
-        );
     }
     // Takes the blit from the device's pass pipelines: the shared layout, for a render pass of one color attachment in the
     // swap chain's format, its vertex stage drawing the fullscreen triangle from SV_VertexID so the pipeline reads no
@@ -792,6 +882,47 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         );
 
         return m_blitLease.Wait(cancellationToken: CancellationToken.None);
+    }
+    // Creates the blit group's pool as a range of the device's shader-visible heaps, admitted first like every other
+    // owner's so a heap that cannot hold it refuses it by name, and allocates its one set, whose sampler never changes.
+    private DirectXDescriptorSet AllocateBlitSet(DirectXDeviceContext deviceContext, GpuPassPipeline blitPipeline) {
+        var bindings = deviceContext.Services.Bindings;
+        GpuDescriptorPoolSizes[] pools = [GpuDescriptorPoolSizes.ForGroups(groups: SurfaceBlitLayout.Layout.Groups)];
+
+        if (!bindings.CanAdmit(
+            owner: BlitOwner,
+            pools: pools,
+            refusal: out var refusal
+        )) {
+            throw new GpuDescriptorHeapRefusalException(message: refusal);
+        }
+
+        m_bindings = bindings;
+        m_blitPool = bindings.CreatePool(
+            name: new GpuObjectName(
+                owner: BlitOwner,
+                part: "pool"
+            ),
+            sizes: in pools[0]
+        );
+        m_blitSet = bindings.AllocateSet(
+            descriptorSetLayoutHandle: blitPipeline.GroupLayoutHandles[((int)SurfaceBlitLayout.Group)],
+            name: new GpuObjectName(
+                owner: BlitOwner,
+                part: "set"
+            ),
+            poolHandle: m_blitPool
+        );
+        bindings.WriteSampler(
+            arrayElement: 0U,
+            binding: SurfaceBlitLayout.SamplerBinding,
+            descriptorSetHandle: m_blitSet,
+            samplerHandle: bindings.CreateSampler(filter: GpuSamplerFilter.Linear)
+        );
+        // A fresh set has no source written yet; the next Blit writes one.
+        m_lastBlitResource = 0;
+
+        return ((DirectXDescriptorSet)GCHandle.FromIntPtr(value: m_blitSet).Target!);
     }
     private void CreateCommandInfrastructure(ID3D12Device* device) {
         for (var i = 0u; (i < FrameCount); i++) {
@@ -841,20 +972,5 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
                 result: Marshal.GetHRForLastWin32Error()
             );
         }
-    }
-    private void WriteSrv(ID3D12Device* device, ID3D12Resource* resource, DXGI_FORMAT format) {
-        var srvDesc = new D3D12_SHADER_RESOURCE_VIEW_DESC {
-            Format = format,
-            Shader4ComponentMapping = DefaultShader4ComponentMapping,
-            ViewDimension = D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_TEXTURE2D,
-        };
-
-        srvDesc.Anonymous.Texture2D.MipLevels = 1;
-
-        device->CreateShaderResourceView(
-            pResource: resource,
-            pDesc: &srvDesc,
-            DestDescriptor: GetCpuHeapStart(heap: ((ID3D12DescriptorHeap*)m_srvHeap))
-        );
     }
 }

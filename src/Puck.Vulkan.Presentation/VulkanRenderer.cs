@@ -110,6 +110,9 @@ public sealed class VulkanRenderer(
     /// <summary>The current swapchain; valid after the first <see cref="BeginFrame"/> and replaced on
     /// resize (see <see cref="PresentationResourcesRecreated"/>).</summary>
     public VulkanSwapchain Swapchain => (m_swapchain ?? throw new InvalidOperationException(message: "Presentation resources are not available until the first BeginFrame."));
+    /// <summary>Gets what the current swapchain presents, its format and color space, or <see langword="null"/> while no
+    /// swapchain exists.</summary>
+    public DisplayOutput? Output => m_swapchain?.Output;
 
     void IGpuDeviceContext.WaitIdle() => WaitForGpuIdle();
 
@@ -197,8 +200,8 @@ public sealed class VulkanRenderer(
             throw new InvalidOperationException(message: "The selected Vulkan device does not support presenting to the window surface.");
         }
 
-        // Both are preferences: the factory falls back (mailbox/immediate/FIFO; the first swapchain format offered) when
-        // the surface does not support them.
+        // All three are preferences: the factory falls back (mailbox/immediate/FIFO; SDR in the first swapchain format
+        // offered) when the surface does not support them.
         var preferredPresentMode = presentationOptions.PresentMode switch {
             PresentMode.Vsync => ((uint?)VulkanPresentMode.Fifo),
             PresentMode.Mailbox => VulkanPresentMode.Mailbox,
@@ -213,6 +216,7 @@ public sealed class VulkanRenderer(
             logicalDevice: device,
             preferredFormat: presentationOptions.SurfaceFormat,
             preferredPresentMode: preferredPresentMode,
+            requestedColorSpace: presentationOptions.ColorSpace,
             supportDetails: supportDetails,
             surface: m_surface!
         );
@@ -416,7 +420,7 @@ public sealed class VulkanRenderer(
     /// contract). The renderer is the published device-context capability and every node resource is a child of its
     /// device, so a presenter deactivation (a backend switch away from Vulkan) must not destroy the device under
     /// them — that is a use-after-free at their eventual release. Full device teardown belongs to <see cref="Dispose"/>
-    /// alone (the renderer is a container-owned singleton, disposed at host shutdown after the node tree).</summary>
+    /// alone (the renderer is a container-owned singleton, disposed at host shutdown after the render root).</summary>
     public void ReleasePresentation() {
         DisposePresentationResources();
         m_surface?.Dispose();

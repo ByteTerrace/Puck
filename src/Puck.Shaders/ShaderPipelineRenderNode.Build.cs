@@ -242,7 +242,7 @@ public sealed partial class ShaderPipelineRenderNode {
             DirectX: m_directX,
             Gpu: m_gpu,
             InFlight: m_inFlight,
-            Instance: m_descriptor.Name,
+            Instance: m_name,
             Key: key,
             Packages: m_packages,
             Pipelines: m_pipelines

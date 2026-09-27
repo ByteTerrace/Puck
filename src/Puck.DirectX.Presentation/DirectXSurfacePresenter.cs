@@ -45,6 +45,9 @@ public sealed class DirectXSurfacePresenter : ISurfacePresenter, IPresentSurface
     }
 
     /// <inheritdoc/>
+    public DisplayOutput? Output => m_compositor.Output;
+
+    /// <inheritdoc/>
     public void Activate(NativeSurfaceBinding binding, uint width, uint height) {
         // The contract is "safe to call repeatedly — each call replaces any previously acquired resources",
         // so release any prior activation before re-acquiring.
@@ -101,7 +104,7 @@ public sealed class DirectXSurfacePresenter : ISurfacePresenter, IPresentSurface
         // Release the compositor's swap chain / heaps / blit resources on the OLD (removed) device — COM Release is safe
         // on a removed device's objects, and these are not recreated by the device context. Then recreate the device IN
         // PLACE (preserving the shared capability's identity so the compute node resolving it stays valid), and
-        // re-initialize the compositor against the new device. The node tree rebuilds its own resources next frame.
+        // re-initialize the compositor against the new device. The render root rebuilds its own resources next frame.
         ReleaseCaptureResources();
         m_compositor.Dispose();
 

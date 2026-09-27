@@ -226,14 +226,14 @@ public sealed partial class ShaderPipelineRenderNode {
                 DirectX: m_directX,
                 Gpu: m_gpu,
                 InFlight: m_inFlight,
-                Instance: m_descriptor.Name,
+                Instance: m_name,
                 Key: default,
                 Packages: m_packages,
                 Pipelines: m_pipelines
             );
 
             var factory = m_packages.FactoryFor(
-                instance: m_descriptor.Name,
+                instance: m_name,
                 package: step.Package,
                 pass: planned.Name
             );

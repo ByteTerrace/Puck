@@ -12,8 +12,9 @@ public sealed partial class SdfWorldEngine {
             commandBufferHandle: commandBuffer
         );
         m_bufferHazards.Reset();
-        // The report dispatch binds a views set, which binds the mesh visibility target: the construction's handshake is
-        // the first submission to reach it.
+        // The report dispatch binds a views set, which binds the mesh visibility target once a frame has created it and the
+        // filler before: the construction's handshake is the first submission to reach the filler.
+        InitializeFiller(commandBuffer: commandBuffer);
         InitializeMeshTarget(commandBuffer: commandBuffer);
 
         if (initializeImages) {

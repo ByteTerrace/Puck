@@ -401,11 +401,11 @@ public sealed record CreationCameraDocument(
 /// <param name="ShapeId">The shape whose surface is the screen (a <see cref="ShapeDocument.Id"/>; -1/null = the whole
 /// creation's canonical face surface, resolved by the consumer).</param>
 /// <param name="DefaultSource">The feed this face shows when nothing else is wired, as a source token a consuming world
-/// resolves through a closed four-token map — <c>none</c> (no signal), <c>test</c> (the test pattern), and
+/// resolves through a closed four-token map — <c>none</c> (unbound glass), <c>test</c> (the test pattern), and
 /// <c>camera:&lt;name&gt;</c> / <c>feed:&lt;name&gt;</c> (a View of the named camera, resolved against the placement's
 /// derived creation-eye feeds then the world's own camera rows). An unrecognized token (including a bare
-/// <c>named:emotes</c>, which named a host registry no world provides) lights the no-signal card. Null = the no-signal
-/// card until a world's face override wires a feed.</param>
+/// <c>named:emotes</c>, which named a host registry no world provides) shows unbound glass. Null = unbound glass
+/// until a world's face override wires a feed.</param>
 public sealed record CreationFaceDocument(
     string Name,
     int? ShapeId,

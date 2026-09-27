@@ -213,7 +213,7 @@ counts the pipelines and shader modules it creates under its own
 
 A holder takes its lease off the frame thread the first time it produces a
 frame. Until the set is ready the node returns an empty surface and a view
-returns its last image, or no signal. The frame thread keeps draining the
+returns its last image, or none. The frame thread keeps draining the
 console and stepping the simulation meanwhile, so a `world.wait` or
 `pipeline.wait` still reaches its deadline. The one exception is the offscreen
 host with a capture armed: it steps no further tick until the capture is served

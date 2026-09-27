@@ -397,7 +397,7 @@ public sealed class WorldFaceCatalog {
             return new WorldScreenSource.View(CameraName: name);
         }
 
-        notices.Add(item: $"[world.faces: '{placementId}':'{faceName}' default source '{token}' is not a known token (none|test|camera:<name>|feed:<name>) or names no camera — it lights the no-signal card]");
+        notices.Add(item: $"[world.faces: '{placementId}':'{faceName}' default source '{token}' is not a known token (none|test|camera:<name>|feed:<name>) or names no camera — it shows unbound glass]");
 
         return null;
     }

@@ -366,8 +366,11 @@ These are one-line cautions; the owning pages hold the derivations.
   out under a counted lease; never upload a sampled image by hand. A converter
   builds off the frame thread, so a capture fill (`WorldCaptureFills`)
   converts whenever a screen shows or a HUD frame names an external source,
-  never first on the frame a capture is armed for, which would have no image
-  (`WorldCaptureFillLawTests`). An uploaded
+  never first on the frame a capture is armed for, which would have no image,
+  and never while none does: a filling gate with no external consumer resolves
+  nothing to a fill, so a capture of such a world creates no pipeline
+  (`WorldCaptureFillLawTests`, the `device-loss-windowed` discriminating leg).
+  An uploaded
   source's region layout and the conversion kernels are a
   sync pair ([references/sync-pairs.md](references/sync-pairs.md#image-sources));
   a change to either moves `ImageSourceConversionLawTests`, the
@@ -393,7 +396,7 @@ These are one-line cautions; the owning pages hold the derivations.
   `OnDeviceLost` refuses the capture its slot holds
   (`CaptureRequestSlot.RefuseForDeviceLoss`), which the scheduler writes as a
   `deviceLost` refusal; both hosts recover through `DeviceLossRecovery`
-  (`Puck.Launcher`), which releases the tree before rebuilding the device
+  (`Puck.Launcher`), which releases the render root before rebuilding the device
   through an `IDeviceRebuild`, and before giving up. `gpu.faults lose` injects
   a loss on a real device (`device-loss`, `device-loss-windowed`). On Direct3D 12 every create or
   call a removal reaches on a frame or capture path goes through
@@ -577,7 +580,9 @@ These are one-line cautions; the owning pages hold the derivations.
   them from that statement, and checks `IGpuBindings.CanAdmit` before it
   allocates, so a candidate that does not fit is refused with
   `GPU_DESCRIPTOR_HEAP` and nothing grows; a new owner does the same, and a new
-  shader-visible heap is never created. The owning explanation is
+  shader-visible heap is never created: `DirectXDescriptorHeaps.Create` makes
+  CPU-only heaps, and `DirectXGpuBindings.ShaderVisibleHeapsCreated` reads two
+  per device. The owning explanation is
   [Direct3D 12](../../../docs/rendering/directx.md#descriptor-heaps).
 - **Every pipeline goes through the device's persistent cache.** Vulkan's
   `VulkanLogicalDevice.PipelineCache` and Direct3D 12's
@@ -723,9 +728,17 @@ These are one-line cautions; the owning pages hold the derivations.
   own profile with no host-visible device-local bytes and reads an uploaded
   source's conversion back byte-exact on Vulkan, Direct3D 12 hardware (debug
   layer on, no `[d3d12-debug]` line) and WARP.
-  A Vulkan swapchain is created only in a `GpuPixelFormat`
-  (`VulkanSwapchainFactory.SelectSurfaceFormat` over `SwapchainFormats`); a
+  A swapchain on either backend is created in a `DisplayOutput` (format and
+  `DisplayColorSpace`) chosen by `DisplayOutput.TrySelect`: SDR in
+  `SdrFormats` unless an HDR color space is requested
+  (`PresentationOptions.ColorSpace`, `Srgb` everywhere) and reported
+  (`VulkanSwapchainFactory.SelectOutput` over the surface's pairs, the
+  Direct3D 12 compositor's `ReportedOutputs` over `IDXGIOutput6`); a Vulkan
   surface offering none of them refuses at creation, never mid-frame.
+  `ISurfacePresenter.Output` exposes the chosen one. Paper white is
+  `PresentationOptions.PaperWhiteNits` (80 to 10,000 nits, default
+  `DisplayOutput.SdrWhiteNits`), and `DisplayOutput.WhiteScale` is the one
+  conversion to an output's UI white: one in SDR at every level.
   `ShaderPipelineMemoryBudget.For(profile)` is the other reader: a pipeline
   instance's budget is a quarter of the device-local bytes, or 512 MiB when the
   profile reports none.
@@ -1179,8 +1192,12 @@ host composes it from the document's current rows whenever they move
 (`WorldViewGraphHost.Reconcile`), and `WorldPostPasses` follows the recomposed
 graph. `WorldRenderRoot`
 builds the engine node, the packages and the runtime for both GPU shapes, and
-`RenderGraphRuntimeNode` is the host's render root; `WorldRenderProbe.Root` is
-what captures, `world.screenshot` and readiness read. A `captures` row may name
+`RenderGraphRuntimeNode` is the host's render root, the one `IRenderRoot`
+(`Puck.Hosting`) a launcher produces, presents, releases on device loss and
+disposes: nothing wraps it, a graph instance's `ShaderPipelineRenderNode` is no
+root, and a service that must be released while the device is alive rides its
+`Holdings` (the screen binder) rather than a decorator. `WorldRenderProbe.Root`
+is what captures, `world.screenshot` and readiness read. A `captures` row may name
 `world` (`WorldCaptureRow.Instance`) to capture the world beneath the root's
 passes, or a screen (`WorldCaptureRow.Screen`) to capture the source instance it
 reads; a capture of a source that states its image (`IImageSourceReference`)
@@ -1401,8 +1418,8 @@ The Direct3D 12 surface compositor's blit is build DXIL
 compositors bind `SurfaceBlitLayout` (the pass group, `t0` and `s1` in space 3)
 and lease their blit from the device's `GpuPassPipelineCache` for a render pass
 in the swapchain's format, so no presentation pipeline is created outside a
-build cache; the Direct3D 12 one keeps its own one-SRV and one-sampler
-shader-visible heaps until P16. No Puck assembly may
+build cache; the Direct3D 12 one binds a set of a pool admitted into the
+device's heaps. No Puck assembly may
 import `d3dcompiler_*.dll` (`NoDeviceShaderCompileLawTests`).
 
 ## Verifying

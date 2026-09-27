@@ -29,6 +29,7 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
 
     private DirectXShaderVisibleHeaps? m_heaps;
     private long m_liveHandles;
+    private long m_shaderVisibleHeapsCreated;
 
     /// <summary>Gets the current device's shader-visible heaps, creating the device first when it does not exist yet.</summary>
     /// <exception cref="GpuDeviceUnavailableException">No device could be created.</exception>
@@ -46,6 +47,10 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
     /// <summary>Gets the <see cref="GCHandle"/>s this instance holds now, one per pool and one per set allocated from a
     /// pool not yet destroyed.</summary>
     public long LiveHandles => Interlocked.Read(location: ref m_liveHandles);
+    /// <summary>Gets the shader-visible descriptor heaps created on this instance's devices over its life: two per
+    /// device brought up, its <see cref="DirectXShaderVisibleHeaps"/> pair, and no other, since no owner creates one of
+    /// its own.</summary>
+    public long ShaderVisibleHeapsCreated => Interlocked.Read(location: ref m_shaderVisibleHeapsCreated);
 
     /// <summary>Returns the sampler descriptor a group's sampler is: clamp-to-edge addressing on every axis, no comparison,
     /// no anisotropy and the full mip range, with the filter the sampler names. It is the sampler a pipeline created
@@ -78,7 +83,8 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
         m_heaps = DirectXShaderVisibleHeaps.Create(
             capabilities: capabilities,
             device: device,
-            memory: deviceContext.Memory
+            memory: deviceContext.Memory,
+            shaderVisibleHeapsCreated: ref m_shaderVisibleHeapsCreated
         );
     }
     /// <summary>Releases the current device's heaps and ends their memory entries, before the device itself is

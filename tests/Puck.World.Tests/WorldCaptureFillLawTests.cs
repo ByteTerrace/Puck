@@ -13,9 +13,10 @@ namespace Puck.World.Tests;
 /// through a converter whose graph builds off the frame thread, so a fill first converted on the frame a capture is armed
 /// for has no image on that frame. While a screen shows an external source (a desktop capture, imported), its fill
 /// therefore converts before any capture is armed, and the arming frame's read of the source hands out the converted
-/// fill with no pipeline built on that frame. A screen showing a source that is not external converts no fill until the
-/// gate fills, and the fill that frame starts converting has no image on the arming frame, only on a later one: the
-/// ordering the first law observes is what gives the arming frame its fill.
+/// fill with no pipeline built on that frame. A fill that starts converting on the arming frame, because a screen starts
+/// showing external content on it, has no image on that frame, only on a later one: the ordering the first law observes
+/// is what gives the arming frame its fill. While nothing shows external content no fill converts, whether a capture is
+/// armed on a windowed gate or an offscreen gate fills every frame, so a capture of such a world builds no pipeline.
 /// </summary>
 public sealed class WorldCaptureFillLawTests {
     // How long a conversion's pipeline build on the thread pool may take before a law gives up on it.
@@ -92,15 +93,39 @@ public sealed class WorldCaptureFillLawTests {
         Assert.Equal(expected: frames, actual: feed.Acquisitions);
         Assert.Equal(expected: 0, actual: scene.PipelinesEntered);
     }
-    [Fact]
-    public void AFillFirstConvertedOnTheArmingFrameHasNoImageUntilALaterFrame() {
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void ACaptureWhileNothingShowsExternalContentConvertsNoFillAndBuildsNoPipeline(bool alwaysFills) {
         var source = Pattern();
 
         Assert.False(condition: WorldCaptureFills.IsExternal(source: source));
 
-        using var scene = new Scene(shown: source);
+        using var scene = new Scene(
+            alwaysFills: alwaysFills,
+            shown: source
+        );
 
-        // Nothing shows external content and the gate does not fill, so no fill converts and no pipeline is built.
+        for (var frame = 0; (frame < 8); frame++) {
+            Assert.False(condition: scene.Frame());
+        }
+
+        // The gate fills now, but no read resolves through it to a fill, so a capture frame converts nothing either.
+        scene.Armed = true;
+        Assert.True(condition: scene.Gate.Filling);
+
+        for (var frame = 0; (frame < 8); frame++) {
+            Assert.False(condition: scene.Frame());
+        }
+
+        Assert.False(condition: FillConverted(fills: scene.Fills));
+        Assert.Equal(expected: 0, actual: scene.PipelinesEntered);
+    }
+    [Fact]
+    public void AFillFirstConvertedOnTheArmingFrameHasNoImageUntilALaterFrame() {
+        using var scene = new Scene(shown: Pattern());
+
+        // Nothing shows external content, so no fill converts and no pipeline is built.
         for (var frame = 0; (frame < 8); frame++) {
             Assert.False(condition: scene.Frame());
         }
@@ -108,8 +133,10 @@ public sealed class WorldCaptureFillLawTests {
         Assert.False(condition: FillConverted(fills: scene.Fills));
         Assert.Equal(expected: 0, actual: scene.PipelinesEntered);
 
-        // The arming frame starts the fill's conversion, whose build is held in the driver: that frame has no fill.
+        // A screen starts showing external content on the arming frame, which starts the fill's conversion, whose build is
+        // held in the driver: that frame has no fill.
         scene.HoldPipelines();
+        scene.ConsumesExternal = true;
         scene.Armed = true;
         Assert.True(condition: scene.Frame());
         Assert.True(
@@ -184,15 +211,13 @@ public sealed class WorldCaptureFillLawTests {
 
         private int m_pipelinesEntered;
 
-        public Scene(WorldScreenSource shown) {
+        public Scene(WorldScreenSource shown, bool alwaysFills = false) {
+            ConsumesExternal = WorldCaptureFills.IsExternal(source: shown);
             Gate = new WorldCaptureGate(
-                alwaysFills: false,
+                alwaysFills: alwaysFills,
                 captureArmed: () => Armed
             );
-            Fills = new WorldCaptureFills(
-                consumesExternal: () => WorldCaptureFills.IsExternal(source: shown),
-                gate: Gate
-            );
+            Fills = new WorldCaptureFills(consumesExternal: () => ConsumesExternal);
             m_gpu.BeforeComputePipeline = description => {
                 _ = Interlocked.Increment(location: ref m_pipelinesEntered);
                 PipelineEntered.Set();
@@ -238,6 +263,8 @@ public sealed class WorldCaptureFillLawTests {
         }
 
         public bool Armed { get; set; }
+        // Whether a consumer shows external content: at first, whether the scene's screen does.
+        public bool ConsumesExternal { get; set; }
         public WorldCaptureFills Fills { get; }
         public WorldCaptureGate Gate { get; }
 

@@ -10,6 +10,10 @@ namespace Puck.Abstractions.Presentation;
 /// live in the dependency-free abstractions leaf and be implemented by any backend (Vulkan, DirectX, …).
 /// </summary>
 public interface ISurfacePresenter : IDisposable {
+    /// <summary>Gets what the active swapchain presents, its format and color space, or <see langword="null"/> while
+    /// no swapchain exists.</summary>
+    DisplayOutput? Output { get; }
+
     /// <summary>Acquires GPU presentation resources (swap chain, back buffers, render passes) for a native
     /// surface binding. Safe to call repeatedly — each call replaces any previously acquired resources.</summary>
     /// <param name="binding">The native surface binding identifying the surface to present into.</param>
