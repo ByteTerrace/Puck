@@ -155,7 +155,12 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         var gpu = new FakePipelineGpu();
         using var node = InstalledNode(gpu: gpu);
         using var opener = new PipelineGateOpener();
-        var candidate = Feedback(historyFormat: "R32G32B32A32Float");
+        // Its shaders differ from the installed graph's, so its pipelines are new pass-pipeline cache entries the gate
+        // holds in the driver: a candidate the cache already holds would finish at once.
+        var candidate = Feedback(
+            historyFormat: "R32G32B32A32Float",
+            revision: 1
+        );
 
         node.Paused = true;
         _ = Produce(node: node);

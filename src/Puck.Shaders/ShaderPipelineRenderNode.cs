@@ -202,14 +202,11 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     );
     }
 
-    // A fullscreen pass records its barriers in their own command buffer before its render pass; the render pass leaves
-    // its color attachment shader-readable, which the plan already accounts for, so nothing follows it.
-    private void RecordPreBarriers(RuntimePass pass, int slot, nint command, List<nint> commands) {
+    // A fullscreen pass records its barriers before its render pass; the render pass leaves its color attachment
+    // shader-readable, which the plan already accounts for, so nothing follows it.
+    private void RecordPreBarriers(RuntimePass pass, int slot, nint command) {
         var recorder = m_gpu.Recorder;
 
-        recorder.BeginCommandBuffer(
-            commandBufferHandle: command
-        );
         InitializeResources(
             command: command,
             recorder: recorder,
@@ -221,10 +218,6 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             recorder: recorder,
             slot: slot
         );
-        recorder.EndCommandBuffer(
-            commandBufferHandle: command
-        );
-        commands.Add(item: command);
     }
     // Puts one pass of a finished build into service: takes its modules, pipeline and render pass from the build, then
     // allocates what the frame thread owns — the geometry buffer, the framebuffer binding each frame slot's attachments,
@@ -262,9 +255,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         runtime.Graphics = runtime.Pipeline?.Current!.Graphics;
         runtime.RenderPass = runtime.Pipeline?.Current!.RenderPass;
 
-        if (declaration is null or { Kind: ShaderPipelineDocumentPassKind.Compute }) {
-            runtime.Pools = new IGpuCommandPool[m_inFlight];
-        } else {
+        if (declaration is not (null or { Kind: ShaderPipelineDocumentPassKind.Compute })) {
             // Geometry buffers are created through the device's buffer factory, not the node's counted one, so they count
             // as no created storage buffer and no written bytes.
             if (declaration.Geometry is { } geometry) {
@@ -288,8 +279,6 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                     usage: GpuBufferUsage.Vertex
                 );
             }
-            runtime.Pre = new IGpuCommandPool[m_inFlight];
-            runtime.Draw = new IGpuCommandPool[m_inFlight];
             runtime.Framebuffers = new IGpuFramebuffer[m_inFlight];
 
             // A framebuffer owns no image, so one over history the install carries binds the replaced graph's instances,
@@ -669,10 +658,10 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                 var slot = m_slots[index];
 
                 slot.Fence ??= m_gpu.QueueSubmitter.CreateSubmissionFence();
-                slot.Final ??= m_gpu.CommandPoolFactory.Create(name: new GpuObjectName(
+                slot.Commands ??= m_gpu.CommandPoolFactory.Create(name: new GpuObjectName(
                     index: index,
                     owner: m_name,
-                    part: "final"
+                    part: "commands"
                 ));
             }
             if (built.StagedRegions > 0) {
@@ -714,13 +703,19 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             throw;
         }
     }
-    private void FinalizeOutputs(int slot, List<nint> commands, IGpuExportableImage? exported) {
-        var command = m_slots[slot].Final!.CommandBufferHandle;
+    // Begins the slot's one command list, which every pass, the float preview, the export copy and the presentation record
+    // into; only the region copies, which the passes' recordings owe, record in a list of their own, submitted first.
+    private nint BeginFrameCommands(int slot) {
+        var command = m_slots[slot].Commands!.CommandBufferHandle;
+
+        m_gpu.Recorder.BeginCommandBuffer(commandBufferHandle: command);
+
+        return command;
+    }
+    // Records the export's copy and the selected output's presentation at the end of the frame's list.
+    private void FinalizeOutputs(int slot, nint command, IGpuExportableImage? exported) {
         var recorder = m_gpu.Recorder;
 
-        recorder.BeginCommandBuffer(
-            commandBufferHandle: command
-        );
         if (exported is not null) {
             RecordExportCopy(
                 command: command,
@@ -735,10 +730,6 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             selected: m_resourceLookup[(m_selectedOutput ?? m_pipeline!.Plan.DefaultOutput)],
             slot: slot
         );
-        recorder.EndCommandBuffer(
-            commandBufferHandle: command
-        );
-        commands.Add(item: command);
     }
     // Writes this frame's ports into the pass group's set for the slot. The sets, samplers and constant buffers were
     // allocated with the graph, from its one pool (AllocateSlotObjects).
@@ -968,7 +959,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             m_portShares = previousPortShares;
             m_rowRegions = previousRowRegions;
             if (!hadFences) {
-                foreach (var slot in m_slots) { slot.Fence?.Dispose(); slot.Fence = null; slot.Final?.Dispose(); slot.Final = null; }
+                foreach (var slot in m_slots) { slot.Fence?.Dispose(); slot.Fence = null; slot.Commands?.Dispose(); slot.Commands = null; }
             }
             if (!key.Candidate) {
                 throw;
@@ -1076,6 +1067,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         var slot = ((int)((m_frame - 1) % m_inFlight));
         var selected = m_resourceLookup[(m_selectedOutput ?? m_pipeline!.Plan.DefaultOutput)];
         var commands = m_commands;
+        var command = BeginFrameCommands(slot: slot);
 
         commands.Clear();
         if (NeedsPreview(spec: selected.Spec)) {
@@ -1090,14 +1082,16 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                     slot
                 ),
                 slot,
-                commands
+                command
             );
         }
         FinalizeOutputs(
-            commands: commands,
+            command: command,
             exported: null,
             slot: slot
         );
+        m_gpu.Recorder.EndCommandBuffer(commandBufferHandle: command);
+        commands.Add(item: command);
         SubmitCounted(
             commands: commands,
             fence: m_slots[slot].Fence!
@@ -1189,10 +1183,19 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             }
         }
     }
-    private void Record(RuntimePass pass, int slot, in FrameContext context, List<nint> commands) {
+    private void Record(RuntimePass pass, int slot, in FrameContext context, nint command) {
         if (pass.Package is not null) {
+            if (pass.Package!.Skips(context: in context)) {
+                SkipAccesses(
+                    pass: pass,
+                    slot: slot
+                );
+
+                return;
+            }
+
             RecordPackage(
-                commands: commands,
+                command: command,
                 context: in context,
                 pass: pass,
                 slot: slot
@@ -1207,12 +1210,9 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         var spec = pass.Spec!;
 
         if (pass.Kind == ShaderPipelinePassKind.Compute) {
-            var handle = pass.Pools![slot].CommandBufferHandle;
+            var handle = command;
             var recorder = m_gpu.Recorder;
 
-            recorder.BeginCommandBuffer(
-                commandBufferHandle: handle
-            );
             InitializeResources(
                 command: handle,
                 recorder: recorder,
@@ -1244,27 +1244,18 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                 groupCountY: (((extent.Height + spec.GroupSizeY) - 1) / spec.GroupSizeY),
                 groupCountZ: (((1u + spec.GroupSizeZ) - 1) / spec.GroupSizeZ)
             );
-            recorder.EndCommandBuffer(
-                commandBufferHandle: handle
-            );
-            commands.Add(item: handle);
             return;
         }
 
         RecordPreBarriers(
-            command: pass.Pre![slot].CommandBufferHandle,
-            commands: commands,
+            command: command,
             pass: pass,
             slot: slot
         );
         var framebuffer = pass.Framebuffers![slot];
-        var command = pass.Draw![slot].CommandBufferHandle;
         var recorderGraphics = m_gpu.Recorder;
         var pipeline = pass.Graphics!;
 
-        recorderGraphics.BeginCommandBuffer(
-            commandBufferHandle: command
-        );
         recorderGraphics.BeginRenderPass(
             command,
             framebuffer
@@ -1319,10 +1310,6 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         recorderGraphics.EndRenderPass(
             commandBufferHandle: command
         );
-        recorderGraphics.EndCommandBuffer(
-            commandBufferHandle: command
-        );
-        commands.Add(item: command);
     }
     private void Release(bool wait) {
         // A build in flight creates objects on the device being released, so it is waited out and discarded first.
@@ -1356,8 +1343,8 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         m_readback = null;
         m_readbackBytes = 0UL;
         foreach (var slot in m_slots) {
-            slot.Final?.Dispose();
-            slot.Final = null;
+            slot.Commands?.Dispose();
+            slot.Commands = null;
             slot.Fence?.Dispose();
             slot.Fence = null;
         }
@@ -1598,6 +1585,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         CheckCounts();
         // A reload, a row upsert, a resize or a recount replaces the graph; it is not a step, so a paused frame builds and
         // installs it too, rendering nothing.
+        m_advances++;
         EnsureBuild();
         InstallPending();
         InstallPendingPreview();
@@ -1701,10 +1689,11 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         BindRegionBuffers(slot: slotIndex);
         HoldLeases();
         var commands = m_commands;
+        var command = BeginFrameCommands(slot: slotIndex);
 
         commands.Clear();
         RecordPasses(
-            commands: commands,
+            command: command,
             context: context,
             slot: slotIndex
         );
@@ -1724,17 +1713,16 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                     slotIndex
                 ),
                 slotIndex,
-                commands
+                command
             );
         }
         FinalizeOutputs(
-            commands: commands,
+            command: command,
             exported: exported,
             slot: slotIndex
         );
-        if (commands.Count == 0) {
-            return m_lastSurface;
-        }
+        m_gpu.Recorder.EndCommandBuffer(commandBufferHandle: command);
+        commands.Add(item: command);
         exported?.BeginWrite();
         SubmitCounted(
             commands: commands,

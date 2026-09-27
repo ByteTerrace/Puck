@@ -6,22 +6,32 @@ using Xunit;
 
 namespace Puck.Testing;
 
-// How a harness gets an engine's pipelines: a fake kernel set, a set built inline for an engine it drives directly,
-// or the frames a node produces while its build runs on the thread pool.
+// How a harness gets an engine's pipelines: a fake kernel set, a set leased and waited for inline for an engine it drives
+// directly, or the frames a node produces while its build runs on the thread pool.
 internal static class SdfTestPipelines {
-    // Builds a set on the calling thread, counting into the ledger the engine will count into.
-    public static SdfWorldPipelines Build(IGpuDeviceContext device, SdfWorldKernels kernels, GpuWorkLedger ledger) =>
-        SdfWorldPipelines.Build(
-            cancellationToken: CancellationToken.None,
+    // Leases a set from a pass-pipeline cache and waits for it on the calling thread; the cache counts what it creates.
+    public static SdfWorldPipelines Build(IGpuDeviceContext device, SdfWorldKernels kernels, GpuPassPipelineCache cache, bool includeBrickPipelines = false) {
+        var set = SdfWorldPipelines.Acquire(
+            cache: cache,
             device: device,
-            includeBrickPipelines: false,
-            kernels: kernels,
-            ledger: ledger
+            includeBrickPipelines: includeBrickPipelines,
+            kernels: kernels
         );
-    // A composition's pipeline cache whose region-copy pipelines are created from a one-byte kernel of the caller's
+
+        try {
+            set.Wait(cancellationToken: CancellationToken.None);
+
+            return set;
+        } catch {
+            set.Dispose();
+
+            throw;
+        }
+    }
+    // A composition's pipeline catalog whose region-copy pipelines are created from a one-byte kernel of the caller's
     // choosing (UploadModelGpu.RegionCopyBytecode for a GPU that runs the copies), and whose mesh pass pipelines from
     // one-byte stages.
-    public static SdfWorldPipelineCache Cache(byte regionCopy = 1) {
+    public static SdfWorldPipelineCatalog Cache(byte regionCopy = 1) {
         var pipelines = new GpuPassPipelineCache();
 
         return new(

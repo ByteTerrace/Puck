@@ -55,10 +55,10 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
     public void EveryCreationOfACandidateFaultedInTurnByTheDecoratorDisposesExactlyWhatItCreated() {
         // A replacement whose history cannot be carried creates, per kind: three images per slot (history, gray, and the
         // image the fullscreen pass draws into); two compute modules and the fullscreen pass's two; two compute
-        // pipelines and a graphics one; one descriptor pool for the graph's three passes; per slot a command pool
-        // for each compute pass and the fullscreen pass's barrier and draw pools; one framebuffer per slot; one render
-        // pass; and per slot one host-visible constant buffer for the frame group's block and one for each pass's pass
-        // block. Its shaders differ from the installed graph's, so its modules, render pass and pipelines are new
+        // pipelines and a graphics one; one descriptor pool for the graph's three passes; one framebuffer per slot; one
+        // render pass; and per slot one host-visible constant buffer for the frame group's block and one for each pass's
+        // pass block. The passes record into each frame slot's one command list, which the installed graph's first
+        // install created, so the candidate creates no command pool. Its shaders differ from the installed graph's, so its modules, render pass and pipelines are new
         // pass-pipeline cache entries, created through the node's faulting device. Samplers are the one creation the fake
         // counts that the decorator cannot fail.
         var expected = new Dictionary<GpuCreationKind, long> {
@@ -68,7 +68,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             [GpuCreationKind.RenderPass] = 1L,
             [GpuCreationKind.Framebuffer] = InFlight,
             [GpuCreationKind.ShaderModule] = 4L,
-            [GpuCreationKind.CommandPool] = (4L * InFlight),
+            [GpuCreationKind.CommandPool] = 0L,
             [GpuCreationKind.BindingsPool] = 1L,
         };
 

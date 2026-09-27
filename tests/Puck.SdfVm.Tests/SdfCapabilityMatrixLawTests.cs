@@ -255,7 +255,7 @@ public sealed class SdfCapabilityMatrixLawTests {
         new(
             Capability: "kernel variants and reload",
             Equivalent: "the graph's pass-pipeline cache, built off the frame thread",
-            Check: "SdfViewsKernelVariantLawTests; SdfWorldPipelineCacheLawTests; SdfPipelineBuildLivenessLawTests",
+            Check: "SdfViewsKernelVariantLawTests; SdfWorldPipelineCatalogLawTests; SdfWorldPipelinesLawTests; SdfPipelineBuildLivenessLawTests",
             Green: false,
             Members: [
                 "SdfWorldTables.InstallReload", "SdfWorldResidency.RequestShaderReload", "SdfWorldResidency.ShaderReloadStatus",

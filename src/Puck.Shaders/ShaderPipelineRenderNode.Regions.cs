@@ -95,6 +95,7 @@ public sealed partial class ShaderPipelineRenderNode {
             // candidate's build and install as a produced frame does: a host that produces only once its region is bound
             // would otherwise never install one.
             if (!m_portShares.ContainsKey(key: name)) {
+                m_advances++;
                 EnsureBuild();
                 InstallPending();
             }

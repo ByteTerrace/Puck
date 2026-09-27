@@ -72,10 +72,15 @@ public sealed partial class ShaderPipelineRenderNode {
     private CompiledShaderPipeline? m_refusedPending;
     private bool m_refusedResize;
     private BuildKey m_buildKey;
+    // Each advance of the node's builds (a produced frame, or a region bind that advances them as one does) is one more,
+    // and the advance the running build started in, so a build is taken only by a later advance.
+    private long m_advances;
+
+    private long m_buildAdvance = -1;
 
     /// <summary>Gets whether a candidate's pipelines and shader modules are being built on the thread pool. Frames
     /// produced meanwhile present the installed graph; the build installs at the first frame boundary after it finishes,
-    /// paused or running.</summary>
+    /// never in the frame that started it, paused or running.</summary>
     public bool IsBuildingCandidate => (m_build.IsPending && !m_build.IsCompleted);
 
     // Every version name mapped to the declaration of the storage that holds it, which fixes its kind, format and extent.
@@ -144,8 +149,14 @@ public sealed partial class ShaderPipelineRenderNode {
     }
     // Takes a finished build and installs it, refuses it, or discards it when what should be built has changed since it
     // started. A failed rebuild of the installed pipeline after a device loss rethrows here, on the frame thread, so the
-    // loss reaches the host's recovery; the next frame starts a fresh build.
+    // loss reaches the host's recovery; the next frame starts a fresh build. A build is never taken in the advance that
+    // started it, however fast it finished (a candidate whose every pipeline the pass-pipeline cache already holds
+    // finishes at once), so the frame an install lands in never depends on the thread pool's timing.
     private void InstallPending() {
+        if (m_buildAdvance == m_advances) {
+            return;
+        }
+
         if (!m_build.TryTake(
             error: out var error,
             result: out var built
@@ -276,6 +287,7 @@ public sealed partial class ShaderPipelineRenderNode {
         );
 
         m_buildKey = key;
+        m_buildAdvance = m_advances;
         m_build.Start(build: token => GraphBuild.Create(
             cancellationToken: token,
             request: request

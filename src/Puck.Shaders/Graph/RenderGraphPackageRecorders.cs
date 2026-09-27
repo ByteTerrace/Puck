@@ -99,6 +99,14 @@ public interface IRenderGraphPackageRecorder : IDisposable {
     /// <param name="recording">The frame's command buffer and bound versions.</param>
     /// <returns>Whether the recording wrote its outputs, or left each to stand for its input.</returns>
     RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording);
+    /// <summary>Returns whether the pass records nothing this frame: neither its work nor the planned barriers of its
+    /// accesses, which the instance asks before it records them. Every storage the pass would have accessed stays in the
+    /// state its last recorded access left it in, which the next access starts from, so a pass that skips must be one
+    /// whose outputs no later pass reads the contents of on the frames it skips. The default records every
+    /// frame.</summary>
+    /// <param name="context">The frame being recorded.</param>
+    /// <returns><see langword="true"/> when the pass records nothing this frame.</returns>
+    bool Skips(in FrameContext context) => false;
 }
 /// <summary>Makes the recorders of one package id. A candidate graph's package passes build with its shader passes:
 /// <see cref="Build"/> creates a pass's shader modules, pipelines and render passes on the thread pool before the graph

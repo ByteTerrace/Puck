@@ -3,12 +3,11 @@ using Puck.Abstractions.Gpu;
 namespace Puck.Hosting.Tests;
 
 /// <summary>
-/// Laws for <see cref="GpuBuildCache{TKey, T}"/>, the one leased-build mechanism under the pass-pipeline cache and the
-/// SDF engine's pipeline sets: leases on one device and key share one value built once, and another device or key has
+/// Laws for <see cref="GpuBuildCache{TKey, T}"/>, the one leased-build mechanism under the pass-pipeline cache: leases on one device and key share one value built once, and another device or key has
 /// its own; the last release disposes the value and a later lease builds anew, which is how a device loss empties the
 /// device's entries; a holder's own pool build waits for an entry; the last release cancels a build still running and
 /// waits only for the creation in the driver, and a wait racing its own lease's release throws without building again; a
-/// failed build rethrows once and the next poll builds afresh; and a lone holder can take its entry out of sharing.
+/// failed build rethrows once and the next poll builds afresh.
 /// Counted, not timed: the build delegate counts its builds, and a gate holds one in the driver.
 /// </summary>
 public sealed class GpuBuildCacheLawTests {
@@ -188,26 +187,6 @@ public sealed class GpuBuildCacheLawTests {
         ));
         Assert.Equal(expected: 2, actual: Ready(lease: lease).Serial);
         lease.Release();
-    }
-    [Fact]
-    public void ALoneHolderTakesItsEntryOutOfSharing() {
-        var builds = new Builds();
-        var cache = builds.Cache();
-        var device = new StubDevice();
-        var first = cache.Acquire(device: device, key: "a");
-        var second = cache.Acquire(device: device, key: "a");
-
-        Assert.False(condition: first.TryMakePrivate());
-        second.Release();
-        Assert.True(condition: first.TryMakePrivate());
-        Assert.Equal(expected: 0, actual: cache.SharedEntries);
-
-        var later = cache.Acquire(device: device, key: "a");
-
-        Assert.NotSame(expected: Ready(lease: first), actual: Ready(lease: later));
-        first.Release();
-        later.Release();
-        Assert.False(condition: first.TryMakePrivate());
     }
     [Fact]
     public void TheCacheLedgerIsNamedByTheCache() {

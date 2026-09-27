@@ -143,7 +143,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     private bool m_viewHostsOnDirectX;
     private int m_viewInstanceCapacity;
     private int m_viewProgramWordCapacity;
-    private SdfWorldPipelineCache? m_viewPipelines;
+    private SdfWorldPipelineCatalog? m_viewPipelines;
 
     private DynamicTransform[] m_viewTransforms = [];
     private readonly Dictionary<int, ScreenSlot> m_slots = new();

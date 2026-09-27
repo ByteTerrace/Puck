@@ -346,10 +346,7 @@ public sealed partial class ShaderPipelineRenderNode {
         private readonly GpuDeviceServices m_gpu;
         private readonly PreviewObjects m_objects;
         private readonly GpuImageLayout m_outputLayout;
-        private readonly IGpuCommandPool[] m_draw;
         private readonly IGpuPipeline m_pipeline;
-        private readonly IGpuCommandPool[] m_post;
-        private readonly IGpuCommandPool[] m_pre;
         private readonly nint[] m_samplers;
         private readonly bool[] m_targetInitialized;
         private readonly IGpuImage[] m_targets;
@@ -363,9 +360,6 @@ public sealed partial class ShaderPipelineRenderNode {
             m_outputLayout = outputLayout;
             m_targets = objects.Targets;
             m_pipeline = objects.Pipeline!;
-            m_draw = new IGpuCommandPool[inFlight];
-            m_pre = new IGpuCommandPool[inFlight];
-            m_post = new IGpuCommandPool[inFlight];
             m_descriptorSets = new nint[inFlight];
             m_samplers = new nint[inFlight];
             m_targetInitialized = new bool[inFlight];
@@ -396,24 +390,6 @@ public sealed partial class ShaderPipelineRenderNode {
                         descriptorSetHandle: m_descriptorSets[i],
                         samplerHandle: m_samplers[i]
                     );
-                    m_pre[i] = gpu.CommandPoolFactory.Create(name: new GpuObjectName(
-                        detail: "barriers",
-                        index: ((int)i),
-                        owner: objects.Owner,
-                        part: "preview"
-                    ));
-                    m_draw[i] = gpu.CommandPoolFactory.Create(name: new GpuObjectName(
-                        detail: "draw",
-                        index: ((int)i),
-                        owner: objects.Owner,
-                        part: "preview"
-                    ));
-                    m_post[i] = gpu.CommandPoolFactory.Create(name: new GpuObjectName(
-                        detail: "post",
-                        index: ((int)i),
-                        owner: objects.Owner,
-                        part: "preview"
-                    ));
                 }
             } catch { Dispose(); throw; }
         }
@@ -423,9 +399,6 @@ public sealed partial class ShaderPipelineRenderNode {
 
         public void Dispose() {
             m_objects.Dispose();
-            foreach (var pool in m_pre) { pool?.Dispose(); }
-            foreach (var pool in m_draw) { pool?.Dispose(); }
-            foreach (var pool in m_post) { pool?.Dispose(); }
             foreach (var sampler in m_samplers) {
                 if (sampler != 0) {
                     m_gpu.Bindings.DestroySampler(
@@ -461,9 +434,9 @@ public sealed partial class ShaderPipelineRenderNode {
 
             return null;
         }
-        // Records the draw of one slot. sourceBarrier is the node's barrier before the source is sampled; the preview's
-        // own targets are private to it and are tracked here.
-        public void Record(ShaderPipelineBarrier sourceBarrier, ShaderPipelineExternalImage image, int slot, List<nint> commands) {
+        // Records the draw of one slot into the frame's list. sourceBarrier is the node's barrier before the source is
+        // sampled; the preview's own targets are private to it and are tracked here.
+        public void Record(ShaderPipelineBarrier sourceBarrier, ShaderPipelineExternalImage image, int slot, nint command) {
             var sourceImageHandle = image.ImageHandle;
             var sourceImageView = image.ImageViewHandle;
 
@@ -474,14 +447,10 @@ public sealed partial class ShaderPipelineRenderNode {
                 imageViewHandle: sourceImageView
             );
             var recorder = m_gpu.Recorder;
-            var pre = m_pre[slot];
 
-            recorder.BeginCommandBuffer(
-                commandBufferHandle: pre.CommandBufferHandle
-            );
             if (sourceBarrier.Kind == ShaderPipelineBarrierKind.Image) {
                 recorder.TransitionImageLayout(
-                    pre.CommandBufferHandle,
+                    command,
                     sourceImageHandle,
                     sourceBarrier.OldLayout,
                     sourceBarrier.NewLayout,
@@ -492,7 +461,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 );
             } else if (sourceBarrier.Kind == ShaderPipelineBarrierKind.Memory) {
                 recorder.MemoryBarrier(
-                    pre.CommandBufferHandle,
+                    command,
                     sourceBarrier.SourceAccess,
                     sourceBarrier.DestinationAccess,
                     sourceBarrier.SourceStage,
@@ -506,7 +475,7 @@ public sealed partial class ShaderPipelineRenderNode {
             );
 
             recorder.TransitionImageLayout(
-                pre.CommandBufferHandle,
+                command,
                 target.ImageHandle,
                 targetOld,
                 GpuImageLayout.RenderTarget,
@@ -519,54 +488,34 @@ public sealed partial class ShaderPipelineRenderNode {
                 : PriorStages),
                 GpuStage.ColorAttachmentOutput
             );
-            recorder.EndCommandBuffer(
-                commandBufferHandle: pre.CommandBufferHandle
-            );
-            commands.Add(item: pre.CommandBufferHandle);
-            var draw = m_draw[slot].CommandBufferHandle;
-            var graphics = m_gpu.Recorder;
-
-            graphics.BeginCommandBuffer(
-                commandBufferHandle: draw
-            );
-            graphics.BeginRenderPass(
-                draw,
+            recorder.BeginRenderPass(
+                command,
                 m_objects.Framebuffers[slot]
             );
-
-            graphics.BindPipeline(
+            recorder.BindPipeline(
                 bindPoint: GpuBindPoint.Graphics,
-                commandBufferHandle: draw,
+                commandBufferHandle: command,
                 pipelineHandle: m_pipeline.Handle
             );
-            graphics.BindDescriptorSet(
+            recorder.BindDescriptorSet(
                 bindPoint: GpuBindPoint.Graphics,
-                commandBufferHandle: draw,
+                commandBufferHandle: command,
                 descriptorSetHandle: m_descriptorSets[slot],
                 group: PassGroup,
                 pipelineLayoutHandle: m_pipeline.LayoutHandle
             );
-            graphics.Draw(
-                commandBufferHandle: draw,
+            recorder.Draw(
+                commandBufferHandle: command,
                 parameters: new GpuDrawParameters(
                     3,
                     1
                 )
             );
-            graphics.EndRenderPass(
-                commandBufferHandle: draw
-            );
-            graphics.EndCommandBuffer(
-                commandBufferHandle: draw
-            );
-            commands.Add(item: draw);
-            var post = m_post[slot];
-
-            recorder.BeginCommandBuffer(
-                commandBufferHandle: post.CommandBufferHandle
+            recorder.EndRenderPass(
+                commandBufferHandle: command
             );
             recorder.TransitionImageLayout(
-                post.CommandBufferHandle,
+                command,
                 target.ImageHandle,
                 GpuImageLayout.ShaderReadOnly,
                 m_outputLayout,
@@ -575,10 +524,6 @@ public sealed partial class ShaderPipelineRenderNode {
                 GpuStage.ColorAttachmentOutput,
                 GpuStage.ComputeShader | GpuStage.FragmentShader
             );
-            recorder.EndCommandBuffer(
-                commandBufferHandle: post.CommandBufferHandle
-            );
-            commands.Add(item: post.CommandBufferHandle);
             m_targetInitialized[slot] = true;
         }
     }

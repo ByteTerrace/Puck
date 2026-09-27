@@ -196,10 +196,10 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     /// construction that throws partway has released every object it created before the exception leaves the
     /// constructor.</summary>
     /// <param name="device">The GPU device the tables live on; they record through its services, unwrapped.</param>
-    /// <param name="pipelines">The pipelines the views' passes record with, built on <paramref name="device"/>
-    /// (<see cref="SdfWorldPipelines.Build"/>). The caller keeps ownership and disposes them after the tables; one set may
-    /// outlive several tables built from it, but serves one live residency at a time, since a kernel reload swaps them in
-    /// place.</param>
+    /// <param name="pipelines">The pipelines the views' passes record with, leased for <paramref name="device"/>
+    /// (<see cref="SdfWorldPipelines.Acquire"/>) and ready (<see cref="SdfWorldPipelines.Poll"/>). The caller keeps
+    /// ownership and disposes them after the tables; one set may outlive several tables built from it, but serves one
+    /// live residency at a time, since a kernel reload swaps its leases.</param>
     /// <param name="regionCopy">The device's region-copy pipeline, created from <see cref="GpuRegion.CopyPipeline"/> on
     /// <paramref name="device"/>, which the uploads record with. The caller keeps ownership and disposes it after the
     /// tables.</param>

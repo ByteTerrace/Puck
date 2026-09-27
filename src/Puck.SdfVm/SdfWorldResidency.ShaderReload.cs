@@ -1,4 +1,5 @@
 using System.Runtime.ExceptionServices;
+using Puck.Abstractions.Gpu;
 using Puck.Hosting;
 
 namespace Puck.SdfVm;
@@ -92,19 +93,9 @@ public sealed partial class SdfWorldResidency {
             value: null
         )!;
 
-        // A reload replaces pipelines in place, draining the device, so no other residency may record
-        // with the set: another residency on the device leasing the same set fails the request.
-        if (!m_pipelines.TryMakePrivate()) {
-            PublishShaderReload(result: request with {
-                State = "failed",
-                Error = "the pipeline set is shared with another residency on this device",
-            });
-
-            return;
-        }
-
         m_reloadRequest = request;
         StartShaderReload(
+            device: m_deviceContext!,
             directory: request.Directory!,
             // Use the format already loaded into this residency, never an OS guess or a mutable host preference.
             extension: (m_kernels.Beam.Span.StartsWith(value: "DXBC"u8)
@@ -177,13 +168,31 @@ public sealed partial class SdfWorldResidency {
             ? $" error={error}"
             : "")}]");
     }
-    // Kept apart so the build's closure is allocated only when a reload starts, never on a polled frame.
-    private void StartShaderReload(SdfWorldPipelines pipelines, string directory, string extension) =>
-        m_reloadBuild.Start(build: token => pipelines.PrepareReload(
-            cancellationToken: token,
-            kernels: SdfWorldKernels.Load(
-                bytecodeExtension: extension,
-                directory: directory
-            )
-        ));
+    // Kept apart so the build's closure is allocated only when a reload starts, never on a polled frame. The changed
+    // kernels' replacements are leased from the pass-pipeline cache and waited for here, off the frame thread; another
+    // residency leasing the replaced entries keeps them, since a reload swaps only this residency's leases.
+    private void StartShaderReload(SdfWorldPipelines pipelines, IGpuDeviceContext device, string directory, string extension) {
+        var cache = m_pipelines.Catalog.Pipelines;
+
+        m_reloadBuild.Start(build: token => {
+            var reload = pipelines.PrepareReload(
+                cache: cache,
+                device: device,
+                kernels: SdfWorldKernels.Load(
+                    bytecodeExtension: extension,
+                    directory: directory
+                )
+            );
+
+            try {
+                reload.Wait(cancellationToken: token);
+
+                return reload;
+            } catch {
+                reload.Dispose();
+
+                throw;
+            }
+        });
+    }
 }

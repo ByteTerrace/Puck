@@ -185,6 +185,19 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
         m_owner.Unhold(residency: m_view.Residency);
         m_view.Residency.Release();
     }
+    // The mesh part skips every frame that draws no mesh: it records neither its draws nor the barriers of its target and
+    // depth, and the hit passes, whose pass block's mesh draws are then zero, read nothing of the target.
+    public bool Skips(in FrameContext context) {
+        if (!IsMesh) {
+            return false;
+        }
+
+        var residency = m_view.Residency;
+
+        m_owner.Begin(residency: residency);
+
+        return (residency.Submit(context: in context).MeshDrawCount == 0);
+    }
     public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
         var residency = m_view.Residency;
 
@@ -310,7 +323,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
         );
     }
     // Draws the frame's mesh draws into the instance's target, one draw call a draw, pulling their triangles from the mesh
-    // region. A frame with no draws records nothing: no pass reads the target while the pass block's mesh draws are zero.
+    // region. A frame with no draws never records (Skips).
     private void RecordMesh(in RenderGraphPackageRecording recording, SdfWorldTables tables) {
         var draws = tables.MeshDraws;
         var count = tables.MeshDrawCount;

@@ -1009,9 +1009,8 @@ P11b's last four commits are these, and all four have landed:
     or shader module. The one mechanism under it is
     `Puck.Hosting.GpuBuildCache<TKey, T>`: a lease per holder, the entry's
     build through `BackgroundBuild`, and a last release that waits out only the
-    creation in the driver. `SdfWorldPipelineCache` is an instance of it keyed
-    by `SdfWorldPipelineKey`; P14-8 makes each SDF pipeline an entry of the
-    pass-pipeline cache itself. `GpuBuildCacheLawTests`,
+    creation in the driver. Each SDF kernel variant is an entry of the
+    pass-pipeline cache itself (P14-8). `GpuBuildCacheLawTests`,
     `GpuPassPipelineCacheLawTests`, `GpuRegionCopyPassLawTests` and the build
     laws of `ShaderPipelineRenderNodeLawTests` pin the hits, the sharing, the
     device loss and the retirement of a reloaded pass.
@@ -1725,20 +1724,21 @@ installed graph, and when it takes the build it allocates the candidate's
 resources and installs it without draining the device; the replaced graph is
 freed once the node's second submission after the install completes.
 
-The world's residency and its views' residencies share their pipeline sets
-through one `SdfWorldPipelineCache` per composition, handed to each of them: one
-set per device, kernel set (`SdfWorldKernels.ContentKey`) and brick-pipeline
-choice, leased by every holder and disposed with its last lease. A set builds up
-to `SdfWorldPipelines.BuildConcurrency` pipelines at once on the thread pool,
-the three views variants last, and checks its cancel between pipelines, so the
-last release waits only for the pipelines already in the driver and a shutdown
-never waits out a whole cold build. The cache reads each backend's deployed kernels once, and it
+The world's residency and its views' residencies share their kernel pipelines
+through the composition's pass-pipeline cache, which the `SdfWorldPipelineCatalog`
+hands each of them: one entry per device and kernel variant, leased by every
+holder and disposed with its last lease. The cache creates up to
+`GpuPassPipelineCache.BuildConcurrency` pipelines at once on the thread pool and
+each build checks its cancel before creating, so a release waits only for the
+pipelines already in the driver and a shutdown never waits out a whole cold
+build. The catalog reads each backend's deployed kernels once, and the cache
 counts the pipelines and shader modules it creates as its own source,
-`gpu.sdf-pipelines`, so no residency's or node's ledger counts them. A residency whose
-set another residency on the device also leases refuses a kernel reload, because a
-reload replaces pipelines in place. `SdfWorldKernels` describes the kernel
-bytecode as the gitignored build product it is.
-`SdfWorldPipelineCacheLawTests` pins the sharing, the counts and the refusal.
+`gpu.pass-pipelines`, so no residency's or node's ledger counts them. A kernel
+reload leases the changed kernels' entries for its own residency, so another
+residency sharing the replaced ones keeps them. `SdfWorldKernels` describes the
+kernel bytecode as the gitignored build product it is.
+`SdfWorldPipelineCatalogLawTests` and `SdfWorldPipelinesLawTests` pin the sharing
+and the counts.
 
 Selecting an output on the installed graph builds its float preview's modules,
 pipelines and targets on the thread pool as well; the previous selection stays
@@ -2320,7 +2320,7 @@ Phase 2, the services, follows the generated frame block, which has landed:
     the services individually; the optional surface export stays its own
     registration. The bundles under **Deletes** are gone: a render node, view,
     engine, pipeline set or producer takes its device context (or the
-    composition's `SdfWorldPipelineCache`) and reads the services from it, and
+    composition's `SdfWorldPipelineCatalog`) and reads the services from it, and
     `GpuWorkCounting.Wrap` wraps a `GpuDeviceServices`. A shader pipeline node
     always has graphics, so nothing refuses a graphics pass for want of
     graphics services. `IGpuDeviceContext.DeviceHandle`,
@@ -2652,7 +2652,7 @@ Phase 3, the groups, follows phase 2:
     `GpuRegionCopyPassLawTests` (one pipeline a device, created and
     counted once, shared by two leases and a new one after the last release;
     two regions copying through it byte-exact under every policy),
-    `SdfWorldPipelineCacheLawTests` (two residencies record with the device's
+    `SdfWorldPipelineCatalogLawTests` (two residencies record with the device's
     one region-copy pipeline), `SdfWorldTablesUploadLawTests` (the mesh
     region's words for a known draw set, and a moved draw owing one word), with
     the upload laws and `GpuResidencyLawTests` unchanged.
@@ -4113,22 +4113,28 @@ item 2 landed.
    element. The frame's tables (dynamic transforms, volumes, mesh draws, the
    instance grid) stay regions.
 8. The SDF pipelines build through the graph's pipeline cache
-   (`GpuPassPipelineCache`): each kernel variant an entry keyed like any pass,
-   so `SdfWorldPipelineCache`, today its own `GpuBuildCache` instance, and its
-   `gpu.sdf-pipelines` ledger are deleted. With it, a view's recording cost
-   comes back to the engine's:
-   - A render node records one command list per instance per frame slot. Today
-     every pass of every graph records its own, so a view submits ten where the
-     engine submitted one; the change reaches every graph, and on Direct3D 12
-     each list's first state comes from the declared prior.
-   - The mesh pass is a conditional package pass: on a frame that draws no mesh
-     it records nothing, and neither do the barriers of its target and depth
-     (three a frame today, which the engine skipped with the pass).
-   - The world tables bind through a world set (group 1) the tables own per
-     ring slot and write once, which every part binds. Today each compute part
-     writes the tables into its own pass set whenever the frame slot and the
-     upload ring slot pair differently, which is every frame, since the node
-     has three frame slots and the ring two.
+   (`GpuPassPipelineCache`), and a view's recording cost comes back to the
+   engine's. Landed:
+   - Each kernel variant is an entry of the pass-pipeline cache keyed like any
+     pass, leased per residency as `SdfWorldPipelines` through the
+     composition's `SdfWorldPipelineCatalog`; `SdfWorldPipelineCache`, its
+     `GpuBuildCache` instance and its `gpu.sdf-pipelines` ledger are deleted.
+     The cache holds at most `BuildConcurrency` creations in the driver, a kernel
+     reload leases the changed kernels' entries, and releasing several leases
+     cancels every build before it waits for any.
+   - A render node records one command list per instance per frame slot, every
+     pass, the float preview, the export copy and the presentation in it; only
+     the region copies keep a list of their own, submitted first. The node
+     never installs a build in the frame that started it.
+   - The mesh pass is a conditional package pass
+     (`IRenderGraphPackageRecorder.Skips`): on a frame that draws no mesh it
+     records nothing, and neither do the barriers of its target and depth.
+   Still to land, after the brick bake atlases' World-group set: the world
+   tables bind through that set (group 1), owned by the tables per ring slot
+   and written once, which every part binds. Today each compute part writes the
+   tables into its own pass set whenever the frame slot and the upload ring
+   slot pair differently, which is every frame, since the node has three frame
+   slots and the ring two.
 9. Landed with step 6, the cadence as the scheduler's: `SdfWorldPasses` asks
    each residency whether a view's latest render stands
    (`IRenderGraphPackageFactory.IsUnchanged`), and the runtime declares that

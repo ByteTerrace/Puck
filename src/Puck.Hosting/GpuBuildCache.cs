@@ -6,7 +6,8 @@ namespace Puck.Hosting;
 
 /// <summary>
 /// GPU objects built once per device and key and shared by every holder that asks for the same pair: the one
-/// mechanism behind the pass-pipeline cache, the SDF engine's pipeline sets and the region-copy pipeline. A holder takes
+/// mechanism behind the pass-pipeline cache, whose entries are every pass pipeline, the SDF engine's kernels and the
+/// region-copy pipeline among them. A holder takes
 /// a <see cref="GpuBuildLease{TKey, T}"/>; the first lease on a pair starts its build on the thread pool
 /// (<see cref="BackgroundBuild{T}"/>), every later lease on that pair joins it, and the built value is disposed when its
 /// last lease is released. That release cancels a build still in flight and waits, outside the cache's lock, only for
@@ -50,8 +51,7 @@ public sealed class GpuBuildCache<TKey, T> where TKey : IEquatable<TKey> where T
         );
     }
 
-    /// <summary>Gets the number of entries a new lease can join, built or building: every entry with a lease, less any
-    /// a holder made private.</summary>
+    /// <summary>Gets the number of entries a new lease can join, built or building: every entry with a lease.</summary>
     public int SharedEntries {
         get {
             lock (m_gate) {
@@ -112,36 +112,34 @@ public sealed class GpuBuildCache<TKey, T> where TKey : IEquatable<TKey> where T
         }
     }
     internal void Release(GpuBuildLease<TKey, T>.Entry entry) {
-        CanceledBuild<T> build;
-
-        // The cancel lands inside the gate, before the entry leaves the list, so a reader that no longer finds the entry
-        // knows its build has been told to stop.
+        if (Detach(entry: entry) is { } build) {
+            Retire(
+                build: build,
+                entry: entry
+            );
+        }
+    }
+    // Gives up a holder's share of an entry; the last one cancels the entry's build and takes the entry out of the list,
+    // returning the canceled build to wait for. The cancel lands inside the gate, before the entry leaves the list, so a
+    // reader that no longer finds the entry knows its build has been told to stop.
+    internal CanceledBuild<T>? Detach(GpuBuildLease<TKey, T>.Entry entry) {
         lock (m_gate) {
             if (--entry.Holders > 0) {
-                return;
+                return null;
             }
 
             entry.IsReleased = true;
-            build = entry.Build.Detach();
             _ = m_entries.Remove(item: entry);
-        }
 
-        // With its last lease released and the entry out of the list, nothing else reaches the entry, so the wait for
-        // the creation still in the driver holds no lock another holder's poll or acquire needs.
+            return entry.Build.Detach();
+        }
+    }
+    // With its last lease released and the entry out of the list, nothing else reaches the entry, so the wait for the
+    // creation still in the driver holds no lock another holder's poll or acquire needs.
+    internal static void Retire(CanceledBuild<T> build, GpuBuildLease<TKey, T>.Entry entry) {
         build.Wait(discard: static value => value.Dispose());
         entry.Value?.Dispose();
         entry.Value = null;
-    }
-    internal bool TryMakePrivate(GpuBuildLease<TKey, T>.Entry entry) {
-        lock (m_gate) {
-            if (entry.Holders != 1) {
-                return false;
-            }
-
-            _ = m_entries.Remove(item: entry);
-
-            return true;
-        }
     }
     internal T Wait(GpuBuildLease<TKey, T>.Entry entry, CancellationToken cancellationToken) {
         while (true) {
@@ -272,12 +270,39 @@ public sealed class GpuBuildLease<TKey, T> where TKey : IEquatable<TKey> where T
             cache.Release(entry: m_entry);
         }
     }
-    /// <summary>Takes the entry out of sharing when this lease is its only holder, so the holder may replace what the
-    /// value holds in place: no other holder records with it, and no later lease joins it.</summary>
-    /// <returns><see langword="true"/> when the entry is now private to this lease; <see langword="false"/> when another
-    /// lease holds it or this one has been released.</returns>
-    public bool TryMakePrivate() =>
-        ((m_cache is { } cache) && cache.TryMakePrivate(entry: m_entry));
+    /// <summary>Gives up several leases at once: every build a last lease leaves unheld is canceled before any is waited
+    /// for, so the release waits only for the creations already in the driver and no waiting build starts one while an
+    /// earlier lease's is waited out. Each lease is released as <see cref="Release()"/> releases it; a released or
+    /// <see langword="null"/> lease is skipped.</summary>
+    /// <param name="leases">The leases.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="leases"/> is <see langword="null"/>.</exception>
+    public static void Release(IReadOnlyList<GpuBuildLease<TKey, T>?> leases) {
+        ArgumentNullException.ThrowIfNull(argument: leases);
+
+        var canceled = new (CanceledBuild<T> Build, Entry Entry)?[leases.Count];
+
+        for (var index = 0; (index < leases.Count); index++) {
+            if (
+                (leases[index] is { } lease) &&
+                (Interlocked.Exchange(
+                    location1: ref lease.m_cache,
+                    value: null
+                ) is { } cache) &&
+                (cache.Detach(entry: lease.m_entry) is { } build)
+            ) {
+                canceled[index] = (build, lease.m_entry);
+            }
+        }
+
+        foreach (var retiring in canceled) {
+            if (retiring is { } retired) {
+                GpuBuildCache<TKey, T>.Retire(
+                    build: retired.Build,
+                    entry: retired.Entry
+                );
+            }
+        }
+    }
     /// <summary>Blocks until the value is ready and returns it, for a holder's own background build: the wait may run
     /// the entry's build inline when it has not started. A build that failed rethrows its exception here; the next
     /// wait or poll starts a fresh one.</summary>

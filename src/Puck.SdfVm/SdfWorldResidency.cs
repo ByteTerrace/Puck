@@ -93,7 +93,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     private static readonly Dictionary<int, Func<SdfScreenSurfaceTransform?>> EmptyScreenSurfaceTransforms = new();
 
     /// <summary>Initializes a new instance of the <see cref="SdfWorldResidency"/> class, held by its creator.</summary>
-    /// <param name="pipelines">The composition's pipeline cache the residency leases its pipeline set from. The device,
+    /// <param name="pipelines">The composition's pipeline catalog the residency leases its pipelines from. The device,
     /// and the services the tables record through, come from the host context each frame.</param>
     /// <param name="frameSource">The per-frame source of the scene, cameras, and viewport regions.</param>
     /// <param name="kernels">The compiled world kernel set (SPIR-V for Vulkan, DXIL for Direct3D 12).</param>
@@ -119,7 +119,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <see cref="SdfWorldTablesOptions.BrickPoolVoxelCapacity"/>), frozen at construction; 0 allocates no pool.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">A dimension is zero.</exception>
-    public SdfWorldResidency(SdfWorldPipelineCache pipelines, ISdfFrameSource frameSource, SdfWorldKernels kernels, string name, uint width, uint height, ISdfScreenSources? screenSources = null, Func<FrameContext, bool>? film = null, int dynamicTransformCapacity = 0, int programWordCapacity = 0, int instanceCapacity = 0, int brickPoolVoxelCapacity = SdfWorldTables.DefaultBrickPoolVoxelCapacity) {
+    public SdfWorldResidency(SdfWorldPipelineCatalog pipelines, ISdfFrameSource frameSource, SdfWorldKernels kernels, string name, uint width, uint height, ISdfScreenSources? screenSources = null, Func<FrameContext, bool>? film = null, int dynamicTransformCapacity = 0, int programWordCapacity = 0, int instanceCapacity = 0, int brickPoolVoxelCapacity = SdfWorldTables.DefaultBrickPoolVoxelCapacity) {
         ArgumentNullException.ThrowIfNull(pipelines);
         ArgumentNullException.ThrowIfNull(frameSource);
         ArgumentException.ThrowIfNullOrEmpty(name);
@@ -138,7 +138,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         m_height = height;
         m_instanceCapacity = instanceCapacity;
         m_kernels = kernels;
-        m_pipelines = new SdfWorldPipelineSource(cache: pipelines);
+        m_pipelines = new SdfWorldPipelineSource(catalog: pipelines);
         m_programWordCapacity = programWordCapacity;
         m_screenSources = screenSources;
         m_screenSurfaceTransforms = ((frameSource.ScreenSurfaceTransforms is { } transforms)
