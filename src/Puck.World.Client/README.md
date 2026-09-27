@@ -157,7 +157,15 @@ separate constraint on dense populations; reusable appearances do not remove it.
   scenery use the same swings and parent chains as inhabitants.
 - `WorldSessionSceneEmitter.cs`, `WorldAdjacencySceneEmitter.cs`—the session
   projection's and adjacency neighbour's own content emission, parallel to
-  `WorldSceneEmitter`'s boot-world path.
+  `WorldSceneEmitter`'s boot-world path. A session view keeps a `WorldStampPool`
+  of its own, so its destination's animated, inhabited and attached creations
+  draw as the boot world's do.
+- `IWorldStampSource.cs`, `WorldSessionStampSource.cs`—the world a stamp pool
+  roots its stamps on: the boot world's `WorldClient`, or a session's
+  destination mirror read with its interpolated poses.
+- `WorldBodyStampCensus.cs`, `WorldSceneMeshDraws.cs`—the creation-stamp census
+  (which bodies render their creation through the pool and park their catalog
+  avatar) and the static-then-pool mesh-draw composition, one each per scene.
 - `WorldSdfDocumentEmitter.cs`—loads a decoded `puck.sdf.v1` document
   through `world.sdf.load` and composes it as its own `ISdfSceneEmitter`
   beside `WorldSceneEmitter`; static world-set geometry only (no dynamic

@@ -6,8 +6,8 @@ using Puck.World.Server;
 namespace Puck.World.Client;
 
 /// <summary>Builds the candidate-aware worst-case program used by session-screen renderers. The
-/// placement rows come from the candidate definition while avatar colors come from the live mirror; every catalog
-/// avatar/rig is emitted, matching the renderer's construction probe.</summary>
+/// placement rows come from the candidate definition while avatar colors come from the live mirror; the stamp pool's
+/// worst case and every catalog avatar/rig are emitted, matching the renderer's construction probe.</summary>
 internal static class WorldSessionRenderEnvelope {
     // Reserves every currently-authored slab, the whole derived-face band, and the document's authored screen
     // headroom. The hidden headroom slabs are capacity probes only; live emission adds them if and when an authored
@@ -50,10 +50,12 @@ internal static class WorldSessionRenderEnvelope {
     }
 
     /// <summary>Emits the construction/candidate probe into an existing composition builder.</summary>
-    public static void EmitProbe(SdfProgramBuilder builder, WorldDefinition candidate, Func<int, Vector3> bodyColor, int slotBase, bool includeScreens = false) {
+    public static void EmitProbe(SdfProgramBuilder builder, WorldDefinition candidate, Func<int, Vector3> bodyColor, WorldBakedColors colors, WorldStampPool pool, int slotBase, bool includeScreens = false) {
         ArgumentNullException.ThrowIfNull(argument: builder);
         ArgumentNullException.ThrowIfNull(argument: candidate);
         ArgumentNullException.ThrowIfNull(argument: bodyColor);
+        ArgumentNullException.ThrowIfNull(argument: colors);
+        ArgumentNullException.ThrowIfNull(argument: pool);
 
         var reserved = WorldPlacementStamper.StaticStampInstances(
             creations: candidate.Creations,
@@ -64,6 +66,14 @@ internal static class WorldSessionRenderEnvelope {
         WorldPlacementStamper.EmitProbe(
             builder: builder,
             reservedCount: reserved
+        );
+        // The stamp pool's worst case, past the avatar catalog's slots, where the live build packs it.
+        pool.Emit(
+            builder: builder,
+            colors: colors,
+            maxPlacementScale: candidate.Authoring.MaxPlacementScale,
+            probeWorstCase: true,
+            slotBase: (slotBase + WorldRigCatalog.DynamicTransformCapacity)
         );
 
         if (includeScreens) {
@@ -98,7 +108,7 @@ internal static class WorldSessionRenderEnvelope {
     // session render cost.")
 
     /// <summary>Measures a candidate definition against the same program shape the offscreen renderer probed.</summary>
-    public static (int Words, int Instances) MeasureCandidate(WorldDefinition candidate, Func<int, Vector3> bodyColor, bool includeScreens = false, bool includeAdjacencies = false) {
+    public static (int Words, int Instances) MeasureCandidate(WorldDefinition candidate, Func<int, Vector3> bodyColor, WorldBakedColors colors, WorldStampPool pool, bool includeScreens = false, bool includeAdjacencies = false) {
         ArgumentNullException.ThrowIfNull(argument: candidate);
         ArgumentNullException.ThrowIfNull(argument: bodyColor);
 
@@ -107,7 +117,9 @@ internal static class WorldSessionRenderEnvelope {
                 bodyColor: bodyColor,
                 builder: builder,
                 candidate: candidate,
+                colors: colors,
                 includeScreens: includeScreens,
+                pool: pool,
                 slotBase: 0
             );
 
