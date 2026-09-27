@@ -347,6 +347,46 @@ public sealed class WorldWindowFrustumFitLawTests {
             }
         }
     }
+    // A pick through the window reaches exactly as far as the window renders: the far distance is measured from the
+    // mapped eye, as the view pass measures it, not from the glass the ray starts on. The marker's near surface lies
+    // about 14.5 units from the first eye; a far distance of 14 ends the view short of it, and one of 15 reaches it.
+    [Fact]
+    public void AWindowPickEndsAtTheFarDistanceMeasuredFromTheMappedEye() {
+        var destination = AuthoredGameFixtures.Load(relativePath: Destination);
+        var eye = Eyes[0];
+
+        bool Picks(float farDistance) {
+            var emitter = new WorldSessionSceneEmitter(
+                effectiveCameraName: null,
+                mirror: new WorldSessionMirror(placeholder: (destination with { RenderRaw = new WorldRenderDefaults(FarDistance: farDistance) }))
+            );
+            var camera = Fit(eye: eye);
+
+            emitter.SetWindowCamera(camera: camera);
+            _ = new SdfCompositionFrameSource(
+                dresser: emitter,
+                emitters: [emitter]
+            ).CaptureFrame(
+                deltaSeconds: 0f,
+                height: 120,
+                interpolationAlpha: 0f,
+                width: 144
+            );
+
+            var image = ImageOf(camera: camera, point: Marker);
+
+            return emitter.TrySurface(
+                point: out _,
+                ray: Through(camera: camera, x: image.X, y: image.Y)
+            );
+        }
+
+        var surface = (Vector3.Distance(value1: Fit(eye: eye).Position, value2: Marker) - 0.5f);
+
+        Assert.InRange(actual: surface, high: 15f, low: 14f);
+        Assert.False(condition: Picks(farDistance: 14f));
+        Assert.True(condition: Picks(farDistance: 15f));
+    }
     // A pick through the window sees only what lies beyond the aperture: the destination's occluder stands on the ray
     // between the mapped eye and the glass, so a ray from the eye itself meets it, while the window's ray, which starts
     // on the glass, passes it and meets the marker beyond.

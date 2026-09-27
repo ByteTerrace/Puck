@@ -3,7 +3,7 @@
 #define SDF_ISA_HLSLI
 
 // The fingerprint of the rest of this file; a kernel set built from this file installs only in a host whose model generates the same one.
-#define SDF_ISA_FINGERPRINT 0xB48106CEu
+#define SDF_ISA_FINGERPRINT 0x4B8DEFB0u
 
 // Puck.SignedDistance.SdfOp.
 #define SDF_OP_RESET_POINT       0u
@@ -149,6 +149,7 @@
 #define SDF_LANE_ERODE_RAGGED_AMOUNT   0.35
 #define SDF_SCREEN_MATERIAL            65535
 #define SDF_MAX_SCREEN_SURFACES        32u
+#define SDF_MINIMUM_NEAR               0.02
 
 // Puck.Abstractions.Gpu.GpuSamplerFilter.
 #define SDF_FILTER_NEAREST 0u

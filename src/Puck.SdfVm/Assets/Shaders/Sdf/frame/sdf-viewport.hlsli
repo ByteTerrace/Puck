@@ -4,6 +4,7 @@
 // host writes it through SdfFrameBlock.
 #ifndef SDF_VIEWPORT_HLSLI
 #define SDF_VIEWPORT_HLSLI
+#include "../isa/sdf-isa.hlsli"
 
 // The view the pass renders, gathered from the pass block into the rows the march, the shading and the mesh projection
 // read it through.
@@ -32,19 +33,25 @@ ViewportData worldView() {
     return data;
 }
 
-// The view's near distance: the forward distance of the plane every camera ray starts on (SdfFrameBlock.NearOf): the
-// beam's cone entry begins at that ray distance, a conservative start since no ray of the cone meets the plane nearer,
-// sdfPixelAt raises each primary ray's start to the plane itself, the bounded volumes composite from it, and the mesh
-// pass clips there. A border window's plane is its aperture, so nothing between its eye and the glass is seen; a
-// camera with no near plane of its own renders from SdfFrameBlock.MinimumNear. The host writes a positive value, so no
-// kernel guards it.
+// The view camera's own near distance (CameraSnapshot.Near): the forward distance of the plane its image begins on,
+// zero for a camera whose image begins at its eye. A border window's plane is its aperture, so nothing between its eye
+// and the glass is seen. The bounded volumes composite from it. The host writes a finite, non-negative value.
 float worldNearDistance(ViewportData view) {
     return view.lens.x;
 }
 
-// The ray distance at which a camera ray along the unit `rayDirection` crosses the near plane.
-float worldNearRayDistance(ViewportData view, float3 rayDirection) {
-    return (worldNearDistance(view) / dot(rayDirection, view.forward.xyz));
+// The forward distance the view's surfaces are rendered from (SdfFrameBlock.NearOf): the near plane, never nearer than
+// SDF_MINIMUM_NEAR, which the mesh pass's reversed-Z depth needs. The beam's cone entry begins at that ray distance, a
+// conservative start since no ray of the cone meets the plane nearer, sdfPixelAt raises each primary ray's start to the
+// plane itself, and the mesh pass clips there.
+float worldSurfaceNearDistance(ViewportData view) {
+    return max(worldNearDistance(view), SDF_MINIMUM_NEAR);
+}
+
+// The ray distance at which a camera ray along the unit `rayDirection` crosses the plane at forward distance
+// `forwardDistance`.
+float worldRayDistanceAt(ViewportData view, float3 rayDirection, float forwardDistance) {
+    return (forwardDistance / dot(rayDirection, view.forward.xyz));
 }
 
 // The frame's FAR DISTANCE — the depth at which every camera march ends: the fine march's far exit (the primary stage), the

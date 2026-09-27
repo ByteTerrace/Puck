@@ -74,19 +74,21 @@ public static class SdfFrameBlock {
     private static readonly int ViewUp = Offset(member: SdfWorldPackage.ViewUp);
     private static readonly int ViewportCount = Offset(member: SdfWorldPackage.ViewportCount);
 
-    /// <summary>The nearest forward distance, in world units, a view's near plane lies at (<see cref="NearOf"/>): the
-    /// mesh pass's reversed-Z depth needs a positive near.</summary>
+    /// <summary>The nearest forward distance, in world units, a view's surfaces are rendered from (<see cref="NearOf"/>):
+    /// the mesh pass's reversed-Z depth needs a positive near. The kernels read it as <c>SDF_MINIMUM_NEAR</c>, which
+    /// <see cref="SdfIsaHlsl"/> generates from this value.</summary>
     public const float MinimumNear = 0.02f;
 
     /// <summary>Gets the bytes of the pass block, a multiple of 16.</summary>
     public static int SizeBytes => ((int)Layout.SizeBytes);
 
-    /// <summary>Returns the forward distance of the near plane a view renders from: the camera's own
-    /// <see cref="CameraSnapshot.Near"/>, or <see cref="MinimumNear"/> when that is nearer. The kernels start every camera
-    /// ray where it crosses this plane and the mesh pass clips there
-    /// (<see cref="ViewProjection.Create"/>'s <c>near</c>), so nothing nearer is seen.</summary>
+    /// <summary>Returns the forward distance of the plane a view's surfaces are rendered from: the camera's own
+    /// <see cref="CameraSnapshot.Near"/>, or <see cref="MinimumNear"/> when that is nearer. The kernels start every
+    /// surface march where its ray crosses this plane and the mesh pass clips there
+    /// (<see cref="ViewProjection.Create"/>'s <c>near</c>). The pass block carries the camera's own near distance, which
+    /// the bounded volumes start from, and the kernels apply this floor themselves.</summary>
     /// <param name="camera">The view's camera.</param>
-    /// <returns>The near plane's forward distance, in world units; at least <see cref="MinimumNear"/>.</returns>
+    /// <returns>The plane's forward distance, in world units; at least <see cref="MinimumNear"/>.</returns>
     public static float NearOf(in CameraSnapshot camera) =>
         MathF.Max(
             x: camera.Near,
@@ -128,7 +130,7 @@ public static class SdfFrameBlock {
         WriteSingle(block: block, offset: AspectRatio, value: camera.AspectRatio);
         WriteSingle(block: block, offset: FrustumOffset, value: camera.FrustumOffset.X);
         WriteSingle(block: block, offset: (FrustumOffset + sizeof(float)), value: camera.FrustumOffset.Y);
-        WriteSingle(block: block, offset: NearDistance, value: NearOf(camera: camera));
+        WriteSingle(block: block, offset: NearDistance, value: camera.Near);
         WriteSingle(block: block, offset: FarDistance, value: frame.FarDistance);
         WriteSingle(block: block, offset: SceneTime, value: sceneTime);
         WriteUInt32(block: block, offset: DebugMode, value: ((uint)tables.DebugMode));

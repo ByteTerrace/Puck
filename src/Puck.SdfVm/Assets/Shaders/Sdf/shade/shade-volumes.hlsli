@@ -154,11 +154,13 @@ void sdfIntegrateVolume(SdfVolumeData v, float3 localOrigin, float3 localDirecti
     transmissionOut = transmission;
 }
 
-// Composites every bounded volume whose slab intersects the ray between `nearDistance`, the ray distance where the
-// camera ray starts (worldNearRayDistance), and `surfaceDistance`, so a volume never paints before the near plane or
-// through solid geometry. Select the next farthest intersecting volume, integrate it, and composite immediately. This preserves the previous entry-distance ordering (including index ties) without
-// per-pixel arrays or an unrolled copy of the integrator for every capacity slot. Overlapping media still composite
-// as whole volumes; this is not a combined-density integral through their overlap.
+// Composites every bounded volume whose slab intersects the ray between `nearDistance`, the ray distance where it
+// crosses the camera's own near plane (worldNearDistance, zero for a camera whose image begins at its eye), and
+// `surfaceDistance`, so a volume never paints before the near plane or through solid geometry. Select the next
+// farthest intersecting volume, integrate it, and composite immediately. This preserves the previous entry-distance
+// ordering (including index ties) without per-pixel arrays or an unrolled copy of the integrator for every capacity
+// slot. Overlapping media still composite as whole volumes; this is not a combined-density integral through their
+// overlap.
 float3 shadeVolumes(float3 color, float3 rayOrigin, float3 rayDirection, float nearDistance, float surfaceDistance, uint2 pixel, float time) {
     float dither = ((sdfR2Dither(pixel) * 2.0) - 1.0);
     float previousNear = 3.402823e+38;

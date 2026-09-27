@@ -118,10 +118,12 @@ basis. Rasterized geometry does, and `ViewProjection`
 is right-handed and view space looks down −Z. The projection is reversed-Z
 with an infinite far plane: depth is `near / d` for forward distance `d`, 1 on
 the near plane and falling toward 0, so a nearer surface always has the
-greater depth. The SDF engine's near plane is the view's pass-block
-`nearDistance` (`SdfFrameBlock.NearOf`): the camera's own `Near`, never nearer
-than `SdfFrameBlock.MinimumNear`. Every camera ray starts where it crosses that
-plane, and the mesh pass clips there. Normalized device coordinates put +Y
+greater depth. The pass block carries the camera's own near plane
+(`CameraSnapshot.Near`, zero when its image begins at the eye) as
+`nearDistance`, and the bounded volumes composite from it. Surfaces render
+from that plane but never nearer than `SdfFrameBlock.MinimumNear`
+(`SdfFrameBlock.NearOf`, `SDF_MINIMUM_NEAR` in the kernels): every surface
+march starts where its ray crosses it, and the mesh pass clips there. Normalized device coordinates put +Y
 up, a view's UV origin is its top-left corner, and each sample is a pixel
 center with no jitter. `RayParameter` turns a depth back into the distance
 the march records, measured along the normalized ray through the sample. The
@@ -157,7 +159,9 @@ another world as a view instance (`WorldViewInstances`).
   plane, the mapped glass's own plane (`CameraSnapshot.Near`): the view pass
   starts every ray on the glass and a hit through the image starts its ray
   there, so the window shows only what lies beyond the aperture, never the
-  destination's geometry between the mapped eye and the glass.
+  destination's geometry between the mapped eye and the glass. The far
+  distance still counts from the mapped eye, so a pick through the window
+  reaches exactly as far as the window renders.
 
 **The scheduler decides what renders.** A view renders only while something
 shows it: a screen, through the footprint of its declared extent inside the
