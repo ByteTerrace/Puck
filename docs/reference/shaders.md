@@ -439,7 +439,10 @@ crosses it.
 then renders each scheduled instance through its own `ShaderPipelineRenderNode`
 at the scheduled extent. One submission per instance records the graph's
 shader passes and, through the recorder `RenderGraphPackageRecorders` holds
-for each package id, its package passes, all in the planner's order. A
+for each package id, its package passes, all in the planner's order, into one
+command list per frame slot, with the float preview, the export copy and the
+presentation after them; only the copies of the regions the passes wrote record
+in a list of their own, submitted first. A
 `RenderGraphRuntimeGraph` binds each external version to a producer instance;
 the runtime binds it to the frame of that producer's output the schedule
 names, and to a transparent-black stand-in while the producer has none. A
@@ -468,6 +471,14 @@ barrier: the instance records the pass's planned barriers first, so a
 fragment-sampled input arrives shader-readable and a color-attachment output in
 render-target layout, which the package's render pass leaves it in for the
 next planned barrier to move on.
+
+A recorder may skip a frame (`IRenderGraphPackageRecorder.Skips`), which the
+instance asks before it records the pass's barriers: it then records neither
+the pass's work nor its planned barriers, and each storage the pass would have
+accessed stays in the state its last recorded access left it in, a planned
+override from which the next access records only the barrier the planned
+states call for. A pass skips only on frames no later pass reads the contents
+of its outputs on; the SDF mesh pass skips every frame that draws no mesh.
 
 A recording that draws nothing returns `RenderGraphPackageOutcome.DrewNothing`,
 and each output then stands for the input at its position: the instance
@@ -1563,9 +1574,11 @@ entries, so the rebuild after a loss creates afresh.
 
 The cache counts the shader modules, render passes and pipelines it creates
 under its own `gpu.pass-pipelines` source in `world.counters`, and a node's
-`work lifetime` line counts none of them. The mechanism is
-`Puck.Hosting.GpuBuildCache<TKey, T>`, which the SDF engine's pipeline sets
-(`SdfWorldPipelineCache`, `gpu.sdf-pipelines`) use as well.
+`work lifetime` line counts none of them. The SDF engine's kernel pipelines are
+entries of the same cache, one a kernel variant (`SdfWorldPipelines`). At most
+`GpuPassPipelineCache.BuildConcurrency` of the cache's builds create at once, so
+a cold driver cache translating many pipelines keeps a processor for the thread
+that pumps frames. The mechanism is `Puck.Hosting.GpuBuildCache<TKey, T>`.
 
 ### Memory budget
 

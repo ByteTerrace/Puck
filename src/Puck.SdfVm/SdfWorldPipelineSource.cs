@@ -5,31 +5,33 @@ using Puck.Shaders;
 
 namespace Puck.SdfVm;
 
-// One node's or view's lease on the pipeline set its engines record with, from its composition's
-// SdfWorldPipelineCache. Taking the lease — loading the deployed kernels when the holder supplies none, hashing them,
-// and starting the shared build — runs on the thread pool, and the set itself builds there too, so a cold driver
-// cache delays the first frame instead of freezing the pump that drains the console. The lease outlives the engines
-// built from its set (a capacity or export rebuild reuses it) and is released on device loss and disposal. The holder
-// builds its engines here (TryBuild), which refuses a failed build by name instead of throwing it, and tries it again only
-// when an input it was built from changes.
-//
-// The holder also leases its device's region-copy pipeline from the cache's GpuRegionCopyPass and its mesh pass pipeline
-// from the cache's SdfMeshRasterPass in the same background acquire, and the set is ready only once both pipelines are
-// too: an engine records its table upload and mesh region with the first and its mesh pass with the second.
-internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCache cache) {
+// One residency's leases on the pipelines its tables record with, from its composition's SdfWorldPipelineCatalog: the
+// kernel variants (SdfWorldPipelines), the region copy and the mesh pass, every one an entry of the pass-pipeline cache.
+// Taking the leases — loading the deployed kernels when the holder supplies none, hashing them, and starting the shared
+// builds — runs on the thread pool, and the pipelines build there too, so a cold driver cache delays the first frame
+// instead of freezing the pump that drains the console. The leases outlive the tables built from them (a capacity or
+// export rebuild reuses them) and are released on device loss and disposal. The holder builds its tables here
+// (TryBuild), which refuses a failed build by name instead of throwing it, and tries it again only when an input it was
+// built from changes. The set is ready only once the region copy and the mesh pass are too: the tables record their
+// upload and mesh region with the first and a view's mesh pass draws with the second.
+internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
     private readonly BackgroundBuild<Leases> m_acquire = new();
 
-    private GpuBuildLease<SdfWorldPipelineKey, SdfWorldPipelines>? m_lease;
+    private SdfWorldPipelines? m_lease;
     private GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? m_regionCopy;
     private GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? m_meshRaster;
+    // Whether every pipeline of the leased set has been seen ready.
+    private bool m_ready;
     // The latest refused engine build and what it was built from, until a build succeeds or the lease is released.
     private Exception? m_refusal;
     private long m_refusedHeapRevision;
     private object? m_refusedInputs;
     private BuildKey m_refusedKey;
 
-    // The ready set, or null before the lease's set has built.
-    public SdfWorldPipelines? Current => m_lease?.Current;
+    // The composition's pipeline catalog, whose pass-pipeline cache a reload leases replacements from.
+    public SdfWorldPipelineCatalog Catalog => catalog;
+    // The ready set, or null before every pipeline of the leased set has built.
+    public SdfWorldPipelines? Current => (m_ready ? m_lease : null);
     // The device's ready region-copy pipeline, or null before it has built.
     public IGpuComputePipeline? RegionCopy => m_regionCopy?.Current?.Compute;
     // The device's ready mesh pass pipeline, or null before it has built.
@@ -65,11 +67,11 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCache cache) {
             m_meshRaster = leases.MeshRaster;
         }
 
-        var set = m_lease.Poll();
+        m_ready = m_lease.Poll();
 
-        return (((m_regionCopy!.Poll() is null) || (m_meshRaster!.Poll() is null))
+        return ((!m_ready || (m_regionCopy!.Poll() is null) || (m_meshRaster!.Poll() is null))
             ? null
-            : set
+            : m_lease
         );
     }
     // Names where the holder's engine build stands while it has no engine: refused, not yet asked for, its lease still
@@ -80,20 +82,21 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCache cache) {
             ? " or another owner returns descriptor heap space"
             : string.Empty)}: {refusal.Message}"
         : ((m_lease is { } lease)
-            ? $"the engine's pipeline set is {lease.Key.Progress.Describe()}"
+            ? $"the engine's pipeline set is {lease.Describe()}"
             : (m_acquire.IsPending
                 ? "the engine's pipeline set is queued behind loading its kernels"
                 : "the engine's pipeline set has not been requested: no frame has been produced"
             )
         )
     );
-    // Waits out a lease still being taken and gives up the lease, which disposes the set when no other holder leases
-    // it, and forgets a refused build: the next build is tried afresh. Call after disposing every engine built from the
-    // set and before the device goes away.
+    // Waits out leases still being taken and gives up the leases, which disposes each pipeline no other holder leases,
+    // and forgets a refused build: the next build is tried afresh. Call after disposing every table built from the set and
+    // before the device goes away.
     public void Release() {
         m_acquire.CancelAndWait(discard: static leases => leases.Release());
-        m_lease?.Release();
+        m_lease?.Dispose();
         m_lease = null;
+        m_ready = false;
         m_regionCopy?.Release();
         m_regionCopy = null;
         m_meshRaster?.Release();
@@ -205,9 +208,6 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCache cache) {
             return null;
         }
     }
-    // Takes the set out of sharing when this is its only holder, so a reload may replace its pipelines in place.
-    public bool TryMakePrivate() =>
-        (m_lease?.TryMakePrivate() ?? false);
 
     // What a build is made from besides the holder's own inputs; a refused build is tried again when any of it changes.
     private readonly record struct BuildKey(IGpuDeviceContext? Device, long FaultsRevision, SdfWorldKernels? Kernels, bool HostsOnDirectX, bool IncludeBrickPipelines, GpuPassPipeline? MeshRaster, IGpuComputePipeline? RegionCopy, SdfWorldPipelines? Set, SdfWorldKernels? SetKernels);
@@ -216,33 +216,34 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCache cache) {
     // acquire that throws releases the leases taken before it.
     private void Start(IGpuDeviceContext device, SdfWorldKernels? kernels, bool hostsOnDirectX, bool includeBrickPipelines) =>
         m_acquire.Start(build: _ => {
-            var set = cache.Acquire(
+            var set = SdfWorldPipelines.Acquire(
+                cache: catalog.Pipelines,
                 device: device,
                 includeBrickPipelines: includeBrickPipelines,
-                kernels: (kernels ?? cache.LoadDeployed(bytecodeExtension: SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: hostsOnDirectX)))
+                kernels: (kernels ?? catalog.LoadDeployed(bytecodeExtension: SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: hostsOnDirectX)))
             );
 
             GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? regionCopy = null;
 
             try {
-                regionCopy = cache.RegionCopy.Acquire(device: device);
+                regionCopy = catalog.RegionCopy.Acquire(device: device);
 
                 return new Leases(
-                    MeshRaster: cache.MeshRaster.Acquire(device: device),
+                    MeshRaster: catalog.MeshRaster.Acquire(device: device),
                     RegionCopy: regionCopy,
                     Set: set
                 );
             } catch {
                 regionCopy?.Release();
-                set.Release();
+                set.Dispose();
                 throw;
             }
         });
 
-    // The three leases one background acquire takes.
-    private sealed record Leases(GpuBuildLease<SdfWorldPipelineKey, SdfWorldPipelines> Set, GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> RegionCopy, GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> MeshRaster) {
+    // The leases one background acquire takes.
+    private sealed record Leases(SdfWorldPipelines Set, GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> RegionCopy, GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> MeshRaster) {
         public void Release() {
-            Set.Release();
+            Set.Dispose();
             RegionCopy.Release();
             MeshRaster.Release();
         }

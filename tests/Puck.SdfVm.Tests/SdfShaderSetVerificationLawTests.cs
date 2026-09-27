@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Abstractions.Gpu;
+using Puck.Shaders;
 using Puck.SignedDistance;
 using Puck.Testing;
 using Xunit;
@@ -78,7 +79,7 @@ public sealed class SdfShaderSetVerificationLawTests {
         using var pipelines = SdfTestPipelines.Build(
             device: gpu,
             kernels: kernels,
-            ledger: ledger
+            cache: new GpuPassPipelineCache()
         );
         var before = gpu.Submissions;
 

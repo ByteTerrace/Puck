@@ -9,7 +9,7 @@ internal sealed partial class WorldScreenBinder {
     /// source has probed the render envelope (the worst-case program, instance and transform capacities every view's
     /// residency must fit). Registers one camera view per camera a screen names and one session view per session screen,
     /// each an <c>sdf.world</c> instance the render graph runs (<see cref="TryResolveView"/>).</summary>
-    /// <param name="pipelines">The composition's pipeline cache every view's residency leases its pipeline set from.</param>
+    /// <param name="pipelines">The composition's pipeline catalog every view's residency leases its pipelines from.</param>
     /// <param name="hostsOnDirectX">Whether the host backend is Direct3D 12 (selects the kernel bytecode).</param>
     /// <param name="programWordCapacity">The world's probed program-word floor.</param>
     /// <param name="instanceCapacity">The world's probed instance floor.</param>
@@ -20,7 +20,7 @@ internal sealed partial class WorldScreenBinder {
     /// <param name="displayHeight">The display's height, in pixels.</param>
     /// <exception cref="ArgumentNullException"><paramref name="pipelines"/> or <paramref name="host"/> is
     /// <see langword="null"/>.</exception>
-    public void ConfigureViews(SdfWorldPipelineCache pipelines, bool hostsOnDirectX, int programWordCapacity, int instanceCapacity, int dynamicTransformCapacity, ISdfFrameSource host, int displayWidth, int displayHeight) {
+    public void ConfigureViews(SdfWorldPipelineCatalog pipelines, bool hostsOnDirectX, int programWordCapacity, int instanceCapacity, int dynamicTransformCapacity, ISdfFrameSource host, int displayWidth, int displayHeight) {
         ArgumentNullException.ThrowIfNull(argument: pipelines);
         ArgumentNullException.ThrowIfNull(argument: host);
 

@@ -18,7 +18,7 @@ namespace Puck.Testing;
 /// so the model also replays each submission's buffer transitions in submission order as Direct3D 12 tracks them
 /// (<see cref="StateConflicts"/>). A disposed buffer is forgotten. Everything else is <see cref="FakeGpuDevice"/>.
 /// <para>Shader modules and pipelines are created on the thread pool, several at once
-/// (<c>SdfWorldPipelines.BuildConcurrency</c>), so handles come from an interlocked counter and the copy kernel is
+/// (<c>GpuPassPipelineCache.BuildConcurrency</c>), so handles come from an interlocked counter and the copy kernel is
 /// identified by the handles of the modules built from its bytecode and the pipelines built from those modules, each a
 /// concurrent set, never by one shared field a concurrent build could overwrite.</para>
 /// </summary>

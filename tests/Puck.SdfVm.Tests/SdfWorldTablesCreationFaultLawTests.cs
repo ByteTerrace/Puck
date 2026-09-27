@@ -192,14 +192,13 @@ public sealed class SdfWorldTablesCreationFaultLawTests {
                 device: Device,
                 ledger: m_work
             );
-            m_pipelines = SdfWorldPipelines.Build(
-                cancellationToken: CancellationToken.None,
+            m_pipelines = SdfTestPipelines.Build(
                 device: Device,
                 includeBrickPipelines: true,
                 kernels: (SdfTestPipelines.Kernels() with {
                     BrickBake = code,
                 }),
-                ledger: m_work
+                cache: new GpuPassPipelineCache()
             );
             Faults.Disarm();
         }

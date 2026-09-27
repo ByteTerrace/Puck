@@ -212,19 +212,20 @@ carries no per-pass C#.
 Creating a compute pipeline is where the driver translates a kernel to native
 code. With its cache cold, after a kernel or driver change, that can take
 seconds per pipeline, and the engine has about a dozen of them. So the engine
-never creates one. `SdfWorldPipelines.Build` creates the whole set, and every
-`SdfWorldResidency`, the world's and each camera or session view's, leases it from
-`SdfWorldPipelineCache`, which the composition hands each of them; the engine
-records through the services of the device context it renders on
-(`IGpuDeviceContext.Services`). The cache keeps one set per device, kernel set and
-brick-pipeline choice: the first lease starts its build on the thread pool
-through `Puck.Hosting.BackgroundBuild`, and every other holder of the same key
-shares it, so a world with many camera views builds one set for all of them.
-The world's residency has a brick pool and a camera or session view's does not,
-so a World with such views builds two sets: the world's and one its views
-share. The cache also reads each backend's deployed kernels once, and it
-counts the pipelines and shader modules it creates under its own
-`gpu.sdf-pipelines` source rather than in any residency's or node's ledger.
+never creates one. Every kernel variant is an entry of the composition's
+pass-pipeline cache (`Puck.Shaders.GpuPassPipelineCache`), keyed like any pass
+by its bytecode and description, and every `SdfWorldResidency`, the world's and
+each camera or session view's, leases its set of them (`SdfWorldPipelines.Acquire`)
+through the `SdfWorldPipelineCatalog` the composition hands each of them; the
+engine records through the services of the device context it renders on
+(`IGpuDeviceContext.Services`). The first lease on an entry starts its build on
+the thread pool through `Puck.Hosting.BackgroundBuild`, and every other holder of
+the same kernel on the device shares it, so a world with many camera views
+builds each kernel once for all of them, and a view without the world's brick
+pool leases every kernel but the baker. The catalog also reads each backend's
+deployed kernels once, and the cache counts the pipelines and shader modules it
+creates under its own `gpu.pass-pipelines` source rather than in any residency's
+or node's ledger.
 
 A residency takes its lease off the frame thread the first time a frame
 prepares it. Until the set is ready it builds no tables, and a pass of its
@@ -235,7 +236,7 @@ draining the console and stepping the simulation meanwhile, so a `world.wait` or
 host with a capture armed: it steps no further tick until the capture is served
 or refused, and a capture refused while the world's residency is not ready names
 its `NotReadyReason`, such as "the engine's pipeline set is building (5 of
-14 pipelines created)" (see [the World guide](../Puck.World/README.md#usage)).
+10 pipelines created)" (see [the World guide](../Puck.World/README.md#usage)).
 A residency is `IsReady` once its set is installed and its tables hold its
 first captured frame; the World is ready once the world's residency is and the
 render graph's root has rendered over a completed view, which is the fact
@@ -243,15 +244,15 @@ render graph's root has rendered over a completed view, which is the fact
 `views.graphs` pane is not part of any residency: it is its own render-graph
 instance with its own node, so it compiles and builds its pipelines without
 waiting for the SDF set. A residency keeps its lease until a device loss or
-its last release. A set's build creates up to
-`SdfWorldPipelines.BuildConcurrency` pipelines at once on the thread pool,
-starting the three views variants last, and checks its cancel between
-pipelines, never during one. The last lease on a set cancels a build still in
-flight and waits, outside the cache's lock, for only the pipelines already in
-the driver before disposing the set: nothing may be created on a device that is
-being torn down, and a shutdown never waits out a whole cold build. A build
-whose creations fail releases everything it created and names every pipeline
-that failed, in build order, in one refusal.
+its last release. The pass-pipeline cache creates up to
+`GpuPassPipelineCache.BuildConcurrency` pipelines at once on the thread pool,
+however many entries are building, and each entry checks its cancel before it
+creates, never during a creation. Releasing a set cancels every build no other
+holder leases before it waits for any, then waits for only the pipelines
+already in the driver: nothing may be created on a device that is being torn
+down, and a shutdown never waits out a whole cold build. A set whose creations
+fail names every pipeline that failed, in the set's order, in one refusal, and
+releasing it releases everything they created.
 
 The tables' construction first asks the device's descriptor heap to admit their
 pool and one copy pool for all their regions (`SdfWorldTables.CheckAdmission`),

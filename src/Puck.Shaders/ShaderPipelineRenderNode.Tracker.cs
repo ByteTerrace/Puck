@@ -7,7 +7,10 @@ namespace Puck.Shaders;
 // the node records exactly those. The only states the plan cannot place are the ones the host's events leave an instance
 // in: new or reset storage, a zero clear, a presentation, and history carried over from a replaced graph. Each such
 // instance holds an override until its next access, which starts from the override and always records a barrier, so
-// every later planned barrier, which waits only on planned stages, still orders the unplanned accesses through it.
+// every later planned barrier, which waits only on planned stages, still orders the unplanned accesses through it. A
+// package pass that skips a frame (IRenderGraphPackageRecorder.Skips) records none of its barriers and leaves each
+// instance it would have accessed in the state before that access, its planned prior, as a planned override, from which
+// the next access records only the barrier the planned states call for.
 public sealed partial class ShaderPipelineRenderNode {
     private const GpuStage ShaderStages = GpuStage.ComputeShader | GpuStage.FragmentShader;
 
@@ -112,11 +115,17 @@ public sealed partial class ShaderPipelineRenderNode {
                     use: access.Use
                 );
             } else if (resource.HasOverride[instance]) {
-                barrier = ShaderPipelineBarrier.Always(
-                    kind: resource.Spec.Kind,
-                    prior: resource.Override[instance],
-                    use: access.Use
-                );
+                barrier = (resource.OverridePlanned[instance]
+                    ? ShaderPipelineBarrier.Between(
+                        kind: resource.Spec.Kind,
+                        prior: resource.Override[instance],
+                        use: access.Use
+                    )
+                    : ShaderPipelineBarrier.Always(
+                        kind: resource.Spec.Kind,
+                        prior: resource.Override[instance],
+                        use: access.Use
+                    ));
                 resource.HasOverride[instance] = false;
             }
             RecordBarrier(
@@ -132,6 +141,30 @@ public sealed partial class ShaderPipelineRenderNode {
             if (access.Use.Writes) {
                 resource.Initialized[instance] = true;
             }
+        }
+    }
+    // Leaves every instance a skipping pass would have accessed in the state before that access: the override it already
+    // holds, or its planned prior as a planned override. A host-owned instance starts every frame in the host's hands.
+    private void SkipAccesses(RuntimePass pass, int slot) {
+        foreach (var access in pass.Accesses) {
+            if (access.PriorKind == ShaderPipelinePriorKind.Host) {
+                continue;
+            }
+
+            var resource = m_resources[access.Storage];
+            var instance = InstanceIndex(
+                previous: access.PreviousFrame,
+                resource: resource,
+                slot: slot
+            );
+
+            if (resource.HasOverride[instance]) {
+                continue;
+            }
+
+            resource.Override[instance] = access.Prior;
+            resource.HasOverride[instance] = true;
+            resource.OverridePlanned[instance] = true;
         }
     }
     private void RecordBarrier(ShaderPipelineBarrier barrier, RuntimeResource resource, int instance, nint command, IGpuRecorder recorder) {

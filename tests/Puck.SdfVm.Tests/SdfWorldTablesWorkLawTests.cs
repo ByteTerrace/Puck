@@ -274,16 +274,15 @@ public sealed class SdfWorldTablesWorkLawTests {
                 ? SdfTestPipelines.Build(
                     device: gpu,
                     kernels: SdfTestPipelines.Kernels(),
-                    ledger: owned
+                    cache: Cache
                 )
-                : SdfWorldPipelines.Build(
-                    cancellationToken: CancellationToken.None,
+                : SdfTestPipelines.Build(
                     device: gpu,
                     includeBrickPipelines: true,
                     kernels: (SdfTestPipelines.Kernels() with {
                         BrickBake = new byte[] { 1 },
                     }),
-                    ledger: owned
+                    cache: Cache
                 ));
             Engine = new SdfWorldTables(
                 device: gpu,
@@ -318,6 +317,7 @@ public sealed class SdfWorldTablesWorkLawTests {
             );
         }
 
+        public GpuPassPipelineCache Cache { get; } = new();
         public SdfWorldTables Engine { get; }
         public SdfFrame Frame { get; }
         public FakeGpuDevice Gpu { get; }
@@ -334,9 +334,12 @@ public sealed class SdfWorldTablesWorkLawTests {
         // Prepares a reload of the rig's pipelines and installs it, as a residency does across two produced frames.
         public int Reload(SdfWorldKernels kernels) {
             using var reload = Pipelines.PrepareReload(
-                cancellationToken: CancellationToken.None,
+                cache: Cache,
+                device: Gpu,
                 kernels: kernels
             );
+
+            reload.Wait(cancellationToken: CancellationToken.None);
 
             return Engine.InstallReload(reload: reload);
         }

@@ -66,8 +66,8 @@ its mesh carries one), and surface its normal at the hit point (the vertex norma
 carries them, carried to world space by the draw's inverse-transpose normal matrix so a nonuniform scale keeps
 them perpendicular to the surface; the face normal otherwise), turned toward the camera and clamped so a grazing ray
 never sees it lean away. The draw plus one and the triangle are stored as floats, so a region holds at most 2^24
-draws and a mesh at most 2^24 triangles, each refused by name past that. A frame with no mesh draws records nothing
-here. The target and its depth attachment, 20 bytes a pixel, are scratch the view's instance allocates with its graph.
+draws and a mesh at most 2^24 triangles, each refused by name past that. A frame with no mesh draws skips the pass,
+its target's and depth's barriers included, and the hit passes read nothing of the target. The target and its depth attachment, 20 bytes a pixel, are scratch the view's instance allocates with its graph.
 Primary bounds its march by that ray parameter
 and keeps an SDF surface only when it is strictly nearer, so a mesh pixel becomes a mesh visibility
 record; while a mesh draws, cull-args covers the whole view, and a mesh pixel shades with neutral shadows

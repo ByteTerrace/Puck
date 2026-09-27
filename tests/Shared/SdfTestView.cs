@@ -18,7 +18,7 @@ internal sealed class SdfTestView : IDisposable {
     private bool m_disposed;
     private long m_frame;
 
-    public SdfTestView(SdfWorldResidency residency, SdfWorldPipelineCache pipelines, IGpuDeviceContext device, uint extent) {
+    public SdfTestView(SdfWorldResidency residency, SdfWorldPipelineCatalog pipelines, IGpuDeviceContext device, uint extent) {
         var packages = new RenderGraphPackageRecorders(regionCopy: pipelines.RegionCopy);
 
         packages.Register(
@@ -44,7 +44,7 @@ internal sealed class SdfTestView : IDisposable {
             graphs: new RenderGraphRuntimeGraph?[1],
             hostsOnDirectX: false,
             packages: packages,
-            pipelines: new GpuPassPipelineCache(),
+            pipelines: pipelines.Pipelines,
             refusal: out var refusal,
             root: Instance,
             runtime: out var runtime,

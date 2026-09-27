@@ -291,8 +291,8 @@ public sealed partial class ShaderPipelineRenderNode {
     // instance the pass read.
     private readonly record struct PackageAlias(RuntimeResource? Target, string? Name, int Instance);
 
-    private void RecordPackage(RuntimePass pass, int slot, in FrameContext context, List<nint> commands) {
-        var handle = pass.Pools![slot].CommandBufferHandle;
+    private void RecordPackage(RuntimePass pass, int slot, in FrameContext context, nint command) {
+        var handle = command;
         var recorder = m_gpu.Recorder;
         var inputs = pass.PackageInputs!;
         var outputs = pass.PackageOutputs!;
@@ -329,7 +329,6 @@ public sealed partial class ShaderPipelineRenderNode {
             block: passBlock,
             pass: pass
         );
-        recorder.BeginCommandBuffer(commandBufferHandle: handle);
         InitializeResources(
             command: handle,
             recorder: recorder,
@@ -375,8 +374,6 @@ public sealed partial class ShaderPipelineRenderNode {
             pass: pass,
             slot: slot
         );
-        recorder.EndCommandBuffer(commandBufferHandle: handle);
-        commands.Add(item: handle);
     }
     // The layout each port's image is in when the recorder records: the one its planned access's barrier left it in.
     private static GpuImageLayout[] LayoutsOf(ShaderPipelineAccess[] accesses, ResourceReference[] ports) {

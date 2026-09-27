@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Abstractions.Gpu;
+using Puck.Shaders;
 using Puck.SignedDistance;
 using Puck.Testing;
 using Xunit;
@@ -44,15 +45,14 @@ public sealed class SdfWorldTablesObjectNameLawTests {
             device: gpu,
             ledger: ledger
         );
-        using var pipelines = SdfWorldPipelines.Build(
-            cancellationToken: CancellationToken.None,
+        using var pipelines = SdfTestPipelines.Build(
             device: gpu,
             includeBrickPipelines: true,
             // A brick pool's engine needs the carve baker, which the fake kernel set leaves out.
             kernels: (SdfTestPipelines.Kernels() with {
                 BrickBake = new byte[] { 1 },
             }),
-            ledger: ledger
+            cache: new GpuPassPipelineCache()
         );
         using var engine = new SdfWorldTables(
             device: gpu,
@@ -88,7 +88,7 @@ public sealed class SdfWorldTablesObjectNameLawTests {
         Assert.Contains(collection: names, expected: "CommandPool sdf.world/commands[1]");
         Assert.Contains(
             collection: names,
-            filter: static name => name.StartsWith(comparisonType: StringComparison.Ordinal, value: "Pipeline sdf.world/")
+            filter: static name => name.StartsWith(comparisonType: StringComparison.Ordinal, value: "Pipeline gpu.pass-pipelines/sdf-beam/")
         );
     }
     [Fact]

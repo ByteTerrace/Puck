@@ -72,7 +72,7 @@ of its passes. The upload and the view's passes, in order:
 | `mask` | `sdf-instance-cull.comp` | Builds each tile's instance mask from the `SdfInstanceGrid` CSR grid. Deliberately not fused into the beam. |
 | `beam` | `sdf-beam.comp` | Cone-marches the tile-masked field and writes the four tile planes and part bounds. |
 | `cull-args` | `sdf-cull-args.comp` | Reduces the indirect dispatch bounds. |
-| `mesh` | `sdf-mesh.vert`, `sdf-mesh.frag` | Rasterizes mesh visibility before primary; records nothing when the frame has no mesh draws. |
+| `mesh` | `sdf-mesh.vert`, `sdf-mesh.frag` | Rasterizes mesh visibility before primary; skips a frame with no mesh draws, its target and depth barriers with it (`Skips`). |
 | `primary` | `sdf-world-primary.comp` | Camera traversal; writes every active visibility record's V, C and L rows, misses included. |
 | `surface` | `sdf-world-surface.comp` | Normals, curvature, gradient magnitude. |
 | `ambient` | `sdf-world-ambient.comp` | Ambient occlusion with its own candidate mask. |
@@ -96,9 +96,10 @@ primary bounds its march by and surface reads the mesh normal from
 (`sdfMeshSampleAt`); the target and its depth attachment are transient fragment
 resources the instance allocates with its graph. The pass draws with its own
 `sdf-mesh` interface, one set per frame slot from a pool of its own, pushes the
-draw (`SdfWorldInterfaces.MeshPushedIndex`), and records nothing on a frame
-with no mesh draws, when the pass block's `meshDraws` tells the hit passes not
-to read the target. A view the cadence gate declares unchanged records none of
+draw (`SdfWorldInterfaces.MeshPushedIndex`), and skips a frame with no mesh
+draws (`IRenderGraphPackageRecorder.Skips`), recording neither its draws nor its
+target and depth barriers, when the pass block's `meshDraws` tells the hit
+passes not to read the target. A view the cadence gate declares unchanged records none of
 its passes, and its latest output stands; `world.cadence off` disables the gate
 for measurement.
 
