@@ -9,6 +9,7 @@ namespace Puck.Platform;
 public sealed class LatestSlotPublication : ISharedSlotRing {
     private ulong[]? m_fenceValues;
     private volatile int m_latestSlot = -1;
+    private ulong m_nextFenceValue;
     private int[]? m_readers;
     private long m_timestamp;
     private long m_version;
@@ -51,6 +52,12 @@ public sealed class LatestSlotPublication : ISharedSlotRing {
             throw new InvalidOperationException(message: $"the slot publication is already configured for {existing.Length} targets");
         }
     }
+    /// <summary>Returns the value the next write into the ring signals on its shared fence: one past the last value this
+    /// publication handed out, whichever producer took it. A producer that replaces another on the same ring (a probe
+    /// kernel run restarted over its output ring) continues the fence's values rather than starting them again, so no
+    /// published value is one the fence has already passed while its write is still in flight.</summary>
+    /// <returns>The value, at least one.</returns>
+    public ulong NextFenceValue() => Interlocked.Increment(location: ref m_nextFenceValue);
     /// <summary>Publishes a written slot (called from the producer thread).</summary>
     /// <param name="slot">The slot whose write was submitted.</param>
     /// <param name="fenceValue">The shared-fence value the write signals, which a consumer's submission waits for on the

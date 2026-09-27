@@ -12,11 +12,13 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>
-/// A view export's direction of the shared fence: a Direct3D 12 write into an exported image that a probe kernel on the
-/// render adapter's own Direct3D 11 host reads, ordered only by the image's shared fence. The image holds white, the
-/// Direct3D 12 submission that clears it waits behind a gate the law holds shut, and the ring publishes the value the
-/// clear signals (<see cref="IGpuExportableImage.CompleteWrite"/>). A kernel that read without waiting would measure the
-/// white it found; the host's kernel measures nothing while the gate is shut, and black once it opens.
+/// A view export's direction of the shared fence: a write into an exported texture that a probe kernel on the render
+/// adapter's own Direct3D 11 host reads, ordered only by a shared fence the writer signals. The texture holds white, the
+/// writer's submission that clears it waits behind a gate the law holds shut, and the ring publishes the value the clear
+/// signals (<see cref="IGpuExportableImage.CompleteWrite"/>). A kernel that read without waiting would measure the white
+/// it found; the host's kernel measures nothing while the gate is shut, and black once it opens. The writer is the
+/// Direct3D 12 device that exports the texture. A kernel run restarted over its output ring continues the ring's fence
+/// values.
 /// </summary>
 [SupportedOSPlatform("windows10.0.15063")]
 public sealed unsafe class RenderedProbeKernelHostLawTests {
@@ -29,7 +31,6 @@ public sealed unsafe class RenderedProbeKernelHostLawTests {
     public void AKernelOnTheRenderAdapterReadsADirect3D12WriteOnlyOnceTheImagesSharedFenceReachesItsValue() {
         using var writer = (SharedFenceWriter.TryCreate(warp: false) ?? Skipped<SharedFenceWriter>(reason: "no Direct3D 11 hardware device on this host"));
         using var context = Direct3D12(adapterLuid: writer.AdapterLuid);
-        var services = context.Services;
         var export = new DirectXGpuSurfaceExportFactory(deviceContext: context);
         using var image = export.CreateSharedComputeImage(
             format: GpuPixelFormat.R8G8B8A8Unorm,
@@ -37,74 +38,137 @@ public sealed unsafe class RenderedProbeKernelHostLawTests {
             width: Extent
         );
         using var gate = ((DirectXExportableFence)export.CreateExportableFence());
-        using var pool = services.CommandPoolFactory.Create(name: default);
-        using var submission = services.QueueSubmitter.CreateSubmissionFence();
 
         Assert.NotEqual(
             actual: image.SharedFenceHandle,
             expected: 0
         );
+        FillWhite(
+            sharedHandle: image.SharedHandle,
+            writer: writer
+        );
+        ClearBehindTheGate(
+            adapterLuid: writer.AdapterLuid,
+            gate: gate,
+            image: image,
+            services: context.Services,
+            waitedGate: gate
+        );
+    }
+    [Fact]
+    public void AKernelRunRestartedOverItsOutputRingContinuesTheRingsFenceValues() {
+        using var writer = (SharedFenceWriter.TryCreate(warp: false) ?? Skipped<SharedFenceWriter>(reason: "no Direct3D 11 hardware device on this host"));
+        using var context = Direct3D12(adapterLuid: writer.AdapterLuid);
+        var export = new DirectXGpuSurfaceExportFactory(deviceContext: context);
+        using var frame = export.CreateSharedComputeImage(
+            format: GpuPixelFormat.R8G8B8A8Unorm,
+            height: Extent,
+            width: Extent
+        );
+        using var first = export.CreateSimultaneousAccessImage(
+            format: GpuPixelFormat.R8G8B8A8Unorm,
+            height: Extent,
+            width: Extent
+        );
+        using var second = export.CreateSimultaneousAccessImage(
+            format: GpuPixelFormat.R8G8B8A8Unorm,
+            height: Extent,
+            width: Extent
+        );
+        using var fence = export.CreateExportableFence();
+        using var host = new Win32RenderedProbeKernelHost(adapterLuid: writer.AdapterLuid);
+        var trigger = new LatestSlotPublication();
+        var output = new LatestSlotPublication();
 
-        // The image starts white, written and finished on the Direct3D 11 device before anything reads it.
-        using (var finished = new Win32D3D11CompletionSignal(
-            context: writer.Context,
-            device: writer.Device,
-            sharedFenceHandle: 0
-        )) {
-            writer.Write(
-                pixels: Enumerable.Repeat(
-                    count: ((Extent * Extent) * 4),
-                    element: ((byte)255)
-                ).ToArray(),
-                target: writer.Open(sharedHandle: image.SharedHandle),
-                width: Extent
+        FillWhite(
+            sharedHandle: frame.SharedHandle,
+            writer: writer
+        );
+        trigger.Configure(targetCount: 2);
+        output.Configure(targetCount: 2);
+
+        var request = new ProbeKernelRequest(
+            AccumulateBytecode: Bytecode(entry: "accumulate"),
+            AccumulateEntry: "accumulate",
+            FinalizeBytecode: Bytecode(entry: "finalize"),
+            FinalizeEntry: "finalize",
+            Constants: UntintedConstants(),
+            ChannelCount: 3,
+            RateHz: 1000U,
+            Inputs: [new ProbeKernelInput.Ring(
+                Format: GpuPixelFormat.R8G8B8A8Unorm,
+                Height: Extent,
+                SharedFenceHandle: 0,
+                SharedTargetHandles: [frame.SharedHandle, frame.SharedHandle],
+                Slots: trigger,
+                Width: Extent
+            )],
+            Trigger: 0,
+            Output: new ProbeKernelOutput(
+                Height: Extent,
+                SharedFenceHandle: fence.SharedHandle,
+                SharedTargetHandles: [first.SharedHandle, second.SharedHandle],
+                Slots: output,
+                TargetFormat: GpuPixelFormat.R8G8B8A8Unorm,
+                Width: Extent
+            )
+        );
+        var written = new ulong[2];
+
+        // Two runs in turn over the one output ring, as a probe's run restarts when a socket's source is made again.
+        for (var run = 0; (run < 2); run++) {
+            var readings = new ProbeReadingRing();
+
+            trigger.Publish(
+                fenceValue: 0UL,
+                slot: run
             );
-            Assert.Equal(
-                actual: finished.Complete(),
-                expected: 0UL
+            Assert.True(
+                condition: host.TryAttachKernel(
+                    fault: out var fault,
+                    request: in request,
+                    ring: readings,
+                    run: out var attached
+                ),
+                userMessage: fault
             );
+
+            using (attached) {
+                host.Signal();
+                Assert.True(
+                    condition: Await(
+                        readings: readings,
+                        seconds: 10.0
+                    ),
+                    userMessage: (attached.Fault ?? $"run {run} published no reading")
+                );
+                Assert.True(
+                    condition: attached.Order.SharedFence,
+                    userMessage: $"run {run} keeps the CPU wait: {attached.Order}"
+                );
+                Assert.True(condition: output.TryAcquireLatest(
+                    fenceValue: out written[run],
+                    slot: out var slot
+                ));
+                output.Release(slot: slot);
+            }
         }
 
-        services.Recorder.BeginCommandBuffer(commandBufferHandle: pool.CommandBufferHandle);
-        services.Recorder.TransitionImageLayout(
-            commandBufferHandle: pool.CommandBufferHandle,
-            destinationAccessMask: GpuAccess.ShaderWrite,
-            destinationStageMask: GpuStage.ComputeShader,
-            imageHandle: image.ImageHandle,
-            newLayout: GpuImageLayout.General,
-            oldLayout: GpuImageLayout.External,
-            sourceAccessMask: GpuAccess.None,
-            sourceStageMask: GpuStage.TopOfPipe
+        Assert.True(
+            condition: (written[1] > written[0]),
+            userMessage: $"the restarted run published fence value {written[1]} after the first run's {written[0]}"
         );
-        services.Recorder.ClearStorageImage(
-            commandBufferHandle: pool.CommandBufferHandle,
-            format: GpuPixelFormat.R8G8B8A8Unorm,
-            imageHandle: image.ImageHandle
-        );
-        services.Recorder.TransitionImageLayout(
-            commandBufferHandle: pool.CommandBufferHandle,
-            destinationAccessMask: GpuAccess.ShaderRead,
-            destinationStageMask: GpuStage.ComputeShader,
-            imageHandle: image.ImageHandle,
-            newLayout: GpuImageLayout.External,
-            oldLayout: GpuImageLayout.General,
-            sourceAccessMask: GpuAccess.ShaderWrite,
-            sourceStageMask: GpuStage.ComputeShader
-        );
-        services.Recorder.EndCommandBuffer(commandBufferHandle: pool.CommandBufferHandle);
-        services.QueueSubmitter.AddExternalWait(wait: new GpuExternalWait(
-            Fence: gate,
-            Value: 1UL
-        ));
-        services.QueueSubmitter.Submit(
-            commandBufferHandles: [pool.CommandBufferHandle],
-            fence: submission
-        );
+        Assert.True(condition: (fence.CompletedValue >= written[1]));
+    }
 
+    // Records the writer's clear of the image to black, held behind the gate, publishes the value its CompleteWrite
+    // returns, and holds the kernel host's reading to it: none while the gate is shut, black once it opens. The gate opens
+    // however the law ends, so neither the writer's queue nor the kernel host's worker is left waiting on it.
+    private static void ClearBehindTheGate(long adapterLuid, GpuDeviceServices services, IGpuExportableImage image, DirectXExportableFence gate, IGpuSharedFence waitedGate) {
+        using var pool = services.CommandPoolFactory.Create(name: default);
+        using var submission = services.QueueSubmitter.CreateSubmissionFence();
         var opened = false;
 
-        // The gate opens however the law ends, so neither the Direct3D 12 queue nor the kernel host's worker is left
-        // waiting on it when the devices go.
         void Open() {
             if (opened) {
                 return;
@@ -120,6 +184,42 @@ public sealed unsafe class RenderedProbeKernelHostLawTests {
             );
         }
 
+        services.Recorder.BeginCommandBuffer(commandBufferHandle: pool.CommandBufferHandle);
+        services.Recorder.TransitionImageLayout(
+            commandBufferHandle: pool.CommandBufferHandle,
+            destinationAccessMask: GpuAccess.TransferWrite,
+            destinationStageMask: GpuStage.Transfer,
+            imageHandle: image.ImageHandle,
+            newLayout: GpuImageLayout.General,
+            oldLayout: GpuImageLayout.Undefined,
+            sourceAccessMask: GpuAccess.None,
+            sourceStageMask: GpuStage.TopOfPipe
+        );
+        services.Recorder.ClearStorageImage(
+            commandBufferHandle: pool.CommandBufferHandle,
+            format: GpuPixelFormat.R8G8B8A8Unorm,
+            imageHandle: image.ImageHandle
+        );
+        services.Recorder.TransitionImageLayout(
+            commandBufferHandle: pool.CommandBufferHandle,
+            destinationAccessMask: GpuAccess.ShaderRead,
+            destinationStageMask: GpuStage.ComputeShader,
+            imageHandle: image.ImageHandle,
+            newLayout: GpuImageLayout.External,
+            oldLayout: GpuImageLayout.General,
+            sourceAccessMask: GpuAccess.TransferWrite,
+            sourceStageMask: GpuStage.Transfer
+        );
+        services.Recorder.EndCommandBuffer(commandBufferHandle: pool.CommandBufferHandle);
+        services.QueueSubmitter.AddExternalWait(wait: new GpuExternalWait(
+            Fence: waitedGate,
+            Value: 1UL
+        ));
+        services.QueueSubmitter.Submit(
+            commandBufferHandles: [pool.CommandBufferHandle],
+            fence: submission
+        );
+
         try {
             var written = image.CompleteWrite();
             var slots = new LatestSlotPublication();
@@ -134,7 +234,7 @@ public sealed unsafe class RenderedProbeKernelHostLawTests {
                 slot: 0
             );
 
-            using var host = new Win32RenderedProbeKernelHost(adapterLuid: writer.AdapterLuid);
+            using var host = new Win32RenderedProbeKernelHost(adapterLuid: adapterLuid);
             var readings = new ProbeReadingRing();
             var request = new ProbeKernelRequest(
                 AccumulateBytecode: Bytecode(entry: "accumulate"),
@@ -205,7 +305,6 @@ public sealed unsafe class RenderedProbeKernelHostLawTests {
             submission.Wait();
         }
     }
-
     // Polls until the ring holds a reading or the budget runs out.
     private static bool Await(ProbeReadingRing readings, double seconds) {
         var started = Stopwatch.GetTimestamp();
@@ -237,6 +336,27 @@ public sealed unsafe class RenderedProbeKernelHostLawTests {
         }
 
         return context;
+    }
+    // Writes white into the shared texture on the Direct3D 11 device and finishes it there before anything reads it.
+    private static void FillWhite(SharedFenceWriter writer, nint sharedHandle) {
+        using var finished = new Win32D3D11CompletionSignal(
+            context: writer.Context,
+            device: writer.Device,
+            sharedFenceHandle: 0
+        );
+
+        writer.Write(
+            pixels: Enumerable.Repeat(
+                count: ((Extent * Extent) * 4),
+                element: ((byte)255)
+            ).ToArray(),
+            target: writer.Open(sharedHandle: sharedHandle),
+            width: Extent
+        );
+        Assert.Equal(
+            actual: finished.Complete(),
+            expected: 0UL
+        );
     }
     private static T Skipped<T>(string reason) {
         Assert.Skip(reason: reason);

@@ -420,6 +420,14 @@ internal sealed partial class WorldScreenBinder : IWorldViewCameras {
                 );
                 Console.Error.WriteLine(value: $"[world.camera: '{name}' registered again]");
             } else {
+                // An exported image has the camera's extent, so an extent edit makes the export again at the new one.
+                if (
+                    (next.RenderWidth != registration.Row.RenderWidth) ||
+                    (next.RenderHeight != registration.Row.RenderHeight)
+                ) {
+                    RetireViewExportForRecreation(cameraName: registration.Row.Name);
+                }
+
                 ApplyCameraPose(
                     camera: next,
                     registration: registration

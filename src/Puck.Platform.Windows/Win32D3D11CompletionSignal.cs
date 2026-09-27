@@ -9,9 +9,9 @@ namespace Puck.Platform.Windows;
 /// <summary>
 /// Orders a Direct3D 11 producer's writes into shared targets before a consumer on another device reads them. With the
 /// consumer's shared fence (a Direct3D 12 fence created with <c>D3D12_FENCE_FLAG_SHARED</c>) opened through
-/// <c>ID3D11Device5::OpenSharedFence</c>, <see cref="Complete"/> signals the next value on the immediate context and
+/// <c>ID3D11Device5::OpenSharedFence</c>, <see cref="Complete()"/> signals the next value on the immediate context and
 /// returns it, and the consumer's submission waits for that value on the GPU. A device that cannot open the fence, or a
-/// producer offered none, keeps the CPU wait: <see cref="Complete"/> spins on an event query until the write has
+/// producer offered none, keeps the CPU wait: <see cref="Complete()"/> spins on an event query until the write has
 /// finished and returns zero. <see cref="Order"/> says which. Affine to the producer's thread; the caller holds the
 /// device's critical section when the context is shared.
 /// </summary>
@@ -72,15 +72,23 @@ public sealed unsafe class Win32D3D11CompletionSignal : IDisposable {
     /// before this call returned.</returns>
     /// <exception cref="ObjectDisposedException">The signal was disposed.</exception>
     /// <exception cref="COMException">The device was removed.</exception>
-    public ulong Complete() {
+    public ulong Complete() => Complete(value: (m_lastValue + 1UL));
+    /// <summary>Completes the writes recorded on the immediate context so far for another device to read, signalling a
+    /// value another counter hands out: the ring the writes land in, when more than one producer signals its fence over
+    /// time (<see cref="LatestSlotPublication.NextFenceValue"/>).</summary>
+    /// <param name="value">The value the fence is set to; greater than every value the fence was set to before.</param>
+    /// <returns><paramref name="value"/>, which the consumer's submission waits for; zero when the writes finished before
+    /// this call returned.</returns>
+    /// <exception cref="ObjectDisposedException">The signal was disposed.</exception>
+    /// <exception cref="COMException">The device was removed.</exception>
+    public ulong Complete(ulong value) {
         if (m_fence is not null) {
             if (OperatingSystem.IsWindowsVersionAtLeast(
                 major: 10,
                 minor: 0,
                 build: Windows10CreatorsUpdateBuild
             )) {
-                var value = ++m_lastValue;
-
+                m_lastValue = value;
                 m_context4->Signal(
                     Value: value,
                     pFence: m_fence

@@ -219,11 +219,11 @@ internal sealed partial class WorldScreenBinder {
         )) {
             feed.Input = new ProbeKernelInput.Ring(
                 Format: GpuPixelFormat.R8G8B8A8Unorm,
-                Height: ((int)camera.RenderHeight),
+                Height: ((int)feed.Height),
                 SharedFenceHandle: node!.ExportFenceHandle,
                 SharedTargetHandles: [handle],
                 Slots: feed.Slots,
-                Width: ((int)camera.RenderWidth)
+                Width: ((int)feed.Width)
             );
             feed.InputGeneration = generation;
         }
@@ -283,10 +283,12 @@ internal sealed partial class WorldScreenBinder {
             Detach(feed: feed);
         }
     }
-    // Waits out the export's readers, then stops its registration exporting: the view's next frame renders into images of
-    // its engine's own again.
+    // Retires the export's publication, so no reader acquires the image again, and stops its registration exporting: the
+    // view's next frame replaces the exporting engine with one rendering into images of its own, so nothing writes the
+    // exported image again. It never waits: a reader still holding the image finishes with it on its own device, which
+    // keeps its own reference to the shared texture and fence.
     private void Detach(ViewExportFeed feed) {
-        feed.Slots.RetireAndWait();
+        feed.Slots.Retire();
 
         if (m_cameraViews.TryGetValue(
             key: feed.Name,
@@ -330,7 +332,11 @@ internal sealed partial class WorldScreenBinder {
 
         var width = camera.RenderWidth;
         var height = camera.RenderHeight;
-        var feed = new ViewExportFeed(name: name);
+        var feed = new ViewExportFeed(
+            height: height,
+            name: name,
+            width: width
+        );
 
         registration.ExportFactory = device => new DirectXGpuSurfaceExportFactory(deviceContext: ((DirectXDeviceContext)device)).CreateSharedComputeImage(
             format: GpuPixelFormat.R8G8B8A8Unorm,
@@ -568,16 +574,20 @@ internal sealed partial class WorldScreenBinder {
         public void NotifyDeviceLost() { }
         public void Publish(in FrameContext context) { }
     }
-    // One camera's export state, keyed by camera name: the registration it exports and the one-image ring its readers
-    // share. It carries no GPU handle of its own — the view's engine's exported handle, fence and identity are read fresh
-    // each call.
-    private sealed class ViewExportFeed(string name) {
+    // One camera's export state, keyed by camera name: the registration it exports, the extent its image was made at, and
+    // the one-image publication its readers share. It carries no GPU handle of its own — the view's engine's exported
+    // handle, fence and identity are read fresh each call.
+    private sealed class ViewExportFeed(string name, uint width, uint height) {
         public object? CompletedGeneration { get; private set; }
+
+        public uint Height { get; } = height;
+
         public ProbeKernelInput.Ring? Input { get; set; }
         public object? InputGeneration { get; set; }
 
         public string Name { get; } = name;
-        public ViewExportRing Slots { get; } = new();
+        public SingleSlotPublication Slots { get; } = new();
+        public uint Width { get; } = width;
 
         // Publishes the identity of the engine a completed frame rendered on before the ring's ready state. A failed first
         // submission after device loss may preserve an older readable image, but it must never bless the replacement
@@ -591,137 +601,6 @@ internal sealed partial class WorldScreenBinder {
                 completed: completed,
                 fenceValue: fenceValue
             );
-        }
-    }
-    // The single-image counterpart of the multi-buffer camera/probe rings above: a view export has exactly one
-    // physical texture, so producer and consumers coordinate through one atomic state instead of rotating slots.
-    // Positive states count concurrent Direct3D 11 readers; the camera view's producer reserves the writer state before
-    // submitting the next Direct3D 12 render and keeps the previous complete image when that reservation is unavailable.
-    // The render's write is ordered before a reader's by the image's shared fence: EndWrite publishes the value the
-    // engine signalled behind the submission, and a reader waits for it on its own device before it samples. A reader
-    // releases only after its reads have finished on the CPU, so the writer never overlaps a reader over the same
-    // texels.
-    private sealed class ViewExportRing : ISharedSlotRing {
-        // 0 = no completed frame, 1 = readable with no readers, 2+ = readable with (state - 1) readers,
-        // -1 = retired, -2 = producer writing.
-        private ulong m_fenceValue;
-        private bool m_hadCompletedBeforeWrite;
-        private int m_state;
-        private long m_version;
-
-        public bool HasCompletedFrame => (Volatile.Read(location: ref m_state) >= 1);
-        public int LatestSlot => (HasCompletedFrame
-            ? 0
-            : -1
-        );
-        public long Version => Interlocked.Read(location: ref m_version);
-
-        // A completed write's fence value is stored before the readable state is published, so a reader that acquires
-        // the image reads the value of the write it samples; a failed write keeps the previous image and its value.
-        public void EndWrite(bool completed, ulong fenceValue) {
-            if (completed) {
-                Volatile.Write(
-                    location: ref m_fenceValue,
-                    value: fenceValue
-                );
-                _ = Interlocked.Increment(location: ref m_version);
-            }
-
-            Volatile.Write(
-                location: ref m_state,
-                value: ((completed || m_hadCompletedBeforeWrite)
-                ? 1
-                : 0)
-            );
-        }
-        public void Release(int slot) {
-            if (slot != 0) {
-                return;
-            }
-
-            while (true) {
-                var state = Volatile.Read(location: ref m_state);
-
-                if (state <= 1) {
-                    return;
-                }
-                if (Interlocked.CompareExchange(
-                    comparand: state,
-                    location1: ref m_state,
-                    value: (state - 1)
-                ) == state) {
-                    return;
-                }
-            }
-        }
-        public void RetireAndWait() {
-            var spinner = new SpinWait();
-
-            while (true) {
-                var state = Volatile.Read(location: ref m_state);
-
-                if (state == -1) {
-                    return;
-                }
-                if (
-                    (state is 0 or 1) &&
-                    (Interlocked.CompareExchange(
-                    comparand: state,
-                    location1: ref m_state,
-                    value: -1
-                ) == state)
-                ) {
-                    return;
-                }
-
-                spinner.SpinOnce();
-            }
-        }
-        public bool TryAcquireLatest(out int slot, out ulong fenceValue) {
-            while (true) {
-                var state = Volatile.Read(location: ref m_state);
-
-                if (
-                    (state < 1) ||
-                    (state == int.MaxValue)
-                ) {
-                    slot = -1;
-                    fenceValue = 0UL;
-
-                    return false;
-                }
-                if (Interlocked.CompareExchange(
-                    comparand: state,
-                    location1: ref m_state,
-                    value: (state + 1)
-                ) == state) {
-                    slot = 0;
-                    fenceValue = Volatile.Read(location: ref m_fenceValue);
-
-                    return true;
-                }
-            }
-        }
-        public bool TryBeginWrite() {
-            while (true) {
-                var state = Volatile.Read(location: ref m_state);
-
-                if (
-                    (state > 1) ||
-                    (state < 0)
-                ) {
-                    return false;
-                }
-                if (Interlocked.CompareExchange(
-                    comparand: state,
-                    location1: ref m_state,
-                    value: -2
-                ) == state) {
-                    m_hadCompletedBeforeWrite = (state == 1);
-
-                    return true;
-                }
-            }
         }
     }
 }

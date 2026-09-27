@@ -573,7 +573,10 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
             pDstResource: ((ID3D11Resource*)m_channelsStaging),
             pSrcResource: ((ID3D11Resource*)m_channelsBuffer)
         );
-        fenceValue = m_completion.Complete();
+        // The output ring hands out the fence's values, so a run restarted over the same ring continues them.
+        fenceValue = ((m_slots is { } slots)
+            ? m_completion.Complete(value: slots.NextFenceValue())
+            : m_completion.Complete());
 
         var mapped = default(D3D11_MAPPED_SUBRESOURCE);
 
