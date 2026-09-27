@@ -1,4 +1,5 @@
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Sources;
 using Puck.Hosting;
 using Puck.Testing;
@@ -149,6 +150,63 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 tick: (held + 1)
             );
             Assert.Equal(expected: 1UL, actual: (node.FrameCounter - submitted));
+        }
+    }
+    /// <summary>A capture of an uploaded source records the tick of the image its upload wrote: a render at a new tick,
+    /// and a conversion made for the capture on a frame whose held tick schedules none, both serve the frame's tick.</summary>
+    [Fact]
+    public void ACaptureOfASourceRecordsTheTickItsUploadWroteTheImageFor() {
+        var gpu = new FakePipelineGpu { ReadbackSupported = true };
+
+        var (runtime, _) = SourceScene(gpu: gpu);
+
+        using (runtime) {
+            var index = 0L;
+
+            Assert.True(
+                condition: SpinWait.SpinUntil(
+                    condition: () => {
+                        Produce(
+                            index: index,
+                            runtime: runtime,
+                            tick: index
+                        );
+                        index++;
+
+                        return runtime.IsSettled;
+                    },
+                    timeout: TimeSpan.FromSeconds(value: 30)
+                ),
+                userMessage: "The source's conversion never built."
+            );
+
+            FrameCaptureResult CaptureAt(long tick) {
+                var request = new FrameCaptureRequest(path: Path.Combine(
+                    path1: Path.GetTempPath(),
+                    path2: $"{Guid.NewGuid():N}.png"
+                ));
+
+                runtime.CaptureTarget(instance: "pattern").RequestCapture(request: request);
+                Produce(
+                    index: index++,
+                    runtime: runtime,
+                    tick: tick
+                );
+                Assert.True(condition: request.Completion.IsCompleted);
+
+                var result = request.Completion.Result;
+
+                Assert.Null(@object: result.Error);
+                File.Delete(path: result.Path);
+
+                return result;
+            }
+
+            var fresh = (index + 40L);
+
+            Assert.Equal(expected: ((ulong)fresh), actual: CaptureAt(tick: fresh).Tick);
+            // The same tick again schedules no conversion, so the capture converts once more for itself.
+            Assert.Equal(expected: ((ulong)fresh), actual: CaptureAt(tick: fresh).Tick);
         }
     }
     [Fact]
