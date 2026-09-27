@@ -39,8 +39,9 @@ never a Vulkan or DirectX type by name.
   including superellipsoids, use analytical leaf normals; the remaining shapes
   use local finite differences. The full-field finite-difference option remains
   available for comparisons. Authored curvature shading uses four neighboring
-  samples and the primary hit's distance. Programs with shading-only details
-  need a fifth sample because their shading field differs from the march field.
+  samples and the distance the visibility record holds. Programs with
+  shading-only details need a fifth sample because their shading field differs
+  from the march field.
   Keep the four curvature samples in one loop: each spelled-out VM call
   duplicates the whole inlined interpreter.
 - *Shading-only detail shapes:* a shape instruction flagged
@@ -51,8 +52,9 @@ never a Vulkan or DirectX type by name.
   footprint-relative march to resolve at distance stays a crisp mark instead
   of dotting out. Compiled rigid leaves retain the same detail and secondary
   mode gates as the generic scalar and gradient interpreters. When packing proves
-  that the program contains no Detail shapes, shading reuses the primary hit's
-  material, pose lanes and seam values instead of reevaluating the field.
+  that the program contains no Detail shapes, shading reuses the visibility
+  record's material, pose lanes and seam values instead of reevaluating the
+  field.
 - *Non-secondary shapes and gradient-scaled shadow/AO:* `SdfInstruction.Secondary`
   is Detail's opposite exclusion set—false drops a shape from ONLY the
   soft-shadow and ambient-occlusion marches, while it still marches for the
@@ -83,8 +85,9 @@ kernel ships in three compiled variants
 CoreOps also strips the remaining exotic cases. The program selects the smallest
 variant that supports its operations, reducing shader size and register pressure.
 
-The hit buffer reserves one record per active pixel, `SdfVisibilityWords` words
-(`sdf-visibility.hlsli`, 60 bytes). Primary traversal preserves
+The visibility record buffer (`SdfFrameBuffer.VisibilityRecords`) reserves one
+record per active pixel, `SdfVisibilityWords` words (`sdf-visibility.hlsli`,
+`SdfWorldEngine.VisibilityRecordByteLength`, 60 bytes). Primary traversal preserves
 depth, hit acceptance, terminal field radius and threshold, material and seam
 data, dynamic frame/lanes, and primary iteration/evaluation counts. Surface adds
 the geometric normal, gradient magnitude and curvature; ambient adds AO and
@@ -94,7 +97,7 @@ beam's tile planes read-only, so a buffer a pass only reads is never held in a
 read-write state. These four dispatches share indirect bounds and live view
 dimensions. Primary, surface and ambient retain the full ISA.
 Material `Soften` changes the later lighting normal; AO uses the geometric normal.
-The buffer reserves `width × height × viewportCapacity × 80` bytes so changing
+The buffer reserves `width × height × viewportCapacity × 60` bytes so changing
 view rectangles cannot overrun an allocation sized for an earlier layout.
 It is shared across frame slots under the engine's existing cross-frame barrier.
 The `primary`, `surface`, `ambient` and `views` labels expose their separate costs;

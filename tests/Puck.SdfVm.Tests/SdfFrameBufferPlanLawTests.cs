@@ -36,9 +36,9 @@ public sealed class SdfFrameBufferPlanLawTests {
             Edge(after: SdfBufferAccess.Read, before: SdfBufferAccess.Write, buffer: SdfFrameBuffer.Tiles, consumer: SdfFramePass.CullArgs, producer: SdfFramePass.Beam),
             Edge(after: SdfBufferAccess.IndirectRead, before: SdfBufferAccess.Write, buffer: SdfFrameBuffer.ViewsArgs, consumer: SdfFramePass.Primary, producer: SdfFramePass.CullArgs),
             Edge(after: SdfBufferAccess.Read, before: SdfBufferAccess.Write, buffer: SdfFrameBuffer.CullBounds, consumer: SdfFramePass.Primary, producer: SdfFramePass.CullArgs),
-            Edge(after: SdfBufferAccess.ReadWrite, before: SdfBufferAccess.Write, buffer: SdfFrameBuffer.PrimaryHits, consumer: SdfFramePass.Surface, producer: SdfFramePass.Primary),
-            Edge(after: SdfBufferAccess.ReadWrite, before: SdfBufferAccess.ReadWrite, buffer: SdfFrameBuffer.PrimaryHits, consumer: SdfFramePass.Ambient, producer: SdfFramePass.Surface),
-            Edge(after: SdfBufferAccess.Read, before: SdfBufferAccess.ReadWrite, buffer: SdfFrameBuffer.PrimaryHits, consumer: SdfFramePass.Views, producer: SdfFramePass.Ambient),
+            Edge(after: SdfBufferAccess.ReadWrite, before: SdfBufferAccess.Write, buffer: SdfFrameBuffer.VisibilityRecords, consumer: SdfFramePass.Surface, producer: SdfFramePass.Primary),
+            Edge(after: SdfBufferAccess.ReadWrite, before: SdfBufferAccess.ReadWrite, buffer: SdfFrameBuffer.VisibilityRecords, consumer: SdfFramePass.Ambient, producer: SdfFramePass.Surface),
+            Edge(after: SdfBufferAccess.Read, before: SdfBufferAccess.ReadWrite, buffer: SdfFrameBuffer.VisibilityRecords, consumer: SdfFramePass.Views, producer: SdfFramePass.Ambient),
         ];
 
         Assert.Equal(
@@ -136,7 +136,7 @@ public sealed class SdfFrameBufferPlanLawTests {
         // use is a plain read (or the indirect arguments) and consecutive hit passes owe no transition for it.
         foreach (var pass in ((ReadOnlySpan<SdfFramePass>)[SdfFramePass.Primary, SdfFramePass.Surface, SdfFramePass.Ambient, SdfFramePass.Views])) {
             foreach (var use in SdfFrameBufferPlan.Uses(pass: pass)) {
-                if (use.Buffer == SdfFrameBuffer.PrimaryHits) {
+                if (use.Buffer == SdfFrameBuffer.VisibilityRecords) {
                     continue;
                 }
 
@@ -150,7 +150,7 @@ public sealed class SdfFrameBufferPlanLawTests {
         Assert.Equal(
             actual: Assert.Single(
                 collection: SdfFrameBufferPlan.Uses(pass: SdfFramePass.Views).ToArray(),
-                predicate: static use => (use.Buffer == SdfFrameBuffer.PrimaryHits)
+                predicate: static use => (use.Buffer == SdfFrameBuffer.VisibilityRecords)
             ).Access,
             expected: SdfBufferAccess.Read
         );

@@ -73,7 +73,7 @@ public sealed class SdfDetailShapeLawTests {
     }
     /// <summary>An empty program still carries a complete directory header and needs no detail resolve.</summary>
     [Fact]
-    public void EmptyProgramAdmitsPrimaryHitReuse() => Assert.Equal(
+    public void EmptyProgramAdmitsVisibilityRecordReuse() => Assert.Equal(
         expected: 1u,
         actual: ShadingFlags(program: Build(instructions: []))
     );
@@ -247,7 +247,7 @@ public sealed class SdfDetailShapeLawTests {
     [InlineData(true, true, false, false)]
     [InlineData(true, true, true, false)]
     [InlineData(true, true, false, true)]
-    public void PrimaryHitReuseAdmissionIncludesAllShapes(bool detail, bool instanced, bool parked, bool secondary) {
+    public void VisibilityRecordReuseAdmissionIncludesAllShapes(bool detail, bool instanced, bool parked, bool secondary) {
         var program = new SdfProgram(
             instructions: [Shape(detail: false), new SdfInstruction(
                     SdfOp.ResetPoint,

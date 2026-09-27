@@ -65,7 +65,7 @@ work is pending, and count outside every pass. A cadence-skipped frame marks
 | `beam` | `sdf-beam.comp` | Cone-marches the tile-masked field and writes the four tile planes and part bounds. |
 | `cull-args` | `sdf-cull-args.comp` | Reduces the indirect dispatch bounds. |
 | `mesh` | `sdf-mesh.vert`, `sdf-mesh.frag` | Rasterizes mesh visibility before primary; records nothing when the frame has no mesh draws. |
-| `primary` | `sdf-world-primary.comp` | Camera traversal; writes every active hit record, misses included. |
+| `primary` | `sdf-world-primary.comp` | Camera traversal; writes every active visibility record's V, C and L rows, misses included. |
 | `surface` | `sdf-world-surface.comp` | Normals, curvature, gradient magnitude. |
 | `ambient` | `sdf-world-ambient.comp` | Ambient occlusion with its own candidate mask. |
 | `views` | `sdf-world-views*.comp` | Shadows, materials, lighting, volumes, diagnostics, written into the view's output image. |
@@ -92,7 +92,7 @@ cadence gate skips records no view set, and each view's retained output
 stands; `world.cadence off` disables the gate for measurement.
 
 The visibility record is 60 bytes per full-extent pixel per viewport
-(`PrimaryHitByteLength`), allocated as width × height × viewport capacity;
+(`SdfWorldEngine.VisibilityRecordByteLength`, the buffer `SdfFrameBuffer.VisibilityRecords`), allocated as width × height × viewport capacity;
 `world.budget` prints the allocated bytes. `sdf-visibility.hlsli` owns its
 fifteen words in five rows: V (t, identity, material, march flags), exact; C
 (terminal radius, threshold, then the seam blend weight as a 15-bit fraction
@@ -104,7 +104,7 @@ most one code against the full record and leaves identity and state exact.
 Primary writes V, C and L;
 surface writes N and S; ambient updates S. Every reader and writer uses the
 module's typed load and store functions, so a layout change edits only that
-module and `PrimaryHitByteLength`. A record is current only inside the frame's
+module and `VisibilityRecordByteLength`. A record is current only inside the frame's
 dispatch box, where primary writes every active pixel, misses included: a
 reader of another pixel's record asks `worldVisibilityCurrent` first and
 treats a pixel outside the box as sky, since the beam proved its tile empty.

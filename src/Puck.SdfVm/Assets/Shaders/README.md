@@ -90,8 +90,8 @@ rendered image beyond `puck parity`, so a kernel change is judged by running
 | `Sdf/field/sdf-parts.hlsli` | Root composition admission for independent part tracing, shared by the beam and primary traversal. | `SdfProgram.PartPrograms.cs` |
 | `Sdf/march/sdf-part-bounds.hlsli` | The primary-acceptance and AO part-bound bands the beam writes after the tile planes. | `SdfWorldEngine`'s `PartBoundFloatCount` |
 | `Sdf/field/sdf-octahedral.hlsli` | Octahedral encoding and decoding of a unit direction, shared by the star field and the visibility record's normal. | None |
-| `Sdf/frame/sdf-visibility.hlsli` | The visibility record: its fifteen words in five rows and how the packed fields round, the identity encoding, the read-write and read-only members it reaches through `sdfVisibilityRecordBuffer`, and the typed load and store functions every hit pass and views use. | `SdfWorldEngine`'s `PrimaryHitByteLength` |
-| `Sdf/march/sdf-primary.hlsli` | The marcher that full-scene and independent whole-part queries share, and the hit it returns. | `SdfWorldEngine` visibility buffer |
+| `Sdf/frame/sdf-visibility.hlsli` | The visibility record: its fifteen words in five rows and how the packed fields round, the identity encoding, the read-write and read-only members it reaches through `sdfVisibilityRecordBuffer`, and the typed load and store functions every hit pass and views use. | `SdfWorldEngine`'s `VisibilityRecordByteLength` |
+| `Sdf/march/sdf-primary.hlsli` | The marcher that full-scene and independent whole-part queries share, and the march it returns (`SdfPrimaryMarch`), which primary stores into the visibility record. | `SdfWorldEngine` visibility buffer |
 | `Sdf/surface/sdf-surface.hlsli` | The surface and ambient passes' writers of the visibility record's normal and surface rows. | `SdfWorldEngine` visibility buffer |
 | `Sdf/surface/sdf-occlusion.hlsli` | Soft-shadow visibility toward the light direction. | None |
 | `Sdf/field/sdf-ellipse.hlsli` | The 2D ellipse distance. | None |
