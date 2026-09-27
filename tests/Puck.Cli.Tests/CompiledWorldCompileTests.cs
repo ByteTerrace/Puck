@@ -13,16 +13,27 @@ public sealed class CompiledWorldCompileTests {
     [Fact]
     public void ASourceAndItsDocumentCompileToOneCompiledWorld() {
         using var directory = new TemporaryDirectory();
-        var source = directory.PathOf(name: "hgb-compare.puck");
+        var shipped = RepositoryPaths.Resolve(relativePath: $"{ShippedWorldDocuments.WorldDirectory}/tools/hgb-compare.puck");
+        var source = ShippedWorldDocuments.CopyComposition(
+            directory: directory.RootPath,
+            path: shipped
+        );
 
         File.Copy(
             destFileName: source,
-            sourceFileName: RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/tools/hgb-compare.puck")
+            sourceFileName: shipped
         );
 
         Assert.Equal(expected: 0, actual: Compile(source));
 
-        var compiled = directory.PathOf(name: "hgb-compare.puckb");
+        var document = Path.ChangeExtension(
+            extension: ".world.json",
+            path: source
+        );
+        var compiled = Path.ChangeExtension(
+            extension: ".puckb",
+            path: source
+        );
         var fromSource = File.ReadAllBytes(path: compiled);
 
         Assert.True(condition: CompiledWorld.TryDecode(container: out var container, content: fromSource, header: out var header, reason: out var reason), userMessage: reason);
@@ -34,7 +45,10 @@ public sealed class CompiledWorldCompileTests {
         Assert.Equal(actual: reference, expected: WorldBakePack.FileName);
 
         // The bakes the compiled world names ship in the pack beside it, which a compile without a tree writes at once.
-        var packPath = directory.PathOf(name: WorldBakePack.FileName);
+        var packPath = Path.Combine(
+            path1: Path.GetDirectoryName(path: source)!,
+            path2: WorldBakePack.FileName
+        );
 
         if (keys.Count == 0) {
             Assert.False(condition: File.Exists(path: packPath));
@@ -44,12 +58,12 @@ public sealed class CompiledWorldCompileTests {
         }
 
         File.Delete(path: compiled);
-        Assert.Equal(expected: 0, actual: Compile(directory.PathOf(name: "hgb-compare.world.json")));
+        Assert.Equal(expected: 0, actual: Compile(document));
         Assert.Equal(expected: fromSource, actual: File.ReadAllBytes(path: compiled));
 
         var elsewhere = directory.PathOf(name: "out/named.puckb");
 
-        Assert.Equal(expected: 0, actual: Compile(directory.PathOf(name: "hgb-compare.world.json"), "--output", elsewhere));
+        Assert.Equal(expected: 0, actual: Compile(document, "--output", elsewhere));
         Assert.Equal(expected: fromSource, actual: File.ReadAllBytes(path: elsewhere));
     }
     [Fact]
