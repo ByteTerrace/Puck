@@ -1,6 +1,5 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
-using Puck.Hosting;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
@@ -123,11 +122,9 @@ public sealed partial class SdfWorldTables {
         floats[4] = transform.Orientation.X; floats[5] = transform.Orientation.Y; floats[6] = transform.Orientation.Z; floats[7] = transform.Orientation.W;
         floats[8] = transform.Lanes.X; floats[9] = transform.Lanes.Y; floats[10] = transform.Lanes.Z; floats[11] = transform.Lanes.W;
     }
-    // Pack the per-frame screen-light buffer: entries 0..(MaxScreenSurfaces-1) = each screen's emitted color (the
-    // framebuffer average set via SetScreenLight) with the room-glow intensity gain in w, the last entry = the
-    // environment (ambient/sun dimming from the frame). KEEP IN SYNC with frame/sdf-environment.hlsli's sdfScreenLights layout
-    // (SdfScreenLightEnv must equal MaxScreenSurfaces there).
-    private void PackScreenLights(SdfFrame frame) {
+    // Packs the screen-light table: each screen slot's emitted color (the framebuffer average set through SetScreenLight)
+    // with the room-glow intensity gain in w. KEEP IN SYNC with frame/sdf-environment.hlsli's sdfScreenLights.
+    private void PackScreenLights() {
         var floats = MemoryMarshal.Cast<byte, float>(span: m_screenLightScratch.AsSpan());
 
         for (var index = 0; (index < MaxScreenSurfaces); index++) {
@@ -136,98 +133,6 @@ public sealed partial class SdfWorldTables {
 
             floats[(b + 0)] = color.X; floats[(b + 1)] = color.Y; floats[(b + 2)] = color.Z; floats[(b + 3)] = ScreenLightIntensity;
         }
-
-        var envBase = (MaxScreenSurfaces * 4);
-
-        // The env entry's zw lanes carry the SLICE debug view's plane selector (axis + offset — see
-        // SdfFrame.DebugSliceAxis); they were spare pads before, so a frame that never sets them uploads the same zeros.
-        floats[(envBase + 0)] = frame.AmbientScale; floats[(envBase + 1)] = frame.SunScale; floats[(envBase + 2)] = frame.DebugSliceAxis; floats[(envBase + 3)] = frame.DebugSliceOffset;
-
-        // The grid-lock overlay rows (grid-locking §4a): four float4 rows AFTER the env entry (env stays at
-        // MaxScreenSurfaces, load-bearing as the shader's screen-count loop bound). Default 0 = no overlay, so a frame
-        // that never sets the Grid* fields uploads the same zeros. KEEP IN SYNC with frame/sdf-environment.hlsli's SdfGridWorld..
-        var gridWorldBase = ((MaxScreenSurfaces + 1) * 4);
-
-        floats[(gridWorldBase + 0)] = frame.GridFlags; floats[(gridWorldBase + 1)] = frame.GridFloorY; floats[(gridWorldBase + 2)] = frame.GridWorldPitch.X; floats[(gridWorldBase + 3)] = frame.GridWorldPitch.Y;
-
-        var gridObjOriginBase = ((MaxScreenSurfaces + 2) * 4);
-
-        floats[(gridObjOriginBase + 0)] = frame.GridObjectOrigin.X; floats[(gridObjOriginBase + 1)] = frame.GridObjectOrigin.Y; floats[(gridObjOriginBase + 2)] = frame.GridObjectOrigin.Z; floats[(gridObjOriginBase + 3)] = frame.GridObjectPitch.X;
-
-        var gridObjFrameBase = ((MaxScreenSurfaces + 3) * 4);
-
-        floats[(gridObjFrameBase + 0)] = frame.GridObjectFrame.X; floats[(gridObjFrameBase + 1)] = frame.GridObjectFrame.Y; floats[(gridObjFrameBase + 2)] = frame.GridObjectFrame.Z; floats[(gridObjFrameBase + 3)] = frame.GridObjectFrame.W;
-
-        // The .z lane is the analytic-normal A/B toggle (0 = the forward-mode dual normal, the default; 1 = the legacy
-        // 4-tap finite-difference probe), read by frame/sdf-levers.hlsli's worldUseTapNormals. The .w lane is the soft-shadow
-        // GRID-CULL toggle (0 = ON, the default grid-gathered shadow march; 1 = OFF, the flat all-instances reference),
-        // read by worldShadowCullEnabled. Both were reserved before, so an unset frame uploads 0 = analytic normals +
-        // cull ON. KEEP IN SYNC with SdfFrame.UseFiniteDifferenceNormals / SdfFrame.DisableShadowCull.
-        var gridObjParamsBase = ((MaxScreenSurfaces + 4) * 4);
-
-        floats[(gridObjParamsBase + 0)] = frame.GridObjectPitch.Y; floats[(gridObjParamsBase + 1)] = frame.GridObjectPatchRadius; floats[(gridObjParamsBase + 2)] = (frame.UseFiniteDifferenceNormals
-            ? 1f
-            : 0f
-        ); floats[(gridObjParamsBase + 3)] = (frame.DisableShadowCull
-            ? 1f
-            : 0f
-        );
-
-        // Engine-bench shader-feature levers: one reserved row after the grid rows. x = disable soft
-        // shadows, y = disable AO, z = shadow-distance scale (0 = the full 1.0 reach — an unset frame uploads 0), w =
-        // disable screen lights. All default 0, so a frame that never sets the Disable*/ShadowDistanceScale fields
-        // uploads the same zeros = every feature ON at full reach. KEEP IN SYNC with frame/sdf-environment.hlsli's SdfBenchParams
-        // row and frame/sdf-levers.hlsli's decode (worldSoftShadowsDisabled/worldAoDisabled/worldShadowDistanceScale/worldScreenLightsDisabled).
-        var benchParamsBase = ((MaxScreenSurfaces + 5) * 4);
-
-        floats[(benchParamsBase + 0)] = (frame.DisableSoftShadows
-            ? 1f
-            : 0f
-        ); floats[(benchParamsBase + 1)] = (frame.DisableAmbientOcclusion
-            ? 1f
-            : 0f
-        ); floats[(benchParamsBase + 2)] = frame.ShadowDistanceScale; floats[(benchParamsBase + 3)] = (frame.DisableScreenLights
-            ? 1f
-            : 0f
-        );
-
-        // The shadow-proxy lever (PATH B): one reserved row AFTER the bench-params row (whose four lanes are full). x =
-        // enable the shadow proxy (shadow rays skip Subtraction-family carve instances and march the pre-carve union
-        // hull); y = use the camera-tile shadow mask instead of the per-pixel shadow-grid gather; z = use the bounded-cost
-        // fast soft-shadow marcher; w = use the one-sample contact-AO approximation.
-        // Both default 0, so a frame that never sets either lever uploads the same zeros = the full gathered occluder
-        // set. KEEP IN SYNC with frame/sdf-environment.hlsli's SdfShadowProxyParams, frame/sdf-levers.hlsli's
-        // worldShadowProxyEnabled, and frame/sdf-levers.hlsli's worldUseCameraTileShadowMask / worldUseFastSoftShadowMarch / worldUseFastAmbientOcclusion.
-        var shadowProxyBase = ((MaxScreenSurfaces + 6) * 4);
-
-        floats[(shadowProxyBase + 0)] = (frame.EnableShadowProxy
-            ? 1f
-            : 0f
-        ); floats[(shadowProxyBase + 1)] = (frame.UseCameraTileShadowMask
-            ? 1f
-            : 0f
-        ); floats[(shadowProxyBase + 2)] = (frame.UseFastSoftShadowMarch
-            ? 1f
-            : 0f
-        ); floats[(shadowProxyBase + 3)] = (frame.UseFastAmbientOcclusion
-            ? 1f
-            : 0f
-        );
-
-        // The far-field lever row: x = disable the beam-published per-tile far bound (the fine march then runs to
-        // the far distance); yzw reserved. Default 0 = the far bound ON. KEEP IN SYNC with frame/sdf-environment.hlsli's
-        // SdfFarFieldParams and frame/sdf-levers.hlsli's worldFarBoundDisabled.
-        var farFieldBase = ((MaxScreenSurfaces + 7) * 4);
-
-        floats[(farFieldBase + 0)] = (frame.DisableFarBound
-            ? 1f
-            : 0f
-        ); floats[(farFieldBase + 1)] = 0f; floats[(farFieldBase + 2)] = 0f; floats[(farFieldBase + 3)] = 0f;
-
-        PackEnvironment(
-            floats: floats,
-            frame: frame
-        );
     }
     // Eleven float4 rows, paired with shade-volumes.hlsli. Unused trailing slots carry zero bounds.
     private void PackVolumes(SdfFrame frame) {
@@ -269,159 +174,36 @@ public sealed partial class SdfWorldTables {
             }
         }
     }
-    // The environment block: SdfEnvironment's lanes copied row for row after the far-field row, with the host bakes
-    // the shader must not pay per pixel — every directional (light and softbox) normalized in double and rounded once
-    // (DXC's DXIL backend constant-folds a normalize() while its SPIR-V backend emits a runtime call; a uniform has
-    // no such asymmetry), the sun-disc angular radius baked into the pow() exponent that puts the disc's edge at half
-    // brightness (k = ln 0.5 / ln cos r), the twinkle rate baked into a period in engine ticks so the shader reduces
-    // the tick counter by an integer modulo, and the cloud drift, shear and spin integrated from the tick counter in
-    // double (offsets wrapped modulo the lattice period, the angle modulo 2π). KEEP IN SYNC with frame/sdf-environment.hlsli's
-    // SdfEnv* rows and SdfEnvironment's row layout.
-    private static void PackEnvironment(SdfFrame frame, Span<float> floats) {
-        var environment = frame.Environment;
-        var lanes = environment.Lanes;
-        var envBase = ((MaxScreenSurfaces + 8) * 4);
-
-        lanes.CopyTo(destination: floats.Slice(
-            length: SdfEnvironment.LaneCount,
-            start: envBase
-        ));
-
-        for (var index = 0; (index < SdfEnvironment.MaxLights); index++) {
-            var local = ((SdfEnvironment.LightsRow + (index * SdfEnvironment.RowsPerLight)) * 4);
-            var row = (envBase + local);
-            var kind = ((SdfLightKind)((byte)lanes[(local + 7)]));
-
-            if (kind != SdfLightKind.Directional) {
-                continue;
-            }
-
-            double x = lanes[(local + 0)], y = lanes[(local + 1)], z = lanes[(local + 2)];
-            var length = Math.Sqrt(d: (((x * x) + (y * y)) + (z * z)));
-
-            if (length <= 0d) {
-                // A zero direction has no Lambert term; the authoring doors refuse one by name, and a frame assembled
-                // in code still must not upload NaNs into every shaded pixel.
-                x = SdfEnvironment.DefaultSunDirection.X; y = SdfEnvironment.DefaultSunDirection.Y; z = SdfEnvironment.DefaultSunDirection.Z;
-                length = Math.Sqrt(d: (((x * x) + (y * y)) + (z * z)));
-            }
-
-            floats[(row + 0)] = ((float)(x / length)); floats[(row + 1)] = ((float)(y / length)); floats[(row + 2)] = ((float)(z / length));
-        }
-
-        var skyControl = (envBase + (SdfEnvironment.SkyControlRow * 4));
-        var cosDiscRadius = Math.Cos(d: environment.SunDiscRadians);
-        var discExponent = ((cosDiscRadius is > 0d and < 1d)
-            ? Math.Clamp(
-                value: (Math.Log(d: 0.5d) / Math.Log(d: cosDiscRadius)),
-                min: 0d,
-                max: 100000d
-            )
-            : 100000d
-        );
-
-        floats[(skyControl + 2)] = ((float)discExponent);
-
-        var twinkle = (envBase + (SdfEnvironment.TwinkleRow * 4));
-        var twinklePeriodTicks = ((environment.TwinkleRate > 0f)
-            ? Math.Max(
-                val1: 1d,
-                val2: Math.Round(a: (((double)EngineTicks.PerSecond) / environment.TwinkleRate))
-            )
-            : 1d
-        );
-
-        floats[(twinkle + 2)] = ((float)twinklePeriodTicks);
-
-        var elapsedSeconds = (((double)frame.SampleIndex) / EngineTicks.PerSecond);
-        var drift = environment.CloudDrift;
-        var shear = environment.CloudShear;
-        var cloudsC = (envBase + ((SdfEnvironment.CloudsRow + 2) * 4));
-        var cloudsD = (envBase + ((SdfEnvironment.CloudsRow + 3) * 4));
-
-        floats[(cloudsC + 0)] = ((float)Math.IEEERemainder(
-            x: (elapsedSeconds * drift.X),
-            y: CloudLatticePeriod
-        ));
-        floats[(cloudsC + 1)] = ((float)Math.IEEERemainder(
-            x: (elapsedSeconds * drift.Y),
-            y: CloudLatticePeriod
-        ));
-        floats[(cloudsC + 2)] = ((float)Math.IEEERemainder(
-            x: (elapsedSeconds * shear.X),
-            y: CloudLatticePeriod
-        ));
-        floats[(cloudsC + 3)] = ((float)Math.IEEERemainder(
-            x: (elapsedSeconds * shear.Y),
-            y: CloudLatticePeriod
-        ));
-        floats[(cloudsD + 0)] = ((float)Math.IEEERemainder(
-            x: (elapsedSeconds * environment.CloudSpin),
-            y: Math.Tau
-        ));
-
-        for (var index = 0; (index < SdfEnvironment.MaxSoftboxes); index++) {
-            var local = ((SdfEnvironment.SoftboxesRow + (index * SdfEnvironment.RowsPerSoftbox)) * 4);
-            var row = (envBase + local);
-
-            double x = lanes[(local + 0)], y = lanes[(local + 1)], z = lanes[(local + 2)];
-            var length = Math.Sqrt(d: (((x * x) + (y * y)) + (z * z)));
-
-            if (length <= 0d) {
-                continue; // an unauthored softbox slot has zero weight and never contributes; leave its direction zero
-            }
-
-            floats[(row + 0)] = ((float)(x / length)); floats[(row + 1)] = ((float)(y / length)); floats[(row + 2)] = ((float)(z / length));
-        }
-    }
-
-    // The cloud offset's wrap period in layer units. The lattice is hashed on integer cell coordinates, so any
-    // integer period is seamless; this one keeps a full period inside float's exact-integer range with room for
-    // the sub-cell fraction.
-    private const double CloudLatticePeriod = 4096d;
 
     // The deterministic tick clock star twinkle reads, the latest frame's or zero for a sky with no visible twinkle.
     private uint m_sampleIndex;
 
-    /// <summary>Gets or sets the SDF debug view mode packed into each viewport row (<c>forward.w</c>); 0 renders the
-    /// final lit image.</summary>
+    // The latest packed frame's environment rows, SdfEnvironment's lanes with the host bakes.
+    private readonly float[] m_environment = new float[SdfEnvironment.LaneCount];
+
+    /// <summary>Gets or sets the SDF debug view mode every pass block carries; 0 renders the final lit image.</summary>
     public int DebugMode { get; set; }
+    /// <summary>Gets what every pass block of the latest packed frame takes from the tables: the bound screens, the
+    /// instance-mask width, the twinkle tick, the mesh draws, the debug view mode, and the environment rows with the host
+    /// bakes applied (<see cref="SdfFrameBlock.BakeEnvironment"/>).</summary>
+    public SdfPassValues PassValues => new(
+        DebugMode: DebugMode,
+        Environment: m_environment,
+        InstanceMaskWordCount: InstanceMaskWordCount,
+        MeshDraws: MeshDrawCount,
+        SampleIndex: SampleIndex,
+        ScreenCount: BoundScreenCount()
+    );
     /// <summary>Gets the tick clock star twinkle reads in the latest packed frame, or zero when its sky twinkles
     /// nowhere visible: the value every pass block of the frame carries.</summary>
     public uint SampleIndex => m_sampleIndex;
     /// <summary>Gets the live program's per-tile instance-mask width, which every pass block carries.</summary>
     public uint InstanceMaskWordCount => ((uint)m_liveInstanceMaskWordCount);
 
-    /// <summary>Writes one view's 96-byte viewport row: its camera snapshot, render extent and the frame's far distance,
-    /// member for member from the frame, with no camera math (the snapshot already holds the basis, tan(fov/2) and aspect).
-    /// The render extent is the view's output extent in exact integers, so the sky, the tile passes and the hit passes all
-    /// read the same one. The far distance rides the row's last lane, and the row carries the frame's presentation time,
-    /// debug view mode and off-axis offset. KEEP IN SYNC with frame/sdf-viewport.hlsli's <c>ViewportData</c> /
-    /// <c>worldFarDistance</c>.</summary>
-    /// <param name="frame">The frame.</param>
-    /// <param name="view">The view's index in <see cref="SdfFrame.Views"/>.</param>
-    /// <param name="width">The view's render width, in pixels.</param>
-    /// <param name="height">The view's render height, in pixels.</param>
-    /// <param name="row">The row, <see cref="ViewportByteLength"/> bytes.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
-    public void WriteViewportRow(SdfFrame frame, int view, uint width, uint height, Span<byte> row) {
-        ArgumentNullException.ThrowIfNull(argument: frame);
-
-        var floats = MemoryMarshal.Cast<byte, float>(span: row[..ViewportByteLength]);
-        var snapshot = frame.Views[view];
-        var camera = snapshot.Camera;
-
-        floats[0] = camera.Position.X; floats[1] = camera.Position.Y; floats[2] = camera.Position.Z; floats[3] = frame.Time;          // position.xyz, time
-        floats[4] = camera.Right.X; floats[5] = camera.Right.Y; floats[6] = camera.Right.Z; floats[7] = camera.TanHalfFieldOfView;     // right.xyz, tan(fov/2)
-        floats[8] = camera.Up.X; floats[9] = camera.Up.Y; floats[10] = camera.Up.Z; floats[11] = camera.AspectRatio;                   // up.xyz, aspect
-        floats[12] = camera.Forward.X; floats[13] = camera.Forward.Y; floats[14] = camera.Forward.Z; floats[15] = DebugMode;           // forward.xyz, debug view mode
-        floats[16] = width; floats[17] = height; floats[18] = 0f; floats[19] = 0f;                                                     // render extent xy
-        floats[20] = 0f; floats[21] = snapshot.AsymmetricFrustumOffset.X; floats[22] = snapshot.AsymmetricFrustumOffset.Y; floats[23] = frame.FarDistance; // lens: off-axis offset xy, far distance
-    }
     /// <summary>Packs a frame into the tables host-side: validates it, writes the dynamic transforms it moved, rebuilds the
     /// frame instance grid when a binnable instance moved, and packs the screen lights, volumes and mesh draws. Each region
-    /// owes only the words that changed; the frame's first pass sends them (<see cref="SubmitUpload"/>). The views are the
-    /// passes' own: each packs its row (<see cref="WriteViewportRow"/>).</summary>
+    /// owes only the words that changed; the frame's first pass sends them (<see cref="SubmitUpload"/>). The frame's values
+    /// reach the passes through each pass block (<see cref="SdfFrameBlock"/>), not the tables.</summary>
     /// <param name="frame">The frame.</param>
     /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
     /// <exception cref="ObjectDisposedException">The tables are disposed.</exception>
@@ -483,7 +265,11 @@ public sealed partial class SdfWorldTables {
 
         // The screen-light and volume tables are packed every frame; UploadProgram seeds the screen-surface table and
         // SetScreenSurface patches it, and SetScreenDecal/ClearScreenDecal patch the decal table.
-        PackScreenLights(frame: frame);
+        PackScreenLights();
+        SdfFrameBlock.BakeEnvironment(
+            frame: frame,
+            rows: m_environment
+        );
         _ = m_screenLightRegion.Write(
             bytes: m_screenLightScratch,
             offset: 0

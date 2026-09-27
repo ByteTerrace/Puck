@@ -36,7 +36,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     private const GpuPixelFormat Format = GpuPixelFormat.R8G8B8A8Unorm;
     private const int MaxBrickBakeVoxelsPerSlice = (256 * 1024); // <= 256K voxels per brick per produced frame: ~1-2 ms background-budget
     private const int MaxBrickCarvesPerBake = 4096; // request-buffer carve capacity per slot (the debug pool's MaxCarves ceiling)
-    private const int ScreenLightByteLength = ((sizeof(float) * 4) * ((MaxScreenSurfaces + 8) + SdfEnvironment.RowCount)); // float4 rgb+intensity per screen (0..MaxScreenSurfaces-1) + env (MaxScreenSurfaces) + FOUR grid-lock rows (+1..+4) + the engine-bench params row (+5) + the shadow-policy row (+6) + the far-field row (+7) + the environment block (+8 onward: SdfEnvironment's row layout) — KEEP IN SYNC with frame/sdf-environment.hlsli SdfGridWorld..SdfEnvBase
+    private const int ScreenLightByteLength = ((sizeof(float) * 4) * MaxScreenSurfaces); // float4 rgb+intensity per screen slot (KEEP IN SYNC with frame/sdf-environment.hlsli sdfScreenLights)
     private const float ScreenLightIntensity = 2.5f; // room-glow gain applied to each screen's average color
     private const int ScreenMappingByteLength = ((sizeof(float) * 4) * 7);
     // The seventh ScreenMappingData row: the bound flag at its first float, the sampler at its second.
@@ -59,9 +59,6 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     /// the SDF march (<see cref="Puck.Abstractions.Cameras.ViewProjection.Create"/>'s <c>near</c>). KEEP IN SYNC with
     /// <c>ConeNear</c> in sdf-viewport.hlsli.</summary>
     public const float ConeNear = 0.02f;
-    /// <summary>The bytes of one view's viewport row: six float4 rows, the last holding the render scale, off-axis
-    /// offset and far distance. KEEP IN SYNC with frame/sdf-viewport.hlsli's <c>ViewportData</c>.</summary>
-    public const int ViewportByteLength = ((sizeof(float) * 4) * 6);
     /// <summary>The default carve-bake brick pool capacity in voxels (f32 words) — <see cref="SdfBrickPoolLayout.TotalVoxels"/>
     /// = 16.7M voxels = 64 MB, i.e. <see cref="SdfBrickPoolLayout.MaxBricks"/> slots at full resolution.</summary>
     public const int DefaultBrickPoolVoxelCapacity = SdfBrickPoolLayout.TotalVoxels;
@@ -199,10 +196,10 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     /// construction that throws partway has released every object it created before the exception leaves the
     /// constructor.</summary>
     /// <param name="device">The GPU device the tables live on; they record through its services, unwrapped.</param>
-    /// <param name="pipelines">The pipelines the views' passes record with, built on <paramref name="device"/>
-    /// (<see cref="SdfWorldPipelines.Build"/>). The caller keeps ownership and disposes them after the tables; one set may
-    /// outlive several tables built from it, but serves one live residency at a time, since a kernel reload swaps them in
-    /// place.</param>
+    /// <param name="pipelines">The pipelines the views' passes record with, leased for <paramref name="device"/>
+    /// (<see cref="SdfWorldPipelines.Acquire"/>) and ready (<see cref="SdfWorldPipelines.Poll"/>). The caller keeps
+    /// ownership and disposes them after the tables; one set may outlive several tables built from it, but serves one
+    /// live residency at a time, since a kernel reload swaps its leases.</param>
     /// <param name="regionCopy">The device's region-copy pipeline, created from <see cref="GpuRegion.CopyPipeline"/> on
     /// <paramref name="device"/>, which the uploads record with. The caller keeps ownership and disposes it after the
     /// tables.</param>

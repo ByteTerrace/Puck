@@ -476,7 +476,7 @@ public sealed class SdfWorldTablesUploadLawTests {
         }
 
         Record(flags: 0u, indexCount: 6, indexWord: 150, material: 4, matrix: moved, vertexWord: 93);
-        Record(flags: (SdfMeshRegion.NormalsFlag | SdfMeshRegion.MaterialsFlag), indexCount: 3, indexWord: 156, material: 5, matrix: Matrix4x4.CreateScale(scale: 2f), vertexWord: 125);
+        Record(flags: SdfMeshRegion.NormalsFlag | SdfMeshRegion.MaterialsFlag, indexCount: 3, indexWord: 156, material: 5, matrix: Matrix4x4.CreateScale(scale: 2f), vertexWord: 125);
         Record(flags: 0u, indexCount: 6, indexWord: 150, material: 6, matrix: Matrix4x4.Identity, vertexWord: 93);
         Vertices(mesh: quad);
         Vertices(mesh: triangle);
@@ -820,7 +820,7 @@ public sealed class SdfWorldTablesUploadLawTests {
             m_pipelines = SdfTestPipelines.Build(
                 device: Gpu,
                 kernels: SdfTestPipelines.Kernels(),
-                ledger: ledger
+                cache: new GpuPassPipelineCache()
             );
 
             return new SdfWorldTables(

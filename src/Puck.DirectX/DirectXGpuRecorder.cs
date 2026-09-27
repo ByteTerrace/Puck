@@ -221,6 +221,34 @@ public sealed unsafe class DirectXGpuRecorder(DirectXDeviceContext deviceContext
 
     }
     /// <inheritdoc/>
+    /// <remarks>Copies subresource zero whole; the extent is the resources' own.</remarks>
+    public void CopyImage(nint commandBufferHandle, nint sourceImageHandle, nint destinationImageHandle, uint width, uint height) {
+        ArgumentOutOfRangeException.ThrowIfZero(commandBufferHandle);
+        ArgumentOutOfRangeException.ThrowIfZero(sourceImageHandle);
+        ArgumentOutOfRangeException.ThrowIfZero(destinationImageHandle);
+
+        var commandList = ((ID3D12GraphicsCommandList*)DecodeState(commandBufferHandle: commandBufferHandle).CommandList);
+        var destinationLocation = new D3D12_TEXTURE_COPY_LOCATION {
+            Type = D3D12_TEXTURE_COPY_TYPE.D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
+            pResource = ((ID3D12Resource*)destinationImageHandle),
+        };
+        var sourceLocation = new D3D12_TEXTURE_COPY_LOCATION {
+            Type = D3D12_TEXTURE_COPY_TYPE.D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
+            pResource = ((ID3D12Resource*)sourceImageHandle),
+        };
+
+        destinationLocation.Anonymous.SubresourceIndex = 0;
+        sourceLocation.Anonymous.SubresourceIndex = 0;
+        commandList->CopyTextureRegion(
+            DstX: 0,
+            DstY: 0,
+            DstZ: 0,
+            pDst: in destinationLocation,
+            pSrc: in sourceLocation,
+            pSrcBox: ((D3D12_BOX?)null)
+        );
+    }
+    /// <inheritdoc/>
     public void ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) {
         ArgumentOutOfRangeException.ThrowIfZero(commandBufferHandle);
         ArgumentOutOfRangeException.ThrowIfZero(bufferHandle);

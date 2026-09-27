@@ -4,9 +4,10 @@ namespace Puck.Shaders.Tests;
 
 /// <summary>
 /// Laws for an exported output (<see cref="IShaderPipelineOutputExport"/>): a node given an export renders its default
-/// output into the one image the export creates, at the export's extent whatever extent it is asked for, publishes it in
-/// <see cref="GpuImageLayout.External"/>, takes it back from its reader before the submission that writes it and completes
-/// it after, and renders nothing on a frame the reader still holds it.
+/// output into images of its own, one per frame slot, at the export's extent whatever extent it is asked for, and publishes
+/// them in its output layout like any output; it copies each written frame into the one image the export creates, which it
+/// takes back from its reader before the submission that copies and completes after, and which it never publishes or
+/// writes as a render target. A frame the reader still holds the image renders and copies nothing into it.
 /// </summary>
 public sealed class ShaderPipelineOutputExportLawTests {
     private const uint ExportHeight = 24;
@@ -24,10 +25,14 @@ public sealed class ShaderPipelineOutputExportLawTests {
     ]);
 
     [Fact]
-    public void AnExportedOutputIsTheExportsImageAtItsExtentHandedOffForItsReader() {
+    public void AnExportedOutputRendersIntoTheGraphsOwnImagesAndCopiesIntoTheExport() {
         var gpu = new FakePipelineGpu();
         var painter = new Painter();
-        var export = new Export(gpu: gpu);
+        var export = new FakeOutputExport(
+            gpu: gpu,
+            height: ExportHeight,
+            width: ExportWidth
+        );
         using var node = Node(
             gpu: gpu,
             painter: painter
@@ -39,22 +44,94 @@ public sealed class ShaderPipelineOutputExportLawTests {
             width: 640
         );
 
-        Assert.True(condition: Render(node: node), userMessage: node.LastSwapError?.Message);
+        Assert.True(condition: Install(node: node), userMessage: node.LastSwapError?.Message);
         Assert.Equal(expected: (ExportWidth, ExportHeight), actual: node.Extent);
-        _ = Assert.Single(collection: export.Created);
-        Assert.All(action: image => Assert.Equal(expected: export.Created[0].ImageHandle, actual: image), collection: painter.Written);
-        Assert.Equal(expected: GpuImageLayout.External, actual: node.PublishedLayout);
-        Assert.Equal(expected: export.Created[0].Writes, actual: export.Ended.Count);
+
+        var image = Assert.Single(collection: export.Created);
+
+        Assert.Same(expected: image, actual: node.ExportedImage);
+        Assert.Equal(expected: [ShaderPipelineRenderNode.ExportCopyPass], actual: node.PassLabels[^1..].ToArray());
+
+        // Each frame renders into this slot's own image, never the one the frame before published, publishes it, and
+        // copies it into the export.
+        var previous = ((nint)0);
+
+        for (var frame = 0; (frame < 4); frame++) {
+            painter.Written.Clear();
+            gpu.CopiedImages.Clear();
+
+            var surface = node.ProduceFrame(context: default);
+            var target = Assert.Single(collection: painter.Written);
+
+            Assert.NotEqual(expected: image.ImageHandle, actual: target);
+            Assert.NotEqual(actual: target, expected: previous);
+            Assert.Equal(expected: target, actual: surface.ImageHandle);
+            Assert.Equal(expected: (target, image.ImageHandle), actual: Assert.Single(collection: gpu.CopiedImages));
+            Assert.Equal(expected: GpuImageLayout.ShaderReadOnly, actual: node.PublishedLayout);
+            previous = target;
+        }
+
+        Assert.Equal(expected: image.Writes, actual: image.Begun);
+        Assert.Equal(expected: image.Writes, actual: export.Ended.Count);
         Assert.All(action: static ended => Assert.True(condition: ended.Written), collection: export.Ended);
 
-        // The reader still holds the image: the node renders nothing and begins no write.
-        var submissions = gpu.Submissions;
+        // The reader still holds the image: the node renders and publishes its own image, and neither copies nor begins a
+        // write.
         var ended = export.Ended.Count;
+        var begun = image.Begun;
 
         export.Released = false;
-        _ = node.ProduceFrame(context: default);
-        Assert.Equal(expected: submissions, actual: gpu.Submissions);
+        painter.Written.Clear();
+        gpu.CopiedImages.Clear();
+
+        var held = node.ProduceFrame(context: default);
+
+        Assert.Equal(expected: Assert.Single(collection: painter.Written), actual: held.ImageHandle);
+        Assert.Empty(collection: gpu.CopiedImages);
         Assert.Equal(expected: ended, actual: export.Ended.Count);
+        Assert.Equal(expected: begun, actual: image.Begun);
+    }
+    [Fact]
+    public void TheExportsImageMovesOnlyThroughTheCopysLayoutsAndRestsInTheHandoffLayout() {
+        var gpu = new FakePipelineGpu();
+        var export = new FakeOutputExport(
+            gpu: gpu,
+            height: ExportHeight,
+            width: ExportWidth
+        );
+        using var node = Node(
+            gpu: gpu,
+            painter: new Painter()
+        );
+
+        node.Export = export;
+        gpu.Recording = true;
+        Assert.True(condition: Install(node: node), userMessage: node.LastSwapError?.Message);
+
+        var image = export.Created[0].ImageHandle;
+
+        for (var frame = 0; (frame < 2); frame++) {
+            _ = node.ProduceFrame(context: default);
+        }
+
+        gpu.Recording = false;
+
+        var transitions = gpu.Barriers
+            .Where(predicate: barrier => (barrier.Handle == image))
+            .Select(selector: static barrier => (barrier.Barrier.OldLayout, barrier.Barrier.NewLayout))
+            .ToArray();
+
+        Assert.Equal(
+            actual: transitions,
+            expected: [
+                (GpuImageLayout.Undefined, GpuImageLayout.TransferDestination),
+                (GpuImageLayout.TransferDestination, GpuImageLayout.External),
+                (GpuImageLayout.External, GpuImageLayout.TransferDestination),
+                (GpuImageLayout.TransferDestination, GpuImageLayout.External),
+                (GpuImageLayout.External, GpuImageLayout.TransferDestination),
+                (GpuImageLayout.TransferDestination, GpuImageLayout.External),
+            ]
+        );
     }
 
     private static ShaderPipelineRenderNode Node(FakePipelineGpu gpu, Painter painter) {
@@ -98,56 +175,20 @@ public sealed class ShaderPipelineOutputExportLawTests {
 
         return node;
     }
-    // Produces frames until the node has installed its graph and rendered twice.
-    private static bool Render(ShaderPipelineRenderNode node) => SpinWait.SpinUntil(
+    // Produces frames until the node has installed its graph and rendered once.
+    private static bool Install(ShaderPipelineRenderNode node) => SpinWait.SpinUntil(
         condition: () => {
+            if (node.FrameCounter >= 1) {
+                return true;
+            }
+
             _ = node.ProduceFrame(context: default);
 
-            return (node.FrameCounter >= 2);
+            return false;
         },
         timeout: TimeSpan.FromSeconds(value: 30)
     );
 
-    // An export over a fake image, which counts its writes and ends, and whose reader releases it until told otherwise.
-    private sealed class Export(FakePipelineGpu gpu) : IShaderPipelineOutputExport {
-        public List<Image> Created { get; } = [];
-        public List<(bool Written, ulong Value)> Ended { get; } = [];
-        public uint Height => ExportHeight;
-        public bool Released { get; set; } = true;
-        public uint Width => ExportWidth;
-
-        public IGpuExportableImage Create(IGpuDeviceContext device) {
-            var image = new Image(inner: gpu.Services.ImageFactory.Create(
-                format: GpuPixelFormat.R8G8B8A8Unorm,
-                height: Height,
-                name: new GpuObjectName(owner: "export", part: "image"),
-                usage: GpuImageUsage.Sampled | GpuImageUsage.Storage,
-                width: Width
-            ));
-
-            Created.Add(item: image);
-
-            return image;
-        }
-        public void EndWrite(bool written, IGpuExportableImage? image, ulong writtenValue) => Ended.Add(item: (written, writtenValue));
-        public bool TryBeginWrite() => Released;
-    }
-    // A fake exportable image: a fake image whose writes count the fence values they signal.
-    private sealed class Image(IGpuImage inner) : IGpuExportableImage {
-        public GpuPixelFormat Format => inner.Format;
-        public uint Height => inner.Height;
-        public nint ImageHandle => inner.ImageHandle;
-        public nint ImageViewHandle => inner.ImageViewHandle;
-        public nint SharedFenceHandle => 1;
-        public nint SharedHandle => 1;
-        public GpuImageUsage Usage => inner.Usage;
-        public uint Width => inner.Width;
-        public int Writes { get; private set; }
-
-        public void BeginWrite() { }
-        public ulong CompleteWrite() => ((ulong)++Writes);
-        public void Dispose() => inner.Dispose();
-    }
     // A package that notes the image its output is written into.
     private sealed class Painter : IRenderGraphPackageFactory {
         public List<nint> Written { get; } = [];

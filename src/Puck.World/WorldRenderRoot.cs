@@ -56,9 +56,9 @@ internal static class WorldRenderRoot {
         var definition = sp.GetRequiredService<WorldDefinition>();
         var graph = sp.GetRequiredService<WorldRootGraph>();
         var host = sp.GetRequiredService<WorldViewGraphHost>();
-        // The composition's one pipeline cache, which the world's residency and every view's lease their pipeline sets
-        // from; each records through the services of the device context it renders on.
-        var pipelines = sp.GetRequiredService<SdfWorldPipelineCache>();
+        // The composition's pipeline catalog, whose pass-pipeline cache the world's residency and every view's lease their
+        // pipelines from; each records through the services of the device context it renders on.
+        var pipelines = sp.GetRequiredService<SdfWorldPipelineCatalog>();
 
         // Configure the views now the frame source has probed the render envelope: each camera a screen shows and each
         // session screen registers a view the render graph renders through an engine sized to these worst-case

@@ -181,11 +181,6 @@ public sealed partial class SdfWorldTables {
             sizeBytes: ((ulong)UniformBytes(blockBytes: parameters.SizeBytes)),
             usage: GpuBufferUsage.Uniform
         ));
-        var viewports = scope.Own(created: m_gpu.BufferFactory.CreateHostVisible(
-            name: NameOf(detail: "viewports", part: "isa"),
-            sizeBytes: ViewportByteLength,
-            usage: GpuBufferUsage.Storage
-        ));
         // Scratch for one tile of one view: the cull buffer's tile planes and part bounds, the masks, the dispatch box,
         // the indirect arguments and one visibility record.
         var tiles = Scratch(bytes: ((SdfWorldPackage.TilePlaneCount + (SdfWorldPackage.PartBoundFloatCount * ((ulong)m_instanceCapacity))) * sizeof(float)), part: "isa-tiles");
@@ -215,7 +210,6 @@ public sealed partial class SdfWorldTables {
         );
         frameBlock.Write<byte>(data: frameBytes);
         passBlock.Write<byte>(data: passBytes);
-        viewports.Write<byte>(data: new byte[ViewportByteLength]);
         m_bindings.WriteConstantBuffer(
             arrayElement: 0,
             binding: 0,
@@ -235,7 +229,6 @@ public sealed partial class SdfWorldTables {
             set: m_isaPassSet,
             slot: 0
         );
-        WriteWorldBuffer(buffer: viewports, member: SdfWorldPackage.Viewports, set: m_isaPassSet);
         WriteWorldBuffer(buffer: tiles, member: SdfWorldPackage.Tiles, set: m_isaPassSet);
         WriteWorldBuffer(buffer: tiles, member: SdfWorldPackage.TilesWritten, set: m_isaPassSet);
         WriteWorldBuffer(buffer: masks, member: SdfWorldPackage.InstanceMasks, set: m_isaPassSet);

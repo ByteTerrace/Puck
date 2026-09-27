@@ -20,7 +20,8 @@ namespace Puck.SdfVm;
 /// set and one pass set per brick slot binding that slot's request buffer and the brick pool, whose block's extent is one
 /// slice as one row, the voxels one bake dispatch writes at most, with the slice ordinal pushed per dispatch.</para>
 /// <para><see cref="Mesh"/> serves the mesh pass's graphics pipeline (<see cref="SdfMeshRasterPass"/>): one pass set per
-/// ring slot binding the viewport table and the mesh region, with the view and the draw pushed per draw call.</para>
+/// frame slot binding the pass block the world interface lays out and the mesh region, with the view and the draw pushed
+/// per draw call.</para>
 /// </summary>
 public static class SdfWorldInterfaces {
     /// <summary>The <see cref="BrickBake"/> request buffer: a three-row header, then the carves.</summary>
@@ -63,12 +64,16 @@ public static class SdfWorldInterfaces {
     /// <summary>Gets the interface the carve-bake baker reads.</summary>
     public static ShaderInterface BrickBake => BrickBakeParameters.Interface;
 
-    /// <summary>Gets the interface the mesh pass draws with: the viewport table and the mesh region, one set per ring slot,
-    /// and the index each draw call pushes, whose bits from <see cref="MeshViewShift"/> up name the view and whose bits
-    /// below it name the draw (<see cref="MeshPushedIndex"/>).</summary>
+    /// <summary>Gets the interface the mesh pass draws with: the pass block <see cref="World"/> declares, member for member
+    /// at the same offsets, so the mesh pass binds the block its node writes for it, then the mesh region; and the index
+    /// each draw call pushes, whose bits from <see cref="MeshViewShift"/> up name the view and whose bits below it name
+    /// the draw (<see cref="MeshPushedIndex"/>).</summary>
     public static ShaderInterface Mesh { get; } = new(
         members: [
-            Read(element: ShaderValueType.Float4, name: SdfWorldPackage.Viewports),
+            .. World.Members.Where(predicate: static member => (
+                (member.Group == ShaderInterfaceGroup.Pass) &&
+                member.IsBlockMember
+            )),
             Read(element: ShaderValueType.Uint, name: SdfWorldPackage.MeshRegion),
         ],
         name: "sdf-mesh",

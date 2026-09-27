@@ -155,4 +155,35 @@
 #define SDF_FILTER_NEAREST 0u
 #define SDF_FILTER_LINEAR  1u
 
+// The environment's rows in the pass block's environment array (SdfEnvironment), its light kinds and tonemaps.
+#define SDF_ENV_ROW_COUNT           53u
+#define SDF_ENV_CONTROL_ROW         0u
+#define SDF_ENV_LIGHTS_ROW          1u
+#define SDF_ENV_ROWS_PER_LIGHT      3u
+#define SDF_ENV_MAX_LIGHTS          8u
+#define SDF_ENV_CURVATURE_ROW       25u
+#define SDF_ENV_SKY_CONTROL_ROW     27u
+#define SDF_ENV_SKY_STOPS_ROW       28u
+#define SDF_ENV_MAX_SKY_STOPS       4u
+#define SDF_ENV_STARS_ROW           32u
+#define SDF_ENV_TWINKLE_ROW         33u
+#define SDF_ENV_CLOUDS_ROW          34u
+#define SDF_ENV_SOFTBOX_CONTROL_ROW 38u
+#define SDF_ENV_SOFTBOXES_ROW       39u
+#define SDF_ENV_ROWS_PER_SOFTBOX    3u
+#define SDF_ENV_MAX_SOFTBOXES       4u
+#define SDF_ENV_HORIZON_LOW_ROW     51u
+#define SDF_ENV_HORIZON_HIGH_ROW    52u
+
+// Puck.SignedDistance.SdfLightKind.
+#define SDF_LIGHT_DIRECTIONAL 0u
+#define SDF_LIGHT_HEMISPHERE  1u
+#define SDF_LIGHT_RIM         2u
+#define SDF_LIGHT_POINT       3u
+#define SDF_LIGHT_OCCLUDER    4u
+
+// Puck.SignedDistance.SdfTonemapMode.
+#define SDF_TONEMAP_NONE   0u
+#define SDF_TONEMAP_FILMIC 1u
+
 #endif // SDF_ISA_HLSLI

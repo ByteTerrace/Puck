@@ -3,12 +3,13 @@ using Puck.Hosting;
 
 namespace Puck.Shaders;
 
-// The installed graph's runtime objects: each frame slot's fence and final command pool, each storage's instances,
-// and each pass's compiled objects, sets and regions.
+// The installed graph's runtime objects: each frame slot's fence and the command pool its one command list records in,
+// each storage's instances, and each pass's compiled objects, sets and regions.
 public sealed partial class ShaderPipelineRenderNode {
     private sealed class FrameSlot {
         public IGpuSubmissionFence? Fence;
-        public IGpuCommandPool? Final;
+        // The slot's command list: every pass, the float preview, the export copy and the presentation, in order.
+        public IGpuCommandPool? Commands;
 
         // The leases this slot's latest submission sampled, retired after its fence.
         public readonly LeaseRetireList Leases = new();
@@ -24,9 +25,16 @@ public sealed partial class ShaderPipelineRenderNode {
         public readonly bool[] Initialized;
         public readonly bool[] HasOverride;
         public readonly ShaderPipelineAccessState[] Override;
+        // Per instance: whether its override is a state the plan produced, left standing by a pass that skipped its
+        // access, which the next access leaves only as the plan would, rather than a host event's.
+        public readonly bool[] OverridePlanned;
 
         public IGpuBuffer[]? Buffers;
         public IGpuImage[]? Images;
+        // The image an export copies this storage into, the export that created it, and whether a copy has written it.
+        public IGpuExportableImage? Export;
+        public IShaderPipelineOutputExport? ExportOwner;
+        public bool ExportWritten;
         // The input this output stands for while the package pass writing it draws nothing.
         public PackageAlias Alias;
 
@@ -37,6 +45,7 @@ public sealed partial class ShaderPipelineRenderNode {
             Initialized = new bool[count];
             HasOverride = new bool[count];
             Override = new ShaderPipelineAccessState[count];
+            OverridePlanned = new bool[count];
             if (!Spec.IsExternal) {
                 // A new instance holds nothing, and no access has touched it.
                 Array.Fill(
@@ -59,6 +68,7 @@ public sealed partial class ShaderPipelineRenderNode {
         public void SetOverride(int instance, ShaderPipelineAccessState state) {
             Override[instance] = state;
             HasOverride[instance] = true;
+            OverridePlanned[instance] = false;
         }
         public void Dispose() {
             if (Images is not null) {
@@ -71,6 +81,7 @@ public sealed partial class ShaderPipelineRenderNode {
                     buffer?.Dispose();
                 }
             }
+            Export?.Dispose();
         }
     }
     // A package pass has no declaration and no compiled shader; its step's ports, its recorder and their resolved
@@ -124,14 +135,11 @@ public sealed partial class ShaderPipelineRenderNode {
         // pass it holds; a package pass leases through its own recorder instead.
         public GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? Pipeline;
         public IGpuComputePipeline? Compute;
-        public IGpuCommandPool[]? Draw;
         public IGpuFramebuffer[]? Framebuffers;
         public IGpuPipeline? Graphics;
-        public IGpuCommandPool[]? Pools;
         // The graph's one descriptor pool, on the pass that created it; zero on every other pass, whose sets it also
         // holds, so disposing the graph's passes destroys it once.
         public nint DescriptorPool;
-        public IGpuCommandPool[]? Pre;
         public IGpuRenderPass? RenderPass;
         public nint[]? Samplers;
         public nint[]? Sets;
@@ -151,21 +159,6 @@ public sealed partial class ShaderPipelineRenderNode {
             if (Framebuffers is not null) {
                 foreach (var framebuffer in Framebuffers) {
                     framebuffer?.Dispose();
-                }
-            }
-            if (Draw is not null) {
-                foreach (var pool in Draw) {
-                    pool?.Dispose();
-                }
-            }
-            if (Pools is not null) {
-                foreach (var pool in Pools) {
-                    pool?.Dispose();
-                }
-            }
-            if (Pre is not null) {
-                foreach (var pool in Pre) {
-                    pool?.Dispose();
                 }
             }
             if (Regions is not null) {

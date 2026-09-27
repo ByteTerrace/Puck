@@ -1471,15 +1471,16 @@ named camera's view for export, sharing the SAME view instance a
 screen gains export at no extra render cost); an export-only camera is a view
 the display shows directly, so it renders at its refresh, at its declared
 extent, even with no screen wired to it.
-Export needs the Direct3D 12 host: the exported image is opened by a Direct3D
-11 `OpenSharedResource1` elsewhere in the process, which cannot open a Vulkan
-host's opaque Vulkan-to-Vulkan export handle, so the Vulkan host refuses
-export outright rather than producing a handle nothing downstream can read.
-Export carries exactly ONE physical image (the engine's own persistent
-output, re-rendered in place every refresh) with no second buffer to rotate
-into. A shared lease admits concurrent readers of the completed image and
-defers the next writer until all of them retire; export submission drains the
-producer queue before publishing that image as readable.
+The exported image is a Direct3D 12 simultaneous-access texture a Direct3D 11
+`OpenSharedResource1` opens elsewhere in the process: the render device's own
+on the Direct3D 12 host, and one the binder's headless Direct3D 12 device makes
+and the render device imports on the Vulkan host. The view's node renders into
+images of its own, which its screens sample, and copies each frame into the one
+exported image in its `export copy` pass. A shared lease admits concurrent
+readers of the completed image and defers the next copy until all of them
+retire, and each copy is published with the value it signals on the image's
+shared fence, which the reader waits for on its own device; nothing drains a
+queue.
 
 ## HUD frame elements
 

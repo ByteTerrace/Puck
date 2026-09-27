@@ -211,6 +211,31 @@ public sealed class ShaderInterfaceLawTests {
         Refused(members: [new ShaderInterfaceMember(Group: ShaderInterfaceGroup.Pass, Kind: ShaderInterfaceMemberKind.Sampler, Name: "s", Type: ShaderValueType.Float)], name: "typed-sampler");
         Refused(members: [new ShaderInterfaceMember(Group: ShaderInterfaceGroup.Pass, Kind: ShaderInterfaceMemberKind.Value, Name: "v")], name: "untyped-value");
         Refused(members: [new ShaderInterfaceMember(Group: ShaderInterfaceGroup.Pass, Kind: ShaderInterfaceMemberKind.StorageImage, Name: "o", Type: ShaderValueType.Float4)], name: "unformatted");
+        Refused(members: [ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: 2, name: "rows", type: ShaderValueType.Float2)], name: "narrow-block-array");
+        Refused(members: [ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: 0, name: "rows", type: ShaderValueType.Float4)], name: "empty-block-array");
+    }
+    [Fact]
+    public void A_block_array_starts_on_a_row_and_takes_one_row_an_element() {
+        var block = new ShaderInterface(
+            members: [
+                ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: "first", type: ShaderValueType.Float),
+                ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: 3, name: "rows", type: ShaderValueType.Float4),
+                ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: "after", type: ShaderValueType.Uint),
+            ],
+            name: "block-array"
+        ).Layout().Groups.Single().BlockMembers;
+
+        Assert.Equal(
+            actual: block,
+            expected: [
+                new ShaderInterfaceBlockMember(Length: 0, Name: "first", Offset: 0, Type: ShaderValueType.Float),
+                new ShaderInterfaceBlockMember(Length: 0, Name: "_pad4", Offset: 4, Type: ShaderValueType.Uint),
+                new ShaderInterfaceBlockMember(Length: 0, Name: "_pad8", Offset: 8, Type: ShaderValueType.Uint),
+                new ShaderInterfaceBlockMember(Length: 0, Name: "_pad12", Offset: 12, Type: ShaderValueType.Uint),
+                new ShaderInterfaceBlockMember(Length: 3, Name: "rows", Offset: 16, Type: ShaderValueType.Float4),
+                new ShaderInterfaceBlockMember(Length: 0, Name: "after", Offset: 64, Type: ShaderValueType.Uint),
+            ]
+        );
     }
     [Fact]
     public void A_buffers_element_is_optional_and_never_three_components() {

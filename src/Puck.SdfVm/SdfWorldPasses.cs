@@ -1,4 +1,3 @@
-using Puck.Abstractions.Gpu;
 using Puck.Hosting;
 using Puck.Shaders;
 
@@ -37,7 +36,6 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
     private readonly Dictionary<SdfWorldResidency, int> m_residencies = new(comparer: ReferenceEqualityComparer.Instance);
     // Each graph's viewport-row region, by the frame block its passes share: the sky part's, which every later part of the
     // same graph binds.
-    private readonly Dictionary<object, GpuRegion> m_viewports = new(comparer: ReferenceEqualityComparer.Instance);
     // The frame the package started last, which each residency's frame is started for once.
     private long m_frame = 1;
 
@@ -110,23 +108,6 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
         }
     }
     /// <inheritdoc/>
-    /// <remarks>The sky part, the fragment's first, writes the view's viewport row into one region, which every later part
-    /// binds; the other parts write none.</remarks>
-    public IReadOnlyList<RenderGraphPackageRegion> Regions(RenderGraphPackageRecorderContext context) {
-        ArgumentNullException.ThrowIfNull(argument: context);
-
-        return (string.Equals(
-            a: context.Part,
-            b: SdfWorldPackage.Parts.Sky,
-            comparisonType: StringComparison.Ordinal
-        )
-            ? [new RenderGraphPackageRegion(
-                ByteCount: SdfWorldTables.ViewportByteLength,
-                Name: SdfWorldPackage.Viewports
-            )]
-            : []);
-    }
-    /// <inheritdoc/>
     public IShaderPipelineStorageCounter? CounterOf(string instance) => Refresh(instance: instance);
     /// <inheritdoc/>
     public bool IsUnchanged(string instance, in FrameContext context) => (
@@ -176,25 +157,6 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
             residency.BeginFrame();
         }
     }
-    // Shares a graph's viewport-row region with the graph's later parts.
-    internal void ShareViewports(object graph, GpuRegion region) => m_viewports[graph] = region;
-    // Forgets a graph's viewport-row region when the part that owns it is disposed.
-    internal void ForgetViewports(object graph, GpuRegion region) {
-        if (
-            m_viewports.TryGetValue(
-                key: graph,
-                value: out var shared
-            ) &&
-            ReferenceEquals(
-                objA: shared,
-                objB: region
-            )
-        ) {
-            _ = m_viewports.Remove(key: graph);
-        }
-    }
-    // The viewport-row region a graph's sky part shares, or null before the part is created.
-    internal GpuRegion? ViewportsOf(object graph) => m_viewports.GetValueOrDefault(key: graph);
     // Holds a residency the package tells of a device loss.
     internal void Hold(SdfWorldResidency residency) =>
         m_residencies[residency] = (m_residencies.GetValueOrDefault(key: residency) + 1);

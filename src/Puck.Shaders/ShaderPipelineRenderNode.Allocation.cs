@@ -13,7 +13,7 @@ public sealed partial class ShaderPipelineRenderNode {
             foreach (var slot in m_slots) {
                 if (
                     (slot.Fence is not null) ||
-                    (slot.Final is not null)
+                    (slot.Commands is not null)
                 ) {
                     return true;
                 }
@@ -91,10 +91,10 @@ public sealed partial class ShaderPipelineRenderNode {
             ? null
             : groups);
     }
-    // Allocates every per-slot object a built pass needs: its pass region, its sets and sampler, and its command pools
-    // (one per slot for a compute pass; the pre-barrier and draw pools for a fullscreen pass). They are allocated on the frame
-    // thread when the built candidate installs, so an allocation failure refuses the candidate before the installed graph
-    // retires, and a steady-state frame creates nothing. The graph holds one descriptor pool, owned by the pass that binds
+    // Allocates every per-slot object a built pass needs: its pass region and its sets and sampler; a pass records into
+    // its frame slot's one command list. They are allocated on the frame thread when the built candidate installs, so an
+    // allocation failure refuses the candidate before the installed graph retires, and a steady-state frame creates
+    // nothing. The graph holds one descriptor pool, owned by the pass that binds
     // a descriptor ahead of every other, and each pass allocates its sets from it. Each object is stored in
     // the pass as soon as it exists, so a failure partway leaves every created object where RuntimePass.Dispose releases
     // it exactly once. A document pass allocates its frame group and pass group sets (AllocateGroupSets); a package pass
@@ -118,28 +118,6 @@ public sealed partial class ShaderPipelineRenderNode {
                 descriptorPool: descriptorPool,
                 pass: pass
             );
-        }
-        for (var slot = 0; (slot < m_inFlight); slot++) {
-            if (pass.Kind is ShaderPipelinePassKind.Compute or ShaderPipelinePassKind.Package) {
-                pass.Pools![slot] = m_gpu.CommandPoolFactory.Create(name: new GpuObjectName(
-                    index: slot,
-                    owner: m_name,
-                    part: pass.Name
-                ));
-            } else {
-                pass.Pre![slot] = m_gpu.CommandPoolFactory.Create(name: new GpuObjectName(
-                    detail: "barriers",
-                    index: slot,
-                    owner: m_name,
-                    part: pass.Name
-                ));
-                pass.Draw![slot] = m_gpu.CommandPoolFactory.Create(name: new GpuObjectName(
-                    detail: "draw",
-                    index: slot,
-                    owner: m_name,
-                    part: pass.Name
-                ));
-            }
         }
     }
 }

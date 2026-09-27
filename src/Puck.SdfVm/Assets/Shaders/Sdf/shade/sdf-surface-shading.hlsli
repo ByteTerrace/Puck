@@ -22,7 +22,6 @@ float3 applyCurvatureShading(float3 shaded, float curvature) {
 // The world FLOOR grid (grid-locking §4b): two-scale frac bands on the floor's XZ, tinted (not replaced) toward a cool
 // line color, with distance + grazing fades so the far field and skimming rays never moire. A line is drawn where
 // EITHER axis sits near a cell boundary; the major band (4x pitch) reads heavier so distance counts at a glance.
-// Guarded on SDF_SCREEN_SOURCES: it reads the grid rows from sdfScreenLights, bound only in that configuration.
 float3 applyWorldFloorGrid(float3 color, float2 xz, float2 pitch, float3 rayDirection, float traveled) {
     if ((pitch.x <= 0.0) || (pitch.y <= 0.0)) {
         return color;
@@ -51,17 +50,15 @@ float3 applyObjectGrid(float3 color, float3 surfacePoint, float3 rayDirection, f
         return color; // floor-projected: only paints the floor plane (it overlays the cool world grid)
     }
 
-    float4 originRow = sdfScreenLights[SdfGridObjOrigin];
-    float4 frame = sdfScreenLights[SdfGridObjFrame];
-    float4 paramsRow = sdfScreenLights[SdfGridObjParams];
-    float2 pitch = float2(originRow.w, paramsRow.x);
-    float patchRadius = paramsRow.y;
+    float4 frame = passGroup.gridObjectFrame;
+    float2 pitch = passGroup.gridObjectPitch;
+    float patchRadius = passGroup.gridObjectPatchRadius;
 
     if ((pitch.x <= 0.0) || (pitch.y <= 0.0) || (patchRadius <= 0.0)) {
         return color;
     }
 
-    float3 local = rotatePointByInverseQuaternion((surfacePoint - originRow.xyz), frame); // world -> reference-local
+    float3 local = rotatePointByInverseQuaternion((surfacePoint - passGroup.gridObjectOrigin), frame); // world -> reference-local
     float planar = length(local.xz);
 
     if (planar > patchRadius) {

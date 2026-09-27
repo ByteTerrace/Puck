@@ -24,4 +24,6 @@ public enum GpuAccess : uint {
     DepthAttachmentRead = 0x40,
     /// <summary>A depth test writes a depth attachment.</summary>
     DepthAttachmentWrite = 0x80,
+    /// <summary>A transfer operation reads the resource.</summary>
+    TransferRead = 0x100,
 }

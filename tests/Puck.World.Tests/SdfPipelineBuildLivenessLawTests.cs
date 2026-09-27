@@ -20,7 +20,7 @@ namespace Puck.World.Tests;
 /// that build is held, every prepared frame returns at once with no tables to render, console lines keep being answered,
 /// and a <c>pipeline.wait</c> armed through a text session reaches its deadline and reports it. Released, the build
 /// completes and the residency's tables are built. A release during the build — a device loss, or the last lease given up — waits only
-/// for the pipelines already in the driver, at most <see cref="SdfWorldPipelines.BuildConcurrency"/> of them, counted
+/// for the pipelines already in the driver, at most <see cref="GpuPassPipelineCache.BuildConcurrency"/> of them, counted
 /// through the factory and never timed.
 /// </summary>
 public sealed class SdfPipelineBuildLivenessLawTests {
@@ -194,21 +194,22 @@ public sealed class SdfPipelineBuildLivenessLawTests {
         Assert.False(condition: node.Produce(context: in context));
         driver.WaitUntilFull();
 
-        // The loss cancels the build inside the cache's gate before the set leaves the cache, so once the cache no
-        // longer lists it the held creations can return: each creator then finds the cancel before claiming another.
+        // The loss cancels every kernel's build inside the cache's gate before any entry leaves the cache, so once the
+        // cache lists only the region copy and the mesh pass, released after the set, the held creations can return: no
+        // canceled build starts another.
         var loss = new Thread(start: node.OnDeviceLost);
 
         loss.Start();
         Assert.True(condition: SpinWait.SpinUntil(
-            condition: () => (cache.SharedSets == 0),
+            condition: () => (cache.Pipelines.SharedPipelines <= 2),
             timeout: TimeSpan.FromSeconds(value: 30)
         ));
         driver.Open();
         loss.Join();
 
         Assert.Equal(
-            actual: (driver.Entered, PipelinesCreated(cache: cache)),
-            expected: (SdfWorldPipelines.BuildConcurrency, ((long)SdfWorldPipelines.BuildConcurrency))
+            actual: (driver.Entered, driver.Created),
+            expected: (GpuPassPipelineCache.BuildConcurrency, GpuPassPipelineCache.BuildConcurrency)
         );
         Assert.False(condition: node.IsReady);
 
@@ -229,12 +230,14 @@ public sealed class SdfPipelineBuildLivenessLawTests {
             BeforeComputePipeline = driver.Enter,
         };
         using var opener = new DriverOpener(driver: driver);
-        var first = cache.Acquire(
+        var first = SdfWorldPipelines.Acquire(
+            cache: cache.Pipelines,
             device: gpu,
             includeBrickPipelines: false,
             kernels: SdfTestPipelines.Kernels()
         );
-        var last = cache.Acquire(
+        var last = SdfWorldPipelines.Acquire(
+            cache: cache.Pipelines,
             device: gpu,
             includeBrickPipelines: false,
             kernels: SdfTestPipelines.Kernels()
@@ -243,31 +246,30 @@ public sealed class SdfPipelineBuildLivenessLawTests {
         driver.WaitUntilFull();
 
         // A release that leaves another holder cancels nothing and returns while the build is still held.
-        first.Release();
+        first.Dispose();
         Assert.Equal(
-            actual: (cache.SharedSets, last.Key.Progress.Describe()),
-            expected: (1, "building (0 of 10 pipelines created)")
+            actual: (cache.Pipelines.SharedPipelines, last.Describe()),
+            expected: (10, "building (0 of 10 pipelines created)")
         );
 
-        var release = new Thread(start: last.Release);
+        var release = new Thread(start: last.Dispose);
 
         release.Start();
         Assert.True(condition: SpinWait.SpinUntil(
-            condition: () => (cache.SharedSets == 0),
+            condition: () => (cache.Pipelines.SharedPipelines == 0),
             timeout: TimeSpan.FromSeconds(value: 30)
         ));
         driver.Open();
         release.Join();
 
         Assert.Equal(
-            actual: (driver.Entered, PipelinesCreated(cache: cache), last.Key.Progress.Created),
-            expected: (SdfWorldPipelines.BuildConcurrency, ((long)SdfWorldPipelines.BuildConcurrency), SdfWorldPipelines.BuildConcurrency)
+            actual: (driver.Entered, driver.Created, PipelinesCreated(cache: cache)),
+            expected: (GpuPassPipelineCache.BuildConcurrency, GpuPassPipelineCache.BuildConcurrency, ((long)GpuPassPipelineCache.BuildConcurrency))
         );
-        Assert.Null(@object: last.Current);
     }
 
-    private static long PipelinesCreated(SdfWorldPipelineCache cache) {
-        Assert.True(condition: cache.Work.TryRead(
+    private static long PipelinesCreated(SdfWorldPipelineCatalog cache) {
+        Assert.True(condition: cache.Pipelines.Work.TryRead(
             kind: GpuWork.PipelinesCreated,
             value: out var created
         ));
@@ -310,15 +312,17 @@ public sealed class SdfPipelineBuildLivenessLawTests {
     private sealed class DriverOpener(HeldDriver driver) : IDisposable {
         public void Dispose() => driver.Open();
     }
-    // A driver that holds every pipeline creation until the law opens it, counting the creations that entered. Once
-    // it is open a creation passes straight through, so a creator that claimed a pipeline after a cancel is counted
-    // rather than deadlocked.
+    // A driver that holds every kernel pipeline creation until the law opens it, counting the creations held and every
+    // kernel creation at all. Once it is open a creation passes straight through, so a creator that claimed a pipeline
+    // after a cancel is counted rather than deadlocked.
     private sealed class HeldDriver : IDisposable {
         private readonly ManualResetEventSlim m_full = new(initialState: false);
         private readonly ManualResetEventSlim m_open = new(initialState: false);
 
+        private int m_created;
         private int m_entered;
 
+        public int Created => Volatile.Read(location: ref m_created);
         public int Entered => Volatile.Read(location: ref m_entered);
 
         public void Dispose() {
@@ -327,18 +331,21 @@ public sealed class SdfPipelineBuildLivenessLawTests {
             m_open.Dispose();
         }
         public void Enter(GpuComputePipelineDescription description) {
-            // The device's region-copy pipeline builds beside the set, from another cache, so the driver lets it pass.
-            if (
-                m_open.IsSet ||
-                ReferenceEquals(
-                    objA: description,
-                    objB: GpuRegion.CopyPipeline
-                )
-            ) {
+            // The device's region-copy pipeline builds beside the set, so the driver lets it pass uncounted.
+            if (ReferenceEquals(
+                objA: description,
+                objB: GpuRegion.CopyPipeline
+            )) {
                 return;
             }
 
-            if (Interlocked.Increment(location: ref m_entered) == SdfWorldPipelines.BuildConcurrency) {
+            _ = Interlocked.Increment(location: ref m_created);
+
+            if (m_open.IsSet) {
+                return;
+            }
+
+            if (Interlocked.Increment(location: ref m_entered) == GpuPassPipelineCache.BuildConcurrency) {
                 m_full.Set();
             }
 

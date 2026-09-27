@@ -17,7 +17,8 @@ namespace Puck.Shaders;
 /// <item><description>A block places its values in declaration order: a scalar on a 4-byte boundary, a two-component
 /// vector on an 8-byte boundary, and a three- or four-component vector on a 16-byte boundary. Every gap is filled with a
 /// named <c>uint</c> padding member, so Direct3D 12's sequential constant-buffer packing lands each member exactly where
-/// the explicit Vulkan offset puts it.</description></item>
+/// the explicit Vulkan offset puts it. A block array of four-component vectors starts on a 16-byte boundary and takes
+/// one 16-byte row per element.</description></item>
 /// <item><description>An array is a binding of its own: a read-only structured buffer of its scalar element type
 /// (<see cref="GpuBindingKind.ReadOnlyBuffer"/>), whose stride is the element's size on both backends, so element
 /// <c>i</c> lies at byte <c>4i</c> of the buffer bound there.</description></item>
@@ -243,11 +244,14 @@ public sealed class ShaderInterfaceLayout {
 
         foreach (var member in members.Where(predicate: static member => member.IsBlockMember)) {
             var type = member.Type!.Value;
-            var alignment = type.ComponentCount() switch {
-                1 => 4u,
-                2 => 8u,
-                _ => RowBytes,
-            };
+            var length = (member.Length ?? 0u);
+            var alignment = ((length != 0u)
+                ? RowBytes
+                : type.ComponentCount() switch {
+                    1 => 4u,
+                    2 => 8u,
+                    _ => RowBytes,
+                });
             var offset = AlignUp(
                 alignment: alignment,
                 value: cursor
@@ -263,12 +267,14 @@ public sealed class ShaderInterfaceLayout {
             }
 
             blockMembers.Add(item: new ShaderInterfaceBlockMember(
-                Length: 0,
+                Length: length,
                 Name: member.Name,
                 Offset: offset,
                 Type: type
             ));
-            cursor = (offset + type.SizeBytes());
+            cursor = (offset + ((length != 0u)
+                ? checked((length * RowBytes))
+                : type.SizeBytes()));
         }
 
         var bindings = new List<ShaderInterfaceBinding>();

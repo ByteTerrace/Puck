@@ -255,14 +255,14 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         var candidateCreations = ReplacementCreationCount();
 
         // Three images per slot (history, gray, and the image the fullscreen pass draws into); per compute pass a module,
-        // a pipeline, and per slot a sampler and command pool; for the fullscreen pass two modules, a render pass and a
-        // graphics pipeline, and per slot a framebuffer, a sampler, the barrier command pool and the draw command pool;
+        // a pipeline, and per slot a sampler; for the fullscreen pass two modules, a render pass and a graphics pipeline,
+        // and per slot a framebuffer and a sampler; every pass records into the frame slot's one command list;
         // per slot a constant buffer for the frame group's block and one for each of the three passes' pass blocks; and the
         // graph's one descriptor pool. The candidate's shaders differ from the installed graph's, so the pass-pipeline
         // cache creates its modules, render pass and pipelines as new entries, each a creation the fault can land on.
         Assert.Equal(
             actual: candidateCreations,
-            expected: (((((3 * ((int)InFlight)) + (2 * (2 + (2 * ((int)InFlight))))) + (4 + (4 * ((int)InFlight)))) + (4 * ((int)InFlight))) + 1)
+            expected: (((((3 * ((int)InFlight)) + (2 * (2 + ((int)InFlight)))) + (4 + (2 * ((int)InFlight)))) + (4 * ((int)InFlight))) + 1)
         );
 
         for (var failAt = 1; (failAt <= candidateCreations); failAt++) {

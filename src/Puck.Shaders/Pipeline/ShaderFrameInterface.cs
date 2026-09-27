@@ -143,6 +143,7 @@ public static class ShaderFrameInterface {
             foreach (var (field, declared) in config) {
                 values.Add(item: ShaderInterfaceMember.Value(
                     group: ShaderInterfaceGroup.Pass,
+                    length: declared.Length,
                     name: field,
                     type: declared.Type
                 ));

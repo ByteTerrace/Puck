@@ -10,13 +10,13 @@ namespace Puck.Shaders.Tests;
 /// </summary>
 public sealed partial class ShaderPipelineRenderNodeLawTests {
     // The float preview: two shader modules, a render pass, a graphics pipeline and one descriptor pool, and per slot an
-    // image, a framebuffer, a sampler and the pre-barrier, draw and post-barrier command pools.
-    private const int PreviewCreations = (5 + (6 * ((int)InFlight)));
+    // image, a framebuffer and a sampler; it records into the frame slot's one command list.
+    private const int PreviewCreations = (5 + (3 * ((int)InFlight)));
     // The float preview's pass pipeline: its two shader modules, render pass and graphics pipeline, a pass-pipeline cache
     // entry keyed by the deployed preview bytecode, which every graph's preview on the node shares.
     private const int PreviewPipelineCreations = 4;
     // The feedback graph's own objects, as the replacement law counts them.
-    private const int GraphCreations = (((((3 * ((int)InFlight)) + (2 * (2 + (2 * ((int)InFlight))))) + (4 + (4 * ((int)InFlight)))) + (4 * ((int)InFlight))) + 1);
+    private const int GraphCreations = (((((3 * ((int)InFlight)) + (2 * (2 + ((int)InFlight)))) + (4 + (2 * ((int)InFlight)))) + (4 * ((int)InFlight))) + 1);
 
     private static ShaderPipelineDimensions FrameRelative => ShaderPipelineDimensions.Relative();
 

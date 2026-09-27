@@ -61,9 +61,9 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
             revision: m_revision
         );
     }
-    // Records every pass inside its own ledger pass. A pass that throws leaves its submission unsealed, so the partial
-    // record is dropped rather than published under a pass that never finished.
-    private void RecordPasses(List<nint> commands, in FrameContext context, int slot) {
+    // Records every pass into the frame's list inside its own ledger pass. A pass that throws leaves its submission
+    // unsealed, so the partial record is dropped rather than published under a pass that never finished.
+    private void RecordPasses(nint command, in FrameContext context, int slot) {
         var passes = m_passes;
 
         WriteFrameGroup(slot: slot);
@@ -72,7 +72,7 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
             for (var index = 0; (index < passes.Length); index++) {
                 m_work.EnterPass(pass: index);
                 Record(
-                    commands: commands,
+                    command: command,
                     context: in context,
                     pass: passes[index],
                     slot: slot

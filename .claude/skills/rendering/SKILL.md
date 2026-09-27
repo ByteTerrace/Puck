@@ -284,9 +284,12 @@ These are one-line cautions; the owning pages hold the derivations.
   never fall. A view export orders the other direction with a shared fence of
   the exported texture: a node given an export (`ShaderPipelineRenderNode.Export`,
   an `IShaderPipelineOutputExport`; the binder's `ViewExportFeed` for a camera
-  view a probe reads) renders its default output into the image the export
-  creates, only on a frame the reader has released it (`TryBeginWrite`), and
-  after the submission that writes it calls
+  view a probe reads) renders its default output into its own per-slot images,
+  which every reader on its device samples, and copies each frame into the image
+  the export creates in its `ExportCopyPass` (one copy per exported camera per
+  frame), only on a frame the reader has released it (`TryBeginWrite`); nothing
+  on the render device ever samples the exported image. After the submission
+  that copies it the node calls
   `IGpuExportableImage.CompleteWrite`, which queues the fence's next value
   behind the submission (never a queue
   drain), `SingleSlotPublication` publishes it, and a Direct3D 11 reader queues
@@ -461,23 +464,27 @@ These are one-line cautions; the owning pages hold the derivations.
   pass): every pipeline a `ShaderPipelineRenderNode` installs, its float
   preview's, each package pass's (the source conversions included) through
   `RenderGraphPackageRecorderContext.Pipelines`, and each device's region copy
-  (`GpuRegionCopyPass`). A runtime pass releases its lease last, when its graph
+  (`GpuRegionCopyPass`), and every SDF kernel variant, one entry each, keyed
+  like any pass. A runtime pass releases its lease last, when its graph
   retires, so an entry outlives every submission that recorded with it; a node's
-  own ledger counts no pipeline or shader module. `SdfWorldTables`'
-  constructor takes a built `SdfWorldPipelines` and creates none. Every
-  residency, the world's and each camera or session view's, leases that set
-  from the `SdfWorldPipelineCache` the composition hands each of them, its one cache (a `GpuBuildCache` keyed by
-  `SdfWorldPipelineKey`: `SdfWorldKernels.ContentKey` and brick-pipeline
-  choice, whose `Progress` a holder reads), one set per device, built on the
-  thread pool by the first lease and shared by the rest.
-  A build creates up to `SdfWorldPipelines.BuildConcurrency` pipelines at once
-  on the pool, in `PipelineLayouts.BuildOrder` (the views variants last), and
-  checks its token between pipelines, never inside a driver call; its counts do
-  not depend on the order. A failed build throws one `AggregateException` naming
-  every pipeline that failed, in build order (a device loss is thrown alone).
-  A holder (`SdfWorldPipelineSource`) takes its lease
-  off the frame thread, builds no tables until the set installs, and keeps the
-  lease until a device loss or the residency's last release gives it back.
+  own ledger counts no pipeline or shader module. At most
+  `GpuPassPipelineCache.BuildConcurrency` of the cache's builds create at once
+  (a turn a build waits for before its first creation, cancelable), and a build
+  checks its token between creations, never inside a driver call.
+  `GpuBuildLease.Release(IReadOnlyList)` releases several leases at once,
+  canceling every build it leaves unheld before it waits for any.
+  `SdfWorldTables`' constructor takes a ready `SdfWorldPipelines` and creates
+  none. That set is one lease per kernel variant (`SdfWorldPipelines.Acquire`,
+  the brick baker only with a brick pool); every residency, the world's and each
+  camera or session view's, leases it through the `SdfWorldPipelineCatalog` the
+  composition hands each of them (its pass-pipeline cache, region copy, mesh
+  pass and deployed kernels), so a kernel shared by several residencies on a
+  device is created once. A set whose creations fail throws one
+  `AggregateException` naming every pipeline that failed, in the set's order
+  (a device loss is thrown alone), and `Describe` counts the pipelines built.
+  A holder (`SdfWorldPipelineSource`) takes its leases
+  off the frame thread, builds no tables until the set is ready, and keeps the
+  leases until a device loss or the residency's last release gives them back.
   A residency builds its tables through `SdfWorldPipelineSource.TryBuild`, only
   when it has none: a failed build (the set's or the tables') is refused, never
   thrown, except a `DeviceLostException`. The refusal is printed once and named
@@ -509,34 +516,39 @@ These are one-line cautions; the owning pages hold the derivations.
   creations to a scope, or to a null-tolerant release it calls on failure.
   The last release of a lease cancels an in-flight build inside the cache's gate
   (`BackgroundBuild.Detach`), then waits outside it for only the pipelines
-  already in the driver, and disposes the set. A residency is ready
-  (`SdfWorldResidency.IsReady`) once its set is installed and its tables are
+  already in the driver, and disposes the entry. A residency is ready
+  (`SdfWorldResidency.IsReady`) once its set is ready and its tables are
   built from its first captured frame, and the world is ready
   (`WorldRenderProbe.IsReady`) once the world's residency is and the render
   graph's root has rendered over a completed world output. That is the one
   readiness fact: the console
   waits on it with `world.wait ready <seconds>`, and whatever reads counted
   world passes (`puck counters`, the `world-counters` canary, `puck qualify`)
-  waits on it, never on a tick count. The cache counts the
-  pipelines and shader modules it creates under `gpu.sdf-pipelines`, never in
-  a node's or view's ledger, and reads each backend's deployed kernels once
-  (`LoadDeployed`). A kernel reload replaces pipelines in place, so a residency
-  whose set another residency on the device also leases fails the reload. A new
-  SDF pipeline is a row in `SdfWorldTables.PipelineLayouts.Specs`, never a create
-  call in the tables. A harness that drives a residency polls
+  waits on it, never on a tick count. The pass-pipeline cache counts the
+  pipelines and shader modules it creates under `gpu.pass-pipelines`, never in
+  a node's or view's ledger, and the catalog reads each backend's deployed
+  kernels once (`LoadDeployed`). A kernel reload leases the changed kernels'
+  entries (`SdfWorldPipelines.PrepareReload`), waits for them off the frame
+  thread, and swaps them into the residency's own set after the device is idle,
+  releasing the replaced leases once the handshake passes; another residency
+  leasing the replaced entries keeps them. A new SDF pipeline is a row in
+  `SdfWorldTables.PipelineLayouts.Specs`, never a create call in the tables. A harness that drives a residency polls
   `SdfWorldResidency.IsReady`
   (`SdfTestPipelines.ProduceFirstFrame` in `tests/Shared`, whose `Kernels` is the one fake kernel set);
   `SdfPipelineBuildLivenessLawTests` holds the factory and proves the pump
   still drains the console, and that a device loss or the last release waits
   for exactly the `BuildConcurrency` creations in the driver, counted through
-  the factory; `SdfWorldPipelinesLawTests` pins the concurrency bound, the
-  build order, a cancel mid-build and two failures in the driver at once, both
-  named, the same way. `ShaderPipelineRenderNode` leases each candidate's
+  the factory; `SdfWorldPipelinesLawTests` pins the concurrency bound, a
+  disposal mid-build and two failures in the driver at once, both named, the
+  same way, and `SdfWorldPipelineCatalogLawTests` the sharing across residencies.
+  `ShaderPipelineRenderNode` leases each candidate's
   pipelines, with their modules and the render passes they are created for,
   from the pass-pipeline cache inside the same `BackgroundBuild`, started by the next produced frame (never by
   `Swap`, `Resize` or `SelectOutput`, so the presenter's swap-then-resize builds
-  once), allocates the candidate's resources on the frame thread when the build
-  is taken, and presents the installed graph meanwhile; its install drains
+  once) and taken by a later one, never the advance that started it, however
+  fast it finished, so the frame an install lands in never depends on the
+  pool's timing; it allocates the candidate's resources on the frame thread when
+  the build is taken, and presents the installed graph meanwhile; its install drains
   nothing, and the replaced graph retires once the node's latest submission has
   completed (at once when it has), except the images behind the two most
   recently published surfaces, which `ShaderPipelineRenderNode.Retirement.cs`
@@ -653,9 +665,9 @@ These are one-line cautions; the owning pages hold the derivations.
   policy the device selects), so the tables create and admit two pools, their
   own and the copy pool, and no region the frame thread creates or grows takes
   a descriptor range; a new region takes a slice of that pool too. A view's
-  viewport row is not a table: each `sdf.world` pass writes it into the one
-  `viewports` region its package states
-  (`IRenderGraphPackageFactory.Regions`), which the instance's node owns. Change
+  camera, the frame's levers and its environment are no table: each
+  `sdf.world` pass writes them into its pass block (`SdfFrameBlock`, the values
+  `SdfWorldPackage.Values` declares). Change
   a table only through its
   region's `Write`, which owes each run of words that differs; a direct buffer
   write is lost or overwritten. The residency's upload records the slot's owed
@@ -723,8 +735,7 @@ These are one-line cautions; the owning pages hold the derivations.
   with that pipeline (the residency leases it beside the set, and the tables take
   it at construction). A `ShaderPipelineRenderNode` owns every host-written
   region its graph reads: a package states the regions its recorder writes
-  (`IRenderGraphPackageFactory.Regions`: the overlay's buffer, an `sdf.world`
-  pass's `viewports` row), a graph's
+  (`IRenderGraphPackageFactory.Regions`: the overlay's buffer), a graph's
   arrays read one row region per bound row and element type
   (`ShaderPipelineRenderNode.Rows.cs`: rows bound by `BindRows` before install,
   written by `TryWriteRow`, a structured buffer each pass's World set binds),
@@ -874,9 +885,9 @@ These are one-line cautions; the owning pages hold the derivations.
   is an instance the command tables take through their constructors; its `Work`
   (`procedures.vulkan`) counts every device- and instance-level resolution made
   through it. `AddWorldShaderWork` registers the shader
-  sources, the `SdfWorldPipelineCache` singleton with its `gpu.sdf-pipelines`
-  ledger and the `GpuPassPipelineCache` singleton with its `gpu.pass-pipelines`
-  ledger in both presentation shapes, and `AddVulkanFactories` registers
+  sources and the `GpuPassPipelineCache` singleton with its `gpu.pass-pipelines`
+  ledger in both presentation shapes (`AddWorldPipelineCache` registers the
+  `SdfWorldPipelineCatalog` over it), and `AddVulkanFactories` registers
   the host's one resolver and its `procedures.vulkan` once.
 
 ## Performance work
@@ -954,8 +965,10 @@ explanation is [Qualifying a package](../../../docs/development/qualification.md
 definition every frame, so a `world.row.set render …` lands on the next frame
 without a program rebuild. Creation volumes become `SdfFrame.Volumes`, not
 instructions. Validation ranges live in `WorldDefinitionValidator`; a new render
-field needs its validator bound, its `SdfFrame`/`SdfEnvironment` lane, and its
-shader consumer in the same change. What a document field means belongs to
+field needs its validator bound, its `SdfFrame`/`SdfEnvironment` lane, its
+pass-block value (`SdfWorldPackage.Values`, written by `SdfFrameBlock`, generated
+into `sdf-world.interface.hlsli` by `puck shaders generate`), and its shader
+consumer in the same change. What a document field means belongs to
 `puck-world`.
 
 Every state read reaches a program, a decal or a pass through the state
@@ -1158,7 +1171,19 @@ the node flushes and copies them): the node records the pass's planned barriers
 first, so a drawing package's target arrives in `RenderTarget` and its sampled
 inputs in `ShaderReadOnly`, and its render pass leaves the target in
 `RenderTarget` (`ObservedPackageFactory` in `tests/Shared` counts a package's
-own barriers in the post and overlay laws). A recording that draws nothing returns `RenderGraphPackageOutcome.DrewNothing`
+own barriers in the post and overlay laws). Every pass of a node records into
+the frame slot's one command list (`BeginFrameCommands`), with the float
+preview, the export copy and the presentation after them; only the region
+copies record in a list of their own, submitted first, so an instance submits
+one list a frame, or two when a staged region owes copies, and a pass's work
+line counts no command buffer. A recorder that skips a frame
+(`IRenderGraphPackageRecorder.Skips`, the SDF mesh pass on a frame that draws no
+mesh) records neither its work nor its planned barriers; the node leaves each
+instance it would have accessed a planned override of the access's prior
+(`SkipAccesses`), from which the next access records only the barrier the
+planned states call for (`Between`, where a host event's override records
+`Always`). A pass skips only on frames no later pass reads its outputs'
+contents on. A recording that draws nothing returns `RenderGraphPackageOutcome.DrewNothing`
 and the node publishes the input in the output's place, never a copy
 (`PublishedLayout`), only when the recording was told it may
 (`RenderGraphPackageRecording.MayStandIn`): never for a previous frame's input, whose instance rests in the layout its own role left, never for an input a later pass overwrites, and never over a host's image bound in

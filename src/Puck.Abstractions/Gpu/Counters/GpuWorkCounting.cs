@@ -63,7 +63,7 @@ public static class GpuWorkCounting {
     }
     /// <summary>Wraps a command recorder. Counts command buffers begun, render passes begun, pipeline and
     /// descriptor-set binds, push-constant bytes, draws, dispatches, indirect dispatches, image, memory, and buffer
-    /// barriers, and storage image and buffer clears.</summary>
+    /// barriers, storage image and buffer clears, and image copies.</summary>
     /// <param name="recorder">The recorder to forward to.</param>
     /// <param name="ledger">The ledger the counts go to.</param>
     /// <returns>The counting recorder.</returns>
@@ -321,6 +321,16 @@ file sealed class CountingRecorder(IGpuRecorder inner, GpuWorkLedger ledger) : C
             imageHandle: imageHandle
         );
         Tally(column: GpuWork.ClearsColumn);
+    }
+    public void CopyImage(nint commandBufferHandle, nint sourceImageHandle, nint destinationImageHandle, uint width, uint height) {
+        inner.CopyImage(
+            commandBufferHandle: commandBufferHandle,
+            destinationImageHandle: destinationImageHandle,
+            height: height,
+            sourceImageHandle: sourceImageHandle,
+            width: width
+        );
+        Tally(column: GpuWork.CopiesColumn);
     }
     public void ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) {
         inner.ClearStorageBuffer(

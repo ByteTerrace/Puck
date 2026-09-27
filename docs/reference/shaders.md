@@ -57,9 +57,11 @@ post-process package:
 
 A config field's `type` is an HLSL spelling: `float`, `float2..4`, `uint`,
 `uint2..4`, `int`, `int2..4`; a vector's document value is an array of that
-many numbers. A field without a default is required, `min`/`max` are
-inclusive per component, and a field's name must not repeat a
-[frame member's](#frame-values-extent-and-ports).
+many numbers. A field with a `length` is a block array of that many
+four-component vectors (`float4`, `uint4` or `int4`), one 16-byte row each,
+whose document value is an array of that many vectors. A field without a
+default is required, `min`/`max` are inclusive per component, and a field's
+name must not repeat a [frame member's](#frame-values-extent-and-ports).
 
 The fragment stage includes `sdf-film-grain.interface.hlsli`, the declarations
 generated from the package's [interface](#frame-values-extent-and-ports), and
@@ -437,7 +439,10 @@ crosses it.
 then renders each scheduled instance through its own `ShaderPipelineRenderNode`
 at the scheduled extent. One submission per instance records the graph's
 shader passes and, through the recorder `RenderGraphPackageRecorders` holds
-for each package id, its package passes, all in the planner's order. A
+for each package id, its package passes, all in the planner's order, into one
+command list per frame slot, with the float preview, the export copy and the
+presentation after them; only the copies of the regions the passes wrote record
+in a list of their own, submitted first. A
 `RenderGraphRuntimeGraph` binds each external version to a producer instance;
 the runtime binds it to the frame of that producer's output the schedule
 names, and to a transparent-black stand-in while the producer has none. A
@@ -466,6 +471,14 @@ barrier: the instance records the pass's planned barriers first, so a
 fragment-sampled input arrives shader-readable and a color-attachment output in
 render-target layout, which the package's render pass leaves it in for the
 next planned barrier to move on.
+
+A recorder may skip a frame (`IRenderGraphPackageRecorder.Skips`), which the
+instance asks before it records the pass's barriers: it then records neither
+the pass's work nor its planned barriers, and each storage the pass would have
+accessed stays in the state its last recorded access left it in, a planned
+override from which the next access records only the barrier the planned
+states call for. A pass skips only on frames no later pass reads the contents
+of its outputs on; the SDF mesh pass skips every frame that draws no mesh.
 
 A recording that draws nothing returns `RenderGraphPackageOutcome.DrewNothing`,
 and each output then stands for the input at its position: the instance
@@ -505,13 +518,19 @@ a pending capture reads, which only a render serves. A device loss reaches every
 package's factory (`IRenderGraphPackageFactory.OnDeviceLost`).
 
 A node given an export (`ShaderPipelineRenderNode.Export`, an
-`IShaderPipelineOutputExport`) renders its default output into the one image the
-export creates, which another device reads, at the export's extent whatever
-extent it is asked for. It publishes that image in `External` layout, takes it
-back from its reader before the submission that writes it
-(`IGpuExportableImage.BeginWrite`) and completes it after (`CompleteWrite`),
-handing the export the shared fence value the write signals, and renders nothing
-on a frame the reader still holds it.
+`IShaderPipelineOutputExport`) renders at the export's extent whatever extent it
+is asked for, into its default output's own images, one per frame slot, which
+it publishes in its output layout and its readers sample like any output. At the
+end of each frame's submission it copies that frame's output into the one image
+the export creates, which another device reads, in a pass of its own
+(`ShaderPipelineRenderNode.ExportCopyPass`, one `gpu.copies` and three image
+barriers a frame). It takes the image back from its reader before that
+submission (`IGpuExportableImage.BeginWrite`), leaves it in `External` layout,
+and completes it after (`CompleteWrite`), handing the export the shared fence
+value the copy signals. On a frame the reader still holds the image the node
+renders and publishes as usual and copies nothing. Nothing on the node's device
+samples the exported image, so a view reading itself binds an earlier frame's
+output, never the image its submission writes or copies into.
 
 An instance can instead be an external producer: a `RenderGraphInstance` whose
 `ExternalPackage` names the `IRenderGraphExternalProducer` registered for that
@@ -1555,9 +1574,11 @@ entries, so the rebuild after a loss creates afresh.
 
 The cache counts the shader modules, render passes and pipelines it creates
 under its own `gpu.pass-pipelines` source in `world.counters`, and a node's
-`work lifetime` line counts none of them. The mechanism is
-`Puck.Hosting.GpuBuildCache<TKey, T>`, which the SDF engine's pipeline sets
-(`SdfWorldPipelineCache`, `gpu.sdf-pipelines`) use as well.
+`work lifetime` line counts none of them. The SDF engine's kernel pipelines are
+entries of the same cache, one a kernel variant (`SdfWorldPipelines`). At most
+`GpuPassPipelineCache.BuildConcurrency` of the cache's builds create at once, so
+a cold driver cache translating many pipelines keeps a processor for the thread
+that pumps frames. The mechanism is `Puck.Hosting.GpuBuildCache<TKey, T>`.
 
 ### Memory budget
 

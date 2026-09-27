@@ -17,7 +17,7 @@
 // kernel at its lean footprint and gives the cull's divergent cell walk its own occupancy budget; the extra dispatch
 // + barrier cost is noise against that. Timing: this pass is the graph pass sdf.world$mask.
 //
-// The tile cone is built from the same inputs the beam uses (a pure function of the viewport row + tile coords), so
+// The tile cone is built from the same inputs the beam uses (a pure function of the view + tile coords), so
 // both kernels derive the IDENTICAL cone and no inter-pass cone buffer is needed.
 //
 // A DYNAMIC instance's bound resolves through the per-frame transform buffer, so this kernel opts into it like the
@@ -204,9 +204,9 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     uint tileIndex = worldTileIndex(viewIndex, id.xy, passGroup.tileGrid);
     uint maskWordCount = passGroup.instanceMaskWordCount;
     uint maskBase = worldInstanceMaskBase(tileIndex);
-    ViewportData view = worldViewport(viewIndex);
+    ViewportData view = worldView();
     // The tile cone, built from the same inputs the beam uses — bitwise the same cone (a pure function of the
-    // viewport row + tile coords; regionSizePx is the view's render extent, worldViewDims, as in the beam and Stage 1).
+    // view + tile coords; regionSizePx is the view's render extent, worldViewDims, as in the beam and Stage 1).
     float2 regionSizePx = float2(worldViewDims(view));
     float2 tileMinPx = (float2(id.xy) * float(WorldTileSize));
 

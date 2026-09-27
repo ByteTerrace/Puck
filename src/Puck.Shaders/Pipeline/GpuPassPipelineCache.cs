@@ -8,11 +8,18 @@ namespace Puck.Shaders;
 /// The pass pipelines of a composition: one <see cref="GpuPassPipeline"/> per device and <see cref="GpuPassPipelineKey"/>,
 /// however many graph nodes, package passes and region owners record with it. Every pass pipeline a
 /// <see cref="ShaderPipelineRenderNode"/> installs comes from here — its document passes, its float preview, and each
-/// package pass its package builds — and so does each device's region-copy pipeline (<see cref="GpuRegionCopyPass"/>).
+/// package pass its package builds — and so do each device's region-copy pipeline (<see cref="GpuRegionCopyPass"/>) and
+/// the SDF engine's kernel pipelines, one entry a kernel variant.
 /// It is a <see cref="GpuBuildCache{TKey, T}"/>: the first lease on a key builds the pipeline on the thread pool, a
 /// second node or a reinstall of the same graph joins it, and the pipeline is disposed when its last lease is released,
 /// so a reload of a changed shader makes a new entry while the replaced graph's lease keeps the old one until that graph
 /// retires after its submissions.
+/// <para>
+/// At most <see cref="BuildConcurrency"/> of the cache's builds create at once, however many entries are building: a
+/// cold driver cache translating many kernels together keeps a processor for the thread that pumps frames. A build waits
+/// for its turn before its first creation and gives it back after its last, and a canceled build stops waiting, so a
+/// release waits only for the creations already in the driver.
+/// </para>
 /// <para>
 /// The cache counts the shader modules, render passes and pipelines it creates into <see cref="Work"/>, named
 /// <see cref="WorkSourceName"/>; no node's ledger counts them. It names each object it creates
@@ -25,16 +32,27 @@ public sealed class GpuPassPipelineCache {
     /// creates is named by.</summary>
     public const string WorkSourceName = "gpu.pass-pipelines";
 
-    private readonly GpuBuildCache<GpuPassPipelineKey, GpuPassPipeline> m_entries = new(
-        build: static (request, token) => Build(
-            cancellationToken: token,
-            device: request.Device,
-            key: request.Key,
-            ledger: request.Ledger
-        ),
-        workSourceName: WorkSourceName
+    private readonly GpuBuildCache<GpuPassPipelineKey, GpuPassPipeline> m_entries;
+    private readonly SemaphoreSlim m_turns = new(
+        initialCount: BuildConcurrency,
+        maxCount: BuildConcurrency
     );
 
+    /// <summary>Initializes a new instance of the <see cref="GpuPassPipelineCache"/> class.</summary>
+    public GpuPassPipelineCache() {
+        m_entries = new GpuBuildCache<GpuPassPipelineKey, GpuPassPipeline>(
+            build: BuildInTurn,
+            workSourceName: WorkSourceName
+        );
+    }
+
+    /// <summary>Gets the most builds that create at once: one fewer than the machine's processors, from one to four, so
+    /// the thread that pumps frames keeps a processor while the driver translates kernels.</summary>
+    public static int BuildConcurrency { get; } = Math.Clamp(
+        max: 4,
+        min: 1,
+        value: (Environment.ProcessorCount - 1)
+    );
     /// <summary>Gets the number of pipelines a new lease can join, built or building.</summary>
     public int SharedPipelines => m_entries.SharedEntries;
     /// <summary>Gets the shader modules, render passes and pipelines the cache has created, over its whole life.</summary>
@@ -52,6 +70,24 @@ public sealed class GpuPassPipelineCache {
             device: device,
             key: key
         );
+
+    // Builds an entry once one of the cache's turns is free; a cancel ends the wait, so a canceled build that never
+    // reached the driver creates nothing.
+    private GpuPassPipeline BuildInTurn(GpuBuildRequest<GpuPassPipelineKey> request, CancellationToken cancellationToken) {
+        m_turns.Wait(cancellationToken: cancellationToken);
+
+        try {
+            return Build(
+                cancellationToken: cancellationToken,
+                device: request.Device,
+                key: request.Key,
+                ledger: request.Ledger
+            );
+        } finally {
+            _ = m_turns.Release();
+        }
+    }
+
     /// <summary>Creates a key's pipeline on a device, on the calling thread: its shader modules, then for a graphics
     /// pipeline its render pass, then the pipeline, each counted into <paramref name="ledger"/>, and asks a device that
     /// keeps a persistent pipeline cache to write it. The cache builds through it on the thread pool; a harness that

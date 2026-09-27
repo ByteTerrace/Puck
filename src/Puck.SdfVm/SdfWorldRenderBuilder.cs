@@ -10,13 +10,13 @@ namespace Puck.SdfVm;
 /// </summary>
 public static class SdfWorldRenderBuilder {
     /// <summary>Assembles the residency a spec describes.</summary>
-    /// <param name="pipelines">The composition's pipeline cache, forwarded unchanged into the built residency. The factory
-    /// reads its kernels through it (<see cref="SdfWorldPipelineCache.LoadDeployed"/>).</param>
+    /// <param name="pipelines">The composition's pipeline catalog, forwarded unchanged into the built residency. The factory
+    /// reads its kernels through it (<see cref="SdfWorldPipelineCatalog.LoadDeployed"/>).</param>
     /// <param name="spec">The render spec.</param>
     /// <returns>The residency, which the caller holds.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="pipelines"/> or <paramref name="spec"/> is
     /// <see langword="null"/>.</exception>
-    public static SdfWorldResidency Build(SdfWorldPipelineCache pipelines, SdfWorldRenderSpec spec) {
+    public static SdfWorldResidency Build(SdfWorldPipelineCatalog pipelines, SdfWorldRenderSpec spec) {
         ArgumentNullException.ThrowIfNull(pipelines);
         ArgumentNullException.ThrowIfNull(spec);
 

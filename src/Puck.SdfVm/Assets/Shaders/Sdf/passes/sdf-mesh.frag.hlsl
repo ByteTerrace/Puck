@@ -7,7 +7,7 @@
 #include "../frame/sdf-mesh.hlsli"
 
 float4 PSMain(MeshVertex input) : SV_Target0 {
-    ViewportData view = worldViewport((pushedIndex.index >> SdfMeshViewShift));
+    ViewportData view = worldView();
 
     return float4(length((input.world - view.position.xyz)), float(((pushedIndex.index & SdfMeshDrawMask) + 1u)), float(input.triangleIndex), 0.0);
 }

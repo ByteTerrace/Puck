@@ -242,12 +242,13 @@ public sealed class SdfWorldTablesWorkLawTests {
     // destinations before the copies write them, each binding the copy pipeline and its set with no push constants, then
     // transitions each copied buffer for its readers; the still upload repeats the first's inputs, so it owes no copy and
     // binds nothing. Outside the pass: the command buffer alone, since the ISA handshake gave the fillers their first
-    // transitions and clears when the tables were created. The upload pass counts the regions' host-visible writes too: on the first upload every region's whole first
-    // copy (the 820 KB decal table among them), each with its header and one run-table entry.
+    // transitions and clears when the tables were created. The upload pass counts the regions' host-visible writes too:
+    // on the first upload every region's whole first copy (the 820 KB decal table among them), each with its header and one
+    // run-table entry.
     private const string FirstUpload =
-        "work submission=7 revision=1\nwork upload executed: dispatches=9 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=1 barriers.buffer=9 binds.pipeline=9 binds.descriptor-set=9 push-constants=0 descriptor-writes=0 uploads.host-visible=838692 clears=0\nwork outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0\n";
+        "work submission=7 revision=1\nwork upload executed: dispatches=9 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=1 barriers.buffer=9 binds.pipeline=9 binds.descriptor-set=9 push-constants=0 descriptor-writes=0 uploads.host-visible=837716 clears=0 copies=0\nwork outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0 copies=0\n";
     private const string StillUpload =
-        "work submission=8 revision=1\nwork upload executed: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0\n";
+        "work submission=8 revision=1\nwork upload executed: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0 copies=0\nwork outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0 copies=0\n";
 
     private sealed class Rig : IDisposable {
         public Rig(GpuWorkLedger? ledger = null, int brickPoolVoxelCapacity = 0) {
@@ -274,16 +275,15 @@ public sealed class SdfWorldTablesWorkLawTests {
                 ? SdfTestPipelines.Build(
                     device: gpu,
                     kernels: SdfTestPipelines.Kernels(),
-                    ledger: owned
+                    cache: Cache
                 )
-                : SdfWorldPipelines.Build(
-                    cancellationToken: CancellationToken.None,
+                : SdfTestPipelines.Build(
                     device: gpu,
                     includeBrickPipelines: true,
                     kernels: (SdfTestPipelines.Kernels() with {
                         BrickBake = new byte[] { 1 },
                     }),
-                    ledger: owned
+                    cache: Cache
                 ));
             Engine = new SdfWorldTables(
                 device: gpu,
@@ -318,6 +318,7 @@ public sealed class SdfWorldTablesWorkLawTests {
             );
         }
 
+        public GpuPassPipelineCache Cache { get; } = new();
         public SdfWorldTables Engine { get; }
         public SdfFrame Frame { get; }
         public FakeGpuDevice Gpu { get; }
@@ -334,9 +335,12 @@ public sealed class SdfWorldTablesWorkLawTests {
         // Prepares a reload of the rig's pipelines and installs it, as a residency does across two produced frames.
         public int Reload(SdfWorldKernels kernels) {
             using var reload = Pipelines.PrepareReload(
-                cancellationToken: CancellationToken.None,
+                cache: Cache,
+                device: Gpu,
                 kernels: kernels
             );
+
+            reload.Wait(cancellationToken: CancellationToken.None);
 
             return Engine.InstallReload(reload: reload);
         }

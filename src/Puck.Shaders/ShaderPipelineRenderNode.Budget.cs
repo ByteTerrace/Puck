@@ -180,11 +180,11 @@ public sealed partial class ShaderPipelineRenderNode {
     // carries from the installed one is moved, not allocated, so the peak holds its bytes once.
     private ShaderPipelineMemoryAccount Account(ShaderPipelinePlan plan, ShaderPipelineStorageCounts counts, (uint Width, uint Height)? preview, RowBindings rows) {
         var extent = (counts.Width, counts.Height);
-        var steady = checked(((GraphBytes(
+        var steady = checked((((GraphBytes(
             counts: counts,
             inFlight: m_inFlight,
             plan: plan
-        ) + RegionBytesOf(
+        ) + ExportBytes(plan: plan)) + RegionBytesOf(
             extent: extent,
             plan: plan,
             rows: rows

@@ -47,7 +47,7 @@
         "src/Puck.SdfVm/SdfCarveBakePlanner.cs": 4,
         "src/Puck.SdfVm/SdfCompositionFrameSource.cs": 2,
         "src/Puck.SdfVm/SdfWorldTables.BrickBake.cs": 1,
-        "src/Puck.SdfVm/SdfWorldTables.FramePreparation.cs": 8,
+        "src/Puck.SdfVm/SdfWorldTables.FramePreparation.cs": 1,
         "src/Puck.SdfVm/SdfWorldTables.ScreenContent.cs": 1,
         "src/Puck.SdfVm/SdfWorldTables.cs": 6,
         "src/Puck.Shaders/ShaderPipelineRenderNode.Tracker.cs": 2,

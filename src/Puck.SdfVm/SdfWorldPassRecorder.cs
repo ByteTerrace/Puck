@@ -6,13 +6,12 @@ using Puck.Shaders;
 namespace Puck.SdfVm;
 
 // One pass of an sdf.world instance (SdfWorldPasses): a part of the package's fragment, recorded into the instance's
-// command buffer for the pass. Every compute part binds the world interface's pass group: the residency's tables in the
-// ring slot the frame's upload wrote, the view's viewport row, the fragment storages its ports bind and, at every member
-// its ports do not, a dummy of the residency's; and the screens, whose host images are rewritten every frame. The sky
-// part, the fragment's first, owns the row's region and writes the row every frame; every later part of the same graph
-// binds the sky's region, since every part of a view renders the same row at the same extent. The
-// mesh part draws the frame's mesh draws into its target through the mesh pipeline, with a set of its own per frame
-// slot. A recorder records no barrier: the planner's are the instance's.
+// command buffer for the pass. Every part writes its pass block (SdfFrameBlock): the view's camera, the frame's levers and
+// environment and the world values. Every compute part binds the world interface's pass group: the residency's tables in
+// the ring slot the frame's upload wrote, the fragment storages its ports bind and, at every member its ports do not, a
+// dummy of the residency's; and the screens, whose host images are rewritten every frame. The mesh part draws the frame's
+// mesh draws into its target through the mesh pipeline, with a set of its own per frame slot binding its pass block. A
+// recorder records no barrier: the planner's are the instance's.
 internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
     private const uint WorkgroupEdge = 8;
 
@@ -37,24 +36,6 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
     private readonly SdfWorldPasses m_owner;
     private readonly string m_part;
     private readonly SdfWorldView m_view;
-    // The viewport row's region: the sky part's own, or the one it shares with the instance's later parts, resolved at
-    // the first bind, once every part of the graph is created.
-    private readonly object m_graph;
-    private readonly GpuRegion? m_ownViewports;
-
-    private GpuRegion? m_viewports;
-
-    private readonly byte[] m_row = new byte[SdfWorldTables.ViewportByteLength];
-
-    // Where each value the recorder writes lies in the pass block.
-    private readonly int m_imageExtentOffset;
-    private readonly int m_instanceMaskWordCountOffset;
-    private readonly int m_meshDrawsOffset;
-    private readonly int m_sampleIndexOffset;
-    private readonly int m_screenCountOffset;
-    private readonly int m_tileGridOffset;
-    private readonly int m_viewBaseOffset;
-    private readonly int m_viewportCountOffset;
 
     // Which screen indices the residency binds.
     private readonly bool[] m_declaredScreens = new bool[SdfWorldTables.MaxScreenSurfaces];
@@ -88,29 +69,6 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
             b: m_part,
             comparisonType: StringComparison.Ordinal
         ));
-        m_graph = groups.FrameBlocks[0];
-
-        if (groups.Regions.Count > 0) {
-            m_ownViewports = groups.Regions[0];
-            m_viewports = m_ownViewports;
-            owner.ShareViewports(
-                graph: m_graph,
-                region: m_ownViewports
-            );
-        }
-
-        var parameters = context.Parameters;
-
-        m_imageExtentOffset = Offset(member: SdfWorldPackage.ImageExtent);
-        m_instanceMaskWordCountOffset = Offset(member: SdfWorldPackage.InstanceMaskWordCount);
-        m_meshDrawsOffset = Offset(member: SdfWorldPackage.MeshDraws);
-        m_sampleIndexOffset = Offset(member: SdfWorldPackage.SampleIndex);
-        m_screenCountOffset = Offset(member: SdfWorldPackage.ScreenCount);
-        m_tileGridOffset = Offset(member: SdfWorldPackage.TileGrid);
-        m_viewBaseOffset = Offset(member: SdfWorldPackage.ViewBase);
-        m_viewportCountOffset = Offset(member: SdfWorldPackage.ViewportCount);
-
-        int Offset(string member) => ((int)parameters.BlockOffsetOf(member: member));
 
         if (view.Residency.ScreenSources is { } sources) {
             foreach (var screen in sources.Screens) {
@@ -141,8 +99,9 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
             return;
         }
 
-        // The mesh part draws through the mesh interface's layout, whose one pass group holds the viewport row and the mesh
-        // region: a set per frame slot from a pool of its own, and a framebuffer over each instance of its target and depth.
+        // The mesh part draws through the mesh interface's layout, whose one pass group holds the pass block the world
+        // interface lays out and the mesh region: a set per frame slot from a pool of its own, its block bound to the slot's
+        // pass block buffer, and a framebuffer over each instance of its target and depth.
         var bindings = context.Services.Bindings;
         var sizes = default(GpuDescriptorPoolSizes);
 
@@ -171,6 +130,13 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
                         part: context.Pass
                     ),
                     poolHandle: m_meshPool
+                );
+                bindings.WriteConstantBuffer(
+                    arrayElement: 0,
+                    binding: 0,
+                    bufferHandle: groups.PassBlocks[slot].BufferHandle,
+                    bufferSize: groups.PassBlocks[slot].SizeBytes,
+                    descriptorSetHandle: m_meshSets[slot]
                 );
             }
 
@@ -216,15 +182,21 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
             m_context.Services.Bindings.DestroyPool(poolHandle: m_meshPool);
         }
 
-        if (m_ownViewports is not null) {
-            m_owner.ForgetViewports(
-                graph: m_graph,
-                region: m_ownViewports
-            );
-        }
-
         m_owner.Unhold(residency: m_view.Residency);
         m_view.Residency.Release();
+    }
+    // The mesh part skips every frame that draws no mesh: it records neither its draws nor the barriers of its target and
+    // depth, and the hit passes, whose pass block's mesh draws are then zero, read nothing of the target.
+    public bool Skips(in FrameContext context) {
+        if (!IsMesh) {
+            return false;
+        }
+
+        var residency = m_view.Residency;
+
+        m_owner.Begin(residency: residency);
+
+        return (residency.Submit(context: in context).MeshDrawCount == 0);
     }
     public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
         var residency = m_view.Residency;
@@ -239,37 +211,20 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
         );
         var width = recording.Width;
         var height = recording.Height;
-        var tileGridX = ((width + (SdfWorldPackage.TileSize - 1)) / SdfWorldPackage.TileSize);
-        var tileGridY = ((height + (SdfWorldPackage.TileSize - 1)) / SdfWorldPackage.TileSize);
-        var block = recording.PassBlock;
 
         residency.RequestExtent(
             height: height,
             width: width
         );
-        if (m_ownViewports is { } viewports) {
-            tables.WriteViewportRow(
-                frame: frame,
-                height: height,
-                row: m_row,
-                view: view,
-                width: width
-            );
-            _ = viewports.Write(
-                bytes: m_row,
-                offset: 0
-            );
-        }
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: block[m_imageExtentOffset..], value: width);
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: block[(m_imageExtentOffset + sizeof(uint))..], value: height);
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: block[m_tileGridOffset..], value: tileGridX);
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: block[(m_tileGridOffset + sizeof(uint))..], value: tileGridY);
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: block[m_viewportCountOffset..], value: 1u);
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: block[m_viewBaseOffset..], value: 0u);
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: block[m_screenCountOffset..], value: tables.BoundScreenCount());
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: block[m_instanceMaskWordCountOffset..], value: tables.InstanceMaskWordCount);
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: block[m_sampleIndexOffset..], value: tables.SampleIndex);
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: block[m_meshDrawsOffset..], value: tables.MeshDrawCount);
+        SdfFrameBlock.Write(
+            block: recording.PassBlock,
+            frame: frame,
+            height: height,
+            sceneTime: frame.Time,
+            tables: tables.PassValues,
+            view: view,
+            width: width
+        );
 
         if (IsMesh) {
             RecordMesh(
@@ -279,9 +234,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
         } else {
             RecordCompute(
                 recording: in recording,
-                tables: tables,
-                tileGridX: tileGridX,
-                tileGridY: tileGridY
+                tables: tables
             );
         }
 
@@ -298,7 +251,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
 
     // Binds the pass set and dispatches the part's kernel: the sky over the extent, the masks over the tile grid in
     // groups, the beam one group a tile, the cull arguments once, and the hit passes indirectly over the surviving tiles.
-    private void RecordCompute(in RenderGraphPackageRecording recording, SdfWorldTables tables, uint tileGridX, uint tileGridY) {
+    private void RecordCompute(in RenderGraphPackageRecording recording, SdfWorldTables tables) {
         var slot = recording.Slot;
         var set = m_sets!.PassSet(slot: slot);
         var recorder = recording.Recorder;
@@ -359,6 +312,9 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
             return;
         }
 
+        var tileGridX = ((recording.Width + (SdfWorldPackage.TileSize - 1)) / SdfWorldPackage.TileSize);
+        var tileGridY = ((recording.Height + (SdfWorldPackage.TileSize - 1)) / SdfWorldPackage.TileSize);
+
         var (x, y) = m_part switch {
             SdfWorldPackage.Parts.Sky => (((recording.Width + (WorkgroupEdge - 1)) / WorkgroupEdge), ((recording.Height + (WorkgroupEdge - 1)) / WorkgroupEdge)),
             SdfWorldPackage.Parts.Mask => (((tileGridX + (WorkgroupEdge - 1)) / WorkgroupEdge), ((tileGridY + (WorkgroupEdge - 1)) / WorkgroupEdge)),
@@ -374,7 +330,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
         );
     }
     // Draws the frame's mesh draws into the instance's target, one draw call a draw, pulling their triangles from the mesh
-    // region. A frame with no draws records nothing: no pass reads the target while the pass block's mesh draws are zero.
+    // region. A frame with no draws never records (Skips).
     private void RecordMesh(in RenderGraphPackageRecording recording, SdfWorldTables tables) {
         var draws = tables.MeshDraws;
         var count = tables.MeshDrawCount;
@@ -405,8 +361,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
 
         tables.WriteMeshTables(
             set: set,
-            slot: tables.CurrentSlot,
-            viewports: Viewports().Buffer(slot: slot)
+            slot: tables.CurrentSlot
         );
         recorder.BeginRenderPass(
             area: new GpuPixelRect(
@@ -480,8 +435,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
         m_sharedSlots[slot] = tables.CurrentSlot;
         m_sharedRevisions[slot] = tables.BindingRevision;
     }
-    // Writes, once per slot, the pass's own viewport row, every storage its ports bind at the member its access reads or
-    // writes it through, and the tables' dummy and fillers at every member no port binds. The storages a slot resolves stay
+    // Writes, once per slot, every storage the pass's ports bind at the member its access reads or writes it through, and
+    // the tables' dummy and fillers at every member no port binds. The storages a slot resolves stay
     // the instance's for the recorder's life.
     private void BindPorts(in RenderGraphPackageRecording recording, nint set, SdfWorldTables tables) {
         var slot = recording.Slot;
@@ -501,7 +456,6 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
             tables.WriteWorldBuffer(buffer: tables.DummyBuffer, member: member, set: set);
         }
 
-        tables.WriteWorldBuffer(buffer: Viewports().Buffer(slot: slot), member: SdfWorldPackage.Viewports, set: set);
 
         for (var port = 0; (port < m_fragmentPass.Inputs.Count); port++) {
             var name = m_fragmentPass.Inputs[port].Name;
@@ -580,8 +534,6 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
             bound[screen] = image;
         }
     }
-    // The viewport row's region the part binds.
-    private GpuRegion Viewports() => (m_viewports ??= (m_owner.ViewportsOf(graph: m_graph) ?? throw new InvalidOperationException(message: $"Pass '{m_context.Pass}' has no sky part sharing its viewport row.")));
     // The member a pass reads a fragment buffer through, or null for one it reads through no member.
     private static string? ReadMemberOf(string version) => version switch {
         SdfWorldPackage.Parts.InstanceMasks => SdfWorldPackage.InstanceMasks,

@@ -54,7 +54,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     // pixels) so this invocation addresses the bbox's pixel rather than the frame's top-left.
     uint2 pixel = ((uint2(cullBounds[0], cullBounds[1]) * 8u) + id.xy);
 
-    ViewportData view = worldViewport(viewIndex);
+    ViewportData view = worldView();
 
     // The symmetry-LOD origin: this viewport's camera (the per-sample wallpaper LOD rule measures from it).
     sdfLodOrigin = view.position.xyz;
