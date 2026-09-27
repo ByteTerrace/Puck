@@ -42,6 +42,87 @@ public static class WorldStaging {
         oldChar: '\\'
     );
 
+    /// <summary>Stages every world a composition source declares into <paramref name="directory"/>, restaged whole so
+    /// a world the source no longer declares cannot be reached, and answers the staged document of the world a boot
+    /// starts in: the one <paramref name="entry"/> names, else the one the source declares its entry. The worlds reach
+    /// each other across their borders by document name, so they are staged together or not at all.</summary>
+    /// <param name="path">The composition source, as the refusals name it.</param>
+    /// <param name="worlds">The worlds the source's compile declared.</param>
+    /// <param name="entry">The world a boot was asked to start in, or <see langword="null"/> for the declared entry.</param>
+    /// <param name="directory">The directory the source's worlds are staged into; deleted and recreated.</param>
+    /// <param name="entryPath">The full path of the entry world's staged document on success.</param>
+    /// <param name="entryName">The entry world's declared name on success.</param>
+    /// <param name="reason">The named refusal, or empty on success.</param>
+    /// <returns><see langword="true"/> when an entry was chosen and every world composed and was written.</returns>
+    public static bool TryStageComposition(string path, IReadOnlyList<WorldCompiledWorld> worlds, string? entry, string directory, out string entryPath, out string entryName, out string reason) {
+        entryPath = string.Empty;
+        entryName = string.Empty;
+
+        var declared = string.Join(
+            separator: ", ",
+            values: worlds.Select(selector: static world => world.Name)
+        );
+        WorldCompiledWorld chosen;
+
+        if (entry is not null) {
+            if (worlds.FirstOrDefault(predicate: world => string.Equals(
+                a: world.Name,
+                b: entry,
+                comparisonType: StringComparison.Ordinal
+            )) is not { } named) {
+                reason = $"--entry '{entry}' names no world '{path}' declares; it declares {declared}.";
+
+                return false;
+            }
+
+            chosen = named;
+        } else if (worlds.FirstOrDefault(predicate: static world => world.Entry) is { } declaredEntry) {
+            chosen = declaredEntry;
+        } else {
+            reason = $"'{path}' declares worlds {declared} and none is its entry — write `entry world <name> = ...` for the world a boot starts in, or name one with --entry.";
+
+            return false;
+        }
+
+        var sourceDirectory = Path.GetDirectoryName(path: Path.GetFullPath(path: path))!;
+
+        try {
+            if (Directory.Exists(path: directory)) {
+                Directory.Delete(
+                    path: directory,
+                    recursive: true
+                );
+            }
+
+            foreach (var world in worlds) {
+                if (!TryWrite(
+                    directory: directory,
+                    name: world.Name,
+                    path: out var staged,
+                    reason: out var composeReason,
+                    sourceDirectory: sourceDirectory,
+                    world: ((JsonObject)JsonNode.Parse(utf8Json: world.Json)!)
+                )) {
+                    reason = $"'{path}' world '{world.Name}' does not compose: {composeReason}";
+
+                    return false;
+                }
+
+                if (world == chosen) {
+                    entryPath = staged;
+                }
+            }
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            reason = $"'{path}' could not be staged under {directory}: {exception.Message}";
+
+            return false;
+        }
+
+        entryName = chosen.Name;
+        reason = string.Empty;
+
+        return true;
+    }
     /// <summary>Writes one compiled world into <paramref name="directory"/> as its document file, its basis and
     /// imports composed into it first so the staged document depends on nothing but its staged siblings.</summary>
     /// <param name="world">The compiled world document. Its <c>basis</c> and <c>imports</c> are rewritten in place.</param>
