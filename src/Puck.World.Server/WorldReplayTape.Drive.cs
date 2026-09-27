@@ -320,6 +320,9 @@ public sealed partial class WorldReplayTape {
     /// <see cref="WorldReplayMode.Replaying"/>. Called by <see cref="WorldServerStepShell"/> immediately before
     /// <see cref="WorldServer.Advance"/>; a no-op otherwise, or when the cursor's tick is already in the doors.</summary>
     public void InjectDriveTick() {
+        // Every step taken while a drive holds the session replays: its seats' own input is masked at the loopback.
+        m_liveServer.ReplaysInput = (m_mode == WorldReplayMode.Replaying);
+
         if (
             (m_mode != WorldReplayMode.Replaying) ||
             (m_drive is not { } drive) ||

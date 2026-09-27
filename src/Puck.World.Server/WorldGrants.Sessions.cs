@@ -360,12 +360,19 @@ public sealed partial class WorldGrants {
 
         entry.Input = submission.Intent;
 
+        var strengthened = false;
+
         for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
             var value = submission.Intent[ordinal];
 
             if (FixedQ4816.Abs(value: value) > FixedQ4816.Abs(value: entry.PressedSince[ordinal])) {
                 entry.PressedSince[ordinal] = value;
+                strengthened = true;
             }
+        }
+
+        if (strengthened) {
+            entry.PressedRay = submission.Intent.SourceRay;
         }
 
         return true;
@@ -374,10 +381,12 @@ public sealed partial class WorldGrants {
     internal void SettleSessionPresses() {
         foreach (var entry in m_sessions.Values) {
             entry.PressedSince = default;
+            entry.PressedRay = null;
         }
     }
 
-    /// <summary>Reads the input of the live session at an ordinal: its pointer ray this step.</summary>
+    /// <summary>Reads the input of the live session at an ordinal: its pointer ray this step, which is the ray a press it
+    /// still keeps was made along while its current input no longer carries that press, and its current ray otherwise.</summary>
     /// <param name="ordinal">The session ordinal.</param>
     /// <param name="session">The live session principal, on success.</param>
     /// <param name="ray">The session's pointer ray, or <see langword="null"/> for none.</param>
@@ -388,7 +397,9 @@ public sealed partial class WorldGrants {
             value: out var entry
         )) {
             session = entry.Principal;
-            ray = entry.Input.SourceRay;
+            ray = (KeepsPress(entry: entry)
+                ? entry.PressedRay
+                : entry.Input.SourceRay);
 
             return true;
         }
@@ -455,6 +466,18 @@ public sealed partial class WorldGrants {
         }
     }
 
+    // Whether a session keeps a press its current input has since released: a channel pressed harder since the last
+    // settled step than it is held now.
+    private static bool KeepsPress(SessionEntry entry) {
+        for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
+            if (FixedQ4816.Abs(value: entry.PressedSince[ordinal]) > FixedQ4816.Abs(value: entry.Input[ordinal])) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     // One live session: the principal it acts as, the verdict's templates, the body (and that body's generation) an
     // embodiment assigned it, and the input its viewer forwards.
     private sealed class SessionEntry(Principal principal, IReadOnlyList<WorldAdmissionGrant> templates) {
@@ -468,6 +491,8 @@ public sealed partial class WorldGrants {
         // The input the session's viewer last forwarded: its pointer ray in this world and its channels, held until the
         // next forward replaces it (a release forward clears it).
         public PlayerIntent Input { get; set; }
+        // The pointer ray the strongest press since the last settled step was made along.
+        public SourceRay? PressedRay { get; set; }
 
         public Principal Principal { get; } = principal;
         public IReadOnlyList<WorldAdmissionGrant> Templates { get; } = templates;

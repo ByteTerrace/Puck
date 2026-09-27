@@ -34,6 +34,12 @@ public sealed partial class WorldServer {
         );
     /// <inheritdoc cref="WorldTick.Advance"/>
     public void Advance(ulong stepTicks) => m_tick.Advance(stepTicks: stepTicks);
+
+    /// <summary>Gets a value indicating whether the next step replays recorded input: set by the replay tape as it feeds
+    /// a recorded tick into this server's doors (<see cref="WorldReplayTape.InjectDriveTick"/>), and cleared once that
+    /// step's engagement fold has read it.</summary>
+    public bool ReplaysInput { get; internal set; }
+
     /// <inheritdoc cref="WorldTick.ApplyIntentSubmission"/>
     public GrantVerdict ApplyIntentSubmission(WorldBody body, in IntentSubmission submission) =>
         m_tick.ApplyIntentSubmission(

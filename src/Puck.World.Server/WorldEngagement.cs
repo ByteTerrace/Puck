@@ -495,8 +495,10 @@ public sealed partial class WorldEngagement {
     /// own-body member is visited like any other and simply has nowhere to route, because the avatar's own
     /// integration IS its delivery. Run once per <see cref="WorldServer.Step"/>, before the tick's
     /// <see cref="Protocol.WorldSnapshot"/> is built, so <see cref="BuildPadSnapshot"/> reflects this tick's
-    /// applied intents.</summary>
-    public void FoldTick() {
+    /// applied intents. A tick that replays recorded input stages no portal forward: the destinations beyond a portal
+    /// are not replaying with this world.</summary>
+    /// <param name="replaysInput">Whether this tick's input was fed from a replay tape (<see cref="WorldServer.ReplaysInput"/>).</param>
+    public void FoldTick(bool replaysInput) {
         m_screenPads.Clear();
         m_bodyContributions.Clear();
         m_portalForwards.Clear();
@@ -532,11 +534,13 @@ public sealed partial class WorldEngagement {
                     // A screen with no row of its own may be a portal face, which routes the body's input through its
                     // glass to the session the face observes (StagePortalForward).
                     if (PolicyOf(screenIndex: application.Target.Value) is not { } policy) {
-                        StagePortalForward(
-                            intent: body.EngagedIntent,
-                            principal: principal,
-                            screenIndex: application.Target.Value
-                        );
+                        if (!replaysInput) {
+                            StagePortalForward(
+                                intent: body.EngagedIntent,
+                                principal: principal,
+                                screenIndex: application.Target.Value
+                            );
+                        }
 
                         continue;
                     }

@@ -64,8 +64,11 @@ public sealed partial class PortalInputLawTests {
     private sealed class PortalScene : IDisposable {
         private readonly TemporaryDirectory m_files = new(prefix: "puck-portal-input-files-");
         private readonly TemporaryDirectory m_hostState = new(prefix: "puck-portal-input-host-");
+        private readonly TemporaryDirectory m_tapes = new(prefix: "puck-portal-input-tapes-");
 
         private readonly TemporaryDirectory m_bootState;
+
+        private ulong m_steps;
 
         public PortalScene(bool control = true) {
             var boot = Load(relative: PortalFixture);
@@ -218,16 +221,58 @@ public sealed partial class PortalInputLawTests {
                 return beyond!.Server;
             }
         }
+        // The destination's row.
+        public WorldInstance BeyondRow {
+            get {
+                Assert.True(condition: Host.TryGet(
+                    instance: out var row,
+                    name: Host.ScreenSession(
+                        instanceName: WorldInstanceHost.BootInstanceName,
+                        screenIndex: GlassScreen
+                    )!.InstanceName!
+                ));
+
+                return row!;
+            }
+        }
         public WorldInstance Boot { get; }
         public WorldFaceFrame Glass { get; }
         public int GlassScreen { get; }
         public WorldInstanceHost Host { get; }
+        // The boot world's replay tape, once armed.
+        public WorldReplayTape? Tape { get; private set; }
 
         public void Dispose() {
             Host.Dispose();
+            m_tapes.Dispose();
             m_bootState.Dispose();
             m_hostState.Dispose();
             m_files.Dispose();
+        }
+        // A replay tape over a row's own link, as a host arms one.
+        public WorldReplayTape TapeOver(WorldInstance row) => new(
+            addonHostFactory: static (_, _) => new NullAddonHost(),
+            engines: [],
+            liveServer: row.Server,
+            machineHostFactory: Fixtures.MachineHostFactory,
+            profiles: row.Server.Profiles,
+            stateRoot: new WorldStateRoot(path: Path.Combine(
+                path1: m_tapes.RootPath,
+                path2: row.Name
+            )),
+            transport: ((LoopbackTransport)row.Link)
+        );
+        // Arms the boot world's tape, which every later step runs under.
+        public WorldReplayTape ArmBootTape() => (Tape = TapeOver(row: Boot));
+        // Counts the session input the destination's link carries from now on.
+        public Func<int> CountForwards() {
+            var count = 0;
+
+            ((LoopbackTransport)BeyondRow.Link).IntentTap = submission => count += ((submission.Principal.Kind == PrincipalKind.Session)
+                ? 1
+                : 0);
+
+            return () => count;
         }
         public bool Engage() => Boot.Server.Engagement.Compose(
             actingPrincipal: Principal.Seat(slot: 0),
@@ -250,7 +295,7 @@ public sealed partial class PortalInputLawTests {
             var channels = new ChannelValues();
 
             channels[0] = FixedQ4816.FromDouble(value: press);
-            Boot.Server.EnqueueIntent(submission: new IntentSubmission(
+            Boot.Link.SubmitIntent(submission: new IntentSubmission(
                 EntityIndex: 0,
                 Intent: new PlayerIntent(
                     Channels: channels,
@@ -263,11 +308,22 @@ public sealed partial class PortalInputLawTests {
                 Tick: Boot.Server.NextInputTick
             ));
         }
-        // One host step as the desktop runs it: the boot world steps, settles its screen sessions, and the other
-        // instances step.
-        public void Step(bool forwards = true) {
-            Boot.Server.Advance(stepTicks: PortalStep);
-            Host.SettleBootScreenSessions(forwards: forwards);
+        // One host step as the desktop runs it: the boot world steps through the step shell under its tape, settles its
+        // screen sessions, and the other instances step.
+        public void Step() {
+            var context = new FixedStepContext(
+                ElapsedTicks: ((m_steps + 1UL) * PortalStep),
+                StepTicks: PortalStep,
+                Tick: m_steps
+            );
+
+            m_steps = WorldServerStepShell.Step(
+                context: in context,
+                publishTick: static _ => { },
+                server: Boot.Server,
+                tape: Tape
+            );
+            Host.SettleBootScreenSessions(stepped: true);
             Host.StepInstances(masterDeltaTicks: PortalStep);
         }
     }
@@ -345,30 +401,152 @@ public sealed partial class PortalInputLawTests {
         );
     }
     [Fact]
-    public void AWorldReplayingItsInput_ForwardsNothingThroughItsPortals() {
-        long OnAfterClicks(bool forwards) {
-            using var scene = new PortalScene();
+    public void AWorldReplayingItsInput_ForwardsNothingThroughItsPortals_ItsLastReplayedTickIncluded() {
+        using var scene = new PortalScene();
+        var sent = scene.CountForwards();
+        var tape = scene.ArmBootTape();
+        var seat = Principal.Seat(slot: 0);
 
-            Assert.True(condition: scene.Engage());
+        Assert.True(
+            condition: tape.TryBeginRecording(
+                name: "clicks",
+                refusal: out var refusal
+            ),
+            userMessage: refusal
+        );
+        scene.Boot.Link.SubmitCommand(command: new WorldCommand.ComposeControl(
+            EntityIndex: 0,
+            Exclusive: false,
+            Principal: seat,
+            Target: GrantSubject.Screen(index: scene.GlassScreen),
+            TargetPrincipal: seat
+        ));
 
-            for (var tick = 0; (tick < 3); tick++) {
-                scene.Point(
-                    press: 1d,
-                    throughGlass: true
-                );
-                scene.Step(forwards: forwards);
-            }
-
-            return Cell(
-                row: OnRow,
-                server: scene.Beyond
+        for (var tick = 0; (tick < 3); tick++) {
+            scene.Point(
+                press: 1d,
+                throughGlass: true
             );
+            scene.Step();
         }
 
-        Laws.RefusalWithControl(
-            lawId: "portal.replay-forwards-nothing",
-            deniedOutcome: () => (OnAfterClicks(forwards: false) == 1L),
-            controlOutcome: () => (OnAfterClicks(forwards: true) == 1L)
+        scene.Boot.Link.SubmitCommand(command: new WorldCommand.DissolveControl(
+            EntityIndex: 0,
+            Principal: seat,
+            TargetPrincipal: seat
+        ));
+        scene.Step();
+        _ = tape.StopRecording();
+
+        // Live, the clicks reached the destination.
+        var live = sent();
+
+        Assert.True(
+            condition: (live > 0),
+            userMessage: "the recorded clicks never reached the destination live"
+        );
+
+        // Driven back to its last click, the boot world re-engages and presses again, and sends none of it: the
+        // destination is not replaying with it, even on the tick whose step ends the drive.
+        Assert.True(
+            condition: tape.TryBeginDrive(
+                documentPath: null,
+                forkName: null,
+                name: "clicks",
+                refusal: out refusal,
+                toTick: 3
+            ),
+            userMessage: refusal
+        );
+
+        for (var tick = 0; ((tick < 8) && (tape.Mode == WorldReplayMode.Replaying)); tick++) {
+            scene.Step();
+        }
+
+        Assert.Equal(
+            actual: (tape.Mode, (sent() - live)),
+            expected: (WorldReplayMode.Idle, 0)
+        );
+    }
+    [Fact]
+    public void ADestinationRecordingItsInput_RecordsWhatAPortalForwardsIt() {
+        using var scene = new PortalScene();
+        var beyond = scene.BeyondRow;
+        var tape = scene.TapeOver(row: beyond);
+
+        beyond.Tape = tape;
+        Assert.True(
+            condition: tape.TryBeginRecording(
+                name: "beyond",
+                refusal: out var refusal
+            ),
+            userMessage: refusal
+        );
+        Assert.True(condition: scene.Engage());
+
+        for (var tick = 0; (tick < 3); tick++) {
+            scene.Point(
+                press: 1d,
+                throughGlass: true
+            );
+            scene.Step();
+        }
+
+        _ = tape.StopRecording();
+
+        using var stream = File.OpenRead(path: tape.PathFor(name: "beyond"));
+        var recorded = WorldReplaySnapshot.Read(stream: stream).Ticks.Sum(selector: static tick => tick.Intents.Count(predicate: static intent => (intent.Principal.Kind == PrincipalKind.Session)));
+
+        Assert.Equal(
+            actual: FixedQ4816.FromRawBits(value: Cell(
+                row: PressRow,
+                server: beyond.Server
+            )),
+            expected: FixedQ4816.One
+        );
+        Assert.True(
+            condition: (recorded > 0),
+            userMessage: "the destination's tape holds none of the input the portal forwarded it"
+        );
+    }
+    [Fact]
+    public void APausedDestination_IsSentNothing_UntilItStepsAgain() {
+        using var scene = new PortalScene();
+        var sent = scene.CountForwards();
+        var beyond = scene.BeyondRow;
+
+        Assert.True(condition: scene.Engage());
+        beyond.IsPaused = true;
+
+        for (var tick = 0; (tick < 4); tick++) {
+            scene.Point(
+                press: 1d,
+                throughGlass: true
+            );
+            scene.Step();
+        }
+
+        Assert.Equal(
+            actual: sent(),
+            expected: 0
+        );
+
+        beyond.IsPaused = false;
+
+        for (var tick = 0; (tick < 2); tick++) {
+            scene.Point(
+                press: 1d,
+                throughGlass: true
+            );
+            scene.Step();
+        }
+
+        Assert.Equal(
+            actual: ((sent() > 0), Cell(
+                row: OnRow,
+                server: beyond.Server
+            )),
+            expected: (true, 1L)
         );
     }
     [Fact]

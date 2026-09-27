@@ -37,8 +37,9 @@ public sealed class WorldScreenSession {
     public string? Refusal { get; internal set; }
     /// <summary>Gets the screen index on the owning world.</summary>
     public int ScreenIndex { get; }
-    /// <summary>Gets the authored session source the screen declares.</summary>
-    public WorldScreenSource.Session Source { get; }
+    /// <summary>Gets the authored session source the screen declares, following an edit of its rendering members; an
+    /// edit of its destination opens a new session instead.</summary>
+    public WorldScreenSource.Session Source { get; internal set; }
 
     // Set once a destination that ended the session refused another: the screen holds its last image.
     internal bool ReadmissionRefused { get; set; }
@@ -282,10 +283,19 @@ public sealed partial class WorldInstanceHost {
 
         return true;
     }
+    // Whether an instance consumes the input it is sent: it steps, rather than holding for a pause, a stop, its mirrors,
+    // or its retirement.
+    private static bool Steps(WorldInstance instance) => (
+        (instance.Server.Definition.SimulationRateHz > 0) &&
+        !instance.IsPaused &&
+        !instance.AwaitingMirrors &&
+        !instance.Server.IsRetiring
+    );
     // Forwards what an instance's engagement routed through its portal faces this step to each face's session, and
-    // one release to a face whose forwarding stopped (a disengage, a lost Control hold, a ray off the glass, or input
-    // suppressed while the instance replays).
-    private void ForwardScreenSessions(WorldInstance owner, SortedDictionary<int, WorldScreenSession> sessions, bool forwards) {
+    // one release to a face whose forwarding stopped (a disengage, a lost Control hold, a ray off the glass, a replayed
+    // tick, or an owner that did not step). Each travels the destination's own link, where its tape records it and a
+    // replay drive masks it. A destination that is not stepping is sent nothing, and a release owed to it waits.
+    private void ForwardScreenSessions(WorldInstance owner, SortedDictionary<int, WorldScreenSession> sessions, bool stepped) {
         var engagement = owner.Server.Engagement;
 
         foreach (var (screen, session) in sessions) {
@@ -302,11 +312,15 @@ public sealed partial class WorldInstanceHost {
                 continue;
             }
 
+            if (!Steps(instance: destination)) {
+                continue;
+            }
+
             var mapped = default(PlayerIntent);
             var found = false;
 
             if (
-                forwards &&
+                stepped &&
                 engagement.TryPortalFace(
                 face: out var face,
                 screenIndex: screen
@@ -337,7 +351,7 @@ public sealed partial class WorldInstanceHost {
                 continue;
             }
 
-            destination.Server.EnqueueIntent(submission: new IntentSubmission(
+            destination.Link.SubmitIntent(submission: new IntentSubmission(
                 EntityIndex: -1,
                 Intent: mapped,
                 Principal: observation.Session,
@@ -351,11 +365,12 @@ public sealed partial class WorldInstanceHost {
     /// every screen its live definition declares that observes a destination, closes the sessions of screens it no longer
     /// declares or re-pointed, asks a destination that ended a session to admit it again, and forwards what its
     /// engagement routed through a portal face this step. A world nobody stands in, other than the boot world, holds no
-    /// sessions. Called on the thread that steps the instance.</summary>
-    /// <param name="instance">The instance that stepped.</param>
-    /// <param name="forwards">Whether the instance's input reaches its destinations this step: false while it replays
-    /// or verifies, when its recorded input must not reach a destination that is not replaying with it.</param>
-    public void SettleScreenSessions(WorldInstance instance, bool forwards) {
+    /// sessions. A replayed tick routes nothing (<see cref="Server.WorldServer.ReplaysInput"/>), since its destinations
+    /// are not replaying with it. Called on the thread that steps the instance.</summary>
+    /// <param name="instance">The instance that stepped, or that was admitted or held this tick.</param>
+    /// <param name="stepped">Whether the instance stepped: false when it was admitted, or held by a pause or a stop,
+    /// when its sessions still follow its definition but it forwards nothing.</param>
+    public void SettleScreenSessions(WorldInstance instance, bool stepped) {
         ArgumentNullException.ThrowIfNull(argument: instance);
 
         if (!PresentsScreens(instance: instance)) {
@@ -386,11 +401,17 @@ public sealed partial class WorldInstanceHost {
                     key: screen,
                     value: out var source
                 ) ||
-                    (source != owned.Rows[screen].Source)
+                    !string.Equals(
+                    a: source.Destination,
+                    b: owned.Rows[screen].Source.Destination,
+                    comparisonType: StringComparison.Ordinal
+                )
                 ) {
                     CloseScreenSession(session: owned.Rows[screen]);
                     _ = owned.Rows.Remove(key: screen);
                     changed = true;
+                } else if (source != owned.Rows[screen].Source) {
+                    owned.Rows[screen].Source = source;
                 }
             }
 
@@ -441,9 +462,9 @@ public sealed partial class WorldInstanceHost {
         }
 
         ForwardScreenSessions(
-            forwards: forwards,
             owner: instance,
-            sessions: owned.Rows
+            sessions: owned.Rows,
+            stepped: stepped
         );
 
         if (changed) {

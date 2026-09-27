@@ -505,13 +505,13 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     }
     /// <summary>Settles the boot world's screen sessions right after its own step (see
     /// <see cref="SettleScreenSessions"/>): every other instance settles inside <see cref="StepInstances"/>.</summary>
-    /// <param name="forwards">Whether the boot world's input reaches its destinations this step: false while it
-    /// replays or verifies.</param>
-    public void SettleBootScreenSessions(bool forwards) {
+    /// <param name="stepped">Whether the boot world stepped: false for a paused or stopped boot world, whose sessions
+    /// still follow its definition but forward nothing.</param>
+    public void SettleBootScreenSessions(bool stepped) {
         if (Boot is { } boot) {
             SettleScreenSessions(
-                forwards: forwards,
-                instance: boot
+                instance: boot,
+                stepped: stepped
             );
         }
     }
@@ -601,7 +601,13 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                 continue;
             }
 
-            var instance = m_instances[name];
+            // A screen session an earlier row settled this call may have stopped this one.
+            if (!m_instances.TryGetValue(
+                key: name,
+                value: out var instance
+            )) {
+                continue;
+            }
 
             // A restored row held pending its adjacency mirrors banks no ticks and drains nothing administrative —
             // it is not yet part of the stepping engine at all, exactly like a row this host has not admitted.
@@ -621,6 +627,10 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                 instance.IsPaused
             ) {
                 _ = instance.Server.DrainAdministrative();
+                SettleScreenSessions(
+                    instance: instance,
+                    stepped: false
+                );
 
                 continue;
             }
@@ -664,8 +674,8 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                 instance.ElapsedEngineTicks = elapsedTicks;
                 ScanInstanceBoundaries(instance: instance);
                 SettleScreenSessions(
-                    forwards: (instance.Tape?.Mode != WorldReplayMode.Replaying),
-                    instance: instance
+                    instance: instance,
+                    stepped: true
                 );
 
                 // Server.Step installs any pending definition swap (world.load/.reset/.reload) before
@@ -1265,8 +1275,8 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         _ = EndpointFor(instance: row);
         ResolveForwardedRecoveries();
         SettleScreenSessions(
-            forwards: false,
-            instance: row
+            instance: row,
+            stepped: false
         );
     }
     /// <summary>Admits <paramref name="row"/> as this host's one boot row and seeds every embodied local seat's

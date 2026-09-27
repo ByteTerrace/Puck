@@ -191,7 +191,8 @@ public sealed partial class PortalInputLawTests {
         using var fixture = Fixtures.FreshServer(definition: Destination(control: true));
         var observation = Observe(fixture: fixture);
 
-        // Both arrive before the destination steps, as from a source stepping twice as fast.
+        // Both arrive before the destination steps, as from a source stepping twice as fast; the release carries no
+        // ray, as the one a stopped forward sends, so the step reads the press where it was made.
         Forward(
             fixture: fixture,
             press: 1d,
@@ -201,21 +202,21 @@ public sealed partial class PortalInputLawTests {
         Forward(
             fixture: fixture,
             press: 0d,
-            ray: OnScreen,
+            ray: null,
             session: observation.Session
         );
         fixture.Step();
 
         Assert.Equal(
-            actual: Read(fixture: fixture).Press,
-            expected: FixedQ4816.One
+            actual: Read(fixture: fixture),
+            expected: (1L, FixedQ4816.One)
         );
 
         fixture.Step();
 
         Assert.Equal(
-            actual: Read(fixture: fixture).Press,
-            expected: FixedQ4816.Zero
+            actual: Read(fixture: fixture),
+            expected: (0L, FixedQ4816.Zero)
         );
     }
     [Fact]

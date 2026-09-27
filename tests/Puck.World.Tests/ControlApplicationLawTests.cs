@@ -187,7 +187,7 @@ public sealed class ControlApplicationLawTests {
             ));
         }
 
-        fixture.Server.Engagement.FoldTick();
+        fixture.Server.Engagement.FoldTick(replaysInput: false);
 
         var pads = fixture.Server.Engagement.BuildPadSnapshot().Span;
 
