@@ -60,17 +60,28 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         return (runtime, frames, camera);
     }
-    // Produces until the view renders, then one frame more, so the view's latest output read the camera unfilled and it
-    // is not due again for seven frames.
+    // Produces until the view renders and its node produces, then one frame more, so the view's latest output read the
+    // camera unfilled and it is not due again for seven frames. A scheduled render is not a produced one: the view's node
+    // takes its graph's build, which runs on the thread pool, only on a frame that schedules it, and the settling frames
+    // may schedule only the camera and the root, so the view is held to a frame whose every scheduled instance produced.
     private static void PastAViewRender(RenderGraphRuntime runtime, Frames frames) {
         var view = runtime.Instances.IndexOf(name: "view");
 
         frames.Settle();
+        Assert.True(
+            condition: SpinWait.SpinUntil(
+                condition: () => {
+                    _ = frames.Next();
 
-        while (runtime.Latest!.Instances[view].Status != RenderGraphInstanceStatus.Rendered) {
-            _ = frames.Next();
-        }
-
+                    return (
+                        (runtime.Latest!.Instances[view].Status == RenderGraphInstanceStatus.Rendered) &&
+                        runtime.IsSettled
+                    );
+                },
+                timeout: TimeSpan.FromSeconds(value: 30)
+            ),
+            userMessage: "The view's node never produced a scheduled render."
+        );
         _ = frames.Next();
         Assert.Equal(
             actual: runtime.Latest!.Instances[view].Status,

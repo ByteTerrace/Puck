@@ -352,8 +352,9 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 _ = Next();
             }
         }
-        // Produces until every scheduled instance has built its graph and produced, then one frame more, so every
-        // consumer has read a completed output of each producer.
+        // Produces until every instance a frame scheduled has built its graph and produced, then one frame more, so every
+        // consumer has read a completed output of each producer that frame scheduled. An instance refreshed at a divisor
+        // that frame did not schedule may still be building.
         public void Settle() {
             Assert.True(
                 condition: SpinWait.SpinUntil(

@@ -110,7 +110,7 @@ Every package below carries its own check on the programme page; tick it there a
 - [x] P9 the state mirror and presentation time, against [the presentation view's](runtime-and-delivery.md#the-presentation-view) state interface.
 - [x] P10 bound rows reaching a pass: the `parameter` and array statements, the deterministic tick, the capture's tick verdict, pricing, and tiers.
 - [x] P11 the frame graph document (`puck.render.graph.v1`), views as graph instances scheduled by demand, and self-reference through the previous frame.
-- [ ] P12 image sources: uploaded, imported, and rendered transports, content classes, producer registration, shared conversion passes, and every `WorldScreenSource` kind migrated (P12b steps 1 to 6 landed; steps 7, 8 and 9 remain).
+- [ ] P12 image sources: uploaded, imported, and rendered transports, content classes, producer registration, shared conversion passes, and every `WorldScreenSource` kind migrated (P12b steps 1 to 7 and 9 landed; step 8 remains).
 - [ ] P13 hit-to-source mapping published as data, with simulation, host passthrough, and presentation destinations, and passthrough only for local-user sources (P13b steps 1, 2, 4 and 6 and step 3's CPU half landed, step 2 with a machine's light gun reading the mapped pointer; the GPU drawing from the mapping and GPU picking remain).
 - [ ] P14 the SDF engine as a pass package: the capability matrix, the generated frame block, the HLSL module tree, staged shading, float working targets, and the retirements (steps 1, 3, 4 and 12 landed; the HLSL module split is in progress, and steps 5 to 11 and 13 remain).
 - [ ] P15 temporal reconstruction: jitter, motion vectors, the temporal upscaler, per-instance history, dynamic resolution, and march seeding.
