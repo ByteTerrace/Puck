@@ -283,7 +283,7 @@ public static class SdfWorldPackage {
         Read(element: ShaderValueType.Uint, name: VisibilityRecords),
         Written(element: ShaderValueType.Uint, name: VisibilityRecordsWritten),
         ShaderInterfaceMember.StorageImage(
-            format: GpuPixelFormat.R8G8B8A8Unorm,
+            format: RenderGraphPackageCatalog.WorkingFormat,
             group: ShaderInterfaceGroup.Pass,
             name: Output,
             type: ShaderValueType.Float4
@@ -340,8 +340,8 @@ public static class SdfWorldPackage {
             Hit(mesh: false, name: Parts.Views, visibility: Parts.AmbientVisibility, written: Color),
         ],
         Resources: [
-            Image(format: GpuPixelFormat.R8G8B8A8Unorm, from: null, name: Parts.SkyImage, transient: false),
-            Image(format: GpuPixelFormat.R8G8B8A8Unorm, from: Parts.SkyImage, name: Color, transient: false),
+            Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: Parts.SkyImage, transient: false),
+            Image(format: RenderGraphPackageCatalog.WorkingFormat, from: Parts.SkyImage, name: Color, transient: false),
             Buffer(
                 count: [Term(1, ShaderPipelineCountBasis.Viewports, ShaderPipelineCountBasis.Tiles, ShaderPipelineCountBasis.InstanceMaskWords)],
                 name: Parts.InstanceMasks,

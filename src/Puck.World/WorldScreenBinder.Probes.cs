@@ -332,7 +332,7 @@ internal sealed partial class WorldScreenBinder {
         var feed = new ViewExportFeed(
             create: (m_hostsOnDirectX
                 ? device => new DirectXGpuSurfaceExportFactory(deviceContext: ((DirectXDeviceContext)device)).CreateSharedComputeImage(
-                    format: GpuPixelFormat.R8G8B8A8Unorm,
+                    format: RenderGraphPackageCatalog.WorkingFormat,
                     height: height,
                     width: width
                 )
@@ -365,7 +365,7 @@ internal sealed partial class WorldScreenBinder {
         )));
         var export = new DirectXGpuSurfaceExportFactory(deviceContext: ((DirectXDeviceContext)targetDevice.Resource));
         var texture = export.CreateSharedComputeImage(
-            format: GpuPixelFormat.R8G8B8A8Unorm,
+            format: RenderGraphPackageCatalog.WorkingFormat,
             height: height,
             width: width
         );

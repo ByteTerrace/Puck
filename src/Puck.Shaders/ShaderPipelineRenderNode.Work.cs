@@ -11,7 +11,7 @@ namespace Puck.Shaders;
 // Every GPU service the node holds is wrapped once, in the constructor, by GpuWorkCounting over one ledger, so each
 // call is counted where it is made and the node only says which pass it is in. Each pass is entered around its
 // recording; the zero initialization recorded at the start of the first pass after an install or reset therefore
-// counts in that pass. The float preview and the output finalization are recorded outside every pass.
+// counts in that pass. The preview and the output finalization are recorded outside every pass.
 public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCounterSource {
     private readonly GpuWorkLedger m_work;
 

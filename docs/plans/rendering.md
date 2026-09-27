@@ -708,9 +708,9 @@ all four live. The notes below record how each landed.
     released (`RetiringEngines`); the screen-source leases its submissions
     sampled retired with it. The drain in `SdfWorldEngine.Dispose` stayed until
     P14-6 as the backstop.
-  - The runtime also refuses, at install, a consumer whose external image
-    version declares another format than its producer publishes, or whose
-    buffer version is larger than its producer's buffer (`InputFormat`), and a
+  - The runtime also refuses, at install, a consumer whose buffer version is
+    larger than its producer's buffer (`InputSize`); an external image version
+    binds whatever image its producer publishes, since it is only sampled; and a
     package recorder's resolved images carry the layout their planned access
     left them in.
   - The synthesized default composition of two instances, `world` as the

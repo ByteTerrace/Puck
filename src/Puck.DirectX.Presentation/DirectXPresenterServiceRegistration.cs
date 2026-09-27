@@ -53,21 +53,17 @@ public static class DirectXPresenterServiceRegistration {
         // before calling this to override the defaults (Vsync + R8G8B8A8).
         services.TryAddSingleton(instance: new PresentationOptions());
         services.TryAddSingleton<IDirectXCommandListRecorder>(implementationFactory: static _ => new DirectXCommandListRecorder());
-        // The composition's pass pipelines, which the blit is an entry of; a host that registers its own shares it.
+        // The composition's pass pipelines, which the display encode is an entry of; a host that registers its own shares it.
         services.TryAddSingleton<GpuPassPipelineCache>();
         services.TryAddSingleton<DirectXSurfaceCompositor>(implementationFactory: static sp => new DirectXSurfaceCompositor(
             commandListRecorder: sp.GetRequiredService<IDirectXCommandListRecorder>(),
             pipelines: sp.GetRequiredService<GpuPassPipelineCache>(),
-            presentationOptions: sp.GetRequiredService<PresentationOptions>(),
-            shaderDirectory: Path.Combine(
-                path1: AppContext.BaseDirectory,
-                path2: "Assets",
-                path3: "Shaders"
-            )
+            presentationOptions: sp.GetRequiredService<PresentationOptions>()
         ));
         services.TryAddSingleton(implementationFactory: static sp => new DirectXSurfacePresenter(
             compositor: sp.GetRequiredService<DirectXSurfaceCompositor>(),
-            deviceContext: sp.GetRequiredService<DirectXDeviceContext>()
+            deviceContext: sp.GetRequiredService<DirectXDeviceContext>(),
+            pipelines: sp.GetRequiredService<GpuPassPipelineCache>()
         ));
         services.TryAddSingleton<ISurfacePresenter>(implementationFactory: static sp => sp.GetRequiredService<DirectXSurfacePresenter>());
 

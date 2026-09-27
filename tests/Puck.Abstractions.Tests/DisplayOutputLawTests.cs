@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 
@@ -141,6 +142,31 @@ public sealed class DisplayOutputLawTests {
         }
 
         Assert.Throws<ArgumentOutOfRangeException>(testCode: static () => SdrBgra.WhiteScale(paperWhiteNits: 40.0));
+    }
+    [Fact]
+    public void TheEncodeBlockHoldsTheColorSpaceAndItsWhiteScaleAtThePaperWhiteLevel() {
+        Span<byte> block = stackalloc byte[DisplayEncodeLayout.BlockBytes];
+
+        foreach (var (output, level) in ((ReadOnlySpan<(DisplayOutput, double)>)[(SdrRgba, 203.0), (ScRgb, 203.0), (Hdr10, 1_000.0)])) {
+            block.Fill(value: 0xFF);
+            DisplayEncodeLayout.WriteBlock(
+                block: block,
+                output: output,
+                paperWhiteNits: level
+            );
+            Assert.Equal(
+                actual: (ColorSpace: BinaryPrimitives.ReadUInt32LittleEndian(source: block), WhiteScale: BinaryPrimitives.ReadSingleLittleEndian(source: block[4..]), Padding: BinaryPrimitives.ReadUInt64LittleEndian(source: block[8..])),
+                expected: (ColorSpace: ((uint)output.ColorSpace), WhiteScale: ((float)output.WhiteScale(paperWhiteNits: level)), Padding: 0UL)
+            );
+        }
+
+        var shortBlock = new byte[(DisplayEncodeLayout.BlockBytes - 1)];
+
+        Assert.Throws<ArgumentException>(testCode: () => DisplayEncodeLayout.WriteBlock(
+            block: shortBlock,
+            output: SdrRgba,
+            paperWhiteNits: DisplayOutput.SdrWhiteNits
+        ));
     }
     [Fact]
     public void ThePresentationOptionsAskForSdr() =>

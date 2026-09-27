@@ -741,11 +741,16 @@ internal sealed class FakeGpuDevice :
                 m_pixels = new byte[length];
             }
 
-            if (length == 4) {
-                m_pixels[0] = 0x53;
-                m_pixels[1] = 0x44;
-                m_pixels[2] = reportVersion;
-                m_pixels[3] = reportVersion;
+            // The SDF ISA report: one working-format pixel of four half floats, each a code over 255.
+            if (length == 8) {
+                ReadOnlySpan<byte> codes = [0x53, 0x44, reportVersion, reportVersion];
+
+                for (var channel = 0; (channel < codes.Length); channel++) {
+                    System.Buffers.Binary.BinaryPrimitives.WriteHalfLittleEndian(
+                        destination: m_pixels.AsSpan(start: (channel * 2)),
+                        value: ((Half)(codes[channel] / 255f))
+                    );
+                }
             }
 
             return m_pixels;

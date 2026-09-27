@@ -42,18 +42,12 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     // this result with its own integration clipped to the surface, so emission is never added twice.
     color = shadeVolumes(color, view.position.xyz, rayDirection, worldFarDistance(view), id.xy, view.position.w);
 
-    // render.tonemap: the SAME curve renderView applies to its own miss-branch sky (passes/sdf-render-view.hlsli), in the same
-    // place in the pixel's op order (before the dither), so a beam-culled tile's sky and a live tile's sky stay
-    // bit-identical across the tile seam under Filmic exactly as they do under None.
+    // render.tonemap: the SAME curve renderView applies to its own miss-branch sky (passes/sdf-render-view.hlsli), so a
+    // beam-culled tile's sky and a live tile's sky stay bit-identical across the tile seam under Filmic exactly as they
+    // do under None.
     if (worldTonemapMode() == SDF_TONEMAP_FILMIC) {
         color = sdfFilmicTonemap(color);
     }
-
-    // The SAME dither, on the SAME render-space pixel coordinate Stage 1 dithers its own miss-branch sky with
-    // (sdf-world-views.comp.hlsl's `pixel`, which for this kernel's un-offset dispatch is exactly id.xy) — so a sky
-    // pixel this pass alone produces (a beam-culled tile) and a sky pixel Stage 1's own miss branch produces (a live
-    // tile's ray that clears the field) are bit-identical, and a screenshot across the tile seam shows no step.
-    color += ((sdfR2Dither(id.xy) - 0.5) * DitherQuantum);
 
     output[id.xy] = float4(color, 1.0);
 }

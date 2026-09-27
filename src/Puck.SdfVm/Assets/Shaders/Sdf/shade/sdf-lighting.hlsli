@@ -39,9 +39,9 @@ float3 worldStudioReflection(float3 direction, float roughness) {
 }
 #include "shade-layers.hlsli"
 // render.tonemap: the Narkowicz ACES-fit filmic curve, and ONLY the curve. The study follows it with a gamma-2.2
-// encode because its shading is linear light; this pipeline's stylized shading is already display-referred (no sRGB
-// encode exists anywhere between the shade and the rgba8 store), so a second encode here washes the whole frame out.
-// None (the default) is a no-op — the pipeline stores its stylized color directly, as it always has.
+// encode because its shading is linear light; this pipeline's stylized shading is already display-referred (the display
+// encode writes it to an SDR display as it is), so a second encode here washes the whole frame out. None (the default)
+// is a no-op.
 float3 sdfFilmicTonemap(float3 color) {
     return saturate((color * ((2.51 * color) + 0.03)) / (((color * ((2.43 * color) + 0.59)) + 0.14)));
 }

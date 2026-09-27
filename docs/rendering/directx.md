@@ -233,7 +233,7 @@ device up and releases them when the context releases it, on `Recreate` and
   pool whose views fit and whose samplers do not.
 - **Owners are admitted before they allocate.** `IGpuBindings.CanAdmit` checks
   a candidate's whole statement of pools and allocates nothing. The pipeline
-  node checks a candidate at install and a float preview when it is selected;
+  node checks a candidate at install and a preview when it is selected;
   an SDF residency's tables check through `SdfWorldTables.CheckAdmission`
   before they allocate, so the residency records the refusal like any other
   failed build of its tables and tries again only when the build's inputs
@@ -284,18 +284,21 @@ device up and releases them when the context releases it, on `Recreate` and
   reads two per device brought up (`DirectXShaderVisibleHeapsLawTests`).
 
 The surface compositor in `Puck.DirectX.Presentation` records on command lists
-of its own, but its descriptors live in the device's heaps. Its blit is the
-device's pass pipeline for `SurfaceBlitLayout`, the pass group both compositors
-bind (the source at `t0` and its sampler at `s1`, space 3), leased from
-`GpuPassPipelineCache` for a render pass in the swap chain's format. The
-compositor admits one pool for that group through `IGpuBindings.CanAdmit`,
-allocates its one set, writes the sampler once with a linear filter
-(`WriteSampler`, clamp-addressed as `DirectXGpuBindings.ClampSampler` states)
-and the source image through `WriteSampledImage` whenever the source resource
-changes. Its `DirectXDrawCommand` names the group, the device's two heaps and
-the set's two tables, which `DirectXCommandListRecorder` binds at the group's
-`ViewTableIndex` and `SamplerTableIndex`. A CPU surface reaches the blit through
-the device's `IGpuSurfaceUpload`, whose texture holds no descriptor of its own.
+of its own, but its descriptors live in the device's heaps. It writes the root's
+surface into the back buffer through the
+[display encode](../reference/shaders.md#the-display-encode), the device's pass
+pipeline for `DisplayEncodeLayout` (the source at `t0`, its sampler at `s1` and
+the encode block at `b2`, space 3), leased from `GpuPassPipelineCache` for a
+render pass in the swap chain's format. The compositor admits one pool for that
+group through `IGpuBindings.CanAdmit`, allocates its one set, writes the sampler
+once with a linear filter (`WriteSampler`, clamp-addressed as
+`DirectXGpuBindings.ClampSampler` states) and the encode block for the chosen
+output at the host's paper-white level once, and writes the source image through
+`WriteSampledImage` whenever the source resource changes. Its
+`DirectXDrawCommand` names the group, the device's two heaps and the set's two
+tables, which `DirectXCommandListRecorder` binds at the group's `ViewTableIndex`
+and `SamplerTableIndex`. A CPU surface reaches the encode through the device's
+`IGpuSurfaceUpload`, whose texture holds no descriptor of its own.
 
 The compositor creates its swap chain as SDR in the preferred 8-bit unsigned
 normalized format, then chooses its `DisplayOutput` through

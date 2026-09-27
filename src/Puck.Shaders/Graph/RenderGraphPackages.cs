@@ -187,6 +187,10 @@ public sealed record RenderGraphPackageFragment(IReadOnlyList<ShaderPipelineReso
 public sealed record RenderGraphPackageStages(string Directory, string Vertex, string Fragment);
 /// <summary>The engine packages a host offers graphs, by id.</summary>
 public sealed class RenderGraphPackageCatalog {
+    /// <summary>The format of the engine's working images: every SDF view's color, and every version of a world's root graph
+    /// that the views are placed into and the post passes and the overlay draw over. A float image, one at SDR white with
+    /// headroom above it, which the display encode quantizes for the display or a capture (<see cref="SurfaceEncoder"/>).</summary>
+    public const GpuPixelFormat WorkingFormat = GpuPixelFormat.R16G16B16A16Float;
     /// <summary>The id of the SDF world view: primary traversal, surfaces, ambient occlusion and lighting of one view,
     /// from the instance's camera, run as the fragment <see cref="SdfWorldPackage.Fragment"/> declares. The screens it
     /// shows are the instance's reads, not ports.</summary>
@@ -374,7 +378,7 @@ public sealed class RenderGraphPackageCatalog {
         ShaderInterfaceMember.Sampler(group: ShaderInterfaceGroup.Pass, name: (PlaceBase + ShaderPipelinePassPorts.SamplerSuffix)),
         ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: PlaceSource, type: ShaderValueType.Float4),
         ShaderInterfaceMember.Sampler(group: ShaderInterfaceGroup.Pass, name: (PlaceSource + ShaderPipelinePassPorts.SamplerSuffix)),
-        ShaderInterfaceMember.StorageImage(format: GpuPixelFormat.R8G8B8A8Unorm, group: ShaderInterfaceGroup.Pass, name: PlaceDestination, type: ShaderValueType.Float4),
+        ShaderInterfaceMember.StorageImage(format: WorkingFormat, group: ShaderInterfaceGroup.Pass, name: PlaceDestination, type: ShaderValueType.Float4),
     ];
 
     /// <summary>The number of frame slots the overlay samples: images a Frame element draws, such as a face cam.</summary>

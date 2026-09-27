@@ -88,11 +88,11 @@ public sealed class VulkanCommandBufferRecorder : IVulkanCommandBufferRecorder {
         // caller's in-flight fence wait guarantees the buffer is not pending.
         m_commandBufferRecordingApi.BeginCommandBuffer(request: request).ThrowIfFailed(operation: "vkBeginCommandBuffer");
         m_commandBufferRecordingApi.StartRenderPass(request: request);
-        // The present-path fullscreen blit — the surface compositor's one draw — as a GPU-capture debug group.
+        // The present path's display encode — the surface compositor's one draw — as a GPU-capture debug group.
         m_commandBufferRecordingApi.BeginDebugLabel(
             commandBufferHandle: request.CommandBufferHandle,
             device: request.Device,
-            label: "surface-blit"
+            label: "display-encode"
         );
         m_commandBufferRecordingApi.SetViewport(
             commandBufferHandle: request.CommandBufferHandle,

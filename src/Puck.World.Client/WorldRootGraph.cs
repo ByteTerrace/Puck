@@ -169,7 +169,7 @@ public sealed class WorldRootGraph {
                 var view = ViewPass(view: (index + 1));
 
                 resources.Add(item: Image(
-                    initialization: ShaderPipelineInitialization.External,
+                        initialization: ShaderPipelineInitialization.External,
                     name: view
                 ));
                 passes.Add(item: new RenderGraphPackagePass(
@@ -335,9 +335,11 @@ public sealed class WorldRootGraph {
             ),
         ]);
 
+    // Every version the root declares is a working image; a pane or view it places binds whatever image its instance
+    // publishes, which the place pass samples.
     private static ShaderPipelineResource Image(string name, ShaderPipelineInitialization initialization) => new(
         Dimensions: ShaderPipelineDimensions.Relative(),
-        Format: "R8G8B8A8Unorm",
+        Format: RenderGraphPackageCatalog.WorkingFormat.ToString(),
         Initialization: initialization,
         Name: name
     );

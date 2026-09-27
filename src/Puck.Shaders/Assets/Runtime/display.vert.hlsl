@@ -1,3 +1,6 @@
+// The display encode's fullscreen triangle, drawn with no vertex buffer: three clip-space corners by vertex index that
+// cover the whole target. The encode reads its source by fragment coordinate, so it never depends on which way up the
+// clip space runs.
 struct VSOutput {
     float4 position : SV_Position;
 };

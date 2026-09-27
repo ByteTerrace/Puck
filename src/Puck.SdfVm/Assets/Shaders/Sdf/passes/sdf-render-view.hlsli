@@ -497,13 +497,13 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
             // A local field rise behind a hit cannot distinguish sky from farther geometry: that old probe
             // painted white halos around grass against the ground and cost another whole-field query.
             // Keep the residual ratio in the same clamped units as hit acceptance; the normal gates grazing hits.
-            // Geometry-to-geometry edges receive no sky blend, and a mesh pixel's coverage is zero. Ordered dither and
-            // bounded-volume composition still happen afterward.
+            // Geometry-to-geometry edges receive no sky blend, and a mesh pixel's coverage is zero. Bounded-volume
+            // composition still happens afterward.
             float coverage = saturate(terminalRadius / terminalHitThreshold);
             float grazing = (1.0 - saturate(-dot(normal, rayDirection)));
             float edgeWeight = (coverage * grazing);
             bool adjacentSky = false;
-            if (edgeWeight > DitherQuantum) {
+            if (edgeWeight > DisplayCode) {
                 uint2 renderDims = worldViewDims(view);
                 const int2 offsets[4] = { int2(-1, 0), int2(1, 0), int2(0, -1), int2(0, 1) };
                 [unroll] for (uint i = 0u; i < 4u; i++) {

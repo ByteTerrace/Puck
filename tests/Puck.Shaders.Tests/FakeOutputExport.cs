@@ -9,7 +9,8 @@ namespace Puck.Shaders.Tests;
 /// <param name="gpu">The fake device the images are created on.</param>
 /// <param name="width">The export's width, in pixels.</param>
 /// <param name="height">The export's height, in pixels.</param>
-internal sealed class FakeOutputExport(FakePipelineGpu gpu, uint width, uint height) : IShaderPipelineOutputExport {
+/// <param name="format">The format of the images it creates: the exported output's.</param>
+internal sealed class FakeOutputExport(FakePipelineGpu gpu, uint width, uint height, GpuPixelFormat format = GpuPixelFormat.R8G8B8A8Unorm) : IShaderPipelineOutputExport {
     /// <summary>Gets every image the export created, in creation order.</summary>
     public List<Image> Created { get; } = [];
     /// <summary>Gets every write the node ended, in order.</summary>
@@ -24,7 +25,7 @@ internal sealed class FakeOutputExport(FakePipelineGpu gpu, uint width, uint hei
     /// <inheritdoc/>
     public IGpuExportableImage Create(IGpuDeviceContext device) {
         var image = new Image(inner: gpu.Services.ImageFactory.Create(
-            format: GpuPixelFormat.R8G8B8A8Unorm,
+            format: format,
             height: Height,
             name: new GpuObjectName(owner: "export", part: "image"),
             usage: GpuImageUsage.Sampled | GpuImageUsage.Storage,

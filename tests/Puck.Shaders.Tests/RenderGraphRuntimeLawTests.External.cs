@@ -641,7 +641,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         }
     }
     [Fact]
-    public void AnInputOfAnotherFormatOrALargerBufferIsRefusedByName() {
+    public void AnInputBindsAnImageOfAnyFormatAndALargerBufferIsRefusedByName() {
         var gpu = new FakePipelineGpu();
         var recorders = new Recorders(Camera, Pool);
         var cameras = Set(
@@ -668,15 +668,12 @@ public sealed partial class RenderGraphRuntimeLawTests {
             ],
             Schema: RenderGraphSchemas.Graph
         ));
-        var format = Refusal(gpu, recorders, cameras, "main", Graph(pipeline: CameraGraph()), Graph(floatView, ("screen", "camera")));
+        // An external image is only ever sampled, so a float version binds the camera's RGBA8 output.
+        using (var bound = Runtime(gpu, recorders, cameras, "main", Graph(pipeline: CameraGraph()), Graph(floatView, ("screen", "camera")))) {
+            Assert.NotNull(@object: bound.NodeOf(instance: "main"));
+        }
 
-        Assert.Equal(expected: RenderGraphRuntimeRefusalCode.InputFormat, actual: format.Code);
-        Assert.Equal(expected: ["main", "screen", "camera"], actual: format.Names);
-        Assert.Equal(
-            actual: format.Message,
-            expected: "Instance 'main' binds 'screen' as R16G16B16A16Float, but 'camera' publishes R8G8B8A8Unorm."
-        );
-
+        var created = gpu.CreationCount;
         var pools = Set(
             Instance(
                 name: "pool",
@@ -702,12 +699,13 @@ public sealed partial class RenderGraphRuntimeLawTests {
         });
         var size = Refusal(gpu, recorders, pools, "main", Graph(pipeline: PoolGraph()), Graph(pipeline: CameraGraph()), Graph(doubled, ("screen", "camera"), ("pool", "pool")));
 
-        Assert.Equal(expected: RenderGraphRuntimeRefusalCode.InputFormat, actual: size.Code);
+        Assert.Equal(expected: RenderGraphRuntimeRefusalCode.InputSize, actual: size.Code);
         Assert.Equal(
             actual: size.Message,
             expected: $"Instance 'main' binds 'pool' as a {(PoolBytes * 2)}-byte buffer, but 'pool' publishes a {PoolBytes}-byte buffer."
         );
-        Assert.Equal(expected: 0, actual: gpu.CreationCount);
+        // A refused set creates nothing.
+        Assert.Equal(expected: created, actual: gpu.CreationCount);
     }
     [Fact]
     public void APackageRecorderIsToldTheLayoutItsImagesAreIn() {

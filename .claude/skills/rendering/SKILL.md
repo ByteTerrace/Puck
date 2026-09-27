@@ -786,6 +786,15 @@ These are one-line cautions; the owning pages hold the derivations.
   `PresentationOptions.PaperWhiteNits` (80 to 10,000 nits, default
   `DisplayOutput.SdrWhiteNits`), and `DisplayOutput.WhiteScale` is the one
   conversion to an output's UI white: one in SDR at every level.
+  The working images are float (`RenderGraphPackageCatalog.WorkingFormat`): every
+  SDF view's color and the root graph's versions, which a node publishes as they
+  are (`Surface.IsImageFormat`); only the display encode quantizes
+  ([Shader manifests and pipelines](../../../docs/reference/shaders.md#the-display-encode)).
+  Each compositor draws it into the swapchain in its `DisplayOutput`, a node's
+  preview of an external output and a capture of a float output draw it in SDR
+  into RGBA8 (`SurfaceEncoder.ReadSdr`), so an instance capture (`world`) is its
+  working output through the SDR encode and a root capture is what an SDR
+  display shows. The dither lives in the encode, never in a pass.
   `ShaderPipelineMemoryBudget.For(profile)` is the other reader: a pipeline
   instance's budget is a quarter of the device-local bytes, or 512 MiB when the
   profile reports none.
@@ -1027,7 +1036,8 @@ The grouped binding contract is the pass interface in `src/Puck.Shaders/Interfac
 shipped pass binds its groups as sets: each pipeline pass and package pass
 (post-process, `place`, `overlay`, the source conversions) through its
 interface, the SDF engine's kernels through `SdfWorldInterfaces` (`World` and
-`BrickBake`), and both surface compositors' blits through `SurfaceBlitLayout`.
+`BrickBake`), and the display encode (both surface compositors, a node's preview
+and a capture's encode) through `DisplayEncodeLayout`.
 The region copy is the one pipeline created from a positional binding list
 (`GpuRegion.CopyPipeline`), bound as one set at group 0. Its placement rules
 are its own: a group's ordinal is its set and register space, a register number
@@ -1079,9 +1089,9 @@ name on both backends. A pool's sets release with it
 (`DirectXGpuBindings.LiveHandles`). `DirectXGroupedBindingLawTests` and
 `VulkanGroupedBindingLawTests` hold the writes and binds. Every pipeline pass and
 package pass is created from its interface's layout
-(`ShaderInterfaceLayout.PipelineLayout`), except the float preview, whose one
-group `ShaderPipelineRenderNode.PreviewLayout` declares by hand; keep it and
-`pipeline-preview.frag.hlsl`'s registers in step. A description's positional binding list
+(`ShaderInterfaceLayout.PipelineLayout`), except the display encode, whose one
+group `DisplayEncodeLayout` declares by hand; keep it and
+`display-encode.frag.hlsl`'s registers in step. A description's positional binding list
 (`GpuComputeBinding`) states a `GpuBindingKind` and holds only buffers and
 storage images; a sampled image or a sampler belongs to a group.
 
@@ -1201,8 +1211,9 @@ pool through `RenderGraphPackageSets` and writing its values into the pass block
 the node seeds (`RenderGraphPackageRecording.PassBlock`). A package pass's `config` binds against its package's
 schema in the graph compiler (`RENDERGRAPH_PACKAGE_CONFIG`). A graph naming an
 unserved package is refused at install, as
-is an input whose format differs from what its producer publishes or whose
-buffer is larger than the producer's (`InputFormat`). An external instance
+is an input whose buffer is larger than the producer's (`InputSize`); an image
+input is only ever sampled, so it binds an image of any format its producer
+publishes, a float working image or an RGBA8 one alike. An external instance
 (`RenderGraphInstance.ExternalPackage`) has no graph: the
 `IRenderGraphExternalProducer` registered with `RegisterProducer` renders it
 through its own submissions, and each consumer binds its latest output under
@@ -1513,12 +1524,13 @@ frame converter's conversion kernels compile at build too
 (`CompileDirect3D11Kernels` over `Direct3D11KernelSource` items,
 `ProbeKindManifest.KernelBytecodePath`, `Win32D3D11CameraFrameConverter.KernelPath`);
 a camera device only creates them, and the colorimetry is constant-buffer data.
-The Direct3D 12 surface compositor's blit is build DXIL
-(`surface-blit.*.hlsl`, `PuckShaderSpirvEnabled` false). Both surface
-compositors bind `SurfaceBlitLayout` (the pass group, `t0` and `s1` in space 3)
-and lease their blit from the device's `GpuPassPipelineCache` for a render pass
-in the swapchain's format, so no presentation pipeline is created outside a
-build cache; the Direct3D 12 one binds a set of a pool admitted into the
+Both surface compositors write the root's surface through the display encode
+(`SurfaceEncoder`, `Assets/Runtime/display-encode.frag.hlsl` in `Puck.Shaders`,
+build SPIR-V and DXIL), binding `DisplayEncodeLayout` (the pass group, `t0`, `s1`
+and the encode block at `b2` in space 3), and lease it from the device's
+`GpuPassPipelineCache` for a render pass in the swapchain's format, so no
+presentation pipeline is created outside a build cache and no compositor ships a
+shader of its own; the Direct3D 12 one binds a set of a pool admitted into the
 device's heaps. No Puck assembly may
 import `d3dcompiler_*.dll` (`NoDeviceShaderCompileLawTests`).
 

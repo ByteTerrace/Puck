@@ -440,7 +440,7 @@ then renders each scheduled instance through its own `ShaderPipelineRenderNode`
 at the scheduled extent. One submission per instance records the graph's
 shader passes and, through the recorder `RenderGraphPackageRecorders` holds
 for each package id, its package passes, all in the planner's order, into one
-command list per frame slot, with the float preview, the export copy and the
+command list per frame slot, with the preview, the export copy and the
 presentation after them; only the copies of the regions the passes wrote record
 in a list of their own, submitted first. A
 `RenderGraphRuntimeGraph` binds each external version to a producer instance;
@@ -698,8 +698,9 @@ blocks through one. A document pass binds its frame group at set 0 and its pass
 group at set 3 as descriptor sets
 ([frame values, extent and ports](#frame-values-extent-and-ports)), and so does
 a package's pass. The SDF engine's kernels bind their groups the same way,
-through the interfaces `SdfWorldInterfaces` declares, and both swapchain
-compositors bind their blit's one group, `SurfaceBlitLayout`, at set 3. The code
+through the interfaces `SdfWorldInterfaces` declares, and the display encode
+(both swapchain compositors, a node's preview and a capture's encode) binds its
+one group, `DisplayEncodeLayout`, at set 3. The code
 lives in
 `src/Puck.Shaders/Interface/`; the spike's two variant passes and their laws
 live in `tests/Puck.Shaders.Tests`.
@@ -1040,6 +1041,42 @@ the frame's passes: a memory barrier ordering earlier submissions' reads before
 the copies' writes, the copies, then a buffer barrier per copied buffer to the
 compute and fragment stages. A recorder only writes a region's contents and binds
 its slot's `GpuRegion.Buffer`; it records no copy and no barrier.
+
+## The display encode
+
+The engine's working images are float (`RenderGraphPackageCatalog.WorkingFormat`,
+`R16G16B16A16Float`): every SDF view's color, and every version of a world's root
+graph that the views are placed into and the post passes and the overlay draw
+over. A working value is the shading's display-referred value, one at SDR white,
+with headroom above it. Nothing quantizes it until the display encode
+(`Assets/Runtime/display-encode.frag.hlsl`, drawn over the fullscreen triangle of
+`display.vert.hlsl`), which samples a working image 1:1 by fragment coordinate
+and writes it in the color space its target shows:
+
+- **SDR** (`DisplayColorSpace.Srgb`): the value plus half a code of the R2 dither
+  at the output pixel, clamped, so an 8-bit target quantizes gradients into noise
+  rather than bands.
+- **HDR10**: the value decoded from the sRGB transfer to linear light, moved from
+  BT.709 to BT.2020 primaries, scaled by `DisplayOutput.WhiteScale` at the
+  paper-white level, and encoded by the ST 2084 perceptual quantizer with half a
+  10-bit code of dither.
+- **scRGB**: the value decoded to linear light and scaled by the white scale,
+  unquantized.
+
+Its one group, `DisplayEncodeLayout`, is the pass group: the image at binding 0,
+its sampler at 1 and the encode block at 2, the block holding the color space and
+the white scale (`DisplayEncodeLayout.WriteBlock`). `SurfaceEncoder` states the
+pipeline once (`SurfaceEncoder.Key`), an entry of the
+[pass-pipeline cache](#the-pass-pipeline-cache), and it has three writers. Each
+swapchain compositor draws it into its back buffer in the swapchain's
+`DisplayOutput` at the host's `PresentationOptions.PaperWhiteNits`, so the
+compositor is the encode's writer rather than a blit after it. A node's preview
+of an external output draws it in SDR into RGBA8. And a capture of an image no
+surface carries, a float output of any instance, draws it in SDR into an RGBA8
+target of its own and reads that back (`SurfaceEncoder.ReadSdr`); a presenter's
+frame capture of a float root surface does the same. A capture of an instance
+is therefore its working output through the SDR encode, and a capture of the
+root is what an SDR display shows.
 
 ## Probe kinds (`puck.probe.manifest.v1`)
 
@@ -1464,7 +1501,7 @@ it takes. The node wraps every GPU service it holds once, so each dispatch,
 draw, barrier, bind, descriptor write, push-constant byte and clear it records
 is counted where it is made, into the pass being recorded. The zero clears that
 start the first frame after an install or a reset count in the first pass. The
-float preview and the output transitions count outside every pass. What the
+preview and the output transitions count outside every pass. What the
 node does between submissions to install or rebuild a graph, the sets it
 writes and the pass blocks it sends to every frame slot, counts in no
 submission, whether the install succeeds, fails partway or follows a device
@@ -1527,14 +1564,18 @@ fence and its output command pool across replacements. The install copies each
 pass's planned accesses, so recording a frame's barriers only reads them. A
 graphics pass records its barriers in one command buffer before its render
 pass; the render pass leaves its attachments in their attachment layouts, and publication moves
-the selected output into the node's output layout. A float or external output
-is published through a float preview, which draws it into an RGBA8 target. The
-preview belongs to the graph: the candidate build leases its pipeline from the
+the selected output into the node's output layout. An image output publishes
+itself in its own format, a float one included, so a consumer on the device
+samples the working image as it is. An external output, a host's image the
+node does not own, is published through a preview, which draws it through the
+[display encode](#the-display-encode) into an RGBA8 target. The preview belongs
+to the graph: the candidate build leases its pipeline from the
 [pass-pipeline cache](#the-pass-pipeline-cache) and creates its targets for the
-selected output, and the install allocates its descriptors and command pools. Selecting a different output of an installed
-graph builds the new preview on the thread pool; the previous selection stays
-published until the frame that takes the finished build, and the old preview
-then retires. A steady-state frame therefore creates no GPU objects and allocates no
+selected output, and the install allocates its descriptors, its encode block and
+its command pools. Selecting an external output of an installed graph builds the
+new preview on the thread pool; the previous selection stays published until the
+frame that takes the finished build, and the old preview then retires. Any
+other selection takes effect at once. A steady-state frame therefore creates no GPU objects and allocates no
 managed memory. World supplies inputs and routes
 named instances to layout slots; it does not compile individual passes itself.
 
@@ -1544,7 +1585,8 @@ A node never creates a pass pipeline of its own. Every pipeline a graph
 installs comes from the composition's `GpuPassPipelineCache`, which holds one
 entry per device and `GpuPassPipelineKey`: a document pass's compute pipeline
 and its shader module, or its graphics pipeline, its two shader modules and the
-render pass it is created for; the float preview's; and each package pass's
+render pass it is created for; the display encode's, for a preview, a capture or
+a swapchain; and each package pass's
 (`place`, every post-process package, `overlay` and each uploaded source's
 conversion),
 which the package leases through
@@ -1591,12 +1633,13 @@ counts two numbers from the plan it would install:
   history, the images a graphics pass draws into and depth attachments included,
   each geometry pass's vertex and index buffer, the fullscreen triangle's vertex
   buffer for each pass that reads the
-  `Position` input, and the float preview its selected output needs.
+  `Position` input, and the preview an external selected output needs.
 - **Replacement peak**: everything the node owns at that moment plus the
   candidate's steady-state bytes. What the node owns is the installed graph and
   its preview, replaced objects still waiting for the GPU, published images
-  held from them, and the staging buffer the capture readback creates on the
-  first capture, sized to the published RGBA8 surface. All of it exists
+  held from them, and what the first capture creates: the readback's staging
+  buffer, sized to the published surface, and for a float output the display
+  encode's RGBA8 target beside it. All of it exists
   together while the candidate allocates.
   History the candidate carries over is moved into it, never allocated fresh,
   so the peak counts those instances once and is lower by exactly their bytes.
@@ -1609,8 +1652,8 @@ or allocated, by the code `SHADERPIPE_BUDGET`. The refusal names the peak, the
 steady state and the budget, and reaches the host as `LastSwapError`: the
 `GPU candidate refused:` report, `pipeline.status`, and a failed
 `pipeline.wait <name> installed` or `resized`. The installed graph keeps
-running. It is never freed to make room. A float preview that a selection
-creates is held to the same budget and refused the same way. The installed
+running. It is never freed to make room. A preview that a selection creates is
+held to the same budget and refused the same way. The installed
 pipeline rebuilt after a device loss is not a replacement and is never refused:
 nothing else is owned then, and the graph it restores already fit.
 
@@ -2048,10 +2091,10 @@ node's latest submission, never while the queue holds it and never through a
 device drain. Only the images behind the two most recently published surfaces
 outlive it, each until the second submission after it was displaced. Eight
 replacements on a paused node leave the owned bytes at one graph plus those two
-images. A float-output replacement creates every object before the first one
+images. A replacement with a preview creates every object before the first one
 retires. No install creates a shader module or a
 pipeline on the frame thread: the law counts every creation by its thread
-across a first install, a reload with a float preview, a resize and a rebuild
+across a first install, a reload with a preview, a resize and a rebuild
 after a device loss. While a build is held inside the driver, every frame keeps
 presenting the installed graph, a step waits for its candidate, and a device
 loss waits the build out and releases what it created. A reload on a paused
@@ -2102,7 +2145,7 @@ order. It asserts no `superseded:` line, because the first edit may equally
 install before the second arrives and be replaced without one. The shapes canary runs compute, compute and fullscreen
 passes over half-float intermediates, a raw buffer read at a
 byte offset and the `Position` vertex input, and checks each stage's value
-through output selection and the float preview, paused and running. The
+through output selection and the capture's display encode, paused and running. The
 geometry canary draws two indexed geometry passes, 16-bit then 32-bit indices
 listed out of order, into one color and one depth chain, and samples the result
 by UV into the published image. Its regions follow from the geometry: the second
