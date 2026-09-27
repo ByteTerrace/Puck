@@ -1,7 +1,9 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using Puck.Abstractions.Cameras;
+using Puck.Commands;
 using Puck.Hosting;
+using Puck.Maths;
 using Puck.SdfVm;
 using Puck.SdfVm.Views;
 using Puck.Shaders;
@@ -12,7 +14,7 @@ namespace Puck.World;
 // Camera views: each camera a screen, a HUD frame or a probe export shows is a registration here, which the render graph
 // runs as an sdf.world instance of that name, rendering a residency of its own (CreateCameraResidency) that films the
 // frame the world renders from the registration's rig.
-internal sealed partial class WorldScreenBinder : IWorldViewCameras {
+internal sealed partial class WorldScreenBinder : IWorldViewScenes {
     // The camera each view last rendered from, which a hit on a screen showing it continues through.
     private readonly Dictionary<string, CameraSnapshot> m_viewCameras = new(comparer: StringComparer.Ordinal);
 
@@ -519,10 +521,40 @@ internal sealed partial class WorldScreenBinder : IWorldViewCameras {
         return (Ok: true, Message: $"screen {index} showing camera '{camera.Name}'");
     }
     /// <inheritdoc/>
-    public bool TryCamera(string view, out CameraSnapshot camera) => m_viewCameras.TryGetValue(
-        key: view,
-        value: out camera
-    );
+    /// <remarks>A camera view's camera is the one it last filmed from; a session's, the one its last frame rendered from
+    /// in the destination's space (<see cref="WorldSessionSceneEmitter.TryCamera"/>), so a hit on a portal's window
+    /// continues into the destination along the ray the window rendered.</remarks>
+    public bool TryCamera(string view, out CameraSnapshot camera) {
+        if (m_viewCameras.TryGetValue(
+            key: view,
+            value: out camera
+        )) {
+            return true;
+        }
+
+        if (SessionFeedOf(name: view)?.Emitter is { } session) {
+            return session.TryCamera(camera: out camera);
+        }
+
+        camera = default;
+
+        return false;
+    }
+    /// <inheritdoc/>
+    /// <remarks>A session answers from the program its last frame rendered (<see cref="WorldSessionSceneEmitter.TrySurface"/>),
+    /// so a pick through a portal lands on the destination's surface it shows; a camera view answers nothing.</remarks>
+    public bool TrySurface(string view, SourceRay ray, out FixedVector3 point) {
+        if (SessionFeedOf(name: view)?.Emitter is { } session) {
+            return session.TrySurface(
+                point: out point,
+                ray: ray
+            );
+        }
+
+        point = default;
+
+        return false;
+    }
 
     // Resolves the camera a registration films from this frame against the frame the world node renders, which it
     // captures first when no view has yet this frame: its anchor, then its rig. A view bound to an anchor that does not

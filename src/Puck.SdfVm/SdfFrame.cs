@@ -11,14 +11,6 @@ namespace Puck.SdfVm;
 /// <param name="Region">The view's normalized display region, which sizes its output when no host asks for an
 /// extent (the render graph's scheduled extent).</param>
 public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedRect Region) {
-    /// <summary>The off-axis (asymmetric) frustum's tangent-space center offset — <c>(0, 0)</c> (the default) is the
-    /// ordinary symmetric camera every view used before this member existed, byte-identical: the shader adds it as a
-    /// trailing term (see march/sdf-cone.hlsli's <c>cameraRayDirection</c>), and adding exactly zero changes no
-    /// rounding. A non-zero value shears the frustum so a fixed rectangular aperture (a border-window face) maps 1:1 to
-    /// the render regardless of where the camera's own eye sits relative to that aperture — see
-    /// <see cref="Puck.SdfVm.Views.SdfAsymmetricFrustum"/>, the one producer of a non-zero offset. The pass block
-    /// carries it as <c>frustumOffset</c> (<see cref="SdfFrameBlock"/>).</summary>
-    public Vector2 AsymmetricFrustumOffset { get; init; }
     /// <summary>The view's render scale in (0, 1]: the fraction of its region's extent its output renders at when no
     /// host asks for an extent (the render graph's scheduled extent); a host placing the output reconstructs
     /// it into the region. 1 (the default) renders native. Presentation-only: hosts drop it during camera transitions

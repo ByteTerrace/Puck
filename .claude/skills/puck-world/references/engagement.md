@@ -80,9 +80,10 @@ Button elements compare the RAW `FixedQ4816` value against
 `WorldChannelTable.DefaultBinaryThreshold`, never a float round-trip; stick axes
 canonicalize to -1..1 and triggers to 0..1 in the fixed-point domain first.
 
-None of the four shipped worlds authors an engaged screen, so there is no worked
-example to cite — the nexus's four portal placements are inert in ENGAGEMENT scope
-only: their faces render their resolved sources, nothing engages them.
+The arcade district (`modules/arcade.world.json`) is the worked example: its
+cabinet screens route engageable with kit `arcadePad`. No shipped world authors a
+portal face; the `portal-window` canary's fixture is the worked portal example, and
+a portal face shows its destination without being engageable.
 
 ## The command kinds
 

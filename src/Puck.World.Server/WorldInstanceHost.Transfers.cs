@@ -587,7 +587,7 @@ public sealed partial class WorldInstanceHost {
             WorldContinuumTrajectory? continuum = null;
 
             // Overrides the destination's own fresh spawn pose with the positional-continuity mapping
-            // (WorldPortalArrivalMath.ComputeArrival), then rotates the captured velocity the same way —
+            // (WorldFrameIsometry.MapArrival), then rotates the captured velocity the same way —
             // after the ordinary join above already embodied this member under the destination's own kit. The
             // selected motion-program NAME travels beside these mapped facts and resolves against that destination's
             // own declared program table (appearance/grants/action-track state remain untouched; see
@@ -948,8 +948,7 @@ public sealed partial class WorldInstanceHost {
         }
     }
     // One (destination, scope key) group's own single resolve+enqueue — the ONE resolver call and ONE
-    // EnqueueTransfer call the whole merged cohort shares, mirroring the pre-coalescing single-hit TriggerPortal's
-    // own body exactly except for operating over a cohort that may span more than one hit.
+    // EnqueueTransfer call the whole merged cohort shares, whether the cohort came from one hit or several.
     private void EnqueueCoalescedGroup(WorldInstance instance, CoalescedPortalGroup group) {
         var cohortSlots = group.Slots.ToArray();
         var cohort = BuildCohort(
