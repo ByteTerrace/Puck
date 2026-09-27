@@ -277,7 +277,6 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
 
         return false;
     }
-
     /// <inheritdoc/>
     /// <remarks>A view answers through <see cref="ViewScenes"/>: a session finds the surface in its destination's
     /// world, which is where a pick through a portal lands.</remarks>

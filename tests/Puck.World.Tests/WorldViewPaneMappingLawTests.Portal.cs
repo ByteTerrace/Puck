@@ -70,8 +70,8 @@ public sealed partial class WorldViewPaneMappingLawTests {
         // The display point the seat shows the marker at: its image point on the left half of the display.
         var direction = (WorldWindowFrustumFitLawTests.Marker - seat.Position);
         var forward = Vector3.Dot(vector1: direction, vector2: seat.Forward);
-        var across = (((Vector3.Dot(vector1: direction, vector2: seat.Right) / forward) / (seat.AspectRatio * seat.TanHalfFieldOfView)) + 1f) * 0.5f;
-        var down = (1f - ((Vector3.Dot(vector1: direction, vector2: seat.Up) / forward) / seat.TanHalfFieldOfView)) * 0.5f;
+        var across = ((((Vector3.Dot(vector1: direction, vector2: seat.Right) / forward) / (seat.AspectRatio * seat.TanHalfFieldOfView)) + 1f) * 0.5f);
+        var down = ((1f - ((Vector3.Dot(vector1: direction, vector2: seat.Up) / forward) / seat.TanHalfFieldOfView)) * 0.5f);
 
         return (session, name, new Vector2(x: (across * (Display / 2)), y: (down * Display)));
     }

@@ -65,8 +65,10 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     private WorldBakedColors? m_bakedColors;
     private WorldStateMirror? m_bakedColorsMirror;
     private int m_bakedColorRevision;
+
     // The static placements' mesh draws the last live Emit fixed.
     private IReadOnlyList<SdfMeshDraw> m_meshDraws = [];
+
     private SdfProgram? m_lastProgram;
     // The WINDOW projection's per-produced-frame override — set by WorldScreenBinder.Publish (the one place with access
     // to both the local eye and the border pair's two face rows) before the render graph renders this view.

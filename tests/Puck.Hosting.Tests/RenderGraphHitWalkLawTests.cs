@@ -148,6 +148,7 @@ public sealed class RenderGraphHitWalkLawTests {
             Y: FixedQ4816.FromDouble(value: -0.5),
             Z: FixedQ4816.FromInteger(value: -3)
         );
+
         RenderGraphHitPath Pick(FixedVector3? found) => RenderGraphHitWalk.Walk(
             instance: Main,
             maxDepth: set.NestingDepth,

@@ -25,6 +25,7 @@ namespace Puck.World.Tests;
 /// </summary>
 public sealed class WorldWindowFrustumFitLawTests {
     internal const string Destination = "tests/Puck.World.Canaries/portal-window/beyond.world.json";
+
     private const string Local = "tests/Puck.World.Canaries/portal-window/fixture.world.json";
     private const float Tolerance = 2e-3f;
 
@@ -49,6 +50,7 @@ public sealed class WorldWindowFrustumFitLawTests {
 
         return (source, destination);
     }
+
     // The screen row the door's glass face derives, as the presenter hands it to the binder.
     internal static WorldScreen DoorRow() {
         var local = AuthoredGameFixtures.Load(relativePath: Local);
@@ -63,8 +65,10 @@ public sealed class WorldWindowFrustumFitLawTests {
             predicate: row => (row.Index == screen)
         );
     }
+
     // The screen index the door's glass face is seated at.
     private static int DoorScreen(WorldDefinition local) => Assert.Single(collection: WorldFaceCatalog.For(definition: local).Rows).ScreenIndex;
+
     internal static CameraSnapshot Fit(Vector3 eye) {
         var (source, destination) = Apertures();
 
@@ -78,6 +82,7 @@ public sealed class WorldWindowFrustumFitLawTests {
 
         return camera;
     }
+
     // The point of a face at image coordinate (x, y): x across its Right, y down its Up, each in [0, 1].
     private static Vector3 FacePoint(WorldFaceGeometry face, float x, float y) =>
         ((face.Origin + ((((2f * x) - 1f) * face.HalfWidth) * face.Right)) + (((1f - (2f * y)) * face.HalfHeight) * face.Up));
@@ -157,7 +162,7 @@ public sealed class WorldWindowFrustumFitLawTests {
 
                     Assert.True(
                         condition: (Vector3.Distance(value1: through, value2: expected) < Tolerance),
-                        userMessage: $"from eye {eye}, image ({x / 4f}, {y / 4f}) crosses the mapped glass at {through}, not at the mapped glass point {expected}"
+                        userMessage: $"from eye {eye}, image ({(x / 4f)}, {(y / 4f)}) crosses the mapped glass at {through}, not at the mapped glass point {expected}"
                     );
                 }
             }
@@ -270,7 +275,7 @@ public sealed class WorldWindowFrustumFitLawTests {
             );
             var camera = frame.Views[0].Camera;
 
-            Assert.Equal(expected: fitted, actual: camera);
+            Assert.Equal(actual: camera, expected: fitted);
 
             var field = new SdfFieldEvaluator(program: frame.Program);
             var image = ImageOf(camera: camera, point: Marker);
