@@ -20,6 +20,8 @@ namespace Puck.World.Tests;
 public sealed class WorldBootCompositionLawTests : IDisposable {
     private const string WorkloadScript = "tests/Puck.Counters/counters.script.txt";
     private const string WorkloadWorld = "tests/Puck.Counters/counters.world.json";
+    // An offscreen world declaring one screen, a machine's video output, with no view screen.
+    private const string ScreensWorld = "tests/Puck.World.Canaries/uploaded-sources/fixture.world.json";
 
     // The collector closes the workload's script with these two lines (WorldOffscreenLeg.Launch in Puck.Cli), so the
     // offscreen World receives them as well.
@@ -173,6 +175,50 @@ public sealed class WorldBootCompositionLawTests : IDisposable {
             .Order(comparer: StringComparer.Ordinal)];
     }
 
+    // THE LAW: an offscreen boot reads its screens back. world.screens and world.view-refresh read only the screen
+    // binder, which every shape composes, so they live in the one core module that every shape registers once, and an
+    // offscreen boot answers them through the same handler a windowed boot runs over the same binder.
+    [Fact]
+    public void AnOffscreenBootAnswersWorldScreensAndTheViewRefreshFromItsBinder() {
+        var builder = WorldBootHarness.Compose(
+            presentation: WorldHostPresentation.Offscreen,
+            stateDirectory: m_stateDirectory,
+            world: ScreensWorld
+        );
+
+        using var host = builder.Build();
+        var registry = host.Services.GetRequiredService<CommandRegistry>();
+        var screens = registry.Submit(line: "world.screens");
+        var refresh = registry.Submit(line: "world.view-refresh");
+
+        Assert.False(
+            condition: screens.IsError,
+            userMessage: screens.Output
+        );
+        Assert.StartsWith(
+            actualString: screens.Output,
+            expectedStartString: "[world.screens: 0 machine:instrument:video "
+        );
+        Assert.Contains(
+            actualString: screens.Output,
+            expectedSubstring: " fixed input:Presentation mapping "
+        );
+        Assert.Equal(
+            actual: refresh.Output,
+            expected: "[world.view-refresh: every 4 produced frame(s); 0 camera view(s) registered]"
+        );
+    }
+    [InlineData(WorldHostPresentation.None)]
+    [InlineData(WorldHostPresentation.Offscreen)]
+    [InlineData(WorldHostPresentation.Windowed)]
+    [Theory]
+    public void EveryShapeRegistersTheScreenListingOnce(WorldHostPresentation presentation) => Assert.Single(
+        collection: ComposeBoot(presentation: presentation).Services,
+        predicate: static descriptor => (
+            (descriptor.ServiceType == typeof(ICommandModule)) &&
+            (descriptor.ImplementationType?.Name == "ScreenCommandModule")
+        )
+    );
     [Fact]
     public void TheHeadlessShapeHasNoCreationFaults() {
         using var host = ComposeBoot(presentation: WorldHostPresentation.None).Build();
