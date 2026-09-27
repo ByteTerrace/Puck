@@ -859,6 +859,10 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{facePath}.face '{source.Face}' is overridden more than once.");
             }
 
+            if (!Enum.IsDefined(value: source.Filter)) {
+                errors.Add(item: $"{facePath}.filter {((uint)source.Filter)} is not a sampler filter; a face samples its source Nearest or Linear.");
+            }
+
             if (source.Source is null) {
                 errors.Add(item: $"{facePath}.source is required.");
             } else if (source.Source is WorldScreenSource.Session session) {

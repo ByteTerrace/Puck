@@ -6017,6 +6017,15 @@
           "$ref": "#/$defs/WorldPlacementPortal",
           "description": "The face\u0027s portal facet (see WorldPlacementPortal) \u2014 absent (the default) means this face is not a door. Optional and trailing deliberately: a face authored before this facet existed round-trips unchanged, and it composes freely with Source \u2014 the door and the screen it shows are independent facts about the same face.",
           "default": null
+        },
+        "filter": {
+          "description": "How the face\u0027s screen samples its source\u0027s image, as a screen row\u0027s Filter does: Nearest, the default, keeps each source pixel crisp; Linear blends between source pixels. Omitted from the wire when Nearest.",
+          "enum": [
+            "Nearest",
+            "Linear"
+          ],
+          "default": "Nearest",
+          "title": "GpuSamplerFilter"
         }
       },
       "required": [

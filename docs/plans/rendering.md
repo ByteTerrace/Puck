@@ -3619,7 +3619,9 @@ Each commit is marked with what it waits on.
    `filter` (`GpuSamplerFilter`: `Nearest`, the default and omitted, or
    `Linear`; the validator refuses any other value) reaches its mapping
    (`SourceMapping.Filter`) and the draw form the engine packs, whose state row
-   names the sampler. The `sdf-world` interface binds the screens as one
+   names the sampler. A placement's `faceSources` row carries the same `filter`,
+   validated the same way, onto the screen `WorldPrototypeFacets` derives for
+   that face. The `sdf-world` interface binds the screens as one
    `screenSources` image array and a `samplers` array, one sampler per filter,
    which a shader interface now declares through an arrayed sampled image or
    sampler (`ShaderInterfaceMember.Length`, taking its length in registers, its
@@ -3635,9 +3637,14 @@ Each commit is marked with what it waits on.
    `ShaderInterfaceLawTests.An_image_or_sampler_array_takes_its_length_in_registers`,
    `WorldScreenMappingLawTests.ARowsFilterReachesItsMappingAndItsDrawFormAndMovesNoHit`,
    `SourceMappingLawTests.TheDrawFormsLetterboxIsHalfOpenAtTheCropsEdgesAsTheHitsIs`,
-   `VulkanGroupedBindingFloorLawTests.ADeviceWithoutSampledImageArrayDynamicIndexingIsRefusedByName`
+   `VulkanGroupedBindingFloorLawTests.ADeviceWithoutSampledImageArrayDynamicIndexingIsRefusedByName`,
+   `WorldFaceCatalogLawTests.AFaceRowsFilterReachesItsDerivedScreenAndAnUndefinedOneIsRefused`
    and the sampler lane of
    `SdfWorldEngineUploadLawTests.TheScreenMappingTableHoldsEachScreensDrawFormAndAnUnchangedMappingOwesNothing`.
+   Canary: `uploaded-sources`, on both backends, where a camera looks square
+   onto a `Linear` screen showing a 7x3 test pattern and a pixel column's
+   green and magenta blend by its place between two texel centres; its
+   discriminating leg samples the screen `Nearest`.
 9. The check's list, last. Every `WorldScreenSource` arm
    (`none`, `machine`, the four shipped producer ids, `view`, `session`,
    `text` and `probe`) is listed with the producer or instance that reproduces

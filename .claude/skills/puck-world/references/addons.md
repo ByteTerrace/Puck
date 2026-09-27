@@ -194,7 +194,9 @@ the declared kinds today: the 5 HUD kinds
 `WorldPlacement` wire shape the document validator accepts: transform
 (position/yawDegrees/scale), repeat, mirror, emission, solid, inhabit,
 faceSources — whose `WorldScreenSource` decodes `none`, `machine`,
-`producer` (its settings object carried whole) and `view` — region, and attach), the 2 state kinds
+`producer` (its settings object carried whole) and `view`, and which admits
+only a face's `face` and `source`, so a face carrying `portal` or `filter` is
+refused as malformed — region, and attach), the 2 state kinds
 (`UpsertStateRow`/`RemoveStateRow`, ordinals 44-45, every non-generator
 `WorldStateRow` variant: int/fixed/bool/text), and `SetInputHold`
 (ordinal 46). Every OTHER declared `WorldMutation` kind still
