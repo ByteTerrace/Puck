@@ -1301,6 +1301,20 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
 
     /// <inheritdoc/>
     public void AdvanceBricks(ISdfBrickBakeService bakes) => m_fields.AdvanceBricks(bakes: bakes);
+    /// <summary>Sets the display extent the next frame's graph is prepared against, as the host resizes its display:
+    /// <see cref="PrepareGraph"/> places camera-paired panes and publishes pane mappings over it before the world
+    /// producer captures that frame, whose <see cref="CaptureFrame"/> reports the same extent.</summary>
+    /// <param name="width">The display's width, in pixels.</param>
+    /// <param name="height">The display's height, in pixels.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="width"/> or <paramref name="height"/> is
+    /// zero.</exception>
+    public void ResizeDisplay(uint width, uint height) {
+        ArgumentOutOfRangeException.ThrowIfZero(value: width);
+        ArgumentOutOfRangeException.ThrowIfZero(value: height);
+
+        m_displayWidth = width;
+        m_displayHeight = height;
+    }
     /// <inheritdoc/>
     public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) {
         // deltaSeconds is the launcher's clamped presentation interval, distinct from its whole-step simulation delta.

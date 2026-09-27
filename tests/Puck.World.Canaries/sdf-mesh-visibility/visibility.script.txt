@@ -38,3 +38,9 @@ world.row.set placements far position [0,0,0]
 world.wait 30
 world.screenshot {run}/depths.png
 world.wait 10
+# A full-size resize: the display grows from 256x144 to 1920x1080 live, and the frame, its mesh attachments and its
+# visibility records render at the new extent.
+world.resize 1920 1080
+world.wait 30
+world.screenshot {run}/full.png
+world.wait 10

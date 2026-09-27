@@ -301,14 +301,24 @@ call); Vulkan's device bring-up in
 this codebase is fused to a real native surface, so this shape stands up a
 native window through the SAME path the windowed shape uses but never shows
 it and never builds a swap chain against it—see
-`WorldOffscreenGpuActivation`'s remarks for the exact obstacle. Diegetic
-View-type screens (the jumbotron pool the windowed render-root factory stands
-up via `WorldScreenBinder.ConfigureViews`) are a known gap this shape does not
-compose. `WorldBootComposition.AddWorldOffscreenPresentation` and
+`WorldOffscreenGpuActivation`'s remarks for the exact obstacle. Camera and
+session screens render as in the windowed shape, through the views
+`WorldScreenBinder.ConfigureViews` sets up. `WorldBootComposition.AddWorldOffscreenPresentation` and
 `Puck.Launcher.OffscreenTickHostedService` (which produces one composed frame
 per host-loop iteration, paced by the fixed-step pump rather than vsync) are
 the seams; the server steps exactly like `host.presentation: none`
 (`HeadlessWorldSimulation`).
+
+An offscreen display has no window whose size could change, so
+`world.resize <width> <height>` (`WorldOffscreenCommandModule`, registered only
+in this shape) resizes it live, each side 1 to 16384 pixels: the host's
+`OffscreenRenderOptions` asks the next frame for the new extent, the render
+root (`RenderGraphRuntimeNode.Resize`) schedules every instance against it, and
+every camera and session view fits its declared extent to it
+(`WorldScreenBinder.ResizeDisplay`), so a capture after it lands at the new
+extent. It refuses until the renderer is ready, and with no argument it echoes
+the current extent. A windowed display keeps its document extent, which
+presentation scales to the window.
 
 Because its frames are its only output, the offscreen host holds its clock
 for them: it never steps past an armed capture's tick until that capture is
@@ -748,7 +758,8 @@ Facts a script needs:
   the fly camera application included—see above);
   `WorldRenderLeverCommandModule.cs` (the render levers: shadows, ambient
   occlusion, far field, cadence, render scale, quality and the rest) is
-  composed by both the windowed and the offscreen shapes; `WorldCommandModule.cs`
+  composed by both the windowed and the offscreen shapes; `WorldOffscreenCommandModule.cs`
+  (`world.resize`) by the offscreen shape alone; `WorldCommandModule.cs`
   (frame rate, FPS target, cameras, shader reload),
   `WorldHostCommandModule.cs`, `WorldAudioCommandModule.cs`,
   `WorldRecordingCommandModule.cs`, and `WorldSdfCommandModule.cs` are

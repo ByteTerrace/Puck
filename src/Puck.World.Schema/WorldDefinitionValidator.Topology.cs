@@ -145,14 +145,14 @@ public static partial class WorldDefinitionValidator {
         RequireIntRange(
             value: host.Width,
             min: 1,
-            max: 16384,
+            max: WorldHostDefaults.MaxDisplayExtent,
             name: "host.width",
             errors: errors
         );
         RequireIntRange(
             value: host.Height,
             min: 1,
-            max: 16384,
+            max: WorldHostDefaults.MaxDisplayExtent,
             name: "host.height",
             errors: errors
         );

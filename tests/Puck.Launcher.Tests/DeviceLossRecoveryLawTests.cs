@@ -209,8 +209,8 @@ public sealed class DeviceLossRecoveryLawTests {
             ExitAfter = TimeSpan.FromMilliseconds(value: 300),
         });
         builder.Services.AddSingleton(implementationInstance: new OffscreenRenderOptions(
-            Height: 32U,
-            Width: 32U
+            height: 32U,
+            width: 32U
         ));
         builder.Services.AddSingleton<IRenderRoot>(implementationInstance: root);
         builder.Services.AddSingleton<IDeviceRebuild>(implementationInstance: rebuild);
@@ -262,8 +262,8 @@ public sealed class DeviceLossRecoveryLawTests {
             ExitAfter = TimeSpan.FromMilliseconds(value: 300),
         });
         builder.Services.AddSingleton(implementationInstance: new OffscreenRenderOptions(
-            Height: 32U,
-            Width: 32U
+            height: 32U,
+            width: 32U
         ));
         builder.Services.AddSingleton<IRenderRoot>(implementationInstance: root);
         builder.Services.AddSingleton<IDeviceRebuild>(implementationInstance: rebuild);
