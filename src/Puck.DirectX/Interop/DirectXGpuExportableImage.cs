@@ -12,16 +12,13 @@ namespace Puck.DirectX.Interop;
 
 /// <summary>Who touches an exportable image, which decides its resource flags and resting state.</summary>
 public enum DirectXExportableImageAccess {
-    /// <summary>This device's work writes it with the usages it declares; the handle crosses to another Direct3D 12 or
-    /// Vulkan device.</summary>
-    ComputeWrite,
     /// <summary>A foreign Direct3D 11 device writes it (copying from a private texture); this device never
     /// dispatches into it. <c>ALLOW_SIMULTANEOUS_ACCESS</c> with render-target binds, resting in <c>COMMON</c>.</summary>
     ForeignWrite,
     /// <summary>This device's compute work writes it through a UAV while a foreign Direct3D 11 device opens and
     /// samples it: <c>ALLOW_UNORDERED_ACCESS</c> plus <c>ALLOW_SIMULTANEOUS_ACCESS</c>, plus <c>ALLOW_RENDER_TARGET</c>
-    /// — without a render-target bind Direct3D 11 refuses to open the allocation. The reader sees whichever frame
-    /// last landed.</summary>
+    /// — without a render-target bind Direct3D 11 refuses to open the allocation. Each write signals the image's shared
+    /// fence, which the reader waits for.</summary>
     ComputeWriteForeignRead,
 }
 /// <summary>
@@ -31,10 +28,8 @@ public enum DirectXExportableImageAccess {
 /// this device writes the texture. Another backend on the same adapter (a Vulkan host, or a Direct3D 11 device) opens
 /// <see cref="SharedHandle"/> and samples the texture without a CPU round-trip.
 /// <para>
-/// A <see cref="DirectXExportableImageAccess.ComputeWrite"/> texture has the resource flags, initial state and
-/// optimized clear value its declared usages need, as a <see cref="DirectXGpuImage"/> does. Both simultaneous-access
-/// shapes have fixed flags, and start and rest in <c>COMMON</c>, the cross-device handoff state their foreign device
-/// expects; a legacy first UAV use promotes from <c>COMMON</c>. The producer's final recorded barrier returns a written
+/// Both shapes are simultaneous-access textures with fixed flags that start and rest in <c>COMMON</c>, the cross-device
+/// handoff state their foreign device expects; a legacy first UAV use promotes from <c>COMMON</c>. The producer's final recorded barrier returns a written
 /// texture to <c>COMMON</c> via <see cref="GpuImageLayout.External"/>, and <see cref="CompleteWrite"/> queues the
 /// shared fence's next value behind that submitted work, which the reading device waits for on the GPU. Single-thread
 /// affine.
@@ -58,11 +53,8 @@ public sealed unsafe class DirectXGpuExportableImage : IGpuExportableImage {
     /// pixel format, and the image extent in pixels.</param>
     /// <param name="format">The neutral format, which <paramref name="request"/> carries translated; a color
     /// format.</param>
-    /// <param name="usage">The usages the image declares: what the caller asked for under
-    /// <see cref="DirectXExportableImageAccess.ComputeWrite"/>, and what the fixed flags permit under the
-    /// simultaneous-access shapes.</param>
-    /// <param name="access">Who writes and who reads the image — see <see cref="DirectXExportableImageAccess"/>.
-    /// Direct3D 11 can open the shared handle only under the two simultaneous-access shapes.</param>
+    /// <param name="usage">The usages the image declares: what its shape's fixed flags permit.</param>
+    /// <param name="access">Who writes and who reads the image — see <see cref="DirectXExportableImageAccess"/>.</param>
     /// <exception cref="ArgumentNullException">The request's device context is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">The format is a depth format, or the usage does not fit it.</exception>
     /// <exception cref="DirectXException">A Direct3D 12 call failed.</exception>
@@ -92,22 +84,14 @@ public sealed unsafe class DirectXGpuExportableImage : IGpuExportableImage {
 
         // The foreign-write shape swaps UAV capability for RENDER_TARGET: its Direct3D 11 writer opens the handle
         // with D3D11-expressible binds, performs any compute work in a private UAV, and copies into this texture.
-        // Adding simultaneous access to the compute-write shape lets a Direct3D 11 reader open the same allocation.
-        var (flags, clearValue) = (access switch {
-            DirectXExportableImageAccess.ForeignWrite => (D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS, ((D3D12_CLEAR_VALUE?)null)),
-            DirectXExportableImageAccess.ComputeWriteForeignRead => (D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS | D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS, ((D3D12_CLEAR_VALUE?)null)),
-            _ => DirectXTextures.OfUsage(
-                format: dxgiFormat,
-                usage: usage
-            ),
-        });
-        var initialState = ((access == DirectXExportableImageAccess.ComputeWrite)
-            ? DirectXTextures.InitialStateOf(usage: usage)
-            : D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON
+        var flags = ((access == DirectXExportableImageAccess.ForeignWrite)
+            ? D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS
+            : D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS | D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS
         );
+        var initialState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON;
         var device = ((ID3D12Device*)deviceContext.Device.Handle);
         var resource = DirectXTextures.CreateCommitted(
-            clearValue: clearValue,
+            clearValue: null,
             device: device,
             flags: flags,
             format: dxgiFormat,
@@ -128,9 +112,7 @@ public sealed unsafe class DirectXGpuExportableImage : IGpuExportableImage {
                 state: initialState
             );
 
-            if (access != DirectXExportableImageAccess.ComputeWrite) {
-                DirectXSimultaneousAccessResources.Register(resourceHandle: m_resource);
-            }
+            DirectXSimultaneousAccessResources.Register(resourceHandle: m_resource);
 
             var sharedHandle = default(HANDLE);
 
@@ -266,6 +248,12 @@ public sealed unsafe class DirectXGpuExportableImage : IGpuExportableImage {
             queue: ((ID3D12CommandQueue*)m_deviceContext.CommandQueueHandle)
         );
 
+    /// <inheritdoc/>
+    /// <remarks>Does nothing: a simultaneous-access texture rests in <c>COMMON</c>, which the reading device shares.</remarks>
+    public void BeginWrite() => ObjectDisposedException.ThrowIf(
+        condition: m_disposed,
+        instance: this
+    );
     /// <inheritdoc/>
     /// <remarks>Queues <c>ID3D12CommandQueue::Signal</c> on the shared fence; a foreign-written texture, which has no
     /// shared fence, drains the queue.</remarks>

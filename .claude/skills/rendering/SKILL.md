@@ -276,7 +276,10 @@ These are one-line cautions; the owning pages hold the derivations.
   stays the CPU slot lease, and retiring an export never waits for a reader. On
   the Vulkan host the exported texture and fence come from the binder's headless
   Direct3D 12 device and the render device imports both to write and signal
-  (`IGpuSurfaceTransferFactory.TryImportWritable`, `VulkanQueueSubmitter.Signal`);
+  (`IGpuSurfaceTransferFactory.TryImportWritable`, `VulkanQueueSubmitter.Signal`),
+  releasing the image to `VK_QUEUE_FAMILY_EXTERNAL` with each signal and acquiring it
+  back in `IGpuExportableImage.BeginWrite`, which the engine calls before the frame it
+  writes;
   a camera extent edit makes the export again. A probe kernel runs on a host's own Direct3D
   11 device: a camera graph's, or, when its trigger socket reads a view or a
   probe and no socket binds a camera, the render adapter's
@@ -542,7 +545,7 @@ These are one-line cautions; the owning pages hold the derivations.
   with its context, bound to it and taking no device argument; a consumer takes
   the device context and reads them there, never a bundle of its own or a DI
   registration of one service, and a new device-bound service joins that set.
-  The optional `IGpuSurfaceExportFactory` is registered on its own. `IGpuBufferFactory` creates by
+  `IGpuBufferFactory` creates by
   `GpuBufferUsage` and placement (`CreateHostVisible`, `CreateDeviceLocal`), and a
   geometry buffer is a host-visible one created with its data.
   A candidate (never the device-loss rebuild) is refused in `EnsureBuild` with

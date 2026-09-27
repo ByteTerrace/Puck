@@ -48,6 +48,7 @@ public sealed class VulkanGpuSurfaceTransferFactory(
     /// <remarks>Imports the texture and the fence as a <see cref="VulkanImportedWritableImage"/>.</remarks>
     public bool TryImportWritable(nint sharedHandle, nint sharedFenceHandle, GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, [NotNullWhen(true)] out IGpuExportableImage? image, out string refusal) {
         var imported = VulkanImportedWritableImage.TryImport(
+            commandResourcesFactory: commandResourcesFactory,
             deviceContext: deviceContext,
             externalMemoryApi: externalMemoryApi,
             format: format,
@@ -55,6 +56,7 @@ public sealed class VulkanGpuSurfaceTransferFactory(
             height: height,
             image: out var writable,
             queueSubmitter: queueSubmitter,
+            recording: commandBufferRecordingApi,
             refusal: out refusal,
             sharedFenceHandle: sharedFenceHandle,
             sharedHandle: sharedHandle,

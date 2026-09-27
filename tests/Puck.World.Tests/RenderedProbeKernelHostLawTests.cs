@@ -283,6 +283,7 @@ public sealed unsafe class RenderedProbeKernelHostLawTests {
             sourceStageMask: GpuStage.Transfer
         );
         services.Recorder.EndCommandBuffer(commandBufferHandle: pool.CommandBufferHandle);
+        image.BeginWrite();
         services.QueueSubmitter.AddExternalWait(wait: new GpuExternalWait(
             Fence: waitedGate,
             Value: 1UL

@@ -4,8 +4,9 @@ namespace Puck.Abstractions.Gpu;
 /// An image whose backing memory is <em>shared</em>: beyond the normal <see cref="IGpuImage"/> handles, it exposes a
 /// shared external handle (<see cref="SharedHandle"/>) another backend on the same adapter imports to sample the result
 /// zero-copy, with no host-memory round trip. The producer records its work through the same neutral recorders as any
-/// image, transitions it to <see cref="GpuImageLayout.External"/> as its final recorded step, submits, then calls
-/// <see cref="CompleteWrite"/> once before handing the surface off.
+/// image, calls <see cref="BeginWrite"/> before the submission that writes it, transitions it to
+/// <see cref="GpuImageLayout.External"/> as its final recorded step, submits, then calls <see cref="CompleteWrite"/> once
+/// before handing the surface off.
 /// </summary>
 public interface IGpuExportableImage : IGpuImage {
     /// <summary>Gets the shared external handle (a Windows NT handle, or a POSIX file descriptor on other platforms) another backend imports to sample this image zero-copy.</summary>
@@ -15,6 +16,13 @@ public interface IGpuExportableImage : IGpuImage {
     /// <see cref="CompleteWrite"/> waits for the write on the CPU instead.</summary>
     nint SharedFenceHandle { get; }
 
+    /// <summary>Takes the image back from the device that reads it before this device writes it again: queues whatever
+    /// the backend needs ahead of the next submission that writes it (a Vulkan device's acquire of the image from the
+    /// external queue family that <see cref="CompleteWrite"/> released it to). A backend that needs nothing does
+    /// nothing. Called once per frame, after the reader has released the image and before that submission.</summary>
+    /// <exception cref="ObjectDisposedException">The image was disposed.</exception>
+    /// <exception cref="DeviceLostException">The device was lost.</exception>
+    void BeginWrite();
     /// <summary>Completes the work submitted into this image so far for a consumer on another device: queues the next
     /// value of the image's shared fence on the producer's queue behind that work and returns it, which the consumer's
     /// work waits for on its own device, so nothing blocks. An image with no shared fence blocks until the producer's

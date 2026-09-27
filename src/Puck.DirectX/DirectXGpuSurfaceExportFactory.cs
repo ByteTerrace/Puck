@@ -4,12 +4,12 @@ using Puck.DirectX.Interop;
 namespace Puck.DirectX;
 
 /// <summary>
-/// Implements <see cref="IGpuSurfaceExportFactory"/> for Direct3D 12 by creating <see cref="DirectXGpuExportableImage"/>
-/// instances, converting <see cref="GpuPixelFormat"/> constants to <c>DXGI_FORMAT</c> values. Registered only on the
-/// Direct3D 12 backend, which can hand a shared texture to another backend on the same adapter.
+/// Creates Direct3D 12 textures and fences in shared memory for a device of another API on the same adapter to open:
+/// <see cref="DirectXGpuExportableImage"/> instances, converting <see cref="GpuPixelFormat"/> constants to
+/// <c>DXGI_FORMAT</c> values, and <see cref="DirectXExportableFence"/> instances.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
-public sealed class DirectXGpuSurfaceExportFactory(DirectXDeviceContext deviceContext) : IGpuSurfaceExportFactory {
+public sealed class DirectXGpuSurfaceExportFactory(DirectXDeviceContext deviceContext) {
     private DirectXGpuExportableImage Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, DirectXExportableImageAccess access) =>
         new(
             access: access,
@@ -23,15 +23,6 @@ public sealed class DirectXGpuSurfaceExportFactory(DirectXDeviceContext deviceCo
             usage: usage
         );
 
-    /// <inheritdoc/>
-    public IGpuExportableImage CreateExportableImage(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) =>
-        Create(
-            access: DirectXExportableImageAccess.ComputeWrite,
-            format: format,
-            height: height,
-            usage: usage,
-            width: width
-        );
     /// <summary>Creates an exportable image whose shared handle another API family can open — with
     /// <c>ALLOW_SIMULTANEOUS_ACCESS</c>, so a Direct3D 11 device can open and write it while this device merely owns
     /// the allocation and samples it. The D3D11 producer writes a private texture and copies into this

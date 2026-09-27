@@ -3539,7 +3539,9 @@ except step 8.
    reader. On the Vulkan host the texture and its fence are made on the
    binder's headless Direct3D 12 device, and the render device imports both to
    write and signal (`IGpuSurfaceTransferFactory.TryImportWritable`,
-   `VulkanImportedWritableImage`, `VulkanQueueSubmitter.Signal`). A camera
+   `VulkanImportedWritableImage`, `VulkanQueueSubmitter.Signal`), releasing it
+   to the external queue family with each signal and acquiring it back before
+   the next write (`IGpuExportableImage.BeginWrite`). A camera
    extent edit makes the export again at the new extent. A kernel whose trigger socket reads
    a rendered source (a view or another probe) and that binds no camera runs
    on the render adapter's own kernel host (`IRenderedProbeKernelHost`,

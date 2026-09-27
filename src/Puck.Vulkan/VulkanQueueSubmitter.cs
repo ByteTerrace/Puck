@@ -5,9 +5,6 @@ namespace Puck.Vulkan;
 
 /// <summary>Submits Vulkan command buffers to a graphics queue.</summary>
 public sealed unsafe class VulkanQueueSubmitter {
-    // VK_PIPELINE_STAGE_ALL_COMMANDS_BIT: an external wait holds every stage of the batch, as Direct3D 12's queue wait
-    // holds the whole submission.
-    private const uint PipelineStageAllCommands = 0x00010000;
     private const uint StructureTypeSubmitInfo = 4;
 
     private static void SubmitCore(VulkanDeviceCommands device, VkQueue graphicsQueue, ReadOnlySpan<nint> commandBufferHandles, nint fenceHandle, ReadOnlySpan<nint> waitSemaphores, ReadOnlySpan<ulong> waitValues, ReadOnlySpan<nint> signalSemaphores = default, ReadOnlySpan<ulong> signalValues = default) {
@@ -26,8 +23,9 @@ public sealed unsafe class VulkanQueueSubmitter {
 
         var waitStages = stackalloc uint[waitSemaphores.Length];
 
+        // An external wait holds every stage of the batch, as Direct3D 12's queue wait holds the whole submission.
         for (var index = 0; (index < waitSemaphores.Length); index++) {
-            waitStages[index] = PipelineStageAllCommands;
+            waitStages[index] = VulkanPipelineStageFlags.AllCommands;
         }
 
         fixed (nint* commandBuffersPointer = commandBufferHandles)
@@ -110,18 +108,20 @@ public sealed unsafe class VulkanQueueSubmitter {
             waitValues: waitValues
         );
     }
-    /// <summary>Queues a signal of a timeline semaphore behind every submission made to the queue before it: a batch with
-    /// no command buffers that sets the semaphore to the value once the queue reaches it. Nothing waits.</summary>
+    /// <summary>Submits command buffers and sets a timeline semaphore to a value once they, and every submission made to
+    /// the queue before them, have completed. Nothing waits.</summary>
     /// <param name="device">The command table of the logical device that owns the queue and semaphore.</param>
     /// <param name="graphicsQueue">The queue that signals.</param>
+    /// <param name="commandBufferHandles">The native command-buffer handles the batch runs before it signals, or
+    /// empty.</param>
     /// <param name="semaphore">The native timeline <c>VkSemaphore</c>.</param>
     /// <param name="value">The value the semaphore is set to; greater than every value it was set to before.</param>
-    public void Signal(VulkanDeviceCommands device, VkQueue graphicsQueue, nint semaphore, ulong value) {
+    public void Signal(VulkanDeviceCommands device, VkQueue graphicsQueue, ReadOnlySpan<nint> commandBufferHandles, nint semaphore, ulong value) {
         Span<nint> semaphores = [semaphore];
         Span<ulong> values = [value];
 
         SubmitCore(
-            commandBufferHandles: [],
+            commandBufferHandles: commandBufferHandles,
             device: device,
             fenceHandle: 0,
             graphicsQueue: graphicsQueue,

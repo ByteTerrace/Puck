@@ -93,6 +93,8 @@ public sealed partial class SdfWorldEngine {
         );
 
         Record(viewportCount: viewportCount);
+        // The exported image is taken back from its reader ahead of the submission that writes it.
+        m_exportableImage?.BeginWrite();
         addWaits?.Invoke(obj: m_gpu.QueueSubmitter);
         m_gpu.QueueSubmitter.Submit(
             commandBufferHandles: [m_commandPools[m_currentSlot].CommandBufferHandle],

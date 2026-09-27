@@ -678,6 +678,7 @@ internal sealed partial class WorldScreenBinder {
         public GpuImageUsage Usage => m_imported.Usage;
         public uint Width => m_imported.Width;
 
+        public void BeginWrite() => m_imported.BeginWrite();
         public ulong CompleteWrite() => m_imported.CompleteWrite();
         public void Dispose() {
             if (m_disposed) {

@@ -156,8 +156,8 @@ Every image is a `VulkanGpuImage`, created with the Vulkan usage its declared
 `GpuImageUsage` maps to (`VulkanGpuFormats.ToVkImageUsage`: a color image is also a
 transfer source and destination, a depth image only a depth attachment) and viewed
 through the aspect its format needs. An image whose view cannot be created is destroyed
-with its memory before the failure propagates, and so is an exportable image, whose shared
-handle is closed too. A `VulkanGpuRenderPass` is a `VkRenderPass` over the colors and the
+with its memory before the failure propagates, and so is an imported writable image
+(`VulkanImportedWritableImage`), whose imported semaphore is destroyed too. A `VulkanGpuRenderPass` is a `VkRenderPass` over the colors and the
 optional depth attachment of a `GpuRenderPassDescription`: an attachment that loads
 begins in its attachment layout, one that clears or discards begins undefined, and a
 color attachment ends in its declared final layout. `VulkanGpuFramebuffer` binds one to
@@ -457,10 +457,14 @@ releases once its own fence has signalled.
 The other direction, a Vulkan write a Direct3D 11 device reads (a camera view exported to a probe),
 imports what a Direct3D 12 device made: `IGpuSurfaceTransferFactory.TryImportWritable` imports a
 Direct3D 12 simultaneous-access texture with the usages the writer declares and a Direct3D 12 shared
-fence as a timeline semaphore (`VulkanImportedWritableImage`), and its `CompleteWrite` queues
-`VulkanQueueSubmitter.Signal`, a batch with no command buffers that sets the semaphore to the next
-value behind every earlier submission. The Direct3D 11 reader opens the texture and the fence by
-their handles and waits for the value on its own device.
+fence as a timeline semaphore (`VulkanImportedWritableImage`). Between writes the reader owns the
+image: `CompleteWrite` submits, in one batch through `VulkanQueueSubmitter.Signal`, a barrier that
+releases the image from the graphics queue family to `VK_QUEUE_FAMILY_EXTERNAL` and the semaphore's
+next value, and `BeginWrite` submits the barrier that acquires it back ahead of the next submission
+that writes it. Both barriers keep the image in `VK_IMAGE_LAYOUT_GENERAL` and are recorded once, into
+command buffers begun for resubmission while pending. `VulkanImportedWritableImageLawTests` pins the
+two barriers. The Direct3D 11 reader opens the texture and the fence by their handles and waits for
+the value on its own device.
 
 ---
 
@@ -575,7 +579,7 @@ line; `VulkanValidationLivenessTests` holds that.
 `tests/Puck.Vulkan.Tests` checks the backend's device-free decisions: native
 marshalling under an allocator that refuses one allocation, the usage and
 memory every storage and geometry buffer is created with, the usage and view
-aspect an image's declared usages map to, that an image or exportable image
+aspect an image's declared usages map to, that an image
 whose view cannot be created is destroyed with its memory, and that every handle
 kind reaches the zero-handle guard through the API its owners call. That law
 drives command tables built over a resolver whose destroy entry points record
