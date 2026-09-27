@@ -17,8 +17,8 @@ public static class DisplayEncodeLayout {
     public const uint SourceImageBinding = 0;
     /// <summary>The encode block's binding.</summary>
     public const uint BlockBinding = 2;
-    /// <summary>The encode block's size, in bytes: the color space, the white scale and padding to one 16-byte
-    /// row.</summary>
+    /// <summary>The encode block's size, in bytes: the color space, the white scale, the dither step and the sRGB-target
+    /// flag, one 16-byte row.</summary>
     public const int BlockBytes = 16;
 
     /// <summary>Gets the encode's pipeline layout: the one group, read by the vertex and fragment stages, pushing
@@ -45,15 +45,20 @@ public static class DisplayEncodeLayout {
         stages: GpuShaderStage.Vertex | GpuShaderStage.Fragment
     );
 
-    /// <summary>Writes the encode block for a display output: its color space as a <c>uint</c>, then the linear value
-    /// SDR white takes in it at the paper-white level (<see cref="DisplayOutput.WhiteScale"/>) as a <c>float</c>, little
-    /// endian, the rest zero.</summary>
+    /// <summary>Writes the encode block for a display output, little endian: its color space as a <c>uint</c>; the linear
+    /// value SDR white takes in it at the paper-white level (<see cref="DisplayOutput.WhiteScale"/>) as a <c>float</c>;
+    /// the dither step as a <c>float</c>, one code of the output's format
+    /// (<see cref="GpuPixelFormats.ColorCodeMaximum"/>), so a write that quantizes is dithered by half a code either
+    /// side, and zero for a floating-point format, which is not dithered; and whether the format encodes sRGB on write
+    /// (<see cref="GpuPixelFormats.EncodesSrgb"/>) as a <c>uint</c>, so the encode writes it the linear light that
+    /// encodes back to the dithered value.</summary>
     /// <param name="block">The block's bytes, at least <see cref="BlockBytes"/> long.</param>
-    /// <param name="output">The output the encode writes for.</param>
+    /// <param name="output">The output the encode writes for, in the format of the image it writes.</param>
     /// <param name="paperWhiteNits">The paper-white level, in nits.</param>
     /// <exception cref="ArgumentException"><paramref name="block"/> is shorter than <see cref="BlockBytes"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="paperWhiteNits"/> is outside the range
-    /// <see cref="DisplayOutput.RequirePaperWhite"/> accepts.</exception>
+    /// <see cref="DisplayOutput.RequirePaperWhite"/> accepts, or the output's format is not a color format a write
+    /// targets.</exception>
     public static void WriteBlock(Span<byte> block, DisplayOutput output, double paperWhiteNits) {
         if (block.Length < BlockBytes) {
             throw new ArgumentException(
@@ -63,15 +68,27 @@ public static class DisplayEncodeLayout {
         }
 
         var whiteScale = ((float)output.WhiteScale(paperWhiteNits: paperWhiteNits));
+        var codes = GpuPixelFormats.ColorCodeMaximum(format: output.Format);
 
-        block[..BlockBytes].Clear();
         BinaryPrimitives.WriteUInt32LittleEndian(
             destination: block,
             value: ((uint)output.ColorSpace)
         );
         BinaryPrimitives.WriteSingleLittleEndian(
-            destination: block[sizeof(uint)..],
+            destination: block[4..],
             value: whiteScale
+        );
+        BinaryPrimitives.WriteSingleLittleEndian(
+            destination: block[8..],
+            value: ((codes == 0U)
+                ? 0F
+                : (1F / codes))
+        );
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            destination: block[12..],
+            value: (GpuPixelFormats.EncodesSrgb(format: output.Format)
+                ? 1U
+                : 0U)
         );
     }
 }

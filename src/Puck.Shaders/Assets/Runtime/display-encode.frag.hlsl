@@ -4,16 +4,20 @@
 // with float headroom above it.
 //
 // Its one group is the pass group, set 3, each register equal to its binding (DisplayEncodeLayout): the source image,
-// its sampler and the encode block, which SurfaceEncoder.WriteBlock writes.
+// its sampler and the encode block, which DisplayEncodeLayout.WriteBlock writes.
 [[vk::binding(0, 3)]] Texture2D<float4> sourceTexture : register(t0, space3);
 [[vk::binding(1, 3)]] SamplerState sourceSampler : register(s1, space3);
 
+// DisplayEncodeLayout.WriteBlock writes it field for field.
 struct DisplayEncode {
     // The target's color space, a Puck.Abstractions.Presentation.DisplayColorSpace value.
     uint colorSpace;
     // The linear value SDR white takes in the target at the paper-white level (DisplayOutput.WhiteScale).
     float whiteScale;
-    uint2 padding;
+    // One code of the target's format, the step its write quantizes at; zero for a float target, which is not dithered.
+    float ditherStep;
+    // Nonzero when the target encodes sRGB on write, so the encode writes it linear light.
+    uint encodesSrgb;
 };
 
 [[vk::binding(2, 3)]] ConstantBuffer<DisplayEncode> encode : register(b2, space3);
@@ -62,18 +66,22 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
     sourceTexture.GetDimensions(width, height);
 
     float3 color = sourceTexture.Sample(sourceSampler, (fragCoord.xy / float2(width, height))).rgb;
-    // Half a code of dither either side before a unorm target quantizes, which breaks gradient banding into noise the
-    // eye barely sees; a float target is not quantized.
-    float dither = (displayDither(uint2(fragCoord.xy)) - 0.5);
+    // Half a code of dither either side of the value the target quantizes, which breaks gradient banding into noise the
+    // eye barely sees: a code of an 8-bit target, a code of a 10-bit one, nothing on a float target.
+    float dither = ((displayDither(uint2(fragCoord.xy)) - 0.5) * encode.ditherStep);
 
     if (encode.colorSpace == DisplayHdr10) {
         float3 display = (mul(Bt709ToBt2020, displayToLinear(color)) * encode.whiteScale);
 
-        return float4(saturate(displayPerceptualQuantizer(display) + (dither * (1.0 / 1023.0))), 1.0);
+        return float4(saturate(displayPerceptualQuantizer(display) + dither), 1.0);
     }
     if (encode.colorSpace == DisplayScRgb) {
-        return float4((displayToLinear(color) * encode.whiteScale), 1.0);
+        return float4(((displayToLinear(color) * encode.whiteScale) + dither), 1.0);
     }
 
-    return float4(saturate(color + (dither * (1.0 / 255.0))), 1.0);
+    float3 sdr = saturate(color + dither);
+
+    // A target that encodes sRGB on write quantizes after its own encode, so it takes the linear light that encodes back
+    // to the dithered value.
+    return float4(((encode.encodesSrgb != 0u) ? displayToLinear(sdr) : sdr), 1.0);
 }

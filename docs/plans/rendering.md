@@ -4337,7 +4337,8 @@ and P14.
   one shader (`SurfaceEncoder`, `display-encode.frag.hlsl`): SDR adds the R2
   dither and clamps, HDR10 decodes the sRGB transfer to linear light, moves it to
   BT.2020 primaries, scales it by the white scale and encodes it with the ST 2084
-  perceptual quantizer, and scRGB decodes and scales. Both swapchain
+  perceptual quantizer, and scRGB decodes and scales. The dither is half a code
+  of the target's format, and none on a float target. Both swapchain
   compositors draw it as their write into the back buffer, in their output at
   the host's paper white, so the HUD shows at paper white; a capture of a float
   output reads through its SDR. On an SDR display the frame matches the previous

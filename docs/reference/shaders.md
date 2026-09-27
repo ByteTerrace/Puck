@@ -1062,20 +1062,26 @@ with headroom above it. Nothing quantizes it until the display encode
 `display.vert.hlsl`), which samples a working image 1:1 by fragment coordinate
 and writes it in the color space its target shows:
 
-- **SDR** (`DisplayColorSpace.Srgb`): the value plus half a code of the R2 dither
-  at the output pixel, clamped, so an 8-bit target quantizes gradients into noise
-  rather than bands.
+- **SDR** (`DisplayColorSpace.Srgb`): the value plus the dither, clamped. A
+  target that encodes sRGB on write takes that value decoded to linear light,
+  which its write encodes back.
 - **HDR10**: the value decoded from the sRGB transfer to linear light, moved from
   BT.709 to BT.2020 primaries, scaled by `DisplayOutput.WhiteScale` at the
-  paper-white level, and encoded by the ST 2084 perceptual quantizer with half a
-  10-bit code of dither.
-- **scRGB**: the value decoded to linear light and scaled by the white scale,
-  unquantized.
+  paper-white level, and encoded by the ST 2084 perceptual quantizer, plus the
+  dither.
+- **scRGB**: the value decoded to linear light and scaled by the white scale.
+
+The dither is the R2 sequence at the output pixel, half a code of the target's
+format either side of the value its write quantizes: a code of an 8-bit format,
+sRGB or not, a code of a 10-bit one, and none on a float target, which does not
+quantize, SDR's float fallback included. It breaks gradients into noise rather
+than bands.
 
 Its one group, `DisplayEncodeLayout`, is the pass group: the image at binding 0,
-its sampler at 1 and the encode block at 2, the block holding the color space and
-the white scale (`DisplayEncodeLayout.WriteBlock`). `SurfaceEncoder` states the
-pipeline once (`SurfaceEncoder.Key`), an entry of the
+its sampler at 1 and the encode block at 2, the block holding the color space,
+the white scale, the dither step and whether the target encodes sRGB, all read
+from the `DisplayOutput` it writes (`DisplayEncodeLayout.WriteBlock`).
+`SurfaceEncoder` states the pipeline once (`SurfaceEncoder.Key`), an entry of the
 [pass-pipeline cache](#the-pass-pipeline-cache), and it has three writers. Each
 swapchain compositor draws it into its back buffer in the swapchain's
 `DisplayOutput` at the host's `PresentationOptions.PaperWhiteNits`, so the

@@ -117,3 +117,11 @@ uint; "uint4" and "float4" name 16-byte vectors.
 | `ImagePixelFormat`, `ImageYuvMatrix`, `ImageYuvRange`, `ImageTransferFunction` codes | `IMAGE_FORMAT_*`, `IMAGE_MATRIX_*`, `IMAGE_RANGE_*`, `IMAGE_TRANSFER_*` | Numeric values match one to one; format code 0 is never a format. |
 | `ImageSourceConversion.YuvToRgb`, `PqToNits`, `SrgbToLinear`, `ReferenceWhiteNits` | `imageSourceYuvToRgb`, `imageSourcePqToNits`, `imageSourceSrgbToLinear`, `IMAGE_REFERENCE_WHITE_NITS` | The CPU reference is double precision; a kernel agrees within one 8-bit code, which the `source-conversion` canary's tolerance allows. |
 | `ImageSourceConversion.PassOf` and its pass names | `source-palette`, `source-nv12`, `source-rgba`, `source-transfer` `.comp.hlsl` | Set 3, as a document pass's interface places its ports: region at binding 1 (`ByteAddressBuffer region`, t1), image at binding 2 (`image`, u2), the pass block at binding 0, 8×8 threads a group, one thread a pixel. |
+
+## The display encode
+
+| C# (`Puck.Abstractions.Gpu`) | HLSL (`src/Puck.Shaders/Assets/Runtime/display-encode.frag.hlsl`) | Contract |
+|---|---|---|
+| `DisplayEncodeLayout` (`Group`, `SourceImageBinding`, `SamplerBinding`, `BlockBinding`) | `sourceTexture` (t0), `sourceSampler` (s1), `encode` (b2), all in space 3 | The pass group, each register equal to its binding. |
+| `DisplayEncodeLayout.WriteBlock`, `BlockBytes` = 16 | `struct DisplayEncode` | Four little-endian words: the `DisplayColorSpace` value; the white scale (`DisplayOutput.WhiteScale`), a float; the dither step, a float, one code of the target's format (`GpuPixelFormats.ColorCodeMaximum`) or zero on a float target; and one when the target encodes sRGB on write (`GpuPixelFormats.EncodesSrgb`). |
+| `DisplayColorSpace` values | `DisplayHdr10` = 1, `DisplayScRgb` = 2 | sRGB is 0, the fall-through. |
