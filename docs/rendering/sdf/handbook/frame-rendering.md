@@ -220,6 +220,14 @@ from its memory profile and the table's size, with a reader always in flight:
   discrete adapter the buffers live in its aperture, so the kernels read them
   from device memory; on unified memory they are the one pool.
 
+Every pass of every view reads the tables through one descriptor set, the
+`sdf.world` interface's World group at set 1: each ring slot's buffers, the
+brick pool, the glyph atlas, the samplers and the mesh atlases. The tables own
+one such set per ring slot and write both once; a frame binds the slot its
+upload wrote. They rewrite the sets only when what they bind moves (a region
+grows, or the glyph or mesh atlases change), after the device is idle, since
+every view's submission in flight binds them.
+
 Dynamic transforms are never compared as a table: the residency packs only the
 rows the frame's moved set (`SdfFrame.MovedTransforms`) owes since the frame it
 last consumed, and the region owes the words of those rows that changed. The

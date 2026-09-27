@@ -2747,7 +2747,7 @@ Phase 3, the groups, follows phase 2:
 20. Done: the SDF engine is on groups. Its kernels read
     `sdf-world.interface.hlsli` and `sdf-bricks.interface.hlsli`,
     generated from `SdfWorldInterfaces` and owned by `puck shaders generate`,
-    and `SdfWorldPipelines.Build` creates every pipeline from its interface's
+    and the pass-pipeline cache creates every pipeline from its interface's
     layout, which the kernels bind by member name. Every per-view dispatch bound
     the ring slot's frame set and its view's views set until P14-6 gave each
     pass of a view's instance its own sets, whose block holds the world values,
@@ -4019,7 +4019,7 @@ instance joined to the views by buffer edges. A display pass tonemaps and
 encodes until P16 inherits it. There is no upload pass, because uploads go
 through `GpuRegion`, and no composite, because the engine has none. Group 0 is the
 frame, group 1 the world (program words and every per-world table, screens,
-decals, the glyph atlas, the brick pool), group 2 the instance (empty and
+decals, the glyph atlas, the brick pool, the mesh atlases), group 2 the instance (empty and
 reserved), and group 3 the pass (its block, holding the frame's values, then
 masks, tiles, arguments, bounds, visibility, shadow, color, and the screen
 sources, an image array read through a sampler array). Each frame source's half
@@ -4158,12 +4158,14 @@ item 2 landed.
    - The mesh pass is a conditional package pass
      (`IRenderGraphPackageRecorder.Skips`): on a frame that draws no mesh it
      records nothing, and neither do the barriers of its target and depth.
-   Still to land: the world tables bind through the World-group set the bake
-   atlases already occupy (group 1), owned by the tables per ring slot
-   and written once, which every part binds. Today each compute part writes the
-   tables into its own pass set whenever the frame slot and the upload ring
-   slot pair differently, which is every frame, since the node has three frame
-   slots and the ring two.
+   - The world's tables, the brick pool, the glyph atlas, the samplers and the
+     mesh atlases are the `sdf.world` interface's World group
+     (`SdfWorldPackage.Tables`), bound at group 1 through one set per upload
+     ring slot that the tables own and write once (`SdfWorldTables.WorldSet`).
+     Every compute part of every view and the ISA handshake bind it, and it is
+     rewritten only when what it binds moves (a region's growth, the glyph
+     atlas, the mesh atlases), after the device is idle. A pass set holds only
+     the view's own storages, output, screens and mesh target.
 9. Landed with step 6, the cadence as the scheduler's: `SdfWorldPasses` asks
    each residency whether a view's latest render stands
    (`IRenderGraphPackageFactory.IsUnchanged`), and the runtime declares that
@@ -4451,8 +4453,8 @@ and a bound member and an overridden member compose by the rule
 [the decisions register](../decisions/rendering.md) states.
 
 The SDF engine's groups (P7b-20), P12b-2, P4-2c, P11b-13, P14-2 and P14-5 have
-landed, and so have P14-6, P14-7, P14-9 and the first parts of P14-8, so the
-longest remaining chain runs P14-8's world set, P14-10 and P14-11, then the rest
+landed, and so have P14-6, P14-7, P14-8 and P14-9, so the longest remaining
+chain runs P14-10 and P14-11, then the rest
 of P14-13, and ends with P15. P16 follows P14-10's float working targets, and a
 bake's textures (P17) come before P6's choice between a bake and the field.
 
