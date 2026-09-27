@@ -27,6 +27,8 @@ public sealed class WorldBakeStore {
     private static readonly ConcurrentDictionary<string, WorldBakeStore> Opened = new(comparer: StringComparer.Ordinal);
     private static readonly ConditionalWeakTable<WorldPrototype, string> Pins = new();
     private readonly ConcurrentDictionary<ContentPin, ReadOnlyMemory<byte>> m_held = new();
+    // Pack provenance follows the loaded prototype objects through definition copies, never another world's equal keys.
+    private readonly ConditionalWeakTable<WorldPrototype, ConcurrentDictionary<ContentPin, byte>> m_shipped = new();
     private readonly ConcurrentDictionary<string, Lazy<WorldBakePack?>> m_packs = new(comparer: StringComparer.Ordinal);
 
     private readonly Lazy<ContentAddressedStore?> m_disk;
@@ -155,13 +157,15 @@ public sealed class WorldBakeStore {
     /// path; one that is absent or cannot be read carries nothing this time, so its keys are left for the background bake.</summary>
     /// <param name="packPath">The pack's path.</param>
     /// <param name="keys">The key pins to hold.</param>
+    /// <param name="definition">The loaded definition whose prototypes the pack supplies.</param>
     /// <returns>The keys held from the pack.</returns>
     /// <exception cref="ArgumentException"><paramref name="packPath"/> is <see langword="null"/>, empty, or white
     /// space.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="keys"/> is <see langword="null"/>.</exception>
-    public int HoldFromPack(string packPath, IEnumerable<ContentPin> keys) {
+    public int HoldFromPack(string packPath, IEnumerable<ContentPin> keys, WorldDefinition definition) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: packPath);
         ArgumentNullException.ThrowIfNull(argument: keys);
+        ArgumentNullException.ThrowIfNull(argument: definition);
 
         var full = Path.GetFullPath(path: packPath);
         var entry = m_packs.GetOrAdd(
@@ -170,6 +174,7 @@ public sealed class WorldBakeStore {
         );
         var pack = entry.Value;
         var held = 0;
+        var supplied = new HashSet<ContentPin>();
 
         // A pack that could not be read is read again by the next load, which may find one a build has since written.
         if (pack is null) {
@@ -180,7 +185,18 @@ public sealed class WorldBakeStore {
         foreach (var key in keys) {
             if (pack.TryGet(key: key, outcome: out var outcome)) {
                 m_held[key] = outcome;
+                supplied.Add(item: key);
                 held++;
+            }
+        }
+
+        var requests = RequestsOf(definition: definition, quality: WorldBakeChunk.Quality);
+
+        for (var index = 0; (index < requests.Count); index++) {
+            var key = requests[index].Key.Pin;
+
+            if (supplied.Contains(item: key)) {
+                m_shipped.GetValue(key: definition.Creations[index], createValueCallback: static _ => new())[key] = 0;
             }
         }
 
@@ -228,6 +244,13 @@ public sealed class WorldBakeStore {
     /// <returns><see langword="true"/> when the store holds the outcome in memory.</returns>
     public bool TryGetHeld(ContentPin key, out ReadOnlyMemory<byte> outcome) =>
         m_held.TryGetValue(key: key, value: out outcome);
+    /// <summary>Returns whether the loaded definition's pack supplied a key for this prototype
+    /// (<see cref="HoldFromPack"/>). Equal keys held for another world's prototypes do not count.</summary>
+    /// <param name="key">The bake's key pin.</param>
+    /// <param name="prototype">The prototype object from the loaded definition.</param>
+    /// <returns><see langword="true"/> when a pack held it.</returns>
+    public bool IsShipped(ContentPin key, WorldPrototype prototype) =>
+        (m_shipped.TryGetValue(key: prototype, value: out var keys) && keys.ContainsKey(key: key));
     /// <summary>Finds an outcome: in memory, else under <see cref="Directory"/>, holding what it reads there.</summary>
     /// <param name="key">The bake's key pin.</param>
     /// <param name="outcome">The encoded outcome, when this returns <see langword="true"/>.</param>

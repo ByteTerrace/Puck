@@ -52,6 +52,8 @@ internal static class WorldRenderRoot {
         var height = ((uint)hostSettings.Height);
         var binder = sp.GetRequiredService<WorldScreenBinder>();
         var frameSource = sp.GetRequiredService<WorldFramePresenter>();
+        var bakes = sp.GetService<WorldBakeSchedule>();
+        var client = sp.GetRequiredService<WorldClient>();
         var device = sp.GetRequiredService<IGpuDeviceContext>();
         var definition = sp.GetRequiredService<WorldDefinition>();
         var graph = sp.GetRequiredService<WorldRootGraph>();
@@ -222,14 +224,19 @@ internal static class WorldRenderRoot {
             // created before the device context, so the container would dispose them after it; the root's teardown releases
             // them, after the runtime's passes gave back their holds, while the device is alive.
             Holdings = [binder, residency],
-            Prepare = frameSource.PrepareGraph,
+            Prepare = (in FrameContext context) => {
+                bakes?.Pump(definition: client.Definition);
+                frameSource.PrepareGraph(context: in context);
+            },
             Roots = host.Roots,
         };
         var probe = sp.GetRequiredService<WorldRenderProbe>();
 
+        probe.Bakes = bakes;
         probe.Device = device;
         probe.Residency = residency;
         probe.Root = root;
+        probe.Settings = sp.GetService<WorldRenderSettings>();
         sp.GetRequiredService<WorldPostPasses>().Attach(
             graph: () => host.Synthesized,
             root: () => runtime.NodeOf(instance: WorldViewGraphs.MainInstance)

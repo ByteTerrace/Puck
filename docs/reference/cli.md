@@ -1296,6 +1296,17 @@ backend (Vulkan, Direct3D 12) with `host.presentation: offscreen`—no window
 is shown—and lets the world's own `captures` rows land every tick-scheduled
 capture and write a `puck.parity.manifest.v1`. Because both backends capture
 the same simulation ticks, each pair observes one moment by construction.
+The parity world ships its bakes as a released world does: the run compiles
+the parity tree into its artifacts with the World artifact's own CLI (a
+compiled world holds only for the engine build that derived it), copying every
+other file of the tree beside it, and each leg boots that copy, whose `BAKE`
+chunk holds every bake from its bake pack. Each leg ends by reading
+`world.counters sdf.bakes` and fails when it resolved a bake on the device
+(`sdf.bakes.scheduled` above zero), so no capture depends on a local bake, or,
+with bakes on, drew none. The static creations draw their bakes, as a world
+that carries its `BAKE` chunk does by default; with `--bakes off` they draw
+through their fields, and `puck parity compare` of an on run against an off
+run holds every capture's state hash, since bakes are presentation only.
 The offscreen host never steps past an armed capture's tick until the capture
 is served or refused, so a cold driver shader cache lengthens a leg instead of
 losing its first capture. After 60 seconds of holding in all, a capture the

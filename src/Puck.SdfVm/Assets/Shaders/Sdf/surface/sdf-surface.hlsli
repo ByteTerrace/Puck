@@ -40,18 +40,18 @@ void sdfResolveSurface(float3 surfacePoint, float3 ray, bool hit, int material, 
     sdfStoreVisibilitySurface(record, surface);
 }
 
-// A mesh pixel's N and S rows: its triangle's surface normal (sdfMeshSurfaceNormal), no curvature and neutral ambient
-// occlusion. Its lit
-// flag stays clear, so the ambient pass leaves the occlusion at one; mesh pixels shade with neutral shadows and ambient
-// occlusion, and views skips their shadow march.
-void sdfResolveMeshSurface(float3 normal, uint record) {
+// A mesh pixel's N and S rows: its triangle's surface normal (sdfMeshSurfaceNormal, or a textured mesh's sampled normal),
+// no curvature, and its ambient occlusion: a textured mesh's baked occlusion, one otherwise. Its lit flag stays clear, so
+// the ambient pass leaves the occlusion as written; mesh pixels shade with neutral shadows, and views skips their shadow
+// march.
+void sdfResolveMeshSurface(float3 normal, float ambient, uint record) {
     SdfVisibilityNormal geometric;
     geometric.normal = normal;
     geometric.gradientMagnitude = 1.0;
     SdfVisibilitySurface surface;
     surface.curvature = 0.0;
     surface.queries = 0.0;
-    surface.ambient = 1.0;
+    surface.ambient = ambient;
     surface.flags = 0u;
     sdfStoreVisibilityNormal(record, geometric);
     sdfStoreVisibilitySurface(record, surface);

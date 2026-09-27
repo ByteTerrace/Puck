@@ -276,7 +276,7 @@ public sealed class SdfCapabilityMatrixLawTests {
             Green: true,
             Members: [
                 "SdfFrame.MeshDraws", "SdfFrame.MeshDrawsRevision", "SdfWorldResidency.MeshRegionBytes", "SdfWorldResidency.MeshDrawCount",
-                "SdfWorldTables.MeshRegionBytes", "SdfWorldTables.MeshRegionLayout", "SdfWorldTables.MeshDrawCount",
+                "SdfWorldTables.MeshRegionBytes", "SdfWorldTables.MeshRegionLayout", "SdfWorldTables.MeshDrawCount", "SdfWorldTables.MeshAtlas",
             ]
         ),
         new(

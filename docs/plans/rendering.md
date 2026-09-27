@@ -1433,18 +1433,22 @@ the palette-indexed and NV12 host layouts no GPU image is created in.
 
 P17 still owes:
 
-- drawing a bake's textures and impostor: its albedo variation, occlusion,
-  emission and impostor do not draw yet, so `world.bakes` ships off, and the
-  textures decide how an sRGB bake is read (a `Bc7UnormSrgb` view or a decode
-  in the shader). This texture draw also stages the mesh region and adds the
-  bake atlases' World-group set. Its geometry already draws: a ready bake's mesh
-  in place of its static placements' fields, the field kept camera-hidden, the
-  switch counted as `sdf.bakes.drawn`, with vertex normals, texture coordinates
-  and per-triangle materials, held by `CreationBakeLawTests` and the
-  `sdf-bake-switch` canary.
-  Choosing per placement between a bake and the field by measured cost is P6's;
-- the parity world shipping its bakes, and the check that a missing bake draws
-  through its field and then switches.
+- the rest of drawing a bake: its impostor. A ready bake's mesh draws textured
+  in place of its static placements' fields: the field is kept camera-hidden,
+  the switch counted as `sdf.bakes.drawn`, its five textures sampled from the
+  mesh atlases with the albedo decoded from sRGB in the shader (held by
+  `CreationBakeLawTests`, `SdfMeshAtlasLawTests`, `MeshTextureDeviceLawTests`
+  and the `sdf-bake-switch` canary). Bakes draw by default when the loaded
+  world's `BAKE` chunk supplies every bake from its pack (a released or
+  compiled tree, the parity world); a source boot draws fields unless
+  `world.bakes on`, and a live bake then switches when ready, which is the
+  authoring path. Under the default rule, captures do not depend on local
+  baking. `world.bakes off` forces fields. The parity
+  world ships its bakes: `puck parity` compiles its tree with the World
+  artifact's own CLI and boots the compiled world, whose `BAKE` chunk holds
+  every bake from the pack, and refuses a leg that resolved a bake on the
+  device. Choosing per placement between a bake and the field by measured cost
+  is P6's.
 
 The SDF frame's values and its environment are members of the generated pass
 block (P14-7): `SdfWorldPackage.Values` declares them, `puck shaders generate`
@@ -4148,8 +4152,8 @@ item 2 landed.
    - The mesh pass is a conditional package pass
      (`IRenderGraphPackageRecorder.Skips`): on a frame that draws no mesh it
      records nothing, and neither do the barriers of its target and depth.
-   Still to land, after the brick bake atlases' World-group set: the world
-   tables bind through that set (group 1), owned by the tables per ring slot
+   Still to land: the world tables bind through the World-group set the bake
+   atlases already occupy (group 1), owned by the tables per ring slot
    and written once, which every part binds. Today each compute part writes the
    tables into its own pass set whenever the frame slot and the upload ring
    slot pair differently, which is every frame, since the node has three frame
@@ -4420,8 +4424,8 @@ the SDF pass interfaces in the one pass-block spelling (P14-5), the
 cutover with the cadence as the scheduler's (P14-6, P14-9), the generated frame
 block (P14-7), and P14-8's kernels as pass-pipeline cache entries, one command
 list per instance per frame slot and the conditional mesh pass. P14-8's last
-part, the world tables' group-1 set, waits on the bake atlases' World-group set
-that P17's texture draw adds. P15 and P16 both follow P14: P15 also needs P4, and
+part moves the world tables into the group-1 set P17's texture draw added for the
+bake atlases. P15 and P16 both follow P14: P15 also needs P4, and
 P16, the smallest package in this group, needs P14's float working targets for
 its display transform; its heap fold, HDR swapchain selection and paper-white
 setting needed none and have landed.

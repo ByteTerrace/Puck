@@ -9,7 +9,10 @@ consumes. `parity.sdf.json` is its companion `puck.sdf.v1` document
 (`world.sdf.load`), carrying the SDF-program stations. `parity.world.json`'s
 own `prototypes`/`placements` sections carry the `vocabulary` station's
 creation content directly (a `puck.creation.v1` document, not a raw SDF op
-stream).
+stream). Its static creations draw their bakes, and the world ships them:
+`puck parity` compiles this directory into its run with the World artifact's
+own CLI and boots the compiled world, whose bake pack holds every bake, so no
+capture depends on a bake made on the device.
 
 The SDF stations' `captures` rows name the `world` instance, the SDF world as the
 station camera sees it. The layout also shows two instances of the binding graph

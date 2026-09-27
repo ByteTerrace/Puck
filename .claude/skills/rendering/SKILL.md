@@ -225,7 +225,13 @@ These are one-line cautions; the owning pages hold the derivations.
   (`ICompiledWorldChunk.DerivesOnBoot`); a presentation bakes a missing
   prototype through `WorldBakeSchedule`, never on the frame thread, and draws a
   ready one only through `WorldBakeSchedule.TryGetMesh` (which counts the
-  switch, `sdf.bakes.drawn`) while `world.bakes` is on. A baked placement's
+  switch, `sdf.bakes.drawn`) while it draws its bakes: by default exactly when
+  the loaded world's `BAKE` chunk supplies every bake from its pack, else when `world.bakes on`
+  (`WorldRenderSettings.DrawsBakes`); the engine is not ready until the
+  schedule has reconciled and, while it draws them, settled. A baked
+  mesh samples its textures from the mesh atlases, World-group members bound in
+  the tables' one World set (`SdfWorldTables.MeshAtlas.cs`,
+  `frame/sdf-mesh-textures.hlsli`). A baked placement's
   instances are camera-hidden (`SdfInstanceRange.CameraHidden`): the cull keeps
   them out of every camera mask, never out of the shadow or ambient gathers.
 
