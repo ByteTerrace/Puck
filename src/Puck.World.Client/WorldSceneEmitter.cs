@@ -120,6 +120,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     private readonly WorldBakedColors m_bakedColors;
 
     private int m_bakedColorRevision;
+    // A counter moved when a stamped body's live scale moves, so the stamps bake it (WorldBodyStampCensus.TryTakeMove).
+    private int m_censusRevision;
 
     // The catalog-look root follower: a NON-stamp-rendered avatar (a Catalog-sourced look, or a Creation look the
     // stamp pool had no free slot for) whose look names a root Motion.Dynamics row lags the whole avatar toward its
@@ -759,9 +761,10 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// <summary>Writes the program-rebuild watch counters this scene composes over: the client's three
     /// (<see cref="WorldClient.WriteRevision"/> — roster, server snapshot, definition delivery), then the continuum
     /// watch, then a counter that moves when a bound color the live build baked moves in the state mirror
-    /// (<see cref="WorldBakedColors.TryTakeMove"/>).
+    /// (<see cref="WorldBakedColors.TryTakeMove"/>), then the bake schedule's revision, then a counter that moves when a
+    /// stamped body's live scale moves (<see cref="WorldBodyStampCensus.TryTakeMove"/>).
     /// <para>
-    /// Five components, not their sum, and the client's three stay split too. One of them — the client's server
+    /// Seven components, not their sum, and the client's three stay split too. One of them — the client's server
     /// revision — is assigned from a snapshot and can move down, so any addition anywhere on this path can cancel: a
     /// server revision falling by one while the continuum counter rises by one would leave a sum unmoved and hold a
     /// stale program. Flattening every counter through to the composition host's componentwise compare is what makes
@@ -783,6 +786,12 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         destination[(WorldClient.RevisionComponentCount + 2)] = ((m_settings.DrawsBakes(schedule: m_bakes) && (m_bakes is not null))
             ? unchecked((int)((m_bakes.Revision * 2L) + 1L))
             : 0);
+
+        if (m_census.TryTakeMove()) {
+            m_censusRevision++;
+        }
+
+        destination[(WorldClient.RevisionComponentCount + 3)] = m_censusRevision;
     }
 
     // A prototype's baked mesh when the presentation draws its bakes and this one is ready; the schedule counts the
@@ -879,7 +888,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// composed words are byte-identical to the unscoped build.</summary>
     public bool OwnsMaterialScope => true;
     /// <inheritdoc/>
-    public int RevisionComponentCount => (WorldClient.RevisionComponentCount + 3);
+    public int RevisionComponentCount => (WorldClient.RevisionComponentCount + 4);
     /// <summary>Gets the bounded volumes the latest live build's static placements baked into world space.</summary>
     public IReadOnlyList<SdfVolume> StaticVolumes => m_staticVolumes;
     /// <inheritdoc/>

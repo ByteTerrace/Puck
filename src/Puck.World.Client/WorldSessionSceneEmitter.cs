@@ -63,6 +63,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     private WorldBakedColors? m_bakedColors;
     private WorldStateMirror? m_bakedColorsMirror;
     private int m_bakedColorRevision;
+    // A counter moved when a stamped body's live scale moves, so the stamps bake it (WorldBodyStampCensus.TryTakeMove).
+    private int m_censusRevision;
 
     // The destination's stamp pool, packed past the avatar catalog's slots, the source it roots on, its creation-stamp
     // census, and the mesh draws: the static placements' the last live Emit fixed, then the pool's.
@@ -521,11 +523,12 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             : null
         );
     }
-    /// <summary>Writes three components, never their sum: the definition-delivery revision, the mirrored snapshot's
+    /// <summary>Writes four components, never their sum: the definition-delivery revision, the mirrored snapshot's
     /// declared-set/palette revision (<see cref="WorldSessionMirror.SnapshotRevision"/>, assigned from the wire and
-    /// able to move down), and a counter that moves when a bound color the live build baked moves in the session's
-    /// state mirror (<see cref="WorldBakedColors.TryTakeMove"/>, as <c>WorldSceneEmitter.WriteRevision</c> does for
-    /// the local world) — the same non-summing rule <see cref="WorldClient.WriteRevision"/> documents for the
+    /// able to move down), a counter that moves when a bound color the live build baked moves in the session's state
+    /// mirror (<see cref="WorldBakedColors.TryTakeMove"/>, as <c>WorldSceneEmitter.WriteRevision</c> does for the local
+    /// world), and a counter that moves when a stamped body's live scale moves
+    /// (<see cref="WorldBodyStampCensus.TryTakeMove"/>) — the same non-summing rule <see cref="WorldClient.WriteRevision"/> documents for the
     /// identical reason: a rebuild must never be maskable by two counters moving in opposite directions.</summary>
     public void WriteRevision(Span<int> destination) {
         destination[0] = m_mirror.DefinitionRevision;
@@ -536,6 +539,13 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         }
 
         destination[2] = m_bakedColorRevision;
+
+        // After the baked colors' follow, so the census reads the latest delivery.
+        if (m_census.TryTakeMove()) {
+            m_censusRevision++;
+        }
+
+        destination[3] = m_censusRevision;
     }
 
     // The bound colors the static build bakes, over the session's own followed state mirror: the one path the local
@@ -564,7 +574,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// <see cref="WorldBodiesLimits.CapacityCeiling"/>, so a full destination can never outgrow this emitter's probe.</summary>
     public int DynamicSlotCount => (WorldRigCatalog.DynamicTransformCapacity + WorldStampPool.DynamicSlotCount);
     /// <inheritdoc/>
-    public int RevisionComponentCount => 3;
+    public int RevisionComponentCount => 4;
     /// <inheritdoc/>
     /// <remarks>The mirrored world's static placements' meshes, fixed by each live <see cref="Emit"/>, then its stamp
     /// pool's (<see cref="WorldStampPool.MeshDraws"/>).</remarks>
