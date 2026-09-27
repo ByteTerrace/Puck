@@ -228,6 +228,8 @@ public sealed class OffscreenTickHostedService : BackgroundService {
                 );
 
                 if (composes) {
+                    // Read once, so a resize between frames reaches the whole frame and never half of it.
+                    var (targetWidth, targetHeight) = m_renderOptions.Extent;
                     var frameContext = new FrameContext(
                         AccumulatorTicks: (pump?.AccumulatorTicks ?? 0UL),
                         DeltaTicks: (((ulong)stepsAdvanced) * stepTicks),
@@ -235,8 +237,8 @@ public sealed class OffscreenTickHostedService : BackgroundService {
                         FrameDeltaTicks: frameDeltaTicks,
                         Host: m_rootHostContext,
                         StepTicks: stepTicks,
-                        TargetHeight: m_renderOptions.Height,
-                        TargetWidth: m_renderOptions.Width
+                        TargetHeight: targetHeight,
+                        TargetWidth: targetWidth
                     );
 
                     // A loss follows the windowed host's policy: captures armed at it are refused by name, the device

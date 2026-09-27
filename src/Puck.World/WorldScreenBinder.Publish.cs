@@ -55,6 +55,21 @@ internal sealed partial class WorldScreenBinder {
 
         ReconcileViews();
     }
+    /// <summary>Changes the display extent a view's declared extent is a fraction of, as the host resizes its display:
+    /// every camera and session view fits its declared extent to the new display from the next reconciliation on.</summary>
+    /// <param name="displayWidth">The display's width, in pixels.</param>
+    /// <param name="displayHeight">The display's height, in pixels.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="displayWidth"/> or <paramref name="displayHeight"/>
+    /// is not positive.</exception>
+    public void ResizeDisplay(int displayWidth, int displayHeight) {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: displayWidth);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: displayHeight);
+
+        m_viewDisplayWidth = displayWidth;
+        m_viewDisplayHeight = displayHeight;
+
+        ReconcileViews();
+    }
     /// <summary>Publishes the screens' content for this produced frame, before the render graph schedules it: it uploads
     /// the fills a filled external source resolves to, and services the shared camera feeds, the probe outputs and the HUD's captures. A
     /// producer, machine or probe source a screen shows is a source instance the runtime publishes at its cadence when it

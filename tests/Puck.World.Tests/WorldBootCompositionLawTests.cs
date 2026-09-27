@@ -208,6 +208,43 @@ public sealed class WorldBootCompositionLawTests : IDisposable {
             expected: "[world.view-refresh: every 4 produced frame(s); 0 camera view(s) registered]"
         );
     }
+    // THE LAW: an offscreen boot's display resizes through world.resize, which echoes the extent its frames render at
+    // and changes nothing until its renderer is ready, and refuses an extent outside the host document's bounds. A
+    // headless boot presents nothing to resize and has no such verb.
+    [Fact]
+    public void AnOffscreenBootAnswersWorldResizeWithItsExtentAndRefusesBeforeItsRendererIsReady() {
+        using var host = WorldBootHarness.Compose(
+            presentation: WorldHostPresentation.Offscreen,
+            stateDirectory: m_stateDirectory,
+            world: ScreensWorld
+        ).Build();
+        var registry = host.Services.GetRequiredService<CommandRegistry>();
+
+        Assert.Equal(
+            actual: registry.Submit(line: "world.resize").Output,
+            expected: "[world.resize: 64x64]"
+        );
+
+        var early = registry.Submit(line: "world.resize 1920 1080");
+
+        Assert.True(condition: early.IsError);
+        Assert.Contains(
+            actualString: early.Output,
+            expectedSubstring: "renderer not ready"
+        );
+        Assert.Equal(
+            actual: registry.Submit(line: "world.resize").Output,
+            expected: "[world.resize: 64x64]"
+        );
+        Assert.True(condition: registry.Submit(line: "world.resize 0 1080").IsError);
+
+        using var headless = ComposeBoot(presentation: WorldHostPresentation.None).Build();
+
+        Assert.False(condition: headless.Services.GetRequiredService<CommandRegistry>().TryGetId(
+            id: out _,
+            name: "world.resize"
+        ));
+    }
     [InlineData(WorldHostPresentation.None)]
     [InlineData(WorldHostPresentation.Offscreen)]
     [InlineData(WorldHostPresentation.Windowed)]
