@@ -142,6 +142,7 @@ public sealed class WorkCountingLawTests {
                 "gpu.descriptor-writes",
                 "gpu.uploads.host-visible",
                 "gpu.clears",
+                "gpu.copies",
             ],
             actual: GpuWork.SubmissionKinds.ToArray().Select(selector: kind => kind.Name)
         );
@@ -157,7 +158,7 @@ public sealed class WorkCountingLawTests {
             actual: GpuWork.LifetimeKinds.ToArray().Select(selector: kind => kind.Name)
         );
         Assert.Same(expected: GpuWork.Dispatches, actual: GpuWork.SubmissionKinds[0]);
-        Assert.Same(expected: GpuWork.Clears, actual: GpuWork.SubmissionKinds[^1]);
+        Assert.Same(expected: GpuWork.Copies, actual: GpuWork.SubmissionKinds[^1]);
     }
 
     // A count is a mutable field of its owner, never a local copied into a closure.

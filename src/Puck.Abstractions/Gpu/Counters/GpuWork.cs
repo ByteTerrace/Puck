@@ -17,6 +17,7 @@ public static class GpuWork {
     internal const int BuffersCreatedIndex = 3;
     internal const int ClearsColumn = 13;
     internal const int CommandBuffersColumn = 4;
+    internal const int CopiesColumn = 14;
     internal const int DescriptorPoolsCreatedIndex = 4;
     internal const int DescriptorSetBindsColumn = 9;
     internal const int DescriptorSetsCreatedIndex = 5;
@@ -34,7 +35,7 @@ public static class GpuWork {
     internal const int PushConstantBytesColumn = 10;
     internal const int RenderPassesColumn = 3;
     internal const int ShaderModulesCreatedIndex = 1;
-    internal const int SubmissionColumnCount = 14;
+    internal const int SubmissionColumnCount = 15;
 
     /// <summary>Gets the kind counting compute dispatches whose group counts the CPU supplies.</summary>
     public static WorkKind Dispatches { get; } = new(name: "gpu.dispatches", unit: "count", workClass: WorkClass.Deterministic);
@@ -64,6 +65,8 @@ public static class GpuWork {
     public static WorkKind HostVisibleUploadBytes { get; } = new(name: "gpu.uploads.host-visible", unit: "bytes", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting whole-resource clears of storage images and buffers.</summary>
     public static WorkKind Clears { get; } = new(name: "gpu.clears", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting whole-image copies.</summary>
+    public static WorkKind Copies { get; } = new(name: "gpu.copies", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting compute and graphics pipelines created. A node's ledger counts the pipelines that
     /// node created; a backend's <see cref="GpuPipelineCacheWork"/> counts every pipeline its devices created.</summary>
     public static WorkKind PipelinesCreated { get; } = new(name: "gpu.created.pipelines", unit: "count", workClass: WorkClass.PerBackendDeterministic);
@@ -131,6 +134,7 @@ public static class GpuWork {
             kinds[DescriptorWritesColumn] = DescriptorWrites;
             kinds[HostVisibleUploadBytesColumn] = HostVisibleUploadBytes;
             kinds[ClearsColumn] = Clears;
+            kinds[CopiesColumn] = Copies;
 
             return kinds;
         }

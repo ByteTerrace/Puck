@@ -53,6 +53,8 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
 
     /// <summary>Gets the handles of the images cleared to zero, in recording order.</summary>
     public List<nint> ClearedImages { get; } = [];
+    /// <summary>Gets the source and destination handles of every image copy, in recording order.</summary>
+    public List<(nint Source, nint Destination)> CopiedImages { get; } = [];
     /// <summary>Gets every barrier recorded while <see cref="Recording"/> is on, with the image or buffer handle it names
     /// (zero for a memory barrier), in recording order.</summary>
     public List<(ShaderPipelineBarrier Barrier, nint Handle)> Barriers { get; } = [];
@@ -243,6 +245,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     public void BindVertexBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes, uint strideBytes) => RecordGraphics(buffer: bufferHandle, command: "vertices", count: strideBytes, offsetBytes: 0, sizeBytes: sizeBytes);
     public void ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) { }
     public void ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) => ClearedImages.Add(item: imageHandle);
+    public void CopyImage(nint commandBufferHandle, nint sourceImageHandle, nint destinationImageHandle, uint width, uint height) => CopiedImages.Add(item: (sourceImageHandle, destinationImageHandle));
     public IGpuCommandPool Create(in GpuObjectName name) => new FakeCommandPool(created: Create(kind: "command pool"));
     public IGpuComputePipeline Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description, in GpuObjectName name) => new FakePipeline(
         created: CreateCompiled(kind: "compute pipeline"),

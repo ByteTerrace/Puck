@@ -37,6 +37,10 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
             result |= VulkanAccessFlags.TransferWrite;
         }
 
+        if (0 != (access & GpuAccess.TransferRead)) {
+            result |= VulkanAccessFlags.TransferRead;
+        }
+
         if (0 != (access & GpuAccess.ColorAttachmentWrite)) {
             result |= VulkanAccessFlags.ColorAttachmentWrite;
         }
@@ -61,6 +65,8 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
             GpuImageLayout.ShaderReadOnly => VulkanImageLayout.ShaderReadOnlyOptimal,
             GpuImageLayout.RenderTarget => VulkanImageLayout.ColorAttachmentOptimal,
             GpuImageLayout.DepthAttachment => VulkanImageLayout.DepthStencilAttachmentOptimal,
+            GpuImageLayout.TransferSource => VulkanImageLayout.TransferSourceOptimal,
+            GpuImageLayout.TransferDestination => VulkanImageLayout.TransferDestinationOptimal,
             // The cross-Vulkan external handoff layout an importing instance re-transitions from.
             GpuImageLayout.External => VulkanImageLayout.General,
             _ => VulkanImageLayout.Undefined,
@@ -220,6 +226,18 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
             alpha: 0f
         );
     }
+    /// <inheritdoc/>
+    public void CopyImage(nint commandBufferHandle, nint sourceImageHandle, nint destinationImageHandle, uint width, uint height) =>
+        recordingApi.CopyImageToImage(
+            commandBufferHandle: commandBufferHandle,
+            destinationImageHandle: destinationImageHandle,
+            destinationImageLayout: ToVulkanLayout(layout: GpuImageLayout.TransferDestination),
+            device: Device,
+            height: height,
+            sourceImageHandle: sourceImageHandle,
+            sourceImageLayout: ToVulkanLayout(layout: GpuImageLayout.TransferSource),
+            width: width
+        );
     /// <inheritdoc/>
     public void Dispatch(nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) =>
         recordingApi.Dispatch(

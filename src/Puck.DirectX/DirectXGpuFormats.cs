@@ -67,6 +67,12 @@ public static class DirectXGpuFormats {
             case GpuImageLayout.DepthAttachment:
                 resourceState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_DEPTH_WRITE;
                 return true;
+            case GpuImageLayout.TransferSource:
+                resourceState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_SOURCE;
+                return true;
+            case GpuImageLayout.TransferDestination:
+                resourceState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST;
+                return true;
             default:
                 resourceState = default;
                 return false;
