@@ -114,13 +114,17 @@ public sealed class ShadersGenerateLawTests {
     [Fact]
     public void ADriftedEngineKernelIncludeFailsByName() {
         var world = EngineKernels.Single(predicate: static kernel => string.Equals(a: kernel.Path, b: WorldPath, comparisonType: StringComparison.Ordinal));
+        var drifted = world.Text.Replace(comparisonType: StringComparison.Ordinal, newValue: "staleSources", oldValue: "screenSources");
+
+        // The drift must move the text, or the law holds a checked-in interface to itself and proves nothing.
+        Assert.NotEqual(actual: drifted, expected: world.Text);
 
         var (exitCode, error) = Check([
             (IsaPath, SdfIsaHlsl.Generate()),
             (OverlayPath, InterfaceOf(id: RenderGraphPackageCatalog.Overlay)),
             (FilmGrainPath, InterfaceOf(id: RenderGraphPackageCatalog.SdfFilmGrain)),
             (PlacePath, InterfaceOf(id: RenderGraphPackageCatalog.Place)),
-            (WorldPath, world.Text.Replace(comparisonType: StringComparison.Ordinal, newValue: "staleWords", oldValue: "sdfWords")),
+            (WorldPath, drifted),
             .. SourceIncludes
         ]);
 

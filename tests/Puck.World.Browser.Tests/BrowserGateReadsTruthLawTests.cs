@@ -50,7 +50,7 @@ public sealed class BrowserGateReadsTruthLawTests {
         var errors = new List<string>();
         var deferred = new List<string>();
         var root = RepositoryPaths.RequireRoot();
-        var basisBytes = File.ReadAllBytes(path: Path.Combine(
+        var basisBytes = ShippedWorldDocuments.Composed(path: Path.Combine(
             root,
             "src",
             "Puck.World",

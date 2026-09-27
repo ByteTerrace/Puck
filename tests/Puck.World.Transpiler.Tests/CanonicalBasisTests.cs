@@ -32,12 +32,15 @@ public class CanonicalBasisTests {
         using var directory = new TemporaryDirectory();
         var avatars = Directory.CreateDirectory(path: directory.PathOf(name: "avatars")).FullName;
 
+        var shipped = ShippedWorlds.PathOf(relativePath: "avatars/moth.puck");
+
+        // The source with every file it composes from, at their places relative to it.
         File.Copy(
-            destFileName: Path.Combine(
-                path1: avatars,
-                path2: "moth.puck"
+            destFileName: ShippedWorldDocuments.CopyComposition(
+                directory: directory.RootPath,
+                path: shipped
             ),
-            sourceFileName: ShippedWorlds.PathOf(relativePath: "avatars/moth.puck")
+            sourceFileName: shipped
         );
 
         var rootPath = directory.PathOf(name: "courtyard.world.json");
