@@ -799,7 +799,13 @@ from SPIR-V's array type and DXIL's bind count, and one otherwise.
 
 Both readers, and both of a layout's views, order records by set, then binding,
 then a bound block before a pushed one at the same place
-(`ShaderInterfaceLayout.Ordered`). `ShaderBytecodeReflector` picks the reader by
+(`ShaderInterfaceLayout.Ordered`). `ShaderInterfaceLayout.Mismatch` holds each
+reflected binding to the one the layout places at its set and binding: the same
+kind, stride, count and block members, and the same name, since two resources of
+one shape exchanged between their bindings differ in nothing else. DXIL names
+every binding from its bind description and SPIR-V from the debug name DXC
+emits; a SPIR-V binding with no debug name is refused, since which resource it
+binds cannot be told. `ShaderBytecodeReflector` picks the reader by
 the bytes, SPIR-V by its magic number and DXIL by its container's, loading the
 DXIL reader once, on the first container it reads.
 

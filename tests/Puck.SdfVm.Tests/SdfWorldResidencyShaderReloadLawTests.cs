@@ -13,8 +13,8 @@ namespace Puck.SdfVm.Tests;
 /// <summary>
 /// Laws for <see cref="SdfWorldResidency.RequestShaderReload"/> over <see cref="FakeGpuDevice"/>, from a kernel tree on
 /// disk, the build's own SPIR-V kernels: a tree whose kernel was compiled against another instruction set, beside this
-/// host's own <c>isa/sdf-isa.hlsli</c>, or binds the program words and the frame's instance grid in each other's places,
-/// is refused by the interface check, the request reports it failed and the residency keeps rendering with its kernels;
+/// host's own <c>isa/sdf-isa.hlsli</c>, or binds the program words and the frame's instance grid, or the cull bounds and
+/// the views' dispatch arguments (two buffers of one shape), in each other's places, is refused by the interface check, the request reports it failed and the residency keeps rendering with its kernels;
 /// a tree whose changed kernel reads this host's interface applies.
 /// </summary>
 public sealed class SdfWorldResidencyShaderReloadLawTests {
@@ -48,6 +48,14 @@ public sealed class SdfWorldResidencyShaderReloadLawTests {
                     ),
                     kernel: SdfKernel.InstanceCull
                 ), SdfWorldPackage.ProgramWords),
+                (changed.With(
+                    bytecode: SpirvEdits.BindingsSwapped(
+                        first: SdfWorldPackage.CullBoundsWritten,
+                        module: changed[SdfKernel.CullArgs].Span,
+                        second: SdfWorldPackage.ViewsArgsWritten
+                    ),
+                    kernel: SdfKernel.CullArgs
+                ), SdfWorldPackage.CullBoundsWritten),
             ])) {
                 Tree(
                     kernels: kernels,

@@ -16,6 +16,10 @@ namespace Puck.Shaders;
 /// else.
 /// </summary>
 public static class SpirvInterfaceReader {
+    /// <summary>The prefix of the name the reader gives a variable the module carries no debug name for: followed by the
+    /// variable's result id, such as <c>%12</c>.</summary>
+    public const string UnnamedPrefix = "%";
+
     private const uint DecorationArrayStride = 6;
     private const uint DecorationBinding = 33;
     private const uint DecorationBlock = 2;
@@ -112,7 +116,7 @@ public static class SpirvInterfaceReader {
                 module: parsed,
                 typeId: declared
             );
-            var name = (parsed.Names.GetValueOrDefault(key: id) ?? $"%{id}");
+            var name = (parsed.Names.GetValueOrDefault(key: id) ?? $"{UnnamedPrefix}{id}");
             var kind = (pushed
                 ? GpuBindingKind.ConstantBuffer
                 : Kind(

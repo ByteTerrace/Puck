@@ -148,7 +148,11 @@ public sealed class ShaderInterfaceLayout {
     /// must be the view's. A binding the module does not read is not reflected, so it is not checked. A DXIL container
     /// cannot tell root constants from a bound constant buffer, so in its view the pushed index is the constant buffer
     /// at register <c>b0</c> in space <see cref="GpuPipelineLayoutDescription.PushIndexSpace"/>. When neither
-    /// view fits, the disagreement is named against the view that fits more of the module's bindings in order.
+    /// view fits, the disagreement is named against the view that fits more of the module's bindings in order. A binding
+    /// is its resource by name: two resources of one shape exchanged between their bindings fit every shape rule, so each
+    /// reflected name must be the one the view places there. Both readers name every binding (DXIL by its bind
+    /// description, SPIR-V by the debug name DXC emits); a SPIR-V module without the debug name is refused, since which
+    /// resource it binds cannot be told.
     /// <para>A stamped interface (<see cref="ShaderInterface.Stamp"/>) holds the module to its stamp before anything else:
     /// the module must read its pass block, and under the stamped name, since a module that reads none carries no stamp
     /// and one whose pass block carries another stamp was compiled from other declarations.</para></summary>
@@ -182,7 +186,9 @@ public sealed class ShaderInterfaceLayout {
 
         return $"the module reads {binding}; interface '{Interface.Name}' ({Interface.Hash}) lays out {((expected is null)
             ? $"no {(binding.Pushed ? "pushed " : "")}{binding.Kind} at set {binding.Set} binding {binding.Binding}"
-            : expected.ToString())}.";
+            : expected.ToString())}{(binding.Name.StartsWith(comparisonType: StringComparison.Ordinal, value: SpirvInterfaceReader.UnnamedPrefix)
+                ? $"; the module names no resource at set {binding.Set} binding {binding.Binding}, so which resource it binds there cannot be told; compile it with the debug names DXC emits"
+                : "")}.";
     }
     /// <summary>Orders bindings as both bytecode readers and a layout's views list them: by set, then binding, then a
     /// bound block before a pushed one at the same place, which is where SPIR-V reports a pushed index beside a bound
@@ -238,6 +244,7 @@ public sealed class ShaderInterfaceLayout {
 
             if (
                 (candidate is null) ||
+                !string.Equals(a: candidate.Name, b: binding.Name, comparisonType: StringComparison.Ordinal) ||
                 (candidate.ElementStride != binding.ElementStride) ||
                 (candidate.Count != binding.Count) ||
                 !binding.Members.SequenceEqual(second: candidate.Members)

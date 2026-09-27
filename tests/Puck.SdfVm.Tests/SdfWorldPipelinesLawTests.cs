@@ -61,9 +61,10 @@ public sealed class SdfWorldPipelinesLawTests {
         Assert.Equal(expected: 12L, actual: Created(cache: cache));
     }
     // A reload is held to the host's interface before it leases anything: a kernel compiled against another instruction
-    // set (its pass block carries another stamp) or binding the program words where the frame's instance grid belongs, and
-    // the grid where the words belong, refuses the reload by name, and the set keeps its kernels and creates nothing; the
-    // same kernels compiled as the host was prepare.
+    // set (its pass block carries another stamp), one binding the program words and the frame's instance grid in each
+    // other's places, and one binding the cull bounds and the views' dispatch arguments, two buffers of one shape, in each
+    // other's places, each refuse the reload by name, and the set keeps its kernels and creates nothing; the same kernels
+    // compiled as the host was prepare.
     [Fact]
     public void AReloadWhoseKernelsDoNotReadTheHostsInterfaceIsRefusedAndTheSetKeepsItsKernels() {
         var gpu = new FakeGpuDevice();
@@ -94,9 +95,19 @@ public sealed class SdfWorldPipelinesLawTests {
             kernel: SdfKernel.InstanceCull
         );
 
+        var sameShaped = changed.With(
+            bytecode: SpirvEdits.BindingsSwapped(
+                first: SdfWorldPackage.CullBoundsWritten,
+                module: changed[SdfKernel.CullArgs].Span,
+                second: SdfWorldPackage.ViewsArgsWritten
+            ),
+            kernel: SdfKernel.CullArgs
+        );
+
         foreach (var (kernels, stem, reason) in ((ReadOnlySpan<(SdfKernelSet, string, string)>)[
             (foreign, "sdf-beam", "stamped"),
             (swapped, "sdf-instance-cull", SdfWorldPackage.ProgramWords),
+            (sameShaped, "sdf-cull-args", SdfWorldPackage.CullBoundsWritten),
         ])) {
             var refusal = Assert.Throws<InvalidOperationException>(testCode: () => pipelines.PrepareReload(
                 cache: cache,
