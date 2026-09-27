@@ -146,7 +146,7 @@ public sealed class WorldSessionResolverLawTests {
         var definition = Fixtures.BuildDocument();
         var cohort = Cohort((1, null));
 
-        // Aborted case: the resolve that "never reached a running instance" (TriggerPortal's own drain-time
+        // Aborted case: the resolve that "never reached a running instance" (the portal scan's own drain-time
         // TryResolveDestination failure, simulated here by calling AbortGeneration directly against the minted
         // name, exactly as ApplyTransfer's own failure path does).
         var abortedDestination = GlobalDestination(name: "camp-aborted");

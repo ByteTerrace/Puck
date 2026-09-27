@@ -656,8 +656,9 @@ public static class WorldBootComposition {
         // module is: both sections are document state that compile to the SAME rule substrate.
         services.AddSingleton<ICommandModule>(implementationFactory: static sp => new WorldInteractionCommandModule(link: sp.GetRequiredService<IServerLink>()));
 
-        // The transport-neutral local session resolver — WorldInstanceHost's
-        // TriggerPortal and WorldPlacementCommandModule's world.destinations read-back both consume it, so it is
+        // The transport-neutral local session resolver — WorldInstanceHost's portal crossings
+        // (ResolveAndEnqueueCoalescedTransfers), its session screens' observation door and WorldPlacementCommandModule's
+        // world.destinations read-back all consume it, so it is
         // registered ahead of (and independent from) WorldInstanceHost itself.
         services.AddSingleton<WorldSessionResolver>();
 

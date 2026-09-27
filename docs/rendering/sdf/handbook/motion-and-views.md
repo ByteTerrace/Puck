@@ -145,6 +145,14 @@ another world as a view instance (`WorldViewInstances`).
   and contributes no light of its own.
 - **A session view** is an `sdf.world` instance too, rendering another world's
   own frame source. A screen showing it shows a **world inside the world**.
+  A window session (`projection: window`, on a face whose portal facet maps a
+  counterpart) renders each frame through an off-axis camera fitted, from the
+  viewer's eye mapped through the door's isometry, to the face's glass mapped
+  the same way (`WorldWindowFrustumFit`): it shows what a traveller standing at
+  the eye would see through the door, and the image parallaxes as the eye
+  moves. The glass shows the image edge to edge, with no bezel. The frustum's
+  shear rides the camera (`CameraSnapshot.FrustumOffset`), which the view pass
+  and a hit through the image both read.
 
 **The scheduler decides what renders.** A view renders only while something
 shows it: a screen, through the footprint of its declared extent inside the
@@ -173,7 +181,12 @@ other's screens each show the other's previous frame, never a same-frame loop.
 ```
 
 A hit on a screen showing a view continues through that view's camera into
-the world it films (`RenderGraphHitWalk`), up to the graph's nesting depth.
+the world it films (`RenderGraphHitWalk`), up to the graph's nesting depth. A
+hit on a portal's window continues through the camera the window last rendered
+from into the destination, where no screen stands (a projected destination's
+screens bind dark), and ends on the surface its ray meets among the
+destination's static placements (`RenderGraphHitPath.Surface`).
+
 ## View transitions move regions and switch content
 
 A `ViewLayout` is a snapshot of which view occupies which

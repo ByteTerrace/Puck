@@ -132,8 +132,10 @@ public sealed class RenderGraphHitWalkLawTests {
             ).Steps
         );
     }
+    // A ray that meets no placement ends on the nested world, at the surface the scene finds along it when the scene
+    // answers for that world, and with no surface when it does not.
     [Fact]
-    public void ANestedWorldWithNothingUnderThePickEndsOnThatWorld() {
+    public void ANestedWorldWithNothingUnderThePickEndsOnThatWorldsSurface() {
         var set = Set(
             Instance(
                 name: "main",
@@ -141,24 +143,37 @@ public sealed class RenderGraphHitWalkLawTests {
             ),
             Instance(name: "room")
         );
-        var path = RenderGraphHitWalk.Walk(
+        var surface = new FixedVector3(
+            X: FixedQ4816.FromDouble(value: 0.25),
+            Y: FixedQ4816.FromDouble(value: -0.5),
+            Z: FixedQ4816.FromInteger(value: -3)
+        );
+
+        RenderGraphHitPath Pick(FixedVector3? found) => RenderGraphHitWalk.Walk(
             instance: Main,
             maxDepth: set.NestingDepth,
             ray: Ray(
                 x: 0.49,
                 y: 0.51
             ),
-            scene: new Scene(placements: [
-                [Screen(source: SourceHandle.Instance(name: "room"))],
-                [],
-            ]),
+            scene: new Scene(
+                placements: [
+                    [Screen(source: SourceHandle.Instance(name: "room"))],
+                    [],
+                ],
+                surface: found
+            ),
             set: set
         );
+
+        var path = Pick(found: surface);
 
         Assert.Equal(
             expected: (RenderGraphHitEnd.World, Room, 1),
             actual: (path.End, path.Instance, path.Steps.Count)
         );
+        Assert.Equal(expected: surface, actual: path.Surface);
+        Assert.Null(@object: Pick(found: null).Surface);
     }
     [Fact]
     public void TheWalkStopsAtTheDepthLimit() {
@@ -337,12 +352,17 @@ public sealed class RenderGraphHitWalkLawTests {
         );
     }
 
-    private sealed class Scene(IReadOnlyList<SourceMapping>[] placements, bool camera = true) : IRenderGraphHitScene {
+    private sealed class Scene(IReadOnlyList<SourceMapping>[] placements, bool camera = true, FixedVector3? surface = null) : IRenderGraphHitScene {
         public IReadOnlyList<SourceMapping> Placements(int instance) => placements[instance];
         public bool TryCamera(int instance, out CameraSnapshot snapshot) {
             snapshot = Camera;
 
             return camera;
+        }
+        public bool TrySurface(int instance, SourceRay ray, out FixedVector3 point) {
+            point = surface.GetValueOrDefault();
+
+            return surface.HasValue;
         }
     }
 }

@@ -351,8 +351,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             slot: slot,
             view: view
         ),
-            // The document's OWN authored session record, verbatim — see ApplySessionSource's own remarks for why
-            // this must not narrow through TrySession's (destination, camera)-only verb surface.
+            // The document's own authored session record, verbatim, projection and resolution included.
             WorldScreenSource.Session session => ApplySessionSource(
             index: index,
             session: session

@@ -3905,15 +3905,21 @@ Each commit is marked with what it waits on.
    `SourceMappingLawTests.TheDrawFormRunsTheChainTheHitRuns` (the draw form
    agrees with `MapRay` over every layout, fit, crop and warp) and
    `SdfWorldTablesUploadLawTests.TheScreenMappingTableHoldsEachScreensDrawFormAndAnUnchangedMappingOwesNothing`.
-6. Hits continue through live instances. Landed, except the portal check:
-   `WorldViewGraphHost.Walk` runs `RenderGraphHitWalk` over the runtime's
-   instance set from the published panes, with each view's seat camera and each
-   pane's paired camera, and the pane pointer maps through its instance's
-   published mapping. Each view's world producer reports the published screens
-   as the surface placements inside its world, so a walk continues from a view
-   through a screen into its source (step 1's screen half). The portal check, a pick
-   through a portal reaching the nested world's surface, needs a nested world
-   rendered as an instance, which no live world does yet.
+6. Hits continue through live instances. Landed. `WorldViewGraphHost.Walk`
+   runs `RenderGraphHitWalk` over the runtime's instance set from the published
+   panes, with each view's seat camera and each pane's paired camera, and the pane
+   pointer maps through its instance's published mapping. Each view's world
+   producer reports the published screens as the surface placements inside its
+   world, so a walk continues from a view through a screen into its source (step
+   1's screen half). A portal's window is a session view: a walk through its
+   glass continues through the camera the window last rendered from
+   (`WorldSessionSceneEmitter.TryCamera`, a window's fitted camera with its
+   shear) into the destination, which reports no placements under the depth-one
+   policy, and ends on the surface its ray meets among the destination's static
+   placements (`RenderGraphHitPath.Surface`). The portal check's laws are
+   `WorldViewPaneMappingLawTests.APickThroughAPortalReachesTheDestinationsSurfaceThroughTheCameraItsWindowRendered`
+   and `WorldWindowFrustumFitLawTests`, and the `portal-window` canary picks the
+   destination's marker through a live window on both backends.
 
 ### P14 — The SDF engine as a pass package
 

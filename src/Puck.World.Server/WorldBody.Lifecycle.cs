@@ -620,7 +620,7 @@ public sealed partial class WorldBody {
     }
     /// <summary>Overrides just this body's own linear velocity — the mapped-arrival half of a portal transfer (see
     /// <c>Puck.World.WorldPlacementPortal.Arrival</c>): the source's captured velocity, rotated into the
-    /// destination's own frame by <c>Puck.World.Server.WorldPortalArrivalMath</c>, written after
+    /// destination's own frame by <see cref="WorldFrameIsometry.MapArrival"/>, written after
     /// <see cref="Pose(FixedVector3, FixedQ4816, FixedQ4816, FixedQ4816)"/>'s own hard-teleport commit — the same
     /// "AFTER Pose, never before" ordering <see cref="ApplyTransferState"/> follows, so the discontinuity has already
     /// reset <see cref="FixedPreviousPosition"/> before this runs. Deliberately narrower than

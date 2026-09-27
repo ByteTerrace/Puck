@@ -4,6 +4,7 @@ using Puck.Abstractions.Sources;
 using Puck.Assets.Documents;
 using Puck.Commands;
 using Puck.Hosting;
+using Puck.Maths;
 using Puck.SdfVm;
 using Puck.World.Client;
 using Xunit;
@@ -144,7 +145,7 @@ public sealed partial class WorldViewPaneMappingLawTests {
     public void AHitOnAScreenShowingACameraContinuesIntoTheView() {
         var screens = ShowCamera(demand: WorldViewDemand.Screen);
 
-        m_host.ViewCameras = new FixedViewCameras(Camera: Camera(x: 0f));
+        m_host.ViewScenes = new FixedViewScenes(Camera: Camera(x: 0f));
         Frame(pane: null);
         Frame(pane: null);
 
@@ -210,7 +211,7 @@ public sealed partial class WorldViewPaneMappingLawTests {
         Assert.Equal(expected: filmsWorld, actual: schedule.Renders.Contains(value: set.IndexOf(name: "session")));
     }
 
-    private sealed record FixedViewCameras(CameraSnapshot Camera) : IWorldViewCameras {
+    private sealed record FixedViewScenes(CameraSnapshot Camera) : IWorldViewScenes {
         public bool TryCamera(string view, out CameraSnapshot camera) {
             camera = Camera;
 
@@ -219,6 +220,11 @@ public sealed partial class WorldViewPaneMappingLawTests {
                 b: ViewCamera,
                 comparisonType: StringComparison.Ordinal
             );
+        }
+        public bool TrySurface(string view, SourceRay ray, out FixedVector3 point) {
+            point = default;
+
+            return false;
         }
     }
 }
