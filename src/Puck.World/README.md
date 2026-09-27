@@ -1656,7 +1656,10 @@ All render levers are live verbs with no-arg echoes of the current value:
 world's own `render.low`, `render.medium` or `render.high` preset, each a
 shadow tier, an ambient-occlusion switch and a render-scale tier; the names are
 the engine's one quality vocabulary (`QualityTiers`), and a preset the world
-does not author is refused by name. Render scale applies
+does not author is refused by name. The shipped worlds share one table,
+`Assets/worlds/quality.puck`: the standard world imports it, and a world on
+another basis imports it by name, so every presenting world answers each tier
+without moving its own boot levers (`ShippedWorldQualityLawTests`). Render scale applies
 to both seat views and named cameras, multiplied by any layout-transition scale.
 Named tiers are
 facades over continuous values. Do not assume a lower render scale is

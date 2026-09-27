@@ -135,7 +135,7 @@ public sealed record WorldRenderDefaults(
     /// <summary>Gets the inert absence — shadows off, no crowd radius, no ambient occlusion, native scale, no
     /// authored presets, the engine's pinned far distance. The engine holds no render posture of its own: a world
     /// authors its boot levers and its preset table in its own <c>render</c> section, or inherits them from its
-    /// basis.</summary>
+    /// basis or an import; the shipped worlds share one preset table, <c>Assets/worlds/quality.puck</c>.</summary>
     public static WorldRenderDefaults Absent { get; } = new WorldRenderDefaults();
 
     /// <summary>Returns the authored preset for a quality tier, or <see langword="null"/> when the world authors none
