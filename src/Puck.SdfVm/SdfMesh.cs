@@ -4,8 +4,8 @@ namespace Puck.SdfVm;
 
 /// <summary>An indexed triangle list in object space: opaque geometry a frame draws beside its SDF program.</summary>
 /// <remarks>Triangles wind counter-clockwise seen from their front, in the right-handed convention of
-/// <see cref="Puck.Abstractions.Cameras.ViewProjection"/>. A world prototype's inline mesh becomes one, placed by its static
-/// placements and rasterized by the mesh pass.</remarks>
+/// <see cref="Puck.Abstractions.Cameras.ViewProjection"/>. A world prototype's inline mesh becomes one, placed by its placements
+/// and stamps and rasterized by the mesh pass.</remarks>
 public sealed record SdfMesh {
     /// <summary>Creates a mesh, refusing a malformed index list or a non-finite position.</summary>
     /// <param name="positions">The object-space vertex positions.</param>

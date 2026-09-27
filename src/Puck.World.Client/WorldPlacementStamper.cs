@@ -152,14 +152,33 @@ public static class WorldPlacementStamper {
             ));
         }
     }
-    // A static instance's mesh draw: the prototype's engine-frame triangles under the instance's scale, its mirror (a
-    // plane through the placement origin in the local frame, as the shapes reflect) and the placement's yaw and
-    // origin, composed in the row-vector convention SdfMeshDraw carries.
+    // A static instance's mesh draw, appended when the placement carries a mesh and the caller collects draws.
     private static void AppendMeshDraw(SdfMesh? mesh, int material, Vector3 origin, Quaternion rotation, float scale, Vector3? reflectionNormal, ICollection<SdfMeshDraw>? meshDraws) {
         if ((mesh is null) || (meshDraws is null)) {
             return;
         }
 
+        meshDraws.Add(item: MeshDrawOf(
+            material: material,
+            mesh: mesh,
+            origin: origin,
+            reflectionNormal: reflectionNormal,
+            rotation: rotation,
+            scale: scale
+        ));
+    }
+    /// <summary>Poses a prototype's mesh as a draw: its engine-frame triangles under a uniform scale, an optional mirror (a
+    /// plane through the origin in the local frame, as the shapes reflect), then the rotation and the origin, composed in
+    /// the row-vector convention <see cref="SdfMeshDraw"/> carries. A static placement and a stamp-pool root pose it
+    /// alike.</summary>
+    /// <param name="mesh">The prototype's mesh (<see cref="MeshOf"/>).</param>
+    /// <param name="material">The engine material the mesh's palette entry registered as.</param>
+    /// <param name="origin">The world-space origin.</param>
+    /// <param name="rotation">The orientation.</param>
+    /// <param name="scale">The uniform scale.</param>
+    /// <param name="reflectionNormal">The mirror plane's normal, or <see langword="null"/> for none.</param>
+    /// <returns>The draw.</returns>
+    internal static SdfMeshDraw MeshDrawOf(SdfMesh mesh, int material, Vector3 origin, Quaternion rotation, float scale, Vector3? reflectionNormal = null) {
         var local = Matrix4x4.CreateScale(scale: scale);
 
         if (reflectionNormal is { } normal) {
@@ -169,15 +188,17 @@ public static class WorldPlacementStamper {
             ));
         }
 
-        meshDraws.Add(item: new SdfMeshDraw(
+        return new SdfMeshDraw(
             Material: material,
             Mesh: mesh,
             ObjectToWorld: ((local * Matrix4x4.CreateFromQuaternion(quaternion: rotation)) * Matrix4x4.CreateTranslation(position: origin))
-        ));
+        );
     }
-    // The engine-frame SdfMesh of an inline prototype mesh, converted once: prototype rows are replaced, never mutated,
-    // so every placement and every rebuild of one row shares one mesh.
-    private static SdfMesh MeshOf(WorldPrototypeMesh mesh) => Meshes.GetValue(
+    /// <summary>The engine-frame <see cref="SdfMesh"/> of an inline prototype mesh, converted once: prototype rows are
+    /// replaced, never mutated, so every placement, stamp and rebuild of one row shares one mesh.</summary>
+    /// <param name="mesh">The prototype's inline mesh.</param>
+    /// <returns>The shared mesh.</returns>
+    internal static SdfMesh MeshOf(WorldPrototypeMesh mesh) => Meshes.GetValue(
         createValueCallback: static authored => new SdfMesh(
             indices: authored.Indices.ToArray(),
             positions: authored.EngineVertices.ToArray()

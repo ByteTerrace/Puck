@@ -257,7 +257,14 @@ another format (`SHADERPIPE_DEPTH_FORMAT`), a pass input
 (`SHADERPIPE_DEPTH_SAMPLED`), a pipeline output (`SHADERPIPE_DEPTH_PUBLIC`),
 `history` (`SHADERPIPE_DEPTH_HISTORY`), an initialization
 (`SHADERPIPE_DEPTH_INITIALIZATION`), and a compute or fullscreen writer
-(`SHADERPIPE_DEPTH_WRITER`). Multiple compute outputs are supported
+(`SHADERPIPE_DEPTH_WRITER`). A depth resource that forwards nothing may state
+`clearDepth`, the depth its writer clears it to in [0, 1], which is its render
+pass's `GpuDepthAttachment.ClearDepth` and 1 when omitted; a pass that keeps
+greater depths (`"depthCompare": "Greater"`, reversed Z) states 0. The planner
+refuses by name (`SHADERPIPE_DEPTH_CLEAR`) a clear depth outside [0, 1], one on
+a forwarded version or a non-depth resource, and a strict test that no fragment
+can pass against its cleared depth: `Greater` against 1, `Less` against 0.
+Multiple compute outputs are supported
 (`MaxOutputsPerPass`, 8 by default); a graphics pass writes exactly one color
 image (`SHADERPIPE_UNSUPPORTED_MRT`) and a geometry pass at most one depth
 version (`SHADERPIPE_DEPTH_OUTPUTS`), every attachment of one pass at one
@@ -1121,7 +1128,7 @@ writing its successor, or reads it from the previous frame, samples discarded
 contents (`SHADERPIPE_DISCARDED_READ`). A graphics pass may write either end of
 a forward. The version it writes is an attachment of its render pass, loaded
 when the version forwards a predecessor and cleared (a color to opaque black, a
-depth to one) when its writer starts from discarded contents, and stored
+depth to its `clearDepth`) when its writer starts from discarded contents, and stored
 exactly when anything uses the version afterwards: a reader, a successor,
 publication, or the next frame. The render pass leaves every attachment in its
 attachment layout, and the next access's planned barrier moves it on, a

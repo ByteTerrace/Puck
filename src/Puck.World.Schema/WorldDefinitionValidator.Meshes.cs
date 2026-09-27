@@ -3,8 +3,8 @@ using System.Numerics;
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
-    // The prototype rows: every creation document, then every inline mesh, and every placement that would carry a mesh
-    // where only a static stamp draws one.
+    // The prototype rows: every creation document, then every inline mesh. A mesh draws wherever its creation renders:
+    // a static placement, an animated or attached stamp, an inhabited body, a session view or a neighbour's border.
     private static HashSet<string> ValidatePrototypes(WorldDefinition definition, IReadOnlyList<WorldPrototype> creations, HashSet<string> fontNames, bool hasTextCatalog, List<string> errors) {
         var ids = ValidateCreations(
             creations: creations,
@@ -18,8 +18,6 @@ public static partial class WorldDefinitionValidator {
             return ids;
         }
 
-        var meshPrototypes = new HashSet<string>(comparer: StringComparer.Ordinal);
-
         for (var index = 0; (index < creations.Count); index++) {
             if (
                 (creations[index] is not { Mesh: { } mesh } creation) ||
@@ -28,44 +26,12 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            var path = $"prototypes[{index}]";
-
             ValidatePrototypeMesh(
                 errors: errors,
                 mesh: mesh,
                 paletteCount: (creation.Document.Palette?.Count ?? 0),
-                path: $"{path}.mesh"
+                path: $"prototypes[{index}].mesh"
             );
-
-            // An animated creation's placements ride the stamp pool, which draws its shapes and no mesh.
-            if ((creation.Document.Frames is { Count: > 0 }) || (creation.Document.Drivers is { Count: > 0 })) {
-                errors.Add(item: $"{path}.mesh is refused on an animated creation — a mesh is a static-stamp facet.");
-            }
-
-            _ = meshPrototypes.Add(item: creation.Id.ToString());
-        }
-
-        if (meshPrototypes.Count == 0) {
-            return ids;
-        }
-
-        var placements = definition.Placements;
-
-        for (var index = 0; (index < placements.Count); index++) {
-            if (
-                (placements[index] is not { } placement) ||
-                !meshPrototypes.Contains(item: placement.PrototypeId)
-            ) {
-                continue;
-            }
-
-            // An inhabited or attached placement rides a body's or a parent's pose through the stamp pool, which
-            // draws no mesh.
-            if (placement.Inhabit is not null) {
-                errors.Add(item: $"placements.rows[{index}] inhabits prototype '{placement.PrototypeId}', whose mesh only a static placement draws.");
-            } else if (placement.Attach is not null) {
-                errors.Add(item: $"placements.rows[{index}] attaches prototype '{placement.PrototypeId}', whose mesh only a static placement draws.");
-            }
         }
 
         return ids;

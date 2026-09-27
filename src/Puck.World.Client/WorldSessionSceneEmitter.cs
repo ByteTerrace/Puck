@@ -62,6 +62,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     private WorldBakedColors? m_bakedColors;
     private WorldStateMirror? m_bakedColorsMirror;
     private int m_bakedColorRevision;
+    // The static placements' mesh draws the last live Emit fixed.
+    private IReadOnlyList<SdfMeshDraw> m_meshDraws = [];
     private SdfProgram? m_lastProgram;
     // The WINDOW projection's per-produced-frame override — set by WorldScreenBinder.Publish (the one place with access
     // to both the local eye and the border pair's two face rows) before the render graph renders this view.
@@ -279,7 +281,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     }
 
     /// <inheritdoc/>
-    public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
+    public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
         var programChanged = !ReferenceEquals(
             objA: program,
             objB: m_lastProgram
@@ -320,6 +322,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             // The mirrored world's own far plane (its render.farDistance), so the panel frames the same depth its
             // authority renders.
             FarDistance = WorldRenderFarDistance.Resolve(defaults: m_mirror.Definition.Render),
+            // The mirrored world's static placements' meshes.
+            MeshDraws = meshDraws,
         };
     }
     /// <inheritdoc/>
@@ -345,14 +349,18 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             colors.Begin();
             // A remote session mirror carries its document but no font asset origin/bytes. Its creation text stays
             // omitted until session delivery transports pinned assets and this view can share the merged glyph atlas.
+            var meshDraws = new List<SdfMeshDraw>();
+
             WorldPlacementStamper.EmitStatic(
                 builder: builder,
                 colors: colors,
                 definition: definition,
                 creations: definition.Creations,
                 placements: definition.Placements,
-                palettes: m_palettes
+                palettes: m_palettes,
+                meshDraws: meshDraws
             );
+            m_meshDraws = meshDraws;
         }
 
         EmitAvatars(
@@ -511,4 +519,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     public int DynamicSlotCount => WorldRigCatalog.DynamicTransformCapacity;
     /// <inheritdoc/>
     public int RevisionComponentCount => 3;
+    /// <inheritdoc/>
+    /// <remarks>The mirrored world's static placements' meshes, fixed by each live <see cref="Emit"/>. A session view
+    /// renders no stamp pool, so an animated or attached stamp draws neither its shapes nor its mesh here.</remarks>
+    public IReadOnlyList<SdfMeshDraw> MeshDraws => m_meshDraws;
 }

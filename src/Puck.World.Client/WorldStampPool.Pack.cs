@@ -11,6 +11,16 @@ public sealed partial class WorldStampPool {
     private readonly Registration?[] m_packedRegistrations = new Registration?[WorldPlacementPolicy.MaxStampRegistrations];
     // A registration's slots as they stood before its repack, which the moved set compares the repack against.
     private readonly DynamicTransform[] m_previousSlots = new DynamicTransform[SlotsPerPlacement];
+    // Each pool entry's mesh draw as the last pack posed it (null for none), and the list they compose, rebuilt only in
+    // a pack that changed an entry, so a pool at rest hands the engine the list it already packed.
+    private readonly SdfMeshDraw?[] m_meshDraws = new SdfMeshDraw?[WorldPlacementPolicy.MaxStampRegistrations];
+    private IReadOnlyList<SdfMeshDraw> m_meshDrawList = [];
+    private bool m_meshDrawsChanged;
+
+    /// <summary>Gets the mesh draws the last <see cref="PackTransforms"/> posed: each live registration whose creation
+    /// carries a mesh (<see cref="WorldPrototype.Mesh"/>), at its packed root and scale, in pool order. The same list
+    /// instance while no draw moved.</summary>
+    public IReadOnlyList<SdfMeshDraw> MeshDraws => m_meshDrawList;
 
     /// <summary>Packs the pool's moved transforms: each live registration's root rides its placement pose (animated),
     /// the client's interpolated body pose (body-rooted), or that pose composed with the attach facet's local offset
@@ -59,6 +69,10 @@ public sealed partial class WorldStampPool {
 
             if (live is null) {
                 m_packedRegistrations[index] = null;
+                SetMeshDraw(
+                    draw: null,
+                    index: index
+                );
 
                 if (m_owners.Vacate(
                     moved: moved,
@@ -148,6 +162,41 @@ public sealed partial class WorldStampPool {
                 rootSlot: rootSlot,
                 shapeCount: shapeCount
             );
+
+            // The root slot holds the pose the shapes were packed under, followers included, whether or not this frame
+            // repacked it.
+            SetMeshDraw(
+                draw: ((live.Mesh is { } mesh)
+                    ? WorldPlacementStamper.MeshDrawOf(
+                        material: live.MeshMaterial,
+                        mesh: mesh,
+                        origin: transforms[rootSlot].Position,
+                        rotation: transforms[rootSlot].Orientation,
+                        scale: placementScale
+                    )
+                    : null),
+                index: index
+            );
+        }
+
+        if (m_meshDrawsChanged) {
+            var draws = new List<SdfMeshDraw>();
+
+            foreach (var draw in m_meshDraws) {
+                if (draw is { } posed) {
+                    draws.Add(item: posed);
+                }
+            }
+
+            m_meshDrawList = draws;
+            m_meshDrawsChanged = false;
+        }
+    }
+    // Records one pool entry's draw, noting whether it changed.
+    private void SetMeshDraw(int index, SdfMeshDraw? draw) {
+        if (m_meshDraws[index] != draw) {
+            m_meshDraws[index] = draw;
+            m_meshDrawsChanged = true;
         }
     }
 
