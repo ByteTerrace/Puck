@@ -9,7 +9,9 @@ running machine its own named identity, keeps screens as the physical
 vocabulary, and puts provider knowledge behind extension contracts; the guest
 side gives `puck.cartridge.v1` the program and memory structures a whole game
 needs. The reasoning behind every decision is in
-[the decisions register](../decisions/machines-and-cartridges.md).
+[the decisions register](../decisions/machines-and-cartridges.md). A third
+machine family, the NES and Famicom core, is planned on its own page:
+[Humble Gaming Deck](humble-gaming-deck.md).
 
 ## Implementation status
 
