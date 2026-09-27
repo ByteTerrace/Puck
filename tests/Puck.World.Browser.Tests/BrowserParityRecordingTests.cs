@@ -22,7 +22,7 @@ namespace Puck.World.Browser.Tests;
 /// <see cref="Puck.World.Browser.Engine.BrowserExtensionVocabulary"/>).</remarks>
 public sealed class BrowserParityRecordingTests {
     private static byte[] ComposedTicTacToeBytes() {
-        var basisBytes = File.ReadAllBytes(path: RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/standard.world.json"));
+        var basisBytes = ShippedWorldDocuments.Composed(path: RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/standard.world.json"));
         var fragmentBytes = ShippedWorldDocuments.Read(path: RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/games/tictactoe.puck"));
 
         Assert.True(
