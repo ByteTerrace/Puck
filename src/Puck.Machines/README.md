@@ -1,7 +1,8 @@
 # Puck.Machines
 
 Puck.Machines provides shared serialization, fork ownership, queued hosting,
-and time travel for the Humble and Advanced Gaming Brick emulators.
+and time travel for the Humble and Advanced Gaming Brick emulators and the
+Humble Gaming Deck CPU core.
 
 ## Documentation
 

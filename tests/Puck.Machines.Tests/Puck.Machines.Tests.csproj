@@ -15,5 +15,6 @@
     <ItemGroup>
         <ProjectReference Include="..\..\src\Puck.Abstractions\Puck.Abstractions.csproj" />
         <ProjectReference Include="..\..\src\Puck.Machines\Puck.Machines.csproj" />
+        <ProjectReference Include="../../src/Puck.Machines.Post/Puck.Machines.Post.csproj" />
     </ItemGroup>
 </Project>

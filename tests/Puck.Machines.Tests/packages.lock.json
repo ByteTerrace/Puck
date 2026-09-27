@@ -215,15 +215,6 @@
           "System.CommandLine": "[2.*, )"
         }
       },
-      "ByteTerrace.Puck.Machines": {
-        "type": "Project",
-        "dependencies": {
-          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
-          "Microsoft.Extensions.DependencyInjection": "[10.*, )"
-        }
-      },
       "ByteTerrace.Puck.Hosting": {
         "type": "Project",
         "dependencies": {
@@ -234,6 +225,15 @@
           "ByteTerrace.Puck.Networking": "[0.1.0-alpha, )"
         }
       },
+      "ByteTerrace.Puck.Machines": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
+          "Microsoft.Extensions.DependencyInjection": "[10.*, )"
+        }
+      },
       "ByteTerrace.Puck.Maths": {
         "type": "Project"
       },
@@ -242,6 +242,13 @@
         "dependencies": {
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Attestation": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
+        }
+      },
+      "puck.machines.post": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Machines": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
         }
       }

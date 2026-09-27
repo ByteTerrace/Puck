@@ -21,7 +21,9 @@ namespace Puck.World.Tests;
 /// <see cref="SourceRay.Through"/> they carry the frustum's shear. The glass shows the image edge to edge: its mapping
 /// carries no bezel, so the point of the glass a ray meets is the image point the window renders there. Two eyes frame
 /// the destination differently: its marker appears on the side of the glass the eye moved toward, and the session view
-/// the binder composes frames the marker at exactly that image point.
+/// the binder composes frames the marker at exactly that image point. The window's near plane is the mapped glass, so
+/// its rays start on the aperture: the destination's occluder, standing between the mapped eye and the glass, is never
+/// met, and the marker beyond it is.
 /// </summary>
 public sealed class WorldWindowFrustumFitLawTests {
     internal const string Destination = "tests/Puck.World.Canaries/portal-window/beyond.world.json";
@@ -31,6 +33,11 @@ public sealed class WorldWindowFrustumFitLawTests {
 
     // The destination's marker: a ball of radius 0.5 six units behind the arch.
     internal static readonly Vector3 Marker = new(x: 0f, y: 1.5f, z: -6f);
+
+    // The destination's occluder: a slab four units in front of the arch, between the first two eyes, mapped, and the
+    // arch's glass.
+    private static readonly Vector3 Occluder = new(x: 0f, y: 1.5f, z: 4f);
+
     internal static readonly Vector3[] Eyes = [
         new(x: 1f, y: 1.6f, z: 9f),
         new(x: -1f, y: 1.6f, z: 9f),
@@ -290,11 +297,144 @@ public sealed class WorldWindowFrustumFitLawTests {
                 ),
                 userMessage: $"from eye {eye} the window's ray through the marker's image point {image} meets no surface"
             );
-            // The marker's near surface, half a unit short of its centre along the ray.
+            // The marker's near surface, half a unit short of its centre along the ray, which starts on the glass.
             Assert.Equal(
-                expected: (Vector3.Distance(value1: camera.Position, value2: Marker) - 0.5),
+                expected: (Vector3.Distance(value1: ray.Origin.ToVector3(), value2: Marker) - 0.5),
                 actual: ((double)hit.Distance),
                 tolerance: 0.02
+            );
+        }
+    }
+    // The window's near plane is its glass: along every corner ray, the camera's near distance reaches the mapped glass's
+    // corner, so it equals the eye-to-aperture distance along that ray, and the ray SourceRay.Through casts through the
+    // corner starts there. A camera with no near plane would start every ray at the mapped eye.
+    [Fact]
+    public void TheWindowsNearPlaneIsTheGlassAlongEveryCornerRay() {
+        var (source, destination) = Apertures();
+        var glass = WorldWindowFrustumFit.Glass(screen: DoorRow());
+
+        foreach (var eye in Eyes) {
+            var camera = Fit(eye: eye);
+
+            Assert.True(condition: (camera.Near > 0f));
+
+            foreach (var (x, y) in ((ReadOnlySpan<(float, float)>)[(0f, 0f), (1f, 0f), (0f, 1f), (1f, 1f)])) {
+                var corner = WorldWindowProjectionMath.MapPoint(
+                    destination: destination,
+                    point: FacePoint(face: glass, x: x, y: y),
+                    source: source
+                );
+                // The corner ray's direction as cameraRayDirection casts it, before normalizing: its forward component
+                // is one, so the near distance along it lands on the near plane.
+                var horizontal = (((((2f * x) - 1f) * camera.AspectRatio) * camera.TanHalfFieldOfView) + camera.FrustumOffset.X);
+                var vertical = (((1f - (2f * y)) * camera.TanHalfFieldOfView) + camera.FrustumOffset.Y);
+                var direction = ((camera.Forward + (horizontal * camera.Right)) + (vertical * camera.Up));
+                var onNear = (camera.Position + (direction * camera.Near));
+
+                Assert.True(
+                    condition: (Vector3.Distance(value1: onNear, value2: corner) < Tolerance),
+                    userMessage: $"from eye {eye}, the near plane along corner ({x}, {y}) is at {onNear}, not at the mapped glass corner {corner}"
+                );
+                Assert.Equal(
+                    expected: Vector3.Distance(value1: camera.Position, value2: corner),
+                    actual: (direction.Length() * camera.Near),
+                    tolerance: Tolerance
+                );
+                Assert.True(
+                    condition: (Vector3.Distance(value1: Through(camera: camera, x: x, y: y).Origin.ToVector3(), value2: corner) < Tolerance),
+                    userMessage: $"from eye {eye}, the ray through corner ({x}, {y}) does not start on the mapped glass corner {corner}"
+                );
+            }
+        }
+    }
+    // A pick through the window reaches exactly as far as the window renders: the far distance is measured from the
+    // mapped eye, as the view pass measures it, not from the glass the ray starts on. The marker's near surface lies
+    // about 14.5 units from the first eye; a far distance of 14 ends the view short of it, and one of 15 reaches it.
+    [Fact]
+    public void AWindowPickEndsAtTheFarDistanceMeasuredFromTheMappedEye() {
+        var destination = AuthoredGameFixtures.Load(relativePath: Destination);
+        var eye = Eyes[0];
+
+        bool Picks(float farDistance) {
+            var emitter = new WorldSessionSceneEmitter(
+                effectiveCameraName: null,
+                mirror: new WorldSessionMirror(placeholder: (destination with { RenderRaw = new WorldRenderDefaults(FarDistance: farDistance) }))
+            );
+            var camera = Fit(eye: eye);
+
+            emitter.SetWindowCamera(camera: camera);
+            _ = new SdfCompositionFrameSource(
+                dresser: emitter,
+                emitters: [emitter]
+            ).CaptureFrame(
+                deltaSeconds: 0f,
+                height: 120,
+                interpolationAlpha: 0f,
+                width: 144
+            );
+
+            var image = ImageOf(camera: camera, point: Marker);
+
+            return emitter.TrySurface(
+                point: out _,
+                ray: Through(camera: camera, x: image.X, y: image.Y)
+            );
+        }
+
+        var surface = (Vector3.Distance(value1: Fit(eye: eye).Position, value2: Marker) - 0.5f);
+
+        Assert.InRange(actual: surface, high: 15f, low: 14f);
+        Assert.False(condition: Picks(farDistance: 14f));
+        Assert.True(condition: Picks(farDistance: 15f));
+    }
+    // A pick through the window sees only what lies beyond the aperture: the destination's occluder stands on the ray
+    // between the mapped eye and the glass, so a ray from the eye itself meets it, while the window's ray, which starts
+    // on the glass, passes it and meets the marker beyond.
+    [Fact]
+    public void AWindowPickPassesWhatStandsBetweenTheEyeAndTheApertureAndMeetsWhatLiesBeyond() {
+        var emitter = new WorldSessionSceneEmitter(
+            effectiveCameraName: null,
+            mirror: new WorldSessionMirror(placeholder: AuthoredGameFixtures.Load(relativePath: Destination))
+        );
+        var composition = new SdfCompositionFrameSource(
+            dresser: emitter,
+            emitters: [emitter]
+        );
+
+        foreach (var eye in Eyes[..2]) {
+            var camera = Fit(eye: eye);
+
+            emitter.SetWindowCamera(camera: camera);
+            _ = composition.CaptureFrame(
+                deltaSeconds: 0f,
+                height: 120,
+                interpolationAlpha: 0f,
+                width: 144
+            );
+
+            var image = ImageOf(camera: camera, point: Marker);
+            var ray = Through(camera: camera, x: image.X, y: image.Y);
+
+            Assert.True(condition: emitter.TrySurface(
+                point: out var beyond,
+                ray: ray
+            ));
+            Assert.Equal(
+                expected: 0.5f,
+                actual: Vector3.Distance(value1: beyond.ToVector3(), value2: Marker),
+                tolerance: 0.02f
+            );
+            Assert.True(
+                condition: emitter.TrySurface(
+                    point: out var between,
+                    ray: (ray with { Origin = FixedVector3.FromVector3(value: camera.Position) })
+                ),
+                userMessage: $"from eye {eye} the ray from the mapped eye meets nothing"
+            );
+            Assert.Equal(
+                expected: (Occluder.Z + 0.05f),
+                actual: between.ToVector3().Z,
+                tolerance: 0.02f
             );
         }
     }

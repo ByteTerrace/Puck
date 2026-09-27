@@ -108,7 +108,8 @@ public static class WorldWindowFrustumFit {
     /// <param name="source">The source (local) face's own aperture geometry, one frame of the isometry.</param>
     /// <param name="destination">The destination counterpart face's own aperture geometry, the other frame.</param>
     /// <param name="camera">The fitted camera, apexed at the mapped eye, its
-    /// <see cref="CameraSnapshot.FrustumOffset"/> the frustum's shear, on success.</param>
+    /// <see cref="CameraSnapshot.FrustumOffset"/> the frustum's shear and its <see cref="CameraSnapshot.Near"/> the
+    /// mapped glass's plane, so it sees only what lies beyond the aperture, on success.</param>
     /// <returns><see langword="true"/> when the eye stands far enough in front of the glass for a sound frustum to
     /// exist (see <see cref="SdfAsymmetricFrustum.MinEyeDepth"/>); <see langword="false"/> otherwise — the caller falls
     /// back to its ordinary default projection for this frame.</returns>

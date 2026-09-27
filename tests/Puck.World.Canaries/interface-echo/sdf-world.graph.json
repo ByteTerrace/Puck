@@ -8,7 +8,7 @@
       "format": "R8G8B8A8Unorm",
       "dimensions": {
         "mode": "Absolute",
-        "width": 55,
+        "width": 56,
         "height": 1
       }
     }
@@ -53,6 +53,7 @@
         "imageExtent": { "type": "uint2", "default": [0, 0], "description": "The sdf.world pass's render extent, in pixels." },
         "instanceMaskWordCount": { "type": "uint", "default": 0, "description": "The sdf.world pass's per-tile instance-mask width." },
         "meshDraws": { "type": "uint", "default": 0, "description": "The sdf.world pass's mesh draw count." },
+        "nearDistance": { "type": "float", "default": 0, "description": "The sdf.world pass's near distance." },
         "sampleIndex": { "type": "uint", "default": 0, "description": "The sdf.world pass's star twinkle clock." },
         "sceneTime": { "type": "float", "default": 0, "description": "The sdf.world pass's scene time." },
         "screenCount": { "type": "uint", "default": 0, "description": "The sdf.world pass's screen-light bound." },

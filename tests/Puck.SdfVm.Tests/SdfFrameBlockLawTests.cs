@@ -39,7 +39,10 @@ public sealed class SdfFrameBlockLawTests {
                         Right: Vector3.Transform(rotation: Basis, value: Vector3.UnitX),
                         TanHalfFieldOfView: 0.5f,
                         Up: Vector3.Transform(rotation: Basis, value: Vector3.UnitY)
-                    ) { FrustumOffset = new Vector2(x: 0.25f, y: 0.5f) },
+                    ) {
+                        FrustumOffset = new Vector2(x: 0.25f, y: 0.5f),
+                        Near = 0.5f,
+                    },
                     Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)
                 ),
             ],
@@ -141,6 +144,48 @@ public sealed class SdfFrameBlockLawTests {
             actual: BitConverter.ToUInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.TileGrid))),
             expected: ((300u + (SdfWorldPackage.TileSize - 1u)) / SdfWorldPackage.TileSize)
         );
+    }
+    // The pass block carries the camera's own near plane, so the bounded volumes start at the eye of a camera whose image
+    // begins there (a cloud around the camera stays visible), and the surfaces render from that plane, never nearer than
+    // the floor the mesh pass's depth needs, which the kernels read as the generated SDF_MINIMUM_NEAR.
+    [Fact]
+    public void ThePassBlockCarriesTheCamerasOwnNearAndTheSurfacesRenderFromTheFloorAtLeast() {
+        Assert.Matches(
+            actualString: SdfIsaHlsl.Generate(),
+            expectedRegexPattern: $@"(?m)^#define SDF_MINIMUM_NEAR +{System.Text.RegularExpressions.Regex.Escape(str: SdfFrameBlock.MinimumNear.ToString(format: "R", provider: System.Globalization.CultureInfo.InvariantCulture))}$"
+        );
+
+        foreach (var (near, surfaces) in ((ReadOnlySpan<(float, float)>)[(0f, SdfFrameBlock.MinimumNear), (0.01f, SdfFrameBlock.MinimumNear), (8.9f, 8.9f)])) {
+            var authored = Frame();
+            var frame = (authored with { Views = [(authored.Views[0] with { Camera = (authored.Views[0].Camera with { Near = near }) })] });
+            var block = new byte[SdfFrameBlock.SizeBytes];
+
+            SdfFrameBlock.Write(
+                block: block,
+                frame: frame,
+                height: 200u,
+                sceneTime: frame.Time,
+                tables: new SdfPassValues(
+                    DebugMode: 0,
+                    Environment: new float[SdfEnvironment.LaneCount],
+                    InstanceMaskWordCount: 1u,
+                    MeshDraws: 0u,
+                    SampleIndex: 0u,
+                    ScreenCount: 0u
+                ),
+                view: 0,
+                width: 300u
+            );
+
+            Assert.Equal(
+                actual: BitConverter.ToSingle(value: block, startIndex: ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: SdfWorldPackage.NearDistance))),
+                expected: near
+            );
+            Assert.Equal(
+                actual: SdfFrameBlock.NearOf(camera: frame.Views[0].Camera),
+                expected: surfaces
+            );
+        }
     }
     [Fact]
     public void TheMeshInterfaceLaysOutTheWorldPassBlockMemberForMember() {

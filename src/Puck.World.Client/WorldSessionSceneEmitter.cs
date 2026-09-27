@@ -555,10 +555,13 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         return m_dressedCamera.HasValue;
     }
     /// <summary>Finds the surface a ray meets among the destination's static placements a session view shows, marched in
-    /// fixed point (<see cref="SdfFieldEvaluator.Raycast"/>) out to the last dressed frame's far distance. The field is
-    /// the static placements alone, emitted once per dressed program: the fixed-point evaluator takes no dynamic
+    /// fixed point (<see cref="SdfFieldEvaluator.Raycast"/>) out to the last dressed frame's far distance, measured from
+    /// the dressed camera's position as the view pass measures it: a ray that starts on the camera's near plane (a
+    /// window's glass) has only the far distance less its distance from the camera's position left to march. The field
+    /// is the static placements alone, emitted once per dressed program: the fixed-point evaluator takes no dynamic
     /// transforms, so neither a mirrored avatar nor a creation the stamp pool draws is a surface a pick lands on.</summary>
-    /// <param name="ray">The ray, in the destination's space.</param>
+    /// <param name="ray">The ray, in the destination's space: one cast through the dressed camera's image
+    /// (<see cref="TryCamera"/>, <see cref="SourceRay.Through"/>).</param>
     /// <param name="point">The point the ray meets, in the destination's space, when this returns <see langword="true"/>.</param>
     /// <returns><see langword="true"/> when a frame has been dressed, the evaluator admits the static placements'
     /// program, and the ray proves a surface within the far distance; a bounded, non-converged march answers nothing.</returns>
@@ -591,12 +594,16 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             }
         }
 
+        // The far distance is measured from the camera's position; the ray's origin already lies this far along it.
+        var reach = (FixedQ4816.FromDouble(value: m_dressedFarDistance) - (ray.Origin - FixedVector3.FromVector3(value: m_dressedCamera.GetValueOrDefault().Position)).Length);
+
         if (
             (m_dressedField is not { } field) ||
+            (reach <= FixedQ4816.Zero) ||
             !field.Raycast(
                 dir: ray.Direction,
                 hit: out var hit,
-                maxDist: FixedQ4816.FromDouble(value: m_dressedFarDistance),
+                maxDist: reach,
                 origin: FixedPosition.FromLocal(local: ray.Origin)
             ) ||
             (hit.Confidence != WorldQueryConfidence.Exact)

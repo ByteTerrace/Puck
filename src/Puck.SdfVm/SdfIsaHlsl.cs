@@ -179,6 +179,10 @@ public static class SdfIsaHlsl {
             name: "SDF_MAX_SCREEN_SURFACES",
             value: SdfProgramBuilder.MaxScreenSurfaces
         );
+        declarations.Real(
+            name: "SDF_MINIMUM_NEAR",
+            value: SdfFrameBlock.MinimumNear
+        );
         declarations.Members<GpuSamplerFilter>(prefix: "SDF_FILTER");
         declarations.Section(title: "The environment's rows in the pass block's environment array (SdfEnvironment) and its light kinds.");
         declarations.Count(name: "SDF_ENV_ROW_COUNT", value: SdfEnvironment.RowCount);
