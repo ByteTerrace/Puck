@@ -10,6 +10,20 @@ public sealed class MultiPortInputTests {
     private static readonly string[] TwoPorts = ["controls", "controls-2"];
 
     [Fact]
+    public void SeatOrderCannotBeChangedThroughThePublishedList() {
+        using var host = new TestHost(
+            core: new SeatRecordingCore(),
+            inputPorts: TwoPorts
+        );
+        var seats = Assert.IsAssignableFrom<IList<IMachineInputPort>>(host.Seats);
+
+        _ = Assert.Throws<NotSupportedException>(testCode: () => seats[0] = seats[1]);
+        Assert.Same(
+            actual: host.Seats[0],
+            expected: host.InputPorts["controls"]
+        );
+    }
+    [Fact]
     public void EachPortReachesTheCoreAsItsOwnSeat() {
         var core = new SeatRecordingCore();
 

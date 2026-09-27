@@ -65,6 +65,7 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
         VideoOutputs = new Dictionary<string, IMachineVideoOutput> { ["video"] = this }.ToFrozenDictionary(comparer: StringComparer.Ordinal);
         AudioOutputs = new Dictionary<string, IAudioMachine> { ["audio"] = this }.ToFrozenDictionary(comparer: StringComparer.Ordinal);
         InputPorts = ports.ToFrozenDictionary(comparer: StringComparer.Ordinal);
+        Seats = Array.AsReadOnly<IMachineInputPort>(array: m_seats);
         m_worker = new QueuedMachineWorker(
             audioSampleRate: audioSampleRate,
             height: height,
@@ -107,7 +108,7 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
         m_worker.AudioSampleRate;
     /// <summary>Gets the controller ports in seat order — the same ports <see cref="InputPorts"/> names — so seat
     /// <c>i</c> of every image this host submits is <c>Seats[i]</c>'s state.</summary>
-    public IReadOnlyList<IMachineInputPort> Seats => m_seats;
+    public IReadOnlyList<IMachineInputPort> Seats { get; }
     /// <inheritdoc/>
     public MachineRuntimeStatus Status => ((QueueFault is not null)
         ? MachineRuntimeStatus.Faulted
