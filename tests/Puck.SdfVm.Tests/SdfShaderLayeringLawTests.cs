@@ -79,10 +79,11 @@ public sealed partial class SdfShaderLayeringLawTests {
                 "float tintOf(float Tint) { return Tint; }",
                 "#endif",
                 "float tinted() { return Tint; }",
-                "float shaded() { { float Shade = 0.0; } return Shade; }"
+                "float shaded() { { float Shade = 0.0; } return Shade; }",
+                "float looped() { for (int Loop = 0; Loop < 1; ++Loop) { } return Loop; }"
             ),
-            ["debug/d.hlsli"] = "#define DEBUG_TINT 0.5\n#define DEBUG_OVERLAY\nstatic const int debugMode = 3;\nstatic const float Tint = 1.0;\nstatic const float Shade = 0.5;\nfloat levelOf(float3 p) { return p.x; }\n",
-            ["field/f.hlsli"] = "float probe(uint debugMode) { float levelOf = 1.0; return (debugMode * levelOf); }\n",
+            ["debug/d.hlsli"] = "#define DEBUG_TINT 0.5\n#define DEBUG_OVERLAY\nstatic const int debugMode = 3;\nstatic const float Tint = 1.0;\nstatic const float Shade = 0.5;\nstatic const float Loop = 0.25;\nfloat levelOf(float3 p) { return p.x; }\n",
+            ["field/f.hlsli"] = "float probe(uint debugMode) { float levelOf = 1.0; return (debugMode * levelOf); }\nfloat counted() { float total = 0.0; for (int Loop = 0; Loop < 2; ++Loop) { total += Loop; } for (int Shade = 0; Shade < 2; ++Shade) total += Shade; return total; }\n",
             ["passes/e.comp.hlsl"] = "#define PASS_FLAG\n[numthreads(8, 8, 1)] void main(uint3 id : SV_DispatchThreadID) { surfaceAt((float3)id); }\n",
         };
 
@@ -91,6 +92,7 @@ public sealed partial class SdfShaderLayeringLawTests {
             expected: [
                 "surface/c.hlsli uses DEBUG_OVERLAY from debug/d.hlsli, a higher layer",
                 "surface/c.hlsli uses DEBUG_TINT from debug/d.hlsli, a higher layer",
+                "surface/c.hlsli uses Loop from debug/d.hlsli, a higher layer",
                 "surface/c.hlsli uses Shade from debug/d.hlsli, a higher layer",
                 "surface/c.hlsli uses Tint from debug/d.hlsli, a higher layer",
                 "surface/c.hlsli uses debugMode from debug/d.hlsli, a higher layer",
@@ -332,7 +334,9 @@ public sealed partial class SdfShaderLayeringLawTests {
         return (uses, tested);
     }
     // The blocks of one file-scope declaration or definition: each brace pair is a block inside the one around it, and
-    // everything outside every brace (a parameter list) is block 0, which encloses the whole definition.
+    // everything outside every brace (a parameter list) is block 0, which encloses the whole definition. A for loop's
+    // header belongs to its loop: to its body's block, or, for a braceless body, to a block of its own that also holds
+    // that one statement, so the initializer's local is in scope in the header and the body and nowhere after.
     private static ScopeBlocks BlocksOf(string scope) {
         var innermost = new int[scope.Length];
         var parents = new List<int> { -1 };
@@ -353,6 +357,41 @@ public sealed partial class SdfShaderLayeringLawTests {
             }
         }
 
+        foreach (Match loop in ForPattern().Matches(input: scope)) {
+            var header = ((loop.Index + loop.Length) - 1);
+            var close = header;
+
+            for (var depth = 0; (close < scope.Length); close++) {
+                depth += ((scope[close] == '(') ? 1 : ((scope[close] == ')') ? -1 : 0));
+
+                if (depth == 0) {
+                    break;
+                }
+            }
+
+            var next = (close + 1);
+
+            while ((next < scope.Length) && char.IsWhiteSpace(c: scope[next])) {
+                next++;
+            }
+
+            var end = close;
+            int body;
+
+            if ((next < scope.Length) && (scope[next] == '{')) {
+                body = innermost[next];
+            } else {
+                parents.Add(item: innermost[header]);
+                body = (parents.Count - 1);
+                end = scope.IndexOf(value: ';', startIndex: Math.Min(val1: next, val2: (scope.Length - 1)));
+                end = ((end < 0) ? (scope.Length - 1) : end);
+            }
+
+            for (var index = header; (index <= end); index++) {
+                innermost[index] = body;
+            }
+        }
+
         return new ScopeBlocks(
             Innermost: innermost,
             Parents: parents
@@ -361,7 +400,7 @@ public sealed partial class SdfShaderLayeringLawTests {
     // The names one file-scope declaration or definition declares, its parameters and locals included, each with the
     // blocks it is declared in: a name that follows a type and is followed by an initializer, an array bound, a
     // semantic, a separator or the end of a declaration or parameter list. A parameter is declared in block 0, so it
-    // is in scope across the whole definition; a local only inside its own block.
+    // is in scope across the whole definition; a local only inside its own block (BlocksOf).
     private static Dictionary<string, List<int>> LocalDeclarations(ScopeBlocks blocks, string scope) {
         var names = new Dictionary<string, List<int>>(comparer: StringComparer.Ordinal);
 
@@ -399,6 +438,8 @@ public sealed partial class SdfShaderLayeringLawTests {
 
     [GeneratedRegex(pattern: "//[^\\n]*|/\\*.*?\\*/", options: RegexOptions.Singleline)]
     private static partial Regex CommentPattern();
+    [GeneratedRegex(pattern: "\\bfor\\s*\\(")]
+    private static partial Regex ForPattern();
     [GeneratedRegex(pattern: "^\\s*#\\s*(\\w+)\\s*(\\w*)")]
     private static partial Regex DirectivePattern();
     [GeneratedRegex(pattern: "([A-Za-z_]\\w*|>)\\s+([A-Za-z_]\\w*)\\s*(?=[;=,)\\[:])")]

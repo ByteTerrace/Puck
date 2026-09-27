@@ -11,16 +11,20 @@ public sealed partial class WorldStampPool {
     private readonly Registration?[] m_packedRegistrations = new Registration?[WorldPlacementPolicy.MaxStampRegistrations];
     // A registration's slots as they stood before its repack, which the moved set compares the repack against.
     private readonly DynamicTransform[] m_previousSlots = new DynamicTransform[SlotsPerPlacement];
-    // Each pool entry's mesh draw as the last pack posed it (null for none), and the list they compose, rebuilt only in
-    // a pack that changed an entry, so a pool at rest hands the engine the list it already packed.
+    // Each pool entry's mesh draw as the last pack posed it (null for none), and the one list they compose, rewritten
+    // in place under a new revision only in a pack that changed an entry: a pool at rest hands the engine what it already
+    // packed, and a moving one allocates nothing once the list has grown to its stamps.
     private readonly SdfMeshDraw?[] m_meshDraws = new SdfMeshDraw?[WorldPlacementPolicy.MaxStampRegistrations];
-    private IReadOnlyList<SdfMeshDraw> m_meshDrawList = [];
+    private readonly List<SdfMeshDraw> m_meshDrawList = new(capacity: WorldPlacementPolicy.MaxStampRegistrations);
     private bool m_meshDrawsChanged;
+    private long m_meshDrawsRevision;
 
     /// <summary>Gets the mesh draws the last <see cref="PackTransforms"/> posed: each live registration whose creation
-    /// carries a mesh (<see cref="WorldPrototype.Mesh"/>), at its packed root and scale, in pool order. The same list
-    /// instance while no draw moved.</summary>
+    /// carries a mesh (<see cref="WorldPrototype.Mesh"/>), at its packed root and scale, in pool order: always the same
+    /// list, rewritten in place when a draw moved, which <see cref="MeshDrawsRevision"/> then counts.</summary>
     public IReadOnlyList<SdfMeshDraw> MeshDraws => m_meshDrawList;
+    /// <summary>Gets the revision of <see cref="MeshDraws"/>' content: one more for each pack that rewrote it.</summary>
+    public long MeshDrawsRevision => m_meshDrawsRevision;
 
     /// <summary>Packs the pool's moved transforms: each live registration's root rides its placement pose (animated),
     /// the client's interpolated body pose (body-rooted), or that pose composed with the attach facet's local offset
@@ -180,15 +184,15 @@ public sealed partial class WorldStampPool {
         }
 
         if (m_meshDrawsChanged) {
-            var draws = new List<SdfMeshDraw>();
+            m_meshDrawList.Clear();
 
             foreach (var draw in m_meshDraws) {
                 if (draw is { } posed) {
-                    draws.Add(item: posed);
+                    m_meshDrawList.Add(item: posed);
                 }
             }
 
-            m_meshDrawList = draws;
+            m_meshDrawsRevision++;
             m_meshDrawsChanged = false;
         }
     }

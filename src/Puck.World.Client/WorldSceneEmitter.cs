@@ -98,8 +98,10 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     private IReadOnlyList<SdfMeshDraw> m_staticMeshDraws = [];
     // MeshDraws' composition of the static draws and the pool's, and the two lists it was composed from.
     private IReadOnlyList<SdfMeshDraw> m_meshDraws = [];
+    private readonly List<SdfMeshDraw> m_composedMeshDraws = [];
     private IReadOnlyList<SdfMeshDraw>? m_composedStaticMeshDraws;
-    private IReadOnlyList<SdfMeshDraw>? m_composedStampedMeshDraws;
+    private long m_composedStampedRevision = -1L;
+    private long m_meshDrawsRevision;
     // Per-frame scratch reused to keep packing allocation-free: movement-driven gait state per avatar.
     private readonly float[] m_avatarGaitPhases = new float[WorldBodiesLimits.CapacityCeiling];
     private readonly Vector3[] m_avatarPreviousPositions = new Vector3[WorldBodiesLimits.CapacityCeiling];
@@ -967,25 +969,61 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// <inheritdoc/>
     /// <remarks>One draw per static placement instance of a prototype that carries a mesh, from the last static
     /// rebuild, then the stamp pool's (<see cref="WorldStampPool.MeshDraws"/>): an animated, inhabited or attached
-    /// stamp's mesh at its root this frame. Recomposed only when either list is a new one.</remarks>
+    /// stamp's mesh at its root this frame. Recomposed only when the static list is a new one or the pool rewrote its own.</remarks>
     public IReadOnlyList<SdfMeshDraw> MeshDraws {
         get {
-            var stamped = m_animator.MeshDraws;
-
-            if (
-                !ReferenceEquals(objA: m_staticMeshDraws, objB: m_composedStaticMeshDraws) ||
-                !ReferenceEquals(objA: stamped, objB: m_composedStampedMeshDraws)
-            ) {
-                m_composedStaticMeshDraws = m_staticMeshDraws;
-                m_composedStampedMeshDraws = stamped;
-                m_meshDraws = ((stamped.Count == 0)
-                    ? m_staticMeshDraws
-                    : ((m_staticMeshDraws.Count == 0)
-                        ? stamped
-                        : [.. m_staticMeshDraws, .. stamped]));
-            }
+            ComposeMeshDraws();
 
             return m_meshDraws;
         }
+    }
+    /// <inheritdoc/>
+    public long MeshDrawsRevision {
+        get {
+            ComposeMeshDraws();
+
+            return m_meshDrawsRevision;
+        }
+    }
+
+    // Recomposes the static draws and the pool's when the static list is a new one or the pool rewrote its own: either
+    // passes through alone, and both are copied into this emitter's own list, rewritten in place, so a moving stamp
+    // allocates nothing here.
+    private void ComposeMeshDraws() {
+        var stamped = m_animator.MeshDraws;
+        var stampedRevision = m_animator.MeshDrawsRevision;
+
+        if (
+            ReferenceEquals(objA: m_staticMeshDraws, objB: m_composedStaticMeshDraws) &&
+            (stampedRevision == m_composedStampedRevision)
+        ) {
+            return;
+        }
+
+        m_composedStaticMeshDraws = m_staticMeshDraws;
+        m_composedStampedRevision = stampedRevision;
+        m_meshDrawsRevision++;
+
+        if (stamped.Count == 0) {
+            m_meshDraws = m_staticMeshDraws;
+
+            return;
+        }
+        if (m_staticMeshDraws.Count == 0) {
+            m_meshDraws = stamped;
+
+            return;
+        }
+
+        m_composedMeshDraws.Clear();
+
+        for (var index = 0; (index < m_staticMeshDraws.Count); index++) {
+            m_composedMeshDraws.Add(item: m_staticMeshDraws[index]);
+        }
+        for (var index = 0; (index < stamped.Count); index++) {
+            m_composedMeshDraws.Add(item: stamped[index]);
+        }
+
+        m_meshDraws = m_composedMeshDraws;
     }
 }

@@ -24,10 +24,12 @@ public interface ISdfFrameDresser {
     /// <param name="deltaSeconds">The presentation frame delta in seconds.</param>
     /// <param name="interpolationAlpha">The fraction in <c>[0, 1)</c> toward the current fixed simulation tick.</param>
     /// <param name="meshDraws">Every emitter's mesh draws (<see cref="ISdfSceneEmitter.MeshDraws"/>), composed in list
-    /// order, which the dressed frame carries as <see cref="SdfFrame.MeshDraws"/>: the same instance while no emitter's
-    /// draws changed.</param>
+    /// order, which the dressed frame carries as <see cref="SdfFrame.MeshDraws"/>. The host may rewrite one list in place
+    /// from frame to frame; <paramref name="meshDrawsRevision"/> moves whenever it does.</param>
+    /// <param name="meshDrawsRevision">The composed draws' revision, which the dressed frame carries as
+    /// <see cref="SdfFrame.MeshDrawsRevision"/>.</param>
     /// <returns>The frame to render.</returns>
-    SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, uint width, uint height, float deltaSeconds, float interpolationAlpha);
+    SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, long meshDrawsRevision, uint width, uint height, float deltaSeconds, float interpolationAlpha);
 }
 /// <summary>Composes a fixed list of <see cref="ISdfSceneEmitter"/>s into one <see cref="ISdfFrameSource"/> — the
 /// generalization of the hand-written <c>BuildProgram</c> method every prior frame source wrote for itself: rather
@@ -94,11 +96,15 @@ public sealed class SdfCompositionFrameSource : ISdfFrameSource {
     // once at construction from each emitter's RevisionComponentCount, which its contract pins for the emitter's life.
     private readonly int[] m_revisionOffsets;
     private readonly int[] m_slotBases;
-    // Each emitter's mesh draws as the host last read them, and their composition, which the dresser receives: rebuilt
-    // only when some emitter returns a list it did not return last frame, so an unchanged frame hands the engine the
-    // list it already packed.
+    // Each emitter's mesh draws and their revision as the host last read them, and their composition, which the
+    // dresser receives with its revision: recomposed only when some emitter's list or revision moved, into one list the
+    // host keeps and rewrites, so an unchanged frame hands the engine what it already packed and a changed one
+    // allocates nothing once the list has grown.
     private readonly IReadOnlyList<SdfMeshDraw>?[] m_meshDrawSources;
+    private readonly long[] m_meshDrawRevisions;
+    private readonly List<SdfMeshDraw> m_composedMeshDraws = [];
     private IReadOnlyList<SdfMeshDraw> m_meshDraws = [];
+    private long m_meshDrawsRevision;
     // The shared table: it keeps every slot's last packed transform across frames, so an owner at rest costs nothing.
     private readonly DynamicTransform[] m_transforms;
 
@@ -125,6 +131,7 @@ public sealed class SdfCompositionFrameSource : ISdfFrameSource {
         m_dresser = dresser;
         m_slotBases = new int[m_emitters.Count];
         m_meshDrawSources = new IReadOnlyList<SdfMeshDraw>?[m_emitters.Count];
+        m_meshDrawRevisions = new long[m_emitters.Count];
         m_revisionOffsets = new int[(m_emitters.Count + 1)];
 
         var slotCursor = 0;
@@ -284,21 +291,28 @@ public sealed class SdfCompositionFrameSource : ISdfFrameSource {
 
         return moved;
     }
-    // Reads every emitter's mesh draws after packing and recomposes them only when one returned a list it did not
-    // return last frame: one emitter's list passes through as it is, several are concatenated in list order.
+    // Reads every emitter's mesh draws after packing and recomposes them only when an emitter's list or revision moved:
+    // one emitter's list passes through as it is, several are copied in list order into the host's own list. Either way
+    // the composed revision moves, so an engine repacks even a list rewritten in place.
     private void ComposeMeshDraws() {
         var changed = false;
         var drawing = 0;
         IReadOnlyList<SdfMeshDraw> only = [];
 
         for (var index = 0; (index < m_emitters.Count); index++) {
-            var draws = m_emitters[index].MeshDraws;
+            var emitter = m_emitters[index];
+            var draws = emitter.MeshDraws;
+            var revision = emitter.MeshDrawsRevision;
 
-            if (!ReferenceEquals(
-                objA: draws,
-                objB: m_meshDrawSources[index]
-            )) {
+            if (
+                !ReferenceEquals(
+                    objA: draws,
+                    objB: m_meshDrawSources[index]
+                ) ||
+                (revision != m_meshDrawRevisions[index])
+            ) {
                 m_meshDrawSources[index] = draws;
+                m_meshDrawRevisions[index] = revision;
                 changed = true;
             }
             if (draws.Count > 0) {
@@ -311,19 +325,23 @@ public sealed class SdfCompositionFrameSource : ISdfFrameSource {
             return;
         }
 
+        m_meshDrawsRevision++;
+
         if (drawing <= 1) {
             m_meshDraws = only;
 
             return;
         }
 
-        var composed = new List<SdfMeshDraw>();
+        m_composedMeshDraws.Clear();
 
         foreach (var draws in m_meshDrawSources) {
-            composed.AddRange(collection: draws!);
+            for (var index = 0; (index < draws!.Count); index++) {
+                m_composedMeshDraws.Add(item: draws[index]);
+            }
         }
 
-        m_meshDraws = composed;
+        m_meshDraws = m_composedMeshDraws;
     }
     // A frame owes the whole table when the program was rebuilt (every slot's meaning may have changed) or the park
     // position moved; the table is parked first so a slot no owner claims reads hidden. Any other frame repacks only
@@ -424,6 +442,7 @@ public sealed class SdfCompositionFrameSource : ISdfFrameSource {
             height: height,
             interpolationAlpha: interpolationAlpha,
             meshDraws: m_meshDraws,
+            meshDrawsRevision: m_meshDrawsRevision,
             moved: m_moved,
             program: m_program!,
             transforms: m_transforms,
