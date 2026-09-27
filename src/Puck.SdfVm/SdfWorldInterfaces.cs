@@ -9,13 +9,18 @@ namespace Puck.SdfVm;
 /// (<see cref="ShaderInterfaceHlsl"/>, checked in beside the kernels and owned by <c>puck shaders generate</c>), and
 /// the engine creates each pipeline from its interface's layout and binds by member name, so no binding number or
 /// register is written by hand on either side.
+/// <para>Both pass interfaces are the <c>sdf.world</c> and <c>sdf.bricks</c> packages' (<see cref="RenderGraphPackageCatalog"/>),
+/// laid out as <see cref="ShaderPipelineParameterLayout.ForPackage"/> lays every package's: the standard frame group
+/// (<see cref="ShaderFrameInterface.FrameGroupMembers"/>), written once a frame, then a pass block holding the extent and
+/// every value in ordinal name order, so a graph document whose config names the same values reads the same block.</para>
 /// <para><see cref="World"/> serves every per-view dispatch: sky, mask, beam, cull-args, primary, surface, ambient and
-/// the three views variants. Its frame group is the standard frame block (<see cref="ShaderFrameInterface.FrameGroupMembers"/>),
-/// written once a frame; its pass group is one set per ring slot and view, whose block holds the view's render extent
-/// and names the view the dispatch renders. A buffer one pass writes and a later pass reads is two members over the one buffer: a read-write member
-/// named with an <c>RW</c> suffix for its writer, and a read-only member for its readers.</para>
-/// <para><see cref="BrickBake"/> serves the carve-bake baker: one pass set per brick slot binding that slot's request
-/// buffer and the brick pool, with the slice ordinal pushed per dispatch.</para>
+/// the three views variants. Its pass group is one set per ring slot and view, whose block holds the view's render extent
+/// and the world values, and names the view the dispatch renders. A buffer one pass writes and a later pass reads is two
+/// members over the one buffer: a read-write member named with an <c>RW</c> suffix for its writer, and a read-only member
+/// for its readers.</para>
+/// <para><see cref="BrickBake"/> serves the carve-bake baker, the <c>sdf.bricks</c> pass: it binds the ring slot's frame
+/// set and one pass set per brick slot binding that slot's request buffer and the brick pool, whose block's extent is one
+/// slice as one row, the voxels one bake dispatch writes at most, with the slice ordinal pushed per dispatch.</para>
 /// <para><see cref="Mesh"/> serves the mesh pass's graphics pipeline (<see cref="SdfMeshRasterPass"/>): one pass set per
 /// ring slot binding the viewport table and the mesh region, with the view and the draw pushed per draw call.</para>
 /// </summary>
@@ -90,8 +95,6 @@ public static class SdfWorldInterfaces {
     public const string GlyphAtlas = "sdfGlyphAtlas";
     /// <summary>The one nearest sampler the screen sources and the glyph atlas are sampled through.</summary>
     public const string ScreenSampler = "screenSampler";
-    /// <summary>The <see cref="BrickBake"/> pass-group value holding the voxels one bake dispatch writes at most.</summary>
-    public const string SliceVoxels = "sliceVoxels";
     /// <summary>The <see cref="BrickBake"/> request buffer: a three-row header, then the carves.</summary>
     public const string BakeRequest = "bakeRequest";
     /// <summary>The <see cref="BrickBake"/> brick pool the baker writes.</summary>
@@ -106,43 +109,43 @@ public static class SdfWorldInterfaces {
     /// <summary>Gets the frame data of every per-view SDF dispatch: the standard frame group, and a pass group whose block
     /// holds the view's render extent and the world values, followed by every resource the dispatches bind. Its frame
     /// block is written through <see cref="ShaderPipelineParameterLayout.WriteFrame"/>.</summary>
-    public static ShaderPipelineParameterLayout WorldParameters { get; } = ShaderPipelineParameterLayout.Grouped(
+    public static ShaderPipelineParameterLayout WorldParameters { get; } = ShaderPipelineParameterLayout.ForPackage(
         config: null,
-        interfaceName: "sdf-world",
+        package: RenderGraphPackageCatalog.SdfWorld,
         members: [
             Value(name: ImageExtent, type: ShaderValueType.Uint2),
-            Value(name: TileGrid, type: ShaderValueType.Uint2),
-            Value(name: ViewportCount, type: ShaderValueType.Uint),
-            Value(name: ScreenMask, type: ShaderValueType.Uint),
             Value(name: InstanceMaskWordCount, type: ShaderValueType.Uint),
-            Value(name: SampleIndex, type: ShaderValueType.Uint),
-            Value(name: ViewBase, type: ShaderValueType.Uint),
             Value(name: MeshDraws, type: ShaderValueType.Uint),
-            Read(name: ProgramWords, element: ShaderValueType.Uint4),
-            Read(name: Viewports, element: ShaderValueType.Float4),
-            Read(name: DynamicTransforms, element: ShaderValueType.Float4),
-            Read(name: FrameInstanceGrid, element: ShaderValueType.Uint),
-            Read(name: InstanceMasks, element: ShaderValueType.Uint),
-            Written(name: InstanceMasksWritten, element: ShaderValueType.Uint),
-            Read(name: Tiles, element: ShaderValueType.Float),
-            Written(name: TilesWritten, element: ShaderValueType.Float),
-            Read(name: CullBounds, element: ShaderValueType.Uint),
-            Written(name: CullBoundsWritten, element: ShaderValueType.Uint),
-            Written(name: ViewsArgsWritten, element: ShaderValueType.Uint),
-            Read(name: VisibilityRecords, element: ShaderValueType.Uint),
-            Written(name: VisibilityRecordsWritten, element: ShaderValueType.Uint),
+            Value(name: SampleIndex, type: ShaderValueType.Uint),
+            Value(name: ScreenMask, type: ShaderValueType.Uint),
+            Value(name: TileGrid, type: ShaderValueType.Uint2),
+            Value(name: ViewBase, type: ShaderValueType.Uint),
+            Value(name: ViewportCount, type: ShaderValueType.Uint),
+            Read(element: ShaderValueType.Uint4, name: ProgramWords),
+            Read(element: ShaderValueType.Float4, name: Viewports),
+            Read(element: ShaderValueType.Float4, name: DynamicTransforms),
+            Read(element: ShaderValueType.Uint, name: FrameInstanceGrid),
+            Read(element: ShaderValueType.Uint, name: InstanceMasks),
+            Written(element: ShaderValueType.Uint, name: InstanceMasksWritten),
+            Read(element: ShaderValueType.Float, name: Tiles),
+            Written(element: ShaderValueType.Float, name: TilesWritten),
+            Read(element: ShaderValueType.Uint, name: CullBounds),
+            Written(element: ShaderValueType.Uint, name: CullBoundsWritten),
+            Written(element: ShaderValueType.Uint, name: ViewsArgsWritten),
+            Read(element: ShaderValueType.Uint, name: VisibilityRecords),
+            Written(element: ShaderValueType.Uint, name: VisibilityRecordsWritten),
             ShaderInterfaceMember.StorageImage(
                 format: GpuPixelFormat.R8G8B8A8Unorm,
                 group: ShaderInterfaceGroup.Pass,
                 name: Output,
                 type: ShaderValueType.Float4
             ),
-            Read(name: ScreenSurfaces, element: ShaderValueType.Float4),
-            Read(name: ScreenLights, element: ShaderValueType.Float4),
-            Read(name: DecalCells, element: ShaderValueType.Uint4),
-            Read(name: BrickPool, element: ShaderValueType.Float),
-            Read(name: Volumes, element: ShaderValueType.Float4),
-            Read(name: MeshRegion, element: ShaderValueType.Uint),
+            Read(element: ShaderValueType.Float4, name: ScreenSurfaces),
+            Read(element: ShaderValueType.Float4, name: ScreenLights),
+            Read(element: ShaderValueType.Uint4, name: DecalCells),
+            Read(element: ShaderValueType.Float, name: BrickPool),
+            Read(element: ShaderValueType.Float4, name: Volumes),
+            Read(element: ShaderValueType.Uint, name: MeshRegion),
             .. Enumerable.Range(count: SdfWorldEngine.MaxScreenSurfaces, start: 0).Select(selector: static screen => ShaderInterfaceMember.SampledImage(
                 group: ShaderInterfaceGroup.Pass,
                 name: ScreenSource(screen: screen),
@@ -164,33 +167,44 @@ public static class SdfWorldInterfaces {
             ),
         ]
     );
+
     /// <summary>Gets the interface every per-view SDF dispatch reads.</summary>
     public static ShaderInterface World => WorldParameters.Interface;
-    /// <summary>Gets the interface the carve-bake baker reads.</summary>
-    public static ShaderInterface BrickBake { get; } = new(
+
+    /// <summary>Gets the frame data of the carve-bake baker, the <c>sdf.bricks</c> pass: the standard frame group, and a
+    /// pass group whose block holds the extent one bake dispatch covers, a slice of voxels as one row, followed by the
+    /// slot's request buffer and the brick pool, with the slice ordinal pushed: the kernel's first voxel is the ordinal
+    /// times the extent's width.</summary>
+    public static ShaderPipelineParameterLayout BrickBakeParameters { get; } = ShaderPipelineParameterLayout.ForPackage(
+        config: null,
         members: [
-            Value(name: SliceVoxels, type: ShaderValueType.Uint),
-            Read(name: BakeRequest, element: ShaderValueType.Float4),
-            Written(name: BakePool, element: ShaderValueType.Float),
+            Read(element: ShaderValueType.Float4, name: BakeRequest),
+            Written(element: ShaderValueType.Float, name: BakePool),
         ],
-        name: "sdf-brick-bake",
+        package: RenderGraphPackageCatalog.SdfBricks,
         pushesIndex: true
     );
+
+    /// <summary>Gets the interface the carve-bake baker reads.</summary>
+    public static ShaderInterface BrickBake => BrickBakeParameters.Interface;
+
     /// <summary>Gets the interface the mesh pass draws with: the viewport table and the mesh region, one set per ring slot,
     /// and the index each draw call pushes, whose bits from <see cref="MeshViewShift"/> up name the view and whose bits
     /// below it name the draw (<see cref="MeshPushedIndex"/>).</summary>
     public static ShaderInterface Mesh { get; } = new(
         members: [
-            Read(name: Viewports, element: ShaderValueType.Float4),
-            Read(name: MeshRegion, element: ShaderValueType.Uint),
+            Read(element: ShaderValueType.Float4, name: Viewports),
+            Read(element: ShaderValueType.Uint, name: MeshRegion),
         ],
         name: "sdf-mesh",
         pushesIndex: true
     );
+
     /// <summary>Gets the layout of <see cref="World"/>.</summary>
     public static ShaderInterfaceLayout WorldLayout => WorldParameters.Layout;
     /// <summary>Gets the layout of <see cref="BrickBake"/>.</summary>
-    public static ShaderInterfaceLayout BrickBakeLayout { get; } = new(shaderInterface: BrickBake);
+    public static ShaderInterfaceLayout BrickBakeLayout => BrickBakeParameters.Layout;
+
     /// <summary>Gets the layout of <see cref="Mesh"/>.</summary>
     public static ShaderInterfaceLayout MeshLayout { get; } = new(shaderInterface: Mesh);
     /// <summary>Gets each interface with the repository-relative path of the include generated from it.</summary>
@@ -227,7 +241,7 @@ public static class SdfWorldInterfaces {
     /// <param name="draw">The draw, below <see cref="SdfMeshRegion.MaxDraws"/>.</param>
     /// <returns>The pushed index.</returns>
     public static uint MeshPushedIndex(uint view, uint draw) =>
-        ((view << MeshViewShift) | draw);
+        (view << MeshViewShift) | draw;
     /// <summary>Returns the member name of a screen source: <c>screenSource</c> followed by its screen index.</summary>
     /// <param name="screen">The screen index, below <see cref="SdfWorldEngine.MaxScreenSurfaces"/>.</param>
     /// <returns>The member name.</returns>

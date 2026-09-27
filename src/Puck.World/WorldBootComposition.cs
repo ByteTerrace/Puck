@@ -54,12 +54,10 @@ namespace Puck.World;
 /// genuinely need a live render/pointer, which only <see cref="AddWorldPresentation"/> can supply.</para>
 /// </summary>
 public static class WorldBootComposition {
-    // Hands the render probe the presenter the moment the presenter is built: world.counters' sdf.transforms forwarder
-    // points at its moved set, and a scheduled capture reads the tick its frame refreshed its regions at, so both can be
-    // registered, and read, before the presenter exists.
+    // Points the render probe's sdf.transforms forwarder at the presenter's moved set the moment the presenter is built,
+    // so world.counters can register it, and read it, before the presenter exists.
     private static WorldFramePresenter AttachTo(this WorldFramePresenter presenter, WorldRenderProbe probe) {
         probe.Transforms.Retarget(target: presenter.MovedTransforms);
-        probe.Presenter = presenter;
 
         return presenter;
     }
@@ -586,10 +584,6 @@ public static class WorldBootComposition {
                     : string.Empty
                 ),
                 readiness: sp.GetService<IWorldEngineReadiness>(),
-                regionTick: ((renderProbe is null)
-                    ? null
-                    : () => renderProbe.RegionTick
-                ),
                 server: server,
                 sources: (((renderProbe is not null) && (sp.GetService<WorldScreenBinder>() is { } binder))
                     ? new WorldCaptureSources(

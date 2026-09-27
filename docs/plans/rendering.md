@@ -33,7 +33,7 @@ reasoning behind every decision is in
 
 ## Implementation status
 
-P2, P3, P5, P7, P9, P10 and P11 are complete; P1a, P1b, P4, P6, P8 and P12 to
+P2, P3, P5, P7, P8, P9, P10 and P11 are complete; P1a, P1b, P4, P6 and P12 to
 P17 are not. The programmable compute and graphics foundation has functional GPU
 fixtures on both backends. The
 work-counting model, the GPU work ledger, and the counting wrappers live in
@@ -318,9 +318,9 @@ Windows build of the same commit, which CI runs as `verify.yml`'s
 `shader-bytecode` job (see P7's gate). It is
 [deferred to the end](#deferred-to-the-end).
 
-P8 is complete but for one item of its check: the `interface-echo` canary
-echoes every shipped interface family but the SDF engine's two, which P14-5
-adds, and has not yet run on a GPU (see P8's check). The frame group is a descriptor set,
+P8 is complete: the `interface-echo` canary echoes every shipped interface
+family, the SDF engine's two among them, and holds on both backends under the
+debug layers (see P8's check). The frame group is a descriptor set,
 set 0, since P7b step 15 put pipelines on groups. HLSL is the one source
 language. `ShaderCompiler` runs DXC alone, a pass document names no
 language, and the Shadertoy adapter, the GLSL front end, the translation back
@@ -379,21 +379,19 @@ which expects two members to hold each other's sentinel, turns red.
 
 The `interface-echo` canary runs one echo per shipped interface family in one
 world: the ink simulation, visualize and finish passes, the package canary's
-tint, and the `sdf.film-grain`, `place` and `overlay` packages. The blocks of
-the Moth and of the `source-*` conversion packages, which hold the extent
-alone, are ink finish's. Its discriminating leg reloads every row onto an echo whose last
-member's first word expects the next word's sentinel.
-`InterfaceEchoCanaryFixtureTests` hold each echo's blocks to its targets' and
-fail when a shipped package with frame data has no echo. The
-canary does not yet cover the SDF engine's `sdf-world` and `sdf-brick-bake`
-interfaces (`src/Puck.SdfVm/SdfWorldInterfaces.cs`), because an echo is a graph
-document, whose pass block is its extent and then its config in ordinal name
-order. `sdf-world`'s pass members are not in that order, and `sdf-brick-bake`
-has no frame group or extent at all, only a pass block and a pushed index.
-P14-5 reshapes both into that one spelling and adds them to the canary.
+tint, the `sdf.film-grain`, `place` and `overlay` packages, and the SDF
+engine's per-view pass, `sdf.world`. The blocks of the Moth, of the `source-*`
+conversion packages and of the SDF brick baker, `sdf.bricks`, which hold the
+extent alone, are ink finish's. Every pass block takes the one spelling
+`ShaderFrameInterface.ForPass` gives a document pass, its extent and then every
+value in ordinal name order, config fields and a package's declared values
+alike, so an echo document whose config names a package's values reads its
+block. Its discriminating leg reloads every row onto an echo whose last
+member's first word expects the next word's sentinel, and each row's last
+pixel turns red. `InterfaceEchoCanaryFixtureTests` hold each echo's blocks to
+its targets' and fail when a shipped package with frame data has no echo.
 
-Open: the `interface-echo` canary has not yet run on a GPU, which is what P8's
-check asks for. The worlds under the
+The worlds under the
 repository's `worlds/` tree, the genesis card among them, are not part of the
 game's build, so their source rows compile where DXC is present. Only the
 `default` variant is built, which is all P8 closes with.
@@ -2679,13 +2677,14 @@ Phase 3, the groups, follows phase 2:
     `SdfFrameBufferPlanLawTests` and `SdfPassPlanLawTests` (the plan without the
     tables).
 20. Done: the SDF engine is on groups. Its kernels read
-    `sdf-world.interface.hlsli` and `sdf-brick-bake.interface.hlsli`,
+    `sdf-world.interface.hlsli` and `sdf-bricks.interface.hlsli`,
     generated from `SdfWorldInterfaces` and owned by `puck shaders generate`,
     and the engine creates every pipeline from its interface's layout and
     binds by member name. Every per-view dispatch binds the ring slot's frame
     set and its view's views set, whose block holds the world values,
-    `viewBase` among them; the baker binds one set per brick slot and pushes
-    its slice ordinal as the pipeline's one index. No kernel declares a
+    `viewBase` among them; the baker binds the ring slot's frame set and one
+    set per brick slot and pushes its slice ordinal as the pipeline's one
+    index. No kernel declares a
     binding, a register or a push block by hand, `GpuRegisterNumbering` is
     deleted, and `ShaderRegisterBindingLawTests` holds every shader with no
     exception. A buffer member names its element type, so the kernels keep
@@ -3030,8 +3029,10 @@ follow it.
    image that served it (`FrameCaptureResult.Tick`): a graph node records the
    host's `ShaderFrameValues.StateTick` with each image it renders and serves a
    capture with it, so a paused instance republishing an older image reports
-   that image's tick; a node that renders the image it serves (the engine)
-   leaves the request's tick source, the presenter's `RegionTick`, to name it.
+   that image's tick, and the SDF engine records its frame's
+   `SdfFrame.StateTick` with each view output the frame renders or its cadence
+   gate retains, and serves a capture with view 0's. A request carries no tick
+   of its own.
    `puck parity` holds it to the armed tick in a tick verdict between the state
    and pixel verdicts (`TICK-OK`, `TICK-FAILED` naming both sides' ticks). The
    offscreen host composes at most one frame per step
@@ -3977,14 +3978,23 @@ generates the frame block into `frame/`.
    SDF package port is a compute read or write. A program with no instances still sizes
    the cull buffer by its tile-plane term, so the cutover resolves its real
    instance count.
-5. The SDF pass interfaces over the four groups, with generated declarations;
-   parity reads identically. Every pass block takes one spelling, the one
-   `ShaderFrameInterface.ForPass` gives a document pass: `sdf-world`'s pass
-   members move into ordinal name order after its extent, and the brick bake
-   becomes the `sdf.bricks` instance's pass, with a frame group and an extent.
-   Both interfaces then join the `interface-echo` canary and
-   `InterfaceEchoCanaryFixtureTests` in this commit, and P8 closes on that
-   canary's GPU run.
+5. Landed, the SDF pass interfaces in the one pass-block spelling, with
+   generated declarations; parity reads identically. `ShaderFrameInterface.ForPass`
+   lays every pass block out as a document pass's, its extent and then every
+   value in ordinal name order, config fields and a package's declared values
+   alike. The SDF engine's interfaces are its packages':
+   `sdf-world` (`sdf.world`) with its world values in that order, and
+   `sdf-bricks` (`sdf.bricks`), the brick bake, with the frame group, which it
+   binds from the ring slot's frame set, and an extent holding one slice, the
+   voxels one bake dispatch writes, in place of its own slice size.
+   `puck shaders generate` writes both into `isa/`. Both join the
+   `interface-echo` canary and `InterfaceEchoCanaryFixtureTests`: `sdf-world`
+   as an echo of its own, and `sdf-bricks`, whose block is the extent alone,
+   as a target of ink finish's. The canary holds on both backends under the
+   debug layers, which closes P8. The engine node's captures record the tick
+   their image was rendered at: `SdfFrame.StateTick`, which the presenter
+   fills from the state mirror, rides each view output the frame renders, and
+   `FrameCaptureRequest` has no tick source of its own.
 6. The cutover, the riskiest commit: the package records into the graph's
    command list, and Direct3D 12's promotion from `COMMON`, the
    indirect-argument state and per-instance scratch hazards all move with it.
@@ -4223,9 +4233,9 @@ owner at a time.
 
 **Contracts.** P7 is complete: its memory profile, its residency selector and
 every step of P7b have landed, and the gate's Linux bytecode leg is
-[deferred to the end](#deferred-to-the-end). P8 is complete but for its echo of
-the SDF engine's two interfaces, which P14-5 adds, and that canary's GPU run;
-its frame group became a descriptor set when step 15 put pipelines on groups.
+[deferred to the end](#deferred-to-the-end). P8 is complete; its frame group
+became a descriptor set when step 15 put pipelines on groups, and its echo of
+the SDF engine's two interfaces landed with P14-5.
 P7 and P8 do not read simulation state, so they do not wait on the state
 rebuild.
 
@@ -4245,7 +4255,8 @@ P14 follows P4, P7b, P8, P11b and P12b, because the engine's composition and
 screens need somewhere to go before it moves. Its capability matrix (P14-1),
 module split (P14-2), generated instruction-set declarations (P14-3), the
 planner's vocabulary with multi-basis counts (P14-4) and post passes as the
-root graph's own passes (P14-12) needed none of them and have landed. P15 and P16 both follow P14: P15 also needs P4, and
+root graph's own passes (P14-12) needed none of them and have landed, and so have
+the SDF pass interfaces in the one pass-block spelling (P14-5). P15 and P16 both follow P14: P15 also needs P4, and
 P16, the smallest package in this group, needs P14's float working targets for
 its display transform; its heap fold, HDR swapchain selection and paper-white
 setting needed none and have landed.
@@ -4262,9 +4273,9 @@ the runtime and delivery programme owns. P10 binds the pass members of
 and a bound member and an overridden member compose by the rule
 [the decisions register](../decisions/rendering.md) states.
 
-The SDF engine's groups (P7b-20), P12b-2, P4-2c, P11b-13 and P14-2 have landed,
-so the longest remaining chain runs P14-5, P14-6,
-P14-7 to P14-11 and P14-13, and ends with P15. P16 follows P14-10's float working targets, and
+The SDF engine's groups (P7b-20), P12b-2, P4-2c, P11b-13, P14-2 and P14-5 have
+landed, so the longest remaining chain runs P14-6, then P14-7 to P14-11 and
+P14-13, and ends with P15. P16 follows P14-10's float working targets, and
 drawing a bake (P17) comes before P6's choice between a bake and the field.
 
 ## Deferred to the end

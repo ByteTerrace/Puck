@@ -136,7 +136,7 @@ internal static class GenerateCommand {
         Every generated shader interface (<name>.interface.hlsli) the model declares is owned too,
         in one list: an engine package's with pass-group members (such as overlay, place and
         sdf.film-grain), found by its file name, and the SDF engine kernels' (sdf-world and
-        sdf-brick-bake, declared by Puck.SdfVm.SdfWorldInterfaces) at their fixed paths. A
+        sdf-bricks, declared by Puck.SdfVm.SdfWorldInterfaces) at their fixed paths. A
         checked-in interface include no package or engine kernel owns, or a declared interface
         whose include is missing, fails by name.
         """,

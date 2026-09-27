@@ -129,4 +129,8 @@ public sealed partial class SdfWorldEngine {
     public uint OutputWidth => (m_viewOutputs[0]?.Width ?? 0);
     /// <summary>Gets the height in pixels of view 0's output image, or zero before a frame has sized it.</summary>
     public uint OutputHeight => (m_viewOutputs[0]?.Height ?? 0);
+
+    // The simulation tick of the state view 0's output shows (SdfFrame.StateTick), which a capture of it records, or
+    // null before a frame naming one has rendered the view.
+    internal ulong? OutputStateTick => m_viewOutputs[0]?.StateTick;
 }

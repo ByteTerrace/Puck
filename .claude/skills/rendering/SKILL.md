@@ -412,10 +412,13 @@ These are one-line cautions; the owning pages hold the derivations.
   records `regionTick`, the tick of the state the serving image was rendered
   from: a graph node records `ShaderFrameValues.StateTick` with each image it
   renders and passes it to `CaptureRequestSlot.Serve`, so a republished image
-  keeps its own tick; a node serving an image it renders that frame leaves the
-  request's tick source (`WorldFramePresenter.RegionTick`) to name it. `puck
-  parity`'s tick verdict holds it to the armed tick. The offscreen host
-  composes at most one frame per step (`OffscreenTickHostedService.ComposesFrame`),
+  keeps its own tick, and `SdfEngineNode` serves with view 0's output's tick,
+  the `SdfFrame.StateTick` of the frame that rendered it or that its cadence
+  gate retained it for, which the presenter fills from the state mirror. A
+  `FrameCaptureRequest` carries no tick of its own: a node that names none
+  records none. `puck parity`'s tick verdict holds it to the armed tick. The
+  offscreen host composes at most one frame per step
+  (`OffscreenTickHostedService.ComposesFrame`),
   the owed frame again only while a capture waits for it, and each frame's
   interval spans every iteration since the one before (`OffscreenFrameInterval`).
 - **Buffer hazards are declared, not barriered.** A dispatch's device-local buffer
@@ -1342,7 +1345,10 @@ only through its generated interface
 the frame group at set 0 (`frameGroup`), the World group at set 1 when it
 declares `arrays` (their block, in ordinal name order), then its pass group at
 set 3 (`passGroup`: extent, config in ordinal name order) followed by its ports,
-each reading as its resource's name in camel case or its `"as"`. The node binds
+each reading as its resource's name in camel case or its `"as"`. Every pass
+block takes that one spelling (`ShaderFrameInterface.ForPass`): a package's
+declared values, the SDF engine's world values among them, join its config in
+ordinal name order, so an echo document's config reads its block. The node binds
 each as its own set every frame (`ShaderPipelineRenderNode.Groups.cs`). The
 declarations are generated into `<interface>.interface.hlsli`, which the loader
 supplies in memory
@@ -1470,7 +1476,9 @@ with a fullscreen pass sampling by UV the right way up, a generated echo pass
 reading back every frame-block sentinel (an echo expecting two members to hold
 each other's sentinel turns their pixels red), one generated echo per shipped
 interface family (the ink passes, the package canary's tint, `sdf.film-grain`,
-`place` and `overlay`) reading its frame and pass blocks back (`interface-echo`,
+`place`, `overlay` and the SDF engine's `sdf.world`; `sdf.bricks` and the
+conversion packages share ink finish's block) reading its frame and pass blocks
+back (`interface-echo`,
 each perturbed twin turning its last pixel red), and, in a World with `dxc`
 hidden from its path, the shipped ink pipeline rendering from its stored
 package and a relocated package from its binaries while an unpackaged source
