@@ -47,6 +47,11 @@ bool worldUseTapNormals() {
 
 // The per-frame shader-feature levers (World's world.shadows drives the soft shadows and their reach; world.ao drives
 // ambient occlusion): each defaults to the shipped behavior, every feature on at full reach.
+// Whether a pixel of `viewMode` takes the final shading. The evals heatmap rides it too, since it tallies what a lit
+// pixel really costs.
+bool worldFinalShadingMode(int viewMode) {
+    return ((viewMode <= 0) || (viewMode >= DebugViewModeCount) || (viewMode == DebugViewModeEvals));
+}
 bool worldSoftShadowsDisabled() {
     return (passGroup.disableSoftShadows != 0u);
 }

@@ -10,11 +10,12 @@ public sealed partial class SdfWorldTables {
     internal const int PrimaryPipelineIndex = 3;
     internal const int SurfacePipelineIndex = 4;
     internal const int AmbientPipelineIndex = 5;
-    internal const int ViewsPipelineIndex = 6;
-    internal const int ViewsCorePipelineIndex = 7;
-    internal const int ViewsFoldsPipelineIndex = 8;
-    internal const int SkyPipelineIndex = 9;
-    internal const int BrickBakePipelineIndex = 10;
+    internal const int ShadowPipelineIndex = 6;
+    internal const int ViewsPipelineIndex = 7;
+    internal const int ViewsCorePipelineIndex = 8;
+    internal const int ViewsFoldsPipelineIndex = 9;
+    internal const int SkyPipelineIndex = 10;
+    internal const int BrickBakePipelineIndex = 11;
 
     // The pipelines the views' passes record with. The owner built them and disposes them; a kernel reload swaps the
     // native objects behind the same slots, so a pass reads each handle when it records.
@@ -94,7 +95,7 @@ public sealed partial class SdfWorldTables {
     // statics, whatever order the partial files are compiled in.
     internal static class PipelineLayouts {
         // Every per-view pipeline binds the sdf-world interface's groups, so a pass's frame and pass sets bind against any
-        // of the ten, and the baker the sdf-bricks interface's. The mesh pass draws with the sdf-mesh interface's: one set
+        // of the eleven, and the baker the sdf-bricks interface's. The mesh pass draws with the sdf-mesh interface's: one set
         // per frame slot, the view and draw pushed.
         internal static readonly GpuPipelineLayoutDescription World = SdfWorldInterfaces.WorldLayout.PipelineLayout(stages: GpuShaderStage.Compute);
         internal static readonly GpuPipelineLayoutDescription Mesh = SdfWorldInterfaces.MeshLayout.PipelineLayout(stages: GpuShaderStage.Vertex | GpuShaderStage.Fragment);
@@ -107,6 +108,7 @@ public sealed partial class SdfWorldTables {
             Spec(name: "sdf-world-primary", layout: World),
             Spec(name: "sdf-world-surface", layout: World),
             Spec(name: "sdf-world-ambient", layout: World),
+            Spec(name: "sdf-world-shadow", layout: World),
             Spec(name: "sdf-world-views", layout: World),
             Spec(name: "sdf-world-views-core", layout: World),
             Spec(name: "sdf-world-views-folds", layout: World),
@@ -123,6 +125,7 @@ public sealed partial class SdfWorldTables {
             PrimaryPipelineIndex,
             SurfacePipelineIndex,
             AmbientPipelineIndex,
+            ShadowPipelineIndex,
             SkyPipelineIndex,
             BrickBakePipelineIndex,
             ViewsCorePipelineIndex,

@@ -27,7 +27,7 @@ public sealed class SdfWorldPipelinesLawTests {
             kernels: SdfTestPipelines.Kernels(beam: 1)
         );
 
-        Assert.Equal(expected: (10L, 10), actual: (Created(cache: cache), device.Persisted));
+        Assert.Equal(expected: (11L, 11), actual: (Created(cache: cache), device.Persisted));
 
         using (var unchanged = pipelines.PrepareReload(
             cache: cache,
@@ -46,7 +46,7 @@ public sealed class SdfWorldPipelinesLawTests {
             Assert.Equal(expected: 1, actual: changed.ChangedPipelines);
         }
 
-        Assert.Equal(expected: (11L, 11), actual: (Created(cache: cache), device.Persisted));
+        Assert.Equal(expected: (12L, 12), actual: (Created(cache: cache), device.Persisted));
 
         // A second set of the same kernels on the device joins every entry the first leases.
         using var joined = SdfTestPipelines.Build(
@@ -55,7 +55,7 @@ public sealed class SdfWorldPipelinesLawTests {
             kernels: SdfTestPipelines.Kernels(beam: 1)
         );
 
-        Assert.Equal(expected: 11L, actual: Created(cache: cache));
+        Assert.Equal(expected: 12L, actual: Created(cache: cache));
     }
     [Fact]
     public void ASetWithABrickPoolAddsTheBrickBakePipelineItsKernelCarries() {
@@ -70,7 +70,7 @@ public sealed class SdfWorldPipelinesLawTests {
         );
 
         Assert.True(condition: pipelines.IncludesBrickPipelines);
-        Assert.Equal(expected: 11L, actual: Created(cache: cache));
+        Assert.Equal(expected: 12L, actual: Created(cache: cache));
     }
     [Fact]
     public async Task TheCacheHoldsAtMostItsConcurrencyInTheDriverAndBuildsEveryPipeline() {
@@ -92,7 +92,7 @@ public sealed class SdfWorldPipelinesLawTests {
             started.Add(item: driver.Next());
         }
 
-        while (started.Count < 10) {
+        while (started.Count < 11) {
             driver.Step();
             started.Add(item: driver.Next());
         }
@@ -105,7 +105,7 @@ public sealed class SdfWorldPipelinesLawTests {
 
         Assert.Equal(
             actual: (driver.MostInDriver, started.Distinct().Count(), Created(cache: cache)),
-            expected: (GpuPassPipelineCache.BuildConcurrency, 10, 10L)
+            expected: (GpuPassPipelineCache.BuildConcurrency, 11, 11L)
         );
     }
     [Fact]

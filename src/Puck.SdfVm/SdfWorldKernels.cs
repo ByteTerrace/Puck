@@ -4,8 +4,8 @@ namespace Puck.SdfVm;
 
 /// <summary>
 /// The compiled compute kernels of the SDF world pipeline: sky, instance-mask culling,
-/// beam cone marching, indirect-argument generation, primary traversal, surface evaluation, ambient occlusion,
-/// views shading, and composition. Views has
+/// beam cone marching, indirect-argument generation, primary traversal, surface evaluation, ambient occlusion, the key
+/// light's soft shadow, and views shading. Views has
 /// full, folds, and core variants selected from the program's operations by <see cref="SdfViewsKernelVariants"/>. Brick baking and
 /// upload run separately when requested. One backend's set uses SPIR-V for Vulkan or DXIL for Direct3D 12;
 /// <see cref="Load(string)"/> reads the selected extension from the deployed assets, and every load is counted into
@@ -18,6 +18,7 @@ namespace Puck.SdfVm;
 /// <param name="Primary">The primary traversal kernel, writing visibility records for the views pass.</param>
 /// <param name="Surface">The geometric normal and curvature pass, writing the visibility record's normal and surface rows.</param>
 /// <param name="Ambient">The ambient-occlusion pass, reading geometric normals and updating the surface rows.</param>
+/// <param name="Shadow">The shadow pass, marching the key light's soft shadow into the visibility record's key row.</param>
 /// <param name="Views">The per-view shading kernel (the full-ISA reference variant).</param>
 /// <param name="ViewsCore">The shading core-ops variant (exotic op/shape cases compiled out).</param>
 /// <param name="ViewsFolds">The shading fold-ops variant (folds/scopes kept, the heavy warp/noise family compiled out).</param>
@@ -31,6 +32,7 @@ public readonly record struct SdfWorldKernels(
     ReadOnlyMemory<byte> Primary,
     ReadOnlyMemory<byte> Surface,
     ReadOnlyMemory<byte> Ambient,
+    ReadOnlyMemory<byte> Shadow,
     ReadOnlyMemory<byte> Views,
     ReadOnlyMemory<byte> ViewsCore,
     ReadOnlyMemory<byte> ViewsFolds,
@@ -81,7 +83,7 @@ public readonly record struct SdfWorldKernels(
     /// changed kernel starts a new cache file.</summary>
     /// <returns>A lowercase 16-digit hexadecimal key.</returns>
     public string ContentKey() =>
-        Puck.Abstractions.Gpu.GpuPipelineCacheStore.ContentKeyOf(parts: [Sky, Beam, InstanceCull, CullArgs, Primary, Surface, Ambient, Views, ViewsCore, ViewsFolds, BrickBake]);
+        Puck.Abstractions.Gpu.GpuPipelineCacheStore.ContentKeyOf(parts: [Sky, Beam, InstanceCull, CullArgs, Primary, Surface, Ambient, Shadow, Views, ViewsCore, ViewsFolds, BrickBake]);
     /// <summary>Loads the world kernel set from the standard deploy location (<see cref="DefaultDirectory"/>).</summary>
     /// <param name="bytecodeExtension">The compiled-kernel extension (<c>".spv"</c> for Vulkan, <c>".dxil"</c> for Direct3D 12).</param>
     /// <returns>The loaded kernel set.</returns>
@@ -138,6 +140,7 @@ public readonly record struct SdfWorldKernels(
             CullArgs: Read(stem: "sdf-cull-args"),
             InstanceCull: Read(stem: "sdf-instance-cull"),
             Primary: Read(stem: "sdf-world-primary"),
+            Shadow: Read(stem: "sdf-world-shadow"),
             Sky: Read(stem: "sdf-sky"),
             Surface: Read(stem: "sdf-world-surface"),
             Views: Read(stem: "sdf-world-views"),

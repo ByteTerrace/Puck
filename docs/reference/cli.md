@@ -986,7 +986,12 @@ A leg's `world` is a repository-relative `.world.json` document or `.puck`
 source; a leg booting a composition source may name the declared world it boots
 with `entry`, passed to the World as `--entry`. A manifest may start a companion authority
 world, pass its allocated endpoint through `connect`, and use `{run}` in scripts
-and assertions for per-leg capture paths. There are no regex programs, loops,
+and assertions for per-leg capture paths. The companion boots headless, so a
+proof with `backends` may start one and boots its own World once per backend. A
+companion that is a composition source is compiled where it stands, every world
+it declares is staged together into the leg's run directory, and the companion
+boots the world the leg's `entry` names, else the source's declared entry; a
+client beside it boots the source itself and must `connect`. There are no regex programs, loops,
 callbacks, conditionals, shell, or embedded scripts.
 Exit codes are 0 for all proofs held, 1 for an observed proof failure, and 2 for
 usage, manifest, build, or infrastructure refusal, including an unsupported

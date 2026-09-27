@@ -67,13 +67,11 @@ internal static partial class CanaryManifestLoader {
         )) {
             throw new CanaryManifestRefusal(message: $"canary '{id}' declares backends, so it needs a GPU and must declare the 'gpu' requirement.");
         }
+        // A companion authority is headless, so a leg beside one boots its own World once per backend as any leg
+        // does; a mesh's listeners are all Worlds of their own, which no backend names.
         foreach (var leg in ((CanaryLeg[])[positive, discriminating])) {
-            if (
-                leg.Connect ||
-                (leg.AuthorityWorldPath is not null) ||
-                (leg.Authorities.Count != 0)
-            ) {
-                throw new CanaryManifestRefusal(message: $"canary '{id}' {leg.Name} leg: a proof with backends runs one local process per backend; authorities, authorityWorld, and connect are refused.");
+            if (leg.Authorities.Count != 0) {
+                throw new CanaryManifestRefusal(message: $"canary '{id}' {leg.Name} leg: a proof with backends boots its own World once per backend; an authorities mesh has no World of its own to boot, so it is refused.");
             }
         }
 

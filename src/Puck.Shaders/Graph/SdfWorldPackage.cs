@@ -197,9 +197,9 @@ public static class SdfWorldPackage {
     /// <summary>The edge of one screen tile in pixels, the unit the beam, the instance masks and the cull buffer count in.
     /// KEEP IN SYNC with <c>WorldTileSize</c> in <c>frame/sdf-tile.hlsli</c>.</summary>
     public const uint TileSize = 16;
-    /// <summary>The bytes of one visibility record: the fifteen words in its V, C, L, N and S rows that
+    /// <summary>The bytes of one visibility record: the sixteen words in its V, C, L, N, S and K rows that
     /// <c>sdf-visibility.hlsli</c> lays out (<c>SdfVisibilityWords</c>).</summary>
-    public const int VisibilityRecordByteLength = (15 * sizeof(uint));
+    public const int VisibilityRecordByteLength = (16 * sizeof(uint));
     /// <summary>The planes the cull buffer holds per tile: the march start, the first exit, the second entry and the far
     /// bound. KEEP IN SYNC with <c>WorldTilePlaneCount</c> in <c>frame/sdf-frame.hlsli</c>.</summary>
     public const uint TilePlaneCount = 4;
@@ -361,7 +361,8 @@ public static class SdfWorldPackage {
             Hit(mesh: true, name: Parts.Primary, visibility: null, written: Parts.Visibility),
             Hit(mesh: false, name: Parts.Surface, visibility: null, written: Parts.SurfaceVisibility),
             Hit(mesh: false, name: Parts.Ambient, visibility: null, written: Parts.AmbientVisibility),
-            Hit(mesh: false, name: Parts.Views, visibility: Parts.AmbientVisibility, written: Color),
+            Hit(mesh: false, name: Parts.Shadow, visibility: null, written: Parts.ShadowVisibility),
+            Hit(mesh: false, name: Parts.Views, visibility: Parts.ShadowVisibility, written: Color),
         ],
         Resources: [
             Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: Parts.SkyImage, transient: false),
@@ -395,6 +396,7 @@ public static class SdfWorldPackage {
             Visibility(from: null, name: Parts.Visibility),
             Visibility(from: Parts.Visibility, name: Parts.SurfaceVisibility),
             Visibility(from: Parts.SurfaceVisibility, name: Parts.AmbientVisibility),
+            Visibility(from: Parts.AmbientVisibility, name: Parts.ShadowVisibility),
         ]
     );
 
@@ -498,6 +500,8 @@ public static class SdfWorldPackage {
         public const string Surface = "surface";
         /// <summary>Ambient resolution, continuing the visibility records.</summary>
         public const string Ambient = "ambient";
+        /// <summary>The key light's soft shadow, continuing the visibility records.</summary>
+        public const string Shadow = "shadow";
         /// <summary>Shading into the view's color.</summary>
         public const string Views = "views";
         /// <summary>The sky's version of the view's color.</summary>
@@ -520,5 +524,7 @@ public static class SdfWorldPackage {
         public const string SurfaceVisibility = "surfaceVisibility";
         /// <summary>Ambient's visibility records, forwarding surface's.</summary>
         public const string AmbientVisibility = "ambientVisibility";
+        /// <summary>Shadow's visibility records, forwarding ambient's.</summary>
+        public const string ShadowVisibility = "shadowVisibility";
     }
 }

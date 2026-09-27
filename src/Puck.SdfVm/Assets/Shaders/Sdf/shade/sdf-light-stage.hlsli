@@ -1,19 +1,13 @@
 // The light stage: shades one pixel from its surface sample (SdfSurfaceSample) into the view's working color, the sky on
-// a miss. It samples a bound screen, marches the key light's soft shadow, re-resolves the material, lights the surface,
-// and applies the grid overlays, the distance fog and the silhouette coverage; the volumes and the debug views follow it.
+// a miss. It samples a bound screen, re-resolves the material, lights the surface through the one light interface
+// (sdf-light.hlsli), the key light under the soft shadow the shadow stage wrote, and applies the grid overlays, the
+// distance fog and the silhouette coverage; the volumes and the debug views follow it.
 #ifndef SHADE_SDF_LIGHT_STAGE_HLSLI
 #define SHADE_SDF_LIGHT_STAGE_HLSLI
+#include "sdf-light.hlsli"
 #ifdef SDF_VIEWS_PASS
 
-// Whether a pixel of `viewMode` takes the final shading. The evals heatmap rides it too, since it tallies what a lit
-// pixel really costs.
-bool sdfFinalShadingMode(int viewMode) {
-    return ((viewMode <= 0) || (viewMode >= DebugViewModeCount) || (viewMode == DebugViewModeEvals));
-}
-
-// `groupGather` is the workgroup's shadow candidate decision (sdfShadowGatherGroup): 2 when the group's mask is built, 1
-// for the camera-tile mask, 0 for the flat field.
-float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, uint groupGather) {
+float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s) {
     float3 color = skyColor(p.rayDirection);
 
     if (!s.hit) {
@@ -23,17 +17,14 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, uint groupGather) {
     float3 surfacePoint = (p.rayOrigin + (p.rayDirection * s.t));
     float3 normal = s.normal;
     float curvature = s.curvature;
-    float gradientMagnitude = s.gradientMagnitude;
     int material = s.material;
     float4 hitLanes = s.lanes;
     int hitFrameSlot = s.frameSlot;
     float materialBlendWeight = s.blendWeight;
     int materialBlendOther = s.blendOther;
     bool curvatureShading = worldCurvatureShadingEnabled();
-    bool useFinalShading = sdfFinalShadingMode(p.viewMode);
+    bool useFinalShading = worldFinalShadingMode(p.viewMode);
     bool sampledScreen = false;
-    // The per-program Lipschitz clamp, which the shadow march divides back out of its world-space comparisons.
-    float stepScale = sdfStepScale();
 
     sdfEvalCount += s.surfaceQueries;
 
@@ -47,45 +38,19 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, uint groupGather) {
 #endif
 
     if (useFinalShading && !sampledScreen) {
-        // The shadow light's Lambert term under its soft-shadow visibility (the ambient lights still fill shadowed regions,
-        // so shadows read soft, not black). The march is skipped where the surface faces away from the light, where no
-        // light shadows, on a mesh pixel, or when soft shadows are off (world.shadows off; the light then goes
-        // unshadowed). The unbound glass reads sunDiffuse too.
+        // The shadow light's Lambert term under the soft-shadow visibility the shadow stage wrote (the ambient lights still
+        // fill shadowed regions, so shadows read soft, not black). The record's key row is current exactly where the
+        // shadow stage marched: where the surface faces the light, a light shadows, soft shadows are on, and the pixel is
+        // no mesh's. The unbound glass reads sunDiffuse too.
         float3 keyDirection = worldSunDirection();
         float sunDiffuse = max(dot(normal, keyDirection), 0.0);
         float keyVisibility = 1.0;
-        // The program's march clamp composed with the hit's local gradient magnitude (GradientMagnitudeFloor): the one
-        // de-scale factor the shadow estimate divides by.
-        float shadingStepScale = (stepScale * max(gradientMagnitude, GradientMagnitudeFloor));
         // The environment scales dim the room so the diegetic screen glow dominates; the overworld sets them low per frame.
         float ambientScale = passGroup.ambientScale;
         float sunScale = passGroup.sunScale;
 
         if ((sunDiffuse > 0.0) && (worldShadowLightIndex() >= 0) && !worldSoftShadowsDisabled() && !s.mesh) {
-            // One scaled reach for both the gather's cull cone and the march's ceiling (world.shadows's reach), so the
-            // gathered occluder set is sound for the shadow ray.
-            float shadowReach = (ShadowMaxDistance * worldShadowDistanceScale());
-            sdfSecondaryMarchActive = true;
-#ifdef SDF_SCREEN_SOURCES
-            // The group's decision: 2 marches the group's candidate mask (bit-identical to the flat all-instances march,
-            // restricted to the instances the group's shadow rays can reach); 1 the camera-tile mask; 0 the flat field,
-            // which is cheap for a few-instance program and keeps the grid toggle render-invariant. The cull off marches
-            // the flat field, the ground-truth reference.
-            bool cullOn = worldShadowCullEnabled();
-            bool culled = (groupGather == 2u);
-            uint shadowFallbackMask = ((cullOn && (groupGather == 1u)) ? p.instanceMaskBase : SDF_INSTANCE_MASK_ALL);
-
-            sdfShadowMaskActive = culled;
-            // Per-instance soft-shadow participation is live for this march only, in every fallback mode, so a
-            // shadow-suppressed dynamic instance drops out of each identically.
-            sdfShadowParticipationActive = true;
-            keyVisibility = softShadowVisibility(surfacePoint, normal, keyDirection, shadowFallbackMask, shadingStepScale, shadowReach);
-            sdfShadowParticipationActive = false;
-            sdfShadowMaskActive = false;
-#else
-            keyVisibility = softShadowVisibility(surfacePoint, normal, keyDirection, p.instanceMaskBase, shadingStepScale, shadowReach);
-#endif
-            sdfSecondaryMarchActive = false;
+            keyVisibility = s.keyVisibility;
             sunDiffuse *= keyVisibility;
         }
 
@@ -168,63 +133,40 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, uint groupGather) {
             float ambientOcclusion = s.ambient;
             ambientOcclusion = lerp(ambientOcclusion, 1.0, saturate(shadeMaterial.wrap * 0.35));
 
-            // Every light in the environment: a directional adds its Lambert term, the shadow light's under its visibility
-            // and every other's under ambient occlusion, and a hemisphere its floor-plus-gradient under ambient occlusion.
-            // Rim lights are view-dependent and join after the material shade. The environment scales dim the directional
-            // and ambient families for the room's mood. A directional or point Lambert term reads through sdfWrapDiffuse:
-            // wrap = 0 reduces it to max(n.l, 0).
+            // Every light answers through the one interface (sdfLightResponse): its diffuse term joins the radiance the
+            // material shade lights by, and its rim and specular terms and its attenuation of reflected light follow the
+            // shade.
+            SdfShadeSurface shadeSurface;
+            shadeSurface.position = surfacePoint;
+            shadeSurface.normal = normal;
+            shadeSurface.rayDirection = p.rayDirection;
+            shadeSurface.material = shadeMaterial;
+            shadeSurface.ambientOcclusion = ambientOcclusion;
+            shadeSurface.keyVisibility = keyVisibility;
+            shadeSurface.sunScale = sunScale;
+            shadeSurface.ambientScale = ambientScale;
+
             float3 radiance = float3(0.0, 0.0, 0.0);
-            uint lightCount = worldLightCount();
-            int shadowLight = worldShadowLightIndex();
+            float3 rim = float3(0.0, 0.0, 0.0);
+            float3 specular = float3(0.0, 0.0, 0.0);
+            float attenuation = 1.0;
+            uint lightCount = sdfLightCount();
 
             [loop]
             for (uint lightIndex = 0u; (lightIndex < lightCount); lightIndex++) {
-                SdfEnvLight light = worldLight(lightIndex);
+                SdfLight light;
 
-                if (light.kind == SDF_LIGHT_DIRECTIONAL) {
-                    float lambert = sdfWrapDiffuse(dot(normal, light.direction), shadeMaterial.wrap);
-                    float occlusion = (((int)lightIndex == shadowLight) ? keyVisibility : ambientOcclusion);
-
-                    radiance += (light.color * (((light.weight * lambert) * occlusion) * sunScale));
-                } else if (light.kind == SDF_LIGHT_HEMISPHERE) {
-                    float ambient = (light.weight + (light.param * normal.y));
-
-                    radiance += (light.color * ((ambient * ambientScale) * ambientOcclusion));
-                } else if (light.kind == SDF_LIGHT_POINT) {
-                    float3 toLight = (worldPointLightPosition(light) - surfacePoint);
-                    float pointDistance = length(toLight);
-                    float3 pointDirection = (toLight / max(pointDistance, 1.0e-4));
-                    float pointRatio = (pointDistance / max(light.param, 1.0e-3));
-                    float pointFalloff = (light.weight / (1.0 + (pointRatio * pointRatio)));
-                    float pointLambert = sdfWrapDiffuse(dot(normal, pointDirection), shadeMaterial.wrap);
-
-                    radiance += (light.color * ((pointFalloff * pointLambert) * ambientOcclusion));
+                if (!sdfLightAt(lightIndex, light)) {
+                    continue;
                 }
+
+                SdfLightResponse response = sdfLightResponse(light, shadeSurface);
+
+                radiance += response.diffuse;
+                rim += response.rim;
+                specular += response.specular;
+                attenuation *= response.attenuation;
             }
-
-#ifdef SDF_SCREEN_SOURCES
-            // Every bound diegetic screen is a colored area light: its position and orientation from the screen-surface
-            // table, its color from the frame's average of its image. The dot(screenNormal, -L) gate lights only what sits
-            // in front of its face. right and up are orthonormal (SdfScreenSurface); the normalize absorbs upload drift.
-            // The sdf.screen-lights lever skips the whole loop.
-            if (!worldScreenLightsDisabled()) {
-                for (uint screenIndex = 0u; (screenIndex < screenLightLoopBound()); screenIndex++) {
-                    if (!screenSourceBound(screenIndex)) {
-                        continue;
-                    }
-
-                    ScreenSurfaceData lightSurface = worldScreenSurface(screenIndex);
-                    float3 screenNormal = normalize(cross(lightSurface.right.xyz, lightSurface.up.xyz));
-                    float3 toLight = (lightSurface.origin.xyz - surfacePoint);
-                    float distanceSquared = max(dot(toLight, toLight), ScreenLightMinDistanceSquared);
-                    float3 lightDirection = (toLight * rsqrt(distanceSquared));
-                    float facing = (max(dot(normal, lightDirection), 0.0) * saturate(dot(screenNormal, -lightDirection)));
-                    float attenuation = (1.0 / (1.0 + (ScreenLightFalloff * distanceSquared)));
-
-                    radiance += (sdfScreenLights[screenIndex].rgb * ((sdfScreenLights[screenIndex].a * facing) * attenuation));
-                }
-            }
-#endif
 
             color = (sdfMaterialShade(shadeMaterial, radiance, normal, p.rayDirection, worldSunDirection(), sunScale) + meshEmission);
 
@@ -245,44 +187,11 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, uint groupGather) {
                 color += ((worldStudioReflection(reflectDirection, shadeMaterial.roughness) * fresnel) * ambientOcclusion);
             }
 
-            // The view-dependent rim lights: an additive silhouette brighten after the material shade, a look rather than a
-            // light the material's specular answers.
-            [loop]
-            for (uint rimIndex = 0u; (rimIndex < lightCount); rimIndex++) {
-                SdfEnvLight rim = worldLight(rimIndex);
+            // The rim brightens and the point lights' lobes join after the shade: a rim is a look rather than a light the
+            // material's specular answers. The occluders then dim reflected light; self-emission stays.
+            color += rim;
+            color += specular;
 
-                if (rim.kind == SDF_LIGHT_RIM) {
-                    color += ((rim.weight * rim.color) * pow((1.0 - saturate(dot(normal, -p.rayDirection))), rim.param));
-                }
-            }
-            // Each point light's own GGX specular lobe, from its own direction; its diffuse term is already in the radiance.
-            // Scaled by ambient occlusion like the diffuse term.
-            [loop]
-            for (uint pointIndex = 0u; (pointIndex < lightCount); pointIndex++) {
-                SdfEnvLight pointLight = worldLight(pointIndex);
-
-                if (pointLight.kind == SDF_LIGHT_POINT) {
-                    float3 toLight = (worldPointLightPosition(pointLight) - surfacePoint);
-                    float pointDistance = length(toLight);
-                    float3 pointDirection = (toLight / max(pointDistance, 1.0e-4));
-                    float pointRatio = (pointDistance / max(pointLight.param, 1.0e-3));
-                    float pointFalloff = (pointLight.weight / (1.0 + (pointRatio * pointRatio)));
-
-                    color += (pointLight.color * sdfMaterialSpecular(shadeMaterial, normal, -p.rayDirection, pointDirection, (pointFalloff * ambientOcclusion)));
-                }
-            }
-
-            // Occluders attenuate reflected light; self-emission stays.
-            float attenuation = 1.0;
-            [loop] for (uint index = 0u; index < lightCount; index++) {
-                SdfEnvLight field = worldLight(index);
-                if (field.kind != SDF_LIGHT_OCCLUDER || field.weight <= 0.0) continue;
-                float3 delta = worldPointLightPosition(field) - surfacePoint;
-                float distanceSquared = dot(delta, delta);
-                float facing = distanceSquared > 1.0e-12 ? saturate(dot(normal, delta * rsqrt(distanceSquared))) : 1.0;
-                float radius = max(field.param, 1.0e-6);
-                attenuation *= 1.0 - saturate(field.weight * exp(-distanceSquared / (radius * radius)) * facing);
-            }
             float3 selfEmission = ((shadeMaterial.albedo * shadeMaterial.emissive) + meshEmission);
             color = selfEmission + (color - selfEmission) * attenuation;
 

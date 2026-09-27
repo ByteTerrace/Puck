@@ -179,10 +179,18 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
         m_owner.Unhold(residency: m_view.Residency);
         m_view.Residency.Release();
     }
-    // The mesh part skips every frame that draws no mesh: it records neither its draws nor the barriers of its target and
-    // depth, and the hit passes, whose pass block's mesh draws are then zero, read nothing of the target.
+    // A part skips a frame whose work it would not do, recording neither its work nor its planned barriers:
+    // - the mesh part a frame that draws no mesh, when the hit passes, whose pass block's mesh draws are then zero, read
+    //   nothing of the target;
+    // - the ambient part a frame whose ambient occlusion is off, whose neutral occlusion the surface pass already wrote;
+    // - the shadow part a frame whose soft shadows are off or that has no shadow light, when views reads nothing of the
+    //   record's key row.
     public bool Skips(in FrameContext context) {
-        if (!IsMesh) {
+        var mesh = IsMesh;
+        var ambient = string.Equals(a: m_part, b: SdfWorldPackage.Parts.Ambient, comparisonType: StringComparison.Ordinal);
+        var shadow = string.Equals(a: m_part, b: SdfWorldPackage.Parts.Shadow, comparisonType: StringComparison.Ordinal);
+
+        if (!(mesh || ambient || shadow)) {
             return false;
         }
 
@@ -190,7 +198,17 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
 
         m_owner.Begin(residency: residency);
 
-        return (residency.Submit(context: in context).MeshDrawCount == 0);
+        var tables = residency.Submit(context: in context);
+        var frame = residency.Frame!;
+
+        if (mesh) {
+            return (tables.MeshDrawCount == 0);
+        }
+        if (ambient) {
+            return frame.DisableAmbientOcclusion;
+        }
+
+        return (frame.DisableSoftShadows || (frame.Environment.ShadowLightIndex < 0));
     }
     public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
         var residency = m_view.Residency;
@@ -238,6 +256,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
             comparisonType: StringComparison.Ordinal
         )) {
             residency.MarkRendered(view: view);
+            m_owner.MarkRendered(instance: m_context.Instance, view: in m_view);
         }
 
         return RenderGraphPackageOutcome.Drew;
@@ -258,6 +277,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
             SdfWorldPackage.Parts.Primary => tables.Pipeline(index: SdfWorldTables.PrimaryPipelineIndex),
             SdfWorldPackage.Parts.Surface => tables.Pipeline(index: SdfWorldTables.SurfacePipelineIndex),
             SdfWorldPackage.Parts.Ambient => tables.Pipeline(index: SdfWorldTables.AmbientPipelineIndex),
+            SdfWorldPackage.Parts.Shadow => tables.Pipeline(index: SdfWorldTables.ShadowPipelineIndex),
             _ => tables.ViewsPipeline,
         };
 
@@ -506,7 +526,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
         SdfWorldPackage.Parts.InstanceMasks => SdfWorldPackage.InstanceMasks,
         SdfWorldPackage.Parts.Tiles => SdfWorldPackage.Tiles,
         SdfWorldPackage.Parts.CullBounds => SdfWorldPackage.CullBounds,
-        SdfWorldPackage.Parts.Visibility or SdfWorldPackage.Parts.SurfaceVisibility or SdfWorldPackage.Parts.AmbientVisibility => SdfWorldPackage.VisibilityRecords,
+        SdfWorldPackage.Parts.Visibility or SdfWorldPackage.Parts.SurfaceVisibility or SdfWorldPackage.Parts.AmbientVisibility or SdfWorldPackage.Parts.ShadowVisibility => SdfWorldPackage.VisibilityRecords,
         _ => null,
     };
     // The member a pass writes a fragment buffer through, or null for one it writes through no member.
@@ -515,7 +535,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
         SdfWorldPackage.Parts.Tiles => SdfWorldPackage.TilesWritten,
         SdfWorldPackage.Parts.Arguments => SdfWorldPackage.ViewsArgsWritten,
         SdfWorldPackage.Parts.CullBounds => SdfWorldPackage.CullBoundsWritten,
-        SdfWorldPackage.Parts.Visibility or SdfWorldPackage.Parts.SurfaceVisibility or SdfWorldPackage.Parts.AmbientVisibility => SdfWorldPackage.VisibilityRecordsWritten,
+        SdfWorldPackage.Parts.Visibility or SdfWorldPackage.Parts.SurfaceVisibility or SdfWorldPackage.Parts.AmbientVisibility or SdfWorldPackage.Parts.ShadowVisibility => SdfWorldPackage.VisibilityRecordsWritten,
         _ => null,
     };
 }

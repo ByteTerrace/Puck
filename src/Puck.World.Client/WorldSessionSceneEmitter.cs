@@ -57,6 +57,16 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     private readonly string? m_effectiveCameraName;
     private readonly float m_fieldOfViewRadians;
     private readonly WorldSessionMirror m_mirror;
+    // The color each avatar is painted with: the mirror's, unless the host paints some bodies its own way.
+    private readonly Func<int, Vector3> m_bodyColor;
+
+    private readonly SdfViewSnapshot[] m_views = new SdfViewSnapshot[1];
+
+    private readonly Vector3[]? m_bodyColors;
+
+    private int m_bodyColorRevision;
+
+    private readonly bool m_castsAvatarShadows;
 
     // The static placements' palettes, reused across rebuilds (WorldPlacementStamper.EmitStatic).
     private readonly WorldStaticPalettes m_palettes = new();
@@ -113,10 +123,16 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// the destination's default projection.</param>
     /// <param name="fieldOfViewRadians">The vertical field of view used only by the spawn-centroid overview fallback
     /// (a named camera row carries its own lens).</param>
-    public WorldSessionSceneEmitter(WorldSessionMirror mirror, string? effectiveCameraName, float fieldOfViewRadians = (MathF.PI / 3f)) {
+    /// <param name="bodyColor">The color each avatar is painted with by body index, or <see langword="null"/> for the
+    /// mirror's own (<see cref="WorldSessionMirror.BodyColor"/>).</param>
+    /// <param name="castsAvatarShadows">Whether avatar transforms participate in soft shadows when the host enables them.</param>
+    public WorldSessionSceneEmitter(WorldSessionMirror mirror, string? effectiveCameraName, float fieldOfViewRadians = (MathF.PI / 3f), Func<int, Vector3>? bodyColor = null, bool castsAvatarShadows = false) {
         ArgumentNullException.ThrowIfNull(argument: mirror);
 
         m_mirror = mirror;
+        m_bodyColor = (bodyColor ?? mirror.BodyColor);
+        m_bodyColors = ((bodyColor is null) ? null : new Vector3[WorldBodiesLimits.CapacityCeiling]);
+        m_castsAvatarShadows = castsAvatarShadows;
         m_effectiveCameraName = effectiveCameraName;
         m_fieldOfViewRadians = fieldOfViewRadians;
         m_meshDraws = new WorldSceneMeshDraws(pool: m_pool);
@@ -137,7 +153,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             // is still emitted, so the catalog keeps the frozen shape its probe reserved.
             WorldMirroredAvatarBand.EmitPalette(
                 accentMaterials: accentMaterials,
-                bodyColor: m_mirror.BodyColor(index: index),
+                bodyColor: m_bodyColor(arg: index),
                 bodyMaterials: bodyMaterials,
                 builder: builder,
                 catalogRig: m_mirror.CatalogRig(index: index),
@@ -327,20 +343,16 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
         m_dressedCamera = camera;
         m_dressedFarDistance = WorldRenderFarDistance.Resolve(defaults: m_mirror.Definition.Render);
+        m_views[0] = new SdfViewSnapshot(
+            Camera: camera,
+            Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)
+        );
 
         return new SdfFrame(
             Program: program,
             ProgramChanged: programChanged,
-            Views: [new SdfViewSnapshot(
-                    Camera: camera,
-                    Region: new NormalizedRect(
-                        Height: 1f,
-                        Width: 1f,
-                        X: 0f,
-                        Y: 0f
-                    )
-                )],
-            Time: 0f
+            Time: 0f,
+            Views: m_views
         ) {
             DynamicTransforms = transforms,
             MovedTransforms = moved,
@@ -370,7 +382,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             WorldSessionRenderEnvelope.EmitProbe(
                 builder: builder,
                 candidate: definition,
-                bodyColor: m_mirror.BodyColor,
+                bodyColor: m_bodyColor,
                 colors: BakedColors(),
                 pool: m_pool,
                 slotBase: context.SlotBase
@@ -424,7 +436,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     public (int Words, int Instances) MeasureCandidate(WorldDefinition candidate) =>
         WorldSessionRenderEnvelope.MeasureCandidate(
             candidate: candidate,
-            bodyColor: m_mirror.BodyColor,
+            bodyColor: m_bodyColor,
             colors: BakedColors(),
             pool: m_pool
         );
@@ -470,7 +482,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             var address = m_mirror.Address(index: index);
 
             if (!m_avatarOwners.Wake(
-                castsSoftShadow: false,
+                castsSoftShadow: m_castsAvatarShadows,
                 discontinuity: (
                 !m_avatarPoseSeeded[index] ||
                 (m_avatarMotionAddresses[index] != address)
@@ -496,9 +508,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
                 deltaSeconds: 1f,
                 moved: WorldTransformOwners.PackBody(
                 avatar: index,
-                // A session view disables soft shadows entirely (see Dress below), so crowd-radius participation has
-                // no observer — false is exact, not an approximation.
-                castsSoftShadow: false,
+                // Session panels omit avatar shadows; a routed scene participates when its host enables them.
+                castsSoftShadow: m_castsAvatarShadows,
                 catalogBase: context.SlotBase,
                 gaitPhase: (m_avatarGaitPhases[index] * m_emittedGaitAmplitudes[index]),
                 moved: moved,
@@ -597,12 +608,12 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
         return true;
     }
-    /// <summary>Writes four components, never their sum: the definition-delivery revision, the mirrored snapshot's
+    /// <summary>Writes five components, never their sum: the definition-delivery revision, the mirrored snapshot's
     /// declared-set/palette revision (<see cref="WorldSessionMirror.SnapshotRevision"/>, assigned from the wire and
     /// able to move down), a counter that moves when a bound color the live build baked moves in the session's state
     /// mirror (<see cref="WorldBakedColors.TryTakeMove"/>, as <c>WorldSceneEmitter.WriteRevision</c> does for the local
     /// world), and a counter that moves when a stamped body's live scale moves
-    /// (<see cref="WorldBodyStampCensus.TryTakeMove"/>) — the same non-summing rule <see cref="WorldClient.WriteRevision"/> documents for the
+    /// (<see cref="WorldBodyStampCensus.TryTakeMove"/>), and the host's avatar colors — the same non-summing rule <see cref="WorldClient.WriteRevision"/> documents for the
     /// identical reason: a rebuild must never be maskable by two counters moving in opposite directions.</summary>
     public void WriteRevision(Span<int> destination) {
         destination[0] = m_mirror.DefinitionRevision;
@@ -620,6 +631,20 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         }
 
         destination[3] = m_censusRevision;
+        if (m_bodyColors is { } colors) {
+            for (var index = 0; (index < colors.Length); index++) {
+                if (!m_mirror.IsActive(index: index)) {
+                    continue;
+                }
+                var color = m_bodyColor(arg: index);
+
+                if (colors[index] != color) {
+                    colors[index] = color;
+                    m_bodyColorRevision++;
+                }
+            }
+        }
+        destination[4] = m_bodyColorRevision;
     }
 
     // The bound colors the static build bakes, over the session's own followed state mirror: the one path the local
@@ -648,7 +673,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// <see cref="WorldBodiesLimits.CapacityCeiling"/>, so a full destination can never outgrow this emitter's probe.</summary>
     public int DynamicSlotCount => (WorldRigCatalog.DynamicTransformCapacity + WorldStampPool.DynamicSlotCount);
     /// <inheritdoc/>
-    public int RevisionComponentCount => 4;
+    public int RevisionComponentCount => 5;
     /// <inheritdoc/>
     /// <remarks>The mirrored world's static placements' meshes, fixed by each live <see cref="Emit"/>, then its stamp
     /// pool's (<see cref="WorldStampPool.MeshDraws"/>).</remarks>

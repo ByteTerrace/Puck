@@ -21,7 +21,7 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
         var angularVelocity = (seat?.MotionAngularVelocity ?? Vector3.Zero);
         var route = seatRouter.Route(slot: slot);
         var builder = new StringBuilder(value: "[world.view.camera: ");
-        var resolved = continuum.TryResolveSeatPose(
+        var resolved = continuum.TryResolvePresentedSeatPose(
             interpolationAlpha: 1f,
             orientation: out _,
             position: out var anchor,

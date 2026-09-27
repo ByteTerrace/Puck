@@ -18,62 +18,7 @@ namespace Puck.World.Tests;
 /// query the instant the transfer settles.
 /// </summary>
 public sealed class SeamCrossingOrchestrationLawTests {
-    // HostRowFixture.HostRow hardcodes its origin to the bare row name (fine for the admin-driven EnqueueTransfer
-    // path every other two-row law drives), so this suite builds its own rows over a REAL file path — the exact
-    // shape HostRow.Build uses, with the one field (WorldInstance.SourcePath, read from `origin`, not
-    // `documentOrigin`) that a file-canonicalized origin match needs.
-    private static (WorldInstance Instance, WorldServer Server, TemporaryDirectory StateDirectory) BuildFileBackedRow(string name, string path, WorldDefinition definition) {
-        var population = new WorldPopulation(definition: definition);
-        var machines = new WorldMachineHost(
-            screens: definition.Screens,
-            engines: []
-        );
-        var stateDirectory = new TemporaryDirectory(prefix: $"puck-seam-crossing-tests-{name}-");
-        var profiles = new WorldOwnedWorlds(
-            template: definition,
-            directory: stateDirectory.RootPath,
-            machineId: Guid.NewGuid()
-        );
-        var server = new WorldServer(
-            definition: definition,
-            population: population,
-            profiles: profiles,
-            envelope: new WorldRenderEnvelope(),
-            machines: machines,
-            instanceIdentity: name,
-            narrationSink: new WorldConsoleNarrationSink()
-        );
-        var link = new LoopbackTransport(server: server);
-        var instance = new WorldInstance(
-            name: name,
-            origin: () => path,
-            server: server,
-            ownedMachines: machines,
-            link: link,
-            federation: new WorldFederationIdentity(
-                Authenticator: new InertAuthenticator(),
-                Subject: server.AuthorityIdentity
-            ),
-            documentOrigin: new WorldFileOrigin(resolvedPath: path)
-        );
-
-        return (instance, server, stateDirectory);
-    }
     private static Puck.Maths.FixedQ4816 FixedQ4816(float value) => Puck.Maths.FixedQ4816.FromDouble(value: value);
-    // References resolve relative to the authoring document's own file, and adjacency adoption matches a running
-    // row by canonical file path (WorldInstanceHost.TryFindRunningInstanceByOrigin, WorldInstance.SourcePath) —
-    // a bare in-memory name never canonicalizes, so this pair needs real, individually valid documents on disk even
-    // though an adopted row's in-memory server is what actually answers the transfer, never a fresh reload.
-    private static void SeamFiles(string rowAPath, WorldDefinition rowA, string rowBPath, WorldDefinition rowB) {
-        File.WriteAllBytes(
-            path: rowAPath,
-            bytes: WorldDefinitionSerialization.Serialize(definition: rowA)
-        );
-        File.WriteAllBytes(
-            path: rowBPath,
-            bytes: WorldDefinitionSerialization.Serialize(definition: rowB)
-        );
-    }
     // A minimal vertical-wall pair, mirroring the shipped quilt shards' own east/west seam (WorldFaceFrame.IsYawOnly)
     // without any of the island's own geometry. Fixtures.BuildDocument authors no seat collider, so its derived
     // threshold is the contact skin, 0.02; a nonzero authored hysteresis may widen it.
@@ -132,8 +77,8 @@ public sealed class SeamCrossingOrchestrationLawTests {
         Assert.True(condition: WorldAdjacencyPolicy.TryDeriveOverlap(depth: out var derived, local: eastDefinition, neighbour: cornerDefinition, reason: out var reason), userMessage: reason);
         Assert.True(condition: (derived < authored));
 
-        SeamFiles(rowA: sourceDefinition, rowAPath: sourcePath, rowB: eastDefinition, rowBPath: eastPath);
-        SeamFiles(rowA: southDefinition, rowAPath: southPath, rowB: cornerDefinition, rowBPath: cornerPath);
+        FileBackedRows.Write((sourcePath, sourceDefinition), (eastPath, eastDefinition));
+        FileBackedRows.Write((southPath, southDefinition), (cornerPath, cornerDefinition));
         using var hostStateRoot = new TemporaryDirectory(prefix: "puck-corner-projection-host-");
         using var host = new WorldInstanceHost(
             applicationStopping: CancellationToken.None, admitsSpawn: true, machineHostFactory: Fixtures.MachineHostFactory,
@@ -141,8 +86,8 @@ public sealed class SeamCrossingOrchestrationLawTests {
             stateRoot: new WorldStateRoot(path: hostStateRoot.RootPath)
         );
         var rows = new[] {
-            BuildFileBackedRow(definition: sourceDefinition, name: "source", path: sourcePath), BuildFileBackedRow(definition: eastDefinition, name: "east", path: eastPath),
-            BuildFileBackedRow(definition: southDefinition, name: "south", path: southPath), BuildFileBackedRow(definition: cornerDefinition, name: "corner", path: cornerPath),
+            FileBackedRows.Build(definition: sourceDefinition, name: "source", path: sourcePath), FileBackedRows.Build(definition: eastDefinition, name: "east", path: eastPath),
+            FileBackedRows.Build(definition: southDefinition, name: "south", path: southPath), FileBackedRows.Build(definition: cornerDefinition, name: "corner", path: cornerPath),
         };
 
         try {
@@ -189,12 +134,7 @@ public sealed class SeamCrossingOrchestrationLawTests {
             outwardYaw: -90f
         );
 
-        SeamFiles(
-            rowA: rowADefinition,
-            rowAPath: rowAPath,
-            rowB: rowBDefinition,
-            rowBPath: rowBPath
-        );
+        FileBackedRows.Write((rowAPath, rowADefinition), (rowBPath, rowBDefinition));
 
         var machineId = Guid.NewGuid();
         using var hostStateRoot = new TemporaryDirectory(prefix: "puck-seam-crossing-tests-host-");
@@ -208,12 +148,12 @@ public sealed class SeamCrossingOrchestrationLawTests {
             stateRoot: new WorldStateRoot(path: hostStateRoot.RootPath)
         );
 
-        var (rowAInstance, rowAServer, rowAStateDirectory) = BuildFileBackedRow(
+        var (rowAInstance, rowAServer, rowAStateDirectory) = FileBackedRows.Build(
             definition: rowADefinition,
             name: "row-a",
             path: rowAPath
         );
-        var (rowBInstance, rowBServer, rowBStateDirectory) = BuildFileBackedRow(
+        var (rowBInstance, rowBServer, rowBStateDirectory) = FileBackedRows.Build(
             definition: rowBDefinition,
             name: "row-b",
             path: rowBPath
