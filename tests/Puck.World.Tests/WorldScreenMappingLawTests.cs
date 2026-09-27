@@ -65,9 +65,9 @@ public sealed class WorldScreenMappingLawTests {
     );
     // A ray along the face's inward normal onto the centre of source pixel (x, y), through the glass's bezel inset.
     private static SourceRay RayAt(double x, double y) {
-        const double Inner = (1.0 - (2.0 * WorldScreenMappings.Bezel));
-        var u = (WorldScreenMappings.Bezel + (Inner * ((x + 0.5) / Width)));
-        var v = (WorldScreenMappings.Bezel + (Inner * ((y + 0.5) / Height)));
+        var glass = ((SourceWarpInverse.Affine)WorldScreenMappings.Glass.Inverse!);
+        var u = ((((x + 0.5) / Width) - glass.M13) / glass.M11);
+        var v = ((((y + 0.5) / Height) - glass.M23) / glass.M22);
         var right = Vector3.Transform(value: Vector3.UnitX, rotation: Pose);
         var up = Vector3.Transform(value: Vector3.UnitY, rotation: Pose);
         var normal = Vector3.Normalize(value: Vector3.Cross(vector1: right, vector2: up));

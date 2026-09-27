@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
+using Puck.Commands;
 using Puck.Hosting;
 using Puck.Shaders;
 using Puck.SignedDistance;
@@ -19,8 +20,9 @@ namespace Puck.SdfVm.Tests;
 /// set owes write the words of each that changed, in one copy dispatch however scattered they are; a change reaches the
 /// device-local buffer once and stays there through every frame in flight after it, whichever ring slot those frames
 /// stage in; changes past the run bound still leave the table exact; a program edit writes only the program words that
-/// changed; the program region holds the live program rather than the reserve and grows by half again past it; and an
-/// engine rebuilt after a device loss owes every table again and reads back exact.
+/// changed; the program region holds the live program rather than the reserve and grows by half again past it; a screen's
+/// mapping reaches the device as its draw form and an unchanged one owes nothing; and an engine rebuilt after a device
+/// loss owes every table again and reads back exact.
 /// </summary>
 public sealed class SdfWorldEngineUploadLawTests {
     // The packed width of a dynamic transform (isa/sdf-world.interface.hlsli sdfDynamicTransforms).
@@ -79,11 +81,11 @@ public sealed class SdfWorldEngineUploadLawTests {
             UnifiedMemory: true
         );
 
-        // Nine per-frame tables, the mesh region among them, and two blocks, the frame block and the one view's world
+        // Ten per-frame tables, the mesh region among them, and two blocks, the frame block and the one view's world
         // block, each a ring of one buffer per slot, and nothing staged or copied.
         using (var rig = new Rig(profile: discrete, slots: 40)) {
             rig.Warm();
-            Assert.Equal(expected: (11 * SdfWorldEngine.FrameRingSize), actual: rig.Gpu.ApertureBuffers);
+            Assert.Equal(expected: (12 * SdfWorldEngine.FrameRingSize), actual: rig.Gpu.ApertureBuffers);
             rig.Move(slot: 3);
             rig.Render(time: 0f);
             Assert.Equal(expected: 0, actual: rig.Gpu.UploadCopies);
@@ -351,6 +353,56 @@ public sealed class SdfWorldEngineUploadLawTests {
             actual: rig.Gpu.DeviceLocal(sizeBytes: ((ulong)(grown * sizeof(uint))))[..(larger.Words.Length * sizeof(uint))]
         );
         Assert.Equal(expected: Reserve, actual: rig.Engine.ProgramWordCapacity);
+    }
+    // A screen's mapping reaches the device as its six-row draw form (frame/sdf-environment.hlsli's ScreenMappingData)
+    // at its screen's place, every other screen's rows zero; the same mapping supplied again owes nothing, and clearing
+    // it zeroes its rows.
+    [Fact]
+    public void TheScreenMappingTableHoldsEachScreensDrawFormAndAnUnchangedMappingOwesNothing() {
+        const int Screen = 3;
+        const int Rows = 6;
+        const float Border = 0.03f;
+        using var rig = new Rig(slots: 1);
+        var mapping = new SourceMapping(
+            Crop: SourcePixelRect.Whole(height: 144, width: 160),
+            Placement: new SourcePlacement.Surface(HalfHeight: 0.9f, HalfWidth: 1.2f, Origin: Vector3.Zero, Right: Vector3.UnitX, Up: Vector3.UnitY),
+            Source: SourceHandle.Producer(name: "cabinet"),
+            SourceHeight: 144,
+            SourceWidth: 160,
+            Warp: new SourceWarp(Inverse: SourceWarpInverse.Affine.Inset(border: Border), Pass: "glass")
+        );
+        var inset = ((SourceWarpInverse.Affine)mapping.Warp!.Inverse!);
+        var table = new float[((SdfWorldEngine.MaxScreenSurfaces * Rows) * 4)];
+        // The warp's rows carry the face distance one warped unit spans, the inner width; the image rows the identity,
+        // mapped and not letterboxing; then the whole crop and the crop inset by half a pixel.
+        float[] rows = [
+            inset.M11, 0f, inset.M13, (1f / inset.M11),
+            0f, inset.M22, inset.M23, (1f / inset.M22),
+            1f, 0f, 0f, 1f,
+            0f, 1f, 0f, 0f,
+            0f, 0f, 1f, 1f,
+            (0.5f / 160f), (0.5f / 144f), (1f - (0.5f / 160f)), (1f - (0.5f / 144f)),
+        ];
+
+        rig.Warm();
+        rig.Engine.SetScreenMapping(mapping: mapping, screenIndex: Screen);
+        rig.Render(time: 0f);
+        rows.CopyTo(array: table, index: ((Screen * Rows) * 4));
+        Assert.Equal(
+            expected: MemoryMarshal.AsBytes(span: table.AsSpan()).ToArray(),
+            actual: rig.Gpu.DeviceLocal(sizeBytes: ((ulong)(table.Length * sizeof(float))))
+        );
+
+        rig.Engine.SetScreenMapping(mapping: mapping, screenIndex: Screen);
+        rig.Render(time: 0f);
+        Assert.Equal(expected: 0L, actual: rig.Gpu.HostBytes());
+
+        rig.Engine.SetScreenMapping(mapping: null, screenIndex: Screen);
+        rig.Render(time: 0f);
+        Assert.Equal(
+            expected: new byte[(table.Length * sizeof(float))],
+            actual: rig.Gpu.DeviceLocal(sizeBytes: ((ulong)(table.Length * sizeof(float))))
+        );
     }
     [Fact]
     public void TheMeshRegionHoldsAKnownDrawSetAndOwesOnlyTheWordsANewSetChanges() {

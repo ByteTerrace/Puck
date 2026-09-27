@@ -1239,9 +1239,13 @@ republished pane takes input again. The laws are
 `WorldViewPaneMappingLawTests.AGrantHoldsAcrossAFrameItsPaneIsNotPublishedAndAnExplicitCloseEndsIt`
 and `Win32PassthroughWindowTests`.
 
-P13b owes the rest. The screen shading still reads its own bezel constant,
-which `WorldScreenMappings` mirrors, and the GPU does not yet draw from the
-mapping. The pointer's pane hover reads the
+The GPU draws every screen from its mapping (P13b-5): the engine node hands
+each screen's published mapping to `SdfWorldEngine.SetScreenMapping`, which
+packs its single-precision draw form (`SourceMapping.Draw`) into the
+`screenMappings` table of the `sdf-world` interface, and the screen shading reads
+the glass's bezel inset, the layout, the letterbox and the crop from it. The
+bezel's one statement is `WorldScreenMappings.Glass`. P13b owes the rest. The
+pointer's pane hover reads the
 picker on the CPU (P13b-3, `WorldCursorFeed` through `WorldViewGraphHost.Hover`,
 outlined by the overlay's `CursorWriter` and echoed as `world.view.panes`'
 `hovered=`); GPU picking follows P4. The recorded Windows run, a click reaching
@@ -3579,11 +3583,11 @@ pick through a portal reaches the nested world's surface.
 
 **Depends on:** P11 and P12.
 
-**P13b, the rest of the package.** Panes and screens publish live mappings and
-the hit walk runs over the live instance set through both, and a windowed host
-routes a passthrough source's input to its window, but the screen shading reads
-its own bezel constant.
-Each commit is marked with what it waits on; only step 5 waits on P7b's groups.
+**P13b, the rest of the package.** Panes and screens publish live mappings,
+the hit walk runs over the live instance set through both, a windowed host
+routes a passthrough source's input to its window, and the GPU draws every
+screen from its mapping.
+Each commit is marked with what it waits on.
 
 1. Mappings are published from the live renderer, landed in both halves. The
    pane half: `WorldViewGraphHost.PublishPanes` publishes each shown view's and
@@ -3717,12 +3721,19 @@ Each commit is marked with what it waits on; only step 5 waits on P7b's groups.
      held by the child it was pressed on).
    - Its check, the recorded Windows run on real hardware, is
      [deferred to the end](#deferred-to-the-end).
-5. The GPU draws from the mapping. Can land now: P7b-20, the engine's groups,
-   has landed. The screen shading reads
-   each screen's UV layout, crop, letterbox and warp inset from the published
-   mapping instead of `CrtBezel` in `shade/sdf-environment.hlsli`, and its mirror,
-   `WorldScreenMappings.Bezel`, is deleted. It adds a per-screen buffer to the
-   SDF engine as a member of the engine's groups.
+5. The GPU draws from the mapping. Landed. `ISdfScreenSources.MappingOf` hands
+   each screen's published mapping to `SdfWorldEngine.SetScreenMapping`, which
+   packs its draw form (`SourceMapping.Draw`: the warp's declared inverse, then
+   one affine map folding the UV layout, the fit and the crop, with the crop and
+   whether the fit letterboxes) into a per-screen region bound as the
+   `screenMappings` member of the `sdf-world` interface's pass group. The screen
+   shading reads the bezel inset, the layout, the letterbox and the crop from it,
+   and a screen with no mapping shades as unbound glass. The bezel is the
+   mapping's warp, stated once as `WorldScreenMappings.Glass`; `CrtBezel`,
+   `CrtCurvature` and `WorldScreenMappings.Bezel` are gone. Laws:
+   `SourceMappingLawTests.TheDrawFormRunsTheChainTheHitRuns` (the draw form
+   agrees with `MapRay` over every layout, fit, crop and warp) and
+   `SdfWorldEngineUploadLawTests.TheScreenMappingTableHoldsEachScreensDrawFormAndAnUnchangedMappingOwesNothing`.
 6. Hits continue through live instances. Landed, except the portal check:
    `WorldViewGraphHost.Walk` runs `RenderGraphHitWalk` over the runtime's
    instance set from the published panes, with each view's seat camera and each
@@ -4162,9 +4173,9 @@ the capture gate over the graph among them. Of the rest, step 7 can land now,
 step 8 can too since P7b-14b-6 and P7b-20 have landed, and step 9 comes last;
 its `view` and `session` arms already went with P11b-13. P13b's live mappings
 (step 1), simulation destination (step 2, with the light gun that authored
-cartridges read through `$light`), host passthrough (step 4) and live hit walk (step 6)
-have landed, with step 3's CPU half; step 5, the GPU drawing from the
-mapping, waited only on P7b-20 and can land now, and GPU picking follows P4.
+cartridges read through `$light`), host passthrough (step 4), the GPU drawing
+from the mapping (step 5) and live hit walk (step 6) have landed, with step 3's
+CPU half, and GPU picking follows P4.
 P14 follows P4, P7b, P8, P11b and P12b, because the engine's composition and
 screens need somewhere to go before it moves. Its capability matrix (P14-1),
 module split (P14-2), generated instruction-set declarations (P14-3), the

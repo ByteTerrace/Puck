@@ -1,5 +1,6 @@
-// The environment and screen-light rows the frame carries: their layout, the screen surfaces' frames, which screen
-// slots hold a source this frame, which screen hits shade as a screen, and the row reader.
+// The environment and screen-light rows the frame carries: their layout, the screen surfaces' frames, the mapping each
+// screen is drawn from, which screen slots hold a source this frame, which screen hits shade as a screen, and the row
+// reader.
 #ifndef FRAME_SDF_ENVIRONMENT_HLSLI
 #define FRAME_SDF_ENVIRONMENT_HLSLI
 // The ENVIRONMENT block: SdfEnvironment's lanes, row for row, after the far-field row. KEEP IN SYNC with
@@ -54,7 +55,32 @@ ScreenSurfaceData worldScreenSurface(uint screenIndex) {
     data.origin = screenSurfaces[(row + 2u)];
     return data;
 }
-// The screenSurfaces[] / sdfDecalCells[] / screenSourceN entry count — the width every screen index is bounded
+// The mapping a screen is drawn from (SdfWorldEngine.SetScreenMapping, the draw form of the mapping its row publishes,
+// Puck.Commands.SourceDraw), indexed by screen index like ScreenSurfaceData. A face point (u, v), v = 0 at the top, runs
+// the warp's rows to the face point the glass sampled; outside the unit square it lies on the bezel. That point runs the
+// image rows to the source, normalized to its extent; outside crop it lies on a letterbox bar when imageV.w is set.
+// Every sample is clamped to sampleClamp, the crop inset by half a source pixel. An unmapped screen's entry is zero.
+struct ScreenMappingData {
+    float4 warpU;       // xyz = the warped u's coefficients of u, v and 1; w = the face distance one warped unit spans
+    float4 warpV;       // xyz = the warped v's coefficients of u, v and 1; w = the face distance one warped unit spans
+    float4 imageU;      // xyz = the source u's coefficients of the warped u, v and 1; w = 1 when the screen is mapped
+    float4 imageV;      // xyz = the source v's coefficients of the warped u, v and 1; w = 1 when the fit letterboxes
+    float4 crop;        // the crop: left, top, right, bottom
+    float4 sampleClamp; // the crop inset by half a source pixel: left, top, right, bottom
+};
+static const uint WorldScreenMappingRows = 6u;
+ScreenMappingData worldScreenMapping(uint screenIndex) {
+    uint row = (screenIndex * WorldScreenMappingRows);
+    ScreenMappingData data;
+    data.warpU = screenMappings[row];
+    data.warpV = screenMappings[(row + 1u)];
+    data.imageU = screenMappings[(row + 2u)];
+    data.imageV = screenMappings[(row + 3u)];
+    data.crop = screenMappings[(row + 4u)];
+    data.sampleClamp = screenMappings[(row + 5u)];
+    return data;
+}
+// The screenSurfaces[] / screenMappings[] / sdfDecalCells[] / screenSourceN entry count — the width every screen index is bounded
 // against before it indexes one. KEEP IN SYNC with SdfProgramBuilder.MaxScreenSurfaces.
 static const uint SdfScreenSurfaceCount = 32u;
 // The screen source images — one sampled image per screen index (screenSource0..screenSource31), all read through the
@@ -106,7 +132,8 @@ uint screenLightLoopBound() {
     return ((0u == passGroup.screenMask) ? 0u : (firstbithigh(passGroup.screenMask) + 1u));
 }
 // Whether a hit on this material shades as a screen: a screen-instance id (above SDF_SCREEN_MATERIAL, from
-// SdfProgramBuilder's screen-surface ScreenSlab overload) whose slot carries a glyph decal or a source bound this frame.
+// SdfProgramBuilder's screen-surface ScreenSlab overload) whose slot carries a glyph decal, or a source bound this frame
+// and a mapping to draw it from.
 // sampleScreenSurface shades exactly these hits, and the surface pass leaves them without a normal.
 bool sdfScreenSurfaceShades(int material) {
     if (material <= SDF_SCREEN_MATERIAL) {
@@ -131,8 +158,8 @@ bool sdfScreenSurfaceShades(int material) {
     }
 #endif
 
-    // Declared, but neither a decal nor a bound source this frame: the material-shaded fallback applies.
-    return screenSourceBound(screenIndex);
+    // Declared, but neither a decal nor a mapped, bound source this frame: the material-shaded fallback applies.
+    return (screenSourceBound(screenIndex) && (worldScreenMapping(screenIndex).imageU.w != 0.0));
 }
 #else
 // The environment reader's no-screen-sources half: the pinned sun and hemisphere an unauthored world renders, so a

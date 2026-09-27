@@ -11,6 +11,12 @@ namespace Puck.World.Schema.Tests;
 /// simulation screen's mapping comes from the row alone, the screen glass's bezel maps to no pixel, and a
 /// <c>$pointer</c> read maps its ray without allocating whether it hits, lands on the bezel or misses.</summary>
 public sealed class WorldScreenInputLawTests {
+    // The face coordinate the screen glass shows image coordinate `image` at: its inverse, run backwards.
+    private static double FaceOf(double image) {
+        var glass = ((SourceWarpInverse.Affine)WorldScreenMappings.Glass.Inverse!);
+
+        return ((image - glass.M13) / glass.M11);
+    }
     // A screen facing +z at (1, 2, 3), two units wide and one and a half tall.
     private static WorldScreen Screen(SourceDestination? input) => new(
         HalfDepth: 0.1f,
@@ -81,12 +87,11 @@ public sealed class WorldScreenInputLawTests {
             actual: mapping.Destination
         );
 
-        // The glass insets the image by the bezel on every side, so image point (x, y) sits at face point
-        // bezel + (1 − 2·bezel)·(x, y).
-        const double Inner = (1.0 - (2.0 * WorldScreenMappings.Bezel));
+        // The glass insets the image inside the bezel on every side, so image point (x, y) sits at the face point its
+        // inverse takes to it.
         var hit = mapping.MapRay(ray: RayAt(
-            u: (WorldScreenMappings.Bezel + (Inner * (40.5 / 160))),
-            v: (WorldScreenMappings.Bezel + (Inner * (100.5 / 144)))
+            u: FaceOf(image: (40.5 / 160)),
+            v: FaceOf(image: (100.5 / 144))
         ));
 
         Assert.True(condition: hit.IsOnSource);
@@ -102,14 +107,14 @@ public sealed class WorldScreenInputLawTests {
                 sourceHeight: 144,
                 sourceWidth: 160
             ).MapRay(ray: RayAt(
-                u: (WorldScreenMappings.Bezel + (Inner * (40.5 / 160))),
-                v: (WorldScreenMappings.Bezel + (Inner * (100.5 / 144)))
+                u: FaceOf(image: (40.5 / 160)),
+                v: FaceOf(image: (100.5 / 144))
             ))
         );
         Assert.Equal(
             expected: SourceHitOutcome.OutsideWarp,
             actual: mapping.MapRay(ray: RayAt(
-                u: (WorldScreenMappings.Bezel / 2),
+                u: (FaceOf(image: 0.0) / 2),
                 v: 0.5
             )).Outcome
         );
@@ -128,7 +133,7 @@ public sealed class WorldScreenInputLawTests {
             v: 0.25
         );
         var bezel = RayAt(
-            u: (WorldScreenMappings.Bezel / 2),
+            u: (FaceOf(image: 0.0) / 2),
             v: 0.5
         );
         var miss = RayAt(

@@ -2,6 +2,7 @@ using System.Numerics;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Sources;
+using Puck.Commands;
 using Puck.Hosting;
 using Puck.Platform;
 using Puck.SdfVm;
@@ -59,6 +60,15 @@ internal sealed partial class WorldScreenBinder : ISdfScreenSources {
                 : Vector3.Zero),
         };
     }
+    /// <inheritdoc/>
+    /// <remarks>A screen is drawn from the mapping <see cref="Mappings"/> last published for it.</remarks>
+    public SourceMapping? MappingOf(int screen) => (Mappings.TryGet(
+        mapping: out var mapping,
+        screen: screen
+    )
+        ? mapping
+        : null
+    );
     /// <summary>Creates the upload of a machine source instance (<see cref="WorldImageProducerSettings.MachineId"/>): once per
     /// completed tick it writes the named machine output's latest complete frame into the instance's region, which the
     /// runtime converts once however many screens show it.</summary>

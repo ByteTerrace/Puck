@@ -1273,8 +1273,8 @@ pointer-to-pane mapping, so a pipeline's frame-block pointer
 (`WorldFramePresenter.UpdatePipelinePointer`) maps through it and a new pane or
 screen pointer path reads a mapping rather than scaling a rect by hand. A warp
 pass is an input path only with a declared exact inverse; a new warp kind is a
-new `SourceWarpInverse` arm. The screen glass bezel is a sync pair
-([references/sync-pairs.md](references/sync-pairs.md)). Panes publish their
+new `SourceWarpInverse` arm. The screen glass's bezel is data: its one statement
+is `WorldScreenMappings.Glass`, the warp every screen row's mapping carries. Panes publish their
 mappings from the placements `place` draws: `WorldFramePresenter.PrepareGraph`
 ends with `WorldViewGraphHost.PublishPanes`, which writes one whole-image
 mapping per shown view and pane, in drawing order, named by the instance's
@@ -1311,7 +1311,16 @@ producer reports those mappings as its placements
 camera view reports them too, so a walk through a screen showing a camera view
 continues into the view through the camera it last filmed from
 (`WorldViewGraphHost.ViewCameras`, the binder); a session reports none. The GPU
-does not draw from a mapping (P13b-5).
+draws every screen from its mapping: the node hands each screen's published
+mapping (`ISdfScreenSources.MappingOf`) to `SdfWorldEngine.SetScreenMapping`,
+which packs its single-precision draw form (`SourceMapping.Draw`, the warp's
+inverse and one affine map folding the layout, fit and crop) into the
+`screenMappings` table of the `sdf-world` interface, and the screen shading draws
+the bezel, the letterbox and the sample from it. A screen with no mapping shades
+as unbound glass. `SourceMappingLawTests.TheDrawFormRunsTheChainTheHitRuns` holds
+the draw form to `MapRay`, and the table's layout is a sync pair
+([references/sync-pairs.md](references/sync-pairs.md)). A pane is not drawn from
+its mapping: `place` draws it.
 
 HLSL is the one source language, and `ShaderCompiler` runs DXC alone: no pass
 declares a language, and a one-off source is an `.hlsl` compute pass read as a

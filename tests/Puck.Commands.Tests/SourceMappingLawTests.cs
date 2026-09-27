@@ -7,8 +7,8 @@ namespace Puck.Commands.Tests;
 
 /// <summary>Laws for the published source mapping: a screen at an arbitrary pose and a pane at an arbitrary rectangle map
 /// known points to known source pixels through every layout, fit, crop and warp; a warp with no inverse refuses as an
-/// input path; passthrough needs a local user's source; and the same mapping and input give a bit-identical hit on
-/// every evaluation and thread.</summary>
+/// input path; the draw form a GPU reads runs the chain the hit runs; passthrough needs a local user's source; and the
+/// same mapping and input give a bit-identical hit on every evaluation and thread.</summary>
 public sealed class SourceMappingLawTests {
     private const int SourceHeight = 240;
     private const int SourceWidth = 320;
@@ -325,6 +325,71 @@ public sealed class SourceMappingLawTests {
             x: 10,
             y: 120
         );
+    }
+    // The draw form the GPU reads runs the chain MapRay runs: at a grid of face points clear of every edge, over every
+    // layout, fit, crop and warp, the warped point leaves the unit square exactly where the hit falls on the warp's
+    // border, a letterbox's source point leaves the crop exactly where the hit falls on a bar, and on the source the
+    // draw form's point is the hit's to within the fixed-point face's quantization, a fiftieth of a pixel.
+    [Fact]
+    public void TheDrawFormRunsTheChainTheHitRuns() {
+        SourcePixelRect[] crops = [
+            SourcePixelRect.Whole(height: SourceHeight, width: SourceWidth),
+            new(Height: 100, Width: 210, X: 70, Y: 40),
+        ];
+        SourceWarp?[] warps = [null, new SourceWarp(Inverse: SourceWarpInverse.Affine.Inset(border: 0.1f), Pass: "glass")];
+        var checkedOnSource = 0;
+
+        foreach (var layout in Enum.GetValues<SourceUvLayout>()) {
+            foreach (var fit in Enum.GetValues<SourceFit>()) {
+                foreach (var crop in crops) {
+                    foreach (var warp in warps) {
+                        var mapping = Surface(crop: crop, fit: fit, layout: layout, warp: warp);
+                        var draw = mapping.Draw();
+
+                        for (var row = 0; (row < 9); row++) {
+                            for (var column = 0; (column < 9); column++) {
+                                var face = new Vector2(x: ((column + 0.37f) / 9f), y: ((row + 0.61f) / 9f));
+                                var hit = mapping.MapRay(ray: RayAt(surface: TiltedSurface, u: face.X, v: face.Y));
+                                var warped = Vector2.Transform(position: face, matrix: draw.Warp);
+                                var source = Vector2.Transform(position: warped, matrix: draw.Image);
+                                var outsideWarp = ((warped.X < 0f) || (warped.X >= 1f) || (warped.Y < 0f) || (warped.Y >= 1f));
+                                var letterbox = (draw.Letterboxes && (
+                                    (source.X < draw.Crop.X) ||
+                                    (source.Y < draw.Crop.Y) ||
+                                    (source.X >= (draw.Crop.X + draw.Crop.Width)) ||
+                                    (source.Y >= (draw.Crop.Y + draw.Crop.Height))
+                                ));
+                                var expected = (outsideWarp
+                                    ? SourceHitOutcome.OutsideWarp
+                                    : (letterbox ? SourceHitOutcome.Letterbox : SourceHitOutcome.OnSource));
+
+                                Assert.Equal(expected: expected, actual: hit.Outcome);
+
+                                if (hit.IsOnSource) {
+                                    Assert.InRange(actual: Math.Abs(value: ((source.X * SourceWidth) - ((double)hit.Coordinate.X))), high: 0.02, low: 0.0);
+                                    Assert.InRange(actual: Math.Abs(value: ((source.Y * SourceHeight) - ((double)hit.Coordinate.Y))), high: 0.02, low: 0.0);
+                                    checkedOnSource++;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Assert.True(condition: (checkedOnSource > 1000));
+    }
+    [Fact]
+    public void AMappingIsDrawnOnlyOnASurfaceThroughADeclaredInverse() {
+        var pane = SourceMapping.WholePane(
+            height: SourceHeight,
+            region: new NormalizedRect(Height: 0.5f, Width: 0.5f, X: 0f, Y: 0f),
+            source: Emulator,
+            width: SourceWidth
+        );
+
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => pane.Draw());
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => Surface(warp: new SourceWarp(Pass: "ripple")).Draw());
     }
     [Fact]
     public void AWarpWithNoInverseRefusesAsAnInputPathButStillDraws() {

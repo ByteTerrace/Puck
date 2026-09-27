@@ -3,6 +3,7 @@ using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
+using Puck.Commands;
 using Puck.Hosting;
 using Puck.SignedDistance;
 using Puck.Testing;
@@ -604,6 +605,7 @@ public sealed class SdfEngineNodeLeaseLawTests {
         public IReadOnlyList<int> Screens => screens;
 
         public Vector3 Light(int screen) => Vector3.Zero;
+        public SourceMapping? MappingOf(int screen) => null;
         public string? ReadOf(int screen) => readOf(arg: screen);
     }
     private sealed class SharedFence : IGpuSharedFence {

@@ -7,8 +7,8 @@ namespace Puck.Commands;
 
 /// <summary>The published chain from where a source is shown to the source's pixels: the placement, any warp pass the
 /// face is drawn through, the UV layout, the fit that letterboxes a crop, and the crop itself. It is data: every hit is
-/// mapped from it in fixed point, it is what the GPU is to draw with, and nothing reads a mapping back from the
-/// GPU.</summary>
+/// mapped from it in fixed point, a screen is drawn from its single-precision form (<see cref="Draw"/>), and nothing
+/// reads a mapping back from the GPU.</summary>
 /// <remarks>
 /// <para>A point on the face runs the chain from the display side: the warp's declared inverse takes it to the face point
 /// the warp sampled, <see cref="Layout"/> turns that into an image point, <see cref="Fit"/> takes the image point to a
@@ -27,7 +27,7 @@ namespace Puck.Commands;
 /// <param name="Warp">The warp pass the face is drawn through, or <see langword="null"/> for none.</param>
 /// <param name="Destination">Where a point mapped onto the source goes.</param>
 /// <param name="Opener">Who opened the source.</param>
-public sealed record SourceMapping(
+public sealed partial record SourceMapping(
     SourceHandle Source,
     SourcePlacement Placement,
     int SourceWidth,

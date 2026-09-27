@@ -72,6 +72,9 @@ public static class SdfWorldInterfaces {
     public const string Output = "output";
     /// <summary>The screen-surface table, three float4 rows per screen slot.</summary>
     public const string ScreenSurfaces = "screenSurfaces";
+    /// <summary>The screen-mapping table, six float4 rows per screen slot: the draw form of the mapping each screen
+    /// publishes (<see cref="Puck.Commands.SourceMapping.Draw"/>), which the screen shading draws its face from.</summary>
+    public const string ScreenMappings = "screenMappings";
     /// <summary>The screen-light and environment table.</summary>
     public const string ScreenLights = "sdfScreenLights";
     /// <summary>The glyph decal table.</summary>
@@ -118,31 +121,32 @@ public static class SdfWorldInterfaces {
             Value(name: SampleIndex, type: ShaderValueType.Uint),
             Value(name: ViewBase, type: ShaderValueType.Uint),
             Value(name: MeshDraws, type: ShaderValueType.Uint),
-            Read(name: ProgramWords, element: ShaderValueType.Uint4),
-            Read(name: Viewports, element: ShaderValueType.Float4),
-            Read(name: DynamicTransforms, element: ShaderValueType.Float4),
-            Read(name: FrameInstanceGrid, element: ShaderValueType.Uint),
-            Read(name: InstanceMasks, element: ShaderValueType.Uint),
-            Written(name: InstanceMasksWritten, element: ShaderValueType.Uint),
-            Read(name: Tiles, element: ShaderValueType.Float),
-            Written(name: TilesWritten, element: ShaderValueType.Float),
-            Read(name: CullBounds, element: ShaderValueType.Uint),
-            Written(name: CullBoundsWritten, element: ShaderValueType.Uint),
-            Written(name: ViewsArgsWritten, element: ShaderValueType.Uint),
-            Read(name: VisibilityRecords, element: ShaderValueType.Uint),
-            Written(name: VisibilityRecordsWritten, element: ShaderValueType.Uint),
+            Read(element: ShaderValueType.Uint4, name: ProgramWords),
+            Read(element: ShaderValueType.Float4, name: Viewports),
+            Read(element: ShaderValueType.Float4, name: DynamicTransforms),
+            Read(element: ShaderValueType.Uint, name: FrameInstanceGrid),
+            Read(element: ShaderValueType.Uint, name: InstanceMasks),
+            Written(element: ShaderValueType.Uint, name: InstanceMasksWritten),
+            Read(element: ShaderValueType.Float, name: Tiles),
+            Written(element: ShaderValueType.Float, name: TilesWritten),
+            Read(element: ShaderValueType.Uint, name: CullBounds),
+            Written(element: ShaderValueType.Uint, name: CullBoundsWritten),
+            Written(element: ShaderValueType.Uint, name: ViewsArgsWritten),
+            Read(element: ShaderValueType.Uint, name: VisibilityRecords),
+            Written(element: ShaderValueType.Uint, name: VisibilityRecordsWritten),
             ShaderInterfaceMember.StorageImage(
                 format: GpuPixelFormat.R8G8B8A8Unorm,
                 group: ShaderInterfaceGroup.Pass,
                 name: Output,
                 type: ShaderValueType.Float4
             ),
-            Read(name: ScreenSurfaces, element: ShaderValueType.Float4),
-            Read(name: ScreenLights, element: ShaderValueType.Float4),
-            Read(name: DecalCells, element: ShaderValueType.Uint4),
-            Read(name: BrickPool, element: ShaderValueType.Float),
-            Read(name: Volumes, element: ShaderValueType.Float4),
-            Read(name: MeshRegion, element: ShaderValueType.Uint),
+            Read(element: ShaderValueType.Float4, name: ScreenSurfaces),
+            Read(element: ShaderValueType.Float4, name: ScreenMappings),
+            Read(element: ShaderValueType.Float4, name: ScreenLights),
+            Read(element: ShaderValueType.Uint4, name: DecalCells),
+            Read(element: ShaderValueType.Float, name: BrickPool),
+            Read(element: ShaderValueType.Float4, name: Volumes),
+            Read(element: ShaderValueType.Uint, name: MeshRegion),
             .. Enumerable.Range(count: SdfWorldEngine.MaxScreenSurfaces, start: 0).Select(selector: static screen => ShaderInterfaceMember.SampledImage(
                 group: ShaderInterfaceGroup.Pass,
                 name: ScreenSource(screen: screen),
@@ -164,14 +168,16 @@ public static class SdfWorldInterfaces {
             ),
         ]
     );
+
     /// <summary>Gets the interface every per-view SDF dispatch reads.</summary>
     public static ShaderInterface World => WorldParameters.Interface;
+
     /// <summary>Gets the interface the carve-bake baker reads.</summary>
     public static ShaderInterface BrickBake { get; } = new(
         members: [
             Value(name: SliceVoxels, type: ShaderValueType.Uint),
-            Read(name: BakeRequest, element: ShaderValueType.Float4),
-            Written(name: BakePool, element: ShaderValueType.Float),
+            Read(element: ShaderValueType.Float4, name: BakeRequest),
+            Written(element: ShaderValueType.Float, name: BakePool),
         ],
         name: "sdf-brick-bake",
         pushesIndex: true
@@ -181,14 +187,16 @@ public static class SdfWorldInterfaces {
     /// below it name the draw (<see cref="MeshPushedIndex"/>).</summary>
     public static ShaderInterface Mesh { get; } = new(
         members: [
-            Read(name: Viewports, element: ShaderValueType.Float4),
-            Read(name: MeshRegion, element: ShaderValueType.Uint),
+            Read(element: ShaderValueType.Float4, name: Viewports),
+            Read(element: ShaderValueType.Uint, name: MeshRegion),
         ],
         name: "sdf-mesh",
         pushesIndex: true
     );
+
     /// <summary>Gets the layout of <see cref="World"/>.</summary>
     public static ShaderInterfaceLayout WorldLayout => WorldParameters.Layout;
+
     /// <summary>Gets the layout of <see cref="BrickBake"/>.</summary>
     public static ShaderInterfaceLayout BrickBakeLayout { get; } = new(shaderInterface: BrickBake);
     /// <summary>Gets the layout of <see cref="Mesh"/>.</summary>
@@ -227,7 +235,7 @@ public static class SdfWorldInterfaces {
     /// <param name="draw">The draw, below <see cref="SdfMeshRegion.MaxDraws"/>.</param>
     /// <returns>The pushed index.</returns>
     public static uint MeshPushedIndex(uint view, uint draw) =>
-        ((view << MeshViewShift) | draw);
+        (view << MeshViewShift) | draw;
     /// <summary>Returns the member name of a screen source: <c>screenSource</c> followed by its screen index.</summary>
     /// <param name="screen">The screen index, below <see cref="SdfWorldEngine.MaxScreenSurfaces"/>.</param>
     /// <returns>The member name.</returns>
