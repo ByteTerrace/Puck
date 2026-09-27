@@ -4346,7 +4346,17 @@ place:
   an instance resolves, a residency follow in place (`CanFollow`) included.
 - `puck counters`' pinned workload at the floor tier. The ledger counts
   host-side API calls only: there is no counted kind for march steps or texels
-  written, and no ceiling file.
+  written, and no ceiling file. Upload bytes are already counted per pass:
+  `gpu.uploads.host-visible` (`GpuWork.HostVisibleUploadBytes`) is recorded by
+  the counting storage buffer into the ledger's active pass, and
+  `SdfWorldTables.SubmitUpload` brackets the region copies with the `upload`
+  pass. The brick writes and the fillers it records before that bracket are
+  attributed to no pass.
+- The offscreen host holds its clock at an armed capture, but each frame it
+  composes still carries its interval (`FrameDeltaTicks`), and
+  `WorldFramePresenter.CaptureFrame` advances presentation time, animation and
+  the camera followers by it. Two frames composed at one tick can differ, by an
+  amount that depends on how fast the backend composes.
 
 **Owns:** jitter, motion vectors, the temporal upscaler, history management,
 dynamic resolution, temporal reuse inside the SDF march, and the counted-cost
@@ -4390,8 +4400,10 @@ resolution, and stay there.
   rebuild or a park change, copies the current table into the previous one, so
   a reassigned slot reports no object motion. A mesh draw's record carries its
   previous object-to-world beside its current one.
-- **Jitter.** A Halton (2, 3) sequence with a period of eight, in pixels of the
-  render extent and starting at the pixel center, applied by the one ray generator (`worldView` in
+- **Jitter.** A Halton (2, 3) sequence with a period of eight, the lead's
+  choice over sixteen, which converges finer but keeps a still view rendering
+  twice as long. It is in pixels of the render extent, starts at the pixel
+  center, and is applied by the one ray generator (`worldView` in
   `frame/sdf-viewport.hlsli`) and the one mesh projection, from a `jitter`
   pass-block value. `ViewProjection.Jitter` becomes the instance's. The index
   is the number of frames the instance's history has accumulated since its last
@@ -4447,16 +4459,37 @@ resolution, and stay there.
   pin reconstruction, dynamic resolution and march seeding off, so every
   existing station keeps its pixel contract. Reconstruction gets stations of its
   own: a `captures` row may state `converge: N`, which resets the captured
-  instance's history on the armed tick and serves the Nth frame the held clock
-  composes at that tick. Offscreen the pump already holds its clock at an armed
-  capture, so those N frames see one state, jitter indices 0 to N-1, and the
-  same inputs on both backends, and the tick verdict still reads the armed tick.
+  instance's history on the armed tick and serves the Nth frame composed at that
+  tick. Holding the simulation clock is not enough, because each composed frame
+  still advances presentation time, animation and the camera followers by its
+  interval. While a capture converges, the presenter composes from one frozen
+  presentation snapshot, taken at the armed tick's first composition: the
+  presentation time, every animation's pose, every camera follower's state, the
+  frame's interval at zero, and the frame values the pass blocks are written
+  from. Only the jitter index advances. So the N frames see one state and one
+  presentation, jitter indices 0 to N-1, on both backends and at any speed, and
+  the tick verdict still reads the armed tick.
 - **Every costed stage has an off-switch at the floor tier.** Reconstruction
   (`world.temporal`), dynamic resolution (`world.dynamic-resolution`), march
   seeding (`world.march-seed`) and sharpening (`world.upscale-sharpness 0`) are
   session levers (`WorldSessionLevers`), and the quality presets in
   `quality.puck` gain a row for each of the first three. Which of them `low`
   turns on is the lead's decision from the counted rows, below.
+- **Camera and session views reconstruct only when asked.** A camera view or
+  a session view, which screens show at their declared extent, reconstructs
+  only when its residency's levers turn reconstruction on; by default it does
+  not, so it renders at its render extent with the spatial resolve and keeps no
+  history storage. The world's own views follow `world.temporal`.
+- **Dynamic resolution follows present timing.** One controller consumes one
+  load signal and sets each view's per-frame render extent from it. The signal
+  is the presenter's confirmed-present timing (`IPresentTimingFeedback`) at
+  runtime: presentation-only, read by nothing in the simulation, and outside the
+  determinism contract. It reaches the controller through an injectable timing
+  source, so laws drive the controller with a fake. Where present timing is
+  unavailable (`PresentTimingSample.Unavailable`, an offscreen host, a
+  presenter without the capability), the same controller reads the previous
+  frame's counted `gpu.march.steps` against a per-tier step budget instead.
+  The counters workload and the parity world pin dynamic resolution off.
 - **The counters are always on.** A pass counts its march steps and texels into
   its instance's counter buffer on every frame, whether or not anything reads
   them, so no counted row depends on whether the counters were read.
@@ -4474,8 +4507,11 @@ counted rows recorded in the same change.
      queries) and the texels it writes with one wave-reduced atomic per wave into
      a small counter buffer of the fragment, cleared at the frame's first use and
      copied into a per-slot readback the completed sample reads, under the pass
-     that counted it. Bytes uploaded count per pass, the region copies and brick
-     staging under the pass that records them. `puck counters --check` holds
+     that counted it. Bytes uploaded reuse `gpu.uploads.host-visible`, which the
+     ledger already counts per pass; the step adds only the attribution it lacks,
+     putting the brick writes, the brick staging and the fillers
+     `SdfWorldTables.SubmitUpload` records before its `upload` bracket under a
+     pass. `puck counters --check` holds
      `puck counters`' report to a ceilings file beside the workload in
      `tests/Puck.Counters` (a `puck.counters.ceilings.v1` document with its
      generated schema), exiting 1
@@ -4485,13 +4521,20 @@ counted rows recorded in the same change.
      was recorded on, the RTX 2060, and reported as not judged elsewhere.
    - Touches: `src/Puck.Abstractions/Gpu/Counters` (`GpuWork`),
      `SdfWorldPackage` (the counter resource and members), the pass kernels under
-     `Sdf/passes`, `SdfWorldPassRecorder`, `src/Puck.Cli/Counters`,
+     `Sdf/passes`, `SdfWorldPassRecorder`, `SdfWorldTables.Upload.cs`,
+     `src/Puck.Cli/Counters`,
      `tests/Puck.Counters`, `SdfPassPlanLawTests`, `SdfWorldResidencyWorkLawTests`.
    - Done when: a law over the fake device holds the readback's placement in the
-     plan and the kinds' classes; the `world-counters` canary reads non-zero
-     steps and texels for every SDF pass on both backends; the ceilings file is
-     recorded on the RTX 2060 at the floor tier and `puck counters --check`
-     passes on it and is shown failing once on a deliberately raised count.
+     plan and the kinds' classes; the ceilings file states, for every pass, what
+     each kind must read, recorded with it: a ceiling for a pass that does the
+     work, and a required zero for a pass that cannot (cull-args marches
+     nothing) and for a pass the workload's tier skips (the shadow and ambient
+     passes and the meshless mesh pass at `low`), so a pass that starts counting
+     where it should not fails as surely as one over its ceiling; the
+     `world-counters` canary reads each pass against those expectations on both
+     backends; the ceilings file is recorded on the RTX 2060 at the floor tier,
+     and `puck counters --check` passes on it and is shown failing once on a
+     deliberately raised count and once on a required zero broken.
    - Counted-cost gate: the counter buffer's own cost, one clear, one copy and
      their barriers per instance a frame, is the first row recorded, and every
      other P14 pass's ceiling is recorded beside it.
@@ -4502,16 +4545,25 @@ counted rows recorded in the same change.
      projection, `ViewProjection.Jitter` carrying it, the cut revision on the
      camera frame sources, the epoch rules above kept on `SdfWorldPasses`'
      entry, and the `converge` capture row, which resets its instance's history
-     on the armed tick and serves the Nth frame composed at it. Nothing turns
-     jitter on outside a `converge` capture until P15-5 adds the lever.
+     on the armed tick and serves the Nth frame composed at it, with the frozen
+     presentation snapshot it composes from: the presenter holds presentation
+     time, animation, the camera followers and the frame values at the first
+     composition of the armed tick and composes every converging frame at a zero
+     interval, advancing only the jitter index. Nothing turns jitter on outside
+     a `converge` capture until P15-5 adds the lever.
    - Touches: `SdfWorldPackage.Values`, `SdfFrameBlock`,
      `frame/sdf-viewport.hlsli`, `sdf-mesh.vert.hlsl`, `ViewProjection`,
      `SdfCameraProgram`, `SdfCameraFrameSource`, `SdfWorldPasses`,
      `WorldCaptureRow`, `WorldCaptureScheduler`, `OffscreenTickHostedService`
-     (composing the N frames at the held tick), the world schemas.
+     (composing the N frames at the held tick), `WorldFramePresenter` (the frozen
+     snapshot), the world schemas.
    - Done when: `ViewProjectionLawTests` hold a jittered projection and ray to
      each other sub-pixel; a law holds every reset rule to its trigger, a follow
-     in place and a portal crossing among them; a `temporal-jitter` canary pins
+     in place and a portal crossing among them; a law composes a converging
+     capture's N frames with frame intervals that differ from run to run and holds
+     every frame's pass block, byte for byte, to the first's except for the jitter
+     index, and the presented time, animation poses and camera states to the
+     armed tick's; a `temporal-jitter` canary pins
      jitter indices through `converge` rows and reads an edge's coverage moving by
      the sequence's offsets on both backends; parity is unchanged with
      reconstruction off.
@@ -4572,7 +4624,8 @@ counted rows recorded in the same change.
      by identity and depth; neighbourhood rectification; the reactive alpha from
      the views stage; the convergence rule in `IsUnchanged`; `place`'s
      contrast-adaptive sharpen at equal extent; and the `world.temporal` lever
-     with its presets.
+     with its presets, which a camera or session view's residency reads only
+     when its levers ask for reconstruction.
    - Touches: `SdfWorldPackage.Fragment`, `passes/sdf-resolve.comp.hlsl`,
      `passes/sdf-hit-stages.hlsli`, `SdfWorldPasses`, `place.comp.hlsl`,
      `PlacePackage`, `WorldSessionLevers`, `WorldRenderLeverCommandModule`,
@@ -4592,15 +4645,18 @@ counted rows recorded in the same change.
      rendered frames stop after one period (`world.cadence on`).
 6. **P15-6, dynamic resolution.** The render extent moves inside its ceiling
    each frame.
-   - Delivers: a controller that sets each view's per-frame render extent
+   - Delivers: one controller that sets each view's per-frame render extent
      between a floor and the tier's ceiling, never reallocating, and resets no
-     history (the resolve reads the extent each frame); its signal is the lead's
-     decision below; the lever with its presets.
+     history (the resolve reads the extent each frame); its one load signal,
+     present timing through an injectable timing source with the counted
+     march-step budget where present timing is unavailable; the lever with its
+     presets.
    - Touches: `WorldFramePresenter`, `WorldRenderSettings`, `SdfFrameBlock`, the
      controller in `src/Puck.World.Client`, `WorldSessionLevers`,
      `quality.puck`.
-   - Done when: a law drives the controller over a scripted signal and holds its
-     extents; a `dynamic-resolution` canary forces a sweep of extents through the
+   - Done when: a law drives the controller through a fake timing source over a
+     scripted signal and holds its extents, and a second law makes the fake
+     unavailable and holds the controller to the step budget; a `dynamic-resolution` canary forces a sweep of extents through the
      lever and reads no `gpu.created.*` rise and no rebuild across it, each
      forced extent's capture within tolerance of its reference.
    - Counted-cost gate: zero created objects across the sweep; per-frame counts
@@ -4634,7 +4690,7 @@ counted rows recorded in the same change.
    - Done when: the chosen defaults' ceilings are recorded and `puck counters
      --check` passes on the RTX 2060.
 
-**Open decisions for the lead.**
+**Open decision for the lead.**
 
 - **The floor tier's defaults (P15-8).** Gather, at 1920x1080 on the RTX 2060's
   floor tier, each pass's dispatches, binds, barriers, march steps, texels
@@ -4646,19 +4702,6 @@ counted rows recorded in the same change.
   the history surface at eight bytes a pixel each, in two frame slots, about
   66 MB a view, and the output at the output extent, about 33 MB, against the
   render-extent color's 18.7 MB at half scale.
-- **Dynamic resolution's signal (P15-6).** Either the presenter's
-  confirmed-present timing (`IPresentTimingFeedback`), which follows the
-  device's real frame time but cannot be held by a gate, or a counted budget, the
-  previous frame's `gpu.march.steps` against a per-tier step budget, which is
-  deterministic per backend and testable but only a proxy for time. The recorded
-  Steam Deck run [deferred to the end](#deferred-to-the-end) needs the first;
-  the counters workload pins either off.
-- **Temporal views beyond the world's.** Whether camera views and session
-  views, which screens show at their declared extent, reconstruct by default or
-  only when their residency's levers ask. Each costs a resolve, and 66 MB of
-  history at 1920x1080, and the shipped world runs six residencies.
-- **The jitter period.** Eight is proposed; sixteen converges finer and takes a
-  still view twice as many frames before it stands.
 
 **Check:** every sub-step's own check above, and together: a still scene
 converges to the supersampled reference within the stated tolerance; the
