@@ -205,7 +205,7 @@ internal static class NuGetCommand {
 
         foreach (var project in projects) {
             using var metadata = JsonDocument.Parse(await CliProcess.RunCheckedAsync(
-                arguments: ["msbuild", project, "-nologo", "-getProperty:PackageId,Version"],
+                arguments: ["msbuild", project, "-nologo", "--disable-build-servers", "-getProperty:PackageId,Version"],
                 fileName: "dotnet",
                 workingDirectory: root,
                 capture: true
