@@ -548,9 +548,15 @@ These are one-line cautions; the owning pages hold the derivations.
   entries (`SdfWorldPipelines.PrepareReload`), waits for them off the frame
   thread, and swaps them into the residency's own set after the device is idle,
   releasing the replaced leases; another residency leasing the replaced entries
-  keeps them. A set built against another instruction set (its tree's
-  `isa/sdf-isa.hlsli` fingerprint) is refused before anything is leased, and the
-  residency keeps its kernels. A new SDF pipeline is a row in
+  keeps them. Before it leases anything, a reload reflects each changed kernel
+  (`ShaderBytecodeReflector`, SPIR-V managed and DXIL through the `dxcompiler`
+  beside `dxc`) and holds it to the host's interface
+  (`SdfKernelSet.InterfaceMismatch`, `ShaderInterfaceLayout.Mismatch`): the
+  kernels' interfaces carry the instruction set's stamp in their pass block's
+  variable name (`SdfIsaHlsl.Stamp`, `ShaderInterface.Stamp`), so a kernel
+  compiled against another instruction set, or binding anything the host does not
+  place where it places it, refuses the reload and the residency keeps its
+  kernels. Boot reflects nothing: the deployed tree is the host's own build. A new SDF pipeline is a row in
   `SdfWorldTables.PipelineLayouts.Specs`, never a create call in the tables. A harness that drives a residency polls
   `SdfWorldResidency.IsReady`
   (`SdfTestPipelines.ProduceFirstFrame` in `tests/Shared`, whose `Kernels` is the one fake kernel set);

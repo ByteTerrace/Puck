@@ -331,10 +331,12 @@ public sealed class SdfWorldTablesWorkLawTests {
         }
         // Prepares a reload of the rig's pipelines and installs it, as a residency does across two produced frames.
         public int Reload(SdfKernelSet kernels) {
+            using var reflector = SdfTestPipelines.Reflector();
             using var reload = Pipelines.PrepareReload(
                 cache: Cache,
                 device: Gpu,
-                kernels: kernels
+                kernels: kernels,
+                reflector: reflector
             );
 
             reload.Wait(cancellationToken: CancellationToken.None);

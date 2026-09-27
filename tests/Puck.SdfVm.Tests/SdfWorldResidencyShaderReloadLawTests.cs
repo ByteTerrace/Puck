@@ -3,6 +3,7 @@ using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
+using Puck.Shaders;
 using Puck.SignedDistance;
 using Puck.Testing;
 using Xunit;
@@ -11,57 +12,61 @@ namespace Puck.SdfVm.Tests;
 
 /// <summary>
 /// Laws for <see cref="SdfWorldResidency.RequestShaderReload"/> over <see cref="FakeGpuDevice"/>, from a kernel tree on
-/// disk: a tree whose generated <c>isa/sdf-isa.hlsli</c> records no fingerprint or another instruction set's is refused,
-/// the request reports it failed and the residency keeps rendering with its kernels, and the same bytecode beside this
-/// host's include applies.
+/// disk, the build's own SPIR-V kernels: a tree whose kernel was compiled against another instruction set, beside this
+/// host's own <c>isa/sdf-isa.hlsli</c>, or binds the program words and the frame's instance grid in each other's places,
+/// is refused by the interface check, the request reports it failed and the residency keeps rendering with its kernels;
+/// a tree whose changed kernel reads this host's interface applies.
 /// </summary>
 public sealed class SdfWorldResidencyShaderReloadLawTests {
     private const uint Extent = 32;
 
     [Fact]
-    public void AReloadWithoutThisHostsInstructionSetFailsAndTheResidencyKeepsItsKernels() {
+    public void AReloadWhoseKernelsDoNotReadTheHostsInterfaceFailsAndTheResidencyKeepsItsKernels() {
         var root = Directory.CreateTempSubdirectory(prefix: "puck-test-").FullName;
 
         try {
             var context = Context(gpu: new FakeGpuDevice());
-            var foreign = SdfIsaHlsl.Fingerprint ^ 1U;
+            var changed = SdfTestPipelines.Kernels(beam: 2);
             using var node = Node();
 
             node.ProduceFirstFrame(context: in context);
+
+            foreach (var (kernels, reason) in ((ReadOnlySpan<(SdfKernelSet, string)>)[
+                (changed.With(
+                    bytecode: SpirvEdits.Renamed(
+                        from: ("passGroup" + SdfIsaHlsl.Stamp),
+                        module: changed[SdfKernel.Beam].Span,
+                        to: ("passGroup" + SdfIsaHlsl.StampOf(fingerprint: SdfIsaHlsl.Fingerprint ^ 1U))
+                    ),
+                    kernel: SdfKernel.Beam
+                ), "stamped"),
+                (changed.With(
+                    bytecode: SpirvEdits.BindingsSwapped(
+                        first: SdfWorldPackage.ProgramWords,
+                        module: changed[SdfKernel.InstanceCull].Span,
+                        second: SdfWorldPackage.FrameInstanceGrid
+                    ),
+                    kernel: SdfKernel.InstanceCull
+                ), SdfWorldPackage.ProgramWords),
+            ])) {
+                Tree(
+                    kernels: kernels,
+                    root: root
+                );
+
+                var refused = Reload(
+                    context: in context,
+                    node: node,
+                    root: root
+                );
+
+                Assert.Equal(expected: ("failed", 0L, 0), actual: (refused.State, refused.Generation, refused.ChangedPipelines));
+                Assert.Contains(actualString: refused.Error, expectedSubstring: reason);
+                Assert.True(condition: node.Produce(context: in context));
+            }
+
             Tree(
-                include: "",
-                root: root
-            );
-
-            var unrecorded = Reload(
-                context: in context,
-                node: node,
-                root: root
-            );
-
-            Assert.Equal(expected: ("failed", 0L), actual: (unrecorded.State, unrecorded.Generation));
-            Assert.Contains(actualString: unrecorded.Error, expectedSubstring: "SDF_ISA_FINGERPRINT");
-            Tree(
-                include: SdfIsaHlsl.Generate().Replace(
-                    comparisonType: StringComparison.Ordinal,
-                    newValue: $"0x{foreign:X8}u",
-                    oldValue: $"0x{SdfIsaHlsl.Fingerprint:X8}u"
-                ),
-                root: root
-            );
-
-            var refused = Reload(
-                context: in context,
-                node: node,
-                root: root
-            );
-
-            Assert.Equal(expected: ("failed", 0L, 0), actual: (refused.State, refused.Generation, refused.ChangedPipelines));
-            Assert.Contains(actualString: refused.Error, expectedSubstring: "another instruction set");
-            Assert.True(condition: node.Produce(context: in context));
-
-            Tree(
-                include: SdfIsaHlsl.Generate(),
+                kernels: changed,
                 root: root
             );
 
@@ -149,11 +154,11 @@ public sealed class SdfWorldResidencyShaderReloadLawTests {
 
         return node.ShaderReloadStatus;
     }
-    // Writes a kernel tree under the root: a kernel set differing from the residency's by its beam kernel, and the given
-    // instruction-set include beside it.
-    private static void Tree(string include, string root) {
+    // Writes a kernel tree under the root: a kernel set's SPIR-V in its passes directory, and this host's own generated
+    // instruction-set include beside it, which a reload never reads: kernels carry their instruction set themselves.
+    private static void Tree(SdfKernelSet kernels, string root) {
         var passes = Directory.CreateDirectory(path: SdfKernelSet.PassesDirectory(tree: root)).FullName;
-        var kernels = SdfTestPipelines.Kernels(beam: 2);
+        var isa = Directory.CreateDirectory(path: Path.Combine(path1: root, path2: "isa")).FullName;
 
         foreach (var kernel in SdfKernelSet.Kernels) {
             File.WriteAllBytes(
@@ -165,10 +170,9 @@ public sealed class SdfWorldResidencyShaderReloadLawTests {
             );
         }
 
-        _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: SdfKernelSet.IsaIncludeOf(passesDirectory: passes))!);
         File.WriteAllText(
-            contents: include,
-            path: SdfKernelSet.IsaIncludeOf(passesDirectory: passes)
+            contents: SdfIsaHlsl.Generate(),
+            path: Path.Combine(path1: isa, path2: SdfIsaHlsl.FileName)
         );
     }
 

@@ -50,13 +50,10 @@ public sealed class SdfWorldPipelines : IDisposable {
     /// <returns>The set, owned by the caller, which disposes it to release its leases.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="cache"/>, <paramref name="device"/> or
     /// <paramref name="kernels"/> is <see langword="null"/>.</exception>
-    /// <exception cref="InvalidOperationException"><paramref name="kernels"/> were built against another instruction set
-    /// (<see cref="SdfKernelSet.RequireHostInstructionSet"/>).</exception>
     public static SdfWorldPipelines Acquire(GpuPassPipelineCache cache, IGpuDeviceContext device, SdfKernelSet kernels, bool includeBrickPipelines) {
         ArgumentNullException.ThrowIfNull(argument: cache);
         ArgumentNullException.ThrowIfNull(argument: device);
         ArgumentNullException.ThrowIfNull(argument: kernels);
-        kernels.RequireHostInstructionSet();
 
         var specs = SdfWorldTables.PipelineLayouts.Specs;
         var slots = new Slot?[specs.Length];
@@ -165,45 +162,66 @@ public sealed class SdfWorldPipelines : IDisposable {
         );
     }
     /// <summary>Leases replacements for the pipelines whose bytecode differs between the installed kernels and
-    /// <paramref name="kernels"/>; unchanged bytecode leases nothing. The replacements build on the thread pool like any
-    /// entry; the reload is ready once <see cref="SdfWorldPipelineReload.Wait"/> returns, and
-    /// <see cref="SdfWorldTables.InstallReload"/> puts it into service on the render thread. Safe on any thread while no
-    /// other reload is being installed.</summary>
+    /// <paramref name="kernels"/>; unchanged bytecode leases nothing. Before it leases anything it reflects each changed
+    /// kernel through <paramref name="reflector"/> and holds it to this host's interface
+    /// (<see cref="SdfKernelSet.InterfaceMismatch"/>), so a kernel compiled against another instruction set, or binding
+    /// anything the host does not place where the host places it, refuses the whole reload and the set keeps its kernels.
+    /// The replacements build on the thread pool like any entry; the reload is ready once
+    /// <see cref="SdfWorldPipelineReload.Wait"/> returns, and <see cref="SdfWorldTables.InstallReload"/> puts it into
+    /// service on the render thread. Safe on any thread while no other reload is being installed.</summary>
     /// <param name="cache">The composition's pass-pipeline cache the set was acquired from.</param>
     /// <param name="device">The device the set's pipelines were created on.</param>
-    /// <param name="kernels">A complete compiled set for the same backend and unchanged host binding ABI.</param>
+    /// <param name="kernels">A complete compiled set for the same backend.</param>
+    /// <param name="reflector">The reflector that reads each changed kernel's bindings.</param>
     /// <returns>The prepared reload, owned by the caller until it is installed or disposed.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="cache"/>, <paramref name="device"/> or
-    /// <paramref name="kernels"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="cache"/>, <paramref name="device"/>,
+    /// <paramref name="kernels"/> or <paramref name="reflector"/> is <see langword="null"/>.</exception>
     /// <exception cref="ObjectDisposedException">The set has been disposed.</exception>
-    /// <exception cref="InvalidOperationException"><paramref name="kernels"/> were built against another instruction set
-    /// (<see cref="SdfKernelSet.RequireHostInstructionSet"/>): the reload is refused and the set keeps its
-    /// kernels.</exception>
-    public SdfWorldPipelineReload PrepareReload(GpuPassPipelineCache cache, IGpuDeviceContext device, SdfKernelSet kernels) {
+    /// <exception cref="InvalidOperationException">A changed kernel does not read this host's interface, naming every such
+    /// kernel and why, or it is a DXIL container no <c>dxcompiler.dll</c> can reflect: the reload is refused and the set
+    /// keeps its kernels.</exception>
+    /// <exception cref="InvalidDataException">A changed kernel's bytes are not bytecode the reflector reads.</exception>
+    public SdfWorldPipelineReload PrepareReload(GpuPassPipelineCache cache, IGpuDeviceContext device, SdfKernelSet kernels, ShaderBytecodeReflector reflector) {
         ArgumentNullException.ThrowIfNull(argument: cache);
         ArgumentNullException.ThrowIfNull(argument: device);
         ArgumentNullException.ThrowIfNull(argument: kernels);
+        ArgumentNullException.ThrowIfNull(argument: reflector);
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
         );
-        kernels.RequireHostInstructionSet();
 
         var baseline = m_kernels;
+        var changed = new List<(int Index, Slot Slot, ReadOnlyMemory<byte> Bytecode)>();
+        List<string>? refusals = null;
+
+        for (var index = 0; (index < m_slots.Length); index++) {
+            if (m_slots[index] is not { } slot) {
+                continue;
+            }
+
+            var kernel = ((SdfKernel)index);
+            var bytecode = kernels[kernel];
+
+            if (bytecode.Span.SequenceEqual(other: baseline[kernel].Span)) {
+                continue;
+            }
+
+            if (SdfKernelSet.InterfaceMismatch(kernel: kernel, reflected: reflector.Read(bytecode: bytecode.Span)) is { } mismatch) {
+                (refusals ??= []).Add(item: $"'{SdfKernelSet.StemOf(kernel: kernel)}': {mismatch}");
+            }
+
+            changed.Add(item: (index, slot, bytecode));
+        }
+
+        if (refusals is not null) {
+            throw new InvalidOperationException(message: $"The reloaded kernels do not read this host's interface (instruction set stamp '{SdfIsaHlsl.Stamp}'), so the set keeps its kernels: {string.Join(separator: " ", values: refusals)}");
+        }
+
         var replacements = new List<(int Index, GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> Lease)>();
 
         try {
-            for (var index = 0; (index < m_slots.Length); index++) {
-                if (m_slots[index] is not { } slot) {
-                    continue;
-                }
-
-                var bytecode = kernels[((SdfKernel)index)];
-
-                if (bytecode.Span.SequenceEqual(other: baseline[((SdfKernel)index)].Span)) {
-                    continue;
-                }
-
+            foreach (var (index, slot, bytecode) in changed) {
                 replacements.Add(item: (index, cache.Acquire(
                     device: device,
                     key: GpuPassPipelineKey.OfCompute(

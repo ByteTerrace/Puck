@@ -1,6 +1,7 @@
 using System.Runtime.ExceptionServices;
 using Puck.Abstractions.Gpu;
 using Puck.Hosting;
+using Puck.Shaders;
 
 namespace Puck.SdfVm;
 
@@ -142,9 +143,9 @@ public sealed partial class SdfWorldResidency {
         } catch (Exception exception) {
             PublishShaderReload(result: request with { State = "failed", Error = exception.Message });
 
-            // A bad directory or bytecode, a tree with no instruction-set fingerprint or another instruction set's,
-            // fails the request, as do several pipelines failing together; anything else, a device loss above all,
-            // continues to the host's recovery.
+            // A bad directory or bytecode, or kernels that do not read this host's interface (another instruction set's
+            // stamp, a binding the host does not place), fail the request, as do several pipelines failing together;
+            // anything else, a device loss above all, continues to the host's recovery.
             if (FailsTheRequest(exception: exception)) {
                 return;
             }
@@ -176,14 +177,21 @@ public sealed partial class SdfWorldResidency {
         var cache = m_pipelines.Catalog.Pipelines;
 
         m_reloadBuild.Start(build: token => {
-            var reload = pipelines.PrepareReload(
-                cache: cache,
-                device: device,
-                kernels: SdfKernelSet.Load(
-                    bytecodeExtension: extension,
-                    directory: directory
-                )
-            );
+            SdfWorldPipelineReload reload;
+
+            // A reload reflects the kernels it would install, so DXIL needs the compiler's reflection: the dxc on the
+            // search path, as the kernels' own build uses.
+            using (var reflector = new ShaderBytecodeReflector(toolchain: new ShaderToolchain())) {
+                reload = pipelines.PrepareReload(
+                    cache: cache,
+                    device: device,
+                    kernels: SdfKernelSet.Load(
+                        bytecodeExtension: extension,
+                        directory: directory
+                    ),
+                    reflector: reflector
+                );
+            }
 
             try {
                 reload.Wait(cancellationToken: token);

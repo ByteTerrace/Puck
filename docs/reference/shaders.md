@@ -799,7 +799,19 @@ from SPIR-V's array type and DXIL's bind count, and one otherwise.
 
 Both readers, and both of a layout's views, order records by set, then binding,
 then a bound block before a pushed one at the same place
-(`ShaderInterfaceLayout.Ordered`).
+(`ShaderInterfaceLayout.Ordered`). `ShaderBytecodeReflector` picks the reader by
+the bytes, SPIR-V by its magic number and DXIL by its container's, loading the
+DXIL reader once, on the first container it reads.
+
+An interface can carry a stamp (`ShaderInterface.Stamp`): a token naming what
+its owner built it against. The generated pass block's variable carries it in
+its name, such as `passGroupIsa1234ABCD`, and the include defines `passGroup` as
+that name, so a pass reads its block as `passGroup` either way while its
+bytecode reflects the stamp. `ShaderInterfaceLayout.Mismatch` holds a module
+to a stamped layout's stamp before anything else: a module whose pass block
+carries another name, or that reads no pass block, is refused. The SDF kernels'
+interfaces carry the instruction set's stamp (`SdfIsaHlsl.Stamp`), which is
+how a kernel reload refuses kernels compiled against another instruction set.
 
 The spike interfaces three passes: film grain, a pixelate compute pass, and a
 compute pass reading structured buffers of a 4-byte and a 16-byte element, a

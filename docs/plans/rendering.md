@@ -4275,11 +4275,13 @@ item 2 landed.
     derive. A kernel set agrees with the instruction set it was built with
     because the build refuses bytecode stale against its sources and every
     include, the generated `sdf-isa.hlsli` among them, and `puck shaders
-    generate --check` refuses that file stale against the C# model. The include
-    records the instruction set's fingerprint (`SdfIsaHlsl.Fingerprint`) and
-    ships beside the bytecode, so a kernel set carries it, and the engine refuses
-    a set whose fingerprint is not its own model's, at boot and on a reload,
-    which keeps the previous kernels. The parity world boots with soft shadows at
+    generate --check` refuses that file stale against the C# model. The include's
+    hash (`SdfIsaHlsl.Fingerprint`) is the stamp the kernels' interfaces carry in
+    their pass block's variable name (`ShaderInterface.Stamp`), so every kernel's
+    bytecode reflects the instruction set it was compiled against, and a reload
+    reflects each changed kernel and holds it to the host's interface
+    (`ShaderInterfaceLayout.Mismatch`), refusing another stamp or a binding the
+    host does not place, which keeps the previous kernels. The parity world boots with soft shadows at
     `High` and ambient occlusion on, so every SDF station passes through the
     shadow and ambient stages under the cross-backend pixel gate.
 

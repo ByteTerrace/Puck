@@ -42,8 +42,10 @@ code that no shipped kernel compiles.
 created on the thread pool (`SdfWorldPipelines.PrepareReload`); a later frame
 installs them (`SdfWorldTables.InstallReload`), which waits for the device to go idle, swaps the changed
 pipelines in and retires the old ones; a failed load or pipeline build keeps
-the previous kernels, and so does a tree whose generated `isa/sdf-isa.hlsli`
-records another instruction set's fingerprint. Scene buffers, images, baked bricks, and world state
+the previous kernels, and so does a tree whose kernels do not read the host's
+interface: a kernel compiled against another instruction set (its pass block's
+stamp) or binding anything where the host does not place it. Reflecting a DXIL
+kernel needs the `dxcompiler.dll` beside the `dxc` on the path. Scene buffers, images, baked bricks, and world state
 survive; the cadence signature is invalidated. The last
 successful set survives device-loss recovery. `views.graphs` instances
 (`pipeline.reload`) and `views.post` post-process packages are outside this

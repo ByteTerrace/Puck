@@ -28,10 +28,13 @@ public sealed class SdfWorldPipelinesLawTests {
 
         Assert.Equal(expected: (11L, 11), actual: (Created(cache: cache), device.Persisted));
 
+        using var reflector = SdfTestPipelines.Reflector();
+
         using (var unchanged = pipelines.PrepareReload(
             cache: cache,
             device: device,
-            kernels: SdfTestPipelines.Kernels(beam: 1)
+            kernels: SdfTestPipelines.Kernels(beam: 1),
+            reflector: reflector
         )) {
             Assert.Equal(expected: 0, actual: unchanged.ChangedPipelines);
         }
@@ -39,7 +42,8 @@ public sealed class SdfWorldPipelinesLawTests {
         using (var changed = pipelines.PrepareReload(
             cache: cache,
             device: device,
-            kernels: SdfTestPipelines.Kernels(beam: 2)
+            kernels: SdfTestPipelines.Kernels(beam: 2),
+            reflector: reflector
         )) {
             changed.Wait(cancellationToken: CancellationToken.None);
             Assert.Equal(expected: 1, actual: changed.ChangedPipelines);
@@ -56,10 +60,12 @@ public sealed class SdfWorldPipelinesLawTests {
 
         Assert.Equal(expected: 12L, actual: Created(cache: cache));
     }
-    // A reload of kernels built against another instruction set is refused before it leases anything, and the set keeps
-    // its kernels; the same kernels built against this host's instruction set prepare.
+    // A reload is held to the host's interface before it leases anything: a kernel compiled against another instruction
+    // set (its pass block carries another stamp) or binding the program words where the frame's instance grid belongs, and
+    // the grid where the words belong, refuses the reload by name, and the set keeps its kernels and creates nothing; the
+    // same kernels compiled as the host was prepare.
     [Fact]
-    public void AReloadBuiltAgainstAnotherInstructionSetIsRefusedAndTheSetKeepsItsKernels() {
+    public void AReloadWhoseKernelsDoNotReadTheHostsInterfaceIsRefusedAndTheSetKeepsItsKernels() {
         var gpu = new FakeGpuDevice();
         var cache = new GpuPassPipelineCache();
         using var pipelines = SdfTestPipelines.Build(
@@ -67,26 +73,49 @@ public sealed class SdfWorldPipelinesLawTests {
             device: gpu,
             kernels: SdfTestPipelines.Kernels(beam: 1)
         );
+        using var reflector = SdfTestPipelines.Reflector();
         var installed = pipelines.Kernels;
         var created = Created(cache: cache);
         var changed = SdfTestPipelines.Kernels(beam: 2);
-        var foreign = new SdfKernelSet(
-            bytecode: [.. SdfKernelSet.Kernels.Select(selector: kernel => changed[kernel])],
-            fingerprint: SdfIsaHlsl.Fingerprint ^ 1U
+        var foreign = changed.With(
+            bytecode: SpirvEdits.Renamed(
+                from: ("passGroup" + SdfIsaHlsl.Stamp),
+                module: changed[SdfKernel.Beam].Span,
+                to: ("passGroup" + SdfIsaHlsl.StampOf(fingerprint: SdfIsaHlsl.Fingerprint ^ 1U))
+            ),
+            kernel: SdfKernel.Beam
+        );
+        var swapped = changed.With(
+            bytecode: SpirvEdits.BindingsSwapped(
+                first: SdfWorldPackage.ProgramWords,
+                module: changed[SdfKernel.InstanceCull].Span,
+                second: SdfWorldPackage.FrameInstanceGrid
+            ),
+            kernel: SdfKernel.InstanceCull
         );
 
-        _ = Assert.Throws<InvalidOperationException>(testCode: () => pipelines.PrepareReload(
-            cache: cache,
-            device: gpu,
-            kernels: foreign
-        ));
-        Assert.Same(expected: installed, actual: pipelines.Kernels);
-        Assert.Equal(expected: created, actual: Created(cache: cache));
+        foreach (var (kernels, stem, reason) in ((ReadOnlySpan<(SdfKernelSet, string, string)>)[
+            (foreign, "sdf-beam", "stamped"),
+            (swapped, "sdf-instance-cull", SdfWorldPackage.ProgramWords),
+        ])) {
+            var refusal = Assert.Throws<InvalidOperationException>(testCode: () => pipelines.PrepareReload(
+                cache: cache,
+                device: gpu,
+                kernels: kernels,
+                reflector: reflector
+            ));
+
+            Assert.Contains(actualString: refusal.Message, expectedSubstring: $"'{stem}': ");
+            Assert.Contains(actualString: refusal.Message, expectedSubstring: reason);
+            Assert.Same(expected: installed, actual: pipelines.Kernels);
+            Assert.Equal(expected: created, actual: Created(cache: cache));
+        }
 
         using var reload = pipelines.PrepareReload(
             cache: cache,
             device: gpu,
-            kernels: changed
+            kernels: changed,
+            reflector: reflector
         );
 
         reload.Wait(cancellationToken: CancellationToken.None);

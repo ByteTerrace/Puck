@@ -66,7 +66,8 @@ public sealed class ShaderInterfaceLayout {
                 groups.Add(item: LayOutGroup(
                     group: group,
                     interfaceName: shaderInterface.Name,
-                    members: members
+                    members: members,
+                    variableName: shaderInterface.BlockVariableNameOf(group: group)
                 ));
             }
         }
@@ -147,13 +148,20 @@ public sealed class ShaderInterfaceLayout {
     /// must be the view's. A binding the module does not read is not reflected, so it is not checked. A DXIL container
     /// cannot tell root constants from a bound constant buffer, so in its view the pushed index is the constant buffer
     /// at register <c>b0</c> in space <see cref="GpuPipelineLayoutDescription.PushIndexSpace"/>. When neither
-    /// view fits, the disagreement is named against the view that fits more of the module's bindings in order.</summary>
+    /// view fits, the disagreement is named against the view that fits more of the module's bindings in order.
+    /// <para>A stamped interface (<see cref="ShaderInterface.Stamp"/>) holds the module to its stamp before anything else:
+    /// the module must read its pass block, and under the stamped name, since a module that reads none carries no stamp
+    /// and one whose pass block carries another stamp was compiled from other declarations.</para></summary>
     /// <param name="reflected">The module's bindings, as <see cref="SpirvInterfaceReader"/> or
     /// <see cref="DxilInterfaceReader"/> reads them.</param>
     /// <returns>The disagreement, or <see langword="null"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="reflected"/> is <see langword="null"/>.</exception>
     public string? Mismatch(IReadOnlyList<ShaderInterfaceBinding> reflected) {
         ArgumentNullException.ThrowIfNull(argument: reflected);
+
+        if (StampMismatch(reflected: reflected) is { } stamp) {
+            return stamp;
+        }
 
         if (FirstMismatch(
             expected: Bindings,
@@ -192,6 +200,29 @@ public sealed class ShaderInterfaceLayout {
             .ToArray());
     }
 
+    // Why a module does not carry this layout's stamp, or null when the interface has none or the module carries it: the
+    // pass block's binding, bound at binding 0 of the pass group's set, is named for the stamp.
+    private string? StampMismatch(IReadOnlyList<ShaderInterfaceBinding> reflected) {
+        if (Interface.Stamp is not { } stamp) {
+            return null;
+        }
+
+        var group = Groups.Single(predicate: static group => (group.Group == ShaderInterfaceGroup.Pass));
+        var block = reflected.FirstOrDefault(predicate: binding => (
+            (binding.Set == group.Set) &&
+            (binding.Binding == 0) &&
+            (binding.Kind == GpuBindingKind.ConstantBuffer) &&
+            !binding.Pushed
+        ));
+
+        if (block is null) {
+            return $"the module reads no pass block, so it carries no stamp; interface '{Interface.Name}' is stamped '{stamp}'.";
+        }
+
+        return (string.Equals(a: block.Name, b: group.BlockVariableName, comparisonType: StringComparison.Ordinal)
+            ? null
+            : $"the module's pass block is '{block.Name}'; interface '{Interface.Name}' is stamped '{stamp}', whose pass block is '{group.BlockVariableName}'.");
+    }
     private static uint AlignUp(uint value, uint alignment) =>
         ((((value + alignment) - 1) / alignment) * alignment);
     // The first reflected binding one view does not place, with the view's binding at its place, if any.
@@ -237,7 +268,7 @@ public sealed class ShaderInterfaceLayout {
                 paramName: nameof(kind)
             ),
         };
-    private static ShaderInterfaceGroupLayout LayOutGroup(ShaderInterfaceGroup group, string interfaceName, IReadOnlyList<ShaderInterfaceMember> members) {
+    private static ShaderInterfaceGroupLayout LayOutGroup(ShaderInterfaceGroup group, string interfaceName, string variableName, IReadOnlyList<ShaderInterfaceMember> members) {
         var set = ((uint)group);
         var blockMembers = new List<ShaderInterfaceBlockMember>();
         var cursor = 0u;
@@ -287,7 +318,7 @@ public sealed class ShaderInterfaceLayout {
                 group: group,
                 interfaceName: interfaceName
             );
-            blockVariableName = ShaderInterface.BlockVariableName(group: group);
+            blockVariableName = variableName;
             bindings.Add(item: new ShaderInterfaceBinding(
                 Binding: 0,
                 Kind: GpuBindingKind.ConstantBuffer,

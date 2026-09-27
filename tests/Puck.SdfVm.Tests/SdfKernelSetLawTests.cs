@@ -1,4 +1,6 @@
+using System.Text.RegularExpressions;
 using Puck.Abstractions.Counting;
+using Puck.Shaders;
 using Puck.Testing;
 using Xunit;
 
@@ -8,8 +10,9 @@ namespace Puck.SdfVm.Tests;
 /// Laws for <see cref="SdfKernelSet"/>: a load reads one file per kernel, named by its stem, and counts once into the
 /// <c>shaders.sdf-kernels</c> counts it was handed, with exactly the bytes it read; the kernels it returns are those
 /// files' bytes; a load that finds a kernel missing still counts as a load that started; both kinds are classified as
-/// deterministic within one backend, since SPIR-V and DXIL sets differ in size; and changing any one kernel changes the
-/// set's content key, which keys a host's persistent pipeline cache.
+/// deterministic within one backend, since SPIR-V and DXIL sets differ in size; changing any one kernel changes the
+/// set's content key, which keys a host's persistent pipeline cache; every kernel the build compiles reads its host's
+/// interface on both backends, stamp included; and the stamp moves with the instruction set.
 /// </summary>
 public sealed class SdfKernelSetLawTests {
     private static readonly string[] Stems = [
@@ -29,7 +32,6 @@ public sealed class SdfKernelSetLawTests {
         var directory = Directory.CreateTempSubdirectory(prefix: "puck-test-").FullName;
 
         try {
-            var passes = Tree(root: directory, include: SdfIsaHlsl.Generate());
             var expected = 0L;
 
             for (var index = 0; (index < Stems.Length); index++) {
@@ -38,7 +40,7 @@ public sealed class SdfKernelSetLawTests {
                 File.WriteAllBytes(
                     bytes: bytes,
                     path: Path.Combine(
-                        path1: passes,
+                        path1: directory,
                         path2: $"{Stems[index]}.comp.spv"
                     )
                 );
@@ -48,20 +50,19 @@ public sealed class SdfKernelSetLawTests {
             var work = Work();
             var kernels = SdfKernelSet.Load(
                 bytecodeExtension: ".spv",
-                directory: passes,
+                directory: directory,
                 work: work
             );
 
             Assert.Equal(expected: 1L, actual: work.Read(kind: SdfKernelSet.Loads));
             Assert.Equal(expected: expected, actual: work.Read(kind: SdfKernelSet.BytecodeBytes));
-            // Passed through: each kernel is its own file's bytes, and the fingerprint the tree's include records.
-            Assert.Equal(expected: SdfIsaHlsl.Fingerprint, actual: kernels.Fingerprint);
+            // Passed through: each kernel is its own file's bytes.
             Assert.Equal(expected: new byte[] { 0 }, actual: kernels[SdfKernel.Ambient].ToArray());
             Assert.Equal(expected: Enumerable.Repeat(count: 12, element: ((byte)11)), actual: kernels[SdfKernel.ViewsFolds].ToArray());
 
             _ = SdfKernelSet.Load(
                 bytecodeExtension: ".spv",
-                directory: passes,
+                directory: directory,
                 work: work
             );
 
@@ -115,49 +116,56 @@ public sealed class SdfKernelSetLawTests {
         Assert.Equal(expected: SdfKernelSet.Kernels.Count, actual: keys.Count);
         Assert.DoesNotContain(collection: keys, expected: baseline.ContentKey());
     }
+    // What the build compiles is what a host installs: every kernel reflects, on both backends, exactly the bindings its
+    // interface places, and its pass block under the name this host's instruction-set stamp gives it.
     [Fact]
-    public void ASetBuiltAgainstAnotherInstructionSetIsRefusedByTheHost() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-test-").FullName;
+    public void EveryCompiledKernelReadsItsHostsInterfaceOnBothBackends() {
+        using var reflector = SdfTestPipelines.Reflector();
 
-        try {
-            var foreign = SdfIsaHlsl.Fingerprint ^ 1U;
-            var include = SdfIsaHlsl.Generate().Replace(
-                comparisonType: StringComparison.Ordinal,
-                newValue: $"0x{foreign:X8}u",
-                oldValue: $"0x{SdfIsaHlsl.Fingerprint:X8}u"
-            );
-            var passes = Tree(include: include, root: directory);
+        foreach (var kernel in SdfKernelSet.Kernels) {
+            var stem = SdfKernelSet.StemOf(kernel: kernel);
 
-            foreach (var kernel in SdfKernelSet.Kernels) {
-                File.WriteAllBytes(bytes: [1], path: Path.Combine(path1: passes, path2: $"{SdfKernelSet.StemOf(kernel: kernel)}.comp.spv"));
+            foreach (var extension in (OperatingSystem.IsWindows() ? [".spv", ".dxil"] : new[] { ".spv" })) {
+                var reflected = reflector.Read(bytecode: File.ReadAllBytes(path: Path.Combine(
+                    path1: SdfKernelSet.DefaultDirectory,
+                    path2: $"{stem}.comp{extension}"
+                )));
+
+                Assert.Null(@object: SdfKernelSet.InterfaceMismatch(kernel: kernel, reflected: reflected));
+                Assert.Contains(
+                    collection: reflected,
+                    filter: static binding => (binding.Name == ("passGroup" + SdfIsaHlsl.Stamp))
+                );
             }
-
-            var kernels = SdfKernelSet.Load(bytecodeExtension: ".spv", directory: passes, work: Work());
-
-            Assert.Equal(expected: foreign, actual: kernels.Fingerprint);
-            Assert.Contains(
-                actualString: Assert.Throws<InvalidOperationException>(testCode: kernels.RequireHostInstructionSet).Message,
-                expectedSubstring: "another instruction set"
-            );
-            SdfTestPipelines.Kernels().RequireHostInstructionSet();
-        } finally {
-            Directory.Delete(
-                path: directory,
-                recursive: true
-            );
         }
     }
+    // Both interfaces the kernels read carry this host's instruction set in their pass blocks' variable names.
     [Fact]
-    public void TheGeneratedIncludeRecordsTheHostsFingerprint() =>
-        Assert.Equal(expected: SdfIsaHlsl.Fingerprint, actual: SdfIsaHlsl.ReadFingerprint(include: SdfIsaHlsl.Generate()));
+    public void TheKernelInterfacesCarryTheHostsInstructionSetStamp() {
+        foreach (var layout in ((ReadOnlySpan<ShaderInterfaceLayout>)[SdfWorldInterfaces.WorldLayout, SdfWorldInterfaces.BrickBakeLayout])) {
+            Assert.Equal(expected: SdfIsaHlsl.Stamp, actual: layout.Interface.Stamp);
+            Assert.Equal(
+                expected: ("passGroup" + SdfIsaHlsl.Stamp),
+                actual: layout.Groups.Single(predicate: static group => (group.Group == ShaderInterfaceGroup.Pass)).BlockVariableName
+            );
+        }
 
-    // A kernel tree under a root: its passes directory, returned, and its instruction-set include beside it.
-    private static string Tree(string root, string include) {
-        var passes = Directory.CreateDirectory(path: SdfKernelSet.PassesDirectory(tree: root)).FullName;
+        Assert.Equal(expected: SdfIsaHlsl.StampOf(fingerprint: SdfIsaHlsl.FingerprintOf(include: SdfIsaHlsl.Generate())), actual: SdfIsaHlsl.Stamp);
+    }
+    // Kernels compiled against another instruction set, say one whose two opcodes trade values, carry another stamp, so
+    // no include beside them can make them pass for this host's.
+    [Fact]
+    public void AnInstructionSetWithTwoOpcodesSwappedCarriesAnotherStamp() {
+        var include = SdfIsaHlsl.Generate();
+        var opcode = new Regex(options: RegexOptions.Multiline, pattern: @"^(#define SDF_OP_(TRANSLATE|ROTATE) +)(\d+)u$");
+        var values = opcode.Matches(input: include).ToDictionary(elementSelector: static match => match.Groups[3].Value, keySelector: static match => match.Groups[2].Value);
+        var swapped = opcode.Replace(
+            evaluator: match => $"{match.Groups[1].Value}{values[((match.Groups[2].Value == "TRANSLATE") ? "ROTATE" : "TRANSLATE")]}u",
+            input: include
+        );
 
-        Directory.CreateDirectory(path: Path.GetDirectoryName(path: SdfKernelSet.IsaIncludeOf(passesDirectory: passes))!);
-        File.WriteAllText(contents: include, path: SdfKernelSet.IsaIncludeOf(passesDirectory: passes));
-
-        return passes;
+        Assert.Equal(expected: 2, actual: values.Count);
+        Assert.NotEqual(actual: swapped, expected: include);
+        Assert.NotEqual(expected: SdfIsaHlsl.Stamp, actual: SdfIsaHlsl.StampOf(fingerprint: SdfIsaHlsl.FingerprintOf(include: swapped)));
     }
 }
