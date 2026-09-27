@@ -8,7 +8,7 @@ using Puck.Maths;
 namespace Puck.World.Client;
 
 /// <summary>The cameras the views a world renders beside its own film from, which a hit on a screen showing a view
-/// continues through.</summary>
+/// continues through: a camera view's, and a session's in its destination's space.</summary>
 public interface IWorldViewCameras {
     /// <summary>Finds the camera a view last rendered from.</summary>
     /// <param name="view">The view's instance name.</param>
@@ -54,8 +54,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
     /// reports as its placements, so a hit walk continues from a view through a screen into its source;
     /// <see langword="null"/> reports none.</summary>
     public WorldScreenMappingSet? Screens { get; set; }
-    /// <summary>Gets or sets the cameras the views the world renders beside its own last filmed from, or
-    /// <see langword="null"/> for none.</summary>
+    /// <summary>Gets or sets the cameras the views the world renders beside its own last filmed from, sessions
+    /// included, or <see langword="null"/> for none.</summary>
     public IWorldViewCameras? ViewCameras { get; set; }
 
     /// <summary>Publishes the panes this frame's placements show, to <see cref="Panes"/> and <see cref="Picker"/>: one
@@ -217,8 +217,10 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
 
     /// <inheritdoc/>
     /// <remarks>Every view's world producer (<c>world</c>, <c>world$&lt;view&gt;</c>) and every camera view renders the one
-    /// world, so each reports the mappings <see cref="Screens"/> last published; any other instance, a session's included,
-    /// reports none, so a ray cast into it ends on its world.</remarks>
+    /// world, so each reports the mappings <see cref="Screens"/> last published; any other instance reports none, so a
+    /// ray cast into it ends on its world. A session (<c>session$&lt;screen&gt;</c>) reports none under the depth-one
+    /// policy: a projected destination's own screens bind dark (its view renders static placements and no screens), so
+    /// a walk through a portal ends in the destination's world, never in a screen inside it.</remarks>
     IReadOnlyList<SourceMapping> IRenderGraphHitScene.Placements(int instance) {
         if (
             (Screens is { } screens) &&
@@ -240,8 +242,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
     }
     /// <inheritdoc/>
     /// <remarks>A view's camera is the one its seat rendered from in the frame the panes were published for, a pane's
-    /// the named camera its row pairs, recorded by <see cref="SetCamera"/>, and a camera view's the one it last rendered
-    /// from (<see cref="ViewCameras"/>).</remarks>
+    /// the named camera its row pairs, recorded by <see cref="SetCamera"/>, and a camera view's or a session's the one it
+    /// last rendered from (<see cref="ViewCameras"/>), a session's in its destination's space.</remarks>
     bool IRenderGraphHitScene.TryCamera(int instance, out CameraSnapshot camera) {
         if (
             (m_runtime is { } runtime) &&

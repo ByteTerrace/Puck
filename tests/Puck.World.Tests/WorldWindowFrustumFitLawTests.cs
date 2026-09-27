@@ -24,13 +24,13 @@ namespace Puck.World.Tests;
 /// the binder composes frames the marker at exactly that image point.
 /// </summary>
 public sealed class WorldWindowFrustumFitLawTests {
-    private const string Destination = "tests/Puck.World.Canaries/portal-window/beyond.world.json";
+    internal const string Destination = "tests/Puck.World.Canaries/portal-window/beyond.world.json";
     private const string Local = "tests/Puck.World.Canaries/portal-window/fixture.world.json";
     private const float Tolerance = 2e-3f;
 
     // The destination's marker: a ball of radius 0.5 six units behind the arch.
-    private static readonly Vector3 Marker = new(x: 0f, y: 1.5f, z: -6f);
-    private static readonly Vector3[] Eyes = [
+    internal static readonly Vector3 Marker = new(x: 0f, y: 1.5f, z: -6f);
+    internal static readonly Vector3[] Eyes = [
         new(x: 1f, y: 1.6f, z: 9f),
         new(x: -1f, y: 1.6f, z: 9f),
         new(x: 0.4f, y: 2.1f, z: 3f),
@@ -50,7 +50,7 @@ public sealed class WorldWindowFrustumFitLawTests {
         return (source, destination);
     }
     // The screen row the door's glass face derives, as the presenter hands it to the binder.
-    private static WorldScreen DoorRow() {
+    internal static WorldScreen DoorRow() {
         var local = AuthoredGameFixtures.Load(relativePath: Local);
         var screen = DoorScreen(local: local);
 
@@ -65,7 +65,7 @@ public sealed class WorldWindowFrustumFitLawTests {
     }
     // The screen index the door's glass face is seated at.
     private static int DoorScreen(WorldDefinition local) => Assert.Single(collection: WorldFaceCatalog.For(definition: local).Rows).ScreenIndex;
-    private static CameraSnapshot Fit(Vector3 eye) {
+    internal static CameraSnapshot Fit(Vector3 eye) {
         var (source, destination) = Apertures();
 
         Assert.True(condition: WorldWindowFrustumFit.TryFitWindow(

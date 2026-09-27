@@ -69,6 +69,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     // to both the local eye and the border pair's two face rows) before the render graph renders this view.
     // Null (the default, and every non-window session's steady state) leaves Dress on the ordinary camera path below.
     private CameraSnapshot? m_windowOverride;
+    // The camera the last dressed frame renders from, which a hit on the session's image continues through.
+    private CameraSnapshot? m_dressedCamera;
 
     // Per-avatar movement-driven gait state, scratch reused across frames to keep packing allocation-free — the SAME
     // distance-driven approach Client.WorldSceneEmitter.PackDynamicTransforms uses, over this emitter's own
@@ -294,6 +296,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             width: width
         ));
 
+        m_dressedCamera = camera;
+
         return new SdfFrame(
             Program: program,
             ProgramChanged: programChanged,
@@ -466,6 +470,16 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// <param name="camera">The fitted camera apexed at the mapped eye, or <see langword="null"/> to use the
     /// ordinary projection.</param>
     public void SetWindowCamera(CameraSnapshot? camera) => m_windowOverride = camera;
+    /// <summary>Finds the camera the last frame <see cref="Dress"/> dressed renders from, in the destination's own
+    /// space: a window's fitted camera, its shear included, or the named or default projection. A hit on the session's
+    /// image continues through it into the destination.</summary>
+    /// <param name="camera">The camera when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> once a frame has been dressed.</returns>
+    public bool TryCamera(out CameraSnapshot camera) {
+        camera = m_dressedCamera.GetValueOrDefault();
+
+        return m_dressedCamera.HasValue;
+    }
     /// <summary>Writes three components, never their sum: the definition-delivery revision, the mirrored snapshot's
     /// declared-set/palette revision (<see cref="WorldSessionMirror.SnapshotRevision"/>, assigned from the wire and
     /// able to move down), and a counter that moves when a bound color the live build baked moves in the session's

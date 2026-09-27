@@ -519,10 +519,25 @@ internal sealed partial class WorldScreenBinder : IWorldViewCameras {
         return (Ok: true, Message: $"screen {index} showing camera '{camera.Name}'");
     }
     /// <inheritdoc/>
-    public bool TryCamera(string view, out CameraSnapshot camera) => m_viewCameras.TryGetValue(
-        key: view,
-        value: out camera
-    );
+    /// <remarks>A camera view's camera is the one it last filmed from; a session's, the one its last frame rendered from
+    /// in the destination's space (<see cref="WorldSessionSceneEmitter.TryCamera"/>), so a hit on a portal's window
+    /// continues into the destination along the ray the window rendered.</remarks>
+    public bool TryCamera(string view, out CameraSnapshot camera) {
+        if (m_viewCameras.TryGetValue(
+            key: view,
+            value: out camera
+        )) {
+            return true;
+        }
+
+        if (SessionFeedOf(name: view)?.Emitter is { } session) {
+            return session.TryCamera(camera: out camera);
+        }
+
+        camera = default;
+
+        return false;
+    }
 
     // Resolves the camera a registration films from this frame against the frame the world node renders, which it
     // captures first when no view has yet this frame: its anchor, then its rig. A view bound to an anchor that does not
