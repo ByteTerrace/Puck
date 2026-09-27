@@ -350,8 +350,8 @@ every textured mesh a frame draws into five mesh atlases, one per usage
 (`SdfMeshAtlas`): each mesh takes a rectangle aligned to 16 texels, so its
 stored blocks move into the atlases unchanged at every level, and the mesh
 region writes its vertices' texture coordinates moved onto that rectangle. The
-atlases are World-group members of the `sdf.world` interface, bound in the
-tables' one World set at group 1; a change to the textured meshes a frame
+atlases are World-group members of the `sdf.world` interface, bound with the
+tables in their World set of each ring slot at group 1; a change to the textured meshes a frame
 draws repacks them once the device is idle. At a textured mesh hit
 (`frame/sdf-mesh-textures.hlsli`) the hit passes interpolate the texture
 coordinate, choose the level whose texels match the pixel's footprint, blend

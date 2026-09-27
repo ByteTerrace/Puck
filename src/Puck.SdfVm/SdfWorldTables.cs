@@ -396,8 +396,9 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
             : null
         );
 
-        // The tables' pool: the ISA handshake's frame and pass sets, and with a brick pool the frame set the baker shares
-        // and one bake set per brick slot. The sets allocated from the pool are released with it.
+        // The tables' pool: the World set per ring slot, the ISA handshake's frame and pass sets, and with a brick pool the
+        // frame set the baker shares and one bake set per brick slot. The sets allocated from the pool are released with
+        // it.
         m_pool = m_bindings.CreatePool(
             name: NameOf(part: "descriptors"),
             sizes: DescriptorPoolSizes(brickPool: m_brickPoolEnabled)
@@ -419,17 +420,22 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
             descriptorSetLayoutHandle: worldGroups[((int)PassGroup)],
             poolHandle: m_pool
         );
-        // The World set, which the ISA handshake and every view's compute passes bind: the mesh atlases, the sampled
-        // filler until a frame draws a textured mesh (SdfWorldTables.MeshAtlas.cs).
-        m_worldSet = m_bindings.AllocateSet(
-            name: NameOf(detail: "world group", part: "mesh atlases"),
-            descriptorSetLayoutHandle: worldGroups[((int)WorldGroup)],
-            poolHandle: m_pool
-        );
-        WriteMeshAtlases(views: []);
+        // The World set per ring slot, which every view's compute passes and the ISA handshake bind, written the first time
+        // one is bound (WorldSet).
+        for (var slot = 0; (slot < FrameRingSize); slot++) {
+            m_worldSets[slot] = m_bindings.AllocateSet(
+                name: NameOf(
+                    detail: "world group",
+                    index: slot,
+                    part: "tables"
+                ),
+                descriptorSetLayoutHandle: worldGroups[((int)WorldGroup)],
+                poolHandle: m_pool
+            );
+        }
 
         // One sampler per filter; a screen samples its source through the one its row chooses and the glyph atlas through
-        // the nearest one. A pass writes them into its set (WriteShared).
+        // the nearest one. The World sets bind them (WriteWorldSet).
         foreach (var filter in Enum.GetValues<GpuSamplerFilter>()) {
             m_samplers[((int)filter)] = scope.Own(
                 handle: m_bindings.CreateSampler(filter: filter),

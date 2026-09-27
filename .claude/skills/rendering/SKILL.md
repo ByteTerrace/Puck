@@ -230,7 +230,7 @@ These are one-line cautions; the owning pages hold the derivations.
   (`WorldRenderSettings.DrawsBakes`); the engine is not ready until the
   schedule has reconciled and, while it draws them, settled. A baked
   mesh samples its textures from the mesh atlases, World-group members bound in
-  the tables' one World set (`SdfWorldTables.MeshAtlas.cs`,
+  the tables' World sets (`SdfWorldTables.MeshAtlas.cs`,
   `frame/sdf-mesh-textures.hlsli`). A baked placement's
   instances are camera-hidden (`SdfInstanceRange.CameraHidden`): the cull keeps
   them out of every camera mask, never out of the shadow or ambient gathers.
@@ -1469,7 +1469,9 @@ one-pass graph. A document pass reads its frame values, extent, config and ports
 only through its generated interface
 ([frame values, extent and ports](../../../docs/reference/shaders.md#frame-values-extent-and-ports)):
 the frame group at set 0 (`frameGroup`), the World group at set 1 when it
-declares `arrays` (their block, in ordinal name order), then its pass group at
+declares `arrays` (their block, in ordinal name order) or a package declares
+World-group resources (bound by the package's host in a set of its own: the SDF
+tables' World set per ring slot, `SdfWorldPackage.Tables`), then its pass group at
 set 3 (`passGroup`: extent, config in ordinal name order) followed by its ports,
 each reading as its resource's name in camel case or its `"as"`. Every pass
 block takes that one spelling (`ShaderFrameInterface.ForPass`): a package's

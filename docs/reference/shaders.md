@@ -142,7 +142,9 @@ descriptor set every frame:
   per-node region, and every pass binds the same constant buffer.
 - The World group, set 1, present only when the pass declares
   [arrays](#per-instance-overrides), whose block holds them in ordinal name
-  order.
+  order, or when an engine package declares World-group resources, which
+  follow the arrays and which the package's host binds as a set of its own
+  (the SDF engine's tables, one set per upload ring slot).
 - The pass group, set 3, whose block `passGroup` holds the pass's `extent` and
   then its config fields in ordinal name order, followed by its ports. Every
   pass block takes this one spelling (`ShaderFrameInterface.ForPass`): an
@@ -458,7 +460,8 @@ installs, with the pass's groups (`RenderGraphPackageGroups`): the instance's on
 descriptor pool, which holds a frame set and a pass set per frame slot for every
 pass, and each slot's frame and pass block buffers. The recorder allocates its
 sets from that pool against its own pipeline's group layouts
-(`RenderGraphPackageSets`). A recorder records into the command buffer it is
+(`RenderGraphPackageSets`); a set of any other group its package binds, such as
+the SDF tables' World set, is the package's own. A recorder records into the command buffer it is
 handed and never submits, waits or creates a pipeline. Each recording carries the pass block, which the node has filled
 with the extent and config and into which the recorder writes the values its
 package declares (`RenderGraphPackageRecording.PassBlock`, placed by

@@ -13,9 +13,10 @@ namespace Puck.SdfVm;
 /// (<see cref="ShaderFrameInterface.FrameGroupMembers"/>), written once a frame, then a pass block holding the extent and
 /// every value in ordinal name order, so a graph document whose config names the same values reads the same block.</para>
 /// <para><see cref="World"/> serves every per-view dispatch: sky, mask, beam, cull-args, primary, surface, ambient and
-/// the three views variants. Its members are the <c>sdf.world</c> package's (<see cref="SdfWorldPackage.Members"/>),
-/// and its pass group is one set per ring slot and view, whose block holds the view's render extent and the world
-/// values, and names the view the dispatch renders.</para>
+/// the three views variants. Its members are the <c>sdf.world</c> package's (<see cref="SdfWorldPackage.Members"/>): its
+/// World group is the residency's tables (<see cref="SdfWorldPackage.Tables"/>), one set per upload ring slot that every
+/// pass of every view binds, and its pass group one set per frame slot and pass, whose block holds the view's render
+/// extent and the frame's values.</para>
 /// <para><see cref="BrickBake"/> serves the carve-bake baker, the <c>sdf.bricks</c> pass: it binds the ring slot's frame
 /// set and one pass set per brick slot binding that slot's request buffer and the brick pool, whose block's extent is one
 /// slice as one row, the voxels one bake dispatch writes at most, with the slice ordinal pushed per dispatch.</para>
@@ -35,9 +36,10 @@ public static class SdfWorldInterfaces {
     /// in its <c>isa</c> directory and the pass entry points in <c>passes</c>.</summary>
     public const string KernelDirectory = "src/Puck.SdfVm/Assets/Shaders/Sdf";
 
-    /// <summary>Gets the frame data of every per-view SDF dispatch: the standard frame group, and a pass group whose block
-    /// holds the view's render extent and the world values, followed by every resource the dispatches bind. Its frame
-    /// block is written through <see cref="ShaderPipelineParameterLayout.WriteFrame"/>.</summary>
+    /// <summary>Gets the frame data of every per-view SDF dispatch: the standard frame group, the World group of the
+    /// residency's tables, and a pass group whose block holds the view's render extent and the frame's values, followed by
+    /// the view's own resources. Its frame block is written through
+    /// <see cref="ShaderPipelineParameterLayout.WriteFrame"/>.</summary>
     public static ShaderPipelineParameterLayout WorldParameters { get; } = ShaderPipelineParameterLayout.ForPackage(
         config: null,
         package: RenderGraphPackageCatalog.SdfWorld,
@@ -116,38 +118,26 @@ public static class SdfWorldInterfaces {
     /// <returns>The pushed index.</returns>
     public static uint MeshPushedIndex(uint view, uint draw) =>
         (view << MeshViewShift) | draw;
-    /// <summary>Returns the pass-group binding number of a member of <see cref="World"/> or
-    /// <see cref="BrickBake"/>.</summary>
+    /// <summary>Returns the binding number, in the group that declares it, of a resource member of <see cref="World"/>,
+    /// <see cref="BrickBake"/> or <see cref="Mesh"/>.</summary>
     /// <param name="layout">The interface's layout.</param>
     /// <param name="member">The member's name.</param>
     /// <returns>The binding number.</returns>
-    /// <exception cref="InvalidOperationException">The pass group declares no such resource.</exception>
+    /// <exception cref="InvalidOperationException">No group declares such a resource.</exception>
     public static uint BindingOf(ShaderInterfaceLayout layout, string member) {
         ArgumentNullException.ThrowIfNull(argument: layout);
 
         return ResourceOf(layout: layout, member: member).Binding;
     }
-    /// <summary>Returns the World-group binding number of a member of <see cref="World"/>: one of the mesh atlases
-    /// (<see cref="SdfWorldPackage.MeshAtlases"/>).</summary>
-    /// <param name="member">The member's name.</param>
-    /// <returns>The binding number.</returns>
-    /// <exception cref="InvalidOperationException">The World group declares no such resource.</exception>
-    public static uint WorldGroupBindingOf(string member) =>
-        ResourceOf(group: ShaderInterfaceGroup.World, layout: WorldLayout, member: member).Binding;
 
-    // The resource an interface member binds in a group, the pass group unless named. Binding updates run every frame, so
-    // this walks the immutable layout by index and allocates no predicate or enumerator.
-    internal static ShaderInterfaceResourceLayout ResourceOf(ShaderInterfaceLayout layout, string member, ShaderInterfaceGroup group = ShaderInterfaceGroup.Pass) {
+    // The resource an interface member binds, in whichever group declares it, since member names are unique across an
+    // interface. Binding updates run every frame, so this walks the immutable layout by index and allocates no predicate
+    // or enumerator.
+    internal static ShaderInterfaceResourceLayout ResourceOf(ShaderInterfaceLayout layout, string member) {
         var groups = layout.Groups;
 
         for (var groupIndex = 0; (groupIndex < groups.Count); groupIndex++) {
-            var candidate = groups[groupIndex];
-
-            if (candidate.Group != group) {
-                continue;
-            }
-
-            var resources = candidate.Resources;
+            var resources = groups[groupIndex].Resources;
 
             for (var index = 0; (index < resources.Count); index++) {
                 var resource = resources[index];
@@ -158,6 +148,6 @@ public static class SdfWorldInterfaces {
             }
         }
 
-        throw new InvalidOperationException(message: $"The {group} group declares no resource '{member}'.");
+        throw new InvalidOperationException(message: $"No group declares a resource '{member}'.");
     }
 }

@@ -2749,7 +2749,7 @@ Phase 3, the groups, follows phase 2:
 20. Done: the SDF engine is on groups. Its kernels read
     `sdf-world.interface.hlsli` and `sdf-bricks.interface.hlsli`,
     generated from `SdfWorldInterfaces` and owned by `puck shaders generate`,
-    and `SdfWorldPipelines.Build` creates every pipeline from its interface's
+    and the pass-pipeline cache creates every pipeline from its interface's
     layout, which the kernels bind by member name. Every per-view dispatch bound
     the ring slot's frame set and its view's views set until P14-6 gave each
     pass of a view's instance its own sets, whose block holds the world values,
@@ -4022,7 +4022,7 @@ instance joined to the views by buffer edges. The view writes its float working
 color; the root graph tonemaps and the display encode quantizes (step 10). There is no upload pass, because uploads go
 through `GpuRegion`, and no composite, because the engine has none. Group 0 is the
 frame, group 1 the world (program words and every per-world table, screens,
-decals, the glyph atlas, the brick pool), group 2 the instance (empty and
+decals, the glyph atlas, the brick pool, the mesh atlases), group 2 the instance (empty and
 reserved), and group 3 the pass (its block, holding the frame's values, then
 masks, tiles, arguments, bounds, visibility, shadow, color, and the screen
 sources, an image array read through a sampler array). Each frame source's half
@@ -4161,12 +4161,14 @@ item 2 landed.
    - The mesh pass is a conditional package pass
      (`IRenderGraphPackageRecorder.Skips`): on a frame that draws no mesh it
      records nothing, and neither do the barriers of its target and depth.
-   Still to land: the world tables bind through the World-group set the bake
-   atlases already occupy (group 1), owned by the tables per ring slot
-   and written once, which every part binds. Today each compute part writes the
-   tables into its own pass set whenever the frame slot and the upload ring
-   slot pair differently, which is every frame, since the node has three frame
-   slots and the ring two.
+   - The world's tables, the brick pool, the glyph atlas, the samplers and the
+     mesh atlases are the `sdf.world` interface's World group
+     (`SdfWorldPackage.Tables`), bound at group 1 through one set per upload
+     ring slot that the tables own and write once (`SdfWorldTables.WorldSet`).
+     Every compute part of every view and the ISA handshake bind it, and it is
+     rewritten only when what it binds moves (a region's growth, the glyph
+     atlas, the mesh atlases), after the device is idle. A pass set holds only
+     the view's own storages, output, screens and mesh target.
 9. Landed with step 6, the cadence as the scheduler's: `SdfWorldPasses` asks
    each residency whether a view's latest render stands
    (`IRenderGraphPackageFactory.IsUnchanged`), and the runtime declares that
@@ -4468,9 +4470,9 @@ root graph's own passes (P14-12) needed none of them and have landed, and so hav
 the SDF pass interfaces in the one pass-block spelling (P14-5), the
 cutover with the cadence as the scheduler's (P14-6, P14-9), the generated frame
 block (P14-7), and P14-8's kernels as pass-pipeline cache entries, one command
-list per instance per frame slot and the conditional mesh pass. P14-8's last
-part moves the world tables into the group-1 set P17's texture draw added for the
-bake atlases. P15 and P16 both follow P14: P15 also needs P4, and
+list per instance per frame slot, the conditional mesh pass, and the world tables
+bound through the group-1 set P17's texture draw added for the bake atlases, one
+per upload ring slot. P15 and P16 both follow P14: P15 also needs P4, and
 P16's display output landed with P14-10's float working targets; only its HDR
 desktop capture and the HDR-display checks remain.
 P17's CPU half, the bakes and their texture codecs, has landed, and so have
@@ -4489,9 +4491,9 @@ and a bound member and an overridden member compose by the rule
 [the decisions register](../decisions/rendering.md) states.
 
 The SDF engine's groups (P7b-20), P12b-2, P4-2c, P11b-13, P14-2 and P14-5 have
-landed, and so have P14-6, P14-7, P14-9, P14-10 and the first parts of P14-8, so the
-longest remaining chain runs P14-8's world set and P14-11, then the rest
-of P14-13, and ends with P15. P16's HDR desktop capture follows P14-10, and a
+landed, and so have P14-6, P14-7, P14-8, P14-9 and P14-10, so the longest
+remaining chain runs P14-11, then the rest of P14-13, and ends with P15.
+P16's HDR desktop capture follows P14-10, and a
 bake's textures (P17) come before P6's choice between a bake and the field.
 
 ## Deferred to the end

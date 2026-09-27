@@ -8,12 +8,12 @@ namespace Puck.SdfVm;
 // The ISA handshake: every per-view kernel of the loaded set, dispatched once in report mode against a pass set of the
 // tables' own pool, writes the ISA version it was built against into a one-pixel report the host reads back and checks
 // (SdfShaderSetVerification). The beam writes its word into a scratch cull buffer the hit kernels read, so the report
-// runs the beam first. The set binds the tables' ring slot 0 and scratch sized for one tile of one view.
+// runs the beam first. The handshake binds the tables' World set of ring slot 0 and a pass set of scratch sized for one
+// tile of one view.
 public sealed partial class SdfWorldTables {
     // The handshake's frame and pass sets, allocated from the tables' pool once and rewritten by each handshake.
     private readonly nint m_isaFrameSet;
     private readonly nint m_isaPassSet;
-    private readonly nint m_worldSet;
 
     private ReadOnlyMemory<byte> DispatchIsaReport(IGpuComputePipeline pipeline, IGpuImage reportImage, IGpuImage sampledImage, IGpuSurfaceReadback readback, IGpuBuffer tiles, bool initializeImages) {
         var commandBuffer = m_commandPools[0].CommandBufferHandle;
@@ -153,7 +153,7 @@ public sealed partial class SdfWorldTables {
         recorder.BindDescriptorSet(
             bindPoint: GpuBindPoint.Compute,
             commandBufferHandle: commandBuffer,
-            descriptorSetHandle: m_worldSet,
+            descriptorSetHandle: WorldSet(slot: 0),
             group: WorldGroup,
             pipelineLayoutHandle: pipeline.LayoutHandle
         );
@@ -235,11 +235,6 @@ public sealed partial class SdfWorldTables {
             bufferHandle: passBlock.BufferHandle,
             bufferSize: passBlock.SizeBytes,
             descriptorSetHandle: m_isaPassSet
-        );
-        WriteShared(
-            glyphAtlas: sampledImage.ImageViewHandle,
-            set: m_isaPassSet,
-            slot: 0
         );
         WriteWorldBuffer(buffer: tiles, member: SdfWorldPackage.Tiles, set: m_isaPassSet);
         WriteWorldBuffer(buffer: tiles, member: SdfWorldPackage.TilesWritten, set: m_isaPassSet);
