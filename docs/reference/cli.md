@@ -2783,7 +2783,8 @@ own count.
 ```text
 puck lengths                  rewrite FileLengths.json from the tree: remove stale entries, lower fallen ones;
                               refuses (exit 2, naming the file) to raise a recorded count or record a new file
-puck lengths --check          write nothing; report stale, risen, and unrecorded-over-ceiling files; exit 1 on any
+puck lengths --check          write nothing; report a ledger not in its canonical form, and stale, risen, and
+                              unrecorded-over-ceiling files; exit 1 on any
 puck lengths --ceiling <n>    lower the ceiling to n and record every file over it at its current count
 puck comment-smells [--check | --ceiling <n>]
                               the same three forms over CommentSmells.json
@@ -2792,6 +2793,11 @@ puck comment-smells [--check | --ceiling <n>]
 Splitting a recorded file, or rewriting its smelly comments, is the expected way to change a ledger: shrink the
 file, run the verb, and the entry lowers or disappears. A ceiling only falls. `--ceiling` refuses a raise, and it
 creates a missing ledger.
+
+Each ledger has one spelling, the one its verb writes: entries in ordinal key order, four-space indentation, and
+one final line feed. `--check` reports a ledger whose bytes differ from that form as drift, even when every count
+holds, so a hand edit that reorders or respaces an entry fails the check rather than churning the next rewrite.
+Running the verb without `--check` rewrites the ledger in its canonical form.
 
 ## `puck baselines`—test baselines
 
