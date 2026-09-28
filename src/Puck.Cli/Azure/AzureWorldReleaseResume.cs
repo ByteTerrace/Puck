@@ -64,7 +64,8 @@ internal static partial class AzureCommand {
                         context.Outputs,
                         "worldSiloStorageEndpoint"
                     ))),
-                    context.Owner
+                    context.Owner,
+                    context.Clock
                 ),
                 source,
                 candidate,

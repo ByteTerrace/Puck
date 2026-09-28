@@ -274,7 +274,8 @@ public sealed class WorldReleaseFixtureArchiveLawTests {
     private static async Task<(WorldAuthorityOperationReceipt Receipt, WorldAuthorityReceiptSnapshot History)> CaptureReceiptsAsync(IObjectBlobStore blobs, ObjectStorageTarget target, Guid owner, string world, CancellationToken token) {
         var authority = new WorldAuthorityBlobStore(
             store: blobs,
-            target: target
+            target: target,
+            timeProvider: new VirtualClock()
         );
         var identity = new WorldAuthorityIdentity(
             Owner: owner,

@@ -29,7 +29,8 @@ public sealed class WorldAuthorityReceiptSnapshotLawTests {
         var target = new DirectoryObjectStorageTarget(directory.RootPath);
         var store = new WorldAuthorityBlobStore(
             store: blobs,
-            target: target
+            target: target,
+            timeProvider: new VirtualClock()
         );
         var identity = new WorldAuthorityIdentity(
             Owner: Guid.NewGuid(),
@@ -85,7 +86,8 @@ public sealed class WorldAuthorityReceiptSnapshotLawTests {
 
         var snapshot = await new WorldAuthorityBlobStore(
             store: blobs,
-            target: target
+            target: target,
+            timeProvider: new VirtualClock()
         ).CaptureReceiptSnapshotAsync(
             identity,
             selected,
@@ -238,7 +240,8 @@ public sealed class WorldAuthorityReceiptSnapshotLawTests {
         var target = new DirectoryObjectStorageTarget(directory.RootPath);
         var store = new WorldAuthorityBlobStore(
             store: blobs,
-            target: target
+            target: target,
+            timeProvider: new VirtualClock()
         );
         var identity = new WorldAuthorityIdentity(
             Owner: Guid.NewGuid(),

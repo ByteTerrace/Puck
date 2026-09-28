@@ -337,7 +337,8 @@ public sealed class WorldReleaseGroupTests {
         var document = Fixtures.BuildDocument() with { HostRaw = Fixtures.StandardHost with { Authority = "localhost:7825", Listen = null, Presentation = WorldHostPresentation.None } };
         var backend = new WorldAuthorityBlobStore(
             store: store,
-            target: target
+            target: target,
+            timeProvider: new VirtualClock()
         );
 
         Assert.True(condition: (await backend.PublishDefinitionAsync(
@@ -385,7 +386,8 @@ public sealed class WorldReleaseGroupTests {
             definition,
             store,
             routing,
-            target
+            target,
+            timeProvider: new VirtualClock()
         );
         using var instances = host.Instances;
         var activation = host.ActivateAsync(
@@ -432,7 +434,8 @@ public sealed class WorldReleaseGroupTests {
             definition,
             store,
             replacementRouting,
-            target
+            target,
+            timeProvider: new VirtualClock()
         );
         using var replacementInstances = replacement.Instances;
         var replacementActivation = replacement.ActivateAsync(
@@ -488,7 +491,8 @@ public sealed class WorldReleaseGroupTests {
         var document = Fixtures.BuildDocument() with { HostRaw = Fixtures.StandardHost with { Authority = "localhost:7825", Listen = null, Presentation = WorldHostPresentation.None } };
         var backend = new WorldAuthorityBlobStore(
             store: store,
-            target: target
+            target: target,
+            timeProvider: new VirtualClock()
         );
 
         Assert.True(condition: (await backend.PublishDefinitionAsync(
@@ -570,7 +574,8 @@ public sealed class WorldReleaseGroupTests {
             definition,
             store,
             routing,
-            target
+            target,
+            timeProvider: new VirtualClock()
         );
         using var instances = host.Instances;
         var activation = host.ActivateAsync(

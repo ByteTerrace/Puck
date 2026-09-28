@@ -8,10 +8,16 @@ public sealed record WorldReleaseRestorePreview(WorldReleaseFixtureManifest Poin
     IReadOnlyDictionary<string, ulong> CurrentDurableTicks);
 /// <summary>Validates and applies intentional group rewind through the ordinary private release transaction.
 /// Rewind discards gameplay, while current receipts and authority generations remain monotonic.</summary>
-public sealed class WorldReleaseRestore(IObjectBlobStore blobs, ObjectStorageTarget target, Guid owner) {
+/// <param name="blobs">The blob store the group's releases, points and authority roots live in.</param>
+/// <param name="target">The storage target they live under.</param>
+/// <param name="owner">The owner of the group's worlds.</param>
+/// <param name="timeProvider">The host clock the authority store's <see cref="WorldAuthorityBlobStore.OperationTimeout"/>
+/// runs on; <see langword="null"/> is <see cref="TimeProvider.System"/>.</param>
+public sealed class WorldReleaseRestore(IObjectBlobStore blobs, ObjectStorageTarget target, Guid owner, TimeProvider? timeProvider = null) {
     private readonly WorldAuthorityBlobStore m_authority = new(
         store: blobs,
-        target: target
+        target: target,
+        timeProvider: timeProvider
     );
     private readonly WorldReleaseArchive m_releases = new(
         blobs,
