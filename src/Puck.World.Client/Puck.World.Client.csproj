@@ -25,4 +25,9 @@
     <ItemGroup>
         <Using Include="Puck.State" />
     </ItemGroup>
+    <ItemGroup>
+        <!-- The committed floor recording is the dynamic-resolution budget's only numeric source. -->
+        <EmbeddedResource Include="..\..\tests\Puck.Counters\counters.ceilings.json" LogicalName="Puck.World.Client.DynamicResolution.Ceilings.json" />
+        <EmbeddedResource Include="..\..\tests\Puck.Counters\counters.world.json" LogicalName="Puck.World.Client.DynamicResolution.Workload.json" />
+    </ItemGroup>
 </Project>

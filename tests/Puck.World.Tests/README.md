@@ -36,6 +36,14 @@ the real instance host: a body inside the deadband retains its authority, and on
 beyond it transfers within a bounded number of ticks. `AuthoredAdjacencyHysteresisLawTests`
 checks that reciprocal documents cannot disagree about that deadband.
 
+`WorldDynamicResolutionLawTests` drives confirmed-present intervals and
+completed march counters through the same presentation controller. It pins
+continuous demand, shared extent quantization, fresh-sample gating, and
+allocation-free steady updates. `WorldDynamicResolutionBudgetLawTests` reads
+the committed backend recordings and checks their quantized pixel-area
+normalization. `WorldDynamicResolutionLeverLawTests` checks boot defaults,
+console and quality writes, and session-save folding without a device.
+
 ## Keep the feedback loop short
 
 Use the smallest fixture that exercises the behavior under test:

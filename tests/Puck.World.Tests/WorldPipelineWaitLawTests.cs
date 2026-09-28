@@ -213,6 +213,8 @@ public sealed class WorldPipelineWaitLawTests : IDisposable {
     [Fact]
     public void ReconcilingKeepsTheNodeOfARowThatStaysAndRemovingTheRowFailsItsWaitAsRemoved() {
         var node = m_runtime.Entries["ink"].Node;
+        Assert.Same(expected: node, actual: m_runtime.WorkOf(instance: "ink"));
+        Assert.Null(@object: m_runtime.WorkOf(instance: "missing"));
         var hold = m_runtime.ArmWait(
             name: "ink",
             phase: WorldPipelinePhase.Captured,
@@ -237,6 +239,7 @@ public sealed class WorldPipelineWaitLawTests : IDisposable {
             actual: m_runtime.Entries["ink"].Node,
             expected: node
         );
+        Assert.Same(expected: node, actual: m_runtime.WorkOf(instance: "ink"));
         Assert.Equal(
             actual: (m_runtime.Entries["ink"].ClockScale, m_runtime.Entries.Count, m_instances.Reconfigurations),
             expected: (0.5f, 2, 2)
@@ -253,6 +256,7 @@ public sealed class WorldPipelineWaitLawTests : IDisposable {
             expected: ["[pipeline: ink wait captured failed: the instance was removed]"]
         );
         Assert.Null(@object: m_instances.NodeOf(instance: "ink"));
+        Assert.Null(@object: m_runtime.WorkOf(instance: "ink"));
     }
     // A slot showing a pane whose graph never installs places nothing, so the root draws the world beneath the slot and
     // nothing the root shows waits on the pane; the same pane places while a compilation is still on its way.
