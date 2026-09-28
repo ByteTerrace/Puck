@@ -7,15 +7,17 @@ public sealed partial class WorldFramePresenter {
     /// views of building seats draw.</summary>
     public WorldEditorSeats Editor { get; }
 
-    // The grid a seat's view draws this frame: none unless the seat builds; otherwise its grid over the document's, on the
-    // working plane its mode names (a fixed height, or the surface under its pointer when following, else the base of
-    // the placement it last put down), with its captured reference's own lattice.
+    // The grid a seat's view draws this frame, in the world the seat is presented in: none unless the seat builds;
+    // otherwise its grid over that world's editor section, on the working plane its mode names (a fixed height, or the
+    // surface under its pointer when following, else the base of the placement it last put down there), with the
+    // lattice of the reference it captured there.
     private GridOverlayState SeatGrid(int slot) {
         if (!m_seatBindings.IsBuilding(slot: slot)) {
             return GridOverlayState.Hidden;
         }
 
-        var definition = m_client.Definition;
+        var world = m_continuum.Route(slot: slot).Endpoint.Identity;
+        var definition = (m_continuum.PresentedElsewhere(slot: slot)?.Definition ?? m_client.Definition);
         var grid = Editor.GridOf(document: definition.Editor, slot: slot);
 
         if (!grid.Visible) {
@@ -27,16 +29,16 @@ public sealed partial class WorldFramePresenter {
 
         if (grid.Mode == WorldEditorGridMode.Follow) {
             if (Editor.PointerProbe?.Invoke(arg: slot) is { } hit) {
-                Editor.Follow(height: hit.Point.Y, slot: slot);
+                Editor.Follow(height: hit.Point.Y, slot: slot, world: world);
             }
 
-            planeY = (Editor.FollowedHeightOf(slot: slot) ?? (BaseOf(definition: definition, id: Editor.CurrentOf(slot: slot)) ?? planeY));
+            planeY = (Editor.FollowedHeightOf(slot: slot, world: world) ?? (BaseOf(definition: definition, id: Editor.CurrentOf(slot: slot, world: world)) ?? planeY));
         }
 
         return WorldEditorGeometry.Overlay(
             grid: grid,
             planeY: planeY,
-            reference: (((Editor.ReferenceOf(slot: slot) is { } id) && (WorldDefinitionRows.FindPlacement(id: id, placements: definition.Placements) is { } placement))
+            reference: (((Editor.ReferenceOf(slot: slot, world: world) is { } id) && (WorldDefinitionRows.FindPlacement(id: id, placements: definition.Placements) is { } placement))
                 ? WorldEditorGeometry.ReferenceOf(definition: definition, pitch: grid.ResolvedPitch, placement: placement)
                 : null),
             snap: snap

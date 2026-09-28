@@ -451,9 +451,18 @@ the grid pitch, or along the captured reference's axes by its lattice; with
 snapping on, the moved axis lands on the lattice. A placement whose position is
 resolved through another row (a parent, an attachment, a board) is refused by
 name. Each of the three verbs submits one `placements` upsert through the
-section upsert `world.row.set` uses, under the issuing principal and the shared
+section upsert `world.row.set` uses, under the issuing principal and a
 row-edit window guard, so the grant check, revalidation, journal and
 `world.undo` govern it exactly as they govern every row edit.
+
+Editing follows the seat. Every build verb acts on the world the seat is
+presented in: after a seat crosses a portal into a nested world, its grid reads
+that world's `editor` section, its surface queries march that world's scene,
+and its edits are submitted through that world's own link, whose admission
+accepts them or refuses them by name. They never touch the world the seat left.
+A seat's selection (its current placement, its reference, the height its
+following plane found) belongs to the world it was made in, so a bound nudge
+after a crossing names nothing until the seat selects again there.
 
 The grid rides each view's pass block (`SdfViewSnapshot.Grid`), so one seat can
 build on a grid while another plays. [The editor plan](../../docs/plans/editor.md)

@@ -153,18 +153,34 @@ public sealed class WorldRoutedScene : ISdfFrameDresser {
     /// <param name="ray">The ray, in the scene world's own coordinates, cast through that view's camera.</param>
     /// <param name="point">The point the ray meets, when this returns <see langword="true"/>.</param>
     /// <returns><see langword="true"/> when the last dressed frame carries the view and the ray proves a surface.</returns>
-    public bool TrySurface(int view, SourceRay ray, out FixedVector3 point) {
+    public bool TrySurface(int view, SourceRay ray, out FixedVector3 point) => TrySurface(
+        normal: out _,
+        point: out point,
+        ray: ray,
+        view: view
+    );
+    /// <summary>Finds the surface a ray cast through a view of the scene meets, as
+    /// <see cref="TrySurface(int, SourceRay, out FixedVector3)"/> does, with the surface's unit normal there, or zero
+    /// where the static field gives none.</summary>
+    /// <param name="view">The view's index in the scene's frames.</param>
+    /// <param name="ray">The ray, in the scene world's own coordinates, cast through that view's camera.</param>
+    /// <param name="point">The point the ray meets, when this returns <see langword="true"/>.</param>
+    /// <param name="normal">The surface's unit normal at the point, when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when the last dressed frame carries the view and the ray proves a surface.</returns>
+    public bool TrySurface(int view, SourceRay ray, out FixedVector3 point, out Vector3 normal) {
         if (!TryCamera(
             camera: out var camera,
             view: view
         )) {
             point = default;
+            normal = Vector3.Zero;
 
             return false;
         }
 
         return m_emitter.TrySurface(
             from: camera.Position,
+            normal: out normal,
             point: out point,
             ray: ray
         );

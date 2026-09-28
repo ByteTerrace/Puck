@@ -585,14 +585,30 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     );
     /// <summary>Finds the surface a ray meets among the destination's static placements, as <see cref="TrySurface(SourceRay, out FixedVector3)"/>
     /// does, with the far distance measured from the position of the camera the ray was cast through: one view of a frame
-    /// that several views share (<see cref="WorldRoutedScene.TrySurface"/>).</summary>
+    /// that several views share (<see cref="WorldRoutedScene.TrySurface(int, SourceRay, out FixedVector3)"/>).</summary>
     /// <param name="ray">The ray, in the destination's space.</param>
     /// <param name="from">The position of the camera the ray was cast through, which the far distance is measured from.</param>
     /// <param name="point">The point the ray meets, in the destination's space, when this returns <see langword="true"/>.</param>
     /// <returns><see langword="true"/> when a frame has been dressed, the evaluator admits the static placements'
     /// program, and the ray proves a surface within the far distance.</returns>
-    public bool TrySurface(SourceRay ray, Vector3 from, out FixedVector3 point) {
+    public bool TrySurface(SourceRay ray, Vector3 from, out FixedVector3 point) => TrySurface(
+        from: from,
+        normal: out _,
+        point: out point,
+        ray: ray
+    );
+    /// <summary>Finds the surface a ray meets among the destination's static placements, as
+    /// <see cref="TrySurface(SourceRay, Vector3, out FixedVector3)"/> does, with the surface's unit normal there: the
+    /// static field's gradient, or zero where the field gives none.</summary>
+    /// <param name="ray">The ray, in the destination's space.</param>
+    /// <param name="from">The position of the camera the ray was cast through, which the far distance is measured from.</param>
+    /// <param name="point">The point the ray meets, in the destination's space, when this returns <see langword="true"/>.</param>
+    /// <param name="normal">The surface's unit normal at the point, when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when a frame has been dressed, the evaluator admits the static placements'
+    /// program, and the ray proves a surface within the far distance.</returns>
+    public bool TrySurface(SourceRay ray, Vector3 from, out FixedVector3 point, out Vector3 normal) {
         point = default;
+        normal = Vector3.Zero;
 
         if ((m_lastProgram is not { } program) || (m_dressedDefinition is not { } definition)) {
             return false;
@@ -638,6 +654,12 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         }
 
         point = (hit.Point - FixedPosition.Zero);
+
+        if (field.TryFieldGradient(gradient: out var gradient, position: hit.Point)) {
+            var unit = Vector3.Normalize(value: gradient.ToVector3());
+
+            normal = (float.IsFinite(f: unit.X) ? unit : Vector3.Zero);
+        }
 
         return true;
     }

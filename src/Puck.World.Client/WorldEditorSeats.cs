@@ -32,10 +32,10 @@ public sealed class WorldEditorSeats {
     /// when the pointer is over its view, otherwise through the middle of its view; <see langword="null"/> when the seat
     /// presents no view.</summary>
     public Func<int, WorldEditorRay?>? AimProbe { get; set; }
-    /// <summary>Gets or sets the probe the presentation asks where a ray first meets the world's solid surfaces within a
-    /// distance in world units; it answers <see langword="null"/> when the ray meets none, or the presentation has no
-    /// queryable field.</summary>
-    public Func<WorldEditorRay, float, WorldEditorPointerHit?>? SurfaceProbe { get; set; }
+    /// <summary>Gets or sets the probe the presentation asks where a ray first meets the solid surfaces of the world a
+    /// seat is presented in, by slot, ray (in that world's coordinates) and distance in world units; it answers
+    /// <see langword="null"/> when the ray meets none, or the presentation has no queryable field for that world.</summary>
+    public Func<int, WorldEditorRay, float, WorldEditorPointerHit?>? SurfaceProbe { get; set; }
     /// <summary>Gets or sets the probe that answers whether a seat's principal may edit placements, by slot;
     /// <see langword="null"/> answers that every seat may.</summary>
     public Func<int, bool>? EditProbe { get; set; }
@@ -92,21 +92,30 @@ public sealed class WorldEditorSeats {
             )
             : snap);
     }
-    /// <summary>Returns the placement a seat's object grid and reference snapping align to, or <see langword="null"/>
-    /// for none.</summary>
-    /// <param name="slot">The seat.</param>
+    /// <summary>Returns the placement a seat's object grid and reference snapping align to in a world, or
+    /// <see langword="null"/> for none: a reference captured in another world does not reach this one.</summary>
+    /// <param name="slot">The seat, zero-based.</param>
+    /// <param name="world">The world's instance name, as the seat's authority route names it.</param>
     /// <returns>The placement's id.</returns>
-    public string? ReferenceOf(int slot) => At(slot: slot).Reference;
-    /// <summary>Returns the placement a seat last put down or moved, which a bound nudge or turn acts on, or
-    /// <see langword="null"/> for none.</summary>
-    /// <param name="slot">The seat.</param>
+    public string? ReferenceOf(int slot, string world) => (At(slot: slot).InWorld(world: world)
+        ? At(slot: slot).Reference
+        : null);
+    /// <summary>Returns the placement a seat last put down or moved in a world, which a bound nudge or turn acts on, or
+    /// <see langword="null"/> for none: a selection made in another world does not reach this one.</summary>
+    /// <param name="slot">The seat, zero-based.</param>
+    /// <param name="world">The world's instance name, as the seat's authority route names it.</param>
     /// <returns>The placement's id.</returns>
-    public string? CurrentOf(int slot) => At(slot: slot).Current;
-    /// <summary>Returns the height the seat's working plane last followed, or <see langword="null"/> when it has
-    /// followed nothing yet.</summary>
-    /// <param name="slot">The seat.</param>
+    public string? CurrentOf(int slot, string world) => (At(slot: slot).InWorld(world: world)
+        ? At(slot: slot).Current
+        : null);
+    /// <summary>Returns the height the seat's working plane last followed in a world, or <see langword="null"/> when
+    /// it has followed nothing there yet.</summary>
+    /// <param name="slot">The seat, zero-based.</param>
+    /// <param name="world">The world's instance name, as the seat's authority route names it.</param>
     /// <returns>The height, in world units.</returns>
-    public float? FollowedHeightOf(int slot) => At(slot: slot).FollowedHeight;
+    public float? FollowedHeightOf(int slot, string world) => (At(slot: slot).InWorld(world: world)
+        ? At(slot: slot).FollowedHeight
+        : null);
     /// <summary>Returns whether a seat's principal may not edit placements, which its build bar badges.</summary>
     /// <param name="slot">The seat, zero-based.</param>
     /// <returns><see langword="true"/> when <see cref="EditProbe"/> refuses the seat.</returns>
@@ -181,25 +190,30 @@ public sealed class WorldEditorSeats {
         At(slot: slot).SurfaceSnap = surface;
         Moved();
     }
-    /// <summary>Sets or clears the placement a seat's object grid and reference snapping align to.</summary>
+    /// <summary>Sets or clears the placement a seat's object grid and reference snapping align to in a world, forgetting
+    /// the seat's selection in any other world.</summary>
     /// <param name="slot">The seat, zero-based.</param>
+    /// <param name="world">The world's instance name, as the seat's authority route names it.</param>
     /// <param name="placement">The placement's id, or <see langword="null"/> to clear it.</param>
-    public void SetReference(int slot, string? placement) {
-        At(slot: slot).Reference = placement;
+    public void SetReference(int slot, string world, string? placement) {
+        At(slot: slot).Enter(world: world).Reference = placement;
         Moved();
     }
-    /// <summary>Sets the placement a seat last put down or moved.</summary>
+    /// <summary>Sets the placement a seat last put down or moved in a world, forgetting the seat's selection in any
+    /// other world.</summary>
     /// <param name="slot">The seat, zero-based.</param>
+    /// <param name="world">The world's instance name, as the seat's authority route names it.</param>
     /// <param name="placement">The placement's id, or <see langword="null"/> for none.</param>
-    public void SetCurrent(int slot, string? placement) {
-        At(slot: slot).Current = placement;
+    public void SetCurrent(int slot, string world, string? placement) {
+        At(slot: slot).Enter(world: world).Current = placement;
         Moved();
     }
-    /// <summary>Records the height a seat's following working plane rests at.</summary>
+    /// <summary>Records the height a seat's following working plane rests at in a world.</summary>
     /// <param name="slot">The seat, zero-based.</param>
+    /// <param name="world">The world's instance name, as the seat's authority route names it.</param>
     /// <param name="height">The height, in world units.</param>
-    public void Follow(int slot, float height) {
-        var seat = At(slot: slot);
+    public void Follow(int slot, string world, float height) {
+        var seat = At(slot: slot).Enter(world: world);
 
         if (seat.FollowedHeight != height) {
             seat.FollowedHeight = height;
@@ -245,5 +259,24 @@ public sealed class WorldEditorSeats {
         public string? Reference { get; set; }
         public bool? SnapEnabled { get; set; }
         public bool? SurfaceSnap { get; set; }
+        // The world the selection (current placement, reference, followed height) was made in.
+        public string? World { get; private set; }
+
+        // Makes `world` the selection's world, forgetting a selection made in another.
+        public Seat Enter(string world) {
+            if (!InWorld(world: world)) {
+                Current = null;
+                FollowedHeight = null;
+                Reference = null;
+                World = world;
+            }
+
+            return this;
+        }
+        public bool InWorld(string world) => string.Equals(
+            a: World,
+            b: world,
+            comparisonType: StringComparison.Ordinal
+        );
     }
 }

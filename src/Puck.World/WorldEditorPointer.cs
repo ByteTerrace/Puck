@@ -8,13 +8,18 @@ namespace Puck.World;
 
 /// <summary>Answers where a seat aims, for the editor: the ray through the seat's pointer when it is over the seat's view,
 /// otherwise through the middle of the view, cast through the camera the view last presented
-/// (<see cref="WorldSeatViewports"/>, <see cref="SourceRay.Through"/>); and the surface under the pointer, that ray
-/// marched through the client's static field (<see cref="WorldClient.StaticField"/>) out to the world's far distance.
-/// A host with no pointer (offscreen) aims every seat through the middle of its view. Presentation only.</summary>
+/// (<see cref="WorldSeatViewports"/>, <see cref="SourceRay.Through"/>); and the surface a ray meets in the world the seat
+/// is presented in: the scene of the world it crossed into (<see cref="WorldFramePresenter.TrySeatScene"/>,
+/// <see cref="WorldRoutedScene.TrySurface(int, SourceRay, out FixedVector3, out Vector3)"/>), else the client's static
+/// field (<see cref="WorldClient.StaticField"/>) out to the world's far distance. A host with no pointer (offscreen) aims
+/// every seat through the middle of its view. Presentation only.</summary>
 /// <param name="viewports">The per-seat views the presentation publishes.</param>
-/// <param name="client">The client whose static field the ray marches.</param>
+/// <param name="client">The client whose static field the ray marches for a seat presented here.</param>
 /// <param name="pointer">The pointer store, or <see langword="null"/> for a host without one.</param>
-public sealed class WorldEditorPointer(WorldSeatViewports viewports, WorldClient client, WorldPointer? pointer = null) {
+/// <param name="presenter">Resolves the presenter whose routed scenes answer for a seat presented elsewhere, or
+/// <see langword="null"/> for a host that presents every seat here. Resolved when a query runs, since the presenter holds
+/// the editor seats this pointer answers for.</param>
+public sealed class WorldEditorPointer(WorldSeatViewports viewports, WorldClient client, WorldPointer? pointer = null, Func<WorldFramePresenter>? presenter = null) {
     private static readonly Vector2 Middle = new(value: 0.5f);
 
     private WorldEditorRay? Through(int slot, bool pointerOnly) {
@@ -84,22 +89,41 @@ public sealed class WorldEditorPointer(WorldSeatViewports viewports, WorldClient
     public WorldEditorPointerHit? Probe(int slot) => ((Through(pointerOnly: true, slot: slot) is { } ray)
         ? Surface(
             maxDistance: WorldRenderFarDistance.Resolve(defaults: client.Definition.Render),
-            ray: ray
+            ray: ray,
+            slot: slot
         )
         : null);
-    /// <summary>Returns where a ray first meets the client's static field, or <see langword="null"/> when it meets
-    /// nothing within the distance or the client has no static field.</summary>
-    /// <param name="ray">The ray, in world space.</param>
-    /// <param name="maxDistance">The farthest the ray reaches, in world units.</param>
+    /// <summary>Returns where a ray first meets the solid surfaces of the world a seat is presented in, or
+    /// <see langword="null"/> when it meets nothing within the distance or that world has no queryable field.</summary>
+    /// <param name="slot">The seat, zero-based.</param>
+    /// <param name="ray">The ray, in that world's coordinates.</param>
+    /// <param name="maxDistance">The farthest the ray reaches, in world units, for a seat presented here; a crossed
+    /// seat's scene bounds the ray by its own frame's far distance.</param>
     /// <returns>The hit, its normal the field's gradient there, or zero where the field gives none.</returns>
-    public WorldEditorPointerHit? Surface(WorldEditorRay ray, float maxDistance) => ((client.StaticField is { } field)
-        ? Cast(
-            direction: ray.Direction,
-            field: field,
-            maxDistance: maxDistance,
-            origin: ray.Origin
-        )
-        : null);
+    public WorldEditorPointerHit? Surface(int slot, WorldEditorRay ray, float maxDistance) {
+        if ((presenter?.Invoke() is { } frames) && frames.TrySeatScene(index: out var view, scene: out var scene, slot: slot)) {
+            return (scene.TrySurface(
+                normal: out var normal,
+                point: out var point,
+                ray: new SourceRay(
+                    Direction: FixedVector3.FromVector3(value: ray.Direction),
+                    Origin: FixedVector3.FromVector3(value: ray.Origin)
+                ),
+                view: view
+            )
+                ? new WorldEditorPointerHit(Normal: normal, Point: point.ToVector3())
+                : null);
+        }
+
+        return ((client.StaticField is { } field)
+            ? Cast(
+                direction: ray.Direction,
+                field: field,
+                maxDistance: maxDistance,
+                origin: ray.Origin
+            )
+            : null);
+    }
     /// <summary>Returns where a ray meets a static field, or <see langword="null"/> when it meets nothing within the
     /// distance.</summary>
     /// <param name="field">The field.</param>

@@ -460,16 +460,33 @@ public static class WorldBootComposition {
         services.AddSingleton<WorldRowStepWindowGuard>();
         // Each seat's editor state: its grid and snapping over the document's editor section, which the presenter
         // draws and the editor verbs move. A seat's editor state leaves with its occupant, and a seat whose principal
-        // may not mutate placements builds read-only.
+        // may not mutate placements in the world it is presented in builds read-only; a world this host does not run
+        // answers for its own edits by name when they reach it.
         services.AddSingleton(implementationFactory: static sp => {
             var roster = sp.GetRequiredService<PlayerRoster>();
             var server = sp.GetRequiredService<WorldServer>();
+            var routes = sp.GetRequiredService<WorldSeatAuthorityRouter>();
             var seats = new WorldEditorSeats {
-                EditProbe = slot => server.Grants.Allows(
-                    capability: WorldCapability.Mutate,
-                    principal: roster.PrincipalOf(slot: slot),
-                    subject: GrantSubject.Section(section: WorldSection.Placements)
-                ).IsAllowed,
+                EditProbe = slot => {
+                    var world = server;
+
+                    if (
+                        (routes.TryRoute(slot: slot) is { } route) &&
+                        !string.Equals(a: route.Endpoint.Identity, b: WorldInstanceHost.BootInstanceName, comparisonType: StringComparison.Ordinal)
+                    ) {
+                        if (!sp.GetRequiredService<WorldInstanceHost>().TryGet(instance: out var instance, name: route.Endpoint.Identity) || (instance is null)) {
+                            return true;
+                        }
+
+                        world = instance.Server;
+                    }
+
+                    return world.Grants.Allows(
+                        capability: WorldCapability.Mutate,
+                        principal: roster.PrincipalOf(slot: slot),
+                        subject: GrantSubject.Section(section: WorldSection.Placements)
+                    ).IsAllowed;
+                },
             };
 
             roster.SlotVacated += seats.Reset;
@@ -1123,7 +1140,7 @@ public static class WorldBootComposition {
         services.AddSingleton<IWorldEngineReadiness>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>());
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().Transforms);
         services.AddSingleton<WorldSeatViewports>();
-        services.AddSingleton(implementationFactory: static sp => new WorldEditorPointer(client: sp.GetRequiredService<WorldClient>(), viewports: sp.GetRequiredService<WorldSeatViewports>()));
+        services.AddSingleton(implementationFactory: static sp => new WorldEditorPointer(client: sp.GetRequiredService<WorldClient>(), presenter: sp.GetRequiredService<WorldFramePresenter>, viewports: sp.GetRequiredService<WorldSeatViewports>()));
         services.AddSingleton<MarkerStore>();
         services.AddSingleton(implementationFactory: static sp => new WorldIconTable(definition: sp.GetRequiredService<WorldDefinition>()));
         services.AddSingleton<WorldSdfDocumentEmitter>();
@@ -1327,7 +1344,7 @@ public static class WorldBootComposition {
         // authoritative-core one — a headless boot never sees a pointer to observe. A new pointer-driven feature
         // registers an IWorldPointerConsumer below; it does NOT add a second window-input observer.
         services.AddSingleton<WorldPointer>();
-        services.AddSingleton(implementationFactory: static sp => new WorldEditorPointer(client: sp.GetRequiredService<WorldClient>(), pointer: sp.GetRequiredService<WorldPointer>(), viewports: sp.GetRequiredService<WorldSeatViewports>()));
+        services.AddSingleton(implementationFactory: static sp => new WorldEditorPointer(client: sp.GetRequiredService<WorldClient>(), pointer: sp.GetRequiredService<WorldPointer>(), presenter: sp.GetRequiredService<WorldFramePresenter>, viewports: sp.GetRequiredService<WorldSeatViewports>()));
 
         // The local mouse seat's right-drag camera orbit (WoW-style): the shared yaw/pitch state WorldFramePresenter
         // composes onto the slot-0 chase camera anchor, and the pointer consumer that nudges it while the authored

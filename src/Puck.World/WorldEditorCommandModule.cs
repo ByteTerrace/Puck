@@ -12,16 +12,23 @@ namespace Puck.World;
 /// grid or snapping with no argument and after every change; they run inline and move presentation state only.
 /// <c>world.place</c>, <c>world.nudge</c> and <c>world.turn</c> put down, move and turn a placement by whole grid and
 /// angle steps, snapping through <see cref="Puck.World.Authoring.GridSnap"/>, and each submits one placements upsert
-/// through the section upsert <c>world.row.set</c> composes with (<see cref="WorldRowCommandModule.TryComposeEditedRow"/>),
-/// under the issuing principal and the shared <see cref="WorldRowStepWindowGuard"/>, so the grant check,
-/// revalidation, tick-boundary apply, journal and <c>world.undo</c> govern them as they govern every row edit. Every
-/// verb here is bindable; the engine's build page binds them.</summary>
+/// composed by the section upsert <c>world.row.set</c> composes with (<see cref="WorldRowCommandModule.TryComposeRoutedSet"/>),
+/// under the issuing principal and a row-edit window guard, so the grant check, revalidation, tick-boundary apply,
+/// journal and <c>world.undo</c> govern them as they govern every row edit.
+/// <para>Editing follows the seat. Every verb acts on the world the acting seat is presented in, by its authority route
+/// (<see cref="WorldSeatAuthorityRouter"/>): a seat that crossed into another world reads that world's document and
+/// submits through that world's own link, whose admission names its verdict, and never touches the world it left. A
+/// seat's selection (its current placement, its reference, the height its plane followed) belongs to the world it was
+/// made in and does not cross with it. A slot with no route edits the world the console addresses. Every verb here is
+/// bindable; the engine's build page binds them.</para></summary>
 /// <param name="seats">Each seat's editor state.</param>
-/// <param name="authority">Resolves the server a command addresses.</param>
-/// <param name="link">The link placement edits are submitted over.</param>
+/// <param name="authority">Resolves the world a command addresses when its slot has no route.</param>
+/// <param name="link">The link placement edits in the console's world are submitted over.</param>
 /// <param name="echoes">Publishes each submitted edit's deferred verdict.</param>
 /// <param name="stepGuard">The per-tick-window row claim every row-editing door shares.</param>
-public sealed partial class WorldEditorCommandModule(WorldEditorSeats seats, IWorldConsoleAuthority authority, IServerLink link, WorldDeferredVerbEchoes echoes, WorldRowStepWindowGuard stepGuard) : ICommandModule {
+/// <param name="seatRouter">Each seat's authority route, so a seat's edits follow it into the world it is presented in;
+/// <see langword="null"/> on a host whose seats never leave the console's world.</param>
+public sealed partial class WorldEditorCommandModule(WorldEditorSeats seats, IWorldConsoleAuthority authority, IServerLink link, WorldDeferredVerbEchoes echoes, WorldRowStepWindowGuard stepGuard, WorldSeatAuthorityRouter? seatRouter = null) : ICommandModule {
     /// <summary>The verb that moves a seat's grid.</summary>
     public const string GridCommand = "world.grid";
     /// <summary>The finest grid pitch <c>world.grid pitch down</c> reaches, in world units.</summary>
@@ -30,6 +37,14 @@ public sealed partial class WorldEditorCommandModule(WorldEditorSeats seats, IWo
     public const float MaxStepPitch = 64f;
     /// <summary>The verb that moves a seat's snapping.</summary>
     public const string SnapCommand = "world.snap";
+
+    // Each routed world's own row-edit window guard: a world's input window is its own tick, so its claims never share a
+    // window with another world's.
+    private readonly Dictionary<string, WorldRowStepWindowGuard> m_routedGuards = new(comparer: StringComparer.Ordinal);
+
+    // The world a verb edits: its instance name as the seat's route names it, its document as this host sees it, the link
+    // an edit is submitted through, the input window an edit targets and the guard that claims rows in it.
+    private readonly record struct EditWorld(string Name, WorldDefinition Definition, IServerLink Link, ulong Window, WorldRowStepWindowGuard Guard);
 
     private static string Format(float value) => value.ToString(
         format: "0.####",
@@ -62,24 +77,64 @@ public sealed partial class WorldEditorCommandModule(WorldEditorSeats seats, IWo
             .Field(key: "plane", value: Format(value: grid.PlaneY))
             .Close());
     }
-    private CommandResult EchoSnap(int slot, WorldDefinition definition) {
-        var snap = seats.SnapOf(document: definition.Editor, slot: slot);
+    private CommandResult EchoSnap(int slot, EditWorld world) {
+        var snap = seats.SnapOf(document: world.Definition.Editor, slot: slot);
 
         return new CommandResult(Output: CommandEcho.Open(verb: SnapCommand)
             .Field(key: "seat", value: PlayerRoster.DisplayNumber(slot: slot))
             .Field(key: "enabled", value: snap.Enabled)
             .Field(key: "angle", value: Format(value: snap.AngleStepDegrees))
             .Field(key: "surface", value: snap.Surface)
-            .Field(key: "reference", value: (seats.ReferenceOf(slot: slot) ?? "none"))
+            .Field(key: "reference", value: (seats.ReferenceOf(slot: slot, world: world.Name) ?? "none"))
             .Close());
     }
+    // The world a verb edits: the one the acting seat is presented in, by its authority route, so a seat that crossed
+    // into another world edits that world through that world's own link and never the world it left; else, for a slot
+    // with no route, the world the console addresses.
+    private bool TryEditWorld(CommandContext context, string verb, out EditWorld world, out CommandResult refusal) {
+        world = default;
+        refusal = CommandResult.None;
+
+        if (!authority.TryResolve(context: context, instance: out var instance, refusal: out var reason)) {
+            refusal = CommandResult.Error(output: $"[{verb}: refused ({reason})]");
+
+            return false;
+        }
+
+        if (
+            (seatRouter?.TryRoute(slot: context.Slot) is { } route) &&
+            !string.Equals(a: route.Endpoint.Identity, b: instance.Name, comparisonType: StringComparison.Ordinal)
+        ) {
+            var endpoint = route.Endpoint;
+
+            world = new EditWorld(
+                Definition: endpoint.Definition,
+                Guard: (m_routedGuards.GetValueOrDefault(key: endpoint.Identity) ?? (m_routedGuards[endpoint.Identity] = new WorldRowStepWindowGuard())),
+                Link: endpoint.Submissions,
+                Name: endpoint.Identity,
+                Window: endpoint.NextInputTick
+            );
+
+            return true;
+        }
+
+        world = new EditWorld(
+            Definition: instance.Server.Definition,
+            Guard: stepGuard,
+            Link: link,
+            Name: instance.Name,
+            Window: instance.Server.NextInputTick
+        );
+
+        return true;
+    }
     private CommandResult GridHandler(CommandContext context, WireArgs args) {
-        if (!authority.TryResolveServer(context: context, error: out var error, server: out var server, verb: GridCommand)) {
-            return error;
+        if (!TryEditWorld(context: context, refusal: out var refusal, verb: GridCommand, world: out var world)) {
+            return refusal;
         }
 
         var slot = context.Slot;
-        var definition = server.Definition;
+        var definition = world.Definition;
 
         if (args.Count == 0) {
             return EchoGrid(definition: definition, slot: slot);
@@ -130,15 +185,15 @@ public sealed partial class WorldEditorCommandModule(WorldEditorSeats seats, IWo
         return EchoGrid(definition: definition, slot: slot);
     }
     private CommandResult SnapHandler(CommandContext context, WireArgs args) {
-        if (!authority.TryResolveServer(context: context, error: out var error, server: out var server, verb: SnapCommand)) {
-            return error;
+        if (!TryEditWorld(context: context, refusal: out var refusal, verb: SnapCommand, world: out var world)) {
+            return refusal;
         }
 
         var slot = context.Slot;
-        var definition = server.Definition;
+        var definition = world.Definition;
 
         if (args.Count == 0) {
-            return EchoSnap(definition: definition, slot: slot);
+            return EchoSnap(slot: slot, world: world);
         }
 
         var snap = seats.SnapOf(document: definition.Editor, slot: slot);
@@ -148,7 +203,7 @@ public sealed partial class WorldEditorCommandModule(WorldEditorSeats seats, IWo
         } else if ((args.Count == 1) && args.Is(index: 0, value: "toggle")) {
             seats.SetSnapEnabled(enabled: !snap.Enabled, slot: slot);
         } else if ((args.Count == 1) && args.Is(index: 0, value: "clear")) {
-            seats.SetReference(placement: null, slot: slot);
+            seats.SetReference(placement: null, slot: slot, world: world.Name);
         } else if ((args.Count == 2) && args.Is(index: 0, value: "angle") && args.TryFloat(index: 1, value: out var degrees)) {
             if (!((degrees > 0f) && (degrees <= 180f))) {
                 return CommandResult.Error(output: $"[{SnapCommand}: an angle step is within (0, 180] degrees]");
@@ -158,22 +213,22 @@ public sealed partial class WorldEditorCommandModule(WorldEditorSeats seats, IWo
         } else if ((args.Count == 2) && args.Is(index: 0, value: "surface") && TryOnOff(token: args[1], value: out var surface)) {
             seats.SetSurfaceSnap(slot: slot, surface: surface);
         } else if ((args.Count is 1 or 2) && args.Is(index: 0, value: "reference")) {
-            var id = ((args.Count == 2) ? args[1].ToString() : seats.CurrentOf(slot: slot));
+            var id = ((args.Count == 2) ? args[1].ToString() : seats.CurrentOf(slot: slot, world: world.Name));
 
             if (id is null) {
                 return CommandResult.Error(output: $"[{SnapCommand}: seat {PlayerRoster.DisplayNumber(slot: slot)} has no current placement; name one: reference <placement>]");
             }
 
             if (WorldDefinitionRows.FindPlacement(id: id, placements: definition.Placements) is null) {
-                return CommandResult.Error(output: $"[{SnapCommand}: no placement '{id}']");
+                return CommandResult.Error(output: $"[{SnapCommand}: no placement '{id}' in '{world.Name}']");
             }
 
-            seats.SetReference(placement: id, slot: slot);
+            seats.SetReference(placement: id, slot: slot, world: world.Name);
         } else {
             return CommandResult.Usage(form: "on|off|toggle|angle <deg>|surface on|off|reference [<placement>]|clear", verb: SnapCommand);
         }
 
-        return EchoSnap(definition: definition, slot: slot);
+        return EchoSnap(slot: slot, world: world);
     }
 
     /// <inheritdoc/>

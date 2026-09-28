@@ -1528,6 +1528,16 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 width: width
             );
 
+            // The cursor feed's unproject seam: the SAME region + camera this view renders with, so a cursor ray
+            // aims exactly where the pixel under it was drawn from. Published before the seat's grid resolves, since
+            // a following grid casts the seat's pointer through this camera.
+            m_viewports.Publish(
+                camera: in camera,
+                height: height,
+                region: region,
+                slot: slot,
+                width: width
+            );
             // The live render-scale tier rides each view's own RenderScale: native = 1.0 is the bit-exact fast path,
             // any lower tier renders that view's SDF at a reduced extent, which the root's place pass reconstructs. A
             // layout transition dips it.
@@ -1546,6 +1556,9 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                     endpoint: elsewhere,
                     view: (m_views.Count - 1)
                 );
+                m_seatRoutes[slot] = m_viewRoutes[(m_views.Count - 1)];
+            } else {
+                m_seatRoutes[slot] = default;
             }
             // The listener-policy candidate: the SAME resolved rig the seat renders through (editor rig included),
             // so "focus" listens where the active view looks.
@@ -1553,15 +1566,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 Eye: eye,
                 Forward: (target - eye),
                 Joined: true
-            );
-            // The cursor feed's unproject seam: the SAME region + camera this view renders with, so a cursor ray
-            // aims exactly where the pixel under it was drawn from.
-            m_viewports.Publish(
-                camera: in camera,
-                height: height,
-                region: region,
-                slot: slot,
-                width: width
             );
             seatSlotBound[slot] = true;
             m_markerSeats[markerSeatCount++] = ComposeMarkerSeat(
@@ -1571,6 +1575,12 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 slot: slot,
                 width: width
             );
+        }
+
+        for (var slot = 0; (slot < m_seatRoutes.Length); slot++) {
+            if (!seatSlotBound[slot]) {
+                m_seatRoutes[slot] = default;
+            }
         }
 
         RetireRoutedScenes();

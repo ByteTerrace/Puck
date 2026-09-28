@@ -105,6 +105,64 @@ public sealed class WorldEditorBuildModeLawTests : IDisposable {
         Assert.Equal(actual: Capture(presenter: presenter).Views[0].Grid, expected: GridOverlayState.Hidden);
     }
     [Fact]
+    public void AFollowingGridTakesTheHeightOfThePlatformUnderTheAimWithinAFrame() {
+        // The editor-grid fixture with a wide stage whose top, at height 1.5, lies under the middle of the seat's view.
+        using var host = WorldBootHarness.Compose(
+            edit: static definition => (definition with {
+                CreationsRaw = [
+                    .. definition.Creations,
+                    CreationFixtures.Prototype(
+                        document: CreationFixtures.Document(
+                            name: "stage",
+                            shapes: [CreationFixtures.Shape(scale: new Vector3(x: 3f, y: 0.75f, z: 3f), type: SdfSolidPrimitive.Box)]
+                        ),
+                        id: "stage"
+                    ),
+                ],
+                PlacementRowsRaw = [
+                    .. (definition.PlacementRowsRaw ?? []),
+                    new WorldPlacement(
+                        Id: "stage",
+                        Position: new Vector3(x: 0f, y: 0.75f, z: 0f),
+                        PrototypeId: "stage",
+                        Scale: 1f,
+                        Solid: new WorldSolid(Margin: 0f),
+                        YawDegrees: 0f
+                    ),
+                ],
+            }),
+            presentation: WorldHostPresentation.Offscreen,
+            stateDirectory: m_stateDirectory,
+            world: "tests/Puck.World.Canaries/editor-grid/fixture.world.json"
+        ).Build();
+        var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
+        var registry = host.Services.GetRequiredService<CommandRegistry>();
+        var pointer = host.Services.GetRequiredService<WorldEditorPointer>();
+        var seats = host.Services.GetRequiredService<WorldEditorSeats>();
+
+        _ = host.Services.GetRequiredService<WorldInstanceHost>();
+
+        // Offscreen there is no pointer, so the seat's pointer stands in the middle of its view: the probe casts the
+        // aim through the camera the seat's view published this frame.
+        seats.PointerProbe = slot => ((pointer.Aim(slot: slot) is { } aim)
+            ? pointer.Surface(maxDistance: 100f, ray: aim, slot: slot)
+            : null);
+
+        // The first frame builds the static field and publishes the seat's view.
+        _ = Capture(presenter: presenter);
+        Submit(line: "player.build", registry: registry);
+        Submit(line: "world.grid on", registry: registry);
+        Submit(line: "world.grid follow", registry: registry);
+
+        // Red leg: with the seat's view published after its grid resolves (the viewports cleared before the grid), the aim
+        // of this frame finds no camera, nothing is followed, and the plane keeps its fallback height, 0.
+        var grid = Capture(presenter: presenter).Views[0].Grid;
+
+        Assert.Equal(actual: (seats.FollowedHeightOf(slot: 0, world: "boot") ?? float.NaN), expected: 1.5f, tolerance: 0.02);
+        Assert.Equal(actual: grid.PlaneY, expected: 1.5f, tolerance: 0.02);
+        Assert.Equal(actual: grid.Flags, expected: GridOverlayFlags.World);
+    }
+    [Fact]
     public void APlaceThroughTheHostRestsOnTheFloorUnderTheAim() {
         using var host = WorldBootHarness.Compose(
             edit: WithFloor,

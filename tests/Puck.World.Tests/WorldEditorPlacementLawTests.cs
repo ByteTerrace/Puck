@@ -51,12 +51,13 @@ public sealed class WorldEditorPlacementLawTests {
             name: "boot"
         );
     }
-    private static CommandRegistry BuildRegistry(HostRow row, WorldEditorSeats seats) => new(modules: [
+    private static CommandRegistry BuildRegistry(HostRow row, WorldEditorSeats seats, WorldSeatAuthorityRouter? routes = null) => new(modules: [
         new WorldEditorCommandModule(
             authority: new FakeConsoleAuthority(instance: row.Instance),
             echoes: new WorldDeferredVerbEchoes(),
             link: row.Instance.Link,
             seats: seats,
+            seatRouter: routes,
             stepGuard: new WorldRowStepWindowGuard()
         ),
     ]);
@@ -83,7 +84,7 @@ public sealed class WorldEditorPlacementLawTests {
         Step(row: row);
 
         Assert.Equal(actual: ((Vector3)Placement(id: "crate1", row: row).Position), expected: (before + new Vector3(x: Pitch, y: 0f, z: 0f)));
-        Assert.Equal(actual: seats.CurrentOf(slot: 0), expected: "crate1");
+        Assert.Equal(actual: seats.CurrentOf(slot: 0, world: "boot"), expected: "crate1");
 
         // The seat's current placement is the default target, and a step count moves that many pitches.
         Submit(line: "world.nudge z -2", registry: registry);
@@ -124,6 +125,96 @@ public sealed class WorldEditorPlacementLawTests {
         Submit(line: "world.turn crate1 -3", registry: registry);
         Step(row: row);
         Assert.Equal(actual: Placement(id: "crate1", row: row).YawDegrees, expected: -90f);
+    }
+
+    // Records every envelope a routed world's link is handed, as the destination would receive it.
+    private sealed class RecordingLink(WorldDefinition definition) : IServerLink {
+        public List<WorldSubmissionPayload> Submitted { get; } = [];
+
+        public void Query(WorldQuery query, Action<QueryAnswer> completion) => new SilentLink(definition: definition).Query(completion: completion, query: query);
+        public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal) {
+            Submitted.Add(item: payload);
+
+            return 1L;
+        }
+        public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal, Guid operationId, Action<WorldSubmissionResult>? completion) => SubmitEnvelope(
+            payload: payload,
+            principal: principal
+        );
+        public void SubmitIntent(in IntentSubmission submission) {
+        }
+        public void SubmitSession(SessionRequest request, Action<SessionReply> completion) {
+        }
+    }
+    private sealed class Lease : IDisposable {
+        public void Dispose() {
+        }
+    }
+
+    // The world a seat crosses into: its own crate1, somewhere else.
+    private static readonly Vector3 AwayCrate = new(x: -3f, y: 0f, z: 2f);
+
+    private static WorldAuthorityEndpoint Away(RecordingLink link, WorldDefinition definition) => new(
+        adjacencies: static () => null,
+        clockOwnedHere: false,
+        definition: () => definition,
+        identity: "away",
+        nextInputTick: static () => 2UL,
+        observe: sink => {
+            sink.DeliverDefinition(definition: definition);
+
+            return new Lease();
+        },
+        submissions: link
+    );
+
+    [Fact]
+    public void AfterACrossingANudgeEditsTheWorldTheSeatIsInAndNeverTheWorldItLeft() {
+        using var row = Build();
+        var seats = new WorldEditorSeats();
+        var routes = new WorldSeatAuthorityRouter();
+        var registry = BuildRegistry(routes: routes, row: row, seats: seats);
+        var awayDocument = (row.Server.Definition with {
+            DocumentId = "away",
+            PlacementRowsRaw = [(Placement(id: "crate1", row: row) with { Position = AwayCrate })],
+        });
+        var awayLink = new RecordingLink(definition: awayDocument);
+        using var away = Away(definition: awayDocument, link: awayLink);
+
+        // Select in the boot world: the nudge moves the boot crate and makes it the seat's current placement there.
+        Submit(line: $"world.grid pitch {Pitch}", registry: registry);
+        Submit(line: "world.nudge crate1 x 1", registry: registry);
+        Step(row: row);
+
+        var boot = ((Vector3)Placement(id: "crate1", row: row).Position);
+
+        // Cross: the seat is now presented in the away world.
+        _ = routes.Publish(endpoint: away, entity: away.Mirror.Address(index: 0), slot: 0);
+
+        // The selection stayed behind: a bare nudge names no placement in the away world and is refused by name.
+        var bare = registry.Submit(line: "world.nudge x 1");
+
+        Assert.True(condition: bare.IsError);
+        Assert.Equal(actual: bare.Output, expected: "[world.nudge: seat 1 has no current placement; name one]");
+
+        // A named nudge edits the away world's crate through the away world's link, from the away document's position.
+        Submit(line: "world.nudge crate1 x 1", registry: registry);
+        Step(row: row);
+
+        var routed = Assert.IsType<WorldMutation.UpsertPlacement>(@object: Assert.IsType<WorldSubmissionPayload.Mutation>(@object: Assert.Single(collection: awayLink.Submitted)).Value);
+
+        Assert.Equal(actual: ((Vector3)routed.Placement.Position), expected: (AwayCrate + new Vector3(x: Pitch, y: 0f, z: 0f)));
+        Assert.Equal(actual: seats.CurrentOf(slot: 0, world: "away"), expected: "crate1");
+        Assert.Null(@object: seats.CurrentOf(slot: 0, world: "boot"));
+        Assert.Equal(actual: ((Vector3)Placement(id: "crate1", row: row).Position), expected: boot);
+
+        // Red leg: a module that edits the console's world whatever the seat's route moves the crate the seat left.
+        var unrouted = BuildRegistry(row: row, seats: new WorldEditorSeats());
+
+        Submit(line: $"world.grid pitch {Pitch}", registry: unrouted);
+        Submit(line: "world.nudge crate1 x 1", registry: unrouted);
+        Step(row: row);
+        Assert.NotEqual(actual: ((Vector3)Placement(id: "crate1", row: row).Position), expected: boot);
     }
     [Fact]
     public void APlaceWithNoViewToAimFromIsRefusedByName() {

@@ -15,9 +15,35 @@ public sealed partial class WorldFramePresenter {
     private readonly Dictionary<WorldAuthorityEndpoint, WorldRoutedScene> m_routedScenes = new(comparer: ReferenceEqualityComparer.Instance);
     private readonly List<WorldRoutedScene> m_retiredScenes = [];
     private readonly List<(WorldRoutedScene? Scene, int Index)> m_viewRoutes = new(capacity: PlayerRoster.MaxSlots);
+    // Each seat's routed scene and its view's index there, as the last Dress latched it; none for a seat presented
+    // here.
+    private readonly (WorldRoutedScene? Scene, int Index)[] m_seatRoutes = new (WorldRoutedScene?, int)[PlayerRoster.MaxSlots];
 
     private SdfFrame? m_dressedFrame;
 
+    /// <summary>Returns the scene of the world a seat was presented in as the last Dress latched it, and its view's index
+    /// among that scene's views, so a query through the seat's view (a surface under its pointer) reads the world the
+    /// seat sees.</summary>
+    /// <param name="slot">The seat, zero-based.</param>
+    /// <param name="scene">The routed world's scene, when this returns <see langword="true"/>.</param>
+    /// <param name="index">The seat's view index in the scene's frames, when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when the seat was presented elsewhere in the last dressed frame.</returns>
+    public bool TrySeatScene(int slot, [NotNullWhen(returnValue: true)] out WorldRoutedScene? scene, out int index) {
+        if (
+            (((uint)slot) < ((uint)m_seatRoutes.Length)) &&
+            (m_seatRoutes[slot] is { Scene: { } routed } route)
+        ) {
+            scene = routed;
+            index = route.Index;
+
+            return true;
+        }
+
+        scene = null;
+        index = 0;
+
+        return false;
+    }
     /// <summary>Returns the scene of the world a view of the boot frame is presented in, as the frame's Dress latched
     /// it: a seat presented elsewhere (<see cref="WorldContinuum.PresentedElsewhere"/>) keeps its view's place, and the
     /// routed world's scene renders the view at its own index.</summary>
