@@ -1,10 +1,13 @@
 using System.Numerics;
+using Microsoft.Extensions.DependencyInjection;
 using Puck.Abstractions.Cameras;
 using Puck.Commands;
 using Puck.Maths;
 using Puck.SdfVm;
 using Puck.SignedDistance.Queries;
+using Puck.Testing;
 using Puck.World.Client;
+using Puck.World.Protocol;
 using Puck.World.Server;
 using Xunit;
 
@@ -436,6 +439,78 @@ public sealed class WorldWindowFrustumFitLawTests {
                 actual: between.ToVector3().Z,
                 tolerance: 0.02f
             );
+        }
+    }
+    // The canary moves the viewer with body.pose, and a window fits its eye to the camera the seat's view renders with
+    // in the same frame (WorldWindowFrustumFit.FitFrom), so the canary's seat renders through a rig that rides its body:
+    // the eye the presenter publishes for seat 0 moves with the body, and the window fitted from it shows the marker on
+    // the side of the glass the body stepped toward. A seat bound to a fixed camera would fit both poses from one eye
+    // and frame the marker at the glass's centre each time.
+    [Fact]
+    public void TheCanarysSeatViewRidesItsBody_SoAStepReframesTheWindow() {
+        using var state = new TemporaryDirectory(prefix: "puck-portal-window-eye-");
+        using var host = WorldBootHarness.Compose(
+            presentation: WorldHostPresentation.Offscreen,
+            stateDirectory: state,
+            world: Local
+        ).Build();
+        var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
+        var client = host.Services.GetRequiredService<WorldClient>();
+        var viewports = host.Services.GetRequiredService<WorldSeatViewports>();
+        var destination = AuthoredGameFixtures.Load(relativePath: Destination);
+        var row = DoorRow();
+        var fit = WorldWindowFrustumFit.FitFrom(
+            destination: () => destination,
+            local: () => client.Definition,
+            screen: () => row,
+            viewports: viewports
+        );
+
+        for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
+            _ = client.Roster.VacateSeat(slot: slot);
+        }
+        _ = client.Roster.OccupySeat(profile: null, slot: 0);
+
+        foreach (var side in ((ReadOnlySpan<float>)[1f, -1f])) {
+            client.DeliverSnapshot(snapshot: new WorldSnapshot(
+                Authority: WorldInstanceHost.BootInstanceName,
+                EngineTick: 1680UL,
+                Entries: new[] { new EntitySnapshot(
+                    Active: true,
+                    BodyColor: Vector3.One,
+                    CatalogRig: 0,
+                    Continuity: EntityContinuity.Continuous,
+                    Generation: 1,
+                    Index: 0,
+                    Kit: 0,
+                    Look: 0,
+                    Orientation: Quaternion.Identity,
+                    Position: new Vector3(x: side, y: 0f, z: 9f)
+                ) },
+                Revision: 0,
+                StepTicks: 1680UL,
+                Tick: 1UL
+            ));
+            _ = presenter.CaptureFrame(
+                deltaSeconds: 0f,
+                height: 144U,
+                interpolationAlpha: 1f,
+                width: 256U
+            );
+
+            var seat = viewports.Seat(slot: 0);
+
+            Assert.True(condition: seat.Present);
+            Assert.Equal(
+                expected: side,
+                actual: seat.Camera.Position.X,
+                tolerance: Tolerance
+            );
+
+            var camera = fit();
+
+            Assert.NotNull(@object: camera);
+            Assert.Equal(expected: MathF.Sign(x: side), actual: MathF.Sign(x: (ImageOf(camera: camera.Value, point: Marker).X - 0.5f)));
         }
     }
 }
