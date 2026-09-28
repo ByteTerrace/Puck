@@ -45,6 +45,11 @@ public sealed class WorldEditorSeats {
     /// <summary>Gets a revision that moves whenever any seat's editor state moves.</summary>
     public long Revision { get; private set; }
 
+    /// <summary>Reads whether the seat shows its presentation inspector.</summary>
+    public bool InspectorEnabled(int slot) => At(slot: slot).Inspector;
+    /// <summary>Enables or hides a seat's presentation inspector without changing the document.</summary>
+    public void SetInspector(int slot, bool enabled) { At(slot: slot).Inspector = enabled; Moved(); }
+
     private Seat At(int slot) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: slot);
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(other: m_seats.Length, value: slot);
@@ -265,6 +270,8 @@ public sealed class WorldEditorSeats {
     }
 
     private sealed class Seat {
+        public bool Inspector;
+
         public float? AngleStepDegrees { get; set; }
         public string? Current { get; set; }
         public float? FollowedHeight { get; set; }

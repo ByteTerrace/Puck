@@ -37,7 +37,9 @@ namespace Puck.Overlays;
 /// <param name="fragmentBytecode">The unified overlay fragment shader, in the host backend's bytecode format.</param>
 /// <param name="theme">The theme a recorder starts from; <see cref="UpdateTheme"/> moves it.</param>
 public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacity capacity, OverlayGlyphSdfPack glyphs, IOverlayFrameSources frameSources, ReadOnlyMemory<byte> vertexBytecode, ReadOnlyMemory<byte> fragmentBytecode, OverlayThemeValues theme = default) : IRenderGraphPackageFactory {
+    private readonly OverlayChannelLeases m_leases = new(capacity: capacity);
     private OverlayThemeValues m_theme = theme;
+
     private int m_themeRevision;
 
     /// <inheritdoc/>
@@ -140,11 +142,11 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
     }
     /// <inheritdoc/>
     /// <remarks>The overlay's one region is the storage buffer its shader reads, <c>data</c>, of
-    /// <see cref="OverlayFrameBuilder.WordCountOf"/> words, which depends on the glyph pack alone.</remarks>
+    /// <see cref="OverlayFrameBuilder.WordCountOf"/> words, which depends on the glyph pack and the composition's summed writer reservations.</remarks>
     public IReadOnlyList<RenderGraphPackageRegion> Regions(RenderGraphPackageRecorderContext context) => [new RenderGraphPackageRegion(
-        ByteCount: (OverlayFrameBuilder.WordCountOf(glyphs: glyphs) * sizeof(uint)),
+        ByteCount: (OverlayFrameBuilder.WordCountOf(glyphs: glyphs, leases: m_leases) * sizeof(uint)),
         Name: "data"
-    )];
+    ) { CpuScratchBytes = ((ulong)(OverlayFrameBuilder.WordCountOf(glyphs: glyphs, leases: m_leases) * sizeof(uint))) }];
     /// <summary>Republishes the theme every recorder's writers read; each recorder refills its token slab on its next
     /// frame.</summary>
     /// <param name="theme">The newly resolved theme.</param>

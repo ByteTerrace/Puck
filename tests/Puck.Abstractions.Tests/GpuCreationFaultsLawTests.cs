@@ -19,11 +19,13 @@ public sealed class GpuCreationFaultsLawTests {
         typeof(IGpuPipelineFactory),
         typeof(IGpuRenderPassFactory),
         typeof(IGpuShaderModuleFactory),
+        typeof(IGpuTimestampFactory),
     ];
 
     // Every creating member of the wrapped interfaces, keyed Interface.Member, with the kind it counts as and a call
     // through the wrapped services. The fake reads no description or module.
     private static Dictionary<string, (GpuCreationKind Kind, Action<GpuDeviceServices> Create)> Creations() => new(comparer: StringComparer.Ordinal) {
+        ["IGpuTimestampFactory.Create"] = (GpuCreationKind.TimestampPool, static services => _ = services.TimestampFactory!.Create(count: 2, name: default)),
         ["IGpuBindings.CreatePool"] = (GpuCreationKind.BindingsPool, static services => _ = services.Bindings.CreatePool(name: default, sizes: default)),
         ["IGpuBufferFactory.CreateDeviceLocal"] = (GpuCreationKind.Buffer, static services => _ = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: 16, usage: GpuBufferUsage.Storage)),
         ["IGpuBufferFactory.CreateReadback"] = (GpuCreationKind.Buffer, static services => _ = services.BufferFactory.CreateReadback(name: default, sizeBytes: 16)),

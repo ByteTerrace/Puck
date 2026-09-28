@@ -210,6 +210,7 @@ internal static class WorldRenderRoot {
         );
 
         var overlaid = (overlay is not null);
+        var timing = sp.GetRequiredService<WorldGpuTiming>();
 
         // The host composes the root again whenever the document's panes, views, views.post or render.tonemap move, from
         // the post passes and tonemap the document names then, so a live views.post or render.tonemap edit reaches the
@@ -245,6 +246,7 @@ internal static class WorldRenderRoot {
             Prepare = (in FrameContext context) => {
                 bakes?.Pump(definition: client.Definition);
                 frameSource.PrepareGraph(context: in context);
+                timing.Tick();
             },
             Roots = host.Roots,
         };

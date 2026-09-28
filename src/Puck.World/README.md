@@ -23,6 +23,25 @@ The reference-game design lives in [the game guide](../../docs/game/README.md);
 nothing there is evidence that a capability is built. What each `Puck.*`
 project is for is [`docs/project-map.md`](../../docs/project-map.md).
 
+## Presentation inspection
+
+`world.inspect on|off` toggles the acting seat's editor panel; bare
+`world.inspect` prints the same formatted snapshot. It includes the completed
+GPU hit and captured palette address, point, normal, pixel cost, selection,
+camera, ticks, render levers, counted work, capacity and reload refusal.
+A passthrough pane follows its own rendered residency, scale and shading quality;
+its placement costs and pass timings use that same view.
+`world.cost <placement>` reads live placement ownership; bare `world.cost`
+uses the completed pointer hit, and `world.cost top [n]` lists the largest rows.
+Shared program overhead is reported separately and reconciles to `world.budget`.
+These are presentation queries and never submit simulation input.
+
+`world.gpu-timing on|off` enables optional observational per-pass timestamps;
+bare reads completed means over at most 32 pairs. The inspector's FPS and timing
+rows follow that toggle. Timing starts off and creates no timestamp objects or
+commands until requested. An offscreen host supports explicit placement costs
+and timing; the panel and pointer feed belong to the windowed presentation.
+
 ## Operator access
 
 For AI pairing, `world.control start|stop|status` manages an authenticated

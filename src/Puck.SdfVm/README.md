@@ -109,7 +109,7 @@ beam's tile planes read-only, so a buffer a pass only reads is never held in a
 read-write state. These four dispatches share indirect bounds and live view
 dimensions. Primary, surface and ambient retain the full ISA.
 Material `Soften` changes the later lighting normal; AO uses the geometric normal.
-The buffer reserves `width × height × 60` bytes at the view's extent, and the
+The buffer reserves `width × height × 64` bytes at the view's extent, and the
 view's instance allocates it again beside its installed graph when that extent
 changes. It is transient: one allocation shared by every frame slot, whose
 first use in a frame the planner orders after the frame before.

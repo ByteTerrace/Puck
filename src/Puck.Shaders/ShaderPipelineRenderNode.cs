@@ -1274,6 +1274,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             WaitAll();
             m_device.WaitIdle();
         }
+        ReleaseTiming();
         DisposeGraph(
             passes: m_passes,
             resources: m_resources
@@ -1524,6 +1525,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         }
         // Publishes the newest finished submission's counts, paused or not, so a held frame still completes them.
         m_work.Poll();
+        PollTimings();
         // A node with nothing published (never rendered, or reset) owes an initialization frame. That frame is its own
         // obligation: a step requested before it renders stays pending and advances one submission beyond it. A device
         // loss unpublishes the image without owing one.
@@ -1638,6 +1640,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         var slot = m_slots[slotIndex];
 
         slot.Fence!.Wait();
+        PrepareTiming(slot: slotIndex);
         slot.Leases.RetireAll();
         BindRegionBuffers(slot: slotIndex);
         HoldLeases();
@@ -1682,6 +1685,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             fence: slot.Fence!
         );
         SubmitPackageReadbacks(fence: slot.Fence!, slot: slotIndex);
+        SubmitTiming(fence: slot.Fence!, slot: slotIndex);
         if (exported is not null) {
             exportValue = exported.CompleteWrite();
             exportWritten = true;

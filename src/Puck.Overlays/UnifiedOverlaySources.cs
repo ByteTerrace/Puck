@@ -17,6 +17,7 @@ namespace Puck.Overlays;
 /// for either scope to draw anything (a <see langword="null"/> pairing on either side draws nothing).</param>
 /// <param name="Cursor">The per-seat drawn-cursor source, or <see langword="null"/>.</param>
 /// <param name="Wheel">The per-seat radial-action-menu source, or <see langword="null"/>.</param>
+/// <param name="Inspector">The optional editor inspector text source.</param>
 public sealed record UnifiedOverlaySources(
     IConsoleTapeSource? Console,
     IBindingBarSource? BindingBar,
@@ -26,5 +27,6 @@ public sealed record UnifiedOverlaySources(
     IHudSource? Hud = null,
     IHudBindingResolver? HudBindings = null,
     ICursorSource? Cursor = null,
-    IWheelSource? Wheel = null
+    IWheelSource? Wheel = null,
+    IInspectorSource? Inspector = null
 );

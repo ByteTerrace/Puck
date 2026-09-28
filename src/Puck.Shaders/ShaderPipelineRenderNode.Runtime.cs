@@ -128,6 +128,7 @@ public sealed partial class ShaderPipelineRenderNode {
         // null for a pass that states none; and the graph's copy pool, reserving every staged region's sets, on its first
         // pass and null on every other.
         public GpuRegion[]? Regions;
+        public ulong RegionCpuScratchBytes;
         public GpuRegionCopyPool? RegionCopySets;
         // The counter buffers the graph's kernels count their own work into, on its first pass when a pass counts
         // (ShaderPipelinePlan.CountsKernelWork) and null on every other.

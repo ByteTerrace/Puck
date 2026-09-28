@@ -44,18 +44,19 @@ public sealed class OverlayFrameBuilder {
     /// a cannot-overflow backstop, never a budget; see <see cref="MaxPanels"/> for what that means.</summary>
     public const int MaxElements = 2048;
     /// <summary>The panel-record ceiling — a cannot-overflow backstop, never a budget.</summary>
-    /// <remarks>What a capacity here is: the point past which a record cannot be addressed at all — the four
-    /// backstops size the GPU region the shader addresses. The budget is <see cref="OverlayChannelLeases"/>'
-    /// per-channel reservations, which that table refuses at construction unless they sum at or below every
-    /// backstop; the remainder below is simply unclaimed — no addon/lease admission model reads it. Capacity costs
+    /// <remarks>What a capacity here is: the point past which a record cannot be addressed at all — the three fixed
+    /// record backstops and the derived text capacity size the GPU region the shader addresses. The budget is
+    /// <see cref="OverlayChannelLeases"/>' per-channel reservations. Their text sum rounds up to a power of two at
+    /// composition; the table refuses other totals beyond their fixed backstops. Any remainder is unclaimed — no addon/lease admission model reads it. Capacity costs
     /// memory only: the fragment shader loops to the written counts it receives in push constants, never to a
     /// capacity, so raising a ceiling never enters per-pixel cost.</remarks>
     public const int MaxPanels = 16;
     /// <summary>Words per panel record.</summary>
     public const int PanelWords = 12;
-    /// <summary>The glyph-code word ceiling every text run in a frame draws from — a cannot-overflow backstop, never
-    /// a budget; see <see cref="MaxPanels"/> for what that means.</summary>
-    public const int TextWordCapacity = 16384;
+
+    /// <summary>The glyph-code words every text run shares: the sum of every writer's reservation rounded up to a
+    /// power of two at composition. A writer still cannot exceed its own reservation.</summary>
+    public int TextWordCapacity => Leases.TextWordCapacity;
 
     private readonly OverlayGlyphSdfPack m_glyphs;
     private readonly float m_inverseHeight;
@@ -122,7 +123,7 @@ public sealed class OverlayFrameBuilder {
         ElementBaseWords = (PanelBaseWords + (MaxPanels * PanelWords));
         TextBaseWords = (ElementBaseWords + (MaxElements * ElementWords));
         ClipBaseWords = (TextBaseWords + TextWordCapacity);
-        WordCount = WordCountOf(glyphs: glyphs);
+        WordCount = WordCountOf(glyphs: glyphs, leases: leases);
         m_scratch = new uint[WordCount];
 
         OverlayTokenBlock.Write(
@@ -837,15 +838,16 @@ public sealed class OverlayFrameBuilder {
 
     /// <summary>Returns the words a builder over <paramref name="glyphs"/> holds: the token slab, the glyph pack, then
     /// the panel, element, text and clip regions at their ceilings, padded to a multiple of 4, since the storage buffer
-    /// is read as <c>uint4</c> rows. It depends on no render extent, so a region can be sized before a builder
+    /// is read as <c>uint4</c> rows. It depends on the composition's writer reservations and no render extent, so a region can be sized before a builder
     /// exists.</summary>
     /// <param name="glyphs">The shared SDF glyph pack.</param>
+    /// <param name="leases">The composition's writer reservations and derived text capacity.</param>
     /// <returns>The word count.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="glyphs"/> is <see langword="null"/>.</exception>
-    public static int WordCountOf(OverlayGlyphSdfPack glyphs) {
+    public static int WordCountOf(OverlayGlyphSdfPack glyphs, OverlayChannelLeases leases) {
         ArgumentNullException.ThrowIfNull(argument: glyphs);
 
-        var total = (((((OverlayTokenBlock.WordCount + glyphs.PackedSdf.Count) + (MaxPanels * PanelWords)) + (MaxElements * ElementWords)) + TextWordCapacity) + (MaxClips * ClipWords));
+        var total = (((((OverlayTokenBlock.WordCount + glyphs.PackedSdf.Count) + (MaxPanels * PanelWords)) + (MaxElements * ElementWords)) + leases.TextWordCapacity) + (MaxClips * ClipWords));
 
         return (total + 3) & ~3;
     }

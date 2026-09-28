@@ -23,9 +23,9 @@ public sealed class GpuCreationFaults {
     /// <summary>The refusal code every <see cref="GpuCreationFaultException"/> message starts with.</summary>
     public const string RefusalCode = "GPU_CREATION_FAULT";
 
-    private const int KindCount = (((int)GpuCreationKind.BindingsPool) + 1);
+    private const int KindCount = (((int)GpuCreationKind.TimestampPool) + 1);
 
-    private static readonly string[] KindNames = ["pipeline", "buffer", "image", "render-pass", "framebuffer", "shader-module", "command-pool", "bindings-pool"];
+    private static readonly string[] KindNames = ["pipeline", "buffer", "image", "render-pass", "framebuffer", "shader-module", "command-pool", "bindings-pool", "timestamp-pool"];
 
     /// <summary>The refusal code every armed device loss's <see cref="DeviceLostException"/> message starts with.</summary>
     public const string LossRefusalCode = "GPU_DEVICE_LOSS_FAULT";
@@ -50,10 +50,11 @@ public sealed class GpuCreationFaults {
         GpuCreationKind.ShaderModule,
         GpuCreationKind.CommandPool,
         GpuCreationKind.BindingsPool,
+        GpuCreationKind.TimestampPool,
     ];
 
     /// <summary>Returns a kind's one spelling: <c>pipeline</c>, <c>buffer</c>, <c>image</c>, <c>render-pass</c>,
-    /// <c>framebuffer</c>, <c>shader-module</c>, <c>command-pool</c> or <c>bindings-pool</c>.</summary>
+    /// <c>framebuffer</c>, <c>shader-module</c>, <c>command-pool</c> <c>bindings-pool</c> or <c>timestamp-pool</c>.</summary>
     /// <param name="kind">The kind.</param>
     /// <returns>The kind's name.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="kind"/> is not a declared kind.</exception>
@@ -134,6 +135,7 @@ public sealed class GpuCreationFaults {
                 faults: faults,
                 inner: Guard(instance: services.ShaderModuleFactory)
             ),
+            TimestampFactory = ((services.TimestampFactory is { } timestamps) ? new FaultingTimestampFactory(inner: Guard(instance: timestamps), faults: faults) : null),
             SurfaceTransferFactory = services.SurfaceTransferFactory,
         };
     }
@@ -315,10 +317,11 @@ public sealed class GpuCreationFaults {
 
 // The one shape every faulting decorator shares: it asks the faults before forwarding a creation, and a service of this
 // type is refused as the inner of another decorator.
-file abstract class FaultingWrapper(GpuCreationFaults faults) {
+internal abstract class FaultingWrapper(GpuCreationFaults faults) {
     protected void Enter(GpuCreationKind kind) =>
         faults.Enter(kind: kind);
 }
+
 file sealed class FaultingBindings(IGpuBindings inner, GpuCreationFaults faults) : FaultingWrapper(faults: faults), IGpuBindings {
     public nint AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle, in GpuObjectName name) =>
         inner.AllocateSet(

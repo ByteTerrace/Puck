@@ -6,12 +6,20 @@ namespace Puck.World.Client;
 /// to edit or move this identity.</summary>
 /// <param name="Placement">The authored placement id, or null for a body-rooted stamp.</param>
 /// <param name="BodyIndex">The stamped body index, or null for a placement.</param>
-public sealed record WorldPickTarget(string? Placement, int? BodyIndex);
+public sealed record WorldPickTarget(string? Placement, int? BodyIndex) {
+    /// <summary>Gets the prototype id captured by this emission, or null when the host has no prototype.</summary>
+    public string? Prototype { get; init; }
+    /// <summary>Gets the transform slots reserved by this live stamp registration, or zero for a static placement.</summary>
+    public int StampPoolSlots { get; init; }
+    /// <summary>Gets whether this captured placement emission actually drew its baked mesh.</summary>
+    public bool DrawsBake { get; init; }
+}
 /// <summary>Builds the host lookup alongside program emission and publishes immutable snapshots for delayed GPU
 /// picks. Several SDF ordinals can name one placement, and meshes use their own draw ordinal table.</summary>
 public sealed class WorldPickMapBuilder {
     private readonly Dictionary<int, WorldPickTarget> m_instances = [];
     private readonly List<WorldPickTarget?> m_meshes = [];
+    private readonly Dictionary<(string Prototype, int Material), string> m_materials = [];
 
     private WorldPickMap? m_snapshot;
     private IReadOnlyList<WorldPickTarget?>? m_pool;
@@ -20,6 +28,7 @@ public sealed class WorldPickMapBuilder {
     public void Clear() {
         m_instances.Clear();
         m_meshes.Clear();
+        m_materials.Clear();
         m_snapshot = null;
     }
     /// <summary>Names the half-open SDF instance range emitted for one placement or stamped body.</summary>
@@ -45,6 +54,20 @@ public sealed class WorldPickMapBuilder {
         }
         m_snapshot = null;
     }
+    /// <summary>Names each registered material by its prototype's palette address. Palette entries have no authored
+    /// name, so this existing row address identifies the material without introducing another authoring field.</summary>
+    /// <param name="prototype">The prototype id.</param>
+    /// <param name="ids">The program material ids in palette-slot order.</param>
+    public void Materials(string prototype, ReadOnlySpan<int> ids) {
+        for (var slot = 0; (slot < ids.Length); slot++) {
+            var key = (prototype, ids[slot]);
+
+            if (!m_materials.ContainsKey(key: key)) {
+                m_materials[key] = $"{prototype}.palette[{slot}]";
+                m_snapshot = null;
+            }
+        }
+    }
     /// <summary>Returns the immutable table of this program's SDF instances and its static then pooled mesh draws.
     /// A pool retains the list reference while only poses change, so those frames allocate nothing here.</summary>
     /// <param name="pool">The immutable pool mesh identities in draw order.</param>
@@ -53,12 +76,14 @@ public sealed class WorldPickMapBuilder {
         if ((m_snapshot is null) || !ReferenceEquals(objA: m_pool, objB: pool)) {
             m_pool = pool;
             m_snapshot = new WorldPickMap(instances: new Dictionary<int, WorldPickTarget>(dictionary: m_instances),
-                meshes: [.. m_meshes, .. pool]);
+                meshes: [.. m_meshes, .. pool], materials: new Dictionary<(string Prototype, int Material), string>(dictionary: m_materials));
         }
         return m_snapshot;
     }
 
-    private sealed class WorldPickMap(Dictionary<int, WorldPickTarget> instances, WorldPickTarget?[] meshes) : ISdfPickMap {
+    private sealed class WorldPickMap(Dictionary<int, WorldPickTarget> instances, WorldPickTarget?[] meshes, Dictionary<(string Prototype, int Material), string> materials) : ISdfPickMap {
+        public string? MaterialName(uint identity, int material) => ((Resolve(identity: identity) is WorldPickTarget { Prototype: { } prototype })
+            ? materials.GetValueOrDefault(key: (prototype, material)) : null);
         public object? Resolve(uint identity) {
             var source = identity & 0x3FFFFFFF;
 

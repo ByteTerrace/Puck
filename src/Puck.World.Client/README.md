@@ -45,6 +45,12 @@ the solid. Independent motion, followers, chains, and domain operations retain
 the conservative creation-root envelope. Primitive transform addresses stay the
 same in both cases.
 
+`WorldInspectorText` formats the shared panel/command snapshot into fixed scratch;
+long output refuses the editor writer by name. `WorldPlacementCostReport` reads
+the live composed program and its immutable `WorldPickMapBuilder` lookup. It
+attributes exclusively owned packed words to placements and leaves shared tables
+as an explicit remainder; it does not re-emit prototypes or change state.
+
 ## Seats and input
 
 - `PlayerRoster.cs`—seat metadata: which devices sit at which of the four

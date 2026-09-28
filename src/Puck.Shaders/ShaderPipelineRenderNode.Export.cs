@@ -168,6 +168,7 @@ public sealed partial class ShaderPipelineRenderNode {
         }
 
         m_work.EnterPass(pass: m_exportCopyPass);
+        BeginTiming(command: command, pass: m_exportCopyPass, slot: slot);
 
         try {
             RecordBarrier(
@@ -215,6 +216,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 GpuStage.Transfer
             );
             exported.ExportWritten = true;
+            EndTiming(command: command, pass: m_exportCopyPass, slot: slot);
         } finally {
             m_work.LeavePass();
         }

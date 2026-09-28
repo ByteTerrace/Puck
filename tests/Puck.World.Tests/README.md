@@ -36,6 +36,15 @@ the real instance host: a body inside the deadband retains its authority, and on
 beyond it transfers within a bounded number of ticks. `AuthoredAdjacencyHysteresisLawTests`
 checks that reciprocal documents cannot disagree about that deadband.
 
+`WorldInspectorLawTests` checks the shared panel/command formatter, captured placement
+and material identities, explicit text-cap refusal, and allocation-free steady formatting.
+`WorldCostLawTests` reads scoped and per-shape ownership from a live composed program.
+`OverlayReservationRefusalLawTests` runs the actual composer with an oversized writer:
+the whole run is refused, later content fits, and the narration names the writer once
+per episode. `OverlayLeaseTableFitsBackstopsLawTests` holds the shared text backing to
+the power-of-two sum of all declared reservations. `OverlayPackageLawTests` counts its
+installed host/device regions and CPU scratch/shadow payloads.
+
 ## Keep the feedback loop short
 
 Use the smallest fixture that exercises the behavior under test:

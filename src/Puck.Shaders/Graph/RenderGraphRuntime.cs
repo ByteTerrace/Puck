@@ -1327,6 +1327,10 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     /// <param name="instance">The instance's index in <see cref="Instances"/>.</param>
     /// <returns>The bytes, or <see langword="null"/> for an instance that renders through an external producer.</returns>
     public ulong? RegionBytes(int instance) => m_nodes[instance]?.RegionBytes;
+    /// <summary>Returns the installed graph regions' actual GPU memory and retained CPU payload storage.</summary>
+    /// <param name="instance">The instance's index in <see cref="Instances"/>.</param>
+    /// <returns>The region account, or null for an external producer.</returns>
+    public RenderGraphRegionMemory? RegionMemory(int instance) => m_nodes[instance]?.RegionMemory;
 
     // One instance's capture target: a capture armed on it arms the runtime's one slot for the instance of its name, and is
     // refused once a reconfiguration has removed that instance.

@@ -33,6 +33,7 @@ public sealed unsafe class VulkanGpuObjectNaming(IVulkanDeviceContext deviceCont
             GpuObjectKind.ImageView => 14U,
             GpuObjectKind.Pipeline => 19U,
             GpuObjectKind.RenderPass => 18U,
+            GpuObjectKind.TimestampPool => 12U,
             _ => throw new ArgumentOutOfRangeException(
                 actualValue: kind,
                 message: "The object kind is not declared.",
