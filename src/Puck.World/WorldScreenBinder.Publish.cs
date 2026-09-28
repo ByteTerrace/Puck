@@ -123,6 +123,7 @@ internal sealed partial class WorldScreenBinder {
         );
         ServiceProbeFeeds(deviceContext: deviceContext);
         PublishFrameCaptures(context: in context);
+        SettleWindowRoutes();
         m_frameContext = context;
         m_hasFrameContext = true;
         Mappings.Publish(images: this);

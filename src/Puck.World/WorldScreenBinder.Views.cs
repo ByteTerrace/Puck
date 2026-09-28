@@ -91,8 +91,20 @@ internal sealed partial class WorldScreenBinder {
             return true;
         }
 
-        if (SessionFeedOf(name: name)?.FrameSource is not { } source) {
+        if (SessionFeedOf(name: name) is not { FrameSource: { } source } feed) {
             return false;
+        }
+
+        // A window joined to its destination's endpoint scene renders its view there, from the one residency that scene's
+        // seats and windows share; until the presenter's latch includes it, it renders its own session.
+        if (
+            (RoutedWindowOf(feed: feed) is { } window) &&
+            TryResolveWindowView(
+                view: out view,
+                window: window
+            )
+        ) {
+            return true;
         }
 
         if (
@@ -226,10 +238,12 @@ internal sealed partial class WorldScreenBinder {
         foreach (var (name, view) in m_viewResidencies) {
             if (
                 !m_cameraViews.ContainsKey(key: name) &&
+                ((SessionFeedOf(name: name) is not { } feed) ||
                 !ReferenceEquals(
-                    objA: SessionFeedOf(name: name)?.FrameSource,
+                    objA: feed.FrameSource,
                     objB: view.Source
-                )
+                ) ||
+                (RoutedWindowOf(feed: feed) is not null))
             ) {
                 m_releasedViews.Add(item: name);
             }

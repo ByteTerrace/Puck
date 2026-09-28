@@ -532,8 +532,16 @@ internal sealed partial class WorldScreenBinder : IWorldViewScenes {
             return true;
         }
 
-        if (SessionFeedOf(name: view)?.Emitter is { } session) {
-            return session.TryCamera(camera: out camera);
+        if (SessionFeedOf(name: view) is { } feed) {
+            if (RoutedWindowOf(feed: feed) is { } window) {
+                return window.Scene.TryCamera(
+                    camera: out camera,
+                    view: window.Index
+                );
+            }
+            if (feed.Emitter is { } session) {
+                return session.TryCamera(camera: out camera);
+            }
         }
 
         camera = default;
@@ -541,14 +549,23 @@ internal sealed partial class WorldScreenBinder : IWorldViewScenes {
         return false;
     }
     /// <inheritdoc/>
-    /// <remarks>A session answers from the program its last frame rendered (<see cref="WorldSessionSceneEmitter.TrySurface"/>),
+    /// <remarks>A session answers from the program its last frame rendered (<see cref="WorldSessionSceneEmitter.TrySurface(Commands.SourceRay, out Maths.FixedVector3)"/>),
     /// so a pick through a portal lands on the destination's surface it shows; a camera view answers nothing.</remarks>
     public bool TrySurface(string view, SourceRay ray, out FixedVector3 point) {
-        if (SessionFeedOf(name: view)?.Emitter is { } session) {
-            return session.TrySurface(
-                point: out point,
-                ray: ray
-            );
+        if (SessionFeedOf(name: view) is { } feed) {
+            if (RoutedWindowOf(feed: feed) is { } window) {
+                return window.Scene.TrySurface(
+                    point: out point,
+                    ray: ray,
+                    view: window.Index
+                );
+            }
+            if (feed.Emitter is { } session) {
+                return session.TrySurface(
+                    point: out point,
+                    ray: ray
+                );
+            }
         }
 
         point = default;

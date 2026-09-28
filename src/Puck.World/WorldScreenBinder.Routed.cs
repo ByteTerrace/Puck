@@ -13,6 +13,8 @@ internal sealed partial class WorldScreenBinder {
     // Each routed scene's residency, and the scenes gone from the presenter's table, released after Dress.
     private readonly Dictionary<WorldRoutedScene, SdfWorldResidency> m_routedResidencies = new(comparer: ReferenceEqualityComparer.Instance);
     private readonly List<WorldRoutedScene> m_retiredRoutedScenes = [];
+    // The residencies made and released for each endpoint's scene, by the endpoint's identity: its counters row.
+    private readonly Dictionary<string, (long Created, long Released)> m_routedResidencyCounts = new(comparer: StringComparer.Ordinal);
 
     /// <summary>Gets or sets the presenter whose views route a seat presented elsewhere into its world's scene;
     /// <see langword="null"/> in a presentation with no render graph.</summary>
@@ -123,7 +125,15 @@ internal sealed partial class WorldScreenBinder {
                 val1: source.WorstCaseDynamicTransformCapacity,
                 val2: m_viewDynamicTransformCapacity
             ),
-            film: context => (host.HostFrame(context: in context) is not null),
+            film: context => {
+                if (host.HostFrame(context: in context) is null) {
+                    return false;
+                }
+
+                FitRoutedWindows(scene: scene);
+
+                return true;
+            },
             frameSource: source,
             height: ((uint)m_viewDisplayHeight),
             instanceCapacity: ((int)host.CapacityRevision),
@@ -137,8 +147,19 @@ internal sealed partial class WorldScreenBinder {
             width: ((uint)m_viewDisplayWidth)
         );
 
+        var identity = scene.Endpoint.Identity;
+
+        CountRoutedResidency(
+            created: 1,
+            identity: identity,
+            released: 0
+        );
         RegisterViewWork(
-            lifetime: residency.WorkLifetime,
+            lifetime: new WorldRoutedResidencyCounts(
+                lifetime: residency.WorkLifetime,
+                residencies: () => m_routedResidencyCounts.GetValueOrDefault(key: identity),
+                tables: () => residency.TableBytes
+            ),
             name: name,
             transforms: source.MovedTransforms,
             work: residency.Work
@@ -166,17 +187,33 @@ internal sealed partial class WorldScreenBinder {
             )) {
                 UnregisterViewWork(name: RoutedViewName(scene: scene));
                 residency.Dispose();
+                CountRoutedResidency(
+                    created: 0,
+                    identity: scene.Endpoint.Identity,
+                    released: 1
+                );
             }
         }
 
         m_retiredRoutedScenes.Clear();
     }
     private void ReleaseRoutedResidencies() {
-        foreach (var residency in m_routedResidencies.Values) {
+        foreach (var (scene, residency) in m_routedResidencies) {
             residency.Dispose();
+            CountRoutedResidency(
+                created: 0,
+                identity: scene.Endpoint.Identity,
+                released: 1
+            );
         }
 
         m_routedResidencies.Clear();
     }
     private static string RoutedViewName(WorldRoutedScene scene) => $"routed${scene.Endpoint.Identity}";
+    // Counts residencies made or released for an endpoint's scene.
+    private void CountRoutedResidency(string identity, long created, long released) {
+        var (made, gone) = m_routedResidencyCounts.GetValueOrDefault(key: identity);
+
+        m_routedResidencyCounts[identity] = ((made + created), (gone + released));
+    }
 }

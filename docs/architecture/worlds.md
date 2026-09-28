@@ -663,6 +663,17 @@ first. A destination that admits no viewer binds the screen dark and says why, a
 that ends the session, as a rebuild does, is asked to admit the screen again. A destination a
 session screen shows therefore authors an admission row that grants `observe all` with a budget.
 
+A portal window renders its destination from its own disclosed mirror unless its session is delivered
+everything the destination holds: a live session admitted at `Replica`, holding `observe all`,
+in a world whose observer disclosure redacts no body (`WorldSessionObservation.DisclosesEverything`).
+Only then does the window join the scene the presentation keeps for the destination's endpoint and
+render the endpoint's mirror, the destination's whole replica, since that shows it nothing its own
+delivery would not. A `Presentation` or `Frames` window, or one onto a world whose observer
+disclosure redacts, never renders the endpoint's mirror, and disclosure is never traded for the
+memory the shared residency saves. The session stays the gate: once it no longer discloses
+everything, the window leaves the scene and shows its own session again, and its input stays on the
+session either way.
+
 A world's authority owns its session screens' sessions, not the presentation that draws them.
 `WorldInstanceHost` opens one for every screen or placement face whose source is a session when the
 world's definition declares it, re-points or closes it when an edit changes the screen's destination
@@ -726,8 +737,12 @@ same endpoint share one residency, with a view each. A window attached to that w
 (`WorldFramePresenter.AttachWindow`) is one more view of the same frame and residency, after the
 seats' views, at its own quality; the scene stays while a seat is presented there or a window is
 attached. The presenter latches membership each frame: attachments enter at the next latch, and
-disposal reserves the window's slot through the current frame. Session screens render separate
-residencies from their own observations of the destination. Split seats in
+disposal reserves the window's slot through the current frame. A portal window whose session
+discloses everything joins its destination's scene this way (`WorldSessionWindowRoute`), so every
+seat and every such window presenting one endpoint share exactly one residency, and its GPU node
+(`sdf:routed$<endpoint>`) reports that row: residencies made and released, and the bytes its
+tables hold by memory. Any other session screen renders a residency of its own from its own
+observation of the destination. Split seats in
 different worlds each show their own world. Named boot cameras and the spectator fallback keep
 showing the boot world. A local seat keeps its roster's color wherever it is presented. A seat's view
 follows the destination's residency in place when its tables are ready, its instance capacity matches

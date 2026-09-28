@@ -142,6 +142,10 @@ public sealed class WorldCountersCommandModule(IEnumerable<IWorkCounterSource> s
     private string WriteJson(IWorkCounterSource[] selected, bool includeGpu, long? allocated) {
         var buffer = new ArrayBufferWriter<byte>();
 
+        var nodes = (includeGpu
+            ? GpuNodes()
+            : []);
+
         using (var writer = new Utf8JsonWriter(bufferWriter: buffer)) {
             writer.WriteStartObject();
             writer.WriteStartArray(propertyName: "sources");
@@ -177,7 +181,7 @@ public sealed class WorldCountersCommandModule(IEnumerable<IWorkCounterSource> s
 
                 writer.WriteStartArray(propertyName: "nodes");
 
-                foreach (var node in GpuNodes()) {
+                foreach (var node in nodes) {
                     GpuWorkReport.WriteNode(
                         node: node,
                         sample: sample,
@@ -206,6 +210,7 @@ public sealed class WorldCountersCommandModule(IEnumerable<IWorkCounterSource> s
 
             WriteLegend(
                 includeGpu: includeGpu,
+                nodes: nodes,
                 selected: selected,
                 writer: writer
             );
@@ -215,8 +220,9 @@ public sealed class WorldCountersCommandModule(IEnumerable<IWorkCounterSource> s
         return $"[{Verb}: {Encoding.UTF8.GetString(bytes: buffer.WrittenSpan)}]";
     }
     // Every kind the object reports, once, with its unit and class: the sources' kinds in report order, then the GPU
-    // submission and lifetime kinds when the gpu section is present.
-    private static void WriteLegend(Utf8JsonWriter writer, IWorkCounterSource[] selected, bool includeGpu) {
+    // submission and lifetime kinds when the gpu section is present, and any other kind a node's lifetime counters
+    // report (a routed residency's endpoint row, say).
+    private static void WriteLegend(Utf8JsonWriter writer, IWorkCounterSource[] selected, bool includeGpu, IReadOnlyList<GpuWorkNode> nodes) {
         var written = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         writer.WriteStartObject(propertyName: "kinds");
@@ -239,6 +245,12 @@ public sealed class WorldCountersCommandModule(IEnumerable<IWorkCounterSource> s
         if (includeGpu) {
             Write(kinds: GpuWork.SubmissionKinds);
             Write(kinds: GpuWork.LifetimeKinds);
+
+            foreach (var node in nodes) {
+                if (node.Lifetime is { } lifetime) {
+                    Write(kinds: lifetime.WorkKinds);
+                }
+            }
         }
 
         writer.WriteEndObject();

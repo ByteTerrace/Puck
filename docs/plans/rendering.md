@@ -4659,6 +4659,18 @@ counted rows recorded in the same change.
      `place`'s falling to a copy; the output at output extent in
      device-local bytes; native scale with reconstruction off unchanged in every
      count.
+   - Open: an exact authored extent for a view instance. A session or camera
+     view that authors a pixel resolution does not render at it: its instance's
+     extent is the scheduler's, which quantizes the display fraction upward to
+     sixteen steps an octave (`RenderGraphExtent.Quantize`), keeps a larger
+     allocation under its hysteresis, multiplies a footprint by its reader's
+     scale (`RenderGraphScheduler`), and rounds pixels up, so a 160x144
+     session renders at 165x152 on a 1920x1080 display and shrinks with the
+     reading view's render scale or split region. Its camera's aspect comes
+     from its residency's capture extent, not the authored ratio. The authored
+     resolution is an artistic choice, so an instance that states one renders
+     exactly that many texels, with the camera's aspect taken from that
+     extent; this step's render extent is where it lands.
 5. **P15-5, the temporal resolve.** Reconstruction on.
    - Delivers: the history color and history surface as the fragment's history
      versions at output extent; reprojection through `sdfReprojection`, rejected

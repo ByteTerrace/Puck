@@ -578,7 +578,20 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// <param name="point">The point the ray meets, in the destination's space, when this returns <see langword="true"/>.</param>
     /// <returns><see langword="true"/> when a frame has been dressed, the evaluator admits the static placements'
     /// program, and the ray proves a surface within the far distance; a bounded, non-converged march answers nothing.</returns>
-    public bool TrySurface(SourceRay ray, out FixedVector3 point) {
+    public bool TrySurface(SourceRay ray, out FixedVector3 point) => TrySurface(
+        from: m_dressedCamera.GetValueOrDefault().Position,
+        point: out point,
+        ray: ray
+    );
+    /// <summary>Finds the surface a ray meets among the destination's static placements, as <see cref="TrySurface(SourceRay, out FixedVector3)"/>
+    /// does, with the far distance measured from the position of the camera the ray was cast through: one view of a frame
+    /// that several views share (<see cref="WorldRoutedScene.TrySurface"/>).</summary>
+    /// <param name="ray">The ray, in the destination's space.</param>
+    /// <param name="from">The position of the camera the ray was cast through, which the far distance is measured from.</param>
+    /// <param name="point">The point the ray meets, in the destination's space, when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when a frame has been dressed, the evaluator admits the static placements'
+    /// program, and the ray proves a surface within the far distance.</returns>
+    public bool TrySurface(SourceRay ray, Vector3 from, out FixedVector3 point) {
         point = default;
 
         if ((m_lastProgram is not { } program) || (m_dressedDefinition is not { } definition)) {
@@ -608,7 +621,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         }
 
         // The far distance is measured from the camera's position; the ray's origin already lies this far along it.
-        var reach = (FixedQ4816.FromDouble(value: m_dressedFarDistance) - (ray.Origin - FixedVector3.FromVector3(value: m_dressedCamera.GetValueOrDefault().Position)).Length);
+        var reach = (FixedQ4816.FromDouble(value: m_dressedFarDistance) - (ray.Origin - FixedVector3.FromVector3(value: from)).Length);
 
         if (
             (m_dressedField is not { } field) ||
