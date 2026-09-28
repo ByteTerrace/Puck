@@ -1,7 +1,7 @@
 {
   "id": "device-loss",
   "title": "gpu.faults lose loses the offscreen device on its frame, refuses the capture armed at the loss by name, and the host renders on a rebuilt device",
-  "binding": "The positive leg boots an offscreen 256x144 world of two blocks and waits for the engine to be ready. gpu.faults lose 1 arms a device loss on the next frame and world.screenshot arms a capture with it: that frame throws the device loss inside the host's frame body on a healthy GPU, the host writes [device-lost] reason 0x00000000 for its first recovery attempt, releases the render root, which refuses the armed capture as [capture] refused with the device-loss reason, and rebuilds the device in place. gpu.faults list then counts more pipelines created than it did when the loss was armed, because the rebuilt device created its pipelines again, and a second capture on the rebuilt device lands with the scene's dark sky across its top. The discriminating leg arms no loss: no [device-lost] line and no refusal appear, the first capture lands, and no pipeline is created again, so the positive leg's loss, refusal and rebuild observations turn red.",
+  "binding": "The positive leg boots an offscreen 256x144 world of two blocks and waits for the engine to be ready. gpu.faults lose 1 arms a device loss on the next frame and world.screenshot arms a capture with it: that frame throws the device loss inside the host's frame body on a healthy GPU, the host writes [device-lost] reason 0x00000000 for its first recovery attempt, releases the render root, which refuses the armed capture as [capture] refused with the device-loss reason, and rebuilds the device in place. gpu.faults list then counts more pipelines created than it did when the loss was armed, because the rebuilt device created its pipelines again, and a second capture on the rebuilt device lands with the scene's dark sky across its top. The discriminating leg arms no loss: no [device-lost] line and no refusal appear, the first capture lands, which creates the display encode's one capture pipeline since the root's frame is a float working image, and after it no pipeline is created again, so the positive leg's loss, refusal and rebuild observations turn red.",
   "bootShape": "offscreen",
   "backends": ["vulkan", "directx"],
   "requirements": ["gpu"],
@@ -38,13 +38,14 @@
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.cadence", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
-      { "verb": "gpu.faults", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
-      { "verb": "gpu.faults", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "gpu.faults", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "gpu.faults", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 5, "outcome": "accepted" },
       { "verb": "world.screenshot", "occurrence": 2, "outcome": "accepted" },
-      { "verb": "world.wait", "occurrence": 5, "outcome": "accepted" }
+      { "verb": "world.wait", "occurrence": 6, "outcome": "accepted" }
     ],
     "expect": [
       { "type": "line", "name": "no-device-is-lost", "stream": "stderr", "match": "contains", "text": "[device-lost]", "present": false },
