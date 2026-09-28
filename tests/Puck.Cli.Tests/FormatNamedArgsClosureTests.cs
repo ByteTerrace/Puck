@@ -400,6 +400,48 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
         );
     }
     /// <summary>
+    /// A batch evaluates together only projects that select their SDK from the same global.json: projects under
+    /// different global.json roots land in separate partitions, projects sharing a root share one, and a project
+    /// directly under the outer root is keyed by that root rather than by a nested one beside it.
+    /// </summary>
+    [Fact]
+    public void ABatchIsPartitionedByTheGlobalJsonEachProjectSelectsItsSdkFrom() {
+        string Project(string relative) {
+            var project = Path.Combine(
+                path1: m_root,
+                path2: relative
+            );
+
+            Directory.CreateDirectory(path: Path.GetDirectoryName(path: project)!);
+            File.WriteAllText(
+                contents: "<Project Sdk=\"Microsoft.NET.Sdk\" />",
+                path: project
+            );
+
+            return Path.GetFullPath(path: project);
+        }
+
+        foreach (var pinned in ((string[])["Alpha", "Beta"])) {
+            Directory.CreateDirectory(path: Path.Combine(path1: m_root, path2: pinned));
+            File.Copy(
+                destFileName: Path.Combine(path1: m_root, path2: pinned, path3: "global.json"),
+                sourceFileName: Path.Combine(path1: m_root, path2: "global.json")
+            );
+        }
+
+        var one = Project(relative: "Alpha/One/One.csproj");
+        var two = Project(relative: "Alpha/Two/Two.csproj");
+        var three = Project(relative: "Beta/Three/Three.csproj");
+        var four = Project(relative: "Four/Four.csproj");
+
+        var partitions = CompileClosure.PartitionBySdkContext(projects: [four, three, two, one]);
+
+        Assert.Equal(
+            actual: partitions.Select(selector: static partition => partition.ToArray()),
+            expected: [[one, two], [three], [four]]
+        );
+    }
+    /// <summary>
     /// Formatting a tree of sibling projects outside any Puck checkout evaluates them in one batch, with the SDK the
     /// projects themselves select, and each project's calls bind against its own closure: the library's call into its
     /// own type and the sample's call into the library are both named.
