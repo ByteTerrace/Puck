@@ -26,7 +26,7 @@ frame, and the `binding` and `bound` rows capture each instance's own output.
 
 | Station | Stresses |
 |---|---|
-| `sky` | The procedural sky gradient and stars—smooth broad-band shading. |
+| `sky` | An authored gradient, distance fog, sun disc, stars with twinkle, and clouds with drift, shear and spin. Four captures cross the two-key cycle and its intermediate blends. |
 | `materials` | Two SDF primitives with distinct materials—silhouette edges and specular. |
 | `lattice` | A `state.lattices` height-field—the fields-to-pixels path. |
 | `noise` | `noiseDisplace` + `cellJitter`—`sdfPcg3d` agreement on SPIR-V and DXIL. |

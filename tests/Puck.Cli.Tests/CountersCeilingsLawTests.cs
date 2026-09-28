@@ -155,6 +155,10 @@ public sealed class CountersCeilingsLawTests {
         var report = Report(vulkan: Run(backend: "vulkan"));
 
         Assert.Equal(
+            actual: Assert.Single(collection: CountersCeilings.Check(ceilings: Recorded, report: report with { Workload = "tests/Puck.Counters/sky-drift.world.json" }).Failures),
+            expected: $"the ceilings hold {CountersCommand.WorldPath} run by {CountersCommand.ScriptPath}, not tests/Puck.Counters/sky-drift.world.json run by {CountersCommand.ScriptPath}"
+        );
+        Assert.Equal(
             actual: Assert.Single(collection: CountersCeilings.Check(ceilings: Recorded with { Script = "other.script.txt" }, report: report).Failures),
             expected: $"the ceilings hold {CountersCommand.WorldPath} run by other.script.txt, not {CountersCommand.WorldPath} run by {CountersCommand.ScriptPath}"
         );

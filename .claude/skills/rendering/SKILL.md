@@ -1028,6 +1028,10 @@ For a repeatable before-and-after reading, `puck counters` boots
 `puck.counters.report.v1` report, and exits 1 naming the kind, pass and node of
 any deterministic count the backends disagree on;
 `puck counters compare <before> <after>` holds two reports to each other.
+Use `--world` and `--script` for another authored workload. The sky-still,
+sky-drift, sky-twinkle and sky-cycle fixtures use `tests/Puck.Counters/sky.script.txt`
+to isolate each sky change with cadence enabled. Report workload and script
+identity must match the ceilings; absent cadence samples are not measured zeros.
 `puck counters --check` holds every render node's deterministic and
 per-backend-deterministic submission counts, pass by pass and outside every
 pass, to `tests/Puck.Counters/counters.ceilings.json`
