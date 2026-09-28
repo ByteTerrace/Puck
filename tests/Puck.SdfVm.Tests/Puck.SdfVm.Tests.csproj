@@ -15,6 +15,7 @@
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\..\src\Puck.SdfVm\Puck.SdfVm.csproj" />
+        <Compile Include="..\Shared\SdfEncodingTrades.cs" Link="SdfEncodingTrades.cs" />
         <Compile Include="..\Shared\FakeGpuDevice.cs" Link="FakeGpuDevice.cs" />
         <Compile Include="..\Shared\RecordingGpuObjectNaming.cs" Link="RecordingGpuObjectNaming.cs" />
         <Compile Include="..\Shared\SdfTestPipelines.cs" Link="SdfTestPipelines.cs" />

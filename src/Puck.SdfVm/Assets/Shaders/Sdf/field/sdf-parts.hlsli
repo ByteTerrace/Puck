@@ -33,8 +33,8 @@ void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part
     [loop]
     for (uint leaf = 0u; leaf < (part.z & 0x7FFFFFFFu); leaf++) {
         uint4 code = sdfWords[part.x + leaf];
-        uint4 shape = sdfWords[1u + code.x];
-        if (!sdfShapeEnabled(shape.y)) {
+        uint4 shape = sdfWords[SDF_PROGRAM_HEADER_VECTORS + code.x];
+        if (!sdfShapeEnabled(SDF_INSTRUCTION_SHAPE(shape))) {
             continue;
         }
         uint4 binding = sdfWords[part.y + leaf];
@@ -55,18 +55,18 @@ void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part
         float distanceScale = 1.0;
         if (code.y != 0u) {
             uint domainIndex = code.y - 1u;
-            uint4 domain = sdfWords[1u + domainIndex];
-            float4 data0 = asfloat(sdfWords[dataOffset + 2u * domainIndex]);
+            uint4 domain = sdfWords[SDF_PROGRAM_HEADER_VECTORS + domainIndex];
+            float4 data0 = asfloat(sdfWords[dataOffset + SDF_INSTRUCTION_DATA_VECTORS * domainIndex]);
             // These operations retain the generic scalar walk's arithmetic order. The compiler admits at most one
             // domain op after the pose and before the primitive; arbitrary chains stay in the reference VM.
-            if (domain.x == SDF_OP_SCALE) {
+            if (SDF_INSTRUCTION_OP(domain) == SDF_OP_SCALE) {
                 localPosition /= data0.xyz;
                 distanceScale *= data0.w;
             }
 #ifndef SDF_STRIP_HEAVY
-            else if (domain.x == SDF_OP_AXIAL_PROFILE) {
-                float4 data1 = asfloat(sdfWords[dataOffset + 2u * domainIndex + 1u]);
-                uint axis = domain.y;
+            else if (SDF_INSTRUCTION_OP(domain) == SDF_OP_AXIAL_PROFILE) {
+                float4 data1 = asfloat(sdfWords[dataOffset + SDF_INSTRUCTION_DATA_VECTORS * domainIndex + 1u]);
+                uint axis = SDF_INSTRUCTION_SHAPE(domain);
                 float rawT = (data0.z - localPosition[axis]) * data0.w;
                 float t = saturate(rawT);
                 float rawS = data1.y + data0.x * t + data0.y * sin(SDF_PI * t);
@@ -76,18 +76,18 @@ void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part
                     if (component != axis) localPosition[component] *= invScale;
                 }
                 distanceScale *= data1.x;
-            } else if (domain.x == SDF_OP_SHEAR) {
-                uint target = domain.y, driver = domain.z;
+            } else if (SDF_INSTRUCTION_OP(domain) == SDF_OP_SHEAR) {
+                uint target = SDF_INSTRUCTION_SHAPE(domain), driver = SDF_INSTRUCTION_BLEND(domain);
                 float t = localPosition[driver];
                 localPosition[target] += ((data0.z * t + data0.y) * t + data0.x) * t;
             }
 #endif
         }
 
-        float4 shapeData0 = asfloat(sdfWords[dataOffset + 2u * code.x]);
-        float4 shapeData1 = asfloat(sdfWords[dataOffset + 2u * code.x + 1u]);
-        float candidate = evaluateShape(shape.y & SDF_SHAPE_TYPE_MASK, localPosition, shapeData0, shapeData1) * distanceScale;
-        sdfComposeCandidate(child, candidate, shape.z, trackMaterial ? (int)binding.y : 0,
+        float4 shapeData0 = asfloat(sdfWords[dataOffset + SDF_INSTRUCTION_DATA_VECTORS * code.x]);
+        float4 shapeData1 = asfloat(sdfWords[dataOffset + SDF_INSTRUCTION_DATA_VECTORS * code.x + 1u]);
+        float candidate = evaluateShape(SDF_INSTRUCTION_SHAPE(shape) & SDF_SHAPE_TYPE_MASK, localPosition, shapeData0, shapeData1) * distanceScale;
+        sdfComposeCandidate(child, candidate, SDF_INSTRUCTION_BLEND(shape), trackMaterial ? (int)binding.y : 0,
             lanes, slot, shapeData1.x, trackMaterial);
     }
 

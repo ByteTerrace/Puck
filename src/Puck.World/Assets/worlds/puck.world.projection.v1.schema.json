@@ -15536,9 +15536,9 @@
                                 "default": null,
                                 "description": "The rotation axis (null = Y, the XZ ground plane).",
                                 "x-enumDescriptions": {
-                                  "X": "Repeat about the local X axis \u2014 the fold acts in the YZ plane.",
-                                  "Y": "Repeat about the local Y axis \u2014 the fold acts in the XZ (ground) plane. The default: the common \u0022arranged on the ground around a centre\u0022 case (columns of a rotunda, spokes of a wheel lying flat).",
-                                  "Z": "Repeat about the local Z axis \u2014 the fold acts in the XY plane (a clock face / gear facing \u002BZ)."
+                                  "X": "The local X axis; a polar repeat about it folds the YZ plane.",
+                                  "Y": "The local Y axis; a polar repeat about it folds the XZ (ground) plane, the common \u0022arranged on the ground around a centre\u0022 case (columns of a rotunda, spokes of a wheel lying flat).",
+                                  "Z": "The local Z axis; a polar repeat about it folds the XY plane (a clock face or a gear facing \u002BZ)."
                                 }
                               },
                               "mirror": {
@@ -15632,9 +15632,9 @@
                                 "default": null,
                                 "description": "The fold plane (null = XZ).",
                                 "x-enumDescriptions": {
-                                  "XZ": "Fold X and Z (tile the ground).",
-                                  "XY": "Fold X and Y (tile a wall facing Z).",
-                                  "YZ": "Fold Y and Z (tile a wall facing X)."
+                                  "XZ": "X and Z: the ground, facing Y.",
+                                  "XY": "X and Y: a wall facing Z.",
+                                  "YZ": "Y and Z: a wall facing X."
                                 }
                               },
                               "materialStride": {

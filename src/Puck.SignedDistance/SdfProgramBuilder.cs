@@ -412,9 +412,9 @@ public sealed partial class SdfProgramBuilder {
             paramName: paramName,
             value: value
         );
-    private static void RequireDefined(SdfPolarAxis value, string paramName) =>
+    private static void RequireDefined(SdfAxis value, string paramName) =>
         RequireDefined(
-            maximum: SdfPolarAxis.Z,
+            maximum: SdfAxis.Z,
             paramName: paramName,
             value: value
         );
@@ -430,9 +430,9 @@ public sealed partial class SdfProgramBuilder {
             paramName: paramName,
             value: value
         );
-    private static void RequireDefined(SdfWallpaperPlane value, string paramName) =>
+    private static void RequireDefined(SdfPlane value, string paramName) =>
         RequireDefined(
-            maximum: SdfWallpaperPlane.YZ,
+            maximum: SdfPlane.YZ,
             paramName: paramName,
             value: value
         );

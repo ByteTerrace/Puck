@@ -35,7 +35,7 @@ public abstract record SdfDomainOp {
     /// creation origin, the pre-existing pivot). A nonzero origin sandwiches the fold between a translate to and
     /// from the origin, so sectors fan out around it instead of the creation root. Zero is byte-identical to the
     /// origin-free fold.</param>
-    public sealed record Polar(int Count, SdfPolarAxis Axis = SdfPolarAxis.Y, bool Mirror = false, int MaterialStride = 0, Vector3 Origin = default) : SdfDomainOp;
+    public sealed record Polar(int Count, SdfAxis Axis = SdfAxis.Y, bool Mirror = false, int MaterialStride = 0, Vector3 Origin = default) : SdfDomainOp;
     /// <summary>Wallpaper-group lattice fold — <see cref="SdfProgramBuilder.WallpaperFold"/>.</summary>
     /// <param name="Group">The wallpaper group.</param>
     /// <param name="Cell">The lattice cell extents in the fold plane.</param>
@@ -47,7 +47,7 @@ public abstract record SdfDomainOp {
         SdfWallpaperGroup Group,
         Vector2 Cell,
         Vector2 Limit,
-        SdfWallpaperPlane Plane = SdfWallpaperPlane.XZ,
+        SdfPlane Plane = SdfPlane.XZ,
         int MaterialStride = 0,
         float LodDistance = 0f
     ) : SdfDomainOp;

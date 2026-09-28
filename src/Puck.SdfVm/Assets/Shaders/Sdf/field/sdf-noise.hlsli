@@ -73,7 +73,7 @@ float sdfCellDistanceGrad(float3 q, uint seed, uint mode, float randomness, out 
     }
     first = sqrt(first); second = sqrt(second);
     gradient = first > 1.0e-12 ? firstDelta / first : 0.0;
-    if (mode == 0u) return first;
+    if (mode == SDF_CELL_MODE_F1) return first;
     gradient = (second > 1.0e-12 ? secondDelta / second : 0.0) - gradient;
     return second - first;
 }

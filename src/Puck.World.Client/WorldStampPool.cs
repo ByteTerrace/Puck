@@ -678,7 +678,7 @@ public sealed partial class WorldStampPool {
                     bulge: (probeWorstCase ? ShapeFlareDocument.MaxBulge : flare!.Bulge),
                     top: (probeWorstCase ? 0f : ((flare!.Top ?? 0f) * lengthScale)),
                     span: (probeWorstCase ? 1f : (flare!.Span * lengthScale)),
-                    axis: (probeWorstCase ? 1 : flare!.Axis),
+                    axis: (probeWorstCase ? SdfAxis.Y : (SdfAxis)flare!.Axis),
                     startScale: (probeWorstCase ? ShapeFlareDocument.MaxStartScale : flare!.StartScale)
                 );
             }
@@ -697,8 +697,8 @@ public sealed partial class WorldStampPool {
                     linear: (probeWorstCase ? ShapeDocument.MaxShear : shear!.Linear),
                     quadratic: (probeWorstCase ? ShapeDocument.MaxShear : (shear!.Quadratic / lengthScale)),
                     cubic: (probeWorstCase ? ShapeDocument.MaxShear : (shear!.Cubic / (lengthScale * lengthScale))),
-                    target: (probeWorstCase ? 0 : shear!.Target),
-                    driver: (probeWorstCase ? 1 : shear!.Driver)
+                    target: (probeWorstCase ? SdfAxis.X : (SdfAxis)shear!.Target),
+                    driver: (probeWorstCase ? SdfAxis.Y : (SdfAxis)shear!.Driver)
                 );
             }
 

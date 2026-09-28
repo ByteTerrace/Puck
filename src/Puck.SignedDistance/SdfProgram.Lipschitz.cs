@@ -340,9 +340,13 @@ public sealed partial class SdfProgram {
                         break;
                     }
                 case SdfOp.RotatePlane: {
-                        var normalAxis = instruction.Shape switch { 0u => 2u, 1u => 0u, _ => 1u };
+                        var normalAxis = (((SdfPlane)instruction.Shape) switch {
+                            SdfPlane.XY => SdfAxis.Z,
+                            SdfPlane.YZ => SdfAxis.X,
+                            _ => SdfAxis.Y,
+                        });
 
-                        chainWarpRates.Add(item: (MathF.Abs(x: instruction.Data0.X), (instruction.Blend != normalAxis), MinAxis(scale: chainScale)));
+                        chainWarpRates.Add(item: (MathF.Abs(x: instruction.Data0.X), (instruction.Blend != ((uint)normalAxis)), MinAxis(scale: chainScale)));
                         break;
                     }
                 case SdfOp.ShapeBlend: {
