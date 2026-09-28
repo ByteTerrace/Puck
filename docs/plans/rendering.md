@@ -4296,7 +4296,12 @@ item 2 landed.
     folds, log-spheres, cell jitter, axial profiles, lane erosion, dynamic
     transforms, non-uniform scales and the shapes the evaluator refuses (regular
     polygons, stars, ellipses, glyphs, sampled regions, paths and multi-strand
-    sweeps) have no device reference yet. The parity world boots with soft shadows at
+    sweeps) have no device reference yet. A reload reads only the kernels a
+    tree carries and compiles each carried `.comp.hlsl` source with the World's
+    `ShaderCompiler` (`SdfKernelSet.Overlaid`), so editing a kernel and
+    reloading is one step; the `sdf-shader-reload` canary installs a baker
+    that reads the host's stamped include and refuses one declaring another
+    stamp, on both backends. The parity world boots with soft shadows at
     `High` and ambient occlusion on, so every SDF station passes through the
     shadow and ambient stages under the cross-backend pixel gate.
 

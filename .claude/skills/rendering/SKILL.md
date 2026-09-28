@@ -137,7 +137,8 @@ register.
 - **Keep control flow uniform around barriers and groupshared gathers.** The
   views wrapper converts its extent test into an `active` flag so inactive
   lanes still reach the barriers.
-- **Build, then hot-reload.** [references/kernels.md](references/kernels.md)
+- **Edit, then hot-reload.** `world.shaders.reload` compiles the kernel
+  sources a tree carries. [references/kernels.md](references/kernels.md)
   covers the DXC build, kernel variants, pass order and labels,
   registers, the visibility record, and the `world.shaders.reload` loop. Host ABI,
   buffer-layout, and C# ISA changes need a rebuild, not a reload.

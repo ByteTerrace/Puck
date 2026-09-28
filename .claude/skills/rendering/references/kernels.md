@@ -25,27 +25,36 @@ do not raise that floor without evidence from every supported GPU.
 
 ## Hot reload
 
-With `Puck.World` running and the shaders rebuilt:
+With `Puck.World` running, edit a kernel and reload; no build comes between:
 
 ```text
 world.shaders.reload src/Puck.SdfVm/Assets/Shaders/Sdf
 world.shaders.status          # idle | pending | applied | unchanged | failed
 ```
 
-Pass the source directory. Without one, the command reads the kernels deployed
-beside the running `Puck.World`, which a `Puck.SdfVm`-only build does not
-update; a relative path resolves against the game's working directory. A status
-of `unchanged` means the compiled bytecode did not change — usually an edit in
-code that no shipped kernel compiles.
+The reload reads the kernels the tree's `passes` directory carries and keeps
+the rest (`SdfKernelSet.Overlaid`). A kernel's `sdf-*.comp.hlsl` source
+compiles with the World's `ShaderCompiler`, the one document passes use, so an
+unchanged source is a cache hit; a kernel carried only as bytecode loads as it
+stands, and a source wins over bytecode beside it. A tree may carry one kernel.
+Without a directory, the command reads the bytecode deployed beside the running
+`Puck.World`; a relative path resolves against the game's working directory. A
+status of `unchanged` means no kernel's bytecode changed — usually an edit in
+code that no shipped kernel compiles. A compile error fails the request with
+each error's file, line and column. The issuing text session's later lines wait
+for the request to settle, and its outcome prints on stderr
+(`[world.shaders.reload: request=N applied|unchanged|failed ...]`).
 
-`status` stays `pending` while the bytecode loads and the changed pipelines are
-created on the thread pool (`SdfWorldPipelines.PrepareReload`); a later frame
+`status` stays `pending` while the sources compile, the bytecode loads and the
+changed pipelines are created on the thread pool
+(`SdfWorldPipelines.PrepareReload`); a later frame
 installs them (`SdfWorldTables.InstallReload`), which waits for the device to go idle, swaps the changed
 pipelines in and retires the old ones; a failed load or pipeline build keeps
 the previous kernels, and so does a tree whose kernels do not read the host's
 interface: a kernel compiled against another instruction set (its pass block's
 stamp) or binding anything where the host does not place it. Reflecting a DXIL
-kernel needs the `dxcompiler.dll` beside the `dxc` on the path. Scene buffers, images, baked bricks, and world state
+kernel needs the `dxcompiler.dll` beside the `dxc` on the path. The
+`sdf-shader-reload` canary holds both outcomes on both backends. Scene buffers, images, baked bricks, and world state
 survive; the cadence signature is invalidated. The last
 successful set survives device-loss recovery. `views.graphs` instances
 (`pipeline.reload`) and `views.post` post-process packages are outside this

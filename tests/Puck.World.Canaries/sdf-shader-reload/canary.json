@@ -1,0 +1,43 @@
+{
+  "id": "sdf-shader-reload",
+  "title": "world.shaders.reload compiles a kernel source a tree carries, installs one that reads the host's stamped interface, and refuses one stamped for another instruction set",
+  "binding": "Both legs boot a minimal offscreen fixture world (one SDF view, no window) on each backend and wait for its engine. Two fixture kernel trees each carry one source and nothing else, a brick baker, so every other kernel keeps its bytecode. The applied tree's baker reads the sdf.bricks interface through the host's generated include, so it carries the host's instruction-set stamp; the foreign tree's baker declares the same pass block under the stamp Isa00000000. world.shaders.reload compiles each tree's source with the World's shader compiler, reflects the bytecode on the running backend, and holds the script until the request settles. The positive leg reloads the applied tree, which installs one pipeline (request 1 applied, generation 1), then the foreign tree, which fails naming the foreign pass block and keeps generation 1. The discriminating leg reloads the two trees in the other order, so request 1 is the refusal and request 2 the install, and both of the positive leg's request lines turn red. The world is the sdf-decode-sign-refusal fixture's; timeoutSeconds leaves room for two cold compiles of a tiny kernel and one pipeline build.",
+  "bootShape": "offscreen",
+  "backends": ["vulkan", "directx"],
+  "requirements": ["gpu"],
+  "timeoutSeconds": 60,
+  "fixtures": [
+    "applied/passes/sdf-brick-bake.comp.hlsl",
+    "foreign/passes/sdf-brick-bake.comp.hlsl"
+  ],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/sdf-shader-reload/fixture.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.shaders.reload", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.shaders.reload", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.shaders.status", "occurrence": 1, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "applied-tree-installs-one-pipeline", "stream": "stderr", "match": "exact", "text": "[world.shaders.reload: request=1 applied generation=1 pipelines=1]" },
+      { "type": "line", "name": "foreign-tree-fails-and-keeps-the-generation", "stream": "stderr", "match": "contains", "text": "[world.shaders.reload: request=2 failed generation=1 pipelines=0 error=" },
+      { "type": "line", "name": "foreign-stamp-named", "stream": "stderr", "match": "contains", "text": "the module's pass block is 'passGroupIsa00000000'" },
+      { "type": "line", "name": "status-reports-the-refusal", "stream": "stdout", "match": "contains", "text": "[world.shaders.status: request=2 state=failed generation=1 pipelines=0" }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/sdf-shader-reload/fixture.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.shaders.reload", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.shaders.reload", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.shaders.status", "occurrence": 1, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "foreign-tree-fails-first", "stream": "stderr", "match": "contains", "text": "[world.shaders.reload: request=1 failed generation=0 pipelines=0 error=" },
+      { "type": "line", "name": "applied-tree-installs-second", "stream": "stderr", "match": "exact", "text": "[world.shaders.reload: request=2 applied generation=1 pipelines=1]" }
+    ]
+  }
+}
