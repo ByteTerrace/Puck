@@ -166,9 +166,10 @@ public static class ShaderInterfaceHlsl {
             );
         }
 
-        if (ShaderWorkCounters.IsDeclaredBy(shaderInterface: shaderInterface)) {
-            ShaderWorkCounters.AppendHlsl(text: text);
-        }
+        ShaderWorkCounters.AppendHlsl(
+            counts: ShaderWorkCounters.IsDeclaredBy(shaderInterface: shaderInterface),
+            text: text
+        );
 
         Line(
             line: "",

@@ -509,6 +509,13 @@ public sealed class ShaderInterfaceLawTests {
 
                 uint offsetsAt(uint index) { return ((index < 4u) ? offsets[index] : ((uint)0)); }
 
+                // This interface declares no work counters, so its passes count nothing: the counting functions a kernel calls
+                // are declared empty, and a kernel written for a counting package compiles here unchanged.
+                void puckCountWork(uint steps, uint texels) {
+                }
+                void puckCountFragmentWork(uint steps, uint texels) {
+                }
+
                 #endif // PUCK_SHADER_INTERFACE_TYPED_BUFFERS
 
                 """.ReplaceLineEndings(replacementText: "\n")
@@ -548,6 +555,13 @@ public sealed class ShaderInterfaceLawTests {
                 [[vk::binding(0, 3)]] ConstantBuffer<PixelatePass> passGroup : register(b0, space3);
                 [[vk::binding(1, 3)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> output : register(u1, space3);
                 [[vk::binding(2, 3)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> source : register(u2, space3);
+
+                // This interface declares no work counters, so its passes count nothing: the counting functions a kernel calls
+                // are declared empty, and a kernel written for a counting package compiles here unchanged.
+                void puckCountWork(uint steps, uint texels) {
+                }
+                void puckCountFragmentWork(uint steps, uint texels) {
+                }
 
                 #endif // PUCK_SHADER_INTERFACE_PIXELATE
 

@@ -871,9 +871,12 @@ These are one-line cautions; the owning pages hold the derivations.
   counting functions in its generated include: `puckCountWork` (a wave sum
   added by the first active lane) for a compute kernel and
   `puckCountFragmentWork` (the same over the lanes that are not helper lanes)
-  for a fragment stage, laid out from `GpuKernelCounters`' constants, and
-  `PUCK_WORK_COUNTERS`, inside which a kernel a document pass also compiles
-  (the source conversions) counts. Its node keeps
+  for a fragment stage, laid out from `GpuKernelCounters`' constants. Every
+  other generated include, a document pass's among them, declares the same two
+  functions empty, so a kernel counts unguarded and a package's kernel compiles
+  as a document pass naming its source; never guard a count with a macro.
+  `DocumentPassPackageKernelLawTests` compiles every package kernel that way.
+  Its node keeps
   `GpuKernelCounters`: per frame slot a device-local counter
   buffer and a readback buffer (`IGpuBufferFactory.CreateReadback`), one row a
   planned pass. The node records the clear and its barrier ahead of the first

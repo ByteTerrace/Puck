@@ -42,9 +42,7 @@ struct PlacePass {
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
 // back): each counted kind in GpuWork.KernelKinds order, march steps then texels written, as a 64-bit count in
-// two words, low word first. A kernel that also compiles under an interface declaring no work counters (a
-// document pass's) counts inside #if defined(PUCK_WORK_COUNTERS).
-#define PUCK_WORK_COUNTERS 1
+// two words, low word first. An interface declaring no work counters declares the same two functions empty.
 static const uint PuckWorkRowWords = 4u;
 static const uint PuckWorkStepsWord = 0u;
 static const uint PuckWorkTexelsWord = 2u;
