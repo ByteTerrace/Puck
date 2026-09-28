@@ -15,7 +15,7 @@ namespace Puck.Shaders;
 /// one allocation shared by every frame slot, and scales with the counts its host resolves: the view's extent, one
 /// viewport, its tiles at <see cref="TileSize"/>, and the program's instances and instance-mask words.</para>
 /// </summary>
-public static class SdfWorldPackage {
+public static partial class SdfWorldPackage {
     /// <summary>The pass-group value holding the render extent in pixels: the per-view visibility record stride.</summary>
     public const string ImageExtent = "imageExtent";
     /// <summary>The pass-group value holding the tiles per viewport, columns then rows: the cull buffer's per-viewport
@@ -374,7 +374,7 @@ public static class SdfWorldPackage {
     /// one output the view's color. Every pass counts its kernels' march steps and texels written into the work counters
     /// (<see cref="RenderGraphFragmentPass.CountsKernelWork"/>): the mesh pass each fragment it writes to its
     /// target.</summary>
-    public static RenderGraphPackageFragment Fragment { get; } = new(
+    public static RenderGraphPackageFragment NativeFragment { get; } = new(
         InputVersions: [],
         OutputVersions: [Color],
         Passes: [

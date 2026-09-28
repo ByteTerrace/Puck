@@ -63,7 +63,8 @@
               "mode": {
                 "enum": [
                   "Relative",
-                  "Absolute"
+                  "Absolute",
+                  "Render"
                 ],
                 "title": "ShaderPipelineDimensionMode"
               },
@@ -155,7 +156,8 @@
                       "DynamicTransforms",
                       "InstanceMaskWords",
                       "InstanceGridWords",
-                      "BrickPoolVoxels"
+                      "BrickPoolVoxels",
+                      "RenderExtent"
                     ],
                     "title": "ShaderPipelineCountBasis"
                   }

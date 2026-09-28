@@ -310,6 +310,7 @@ public sealed partial class RenderGraphRuntime {
             new RenderGraphSchedule(set: set),
             new RenderGraphSchedule(set: set),
         ];
+        ForgetReplacedFragments(kept: kept, set: set);
         m_set = set;
         m_standInReads = new string?[count];
         m_taintedReads = new string?[count];

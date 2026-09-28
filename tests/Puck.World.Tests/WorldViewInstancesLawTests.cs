@@ -46,6 +46,16 @@ public sealed class WorldViewInstancesLawTests {
         );
     }
     [Fact]
+    public void CameraAndSessionInstancesRetainTheirAuthoredPixels() {
+        var views = WorldViewInstances.Of(views: [
+            View(name: "camera", demand: WorldViewDemand.Screen) with { OutputExtent = new RenderGraphPixelExtent(Height: 256, Width: 2048) },
+            View(demand: WorldViewDemand.Screen, filmsWorld: false, name: "session") with { OutputExtent = new RenderGraphPixelExtent(Height: 144, Width: 160) },
+        ]);
+
+        Assert.Equal(expected: views.Views.Select(selector: static view => view.OutputExtent),
+            actual: views.Instances(sources: []).Select(selector: static instance => instance.OutputExtent));
+    }
+    [Fact]
     public void ACameraReadsOnlyTheViewsAScreenShows() {
         const int Cameras = 6;
         var views = WorldViewInstances.Of(views: [

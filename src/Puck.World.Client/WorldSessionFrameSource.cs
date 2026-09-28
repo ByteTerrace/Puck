@@ -14,7 +14,10 @@ namespace Puck.World.Client;
 /// <param name="inner">The session's composition, whose dresser is its <see cref="WorldSessionSceneEmitter"/>.</param>
 /// <param name="captureHostFirst">Captures the world's frame for the frame being prepared when it has not been captured
 /// yet; a no-op otherwise.</param>
-public sealed class WorldSessionFrameSource(SdfCompositionFrameSource inner, Action captureHostFirst) : ISdfFrameSource {
+/// <param name="resolution">The session's authored pixel extent, including the caller's resolved default, or null to
+/// use the requested capture extent. It fixes the camera aspect from the first capture, independently of a residency's
+/// largest previously requested extent.</param>
+public sealed class WorldSessionFrameSource(SdfCompositionFrameSource inner, Action captureHostFirst, WorldScreenResolution? resolution = null) : ISdfFrameSource {
     private bool m_hasProduced;
     private long m_lastProduceTimestamp;
 
@@ -42,9 +45,9 @@ public sealed class WorldSessionFrameSource(SdfCompositionFrameSource inner, Act
 
         return inner.CaptureFrame(
             deltaSeconds: ownDelta,
-            height: height,
+            height: ((uint)(resolution?.Height ?? ((int)height))),
             interpolationAlpha: 0f,
-            width: width
+            width: ((uint)(resolution?.Width ?? ((int)width)))
         );
     }
     /// <inheritdoc/>

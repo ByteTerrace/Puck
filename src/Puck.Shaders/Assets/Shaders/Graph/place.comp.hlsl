@@ -20,72 +20,7 @@ float3 filmicTonemap(float3 color) {
     return saturate((color * ((2.51 * color) + 0.03)) / (((color * ((2.43 * color) + 0.59)) + 0.14)));
 }
 
-float4 catmullRomWeights(float t) {
-    float t2 = (t * t);
-    float t3 = (t2 * t);
-
-    return float4(
-        ((-0.5 * t) + t2 - (0.5 * t3)),
-        (1.0 - (2.5 * t2) + (1.5 * t3)),
-        ((0.5 * t) + (2.0 * t2) - (1.5 * t3)),
-        ((-0.5 * t2) + (0.5 * t3))
-    );
-}
-float3 tap(int2 pixel, uint2 sourceDims) {
-    uint2 p = (uint2)clamp(pixel, int2(0, 0), (int2(sourceDims) - 1));
-
-    return source.Load(int3(p, 0)).rgb;
-}
-float3 reconstruct(uint2 pixel, uint2 rectDims, uint2 sourceDims) {
-    if (all(sourceDims == rectDims)) {
-        return source.Load(int3(pixel, 0)).rgb;
-    }
-
-    float2 sourcePos = ((((float2(pixel) + 0.5) * float2(sourceDims)) / float2(rectDims)) - 0.5);
-    float2 clamped = clamp(sourcePos, float2(0.0, 0.0), (float2(sourceDims) - 1.0));
-    int2 origin = int2(clamped);
-    float2 f = (clamped - float2(origin));
-    float3 c00 = tap((origin + int2(0, 0)), sourceDims);
-    float3 c10 = tap((origin + int2(1, 0)), sourceDims);
-    float3 c01 = tap((origin + int2(0, 1)), sourceDims);
-    float3 c11 = tap((origin + int2(1, 1)), sourceDims);
-    float3 bilinear = lerp(lerp(c00, c10, f.x), lerp(c01, c11, f.x), f.y);
-    float sharpness = saturate(passGroup.sharpness);
-
-    if (sharpness == 0.0) {
-        return bilinear;
-    }
-
-    // The central four taps serve both the bilinear baseline and the cubic's middle rows, so the cubic path makes
-    // exactly sixteen loads.
-    float4 wx = catmullRomWeights(f.x);
-    float4 wy = catmullRomWeights(f.y);
-    float3 row0 =
-        (wx.x * tap((origin + int2(-1, -1)), sourceDims)) +
-        (wx.y * tap((origin + int2( 0, -1)), sourceDims)) +
-        (wx.z * tap((origin + int2( 1, -1)), sourceDims)) +
-        (wx.w * tap((origin + int2( 2, -1)), sourceDims));
-    float3 row1 =
-        (wx.x * tap((origin + int2(-1,  0)), sourceDims)) +
-        (wx.y * c00) +
-        (wx.z * c10) +
-        (wx.w * tap((origin + int2( 2,  0)), sourceDims));
-    float3 row2 =
-        (wx.x * tap((origin + int2(-1,  1)), sourceDims)) +
-        (wx.y * c01) +
-        (wx.z * c11) +
-        (wx.w * tap((origin + int2( 2,  1)), sourceDims));
-    float3 row3 =
-        (wx.x * tap((origin + int2(-1,  2)), sourceDims)) +
-        (wx.y * tap((origin + int2( 0,  2)), sourceDims)) +
-        (wx.z * tap((origin + int2( 1,  2)), sourceDims)) +
-        (wx.w * tap((origin + int2( 2,  2)), sourceDims));
-    float3 cubic = ((((wy.x * row0) + (wy.y * row1)) + (wy.z * row2)) + (wy.w * row3));
-    float3 neighborhoodMin = min(min(c00, c10), min(c01, c11));
-    float3 neighborhoodMax = max(max(c00, c10), max(c01, c11));
-
-    return lerp(bilinear, clamp(cubic, neighborhoodMin, neighborhoodMax), sharpness);
-}
+#include "../Shared/reconstruction.hlsli"
 
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
@@ -115,7 +50,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     } else {
         source.GetDimensions(sourceDims.x, sourceDims.y);
 
-        float3 color = reconstruct((id.xy - rectMin), (rectMax - rectMin), sourceDims);
+        float3 color = puckReconstruct(source, (id.xy - rectMin), (rectMax - rectMin), sourceDims, passGroup.sharpness).rgb;
 
         written = float4(((passGroup.tonemap != 0u) ? filmicTonemap(color) : color), 1.0);
     }

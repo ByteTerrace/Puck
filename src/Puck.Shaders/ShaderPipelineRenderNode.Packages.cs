@@ -351,6 +351,8 @@ public sealed partial class ShaderPipelineRenderNode {
                 : null),
             CommandBuffer: handle,
             Context: context,
+            FrameWidth: m_width,
+            FrameHeight: m_height,
             Height: pass.Height,
             Inputs: inputs,
             Leases: m_frameLeases,

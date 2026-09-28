@@ -27,7 +27,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
             PackageView,
             new RenderGraphRuntimeGraph[1]
         );
-        var parts = SdfWorldPackage.Fragment.Passes.Count;
+        var parts = SdfWorldPackage.NativeFragment.Passes.Count;
         var index = 0L;
 
         Assert.True(condition: SpinWait.SpinUntil(

@@ -14,11 +14,16 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
     /// <summary>The camera's cut revision, moved when its framing is reseeded or a layout slot changes its source.</summary>
     public long CutRevision { get; init; }
 
-    /// <summary>The view's render scale in (0, 1]: the fraction of its region's extent its output renders at when no
-    /// host asks for an extent (the render graph's scheduled extent); a host placing the output reconstructs
-    /// it into the region. 1 (the default) renders native. Presentation-only: hosts drop it during camera transitions
-    /// and for mostly-hidden views.</summary>
+    /// <summary>The authored render-scale ceiling in (0, 1], quantized by <see cref="RenderGraphExtent"/>. Scratch is
+    /// allocated at this fraction of the view's output extent; its published output keeps its full extent.</summary>
     public float RenderScale { get; init; } = 1f;
+
+    /// <summary>The controller's already-quantized render scale, bounded by <see cref="RenderScale"/>'s quantized
+    /// ceiling. Zero uses the ceiling; a positive value enables changing the sample grid without reallocating scratch.</summary>
+    public float ResolvedRenderScale { get; init; }
+    /// <summary>The spatial reconstruction sharpness, from zero for bilinear to one for clamped Catmull-Rom.</summary>
+    public float UpscaleSharpness { get; init; }
+
     /// <summary>The editor grid the view draws, which its pass block carries (<see cref="SdfFrameBlock"/>); a view that
     /// draws none carries <see cref="GridOverlayState.Hidden"/>.</summary>
     public GridOverlayState Grid { get; init; } = GridOverlayState.Hidden;

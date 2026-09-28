@@ -5,7 +5,7 @@ using Puck.Hosting;
 namespace Puck.Shaders.Tests;
 
 /// <summary>
-/// The <c>sdf.world</c> package's fragment (<see cref="SdfWorldPackage.Fragment"/>), spliced into a view's graph by the
+/// The <c>sdf.world</c> package's fragment (<see cref="SdfWorldPackage.NativeFragment"/>), spliced into a view's graph by the
 /// graph compiler, is the one statement of an SDF view's dispatch set: the planner orders its passes sky, mask, beam,
 /// cull arguments, mesh, primary, surface, ambient, shadow and views, and plans between them exactly the buffer transitions the
 /// kernels' reads and writes need, each after the pass that last wrote or read what the next writes or reads. Every
@@ -13,7 +13,7 @@ namespace Puck.Shaders.Tests;
 /// frame before, and at every capacity the planner sizes each buffer as the kernels index it. Every compute pass counts its
 /// kernels' work into the node's kernel counters, which are no planned storage.
 /// </summary>
-public sealed class SdfPassPlanLawTests {
+public sealed partial class SdfPassPlanLawTests {
     // The name a view's graph gives the pass running the package.
     private const string Sdf = "sdf";
 
@@ -78,7 +78,7 @@ public sealed class SdfPassPlanLawTests {
     [Fact]
     public void ThePlannedOrderIsTheFragmentsDispatchOrder() {
         Assert.Equal(
-            actual: SdfWorldPackage.Fragment.Passes.Select(selector: static pass => pass.Name),
+            actual: SdfWorldPackage.NativeFragment.Passes.Select(selector: static pass => pass.Name),
             expected: Order
         );
         Assert.Equal(
@@ -103,7 +103,7 @@ public sealed class SdfPassPlanLawTests {
         string[] hit = [SdfWorldPackage.Parts.CullBounds, SdfWorldPackage.Parts.InstanceMasks, SdfWorldPackage.Parts.Tiles];
 
         Assert.Equal(
-            actual: SdfWorldPackage.Fragment.Passes.Select(selector: static pass => (
+            actual: SdfWorldPackage.NativeFragment.Passes.Select(selector: static pass => (
                 pass.Name,
                 string.Join(separator: ",", values: pass.Inputs.Select(selector: static input => input.Name)),
                 string.Join(separator: ",", values: pass.Outputs.Select(selector: static output => output.Name))

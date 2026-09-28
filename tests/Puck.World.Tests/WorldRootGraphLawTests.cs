@@ -56,7 +56,7 @@ public sealed class WorldRootGraphLawTests {
         Assert.Null(@object: graph.Plan);
         Assert.Equal(
             actual: (graph.Root, world.Name, world.ExternalPackage, world.Passes),
-            expected: (WorldViewGraphs.WorldInstance, WorldViewGraphs.WorldInstance, RenderGraphPackageCatalog.SdfWorld, SdfWorldPackage.Fragment.Passes.Count)
+            expected: (WorldViewGraphs.WorldInstance, WorldViewGraphs.WorldInstance, RenderGraphPackageCatalog.SdfWorld, SdfWorldPackage.NativeFragment.Passes.Count)
         );
         Assert.Empty(collection: graph.Footprints);
         Assert.Null(@object: Assert.Single(collection: graph.Graphs()));

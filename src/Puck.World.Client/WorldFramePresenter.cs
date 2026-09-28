@@ -1446,6 +1446,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                         CutRevision = ViewCut(index: m_views.Count, source: m_namedCameraRigCache[cameraName], revision: m_namedCameraRigCache[cameraName].Revision),
                         Quality = quality,
                         RenderScale = (m_settings.RenderScale * transitionScale),
+                        UpscaleSharpness = m_settings.UpscaleSharpness,
                     });
                     if (!hasSeatViewFallback) {
                         hasSeatViewFallback = true;
@@ -1496,8 +1497,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 width: width
             );
             // The live render-scale tier rides each view's own RenderScale: native = 1.0 is the bit-exact fast path,
-            // any lower tier renders that view's SDF at a reduced extent, which the root's place pass reconstructs. A
-            // layout transition dips it.
+            // any lower tier renders that view's SDF at a reduced extent, reconstructed inside its own package.
+            // The root places the native output; a layout transition dips only the internal render grid.
             m_views.Add(item: new SdfViewSnapshot(
                 Camera: camera,
                 Region: region
@@ -1506,6 +1507,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 Grid = SeatGrid(slot: slot),
                 Quality = quality,
                 RenderScale = (m_settings.RenderScale * transitionScale),
+                UpscaleSharpness = m_settings.UpscaleSharpness,
             });
             // A seat presented elsewhere keeps its place among the views, so every view keeps its index, and its view
             // is latched into the scene of the world it is presented in, which renders it instead.
@@ -1596,6 +1598,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 CutRevision = ViewCut(index: m_views.Count, source: this, revision: 0),
                 Quality = quality,
                 RenderScale = m_settings.RenderScale,
+                UpscaleSharpness = m_settings.UpscaleSharpness,
             });
         } else {
             m_noLocalSeatsNarrated = false;

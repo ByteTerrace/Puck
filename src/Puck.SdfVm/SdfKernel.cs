@@ -28,4 +28,6 @@ public enum SdfKernel {
     Sky,
     /// <summary>The carve-union brick baker, dispatched only when the engine keeps a brick pool.</summary>
     BrickBake,
+    /// <summary>Full-output reconstruction, whose pipeline is acquired only by reduced or variable views.</summary>
+    Resolve,
 }

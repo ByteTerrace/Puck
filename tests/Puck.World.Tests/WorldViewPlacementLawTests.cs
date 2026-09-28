@@ -104,24 +104,24 @@ public sealed class WorldViewPlacementLawTests : IDisposable {
         var right = new NormalizedRect(Height: 1f, Width: 0.5f, X: 0.5f, Y: 0f);
 
         // A view not yet shown is still read at its rect's extent, so it renders before the root first shows it.
-        Assert.True(condition: m_host.PlaceView(region: left, renderScale: 0.5f, sharpness: 0.25f, shown: false, uncovered: false, view: 0));
-        Assert.True(condition: m_host.PlaceView(region: right, renderScale: 1f, sharpness: 0.25f, shown: false, uncovered: false, view: 1));
+        Assert.True(condition: m_host.PlaceView(region: left, sharpness: 0.25f, shown: false, uncovered: false, view: 0));
+        Assert.True(condition: m_host.PlaceView(region: right, sharpness: 0.25f, shown: false, uncovered: false, view: 1));
         Assert.Equal(
             actual: WorldFootprints(),
             expected: new Dictionary<string, (double Width, double Height)>(comparer: StringComparer.Ordinal) {
-                [WorldRootGraph.ProducerOf(view: 0)] = (0.25, 0.5),
+                [WorldRootGraph.ProducerOf(view: 0)] = (0.5, 1.0),
                 [WorldRootGraph.ProducerOf(view: 1)] = (0.5, 1.0),
             }
         );
         Assert.False(condition: PlacementOf(view: 1).Shown);
 
         m_host.BeginFrame(views: Views);
-        Assert.True(condition: m_host.PlaceView(region: left, renderScale: 0.5f, sharpness: 0.25f, shown: true, uncovered: false, view: 0));
-        Assert.True(condition: m_host.PlaceView(region: right, renderScale: 1f, sharpness: 0.25f, shown: true, uncovered: false, view: 1));
+        Assert.True(condition: m_host.PlaceView(region: left, sharpness: 0.25f, shown: true, uncovered: false, view: 0));
+        Assert.True(condition: m_host.PlaceView(region: right, sharpness: 0.25f, shown: true, uncovered: false, view: 1));
         Assert.Equal(
             actual: WorldFootprints(),
             expected: new Dictionary<string, (double Width, double Height)>(comparer: StringComparer.Ordinal) {
-                [WorldRootGraph.ProducerOf(view: 0)] = (0.25, 0.5),
+                [WorldRootGraph.ProducerOf(view: 0)] = (0.5, 1.0),
                 [WorldRootGraph.ProducerOf(view: 1)] = (0.5, 1.0),
             }
         );
@@ -132,7 +132,7 @@ public sealed class WorldViewPlacementLawTests : IDisposable {
 
         // A view the frame does not place is not shown, and one past the root's views is not placed at all.
         Assert.False(condition: PlacementOf(view: 2).Shown);
-        Assert.False(condition: m_host.PlaceView(region: Whole, renderScale: 1f, sharpness: 0f, shown: true, uncovered: false, view: m_viewPasses.Count));
+        Assert.False(condition: m_host.PlaceView(region: Whole, sharpness: 0f, shown: true, uncovered: false, view: m_viewPasses.Count));
     }
     [Fact]
     public void BeforeTheWorldsFirstFrameTheFirstViewIsPlacedHiddenOverTheWholeDisplay() {
@@ -152,7 +152,7 @@ public sealed class WorldViewPlacementLawTests : IDisposable {
         );
     }
     [Fact]
-    public void ALoneWholeDisplayViewAtNativeScaleIsNeverShown() {
+    public void ALoneWholeDisplayViewAtAnyRenderScaleStandsForItsResolvedOutput() {
         m_host.PlaceViews(
             panesCover: false,
             rendered: static _ => true,
@@ -162,7 +162,7 @@ public sealed class WorldViewPlacementLawTests : IDisposable {
 
         Assert.False(condition: PlacementOf(view: 0).Shown);
 
-        // The same view at a reduced render scale, or over part of the display, is shown once rendered.
+        // A reduced sample grid still publishes a full-size output, so only a smaller region needs placement.
         m_host.BeginFrame(views: Views);
         m_host.PlaceViews(
             panesCover: false,
@@ -170,10 +170,10 @@ public sealed class WorldViewPlacementLawTests : IDisposable {
             sharpness: 0f,
             views: [View(region: Whole, renderScale: 0.5f)]
         );
-        Assert.True(condition: PlacementOf(view: 0).Shown);
+        Assert.False(condition: PlacementOf(view: 0).Shown);
         Assert.Equal(
             actual: WorldFootprints()[WorldRootGraph.ProducerOf(view: 0)],
-            expected: (0.5, 0.5)
+            expected: (1.0, 1.0)
         );
 
         m_host.BeginFrame(views: Views);
@@ -262,7 +262,7 @@ public sealed class WorldViewPlacementLawTests : IDisposable {
         );
         Assert.Equal(
             actual: (PlacementOf(view: 0).Shown, PlacementOf(view: 0).Uncovered),
-            expected: (true, false)
+            expected: (false, false)
         );
 
         foreach (var panesCover in ((ReadOnlySpan<bool>)[false, true])) {
@@ -279,12 +279,9 @@ public sealed class WorldViewPlacementLawTests : IDisposable {
             );
         }
     }
-    // A view's render scale is what the scheduler renders its producer at: the host's footprints, over the set it
-    // composed and the root the display shows, schedule a lone whole-display view at each render-scale tier's own
-    // quantized extent, whichever tier the frame before rendered at. Three-quarter's scale quantizes to exactly the
-    // shrink threshold of a native allocation, so a live step down from native reaches it too.
+    // Sampling scale belongs to the SDF fragment; the published output always fills its authored display region.
     [Fact]
-    public void ALoneViewAtEachRenderScaleTierIsScheduledAtThatTiersExtent() {
+    public void ALoneViewsOutputExtentIsIndependentOfItsRenderScaleTier() {
         var set = m_instances.Instances;
         var history = RenderGraphHistory.Empty(set: set);
         var world = set.IndexOf(name: WorldViewGraphs.WorldInstance);
@@ -324,11 +321,9 @@ public sealed class WorldViewPlacementLawTests : IDisposable {
         ];
 
         for (var index = 0; (index < walk.Length); index++) {
-            var fraction = RenderGraphExtent.Quantize(fraction: WorldRenderScaleTiers.Scale(tier: walk[index]));
-
             Assert.Equal(
                 actual: Scheduled(index: index, renderScale: WorldRenderScaleTiers.Scale(tier: walk[index])),
-                expected: (RenderGraphExtent.Pixels(display: 256, fraction: fraction), RenderGraphExtent.Pixels(display: 144, fraction: fraction))
+                expected: (256, 144)
             );
         }
     }

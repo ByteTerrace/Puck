@@ -41,6 +41,21 @@ public sealed class WorldSessionViewLawTests {
         );
     }
 
+    [InlineData(160, 144)]
+    [InlineData(2048, 256)]
+    [Theory]
+    public void AuthoredSessionResolutionDeterminesTheFirstCameraAspect(int width, int height) {
+        var emitter = new WorldSessionSceneEmitter(effectiveCameraName: null,
+            mirror: new WorldSessionMirror(placeholder: AuthoredGameFixtures.Load(relativePath: SessionWorld)));
+        var source = new WorldSessionFrameSource(inner: new SdfCompositionFrameSource(dresser: emitter, emitters: [emitter]),
+            captureHostFirst: static () => { }, resolution: new WorldScreenResolution(Height: height, Width: width));
+
+        foreach (var requested in new[] { (1280u, 720u), (4096u, 4096u), (32u, 32u) }) {
+            var frame = source.CaptureFrame(deltaSeconds: 0f, height: requested.Item2, interpolationAlpha: 0f, width: requested.Item1);
+
+            Assert.Equal(expected: (width / ((float)height)), actual: frame.Views[0].Camera.AspectRatio);
+        }
+    }
     [Fact]
     public void ASessionViewOfAnAnimatedCreationIncludesItsInstance() {
         var definition = AuthoredGameFixtures.Load(relativePath: SessionWorld);

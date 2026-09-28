@@ -65,4 +65,7 @@ public readonly record struct RenderGraphFrame(
     IReadOnlyList<RenderGraphSourceState>? Sources = null,
     IReadOnlyList<string>? Rerender = null,
     IReadOnlyList<string>? Unchanged = null
-);
+) {
+    /// <summary>Optional current-grid pass pricing, independent of the output extent used by consumers.</summary>
+    public IRenderGraphPassCosts? Costs { get; init; }
+}

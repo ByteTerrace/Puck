@@ -319,7 +319,7 @@ offers:
 
 | Package | Ports | Renders |
 |---|---|---|
-| `sdf.world` | no input, one image output written by compute | The SDF world as the instance's camera sees it, run as a fragment (`SdfWorldPackage.Fragment`): sky, mask, beam, cull arguments, mesh, then primary, surface, ambient, shadow and views dispatched indirectly from the cull arguments, over transient counted scratch. Those five are stages over the per-pixel visibility record: primary alone reads the mesh target and writes the record, surface, ambient and shadow add to it, and views shades it, every light answering through one interface and the stage adding each light's summed rim and specular totals once. The ambient and shadow passes skip a frame whose levers turn ambient occlusion or soft shadows off. The screens it shows are the instance's reads, not ports. |
+| `sdf.world` | no input, one image output written by compute | The SDF world as the instance's camera sees it, run as a native fragment (`SdfWorldPackage.NativeFragment`): sky, mask, beam, cull arguments, mesh, then primary, surface, ambient, shadow and views dispatched indirectly from the cull arguments, over transient counted scratch. Those five are stages over the per-pixel visibility record: primary alone reads the mesh target and writes the record, surface, ambient and shadow add to it, and views shades it, every light answering through one interface and the stage adding each light's summed rim and specular totals once. The ambient and shadow passes skip a frame whose levers turn ambient occlusion or soft shadows off. The screens it shows are the instance's reads, not ports. |
 | `sdf.bricks` | no input, one buffer output written by compute | The world's SDF brick pool, written by brick uploads and carve bakes: one float per voxel, stride 4, counted `[{ "per": ["BrickPoolVoxels"] }]`. It is world-scoped, and the views read it across buffer edges. |
 | `overlay` | one fragment-sampled image input, one color-attachment image output | The console, HUD, toasts and cursor drawn over the input. |
 | `place` | two image inputs, a base and a source, read by compute, one image output written by compute | The base with the source reconstructed into a destination rect over it: an exact copy where the rect has the source's extent, otherwise bilinear at sharpness 0 blending to clamped Catmull-Rom at sharpness 1. Its config is `letterbox` (1 writes the letterbox color outside the rect instead of the base, 0 by default), `rect` (left, top, width and height as fractions of the output, the whole output by default, which resamples the whole source), `sharpness` and `tonemap` (1 puts the reconstructed source through the filmic curve inside the rect, never the base or the letterbox color, 0 by default); a host that places panes per frame (`IRenderGraphPlacements`) overrides the rect and sharpness, and a source it shows nowhere draws nothing, so the base stands for the output, or, when the pass may not stand in, copies the base everywhere, letterbox or not. Its kernel, `src/Puck.Shaders/Assets/Shaders/Graph/place.comp.hlsl`, compiles at build, and `PlacePackage` records it. |
@@ -684,11 +684,13 @@ of a layout into its own output image, and each view is a producer of its own:
 `world` for the first, then `world$2`, `world$3` and so on, up to the most
 views any layout or the player roster can compose. When a world has more than
 one, `main` is the root and runs one `place` pass per view ahead of the pane
-passes. `PrepareGraph` places each view at its rect and adds a footprint of
-that rect at the view's render scale, so the scheduler renders the view at the
-reduced extent and `place` reconstructs it with the same sharpness. A view is
-shown only once the engine has rendered it, and a single view covering the
-whole display at native scale with no tonemap is not placed, so `main` passes
+passes. `PrepareGraph` places each view at its rect and adds that rect's native
+footprint. The view's own package allocates traversal targets at its quantized
+render ceiling and records the current render grid inside those targets. A
+reduced or variable view appends `resolve`, reconstructing color and nearest
+surface at the output extent before placement. A view is shown only once the
+engine has rendered it, and a single view covering the whole display with no
+tonemap is not placed, so `main` passes
 `world` through unchanged; with a tonemap it is placed like any other, since its
 place pass applies the tonemap. A layout change places its views one frame later, like its panes.
 The first view's place pass sets the `place` config's `letterbox`, so outside
@@ -1342,7 +1344,8 @@ more pieces of vocabulary:
 - A buffer's `strideBytes` makes it a structured buffer of elements that size.
 - A buffer's `count` sizes it in place of `sizeBytes`, as a sum of terms. Each
   term is `elements` per unit of the product of the bases in `per`, counts the
-  host resolves: `Extent` pixels, program `Instances`, `ProgramWords`,
+  host resolves: output `Extent` pixels, `RenderExtent` pixels (the allocation
+  ceiling for a package with separate grids), program `Instances`, `ProgramWords`,
   `Viewports`, `Tiles` of one viewport, `DynamicTransforms`, and the
   `InstanceMaskWords` of one tile and `InstanceGridWords` the host derives from
   its instances, and the `BrickPoolVoxels` of the world's SDF brick pool. The
@@ -1358,7 +1361,15 @@ more pieces of vocabulary:
   (`IRenderGraphPackageFactory.CounterOf`, an `IShaderPipelineStorageCounter`)
   at the extent it builds the graph for, and rebuilds the installed graph
   beside it, as a resize does, when the counter's revision moves. A graph whose
-  packages state no counter resolves the extent alone.
+  packages state no counter resolves the extent alone. A package can separately
+  supply `IShaderPipelineRenderExtent`: its ceiling sizes render resources and
+  its current grid sets pass dimensions without reallocating. `Relative` image
+  dimensions use the output grid; `Render` dimensions use this render grid,
+  falling back to output when no provider exists. Current pass costs use those
+  same dimensions, so a reduced SDF view prices ten render-grid passes plus one
+  full-output resolve. An authored camera or session `OutputExtent` stays exact
+  through display resizing and consumer scale changes; footprints decide demand,
+  while the authored pixels decide the image size.
 - A resource's `transient` makes its storage frame-transient: one allocation
   every frame slot shares, instead of one per slot. Each frame writes it from
   discarded contents before anything reads it, and nothing reads it across

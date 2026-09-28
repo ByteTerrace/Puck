@@ -99,8 +99,9 @@ public sealed partial class ShaderPipelineRenderNode {
         public readonly ShaderPipelineAccess[] Accesses = [.. planned.Accesses];
         public readonly CompiledShader? Compiled = compiled;
         public readonly int Count = count;
-        public readonly uint Width = extent.Width;
-        public readonly uint Height = extent.Height;
+        public uint Width = extent.Width;
+        public uint Height = extent.Height;
+        public readonly ShaderPipelineDimensions? Dimensions = planned.Extent;
         public readonly ShaderPipelineParameterLayout ParametersLayout = planned.Parameters;
         public ShaderPipelineParameterValues Parameters = (planned.Parameters.TryBind(
             config: null,
