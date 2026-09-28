@@ -1773,6 +1773,17 @@ the scoped deadline, so that count is the remaining work list.
 puck bench state-evidence
 ```
 
+Replay reads only the manifest and `llvm-mca`. It proves that the pinned
+instruction forms still cost what the manifest records, and says nothing about
+the lowering those forms were read from: a kernel's path exists only after the
+Native AOT compile that [`--capture`](#capturing-the-evidence) runs. The source
+digests cover each kernel's own declaring files, not its callees. So replay and
+the inventory both pass after a change that moves a kernel's path through
+anything else: a callee in `Puck.Maths` or the runtime, the SDK, ILCompiler or
+runtime pack, or the capture's own disassembly walk. After such a change, run
+`--capture`, which exits 1 when the lowering no longer reproduces the pinned
+evidence.
+
 Before producing new kernel artifacts, capture the exact work list and verify that
 the checked-out sources still match the manifest:
 

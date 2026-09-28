@@ -177,6 +177,14 @@ kernel or the schedule, replay the pinned instruction evidence:
 puck bench state-evidence
 ```
 
+Replay checks instruction service only, not the kernels' lowering. When a
+change can move a kernel's path (the kernel or anything it calls, the pinned
+toolchain, or the capture tooling), recapture the evidence as well:
+
+```bash
+puck bench state-evidence --capture artifacts/state-evidence
+```
+
 [Rule analysis, scheduling, and work budgets](analysis.md) explains what the
 schedule prices, and the [`puck bench state-evidence` reference](../cli.md#puck-bench-state-evidence)
 covers the capture procedure.

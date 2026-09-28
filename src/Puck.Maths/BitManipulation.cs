@@ -1,4 +1,6 @@
 using System.Buffers.Binary;
+using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics.X86;
 using System.Text;
 
@@ -22,16 +24,31 @@ public static class BitManipulation {
     // Zen 3's family; Zen 4 shares it and Zen 5 is 0x1A. Hygon's Zen 1 derivative is 0x18.
     private const int FirstFastAmdFamily = 0x19;
 
+    private static bool FastParallelBits;
+
     /// <summary>
     /// Gets whether this host has BMI2 and executes its <c>PDEP</c> and <c>PEXT</c> without microcode:
     /// <see cref="IsParallelBitsFast(string, int, bool)"/> applied to this processor's CPUID vendor and family, read
     /// once. <see langword="false"/> on a host that is not x86.
     /// <para>
-    /// A <see langword="static"/> <see langword="readonly"/> field, so the tier-1 JIT reads it as a constant and a
-    /// closed generic that tests it keeps only the chosen path.
+    /// The module initializer reads CPUID before any code in this assembly runs, so the class has no static
+    /// constructor. A static constructor would make every path that tests this flag carry a check that the constructor
+    /// has run, and under Native AOT that check's cold path enters the runtime's class-constructor runner, whose locks
+    /// and loops have no bound.
     /// </para>
     /// </summary>
-    public static readonly bool HasFastParallelBits = DetectFastParallelBits();
+    public static bool HasFastParallelBits => FastParallelBits;
+
+    /// <summary>Reads this host's CPUID once, when the module loads, into <see cref="HasFastParallelBits"/>.</summary>
+    [ModuleInitializer]
+    [SuppressMessage(
+        category: "Usage",
+        checkId: "CA2255",
+        Justification = "The flag cannot be preinitialized, because it reads the running processor, and reading it from a static constructor would put an unbounded class-constructor check on every PDEP and PEXT path. The initializer reads CPUID and sets this one flag."
+    )]
+    internal static void DetectOnModuleLoad() {
+        FastParallelBits = DetectFastParallelBits();
+    }
 
     /// <summary>Decides whether a processor executes BMI2 <c>PDEP</c> and <c>PEXT</c> fast enough to prefer them over a portable path.</summary>
     /// <param name="vendor">The twelve-character CPUID vendor identifier, such as <c>AuthenticAMD</c> or <c>GenuineIntel</c>.</param>
