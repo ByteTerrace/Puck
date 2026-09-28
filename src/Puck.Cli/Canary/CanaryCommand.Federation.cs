@@ -112,10 +112,80 @@ internal static partial class CanaryCommand {
                     relativeTo: root
                 )
             );
+            RootEscapingDocuments(
+                mirror: federatedDirectory,
+                source: resolved,
+                staged: staged[given]
+            );
         }
 
         return staged;
     }
+
+    // A staged document's basis and imports resolve against its own directory. One that names a document outside the
+    // mirrored tree, as a canary's own delta over a shipped world does, would name nothing from the copy, so it is rooted
+    // where the source's resolves; one inside the tree keeps naming the staged copy, which is what a patched sibling is.
+    internal static void RootEscapingDocuments(string staged, string source, string mirror) {
+        if (JsonNode.Parse(json: File.ReadAllText(path: staged)) is not JsonObject world) {
+            return;
+        }
+
+        var stagedDirectory = Path.GetDirectoryName(path: staged)!;
+        var sourceDirectory = Path.GetDirectoryName(path: source)!;
+        var mirrorRoot = (Path.GetFullPath(path: mirror).TrimEnd(trimChar: Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar);
+        var changed = false;
+
+        string? Rooted(string name) {
+            if (
+                Path.IsPathRooted(path: name) ||
+                Path.GetFullPath(path: Path.Combine(
+                    path1: stagedDirectory,
+                    path2: name
+                )).StartsWith(
+                    comparisonType: StringComparison.OrdinalIgnoreCase,
+                    value: mirrorRoot
+                )
+            ) {
+                return null;
+            }
+
+            changed = true;
+
+            return Path.GetFullPath(path: Path.Combine(
+                path1: sourceDirectory,
+                path2: name
+            )).Replace(
+                newChar: '/',
+                oldChar: '\\'
+            );
+        }
+
+        if (
+            (world[propertyName: WorldDocumentBasis.BasisMemberName]?.GetValue<string>() is { } basis) &&
+            (Rooted(name: basis) is { } rootedBasis)
+        ) {
+            world[propertyName: WorldDocumentBasis.BasisMemberName] = rootedBasis;
+        }
+
+        foreach (var entry in ((world[propertyName: WorldDocumentBasis.ImportsMemberName] as JsonArray) ?? [])) {
+            if (
+                (entry is JsonObject import) &&
+                (import[propertyName: WorldImport.DocumentMemberName]?.GetValue<string>() is { } document) &&
+                (Rooted(name: document) is { } rootedDocument)
+            ) {
+                import[propertyName: WorldImport.DocumentMemberName] = rootedDocument;
+            }
+        }
+
+        if (changed) {
+            File.WriteAllText(
+                contents: world.ToJsonString(options: new System.Text.Json.JsonSerializerOptions { WriteIndented = true }),
+                encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+                path: staged
+            );
+        }
+    }
+
     private static void CopyDirectory(string source, string target) {
         Directory.CreateDirectory(path: target);
 
