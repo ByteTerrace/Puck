@@ -17,6 +17,17 @@ public sealed class SdfFrameBlockLawTests {
     private static readonly string[] ZeroValues = [ShaderFrameInterface.Extent, SdfWorldPackage.ViewBase];
     // A camera basis none of whose components is zero.
     private static readonly Quaternion Basis = Quaternion.CreateFromYawPitchRoll(pitch: 0.4f, roll: 0.5f, yaw: 0.3f);
+    // A grid none of whose components is zero.
+    private static readonly GridOverlayState Grid = new(
+        Flags: GridOverlayFlags.World | GridOverlayFlags.Object | GridOverlayFlags.Surface,
+        LineWidth: 2f,
+        ObjectFrame: new Quaternion(w: 0.9f, x: 0.1f, y: 0.2f, z: 0.3f),
+        ObjectOrigin: new Vector3(x: 4f, y: 5f, z: 6f),
+        ObjectPatchRadius: 2f,
+        ObjectPitch: new Vector3(x: 0.5f, y: 0.25f, z: 0.75f),
+        PlaneY: 1f,
+        WorldPitch: new Vector3(x: 1f, y: 0.5f, z: 2f)
+    );
 
     private static SdfFrame Frame() {
         var builder = new SdfProgramBuilder();
@@ -44,7 +55,9 @@ public sealed class SdfFrameBlockLawTests {
                         Near = 0.5f,
                     },
                     Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)
-                ),
+                ) {
+                    Grid = Grid,
+                },
             ],
             Time: 7f
         ) {
@@ -58,13 +71,6 @@ public sealed class SdfFrameBlockLawTests {
             DisableSoftShadows = true,
             EnableShadowProxy = true,
             FarDistance = 30f,
-            GridFlags = 3u,
-            GridFloorY = 1f,
-            GridObjectFrame = new Quaternion(w: 0.9f, x: 0.1f, y: 0.2f, z: 0.3f),
-            GridObjectOrigin = new Vector3(x: 4f, y: 5f, z: 6f),
-            GridObjectPatchRadius = 2f,
-            GridObjectPitch = new Vector2(x: 0.5f, y: 0.75f),
-            GridWorldPitch = new Vector2(x: 1f, y: 2f),
             ShadowDistanceScale = 0.5f,
             SunScale = 0.75f,
             UseCameraTileShadowMask = true,
@@ -172,6 +178,50 @@ public sealed class SdfFrameBlockLawTests {
                 expected: surfaces
             );
         }
+    }
+    // A view's grid is its own: of two views of one frame, the one that draws a grid carries it in its block and the other
+    // carries no flags, so one seat can build on a grid while another plays.
+    [Fact]
+    public void EachViewsBlockCarriesItsOwnGrid() {
+        var authored = Frame();
+        var frame = (authored with { Views = [authored.Views[0], (authored.Views[0] with { Grid = GridOverlayState.Hidden })] });
+        var parameters = SdfWorldInterfaces.WorldParameters;
+
+        byte[] Block(int view) {
+            var block = new byte[SdfFrameBlock.SizeBytes];
+
+            SdfFrameBlock.Write(
+                block: block,
+                frame: frame,
+                height: 200u,
+                sceneTime: frame.Time,
+                tables: new SdfPassValues(
+                    DebugMode: 0,
+                    Environment: new float[SdfEnvironment.LaneCount],
+                    InstanceMaskWordCount: 1u,
+                    MeshDraws: 0u,
+                    SampleIndex: 0u,
+                    ScreenCount: 0u
+                ),
+                view: view,
+                width: 300u
+            );
+
+            return block;
+        }
+
+        uint Flags(byte[] block) => BitConverter.ToUInt32(startIndex: ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.GridFlags)), value: block);
+        float Single(byte[] block, string member, int component = 0) => BitConverter.ToSingle(startIndex: (((int)parameters.BlockOffsetOf(member: member)) + (component * sizeof(float))), value: block);
+
+        var building = Block(view: 0);
+        var playing = Block(view: 1);
+
+        Assert.Equal(expected: ((uint)Grid.Flags), actual: Flags(block: building));
+        Assert.Equal(
+            expected: (Grid.PlaneY, Grid.LineWidth, Grid.WorldPitch.Y, Grid.ObjectPitch.Y, Grid.ObjectPatchRadius),
+            actual: (Single(block: building, member: SdfWorldPackage.GridPlaneY), Single(block: building, member: SdfWorldPackage.GridLineWidth), Single(block: building, component: 1, member: SdfWorldPackage.GridWorldPitch), Single(block: building, component: 1, member: SdfWorldPackage.GridObjectPitch), Single(block: building, member: SdfWorldPackage.GridObjectPatchRadius))
+        );
+        Assert.Equal(expected: 0u, actual: Flags(block: playing));
     }
     [Fact]
     public void TheMeshInterfaceLaysOutTheWorldPassBlockMemberForMember() {
