@@ -46,8 +46,10 @@ internal sealed class UploadModelGpu :
     private readonly ConcurrentDictionary<nint, byte> m_uploadModules = new();
     private readonly ConcurrentDictionary<nint, byte> m_uploadPipelines = new();
     // The command buffers recorded since a barrier whose first scope holds the compute stage, which orders every earlier
-    // compute read of a staged destination before a copy writes it; a copy recorded in any other is refused.
+    // compute read of a staged destination before a copy writes it, and the buffers a transition from the compute stage
+    // orders the same way in one command buffer; a copy recorded under neither is refused.
     private readonly HashSet<nint> m_readsOrdered = [];
+    private readonly HashSet<(nint CommandBuffer, nint Buffer)> m_bufferReadsOrdered = [];
     private readonly nint[] m_boundSets = new nint[8];
 
     private nint m_boundPipeline;
@@ -224,6 +226,7 @@ internal sealed class UploadModelGpu :
     void IGpuBindings.WriteStorageImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) { }
     void IGpuRecorder.BeginCommandBuffer(nint commandBufferHandle) {
         _ = m_readsOrdered.Remove(item: commandBufferHandle);
+        _ = m_bufferReadsOrdered.RemoveWhere(match: entry => (entry.CommandBuffer == commandBufferHandle));
 
         if (m_transitions.TryGetValue(
             key: commandBufferHandle,
@@ -277,6 +280,10 @@ internal sealed class UploadModelGpu :
             SourceAccess: sourceAccessMask,
             SourceStages: sourceStageMask
         ));
+
+        if (sourceStageMask.HasFlag(flag: GpuStage.ComputeShader)) {
+            _ = m_bufferReadsOrdered.Add(item: (commandBufferHandle, bufferHandle));
+        }
     }
     void IGpuRecorder.MemoryBarrier(nint commandBufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) {
         if (sourceStageMask.HasFlag(flag: GpuStage.ComputeShader)) {
@@ -292,7 +299,10 @@ internal sealed class UploadModelGpu :
         if (!m_uploadPipelines.ContainsKey(key: m_boundPipeline)) {
             return;
         }
-        if (!m_readsOrdered.Contains(item: commandBufferHandle)) {
+        if (
+            !m_readsOrdered.Contains(item: commandBufferHandle) &&
+            !m_bufferReadsOrdered.Contains(item: (commandBufferHandle, m_bindings[(m_boundSet, 1u)]))
+        ) {
             throw new InvalidOperationException(message: "A region copy was recorded with no barrier ordering the earlier compute reads of its destination before it.");
         }
 

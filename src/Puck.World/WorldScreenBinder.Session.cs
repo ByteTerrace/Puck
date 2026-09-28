@@ -55,83 +55,62 @@ internal sealed partial class WorldScreenBinder {
 
         return (Ok: true, Message: $"screen {index} showing session '{session.Destination}' -> instance '{feed.InstanceName}'");
     }
-    // Best-effort lifecycle observation, called once per produced frame: a destination instance retiring drops the
-    // projection to a held last image with a stderr note. The held-image half is free — the mirror simply stops
-    // receiving deliveries and Resolve keeps re-rendering its last mirrored definition — this only detects the
-    // transition once and narrates it. Re-resolving onto the destination's next generation is not implemented; this
-    // holds the frozen image and says so rather than silently going stale.
-    //
-    // A session the destination itself ended (a rebuild ends every one) is admitted again under the destination's
-    // current policy, observing into the same mirror; a refusal holds the last image and says why, once.
+    // Called once per produced frame. The authority owns each session screen's session (WorldInstanceHost.ScreenSession):
+    // it opens one when the screen is declared, closes it when the screen is re-pointed or removed, and asks a
+    // destination that ended one to admit the screen again. This follows it: a slot whose declared session the host now
+    // answers with a different session object (a re-point, or one that was pending when the screen applied) rebinds
+    // onto it. A destination instance retiring drops the projection to a held last image with a stderr note: the mirror
+    // simply stops receiving deliveries and Resolve keeps re-rendering its last mirrored definition.
     private void ReconcileSessionLifecycles() {
+        foreach (var row in m_rows) {
+            if (
+                (row.Source is not WorldScreenSource.Session declared) ||
+                !m_slots.TryGetValue(
+                key: row.Index,
+                value: out var slot
+            ) ||
+                (HostedSession(
+                index: row.Index,
+                source: declared
+            ) is not { } hosted) ||
+                ReferenceEquals(
+                objA: slot.Session?.Hosted,
+                objB: hosted
+            )
+            ) {
+                continue;
+            }
+
+            _ = ApplySessionSource(
+                index: row.Index,
+                session: declared
+            );
+        }
+
         foreach (var slot in m_slots.Values) {
             if (
                 (slot.Session is not { } feed) ||
-                feed.InstanceGone
-            ) {
-                continue;
-            }
-
-            if (
-                !m_instanceHost.TryGet(
+                feed.InstanceGone ||
+                (m_instanceHost.TryGet(
                 name: feed.InstanceName,
                 instance: out var destination
-            ) ||
-                (destination is null)
-            ) {
-                feed.InstanceGone = true;
-
-                Console.Error.WriteLine(value: $"[world.screen: session {slot.Index} -> destination '{feed.Destination}' instance '{feed.InstanceName}' retired — holding last image]");
-
-                continue;
-            }
-
-            if (
-                !feed.Observation.Ended ||
-                feed.ObservationRefused
+            ) && (destination is not null))
             ) {
                 continue;
             }
 
-            // The ended observation is released first, so its session never outlives it.
-            feed.Observation.Dispose();
+            feed.InstanceGone = true;
 
-            if (TryObserveDestination(
-                destination: destination,
-                mirror: feed.Mirror,
-                reason: out var reason
-            ) is { } observation) {
-                feed.Observation = observation;
-
-                Console.Error.WriteLine(value: $"[world.screen: session {slot.Index} -> destination '{feed.Destination}' ended its session — observing again as {observation.Session.Describe()}]");
-            } else {
-                feed.ObservationRefused = true;
-
-                Console.Error.WriteLine(value: $"[world.screen: session {slot.Index} -> destination '{feed.Destination}' ended its session and refuses another ({reason}) — holding last image]");
-            }
+            Console.Error.WriteLine(value: $"[world.screen: session {slot.Index} -> destination '{feed.Destination}' instance '{feed.InstanceName}' retired — holding last image]");
         }
     }
-    // Observes a resolved destination as a session, through its one door: the destination's own admission policy
-    // decides whether this world's viewer is admitted and what it is disclosed.
-    private WorldSessionObservation? TryObserveDestination(WorldInstance destination, WorldSessionMirror mirror, out string reason) {
-        if (
-            !m_instanceHost.TryGet(
-            instance: out var source,
-            name: WorldInstanceHost.BootInstanceName
-        ) ||
-            (source is null)
-        ) {
-            reason = "the boot source instance is not running";
-
-            return null;
-        }
-
-        return destination.Server.TryObserveAsSession(
-            refusal: out reason,
-            sink: mirror,
-            sourceAuthority: source.Server.AuthorityIdentity
-        );
-    }
+    // The session the boot world's authority holds for a screen, when it holds one for this very source.
+    private WorldScreenSession? HostedSession(int index, WorldScreenSource.Session source) => (((m_instanceHost.ScreenSession(
+        instanceName: WorldInstanceHost.BootInstanceName,
+        screenIndex: index
+    ) is { } hosted) && (hosted.Source == source))
+        ? hosted
+        : null);
     // Completes a resolved session's view registration — deferred from ResolveSession because the render envelope
     // (m_viewPipelines) is not known until the render factory calls ConfigureViews (or a live reconcile runs, by which
     // point it always is): one WorldSessionSceneEmitter composed through its own SdfCompositionFrameSource, which the
@@ -180,16 +159,15 @@ internal sealed partial class WorldScreenBinder {
                 instanceCapacity: frameSource.WorstCaseInstanceCapacity,
                 // The envelope sizes the observer's view from what the candidate's admission discloses this viewer,
                 // never the full candidate: what would render nothing measures nothing.
-                measure: candidate => ((feed.Observation.Disclose(candidate: candidate) is { } disclosed)
+                measure: candidate => ((feed.Observation?.Disclose(candidate: candidate) is { } disclosed)
                     ? emitter.MeasureCandidate(candidate: disclosed)
                     : (Words: 0, Instances: 0))
             );
         }
     }
-    // Releases one session's observation: ends the session, which revokes its rows and detaches its sink. The
-    // destination instance itself is NEVER touched here, per docs/architecture/worlds.md: "releasing an observation
-    // lease alone never advances the generation — the resolver owns lifecycle"; its instance leaves the render graph
-    // once no slot holds the feed.
+    // Releases one slot's view of a session: its envelope and window registrations. The session itself is the
+    // authority's (WorldInstanceHost), which ends it when the screen is re-pointed or removed; the destination instance
+    // leaves the render graph once no slot holds the feed.
     private void ReleaseSession(SessionFeed feed, int index, string reason) {
         feed.Dispose();
 
@@ -249,37 +227,27 @@ internal sealed partial class WorldScreenBinder {
 
         return null;
     }
-    // Resolves (and headless-safely attaches) a session-sourced face's destination — the boot loop and
-    // ApplySessionSource both call this, so a resolve at boot and a resolve triggered by a live document mutation take
-    // the identical route. Returns the newly attached feed on success (slot.DeclaredFault cleared); returns null on
-    // failure (slot.DeclaredFault set to the refusal reason). Deliberately never touches slot.Session itself either
-    // way — the boot-loop caller assigns it directly (a fresh slot has nothing to preserve), while a re-point must be
-    // able to inspect a failed resolve without losing the slot's previous feed reference.
-    // GPU view registration is a separate step (RegisterSessionView), since GPU services may not exist yet
-    // (headless, or boot before the render factory runs).
+    // Binds a slot to the session the boot world's authority holds for its declared source — the boot loop and
+    // ApplySessionSource both call this. Returns the new feed on success (slot.DeclaredFault cleared); returns null
+    // when the authority holds none for this source yet (a live re-point the host settles at its next step, which
+    // ReconcileSessionLifecycles then binds) or when the destination refused it (slot.DeclaredFault names why).
+    // Deliberately never touches slot.Session itself: a re-point must keep the slot's previous feed until a new one
+    // exists. GPU view registration is a separate step (RegisterSessionView).
     private SessionFeed? ResolveSession(ScreenSlot slot, WorldScreenSource.Session session) {
-        if (!TryResolveDestinationInstance(
-            destinationName: session.Destination,
-            instance: out var instance,
-            resolved: out var resolvedSession,
-            reason: out var reason
-        )) {
-            slot.DeclaredFault = reason;
-
-            Console.Error.WriteLine(value: $"[world.screen: session {slot.Index} refused ({reason})]");
+        if (HostedSession(
+            index: slot.Index,
+            source: session
+        ) is not { } hosted) {
+            slot.DeclaredFault = $"the session to destination '{session.Destination}' awaits its authority";
 
             return null;
         }
 
-        // The mirror starts knowing nothing of the destination; the session's admission decides what reaches it.
-        var mirror = new WorldSessionMirror(placeholder: WorldProjection.Undisclosed);
-
-        if (TryObserveDestination(
-            destination: instance!,
-            mirror: mirror,
-            reason: out var refusal
-        ) is not { } observation) {
-            slot.DeclaredFault = $"destination '{session.Destination}' refuses a session: {refusal}";
+        if (
+            (hosted.Observation is null) ||
+            (hosted.InstanceName is not { } instanceName)
+        ) {
+            slot.DeclaredFault = (hosted.Refusal ?? $"destination '{session.Destination}' is not observed");
 
             Console.Error.WriteLine(value: $"[world.screen: session {slot.Index} refused ({slot.DeclaredFault})]");
 
@@ -289,61 +257,28 @@ internal sealed partial class WorldScreenBinder {
         WarnIfDestinationRecurses(
             index: slot.Index,
             destinationName: session.Destination,
-            destinationDefinition: mirror.Definition
+            destinationDefinition: hosted.Mirror.Definition
         );
 
         var effectiveCamera = ResolveEffectiveCameraName(
-            destinationDefinition: mirror.Definition,
+            destinationDefinition: hosted.Mirror.Definition,
             requested: session.CameraName,
             index: slot.Index,
             destinationName: session.Destination
         );
-        var feed = new SessionFeed(
-            destination: session.Destination,
-            requestedCamera: session.CameraName,
-            effectiveCamera: effectiveCamera,
-            instanceName: resolvedSession.InstanceName,
-            generationId: resolvedSession.GenerationId,
-            mirror: mirror,
-            observation: observation,
-            registrationName: WorldViewNames.Session(screen: slot.Index),
-            projection: session.Projection,
-            resolution: session.Resolution
-        );
 
         slot.DeclaredFault = null;
 
-        Console.Error.WriteLine(value: $"[world.screen: session {slot.Index} -> destination '{session.Destination}' resolved to instance '{resolvedSession.InstanceName}' generation {resolvedSession.GenerationId}{(resolvedSession.IsNewGeneration
-            ? " (new)"
-            : "")} as {observation.Session.Describe()} disclosed {observation.Tier}]");
-
-        return feed;
-    }
-    // Resolves through the instance host's ONE observation door. Besides sharing WorldSessionResolver identity with
-    // portal entry, that door also owns persisted-origin adoption ("return means home"), collision fencing and
-    // failed-generation abort; duplicating only TryResolve+TryStart here previously let a screen mint a second copy
-    // of an already-running persisted world while a crossing correctly adopted it.
-    private bool TryResolveDestinationInstance(string destinationName, out WorldInstance? instance, out WorldSessionResolver.Resolved resolved, out string reason) {
-        if (
-            !m_instanceHost.TryGet(
-            instance: out var source,
-            name: WorldInstanceHost.BootInstanceName
-        ) ||
-            (source is null)
-        ) {
-            instance = null;
-            resolved = default;
-            reason = "the boot source instance is not running";
-
-            return false;
-        }
-
-        return m_instanceHost.TryResolveObservedDestination(
-            destinationName: destinationName,
-            reason: out reason,
-            resolved: out resolved,
-            source: source,
-            target: out instance
+        return new SessionFeed(
+            destination: session.Destination,
+            effectiveCamera: effectiveCamera,
+            generationId: hosted.GenerationId,
+            hosted: hosted,
+            instanceName: instanceName,
+            projection: session.Projection,
+            registrationName: WorldViewNames.Session(screen: slot.Index),
+            requestedCamera: session.CameraName,
+            resolution: session.Resolution
         );
     }
     // Recomputes every live WINDOW session's off-axis camera from this frame's local eye and the border pair's two
@@ -360,8 +295,8 @@ internal sealed partial class WorldScreenBinder {
             }
         }
 
-        // The LOCAL (boot) document — the same "one observation door" WorldInstanceHost.BootInstanceName resolves
-        // everywhere else in this type (TryResolveDestinationInstance). Absent only in a boot-sequencing gap this
+        // The LOCAL (boot) document — the world whose screen sessions this binder renders
+        // (WorldInstanceHost.ScreenSession). Absent only in a boot-sequencing gap this
         // binder itself is constructed inside; a window degrades to its ordinary fallback for that one frame.
         if (
             !m_instanceHost.TryGet(
@@ -490,8 +425,8 @@ internal sealed partial class WorldScreenBinder {
                 EffectiveCamera: feed.EffectiveCamera,
                 InstanceName: feed.InstanceName,
                 GenerationId: feed.GenerationId,
-                Session: feed.Observation.Session,
-                Tier: feed.Observation.Tier,
+                Session: (feed.Observation?.Session ?? default),
+                Tier: (feed.Observation?.Tier ?? WorldDisclosureTier.Frames),
                 LeaseHeld: !feed.InstanceGone,
                 InstanceGone: feed.InstanceGone,
                 Projection: feed.Projection,
@@ -535,21 +470,24 @@ internal sealed partial class WorldScreenBinder {
     // offscreen view. A mutable class so a lifecycle transition (re-point, teardown, instance-retired) updates it in
     // place; the constructor parameters are immutable facts about ONE resolution (a re-point builds a fresh instance
     // rather than mutating this one — see ApplySessionSource).
-    private sealed class SessionFeed(string destination, string? requestedCamera, string? effectiveCamera, string instanceName, ulong generationId, WorldSessionMirror mirror, WorldSessionObservation observation, string registrationName, WorldScreenProjection projection, WorldScreenResolution? resolution) : IDisposable {
+    private sealed class SessionFeed(string destination, string? requestedCamera, string? effectiveCamera, string instanceName, ulong generationId, WorldScreenSession hosted, string registrationName, WorldScreenProjection projection, WorldScreenResolution? resolution) : IDisposable {
         public string Destination { get; } = destination;
         public string? RequestedCamera { get; } = requestedCamera;
         public string? EffectiveCamera { get; } = effectiveCamera;
         public string InstanceName { get; } = instanceName;
         public ulong GenerationId { get; } = generationId;
-        public WorldSessionMirror Mirror { get; } = mirror;
+        // The authority's session this feed renders: its mirror, and the observation it currently holds.
+        public WorldScreenSession Hosted { get; } = hosted;
+
+        public WorldSessionMirror Mirror => Hosted.Mirror;
+
         public string RegistrationName { get; } = registrationName;
         public WorldScreenProjection Projection { get; } = projection;
         public WorldScreenResolution? Resolution { get; } = resolution;
-        // The session the screen observes as; replaced when the destination ends it and admits another.
-        public WorldSessionObservation Observation { get; set; } = observation;
 
-        // Set once the destination ended the session and refused another: the screen holds its last image.
-        public bool ObservationRefused { get; set; }
+        // The session the screen observes as, replaced by the authority when the destination ends it and admits
+        // another; null once the destination refused another.
+        public WorldSessionObservation? Observation => Hosted.Observation;
 
         // Acquired only for a WINDOW projection (WorldSessionWindowLeases) — the runtime accounting world.faces'
         // true-cost echo reads; the DOCUMENT-level refusal is WorldDefinitionValidator's, at boot/mutation time, not
@@ -568,14 +506,13 @@ internal sealed partial class WorldScreenBinder {
         // needs to force that, since the mirror simply stops receiving deliveries).
         public bool InstanceGone { get; set; }
 
-        // Ends the session and releases the envelope and window registrations; the session's instance leaves the
-        // render graph once no slot holds the feed.
+        // Releases the envelope and window registrations; the session is the authority's, and the session's instance
+        // leaves the render graph once no slot holds the feed.
         public void Dispose() {
             EnvelopeRegistration?.Dispose();
             EnvelopeRegistration = null;
             WindowLease?.Dispose();
             WindowLease = null;
-            Observation.Dispose();
         }        /// <summary>Acquires (replacing any prior) this feed's window-cost lease.</summary>
         public void SetWindowLease(IDisposable lease) {
             WindowLease?.Dispose();

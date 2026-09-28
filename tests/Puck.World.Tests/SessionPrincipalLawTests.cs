@@ -1,4 +1,5 @@
 using Puck.Commands;
+using Puck.Maths;
 using Puck.Testing;
 using System.Numerics;
 
@@ -193,6 +194,50 @@ public sealed class SessionPrincipalLawTests {
         Assert.Contains(
             collection: fixture.Server.GrantRows(principal: session),
             filter: row => (row.Subject == GrantSubject.Placement(id: SlotRow))
+        );
+    }
+    [Fact]
+    public void AnEmbodiedSessionsIntent_DrivesTheBodyItNames_AndOnlyOnceEmbodied() {
+        FixedQ4816 ForwardAfterIntent(bool embody) {
+            using var fixture = Fixtures.FreshServer(definition: Document());
+            var body = Census(
+                count: 1,
+                fixture: fixture
+            );
+            var session = AdmitSession(fixture: fixture);
+
+            if (embody) {
+                Assert.True(
+                    condition: fixture.Server.TryEmbodySession(
+                        bodyIndex: body.Index,
+                        refusal: out var refusal,
+                        session: session
+                    ),
+                    userMessage: refusal
+                );
+            }
+
+            // The census body takes a submitted intent, as the body.control verb sets it.
+            fixture.Server.Body(index: body.Index)!.SetIntentSource(source: IntentSource.Live);
+
+            var channels = new ChannelValues();
+
+            channels[0] = FixedQ4816.One;
+            fixture.Server.EnqueueIntent(submission: new IntentSubmission(
+                EntityIndex: body.Index,
+                Intent: new PlayerIntent(Channels: channels),
+                Principal: session,
+                Tick: fixture.Server.NextInputTick
+            ));
+            fixture.Step();
+
+            return fixture.Server.Body(index: body.Index)!.EngagedIntent[0];
+        }
+
+        Laws.RefusalWithControl(
+            lawId: "session.embodied-intent-drives-its-body",
+            deniedOutcome: () => (ForwardAfterIntent(embody: false) == FixedQ4816.One),
+            controlOutcome: () => (ForwardAfterIntent(embody: true) == FixedQ4816.One)
         );
     }
     [Fact]

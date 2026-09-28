@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Puck.Abstractions.Counting;
 using Puck.Shaders;
+using Puck.SignedDistance;
 using Puck.Testing;
 using Xunit;
 
@@ -150,22 +151,52 @@ public sealed class SdfKernelSetLawTests {
             );
         }
 
-        Assert.Equal(expected: SdfIsaHlsl.StampOf(fingerprint: SdfIsaHlsl.FingerprintOf(include: SdfIsaHlsl.Generate())), actual: SdfIsaHlsl.Stamp);
+        // The recorded fingerprint is the model's: the host names the instruction set its kernels were generated against.
+        Assert.Equal(expected: SdfIsaFingerprint.Value, actual: SdfIsaHlsl.DescribeFingerprint());
+        Assert.Equal(expected: SdfIsaHlsl.StampOf(fingerprint: SdfIsaFingerprint.Value), actual: SdfIsaHlsl.Stamp);
     }
-    // Kernels compiled against another instruction set, say one whose two opcodes trade values, carry another stamp, so
-    // no include beside them can make them pass for this host's.
+    // Kernels compiled against another instruction set carry another stamp, so no include beside them can make them pass
+    // for this host's: an instruction set whose two opcodes, or whose two cell modes, trade values; one whose instruction
+    // headers carry the shape and the blend in each other's lanes; and one whose builder or packer puts a field
+    // elsewhere (a rotation's Y and W, a sampled region's Y and Z dimension bitfields, a weathering's Edge and Lines, a
+    // sweep's start and end radii, a cell displacement's frequency and amplitude, a stroked path's start and end radii, a
+    // rigid leaf's rotation X and Y, a path edge's two radii).
     [Fact]
-    public void AnInstructionSetWithTwoOpcodesSwappedCarriesAnotherStamp() {
+    public void AnInstructionSetEncodedOtherwiseCarriesAnotherStamp() {
         var include = SdfIsaHlsl.Generate();
-        var opcode = new Regex(options: RegexOptions.Multiline, pattern: @"^(#define SDF_OP_(TRANSLATE|ROTATE) +)(\d+)u$");
-        var values = opcode.Matches(input: include).ToDictionary(elementSelector: static match => match.Groups[3].Value, keySelector: static match => match.Groups[2].Value);
-        var swapped = opcode.Replace(
-            evaluator: match => $"{match.Groups[1].Value}{values[((match.Groups[2].Value == "TRANSLATE") ? "ROTATE" : "TRANSLATE")]}u",
+        var encoding = SdfEncodingProbe.Describe();
+        var calls = SdfEncodingProbe.Calls();
+
+        foreach (var (otherInclude, otherEncoding) in ((ReadOnlySpan<(string, string)>)[
+            (Swapped(first: "SDF_OP_TRANSLATE", include: include, second: "SDF_OP_ROTATE"), encoding),
+            (Swapped(first: "SDF_CELL_MODE_F1", include: include, second: "SDF_CELL_MODE_F2_MINUS_F1"), encoding),
+            (Swapped(first: "SDF_INSTRUCTION_SHAPE(v)", include: include, second: "SDF_INSTRUCTION_BLEND(v)"), encoding),
+        ])) {
+            Assert.NotEqual(expected: SdfIsaHlsl.Stamp, actual: SdfIsaHlsl.StampOf(fingerprint: SdfIsaHlsl.FingerprintOf(encoding: otherEncoding, include: otherInclude)));
+        }
+        foreach (var other in SdfEncodingTrades.Traded(calls: calls)) {
+            var otherEncoding = SdfEncodingProbe.Describe(calls: [.. calls.Select(selector: call => ((call.Name == other.Name) ? other : call))]);
+
+            Assert.NotEqual(expected: SdfIsaHlsl.Stamp, actual: SdfIsaHlsl.StampOf(fingerprint: SdfIsaHlsl.FingerprintOf(encoding: otherEncoding, include: include)));
+        }
+        // A packer that writes a rigid leaf's rotation X and Y, or a stroked path edge's two radii, in each other's places.
+        foreach (var wordsOf in (ReadOnlySpan<Func<SdfProgram, uint[]>>)[SdfEncodingTrades.RigidLeafRotationXySwapped, SdfEncodingTrades.PathRadiiSwapped]) {
+            Assert.NotEqual(expected: SdfIsaHlsl.Stamp, actual: SdfIsaHlsl.StampOf(fingerprint: SdfIsaHlsl.FingerprintOf(encoding: SdfEncodingProbe.Describe(calls: calls, wordsOf: wordsOf), include: include)));
+        }
+    }
+
+    // The include with two defines' values traded.
+    private static string Swapped(string include, string first, string second) {
+        var define = new Regex(options: RegexOptions.Multiline, pattern: $@"^(#define (?:{Regex.Escape(str: first)}|{Regex.Escape(str: second)}) +)(.+)$");
+        var values = define.Matches(input: include).ToDictionary(elementSelector: static match => match.Groups[2].Value, keySelector: static match => match.Groups[1].Value.TrimEnd().Split(separator: ' ')[1]);
+        var swapped = define.Replace(
+            evaluator: match => (match.Groups[1].Value + values[((match.Groups[1].Value.TrimEnd().Split(separator: ' ')[1] == first) ? second : first)]),
             input: include
         );
 
         Assert.Equal(expected: 2, actual: values.Count);
         Assert.NotEqual(actual: swapped, expected: include);
-        Assert.NotEqual(expected: SdfIsaHlsl.Stamp, actual: SdfIsaHlsl.StampOf(fingerprint: SdfIsaHlsl.FingerprintOf(include: swapped)));
+
+        return swapped;
     }
 }

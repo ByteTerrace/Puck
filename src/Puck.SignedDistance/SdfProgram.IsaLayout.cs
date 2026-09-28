@@ -3,6 +3,58 @@ namespace Puck.SignedDistance;
 // The packed-layout constants the kernels decode words with. Puck.SdfVm.SdfIsaHlsl generates each into
 // sdf-isa.hlsli under the HLSL name its summary gives.
 public sealed partial class SdfProgram {
+    /// <summary>The vectors before the instruction headers: the program header alone. Instruction <c>i</c>'s header is
+    /// vector <c>ProgramHeaderVectors + i</c> (<c>SDF_PROGRAM_HEADER_VECTORS</c>).</summary>
+    public const int ProgramHeaderVectors = 1;
+    /// <summary>The program header's lane holding the instruction count (<c>SDF_PROGRAM_INSTRUCTION_COUNT_LANE</c>).</summary>
+    public const int ProgramInstructionCountLane = 0;
+    /// <summary>The program header's lane holding the material count (<c>SDF_PROGRAM_MATERIAL_COUNT_LANE</c>).</summary>
+    public const int ProgramMaterialCountLane = 1;
+    /// <summary>The program header's lane holding the vector offset of the instruction data table
+    /// (<c>SDF_PROGRAM_DATA_OFFSET_LANE</c>).</summary>
+    public const int ProgramDataOffsetLane = 2;
+    /// <summary>The program header's lane holding the vector offset of the material table
+    /// (<c>SDF_PROGRAM_MATERIAL_OFFSET_LANE</c>).</summary>
+    public const int ProgramMaterialOffsetLane = 3;
+    /// <summary>An instruction header's lane holding its <see cref="SdfOp"/> (<c>SDF_INSTRUCTION_OP_LANE</c>).</summary>
+    public const int InstructionOpLane = 0;
+    /// <summary>An instruction header's lane holding <see cref="SdfInstruction.Shape"/>, with a ShapeBlend's flags
+    /// (<c>SDF_INSTRUCTION_SHAPE_LANE</c>).</summary>
+    public const int InstructionShapeLane = 1;
+    /// <summary>An instruction header's lane holding <see cref="SdfInstruction.Blend"/>
+    /// (<c>SDF_INSTRUCTION_BLEND_LANE</c>).</summary>
+    public const int InstructionBlendLane = 2;
+    /// <summary>An instruction header's lane holding <see cref="SdfInstruction.Material"/>
+    /// (<c>SDF_INSTRUCTION_MATERIAL_LANE</c>).</summary>
+    public const int InstructionMaterialLane = 3;
+    /// <summary>The data table's vectors per instruction: <see cref="SdfInstruction.Data0"/>, then
+    /// <see cref="SdfInstruction.Data1"/> (<c>SDF_INSTRUCTION_DATA_VECTORS</c>).</summary>
+    public const int InstructionDataVectors = 2;
+    /// <summary>The vectors of a bound record, a shape's, a segment's or an instance's: its bound sphere, then its
+    /// meta (<c>SDF_BOUND_RECORD_VECTORS</c>).</summary>
+    public const int BoundRecordVectors = 2;
+    /// <summary>The header vectors before a directory's records: the segment directory's, the instance directory's and
+    /// the world-segment list's (<c>SDF_DIRECTORY_HEADER_VECTORS</c>).</summary>
+    public const int DirectoryHeaderVectors = 1;
+    /// <summary>The segment directory header's lane holding the segment count (<c>SDF_SEGMENT_COUNT_LANE</c>).</summary>
+    public const int SegmentCountLane = 0;
+    /// <summary>The segment directory header's lane holding the program's step scale, as float bits
+    /// (<c>SDF_SEGMENT_STEP_SCALE_LANE</c>).</summary>
+    public const int SegmentStepScaleLane = 1;
+    /// <summary>The segment directory header's lane holding the rigid-leaf plan's vector offset
+    /// (<c>SDF_SEGMENT_RIGID_PLAN_LANE</c>).</summary>
+    public const int SegmentRigidPlanLane = 2;
+    /// <summary>The instance directory header's lane holding the instance count (<c>SDF_INSTANCE_COUNT_LANE</c>).</summary>
+    public const int InstanceCountLane = 0;
+    /// <summary>The instance directory header's lane holding the part-program table's vector offset, zero when none
+    /// qualify (<c>SDF_INSTANCE_PART_PROGRAMS_LANE</c>).</summary>
+    public const int InstancePartProgramsLane = 1;
+    /// <summary>The instance directory header's lane holding the program's flags, <see cref="NoDetailShapesFlag"/>
+    /// (<c>SDF_INSTANCE_FLAGS_LANE</c>).</summary>
+    public const int InstanceFlagsLane = 2;
+    /// <summary>The world-segment list header's lane holding the list's length
+    /// (<c>SDF_WORLD_SEGMENT_COUNT_LANE</c>).</summary>
+    public const int WorldSegmentCountLane = 0;
     /// <summary>The bound mode of a record that carries no bound: the interpreter evaluates it in full
     /// (<c>SDF_BOUND_NONE</c>).</summary>
     public const uint BoundModeNone = 0;
@@ -65,12 +117,12 @@ public sealed partial class SdfProgram {
     // material (a pure Subtraction-family carve, which the sdf.shadow-proxy gather omits so the shadow ray marches the
     // pre-carve union hull), and camera-hidden when it was declared so.
     private uint InstanceFlagsOf(SdfInstanceRange instance) =>
-        ((IsShadowTransparentInstance(
+        (IsShadowTransparentInstance(
             first: instance.First,
             end: instance.End
         )
             ? ShadowTransparentInstanceFlag
             : 0u) | (instance.CameraHidden
             ? CameraHiddenInstanceFlag
-            : 0u));
+            : 0u);
 }

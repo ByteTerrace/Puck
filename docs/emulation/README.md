@@ -4,8 +4,8 @@ Puck provides deterministic emulation libraries for three hardware families.
 `Puck.HumbleGamingBrick` models the Game Boy family around the SM83 processor,
 and `Puck.AdvancedGamingBrick` models the native Game Boy Advance around an
 ARM7TDMI processor. Both handheld cores expose synchronous embedding and queued
-hosting. `Puck.HumbleGamingDeck` models the NES/Famicom CPU and cartridge bus;
-its video, audio, controllers, and host adapter are not implemented.
+hosting. `Puck.HumbleGamingDeck` models the NTSC NES/Famicom console and offers
+the same embedding and queued hosting.
 
 This documentation separates host integration from hardware detail. Start with
 [Machine hosting runtime](shared/machine-hosting.md) when you need to load content,
@@ -25,10 +25,11 @@ cartridge storage, and peripherals. Its topic pages cover pipeline and
 wait-state behavior, scanline rendering, direct sound, bus arbitration,
 saves, replay, performance, and evidence.
 
-The Deck core covers the NTSC RP2A03G CPU, master-clock sub-phases, NROM,
-header-based cartridge loading, and mid-instruction snapshots and forks. Its
-[CPU and timing guide](hgd/cpu-and-timing.md) explains the bus sequences and
-the instruction-corpus battery.
+The Deck core covers the NTSC console: the RP2A03G CPU with its DMA unit and
+APU, the RP2C02G PPU, standard controllers, NROM, header-based cartridge loading,
+and mid-instruction snapshots and forks. Its topic pages cover the CPU and
+master clock, picture processing, audio, input and DMA, hosting, and the
+verification battery.
 
 The shared layer supplies machine hosting, integer tick-to-cycle pacing,
 backpressure, snapshots, and link sessions. It does not define a core's

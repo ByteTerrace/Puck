@@ -1,11 +1,16 @@
 namespace Puck.HumbleGamingDeck;
 
-/// <summary>The CPU/bus Deck driven one master tick at a time. PPU, APU, controllers, and host presentation are absent.</summary>
+/// <summary>
+/// The NTSC Deck driven one master tick at a time: the CPU and its DMA unit, the PPU and the console's nametable RAM, the
+/// APU, two standard controllers, and the cartridge board. Within a master tick that ends both a PPU dot and a CPU cycle
+/// the PPU dot comes first, so the CPU cycle sees the dot's effects; the NMI line follows the PPU after every dot and the
+/// IRQ line, the board's and the APU's requests together, is sampled at every CPU cycle.
+/// </summary>
 public sealed class HgdMachine : ISnapshotableMachine {
     private readonly HgdMachineIdentity m_identity;
     private readonly ISnapshotable[] m_components;
 
-    private readonly string[] m_componentNames = ["clock", "cpu", "bus", "mapper"];
+    private readonly string[] m_componentNames = ["clock", "cpu", "dma", "bus", "ppu", "nametables", "apu", "controllers", "mapper"];
     private readonly StateWriter m_writer = new();
 
     /// <summary>Initializes a new instance of the <see cref="HgdMachine"/> class with independent mutable components.</summary>
@@ -15,11 +20,31 @@ public sealed class HgdMachine : ISnapshotableMachine {
         ArgumentNullException.ThrowIfNull(argument: configuration);
 
         Configuration = configuration;
+        var mapper = configuration.Cartridge.CreateMapper();
+
         Clock = new(configuration: configuration);
-        Bus = new(mapper: configuration.Cartridge.CreateMapper(), workRamFill: configuration.PowerOn.WorkRamFill);
-        Cpu = new(bus: new HgdCpuBus(bus: Bus), model: configuration.Model);
+        Nametables = new();
+        Ppu = new(
+            mapper: mapper,
+            nametables: Nametables
+        );
+        Apu = new();
+        Controllers = new();
+        Dma = new();
+        Bus = new(
+            apu: Apu,
+            controllers: Controllers,
+            dma: Dma,
+            mapper: mapper,
+            ppu: Ppu,
+            workRamFill: configuration.PowerOn.WorkRamFill
+        );
+        Cpu = new(
+            bus: new HgdCpuBus(bus: Bus),
+            model: configuration.Model
+        );
         m_identity = HgdMachineIdentity.Compute(configuration: configuration);
-        m_components = [Clock, Cpu, Bus, Bus.Mapper];
+        m_components = [Clock, Cpu, Dma, Bus, Ppu, Nametables, Apu, Controllers, mapper];
     }
 
     /// <summary>Gets the machine's immutable execution inputs.</summary>
@@ -38,6 +63,34 @@ public sealed class HgdMachine : ISnapshotableMachine {
     public HgdSystemBus Bus {
         get;
     }
+    /// <summary>Gets the picture processing unit.</summary>
+    public HgdPpu Ppu {
+        get;
+    }
+    /// <summary>Gets the console's nametable RAM.</summary>
+    public HgdNametableRam Nametables {
+        get;
+    }
+    /// <summary>Gets the audio processing unit.</summary>
+    public HgdApu Apu {
+        get;
+    }
+    /// <summary>Gets the controller ports.</summary>
+    public HgdControllers Controllers {
+        get;
+    }
+    /// <summary>Gets the DMA unit.</summary>
+    public HgdDma Dma {
+        get;
+    }
+    /// <summary>Gets the number of frames whose vertical blank has begun since power-on.</summary>
+    public long FrameIndex => Ppu.FrameIndex;
+
+    /// <summary>Gets the presentation-side audio stage, disabled until configured; it is not machine state.</summary>
+    public HgdAudioOutput Audio {
+        get;
+    } = new();
+
     /// <summary>Gets the completed master-tick count.</summary>
     public ulong MasterTicks => Clock.MasterTicks;
 
@@ -50,13 +103,27 @@ public sealed class HgdMachine : ISnapshotableMachine {
             StepMasterTick();
         }
     }
-    /// <summary>Advances the reference clock one tick. M2 falling commits the CPU access before notifying the board.</summary>
+    /// <summary>Advances the reference clock one tick: a PPU dot when the tick ends one, then, when M2 falls, the CPU
+    /// cycle (or the DMA unit's) and the APU's, before the board sees the edge.</summary>
     public void StepMasterTick() {
-        var edge = Clock.StepTick(edgeHalfTick: out var edgeHalfTick);
+        var edge = Clock.StepTick(
+            edgeHalfTick: out var edgeHalfTick,
+            ppuDot: out var ppuDot
+        );
 
+        if (ppuDot) {
+            Ppu.StepDot(masterTick: Clock.MasterTicks);
+            Cpu.Nmi = Ppu.NmiOutput;
+        }
         if (edge == HgdM2Edge.Falling) {
-            Cpu.Irq = Bus.Mapper.Irq;
-            Cpu.StepCycle();
+            Cpu.Irq = (Bus.Mapper.Irq || Apu.Irq);
+            Dma.Step(
+                apu: Apu,
+                bus: Bus,
+                cpu: Cpu
+            );
+            Apu.StepCpuCycle();
+            Audio.Sample(apu: Apu);
             Bus.Mapper.ObserveM2(high: false, masterHalfTick: edgeHalfTick);
         } else if (edge == HgdM2Edge.Rising) {
             Bus.Mapper.ObserveM2(high: true, masterHalfTick: edgeHalfTick);
@@ -82,7 +149,7 @@ public sealed class HgdMachine : ISnapshotableMachine {
     /// <param name="snapshot">The capture to restore.</param>
     /// <exception cref="ArgumentNullException">The snapshot is null.</exception>
     /// <exception cref="InvalidOperationException">Identity or serialized length does not match.</exception>
-    /// <exception cref="InvalidDataException">The serialized clock phase is outside the CPU divider.</exception>
+    /// <exception cref="InvalidDataException">A serialized component position is outside its valid range.</exception>
     public void Restore(HgdMachineSnapshot snapshot) {
         ArgumentNullException.ThrowIfNull(argument: snapshot);
         if (snapshot.Identity != m_identity) {
@@ -102,11 +169,13 @@ public sealed class HgdMachine : ISnapshotableMachine {
         }
     }
     /// <inheritdoc/>
+    /// <remarks>Restoration discards queued presentation audio and starts a fresh stream at the configured rate.</remarks>
     /// <exception cref="InvalidOperationException">The reader does not contain a complete machine state.</exception>
-    /// <exception cref="InvalidDataException">The serialized clock phase is outside the CPU divider.</exception>
+    /// <exception cref="InvalidDataException">A serialized component position is outside its valid range.</exception>
     public void RestoreState(StateReader reader) {
         foreach (var component in m_components) {
             component.LoadState(reader: reader);
         }
+        Audio.Configure(sampleRate: Audio.SampleRate);
     }
 }

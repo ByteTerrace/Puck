@@ -6,20 +6,20 @@ namespace Puck.SignedDistance;
 
 public sealed partial class SdfProgramBuilder {
     /// <summary>Rotates a coordinate plane by a rate driven by one coordinate.</summary>
-    /// <param name="plane">XY = 0, YZ = 1, XZ = 2.</param>
-    /// <param name="driver">The driving coordinate: X = 0, Y = 1, Z = 2.</param>
+    /// <param name="plane">The plane that rotates.</param>
+    /// <param name="driver">The driving coordinate.</param>
     /// <param name="rate">Radians per unit; positive follows the VM's inverse-domain rotation.</param>
     /// <param name="origin">The driver coordinate at zero angle.</param>
-    public SdfProgramBuilder RotatePlane(int plane, int driver, float rate, float origin = 0f) {
-        ArgumentOutOfRangeException.ThrowIfNegative(plane);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            plane,
-            2
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="plane"/> or <paramref name="driver"/> is not a
+    /// defined member, or <paramref name="rate"/> or <paramref name="origin"/> is not finite.</exception>
+    public SdfProgramBuilder RotatePlane(SdfPlane plane, SdfAxis driver, float rate, float origin = 0f) {
+        RequireDefined(
+            paramName: nameof(plane),
+            value: plane
         );
-        ArgumentOutOfRangeException.ThrowIfNegative(driver);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            driver,
-            2
+        RequireDefined(
+            paramName: nameof(driver),
+            value: driver
         );
         RequireFinite(
             rate,
@@ -45,21 +45,21 @@ public sealed partial class SdfProgramBuilder {
     }
     /// <summary>Rotates XY driven by X.</summary>
     public SdfProgramBuilder BendX(float rate) => RotatePlane(
-        0,
-        0,
-        rate
+        driver: SdfAxis.X,
+        plane: SdfPlane.XY,
+        rate: rate
     );
     /// <summary>Rotates XY driven by Y.</summary>
     public SdfProgramBuilder BendY(float rate) => RotatePlane(
-        0,
-        1,
-        rate
+        driver: SdfAxis.Y,
+        plane: SdfPlane.XY,
+        rate: rate
     );
     /// <summary>Rotates YZ driven by Y.</summary>
     public SdfProgramBuilder BendZ(float rate) => RotatePlane(
-        1,
-        1,
-        rate
+        driver: SdfAxis.Y,
+        plane: SdfPlane.YZ,
+        rate: rate
     );
     /// <summary>Stochastic domain-repeat fold: tiles space into cells of <paramref name="spacing"/> like
     /// <see cref="Repeat"/>, then per cell displaces the point by a hashed offset, optionally tumbles (a hashed
@@ -220,13 +220,12 @@ public sealed partial class SdfProgramBuilder {
     /// <paramref name="top"/>); must be finite and strictly positive.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="amount"/>, <paramref name="bulge"/> or
     /// <paramref name="top"/> is not finite, or <paramref name="span"/> is not finite and greater than zero.</exception>
-    /// <param name="axis">The profile coordinate: X=0, Y=1, Z=2.</param>
+    /// <param name="axis">The profile coordinate.</param>
     /// <param name="startScale">The positive cross-section scale at t=0.</param>
-    public SdfProgramBuilder AxialProfile(float amount, float bulge, float top, float span, int axis = 1, float startScale = 1f) {
-        ArgumentOutOfRangeException.ThrowIfNegative(axis);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            axis,
-            2
+    public SdfProgramBuilder AxialProfile(float amount, float bulge, float top, float span, SdfAxis axis = SdfAxis.Y, float startScale = 1f) {
+        RequireDefined(
+            paramName: nameof(axis),
+            value: axis
         );
         RequireFinite(
             startScale,
@@ -287,18 +286,16 @@ public sealed partial class SdfProgramBuilder {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="linear"/> or <paramref name="quadratic"/> is not
     /// finite.</exception>
     /// <param name="cubic">The cubic coefficient.</param>
-    /// <param name="target">The displaced coordinate, 0..2.</param>
-    /// <param name="driver">The distinct driving coordinate, 0..2.</param>
-    public SdfProgramBuilder Shear(float linear, float quadratic, float cubic = 0f, int target = 0, int driver = 1) {
-        ArgumentOutOfRangeException.ThrowIfNegative(target);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            target,
-            2
+    /// <param name="target">The displaced coordinate.</param>
+    /// <param name="driver">The driving coordinate, distinct from <paramref name="target"/>.</param>
+    public SdfProgramBuilder Shear(float linear, float quadratic, float cubic = 0f, SdfAxis target = SdfAxis.X, SdfAxis driver = SdfAxis.Y) {
+        RequireDefined(
+            paramName: nameof(target),
+            value: target
         );
-        ArgumentOutOfRangeException.ThrowIfNegative(driver);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            driver,
-            2
+        RequireDefined(
+            paramName: nameof(driver),
+            value: driver
         );
         if (target == driver) { throw new ArgumentException(message: "A shear's target and driver must differ."); }
         RequireFinite(
@@ -613,7 +610,7 @@ public sealed partial class SdfProgramBuilder {
     /// in Assets/Shaders/Sdf/field/sdf-map.hlsli and field/sdf-map-grad.hlsli.</summary>
     /// <param name="count">The number of sectors around the axis (clamped to ≥ 1; 1 = a single full-circle no-op).</param>
     /// <param name="axis">The rotation axis — the fold acts in the plane perpendicular to it (default
-    /// <see cref="SdfPolarAxis.Y"/>, the XZ ground plane).</param>
+    /// <see cref="SdfAxis.Y"/>, the XZ ground plane).</param>
     /// <param name="mirror">When <see langword="true"/>, reflects each sector across its bisector so adjacent sectors
     /// mirror — the kaleidoscope fold (still an isometry).</param>
     /// <param name="materialStride">The per-sector palette stride: the sector index (0..count-1) times this strides the
@@ -621,8 +618,8 @@ public sealed partial class SdfProgramBuilder {
     /// purely geometric.</param>
     /// <exception cref="ArgumentException"><paramref name="materialStride"/> is negative, or <paramref name="count"/>
     /// (after clamping to ≥ 1) exceeds <see cref="MaxExactFloatSectorCount"/>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="axis"/> is not a defined <see cref="SdfPolarAxis"/>.</exception>
-    public SdfProgramBuilder RepeatPolar(int count, SdfPolarAxis axis = SdfPolarAxis.Y, bool mirror = false, int materialStride = 0) {
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="axis"/> is not a defined <see cref="SdfAxis"/>.</exception>
+    public SdfProgramBuilder RepeatPolar(int count, SdfAxis axis = SdfAxis.Y, bool mirror = false, int materialStride = 0) {
         if (materialStride < 0) {
             throw new ArgumentException(
                 message: "RepeatPolar materialStride must be >= 0 (0 = geometric only).",
@@ -890,9 +887,9 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="rate">Radians of rotation per unit of local Y.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="rate"/> is not finite.</exception>
     public SdfProgramBuilder TwistY(float rate) => RotatePlane(
-        2,
-        1,
-        rate
+        driver: SdfAxis.Y,
+        plane: SdfPlane.XZ,
+        rate: rate
     );
     /// <summary>Folds the point's in-plane coordinates onto the fundamental cell of a wallpaper symmetry group — the
     /// shapes that follow repeat under the group's mirrors/rotations across the lattice. Every fold branch is an
@@ -912,8 +909,8 @@ public sealed partial class SdfProgramBuilder {
     /// <exception cref="ArgumentOutOfRangeException">A <paramref name="cell"/> extent the group reads is not finite and
     /// positive, <paramref name="limit"/> is not finite and non-negative, <paramref name="lodDistance"/> is not
     /// finite and non-negative, <paramref name="group"/> is not a defined <see cref="SdfWallpaperGroup"/>, or
-    /// <paramref name="plane"/> is not a defined <see cref="SdfWallpaperPlane"/>.</exception>
-    public SdfProgramBuilder WallpaperFold(SdfWallpaperGroup group, Vector2 cell, Vector2 limit, SdfWallpaperPlane plane = SdfWallpaperPlane.XZ, int materialStride = 0, float lodDistance = 0f) {
+    /// <paramref name="plane"/> is not a defined <see cref="SdfPlane"/>.</exception>
+    public SdfProgramBuilder WallpaperFold(SdfWallpaperGroup group, Vector2 cell, Vector2 limit, SdfPlane plane = SdfPlane.XZ, int materialStride = 0, float lodDistance = 0f) {
         // Mirrors RepeatPolar's stride check — the same Material lane, the same uint cast, and the shader reads it back
         // as `(int)instructionHeader.w`, so a negative stride would recolor shapes DOWNWARD out of the palette.
         if (materialStride < 0) {

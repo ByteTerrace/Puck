@@ -593,7 +593,7 @@ drives the next occupant.
 
 A session belongs to the world that admitted it. The peer and federated wires refuse any submission
 that names a session principal (`SessionPrincipalRemote`), so a remote or federated session is not
-admitted. A click through a portal does not reach the destination's rules yet.
+admitted.
 
 Crossing asks for embodiment. Successful target admission allocates a population entry and produces
 concrete `Drive/body:<allocated-id>` authority. Do not add `Enter`: the capability vocabulary is the
@@ -663,6 +663,34 @@ first. A destination that admits no viewer binds the screen dark and says why, a
 that ends the session, as a rebuild does, is asked to admit the screen again. A destination a
 session screen shows therefore authors an admission row that grants `observe all` with a budget.
 
+A world's authority owns its session screens' sessions, not the presentation that draws them.
+`WorldInstanceHost` opens one for every screen or placement face whose source is a session when the
+world's definition declares it, re-points or closes it when an edit changes the screen's destination
+or removes the screen (an edit of its camera, projection or resolution keeps the session), asks a destination that ended one to admit the screen again, and stops a destination left with
+neither a screen nor anyone in it, as it stops one whose admission it just refused. The boot world's
+screens always hold their sessions; any other world's hold them while someone stands in it, so a
+portal in a world a traveller reached works for them there. A paused or stopped world keeps its
+sessions in step with its definition and its occupants, but forwards nothing. A presentation reads
+the session (`WorldInstanceHost.ScreenSession`) and renders its mirror.
+
+A click through a portal reaches the destination's rules as the session's input. A body engages the
+portal face with `Control` over it, as it engages a machine screen, and the fold routes its
+per-tick intent, the one its seat already submits and the tape already records, through the face:
+while its pointer ray passes through the glass from the front, the ray is mapped through the door the
+portal's counterpart names, in fixed point, and its channels are carried by name into the
+destination's own. The forward travels the destination's own link, so the destination's tape
+records it like any other input, and a destination that is not taking input (paused, stopped, held,
+or driving its own tape) is sent nothing until it takes input again, a release it is owed included. The destination latches it on the session, never on a body,
+and a rule reads it through `$pointer:any:<screen>:x|y|on` and
+`$pointer:any:<screen>:press:<channel>`, which count a session only while it holds `Control` over
+that screen. A press the destination has not yet stepped over is kept for one step's rules, with the
+ray it was made along, so a press and release that both arrive between two destination steps still
+reach them once, where the press was made. When the forward stops (a disengage, a lost `Control`
+hold, a ray off the glass) one release clears what the session pointed and pressed. A tick a world
+replays from its tape forwards nothing, its drive's last tick included: its destinations are not
+replaying with it. A destination driving its own tape restores the sessions it recorded; when the
+drive ends, each one no observer holds ends, so nothing its recorded viewer pressed stays held.
+
 A joined-world projection renders the destination from the destination's own delivered snapshots and
 its own measured clock, never through the host's presentation clock—independently scheduled or
 remote worlds do not share a presentation coordinate. A nested screen inside a projected destination
@@ -676,7 +704,8 @@ the glass shows it edge to edge, with no bezel. The eye is the primary local sea
 height, one per screen, since a screen shows one image. A pick through the glass continues through
 the camera the window rendered into the destination and, since the destination's own screens bind
 dark, ends on its world: on the surface the pick's ray meets among the destination's static
-placements. Routing input into the destination's authority is open work.
+placements. That pick is presentation; the input a click carries reaches the destination's rules
+through the engaged body's own intent, as above.
 
 A seat that crosses into a world the boot presentation cannot map it into (another document that no
 adjacency relates to the boot world) is presented in that world. Its view draws the destination's own

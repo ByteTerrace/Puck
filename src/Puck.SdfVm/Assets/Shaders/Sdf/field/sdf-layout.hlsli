@@ -138,26 +138,26 @@ static SdfProgramLayout sdfProgramLayout = (SdfProgramLayout)0;
 // The ONE per-invocation layout decode. Same loads, same order as mapCore's former inline sequence.
 SdfProgramLayout sdfLoadProgramLayout() {
     uint4 header = sdfWords[0];
-    uint boundsOffset = (header.w + (SDF_MATERIAL_VECTORS_PER_ENTRY * header.y));
-    uint segmentOffset = (boundsOffset + (2u * header.x));
+    uint boundsOffset = (SDF_PROGRAM_MATERIAL_OFFSET(header) + (SDF_MATERIAL_VECTORS_PER_ENTRY * SDF_PROGRAM_MATERIAL_COUNT(header)));
+    uint segmentOffset = (boundsOffset + (SDF_BOUND_RECORD_VECTORS * SDF_PROGRAM_INSTRUCTION_COUNT(header)));
     uint4 segmentHeader = sdfWords[segmentOffset];
-    uint segmentCount = segmentHeader.x;
-    float stepScale = asfloat(segmentHeader.y);
+    uint segmentCount = SDF_SEGMENT_COUNT(segmentHeader);
+    float stepScale = asfloat(SDF_SEGMENT_STEP_SCALE(segmentHeader));
     uint instanceOffset = sdfInstanceDirectoryOffsetFrom(segmentOffset, segmentCount);
-    uint instanceCount = sdfWords[instanceOffset].x;
+    uint instanceCount = SDF_INSTANCE_COUNT(sdfWords[instanceOffset]);
     SdfProgramLayout layout;
 
-    layout.dataOffset = header.z;
+    layout.dataOffset = SDF_PROGRAM_DATA_OFFSET(header);
     layout.boundsOffset = boundsOffset;
     layout.segmentOffset = segmentOffset;
     layout.segmentCount = segmentCount;
-    layout.rigidPlanOffset = segmentHeader.z;
-    layout.partProgramOffset = sdfWords[instanceOffset].y;
-    layout.noDetailShapes = (sdfWords[instanceOffset].z & SDF_NO_DETAIL_SHAPES_FLAG) != 0u;
+    layout.rigidPlanOffset = SDF_SEGMENT_RIGID_PLAN_OFFSET(segmentHeader);
+    layout.partProgramOffset = SDF_INSTANCE_PART_PROGRAMS(sdfWords[instanceOffset]);
+    layout.noDetailShapes = (SDF_INSTANCE_FLAGS(sdfWords[instanceOffset]) & SDF_NO_DETAIL_SHAPES_FLAG) != 0u;
     layout.stepScale = ((stepScale > 0.0) ? stepScale : 1.0);
     layout.instanceOffset = instanceOffset;
     layout.instanceCount = instanceCount;
-    layout.worldSegmentOffset = (instanceOffset + 1u + (2u * instanceCount));
+    layout.worldSegmentOffset = (instanceOffset + SDF_DIRECTORY_HEADER_VECTORS + (SDF_BOUND_RECORD_VECTORS * instanceCount));
     layout.hasInstances = (instanceCount != 0u);
 
     return layout;
@@ -176,8 +176,8 @@ SdfProgramLayout sdfLoadProgramLayout() {
 #define SDF_VM_LOAD_DATA0
 #define SDF_VM_LOAD_DATA1
 #else
-#define SDF_VM_LOAD_DATA0 float4 data0 = asfloat(sdfWords[dataOffset + (2u * index)])
-#define SDF_VM_LOAD_DATA1 float4 data1 = asfloat(sdfWords[dataOffset + (2u * index) + 1u])
+#define SDF_VM_LOAD_DATA0 float4 data0 = asfloat(sdfWords[dataOffset + (SDF_INSTRUCTION_DATA_VECTORS * index)])
+#define SDF_VM_LOAD_DATA1 float4 data1 = asfloat(sdfWords[dataOffset + (SDF_INSTRUCTION_DATA_VECTORS * index) + 1u])
 #endif
 
 #include "sdf-parts.hlsli"

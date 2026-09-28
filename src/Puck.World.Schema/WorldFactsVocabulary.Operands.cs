@@ -30,7 +30,7 @@ public static partial class WorldFactsVocabulary {
             $"{WorldRuleFacts.ParkedPrefix}<bodyRef>",
             $"{WorldRuleFacts.LinkPrefix}<adjacencyName>",
             $"{WorldRuleFacts.ChannelPrefix}<seat>:<channelName>",
-            $"{WorldRuleFacts.PointerPrefix}<seat>:<screenIndex>:x|y|on",
+            $"{WorldRuleFacts.PointerPrefix}<seat>|any:<screenIndex>:x|y|on|press:<channelName>",
             $"{WorldRuleFacts.NearestPrefix}<bodyRef>:<row>",
             $"{WorldRuleFacts.ClockPrefix}<music>:phaseError",
             $"{BoardCellOfPrefix}<row>:<bodyRef>",
@@ -136,26 +136,35 @@ public static partial class WorldFactsVocabulary {
         private static WorldBodyFactOperand Pointer(string name, string ruleName, WorldFactsCompileContext world) {
             var seats = world.Definition.Population.LocalSeats;
             var parts = name[WorldRuleFacts.PointerPrefix.Length..].Split(separator: ':');
-            var pointerFacet = ((parts.Length == 3)
-                ? parts[2] switch {
+            var pointerFacet = (parts.Length switch {
+                3 => parts[2] switch {
                     "x" => PointerFacet.X,
                     "y" => PointerFacet.Y,
                     "on" => PointerFacet.On,
                     _ => ((PointerFacet?)null),
-                }
-                : null
+                },
+                4 when (parts[2] == "press") => PointerFacet.Press,
+                _ => null,
+            });
+            // "any" is every participant allowed to point here, seats first and then live sessions; a number is one
+            // seat, 1-based.
+            var seat = PointerOperand.AnyParticipant;
+            var participant = (
+                (parts.Length > 0) &&
+                ((parts[0] == "any") ||
+                (int.TryParse(
+                s: parts[0],
+                style: NumberStyles.None,
+                provider: CultureInfo.InvariantCulture,
+                result: out seat
+            ) &&
+                (seat >= 1) &&
+                (seat <= seats)))
             );
 
             if (
                 (pointerFacet is null) ||
-                !int.TryParse(
-                s: parts[0],
-                style: NumberStyles.None,
-                provider: CultureInfo.InvariantCulture,
-                result: out var seat
-            ) ||
-                (seat < 1) ||
-                (seat > seats) ||
+                !participant ||
                 !int.TryParse(
                 s: parts[1],
                 style: NumberStyles.None,
@@ -164,10 +173,24 @@ public static partial class WorldFactsVocabulary {
             )
             ) {
                 throw new RuleException(
-                    detail: $"'{name}' does not spell '{WorldRuleFacts.PointerPrefix}<seat>:<screenIndex>:x|y|on' with seat in 1..{seats}",
+                    detail: $"'{name}' does not spell '{WorldRuleFacts.PointerPrefix}<seat>|any:<screenIndex>:x|y|on|press:<channelName>' with seat in 1..{seats}",
                     refusal: WorldRuleRefusal.PointerMalformed,
                     ruleName: ruleName
                 );
+            }
+
+            var pressChannel = -1;
+
+            if (pointerFacet == PointerFacet.Press) {
+                pressChannel = world.ChannelOrdinal(name: parts[3]);
+
+                if (pressChannel < 0) {
+                    throw new RuleException(
+                        detail: $"'{name}' names channel '{parts[3]}', which the document does not declare in 'channels[]'",
+                        refusal: WorldRuleRefusal.PointerMalformed,
+                        ruleName: ruleName
+                    );
+                }
             }
 
             WorldScreen? screen = null;
@@ -208,7 +231,11 @@ public static partial class WorldFactsVocabulary {
             var operand = new PointerOperand(
                 facet: pointerFacet.Value,
                 mapping: mapping,
-                seat: (seat - 1)
+                pressChannel: pressChannel,
+                screenIndex: screenIndex,
+                seat: ((seat == PointerOperand.AnyParticipant)
+                    ? PointerOperand.AnyParticipant
+                    : (seat - 1))
             );
 
             return BodyFact(

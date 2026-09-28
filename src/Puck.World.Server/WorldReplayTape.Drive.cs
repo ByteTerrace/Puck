@@ -75,9 +75,14 @@ public sealed partial class WorldReplayTape {
     /// a fast-forwarding drive that has not reached its target yet.</summary>
     public bool WantsFastForwardStep => ((m_drive is { FastForward: true } drive) && (drive.Cursor < drive.Target));
 
-    // Every live drive ends here: seats return to live input, and a completed fork hands its prefix over to a fresh
-    // recording; anything else — a plain drive's end, or a cancel — leaves the tape Idle.
+    // Every live drive ends here: seats return to live input, a completed fork hands its prefix over to a fresh
+    // recording, and anything else — a plain drive's end, or a cancel — leaves the tape Idle. Either way the sessions the
+    // drive restored that no observer holds end last, where a fork's recording captures their ends.
     private void EndDrive(bool completed) {
+        EndDriveCore(completed: completed);
+        m_liveServer.EndUnobservedSessions();
+    }
+    private void EndDriveCore(bool completed) {
         var drive = m_drive!;
 
         m_drive = null;
@@ -320,6 +325,9 @@ public sealed partial class WorldReplayTape {
     /// <see cref="WorldReplayMode.Replaying"/>. Called by <see cref="WorldServerStepShell"/> immediately before
     /// <see cref="WorldServer.Advance"/>; a no-op otherwise, or when the cursor's tick is already in the doors.</summary>
     public void InjectDriveTick() {
+        // Every step taken while a drive holds the session replays: its seats' own input is masked at the loopback.
+        m_liveServer.ReplaysInput = (m_mode == WorldReplayMode.Replaying);
+
         if (
             (m_mode != WorldReplayMode.Replaying) ||
             (m_drive is not { } drive) ||

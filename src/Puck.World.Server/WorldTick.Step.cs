@@ -279,6 +279,17 @@ public sealed partial class WorldTick {
         m_tickWrittenCount = 0;
 
         while (m_intents.TryDequeue(result: out var submission)) {
+            // A session's screen input names no body: it latches on the session itself, for the rules to read. A
+            // session's submission naming a body drives that body like any other principal's, under its grants.
+            if (
+                (submission.Principal.Kind == PrincipalKind.Session) &&
+                (submission.EntityIndex < 0)
+            ) {
+                _ = Host.GrantTable.TryLatchSessionInput(submission: in submission);
+
+                continue;
+            }
+
             if (Host.Body(index: submission.EntityIndex) is not { } body) {
                 continue;
             }
@@ -484,6 +495,7 @@ public sealed partial class WorldTick {
             tick: tick,
             stepTicks: context.StepTicks
         );
+        Host.GrantTable.SettleSessionPresses();
         StepBoardEnforcement(tick: tick);
         Host.StepSearch(tick: tick);
         StepFields(tick: tick);
@@ -498,7 +510,8 @@ public sealed partial class WorldTick {
         SweepPlacementDeals(tick: tick);
         Host.Addons?.ResolveReads(tick: (context.Tick + 1UL));
         // Fold this tick's routed intents into their targets BEFORE the snapshot is built.
-        Host.Engagement.FoldTick();
+        Host.Engagement.FoldTick(replaysInput: Host.ReplaysInput);
+        Host.ReplaysInput = false;
 
         // screens[].memory bindings poke a moved cell into its machine and mirror a machine's moved byte into its
         // cell — see WorldServer.MachineMemory.cs. Runs right before the machine steps so a Write binding's poke

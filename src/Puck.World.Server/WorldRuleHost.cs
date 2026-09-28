@@ -329,7 +329,7 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
 
         return RuleFact.Finite(
             kind: operand.ValueKind,
-            value: operand.Read(ray: ReadPointerRay(seat: operand.Seat))
+            value: ReadPointer(operand: operand)
         );
     }
     /// <inheritdoc/>

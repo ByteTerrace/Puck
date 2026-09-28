@@ -16,14 +16,18 @@ public enum HgdM2Edge {
     /// <summary>M2 changes from high to low.</summary>
     Falling,
 }
-/// <summary>Master ticks, the CPU divider, and the accumulated run target, serialized as one timing component.</summary>
+/// <summary>Master ticks, the CPU and PPU dividers, and the accumulated run target, serialized as one timing
+/// component. The PPU's divider starts at phase 0 and the CPU's at the power-on profile's alignment phase, which is how
+/// the four CPU/PPU alignments differ.</summary>
 public sealed class HgdClock : ISnapshotable {
     private readonly int m_cpuDivider;
     private readonly int m_m2RiseHalfTick;
+    private readonly int m_ppuDivider;
 
     private ulong m_masterTicks;
     private ulong m_runTargetCycles;
     private int m_cpuPhase;
+    private int m_ppuPhase;
 
     /// <summary>Initializes a new instance of the <see cref="HgdClock"/> class at the configured alignment.</summary>
     /// <param name="configuration">The model and phase profile.</param>
@@ -33,6 +37,7 @@ public sealed class HgdClock : ISnapshotable {
 
         m_cpuDivider = configuration.Model.CpuDivider();
         m_m2RiseHalfTick = configuration.Model.M2RiseHalfTick();
+        m_ppuDivider = configuration.Model.PpuDivider();
         m_cpuPhase = configuration.PowerOn.AlignmentPhase;
         Rate = configuration.Model.MasterClockRate();
     }
@@ -56,12 +61,18 @@ public sealed class HgdClock : ISnapshotable {
     public void AddBudget(ulong masterTicks) {
         m_runTargetCycles = checked((m_runTargetCycles + masterTicks));
     }
-    /// <summary>Advances exactly one master tick and reports any M2 edge within that tick.</summary>
+    /// <summary>Advances exactly one master tick and reports whether it ends a PPU dot and any M2 edge within it.</summary>
+    /// <param name="ppuDot">Whether the tick completes a PPU dot.</param>
     /// <param name="edgeHalfTick">The edge's elapsed time in half master ticks, or zero when there is no edge.</param>
     /// <returns>The M2 transition, or <see cref="HgdM2Edge.None"/> between edges.</returns>
-    public HgdM2Edge StepTick(out ulong edgeHalfTick) {
+    public HgdM2Edge StepTick(out bool ppuDot, out ulong edgeHalfTick) {
         edgeHalfTick = 0;
         ++m_masterTicks;
+        ++m_ppuPhase;
+        ppuDot = (m_ppuPhase == m_ppuDivider);
+        if (ppuDot) {
+            m_ppuPhase = 0;
+        }
         ++m_cpuPhase;
         if (m_cpuPhase == m_cpuDivider) {
             m_cpuPhase = 0;
@@ -83,12 +94,12 @@ public sealed class HgdClock : ISnapshotable {
         TransferState(transfer: new StateSaveTransfer(writer: writer));
     }
     /// <inheritdoc/>
-    /// <exception cref="InvalidDataException">The serialized phase is outside the CPU divider.</exception>
+    /// <exception cref="InvalidDataException">A serialized phase is outside its divider.</exception>
     /// <exception cref="InvalidOperationException">The reader does not contain a complete clock state.</exception>
     public void LoadState(StateReader reader) {
         TransferState(transfer: new StateLoadTransfer(reader: reader));
-        if (((uint)m_cpuPhase) >= ((uint)m_cpuDivider)) {
-            throw new InvalidDataException(message: "Snapshot clock phase is outside the CPU divider.");
+        if ((((uint)m_cpuPhase) >= ((uint)m_cpuDivider)) || (((uint)m_ppuPhase) >= ((uint)m_ppuDivider))) {
+            throw new InvalidDataException(message: "Snapshot clock phase is outside the CPU or PPU divider.");
         }
     }
 
@@ -96,5 +107,6 @@ public sealed class HgdClock : ISnapshotable {
         transfer.UInt64(value: ref m_masterTicks);
         transfer.UInt64(value: ref m_runTargetCycles);
         transfer.Int32(value: ref m_cpuPhase);
+        transfer.Int32(value: ref m_ppuPhase);
     }
 }
