@@ -24,7 +24,8 @@ public sealed class WorldAuthorityRecoveryRootLawTests {
         var cancellation = TestContext.Current.CancellationToken;
         var first = new WorldAuthorityBlobStore(
             store: blobs,
-            target: target
+            target: target,
+            timeProvider: new VirtualClock()
         );
         var fence = await first.AcquireActivationAsync(
             cancellationToken: cancellation,
@@ -70,7 +71,8 @@ public sealed class WorldAuthorityRecoveryRootLawTests {
 
         var restarted = new WorldAuthorityBlobStore(
             store: blobs,
-            target: target
+            target: target,
+            timeProvider: new VirtualClock()
         );
         var loaded = await restarted.LoadRecoveryRootAsync(
             identity,
@@ -163,7 +165,8 @@ public sealed class WorldAuthorityRecoveryRootLawTests {
         var cancellation = TestContext.Current.CancellationToken;
         var store = new WorldAuthorityBlobStore(
             store: blobs,
-            target: target
+            target: target,
+            timeProvider: new VirtualClock()
         );
         var oldFence = await store.AcquireActivationAsync(
             cancellationToken: cancellation,
@@ -230,7 +233,8 @@ public sealed class WorldAuthorityRecoveryRootLawTests {
         var cancellation = TestContext.Current.CancellationToken;
         var store = new WorldAuthorityBlobStore(
             store: blobs,
-            target: target
+            target: target,
+            timeProvider: new VirtualClock()
         );
         var fence = await store.AcquireActivationAsync(
             cancellationToken: cancellation,

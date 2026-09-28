@@ -1,3 +1,4 @@
+using Puck.Testing;
 using Puck.Storage;
 using Puck.World.Server;
 using Xunit;
@@ -11,7 +12,8 @@ public sealed class WorldAuthorityRecoveryLawTests {
         var target = AzureBlobObjectStorageTarget.FromConnectionStringOrServiceUri(value: "UseDevelopmentStorage=true");
         var store = new WorldAuthorityBlobStore(
             store: blobs,
-            target: target
+            target: target,
+            timeProvider: new VirtualClock()
         );
         var identity = new WorldAuthorityIdentity(
             Owner: Guid.NewGuid(),
