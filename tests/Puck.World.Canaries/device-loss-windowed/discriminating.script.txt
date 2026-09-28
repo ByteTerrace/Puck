@@ -4,7 +4,7 @@ world.wait ready 45
 world.cadence off
 world.wait 10
 world.screenshot {run}/lost.png
-world.wait 30
+world.wait captures 30
 gpu.faults list
 world.wait 10
 gpu.faults list
