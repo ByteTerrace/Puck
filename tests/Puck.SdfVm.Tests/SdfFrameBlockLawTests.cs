@@ -17,6 +17,25 @@ public sealed class SdfFrameBlockLawTests {
     private static readonly string[] ZeroValues = [ShaderFrameInterface.Extent, SdfWorldPackage.ViewBase];
     // A camera basis none of whose components is zero.
     private static readonly Quaternion Basis = Quaternion.CreateFromYawPitchRoll(pitch: 0.4f, roll: 0.5f, yaw: 0.3f);
+    // A quality every lever of which is off its default, and the pass-block members that carry them.
+    private static readonly SdfViewQuality Restricted = new() {
+        DisableAmbientOcclusion = true,
+        DisableFarBound = true,
+        DisableSoftShadows = true,
+        ShadowDistanceScale = 0.5f,
+        UseCameraTileShadowMask = true,
+        UseFastAmbientOcclusion = true,
+        UseFastSoftShadowMarch = true,
+    };
+    private static readonly (string Member, SdfViewQuality Quality, uint Bits)[] QualityValues = [
+        (SdfWorldPackage.CameraTileShadowMask, new() { UseCameraTileShadowMask = true }, 1u),
+        (SdfWorldPackage.DisableAmbientOcclusion, new() { DisableAmbientOcclusion = true }, 1u),
+        (SdfWorldPackage.DisableFarBound, new() { DisableFarBound = true }, 1u),
+        (SdfWorldPackage.DisableSoftShadows, new() { DisableSoftShadows = true }, 1u),
+        (SdfWorldPackage.FastAmbientOcclusion, new() { UseFastAmbientOcclusion = true }, 1u),
+        (SdfWorldPackage.FastSoftShadowMarch, new() { UseFastSoftShadowMarch = true }, 1u),
+        (SdfWorldPackage.ShadowDistanceScale, new() { ShadowDistanceScale = 0.5f }, BitConverter.SingleToUInt32Bits(value: 0.5f)),
+    ];
 
     private static SdfFrame Frame() {
         var builder = new SdfProgramBuilder();
@@ -44,18 +63,17 @@ public sealed class SdfFrameBlockLawTests {
                         Near = 0.5f,
                     },
                     Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)
-                ),
+                ) {
+                    Quality = Restricted,
+                },
             ],
             Time: 7f
         ) {
             AmbientScale = 0.5f,
             DebugSliceAxis = 2f,
             DebugSliceOffset = 3f,
-            DisableAmbientOcclusion = true,
-            DisableFarBound = true,
             DisableScreenLights = true,
             DisableShadowCull = true,
-            DisableSoftShadows = true,
             EnableShadowProxy = true,
             FarDistance = 30f,
             GridFlags = 3u,
@@ -65,11 +83,7 @@ public sealed class SdfFrameBlockLawTests {
             GridObjectPatchRadius = 2f,
             GridObjectPitch = new Vector2(x: 0.5f, y: 0.75f),
             GridWorldPitch = new Vector2(x: 1f, y: 2f),
-            ShadowDistanceScale = 0.5f,
             SunScale = 0.75f,
-            UseCameraTileShadowMask = true,
-            UseFastAmbientOcclusion = true,
-            UseFastSoftShadowMarch = true,
             UseFiniteDifferenceNormals = true,
         };
     }
@@ -130,6 +144,47 @@ public sealed class SdfFrameBlockLawTests {
             actual: BitConverter.ToUInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.TileGrid))),
             expected: ((300u + (SdfWorldPackage.TileSize - 1u)) / SdfWorldPackage.TileSize)
         );
+    }
+    // Quality is each view's: two views of one frame, which two instances of one residency render, write their own
+    // quality into their own pass blocks and share every other value. Each lever varies independently.
+    [Fact]
+    public void EachViewOfOneFrameWritesItsOwnQualityAndSharesEverythingElse() {
+        var authored = Frame();
+        var blocks = new[] { new byte[SdfFrameBlock.SizeBytes], new byte[SdfFrameBlock.SizeBytes] };
+
+        foreach (var (member, quality, bits) in QualityValues) {
+            var frame = (authored with { Views = [(authored.Views[0] with { Quality = quality }), (authored.Views[0] with { Quality = default })] });
+
+            for (var view = 0; (view < blocks.Length); view++) {
+                SdfFrameBlock.Write(
+                    block: blocks[view],
+                    frame: frame,
+                    height: 200u,
+                    sceneTime: frame.Time,
+                    tables: new SdfPassValues(
+                        DebugMode: 0,
+                        Environment: new float[SdfEnvironment.LaneCount],
+                        InstanceMaskWordCount: 1u,
+                        MeshDraws: 0u,
+                        SampleIndex: 0u,
+                        ScreenCount: 0u
+                    ),
+                    view: view,
+                    width: 300u
+                );
+            }
+
+            var parameters = SdfWorldInterfaces.WorldParameters;
+            var offset = ((int)parameters.BlockOffsetOf(member: member));
+
+            Assert.Equal(actual: BitConverter.ToUInt32(value: blocks[0], startIndex: offset), expected: bits);
+            Assert.Equal(actual: BitConverter.ToUInt32(value: blocks[1], startIndex: offset), expected: 0u);
+            for (var index = 0; (index < SdfFrameBlock.SizeBytes); index++) {
+                if ((index < offset) || (index >= (offset + sizeof(uint)))) {
+                    Assert.Equal(actual: blocks[1][index], expected: blocks[0][index]);
+                }
+            }
+        }
     }
     // The pass block carries the camera's own near plane, so the bounded volumes start at the eye of a camera whose image
     // begins there (a cloud around the camera stays visible), and the surfaces render from that plane, never nearer than

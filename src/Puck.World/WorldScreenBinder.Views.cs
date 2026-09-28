@@ -128,8 +128,10 @@ internal sealed partial class WorldScreenBinder {
     // occlusion, which a view may add to the host's levers but never lift.
     private ViewResidency CreateCameraResidency(ISdfFrameSource host, string name) {
         var source = new SdfCameraFrameSource(host: host) {
-            DisableAmbientOcclusion = true,
-            DisableSoftShadows = true,
+            Quality = new SdfViewQuality {
+                DisableAmbientOcclusion = true,
+                DisableSoftShadows = true,
+            },
         };
         var residency = new SdfWorldResidency(
             brickPoolVoxelCapacity: 0,

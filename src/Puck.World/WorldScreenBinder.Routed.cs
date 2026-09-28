@@ -5,8 +5,9 @@ namespace Puck.World;
 
 // The worlds seats are presented in elsewhere (WorldContinuum.PresentedElsewhere): a view of the boot frame whose seat is
 // presented in another world renders the scene of that world (WorldRoutedScene) instead, from a residency of its own that
-// every seat presented there shares. The presenter latches which views route where in its Dress, which the package starts
-// before any instance resolves, so a frame's views and its residencies agree. A routed residency films the boot frame
+// every seat presented there shares, and every window attached to that world (TryResolveWindowView). The presenter
+// latches which views route where in its Dress, which the package starts before any instance resolves, so a frame's views
+// and its residencies agree. A routed residency films the boot frame
 // before it captures its own, so the cameras it frames with are this frame's.
 internal sealed partial class WorldScreenBinder {
     // Each routed scene's residency, and the scenes gone from the presenter's table, released after Dress.
@@ -46,6 +47,53 @@ internal sealed partial class WorldScreenBinder {
             return false;
         }
 
+        view = new SdfWorldView(
+            Residency: RoutedResidencyOf(
+                host: host,
+                scene: scene
+            ),
+            View: index
+        );
+
+        return true;
+    }
+    /// <summary>Returns the view a window onto an endpoint's world renders (<see cref="WorldFramePresenter.AttachWindow"/>):
+    /// the window's index in the residency of its scene, the one every seat presented in that world renders from,
+    /// created the first time a view resolves to it.</summary>
+    /// <param name="window">The window.</param>
+    /// <param name="view">The view, when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when this presenter's latch includes the window and the views are configured.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="window"/> is <see langword="null"/>.</exception>
+    public bool TryResolveWindowView(WorldRoutedWindow window, out SdfWorldView view) {
+        ArgumentNullException.ThrowIfNull(argument: window);
+
+        view = default;
+
+        var index = window.Index;
+
+        if (
+            (m_viewPipelines is null) ||
+            (ViewHost is not { } host) ||
+            (index < 0) ||
+            (Presenter is not { } presenter) ||
+            !presenter.Presents(scene: window.Scene)
+        ) {
+            return false;
+        }
+
+        view = new SdfWorldView(
+            Residency: RoutedResidencyOf(
+                host: host,
+                scene: window.Scene
+            ),
+            View: index
+        );
+
+        return true;
+    }
+
+    // A scene's residency, created the first time a view resolves to it.
+    private SdfWorldResidency RoutedResidencyOf(SdfWorldResidency host, WorldRoutedScene scene) {
         if (!m_routedResidencies.TryGetValue(
             key: scene,
             value: out var residency
@@ -60,14 +108,8 @@ internal sealed partial class WorldScreenBinder {
             );
         }
 
-        view = new SdfWorldView(
-            Residency: residency,
-            View: index
-        );
-
-        return true;
+        return residency;
     }
-
     // A routed scene's residency: built like the world's own, with its brick pool and the full quality its frame carries,
     // and its work counted under the scene's name in world.counters. Its instances are sized to the world's own (the count
     // a view's scratch is sized by), so the view the seat renders through follows it in place at the crossing, with no
@@ -101,12 +143,12 @@ internal sealed partial class WorldScreenBinder {
             transforms: source.MovedTransforms,
             work: residency.Work
         );
-        Console.Error.WriteLine(value: $"[world.view: a seat is presented in '{scene.Endpoint.Identity}'; its view renders that world's scene]");
+        Console.Error.WriteLine(value: $"[world.view: '{scene.Endpoint.Identity}' is shown here; its seats and windows render that world's scene]");
 
         return residency;
     }
-    // Releases the residency of every scene the presenter no longer presents a seat in: its views have left the render
-    // graph's resolves, whose passes give back their holds once the device has finished with them.
+    // Releases the residency of every scene no seat is presented in and no window is attached to any longer: its views
+    // have left the render graph's resolves, whose passes give back their holds once the device has finished with them.
     private void ReconcileRoutedResidencies() {
         if (Presenter is not { } presenter) {
             return;

@@ -1,0 +1,23 @@
+{
+  "basis": "../../../src/Puck.World/Assets/worlds/shards/quilt-se",
+  "machines": [
+    {
+      "name": "arcade$agb-screen",
+      "running": false
+    },
+    {
+      "name": "arcade$cgb-screen",
+      "running": false
+    },
+    {
+      "name": "arcade$handheld-screen",
+      "running": false
+    }
+  ],
+  "references": [
+    {
+      "name": "island",
+      "document": "island"
+    }
+  ]
+}
