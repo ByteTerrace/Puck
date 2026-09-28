@@ -72,6 +72,10 @@
         </Task>
     </UsingTask>
 
+    <!-- The DXC options of every stage and target, generated from Puck.Shaders.ShaderCompiler.StepsOf, which the
+         runtime shader compiler runs too: one recipe. -->
+    <Import Project="$(MSBuildThisFileDirectory)ShaderRecipe.props" />
+
     <PropertyGroup>
         <DxcCommand Condition="'$(DxcCommand)' == ''">dxc</DxcCommand>
         <PuckShaderDxilEnabled Condition="'$(PuckShaderDxilEnabled)' == ''">true</PuckShaderDxilEnabled>
@@ -95,11 +99,11 @@
     </Target>
 
     <!-- Compiles each declared source to SPIR-V (Vulkan; entry renamed to "main") always, and to DXIL (DirectX)
-         when its category's opt-out property is true. The vk:: binding/push-constant attributes are SPIR-V-only, so
-         every DXIL pass suppresses the "attribute ignored" warnings. Every invocation pins the shared capability
-         floor: -fspv-target-env=vulkan1.3 (SPIR-V 1.6), -T *_6_6 (Shader Model 6.6), explicit -O3, and
-         -enable-16bit-types. $(MSBuildThisFileFullPath) rides Inputs alongside $(MSBuildProjectFullPath): editing
-         this shared recipe must invalidate every consuming project's cached build, not only a csproj edit.
+         when its category's opt-out property is true, with the options ShaderRecipe.props holds for the stage and
+         target (generated from ShaderCompiler.StepsOf: the capability floor, explicit -O3 and -enable-16bit-types,
+         and on DXIL the suppressed "attribute ignored" warnings for the SPIR-V-only vk:: attributes).
+         $(MSBuildThisFileFullPath) and the recipe ride Inputs alongside $(MSBuildProjectFullPath): editing either
+         must invalidate every consuming project's cached build, not only a csproj edit.
 
          PuckWriteShaderHashSidecars runs INSIDE this same incremental gate, after every Exec, so a sidecar is
          rewritten only on an actual recompile — never unconditionally every build, which would make
@@ -112,7 +116,7 @@
         <_PuckExpectedBytecode Condition="'$(PuckComputeShaderDxilEnabled)' == 'true'" Include="@(ComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil')" />
     </ItemGroup>
     <Target Name="CompileShaders" BeforeTargets="PrepareForBuild"
-            Inputs="@(VertexShaderSource);@(FragmentShaderSource);@(ComputeShaderSource);@(ShaderInclude);$(MSBuildProjectFullPath);$(MSBuildThisFileFullPath)"
+            Inputs="@(VertexShaderSource);@(FragmentShaderSource);@(ComputeShaderSource);@(ShaderInclude);$(MSBuildProjectFullPath);$(MSBuildThisFileFullPath);$(MSBuildThisFileDirectory)ShaderRecipe.props"
             Outputs="@(_PuckExpectedBytecode);@(_PuckExpectedBytecode -> '%(Identity).hash')">
         <!-- Guards the DXC version probe and its <Error> below: a buildTransitive consumer with no shaders and no
              DXC installed (PackageReference'd only for IShaderModuleLoader/ShaderBytecode) must not fail its build
@@ -132,18 +136,18 @@
         <Error Condition="'$(_PuckHasShaderItems)' == 'true' and '$(DxcProbeExitCode)' != '0'" Text="$(MSBuildProjectName) shader compilation requires '$(DxcCommand)' (the DirectX Shader Compiler) to run. Install the Vulkan SDK or Windows SDK, or pass /p:DxcCommand=&quot;path\to\dxc&quot;." />
 
         <!-- Vertex. -->
-        <Exec Condition="'$(PuckShaderSpirvEnabled)' == 'true' and '$(DxcProbeExitCode)' == '0' and '%(VertexShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.3 -fspv-entrypoint-name=main -enable-16bit-types -O3 -T vs_6_6 -E VSMain -Fo &quot;%(VertexShaderSource.RootDir)%(VertexShaderSource.Directory)%(VertexShaderSource.Filename).spv&quot; &quot;%(VertexShaderSource.FullPath)&quot;" />
-        <Exec Condition="'$(PuckShaderDxilEnabled)' == 'true' and '$(DxcProbeExitCode)' == '0' and '%(VertexShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -Wno-ignored-attributes -enable-16bit-types -O3 -T vs_6_6 -E VSMain -Fo &quot;%(VertexShaderSource.RootDir)%(VertexShaderSource.Directory)%(VertexShaderSource.Filename).dxil&quot; &quot;%(VertexShaderSource.FullPath)&quot;" />
+        <Exec Condition="'$(PuckShaderSpirvEnabled)' == 'true' and '$(DxcProbeExitCode)' == '0' and '%(VertexShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; $(PuckDxcVertexSpirv) -Fo &quot;%(VertexShaderSource.RootDir)%(VertexShaderSource.Directory)%(VertexShaderSource.Filename).spv&quot; &quot;%(VertexShaderSource.FullPath)&quot;" />
+        <Exec Condition="'$(PuckShaderDxilEnabled)' == 'true' and '$(DxcProbeExitCode)' == '0' and '%(VertexShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; $(PuckDxcVertexDxil) -Fo &quot;%(VertexShaderSource.RootDir)%(VertexShaderSource.Directory)%(VertexShaderSource.Filename).dxil&quot; &quot;%(VertexShaderSource.FullPath)&quot;" />
 
         <!-- Fragment. -->
-        <Exec Condition="'$(PuckShaderSpirvEnabled)' == 'true' and '$(DxcProbeExitCode)' == '0' and '%(FragmentShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.3 -fspv-entrypoint-name=main -enable-16bit-types -O3 -T ps_6_6 -E PSMain -Fo &quot;%(FragmentShaderSource.RootDir)%(FragmentShaderSource.Directory)%(FragmentShaderSource.Filename).spv&quot; &quot;%(FragmentShaderSource.FullPath)&quot;" />
-        <Exec Condition="'$(PuckShaderDxilEnabled)' == 'true' and '$(DxcProbeExitCode)' == '0' and '%(FragmentShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -Wno-ignored-attributes -enable-16bit-types -O3 -T ps_6_6 -E PSMain -Fo &quot;%(FragmentShaderSource.RootDir)%(FragmentShaderSource.Directory)%(FragmentShaderSource.Filename).dxil&quot; &quot;%(FragmentShaderSource.FullPath)&quot;" />
+        <Exec Condition="'$(PuckShaderSpirvEnabled)' == 'true' and '$(DxcProbeExitCode)' == '0' and '%(FragmentShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; $(PuckDxcFragmentSpirv) -Fo &quot;%(FragmentShaderSource.RootDir)%(FragmentShaderSource.Directory)%(FragmentShaderSource.Filename).spv&quot; &quot;%(FragmentShaderSource.FullPath)&quot;" />
+        <Exec Condition="'$(PuckShaderDxilEnabled)' == 'true' and '$(DxcProbeExitCode)' == '0' and '%(FragmentShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; $(PuckDxcFragmentDxil) -Fo &quot;%(FragmentShaderSource.RootDir)%(FragmentShaderSource.Directory)%(FragmentShaderSource.Filename).dxil&quot; &quot;%(FragmentShaderSource.FullPath)&quot;" />
 
         <!-- Compute kernels: SPIR-V (Vulkan; entry renamed to "main") and DXIL (DirectX) when enabled. The vk::
              binding/push-constant attributes are SPIR-V-only, so the DXIL pass suppresses the "attribute ignored"
              warnings; the register() slots drive the Direct3D 12 root signature. -->
-        <Exec Condition="'$(PuckShaderSpirvEnabled)' == 'true' and '$(DxcProbeExitCode)' == '0' and '%(ComputeShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.3 -fspv-entrypoint-name=main -enable-16bit-types -O3 -T cs_6_6 -E CSMain -Fo &quot;%(ComputeShaderSource.RootDir)%(ComputeShaderSource.Directory)%(ComputeShaderSource.Filename).spv&quot; &quot;%(ComputeShaderSource.FullPath)&quot;" />
-        <Exec Condition="'$(PuckComputeShaderDxilEnabled)' == 'true' and '$(DxcProbeExitCode)' == '0' and '%(ComputeShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -Wno-ignored-attributes -enable-16bit-types -O3 -T cs_6_6 -E CSMain -Fo &quot;%(ComputeShaderSource.RootDir)%(ComputeShaderSource.Directory)%(ComputeShaderSource.Filename).dxil&quot; &quot;%(ComputeShaderSource.FullPath)&quot;" />
+        <Exec Condition="'$(PuckShaderSpirvEnabled)' == 'true' and '$(DxcProbeExitCode)' == '0' and '%(ComputeShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; $(PuckDxcComputeSpirv) -Fo &quot;%(ComputeShaderSource.RootDir)%(ComputeShaderSource.Directory)%(ComputeShaderSource.Filename).spv&quot; &quot;%(ComputeShaderSource.FullPath)&quot;" />
+        <Exec Condition="'$(PuckComputeShaderDxilEnabled)' == 'true' and '$(DxcProbeExitCode)' == '0' and '%(ComputeShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; $(PuckDxcComputeDxil) -Fo &quot;%(ComputeShaderSource.RootDir)%(ComputeShaderSource.Directory)%(ComputeShaderSource.Filename).dxil&quot; &quot;%(ComputeShaderSource.FullPath)&quot;" />
 
         <!-- The full set of bytecode files this pass just produced, one item per stage/extension combination that
              was actually enabled — a project declaring no VertexShaderSource contributes zero vertex items via the

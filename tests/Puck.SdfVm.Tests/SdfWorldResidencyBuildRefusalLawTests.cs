@@ -3,6 +3,7 @@ using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
+using Puck.Shaders;
 using Puck.SignedDistance;
 using Puck.Testing;
 using Xunit;
@@ -237,7 +238,7 @@ public sealed class SdfWorldResidencyBuildRefusalLawTests {
         );
 
         // So is a kernel reload request.
-        Assert.True(condition: rig.Node.RequestShaderReload());
+        Assert.True(condition: rig.Node.RequestShaderReload(compiler: new ShaderCompiler(cacheDirectory: Path.Combine(path1: Path.GetTempPath(), path2: "puck-test-shader-cache"))));
         rig.ProduceUnchanged(frames: Frames);
         Assert.Equal(
             actual: rig.Gpu.Admissions,

@@ -10,11 +10,11 @@ namespace Puck.World;
 
 /// <summary>
 /// The world's own PRESENTATION console surface — its frame-rate readout (<c>world.fps</c>), the camera table
-/// (<c>world.cameras</c>), the FPS target, and the renderer's shader diagnostics — all live console verbs, each echoing
+/// (<c>world.cameras</c>) and the FPS target — all live console verbs, each echoing
 /// the current value when called with no argument. The screen listing and the views' refresh cadence
 /// (<c>world.screens</c>, <c>world.view-refresh</c>) read only the screen binder every boot shape composes, so they
 /// live in <see cref="ScreenCommandModule"/>, registered in core. The render levers every presentation shape honors live in
-/// <see cref="WorldRenderLeverCommandModule"/>. Registered ONLY when presentation is composed (<c>AddWorldPresentation</c>); over
+/// <see cref="WorldRenderLeverCommandModule"/>, and the kernel reload verbs in <see cref="WorldShaderReloadCommandModule"/>. Registered ONLY when presentation is composed (<c>AddWorldPresentation</c>); over
 /// headless stdin every one of these refuses as unknown. The participant/census verbs (<c>world.players</c>,
 /// <c>world.devices</c>, <c>world.population</c>) and authoritative diagnostics (<c>world.navigation</c>,
 /// <c>world.budget</c>) moved to <see cref="WorldPopulationCommandModule"/> — server-safe, registered in core either
@@ -22,7 +22,7 @@ namespace Puck.World;
 /// (<see cref="WorldCountersCommandModule"/>), registered in core. The FPS target rides the live
 /// <see cref="PresentPacingControl"/>, read by the frame source each captured frame.
 /// </summary>
-internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPacingControl pacing, WorldRenderProbe renderProbe, WorldServer server, IServerLink link, WorldOverlayFacts facts, PlayerRoster roster) : ICommandModule {
+internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPacingControl pacing, WorldServer server, IServerLink link, WorldOverlayFacts facts, PlayerRoster roster) : ICommandModule {
     // A ranked camera's listing: every candidate's anchor kind in rank order, then the candidate currently winning
     // for each joined seat (a seat-relative list can win differently per seat).
     private string CameraAnchorCandidates(WorldCamera camera) {
@@ -163,46 +163,6 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
-            name: "world.shaders.reload",
-            description: "Reloads compiled SDF kernels on the next produced frame: world.shaders.reload [tree]. Reads the bytecode under the kernel tree's passes directory; defaults to the deployed Assets/Shaders/Sdf, and a source checkout can name src/Puck.SdfVm/Assets/Shaders/Sdf after CompileShaders completes. Uses the current backend. Replaces changed pipelines while retaining world state, GPU buffers and textures; a failed load or pipeline build, or kernels that do not read this host's interface (compiled against another SDF instruction set, or binding what the host does not place there), keeps the previous set; DXIL kernels are checked through the dxcompiler beside dxc. This queues work: world.shaders.status reports completion. Binding/ABI changes require a host rebuild; child engines and overlay/postprocess shaders are outside this command.",
-            handler: (_, args) => {
-                if (renderProbe.Residency is not { } node) {
-                    return CommandResult.Error(output: "[world.shaders.reload: renderer not ready]");
-                }
-                try {
-                    if (!node.RequestShaderReload(tree: ((args.Count == 0)
-                        ? null
-                        : args.Tail(start: 0)))) {
-                        return CommandResult.Error(output: "[world.shaders.reload: another request is pending — world.shaders.status]");
-                    }
-                    var status = node.ShaderReloadStatus;
-
-                    return new CommandResult(Output: $"[world.shaders.reload: request={status.RequestId} pending directory={status.Directory}]");
-                } catch (Exception exception) when ((exception is ArgumentException or IOException or UnauthorizedAccessException)) {
-                    return CommandResult.Error(output: $"[world.shaders.reload: {exception.Message}]");
-                }
-            }
-        );
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
-            name: "world.shaders.status",
-            description: "Reports the most recent compiled SDF shader reload: request number, state (idle/pending/applied/unchanged/failed), generation, changed pipeline count, directory and failure reason. A request is complete only after pending changes to an outcome.",
-            handler: (_, args) => {
-                if (args.Count != 0) {
-                    return CommandResult.Error(output: "[world.shaders.status: no arguments]");
-                }
-                if (renderProbe.Residency is not { } node) {
-                    return new CommandResult(Output: "[world.shaders.status: renderer not ready]");
-                }
-                var status = node.ShaderReloadStatus;
-
-                return new CommandResult(Output: $"[world.shaders.status: request={status.RequestId} state={status.State} generation={status.Generation} pipelines={status.ChangedPipelines} directory={(status.Directory ?? "default")}{((status.Error is { } error)
-                    ? $" error={error}"
-                    : "")}]");
-            }
-        );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.target",

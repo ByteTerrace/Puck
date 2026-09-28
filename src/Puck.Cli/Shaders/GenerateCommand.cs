@@ -93,6 +93,7 @@ internal static class GenerateCommand {
         return [
             new GeneratedInclude(Generate: SdfIsaHlsl.Generate, Path: $"src/Puck.SdfVm/Assets/Shaders/Sdf/isa/{SdfIsaHlsl.FileName}"),
             new GeneratedInclude(Generate: () => SdfIsaHlsl.GenerateFingerprintSource(fingerprint: fingerprint), Path: SdfIsaHlsl.FingerprintSourcePath),
+            new GeneratedInclude(Generate: ShaderCompiler.GenerateBuildRecipe, Path: ShaderCompiler.BuildRecipePath),
             .. owned.Values,
         ];
     }
@@ -159,6 +160,10 @@ internal static class GenerateCommand {
         sdf-bricks, declared by Puck.SdfVm.SdfWorldInterfaces) at their fixed paths. A
         checked-in interface include no package or engine kernel owns, or a declared interface
         whose include is missing, fails by name.
+
+        The build's shader recipe, build/ShaderRecipe.props, is generated from
+        Puck.Shaders.ShaderCompiler.StepsOf: the DXC options build/Shaders.targets compiles every
+        stage source with, the options the runtime shader compiler runs.
         """,
         name: "generate",
         run: Run

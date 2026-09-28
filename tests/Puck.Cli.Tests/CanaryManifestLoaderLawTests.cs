@@ -295,6 +295,81 @@ public sealed class CanaryManifestLoaderLawTests : IDisposable {
             );
         }
     }
+    // A declared fixture may sit in a subdirectory of its canary, a tree a script names by directory; a file there the
+    // manifest does not declare, or a directory holding no file, is refused by name.
+    [InlineData("tree/passes/kernel.hlsl", null, null)]
+    [InlineData("tree/passes/kernel.hlsl", "tree/passes/extra.hlsl", "orphan file 'tree/passes/extra.hlsl'")]
+    [InlineData("tree/passes/kernel.hlsl", "empty/", "holds no file")]
+    [Theory]
+    public void AFixtureTreeHoldsOnlyDeclaredFixtures(string fixture, string? extra, string? refusal) {
+        var goodDirectory = Path.Combine(
+            path1: m_root,
+            path2: "tests",
+            path3: "Puck.World.Canaries",
+            path4: "good-one"
+        );
+
+        Directory.Delete(
+            path: Path.Combine(
+                path1: m_root,
+                path2: "tests",
+                path3: "Puck.World.Canaries",
+                path4: "orphan-one"
+            )
+        );
+
+        foreach (var path in ((string?[])[fixture, extra]).OfType<string>()) {
+            var full = Path.Combine(
+                path1: goodDirectory,
+                path2: path
+            );
+
+            if (path.EndsWith(value: '/')) {
+                Directory.CreateDirectory(path: full);
+            } else {
+                Directory.CreateDirectory(path: Path.GetDirectoryName(path: full)!);
+                File.WriteAllText(
+                    contents: "// fixture",
+                    path: full
+                );
+            }
+        }
+
+        File.WriteAllText(
+            contents: LegManifest(
+                id: "good-one",
+                worldPrefix: "tests/Puck.World.Canaries/good-one/"
+            ).Replace(
+                comparisonType: StringComparison.Ordinal,
+                newValue: $"\"timeoutSeconds\": 10,\n  \"fixtures\": [\"{fixture}\"],",
+                oldValue: "\"timeoutSeconds\": 10,"
+            ),
+            path: Path.Combine(
+                path1: goodDirectory,
+                path2: "canary.json"
+            )
+        );
+
+        var loaded = CanaryManifestLoader.TryLoadAll(
+            error: out var error,
+            manifests: out _,
+            refused: out _,
+            repositoryRoot: m_root,
+            strict: true
+        );
+
+        Assert.Equal(
+            actual: loaded,
+            expected: (refusal is null)
+        );
+        if (refusal is not null) {
+            Assert.Contains(
+                actualString: error,
+                comparisonType: StringComparison.Ordinal,
+                expectedSubstring: refusal
+            );
+        }
+    }
     [Fact]
     public void NonStrictLoadSkipsTheOrphanAndStillLoadsTheGoodManifest() {
         var loaded = CanaryManifestLoader.TryLoadAll(
