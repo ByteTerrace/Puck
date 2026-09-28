@@ -959,6 +959,7 @@ internal static partial class CanaryCommand {
                 ? []
                 : new[] { "--federation-key-file", clientFederationKeyPath }),
                     "--state-dir", stateDirectory,
+                    .. (leg.RunSchedule ? new[] { "--schedule-dir", Path.Combine(path1: runDirectory, path2: "schedule") } : []),
                     "--exit-after-seconds", manifest.TimeoutSeconds.ToString(provider: CultureInfo.InvariantCulture),
                     .. BootShapeArguments(
                     backend: backend,

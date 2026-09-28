@@ -93,6 +93,8 @@ internal sealed class UploadModelGpu :
     public GpuDeviceServices Services { get; }
     /// <summary>Gets the table-upload copies recorded since the last <see cref="ResetTallies"/>.</summary>
     public int UploadCopies { get; private set; }
+    /// <summary>Gets the raw buffer-copy bytes recorded since the last tally reset.</summary>
+    public ulong BufferCopyBytes { get; private set; }
     /// <summary>Gets every device-local buffer transition that declared another state than the one the command buffers
     /// before it in the same submission left its buffer in, as Direct3D 12 reports it: a buffer's state carries from one
     /// command list to the next of one submission and decays only between submissions, and a list's first transition
@@ -104,9 +106,11 @@ internal sealed class UploadModelGpu :
 
     /// <summary>Gets the bytes of the one device-local buffer of <paramref name="sizeBytes"/>.</summary>
     /// <param name="sizeBytes">The buffer's size; exactly one device-local buffer must have it.</param>
+    /// <param name="part">An optional object-name part distinguishing equally sized tables.</param>
     /// <returns>The buffer's current contents.</returns>
-    public byte[] DeviceLocal(ulong sizeBytes) => Single(
+    public byte[] DeviceLocal(ulong sizeBytes, string? part = null) => Single(
         hostVisible: false,
+        part: part,
         sizeBytes: sizeBytes
     ).Memory;
 
@@ -160,6 +164,7 @@ internal sealed class UploadModelGpu :
         }
 
         UploadCopies = 0;
+        BufferCopyBytes = 0;
     }
     public void WaitIdle() { }
 
@@ -205,7 +210,7 @@ internal sealed class UploadModelGpu :
     }
     IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => Buffer(hostVisible: true, sizeBytes: sizeBytes, uniform: usage.HasFlag(flag: GpuBufferUsage.Uniform));
     IGpuStorageBuffer IGpuBufferFactory.CreateHostVisibleDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => Buffer(aperture: true, hostVisible: true, sizeBytes: sizeBytes, uniform: usage.HasFlag(flag: GpuBufferUsage.Uniform));
-    IGpuBuffer IGpuBufferFactory.CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => Buffer(hostVisible: false, sizeBytes: sizeBytes);
+    IGpuBuffer IGpuBufferFactory.CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => Buffer(hostVisible: false, sizeBytes: sizeBytes, part: name.Part);
     IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage, in GpuObjectName name) => throw new NotSupportedException();
     IGpuReadbackBuffer IGpuBufferFactory.CreateReadback(ulong sizeBytes, in GpuObjectName name) => Buffer(hostVisible: true, sizeBytes: sizeBytes);
     IGpuPipeline IGpuPipelineFactory.Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description, in GpuObjectName name) =>
@@ -253,8 +258,11 @@ internal sealed class UploadModelGpu :
         }
     }
     void IGpuRecorder.CopyImage(nint commandBufferHandle, nint sourceImageHandle, nint destinationImageHandle, uint width, uint height) { }
-    void IGpuRecorder.CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes, ulong sourceOffsetBytes) =>
-        m_buffers[sourceBufferHandle].Memory.AsSpan(length: checked((int)sizeBytes), start: checked((int)sourceOffsetBytes)).CopyTo(destination: m_buffers[destinationBufferHandle].Memory);
+    void IGpuRecorder.CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes, ulong sourceOffsetBytes, ulong destinationOffsetBytes) {
+        m_buffers[sourceBufferHandle].Memory.AsSpan(length: checked((int)sizeBytes), start: checked((int)sourceOffsetBytes))
+            .CopyTo(destination: m_buffers[destinationBufferHandle].Memory.AsSpan(start: checked((int)destinationOffsetBytes)));
+        BufferCopyBytes += sizeBytes;
+    }
     void IGpuRecorder.TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) { }
     void IGpuRecorder.TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) {
         if (!m_transitions.TryGetValue(
@@ -342,12 +350,13 @@ internal sealed class UploadModelGpu :
         }
     }
 
-    private MemoryBuffer Buffer(bool hostVisible, ulong sizeBytes, bool aperture = false, bool uniform = false) {
+    private MemoryBuffer Buffer(bool hostVisible, ulong sizeBytes, bool aperture = false, bool uniform = false, string? part = null) {
         var buffer = new MemoryBuffer(
             aperture: aperture,
             handle: NextHandle(),
             hostVisible: hostVisible,
             owner: m_buffers,
+            part: part,
             sizeBytes: sizeBytes,
             uniform: uniform
         );
@@ -360,6 +369,9 @@ internal sealed class UploadModelGpu :
     // an indirect read the argument state, a copy's read the copy-source state, a shader read the non-pixel state and
     // the pixel state too when a fragment stage reads, and anything else common.
     private static BufferState StateOf(GpuAccess access, GpuStage stages) {
+        if (0 != (access & GpuAccess.CopyWrite)) {
+            return BufferState.CopyDestination;
+        }
         if (0 != (access & (GpuAccess.TransferWrite | GpuAccess.ShaderWrite))) {
             return BufferState.UnorderedAccess;
         }
@@ -435,10 +447,10 @@ internal sealed class UploadModelGpu :
         }
     }
     private nint NextHandle() => ((nint)Interlocked.Increment(location: ref m_nextHandle));
-    private MemoryBuffer Single(bool hostVisible, ulong sizeBytes) => m_buffers.Values.Single(predicate: buffer =>
+    private MemoryBuffer Single(bool hostVisible, ulong sizeBytes, string? part = null) => m_buffers.Values.Single(predicate: buffer =>
         (!buffer.Uniform &&
         (buffer.HostVisible == hostVisible) &&
-        (buffer.SizeBytes == sizeBytes))
+        (buffer.SizeBytes == sizeBytes) && ((part is null) || (buffer.Part == part)))
     );
 
     void IGpuQueueSubmitter.AddExternalWait(GpuExternalWait wait) => m_inner.Services.QueueSubmitter.AddExternalWait(wait: wait);
@@ -468,6 +480,7 @@ internal sealed class UploadModelGpu :
         UnorderedAccess = 4,
         IndirectArgument = 8,
         CopySource = 16,
+        CopyDestination = 32,
     }
     // One recorded buffer transition: the state its declared source access names, and the state its target access
     // needs.
@@ -494,11 +507,12 @@ internal sealed class UploadModelGpu :
 
         public void Dispose() { }
     }
-    private sealed class MemoryBuffer(nint handle, bool hostVisible, bool aperture, Dictionary<nint, MemoryBuffer> owner, ulong sizeBytes, bool uniform) : IGpuStorageBuffer, IGpuReadbackBuffer {
+    private sealed class MemoryBuffer(nint handle, bool hostVisible, bool aperture, Dictionary<nint, MemoryBuffer> owner, ulong sizeBytes, bool uniform, string? part) : IGpuStorageBuffer, IGpuReadbackBuffer {
         public bool Aperture => aperture;
         public nint BufferHandle => handle;
         public bool HostVisible => hostVisible;
         public byte[] Memory { get; } = new byte[checked((int)sizeBytes)];
+        public string? Part => part;
         public ulong SizeBytes => sizeBytes;
         public bool Uniform => uniform;
         public long Written { get; set; }

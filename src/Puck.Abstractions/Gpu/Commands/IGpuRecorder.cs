@@ -120,17 +120,20 @@ public interface IGpuRecorder {
     /// <param name="width">The width, in pixels, of both images.</param>
     /// <param name="height">The height, in pixels, of both images.</param>
     void CopyImage(nint commandBufferHandle, nint sourceImageHandle, nint destinationImageHandle, uint width, uint height);
-    /// <summary>Records a byte-range copy of one buffer into the start of another: a Vulkan
+    /// <summary>Records a byte-range copy of one buffer into a range of another: a Vulkan
     /// <c>vkCmdCopyBuffer</c>, a Direct3D 12 <c>CopyBufferRegion</c>. A barrier into <see cref="GpuAccess.TransferRead"/>
     /// at <see cref="GpuStage.Transfer"/> readies the source (<see cref="TransitionBuffer"/>); the destination is a
-    /// readback buffer (<see cref="IGpuBufferFactory.CreateReadback"/>), which is always a copy's destination.</summary>
+    /// readback buffer (<see cref="IGpuBufferFactory.CreateReadback"/>), or a storage buffer transitioned into
+    /// <see cref="GpuAccess.CopyWrite"/> at <see cref="GpuStage.Transfer"/>. The caller orders both ranges; overlapping
+    /// ranges of the same buffer are not supported.</summary>
     /// <param name="commandBufferHandle">The command buffer being recorded.</param>
     /// <param name="sourceBufferHandle">The buffer copied, a storage buffer.</param>
-    /// <param name="destinationBufferHandle">The readback buffer written.</param>
+    /// <param name="destinationBufferHandle">The readback or storage buffer written.</param>
     /// <param name="sizeBytes">The bytes copied; positive and within both buffers.</param>
     /// <param name="sourceOffsetBytes">The first source byte copied; the range must fit the source buffer.</param>
+    /// <param name="destinationOffsetBytes">The first destination byte written; the range must fit the destination buffer.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="sizeBytes"/> is zero.</exception>
-    void CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes, ulong sourceOffsetBytes = 0);
+    void CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes, ulong sourceOffsetBytes = 0, ulong destinationOffsetBytes = 0);
     /// <summary>Records a zero fill of a whole storage buffer, ordered before the next compute shader access.</summary>
     /// <param name="commandBufferHandle">The command buffer being recorded.</param>
     /// <param name="bufferHandle">The buffer.</param>

@@ -807,6 +807,13 @@ Assertions read both boots' streams in order, and captures from either land in
 the one run directory. The leg's budget counts both boots. `pipeline-override`
 uses it to prove that a committed value survives an exit.
 
+A single-process leg can set `runSchedule: true` to arm the world document's
+existing command schedule. The runner passes `--schedule-dir {run}/schedule`,
+which retains the submission manifest and state exports with the capture
+evidence. This is opt-in and takes no companion authority, relaunch or stub
+boot. Scheduled mutations submitted at tick N apply during N+1; a capture
+authored at N+1 is armed after that step and before its first render.
+
 A leg that runs one World process can also declare a `package`: a `source`, a
 file in the repository resolved from the canary's directory, so canaries can
 share one fixture; an `output`, a bare directory name; and an optional

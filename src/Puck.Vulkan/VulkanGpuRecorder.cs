@@ -33,7 +33,7 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
             result |= VulkanAccessFlags.IndirectCommandRead;
         }
 
-        if (0 != (access & GpuAccess.TransferWrite)) {
+        if (0 != (access & (GpuAccess.TransferWrite | GpuAccess.CopyWrite))) {
             result |= VulkanAccessFlags.TransferWrite;
         }
 
@@ -215,14 +215,15 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
         );
     }
     /// <inheritdoc/>
-    public void CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes, ulong sourceOffsetBytes = 0) =>
+    public void CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes, ulong sourceOffsetBytes = 0, ulong destinationOffsetBytes = 0) =>
         recordingApi.CopyBuffer(
             commandBufferHandle: commandBufferHandle,
             destinationBufferHandle: destinationBufferHandle,
             device: Device,
             sizeBytes: sizeBytes,
             sourceBufferHandle: sourceBufferHandle,
-            sourceOffsetBytes: sourceOffsetBytes
+            sourceOffsetBytes: sourceOffsetBytes,
+            destinationOffsetBytes: destinationOffsetBytes
         );
     /// <inheritdoc/>
     public void ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) {

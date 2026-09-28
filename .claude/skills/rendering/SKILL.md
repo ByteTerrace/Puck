@@ -742,6 +742,14 @@ These are one-line cautions; the owning pages hold the derivations.
   static. A new emitter that writes a slot without reporting it renders stale.
   `WorldSceneMovedTransformsLawTests` pins a still frame at zero packed rows and
   a frame moving k bodies at k leaf ranges.
+- **Motion reads the preceding consumed tables and rendered camera.**
+  `SdfWorldTables.Motion.cs` copies prior changed rigid rows and compact mesh
+  matrices on the GPU before their current regions are overwritten. The first
+  upload seeds them; one copy settles the last moving frame, then still frames
+  copy nothing. Keep host upload bytes unchanged. `SdfTemporalHistory` retains
+  the instance's preceding completed camera even when temporal sampling is off;
+  resets invalidate it. `frame/sdf-reprojection.hlsli` is the one visibility
+  reprojection implementation, shared by motion diagnostics and reconstruction.
 - **Device identity is recorded, never branched on.** Each backend fills
   `IGpuDeviceContext.Identity` (`GpuDeviceIdentity`) when it creates the device
   — Vulkan from `vkGetPhysicalDeviceProperties2` with

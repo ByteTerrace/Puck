@@ -1555,7 +1555,11 @@ inputs occupy none of it.
 `ShaderPipelineRenderNode` counts the GPU work each pass records, not the time
 it takes. The node wraps every GPU service it holds once, so each dispatch,
 draw, barrier, bind, descriptor write, push-constant byte and clear it records
-is counted where it is made, into the pass being recorded. The zero clears that
+is counted where it is made, into the pass being recorded. `gpu.copies` counts image
+and buffer-range copies; `gpu.copies.buffer-bytes` counts the bytes of every
+buffer range, including picking, counter readback and device-local history.
+Image copies do not contribute buffer bytes, and these device transfers do
+not contribute host-visible upload bytes. The zero clears that
 start the first frame after an install or a reset count in the first pass. The
 preview and the output transitions count outside every pass. A package pass
 that skips a frame (`IRenderGraphPackageRecorder.Skips`) records nothing and

@@ -19,6 +19,22 @@ public sealed class DirectXBufferStatesLawTests {
     private const D3D12_RESOURCE_STATES NonPixelShaderResource = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
 
     [Fact]
+    public void AStorageHistoryCopyUsesCopyDestinationAndReturnsToShaderRead() {
+        var states = new DirectXBufferStates();
+        var write = DirectXBufferStates.RequiredState(access: GpuAccess.CopyWrite, stages: GpuStage.Transfer);
+
+        Assert.Equal(actual: write, expected: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST);
+        var into = states.Plan(after: write, bufferHandle: ArgsBuffer, firstState: NonPixelShaderResource);
+        var back = states.Plan(after: NonPixelShaderResource, bufferHandle: ArgsBuffer, firstState: write);
+
+        Assert.Equal(expected: (DirectXBufferBarrierKind.Transition, NonPixelShaderResource, write),
+            actual: (into.Kind, into.Before, into.After));
+        Assert.Equal(expected: (DirectXBufferBarrierKind.Transition, write, NonPixelShaderResource),
+            actual: (back.Kind, back.Before, back.After));
+        Assert.Equal(expected: UnorderedAccess,
+            actual: DirectXBufferStates.RequiredState(access: GpuAccess.TransferWrite, stages: GpuStage.Transfer));
+    }
+    [Fact]
     public void EveryRecordingTransitionsTheArgsBufferIntoIndirectArgument() {
         var commandBuffer = new DirectXCommandBufferState();
         var transitions = 0;

@@ -211,6 +211,28 @@ that a world document's `views.post` rows name. Each package is declared in
 `sdf-film-grain.frag.hlsl`, is the one post-process package. This project
 carries no per-pass C#.
 
+The upload also keeps GPU-only history for motion: a 48-byte rigid row per
+dynamic slot and a compact 64-byte object-to-world matrix per mesh draw.
+Before overwriting the current tables, it copies the rows changed in the
+preceding consumed frame. The initial upload seeds history; after motion stops,
+one last copy settles its changed rows, and later still frames copy nothing.
+These copies add device-local bytes and counted buffer copies, with no second
+host upload. Mesh matrices live separately so the host-written mesh region's
+CPU shadow stays exact.
+
+Previous-transform transfers contribute their range lengths to `gpu.copies.buffer-bytes`
+in the existing upload pass. A dynamic row contributes 48 bytes and a mesh matrix
+64 bytes; the first still frame settles the preceding change, and later still
+frames contribute zero. Host-visible upload bytes remain unchanged.
+
+Each view instance retains the camera and sample grid of its last completed
+render. A cut, view change, or gap invalidates that correspondence.
+`frame/sdf-reprojection.hlsli` combines it with the visibility record's winning
+slot or mesh triangle to recover the previous pixel and ray distance.
+`world.debug-view motion` shows previous-minus-current motion: red and green
+are 0.5 plus the displacement in pixels divided by 32, blue marks valid history,
+and invalid history is black.
+
 ## Pipelines build off the frame thread
 
 Creating a compute pipeline is where the driver translates a kernel to native
