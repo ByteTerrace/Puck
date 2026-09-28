@@ -22,7 +22,7 @@ public readonly record struct SdfWorldView(SdfWorldResidency Residency, int View
 /// screen, the first taking its lease into the frame's lease list.
 /// </para>
 /// </summary>
-public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
+public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     private readonly Func<string, SdfWorldView?> m_resolve;
 
     // Each instance the runtime asked about: the view it renders, resolved on the frame thread at most once a frame, and
@@ -87,12 +87,15 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
 
         try {
             view.Residency.WaitReady(cancellationToken: cancellationToken);
+            if (context.Part == SdfWorldPackage.Resolve) {
+                using var reflector = new ShaderBytecodeReflector(toolchain: new ShaderToolchain());
+
+                view.Residency.Tables!.Pipelines.BuildResolve(cache: context.Pipelines, device: context.Device, reflector: reflector, cancellationToken: cancellationToken);
+            }
         } catch {
             view.Residency.Release();
-
             throw;
         }
-
         return new Built(view: view);
     }
     /// <inheritdoc/>
@@ -100,11 +103,15 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
         ArgumentNullException.ThrowIfNull(argument: context);
         ArgumentNullException.ThrowIfNull(argument: groups);
 
-        var view = ((built as Built) ?? throw new ArgumentException(message: "An sdf.world pass is created from its own build.", paramName: nameof(built))).Take();
+        var objects = ((built as Built) ?? throw new ArgumentException(message: "An sdf.world pass is created from its own build.", paramName: nameof(built)));
+        var view = objects.Take();
 
         Hold(residency: view.Residency);
 
         try {
+            if (context.Part == SdfWorldPackage.Resolve) {
+                return new SdfResolveRecorder(context: context, groups: groups, owner: this, view: view);
+            }
             return new SdfWorldPassRecorder(
                 context: context,
                 groups: groups,
@@ -141,7 +148,9 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
                 context: in context,
                 view: view.View
             ) &&
-            (entry.RenderedBindings == entry.Bindings)
+            (entry.RenderedBindings == entry.Bindings) &&
+            (entry.RenderedScale == entry.CurrentScale) &&
+            (entry.RenderedSharpness == entry.CurrentSharpness)
         );
     }
     /// <inheritdoc/>
@@ -156,7 +165,7 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
         }
     }
 
-    internal SdfTemporalHistory TemporalOf(string instance, SdfWorldView view, uint width, uint height, int debug) {
+    internal SdfTemporalHistory TemporalOf(string instance, SdfWorldView view, uint width, uint height, int debug, uint renderWidth = 0, uint renderHeight = 0) {
         var entry = Refresh(instance: instance);
 
         if (entry.TemporalFrame != m_frame) {
@@ -178,7 +187,9 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
                     Enabled: (entry.Convergence is { Completion.IsCompleted: false }),
                     Debug: debug
                 ),
-                frame: view.Residency.CapturedFrame
+                frame: view.Residency.CapturedFrame,
+                renderWidth: renderWidth,
+                renderHeight: renderHeight
             );
         }
         return entry.Temporal;
@@ -194,6 +205,8 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
             (entry.View == view)
         ) {
             entry.RenderedBindings = entry.Bindings;
+            entry.RenderedScale = entry.CurrentScale;
+            entry.RenderedSharpness = entry.CurrentSharpness;
             entry.Temporal.Rendered();
         }
     }
@@ -419,7 +432,7 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
     }
     // One instance: the view it renders this frame, and the counter its passes' scratch is sized by. The view is written
     // on the frame thread and read by a pass's build on the thread pool.
-    private sealed class Entry : IShaderPipelineStorageCounter {
+    private sealed partial class Entry : IShaderPipelineStorageCounter, IShaderPipelineRenderExtent {
         public SdfWorldPicker Picker { get; } = new();
 
         private readonly Lock m_gate = new();

@@ -13,7 +13,7 @@ world.wait 30
 world.screenshot {run}/split.png
 world.wait captures 30
 view.override layout auto
-# A reduced render scale: the view renders at a fraction of its rect and the place pass reconstructs it.
+# A reduced render scale: the view traverses at a fraction of its rect and its resolve pass reconstructs the native output.
 world.render-scale half
 world.wait 30
 world.screenshot {run}/scaled.png

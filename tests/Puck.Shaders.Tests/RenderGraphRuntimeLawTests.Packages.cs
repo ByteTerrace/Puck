@@ -28,7 +28,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
             PackageView,
             new RenderGraphRuntimeGraph[1]
         );
-        var parts = SdfWorldPackage.Fragment.Passes.Select(selector: static pass => pass.Name).ToArray();
+        var parts = SdfWorldPackage.NativeFragment.Passes.Select(selector: static pass => pass.Name).ToArray();
         var index = 0L;
 
         Assert.True(
@@ -160,7 +160,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
     private static RenderGraphInstance PackageInstance() => new(
         ExternalPackage: RenderGraphPackageCatalog.SdfWorld,
         Name: PackageView,
-        Passes: SdfWorldPackage.Fragment.Passes.Count,
+        Passes: SdfWorldPackage.NativeFragment.Passes.Count,
         Reads: [],
         Refresh: RenderGraphRefresh.EveryFrame
     );

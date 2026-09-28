@@ -210,6 +210,10 @@ public sealed class RenderGraphInstanceSet {
 
                 return false;
             }
+            if ((instance.OutputExtent is { } extent) && ((extent.Width <= 0) || (extent.Height <= 0) || instance.IsSource || (instance.Output != ShaderPipelineResourceKind.Image))) {
+                refusal = Refuse(RenderGraphInstanceRefusalCode.ExtentInvalid, $"Render-graph instance '{instance.Name}' has invalid authored output extent {extent.Width}x{extent.Height}; only a non-source image instance may declare positive dimensions.", instance.Name);
+                return false;
+            }
             if (!instance.Refresh.IsValid) {
                 refusal = Refuse(
                     RenderGraphInstanceRefusalCode.RefreshInvalid,

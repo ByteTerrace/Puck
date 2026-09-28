@@ -1055,7 +1055,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         );
 
         RenderGraphScheduler.Schedule(
-            frame: scheduled,
+            frame: scheduled with { Costs = this },
             history: prior,
             schedule: schedule,
             set: m_set

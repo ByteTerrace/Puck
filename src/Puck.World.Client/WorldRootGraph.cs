@@ -49,7 +49,7 @@ public sealed class WorldRootGraph {
             producers[view] = new RenderGraphInstance(
                 ExternalPackage: RenderGraphPackageCatalog.SdfWorld,
                 Name: ProducerOf(view: view),
-                Passes: SdfWorldPackage.Fragment.Passes.Count,
+                Passes: SdfWorldPackage.NativeFragment.Passes.Count,
                 Reads: [],
                 Refresh: RenderGraphRefresh.EveryFrame
             );

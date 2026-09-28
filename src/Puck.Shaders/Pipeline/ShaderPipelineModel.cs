@@ -7,13 +7,15 @@ using Puck.Hosting;
 
 namespace Puck.Shaders;
 
-/// <summary>Whether an image's dimensions are tied to the output extent or fixed.</summary>
+/// <summary>Whether an image's dimensions follow the output extent, the package render extent, or fixed pixels.</summary>
 [JsonConverter(typeof(StrictEnumConverter<ShaderPipelineDimensionMode>))]
 public enum ShaderPipelineDimensionMode {
     /// <summary>Dimensions are a scale of the frame extent.</summary>
     Relative,
     /// <summary>Dimensions are absolute pixels.</summary>
     Absolute,
+    /// <summary>Dimensions scale the package's render extent inside its output.</summary>
+    Render,
 }
 /// <summary>How a resource is made valid before its first read.</summary>
 [JsonConverter(typeof(StrictEnumConverter<ShaderPipelineInitialization>))]
@@ -71,18 +73,28 @@ public sealed record ShaderPipelineDimensions(
             Mode: ShaderPipelineDimensionMode.Relative,
             Width: width
         );
-    /// <summary>Resolves this declaration against a frame extent, clamping each positive extent to one pixel.</summary>
-    public (uint Width, uint Height) Resolve(uint frameWidth, uint frameHeight) {
+    /// <summary>Creates dimensions relative to the package's render extent.</summary>
+    public static ShaderPipelineDimensions Render(double width = 1, double height = 1) =>
+        new(Height: height, Mode: ShaderPipelineDimensionMode.Render, Width: width);
+    /// <summary>Resolves the declaration against output and render extents, clamping positive extents to one pixel.</summary>
+    /// <param name="frameWidth">The output width.</param>
+    /// <param name="frameHeight">The output height.</param>
+    /// <param name="renderWidth">The render width, or zero to use the output width.</param>
+    /// <param name="renderHeight">The render height, or zero to use the output height.</param>
+    /// <returns>The resolved pixel extent.</returns>
+    public (uint Width, uint Height) Resolve(uint frameWidth, uint frameHeight, uint renderWidth = 0, uint renderHeight = 0) {
         ArgumentOutOfRangeException.ThrowIfZero(value: frameWidth);
         ArgumentOutOfRangeException.ThrowIfZero(value: frameHeight);
-        var width = ((Mode == ShaderPipelineDimensionMode.Relative)
-            ? (frameWidth * Width)
-            : Width
-        );
-        var height = ((Mode == ShaderPipelineDimensionMode.Relative)
-            ? (frameHeight * Height)
-            : Height
-        );
+        var width = Mode switch {
+            ShaderPipelineDimensionMode.Relative => (frameWidth * Width),
+            ShaderPipelineDimensionMode.Render => (((renderWidth == 0) ? frameWidth : renderWidth) * Width),
+            _ => Width,
+        };
+        var height = Mode switch {
+            ShaderPipelineDimensionMode.Relative => (frameHeight * Height),
+            ShaderPipelineDimensionMode.Render => (((renderHeight == 0) ? frameHeight : renderHeight) * Height),
+            _ => Height,
+        };
 
         return (ResolveExtent(
             value: width,
@@ -271,6 +283,10 @@ public sealed record ShaderPipelineCountTerm(
 /// <param name="Width">The frame extent's width in pixels.</param>
 /// <param name="Height">The frame extent's height in pixels.</param>
 public readonly record struct ShaderPipelineStorageCounts(uint Width, uint Height) {
+    /// <summary>Gets the allocated render width, or zero when it equals the output width.</summary>
+    public uint RenderWidth { get; init; }
+    /// <summary>Gets the allocated render height, or zero when it equals the output height.</summary>
+    public uint RenderHeight { get; init; }
     /// <summary>Gets the instances of the program the host renders.</summary>
     public ulong Instances { get; init; }
     /// <summary>Gets the words of the program the host renders.</summary>
@@ -294,6 +310,7 @@ public readonly record struct ShaderPipelineStorageCounts(uint Width, uint Heigh
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="basis"/> is not a declared basis.</exception>
     public ulong UnitsOf(ShaderPipelineCountBasis basis) => basis switch {
         ShaderPipelineCountBasis.Extent => (((ulong)Width) * Height),
+        ShaderPipelineCountBasis.RenderExtent => (((ulong)((RenderWidth == 0) ? Width : RenderWidth)) * ((RenderHeight == 0) ? Height : RenderHeight)),
         ShaderPipelineCountBasis.Instances => Instances,
         ShaderPipelineCountBasis.ProgramWords => ProgramWords,
         ShaderPipelineCountBasis.Viewports => Viewports,

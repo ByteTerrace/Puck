@@ -87,6 +87,9 @@ public sealed record RenderGraphInstance(string Name, RenderGraphRefresh Refresh
     /// <summary>The prefix of every source instance's package id: <c>source.</c> then the producer's id.</summary>
     public const string SourcePackagePrefix = "source.";
 
+    /// <summary>An authored pixel extent, independent of reader footprints and display quantization. Null uses the
+    /// scheduler's ordinary footprint sizing. Sources keep their producer-negotiated extent instead.</summary>
+    public RenderGraphPixelExtent? OutputExtent { get; init; }
     /// <summary>Gets the instance's identity as a displayed source: a producer handle for a source instance, whose hit
     /// ends at its pixels, and an instance handle for any other, whose hit continues into its camera. Either names the
     /// instance.</summary>
@@ -173,6 +176,8 @@ public enum RenderGraphInstanceRefusalCode : byte {
     /// <summary>An instance carries settings but is no source, or a source names no producer id, refreshes other than on
     /// every frame its cadence allows, or declares an output that is not an image.</summary>
     SourceDeclaration = 11,
+    /// <summary>An authored output extent is non-positive, or belongs to a buffer or negotiated source.</summary>
+    ExtentInvalid = 12,
 }
 /// <summary>A refused set of render-graph instances.</summary>
 /// <param name="Code">Why it was refused.</param>

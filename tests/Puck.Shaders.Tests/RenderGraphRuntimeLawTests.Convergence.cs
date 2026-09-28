@@ -28,7 +28,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         Assert.Same(expected: request, actual: Assert.Single(collection: view.Convergence));
         for (var sample = 0; (sample < 8); sample++) {
             ProducePackageFrame(frameIndex: index++, runtime: runtime);
-            Assert.Equal(expected: (start + ((sample + 1) * SdfWorldPackage.Fragment.Passes.Count)), actual: view.Parts.Count);
+            Assert.Equal(expected: (start + ((sample + 1) * SdfWorldPackage.NativeFragment.Passes.Count)), actual: view.Parts.Count);
             if (sample < 7) {
                 Assert.False(condition: request.Completion.IsCompleted);
                 Assert.Equal(expected: request.Path, actual: runtime.PendingCapturePath);
@@ -36,11 +36,11 @@ public sealed partial class RenderGraphRuntimeLawTests {
         }
         Assert.True(condition: SpinWait.SpinUntil(condition: () => {
             ProducePackageFrame(frameIndex: index++, runtime: runtime);
-            Assert.Equal(expected: (start + (8 * SdfWorldPackage.Fragment.Passes.Count)), actual: view.Parts.Count);
+            Assert.Equal(expected: (start + (8 * SdfWorldPackage.NativeFragment.Passes.Count)), actual: view.Parts.Count);
             return request.Completion.IsCompleted;
         }, timeout: TimeSpan.FromSeconds(value: 30)));
         ProducePackageFrame(frameIndex: index++, runtime: runtime);
-        Assert.Equal(expected: (start + (8 * SdfWorldPackage.Fragment.Passes.Count)), actual: view.Parts.Count);
+        Assert.Equal(expected: (start + (8 * SdfWorldPackage.NativeFragment.Passes.Count)), actual: view.Parts.Count);
     }
     [Fact]
     public void ConvergenceCountsOnlyFramesWhoseDependenciesAreReadyForCapture() {

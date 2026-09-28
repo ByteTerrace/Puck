@@ -242,8 +242,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         var height = recording.Height;
 
         residency.RequestExtent(
-            height: height,
-            width: width
+            height: recording.FrameHeight,
+            width: recording.FrameWidth
         );
         SdfFrameBlock.Write(
             block: recording.PassBlock,
@@ -255,7 +255,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         );
 
         var temporal = m_owner.TemporalOf(
-            instance: m_context.Instance, view: m_view, width: width, height: height, debug: tables.PassValues.DebugMode
+            instance: m_context.Instance, view: m_view, width: recording.FrameWidth, height: recording.FrameHeight, debug: tables.PassValues.DebugMode, renderWidth: width, renderHeight: height
         );
 
         SdfFrameBlock.WriteTemporal(block: recording.PassBlock, jitter: temporal.Jitter, historyFrames: temporal.Frames);
@@ -286,8 +286,10 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             var visibility = recording.Inputs[VisibilityInputIndex()];
 
             m_pick!.Prepare(slot: recording.Slot, width: width, height: height, frame: frame, version: visibility.Version);
-            residency.MarkRendered(view: view);
-            m_owner.MarkRendered(instance: m_context.Instance, view: in m_view);
+            if (ReferenceEquals(objA: m_owner.FragmentOf(instance: m_context.Instance), objB: SdfWorldPackage.NativeFragment)) {
+                residency.MarkRendered(view: view);
+                m_owner.MarkRendered(instance: m_context.Instance, view: in m_view);
+            }
         }
 
         return RenderGraphPackageOutcome.Drew;

@@ -81,12 +81,12 @@ fills every pixel of the view's output with the authored sky, before any tile is
 frame whose levers turn them off. The region copies are the
 residency's one upload a frame (`SdfWorldResidency.Submit`); every pass after
 it runs once per view as a pass of the view's `sdf.world` instance, into that
-instance's own output image at its render extent. The package declares those
-passes as a fragment (`Puck.Shaders.SdfWorldPackage.Fragment`) that the graph
-compiler splices, so the render graph's planner decides every barrier between
-them and the recorder (`SdfWorldPassRecorder`) records none. The render graph's
-`place` pass, not this engine, places each output in its seat rect and
-reconstructs a reduced render scale. The residency counts its upload as three
+instance's render grid. Native views use `SdfWorldPackage.NativeFragment` and
+write the output directly. Reduced or variable views use `SdfWorldPackage.Fragment`:
+its final `sdf-resolve.comp` reconstructs full-output color and an eight-byte
+surface row (exact nearest ray-distance bits and visibility identity). The graph
+planner decides every barrier. `place` then places the output in its seat rect;
+when the grids match it copies the texels exactly. The residency counts its upload as three
 passes, `fillers`, `bricks` and `upload` (`SdfWorldTables.PassLabels`), in a
 ledger it owns, so counts survive a rebuild of its tables, and each view's node
 counts the view's passes as `sdf.world$sky` through `sdf.world$views`, their
@@ -109,10 +109,27 @@ beam's tile planes read-only, so a buffer a pass only reads is never held in a
 read-write state. These four dispatches share indirect bounds and live view
 dimensions. Primary, surface and ambient retain the full ISA.
 Material `Soften` changes the later lighting normal; AO uses the geometric normal.
-The buffer reserves `width × height × 60` bytes at the view's extent, and the
+The buffer reserves `renderWidth × renderHeight × 64` bytes at the view's render ceiling, and the
 view's instance allocates it again beside its installed graph when that extent
 changes. It is transient: one allocation shared by every frame slot, whose
 first use in a frame the planner orders after the frame before.
+The render ceiling allocates scratch once; a smaller current grid changes dispatches
+and the packed visibility stride without replacing storage. The full-output color
+and surface are priced beside the ceiling targets in the node's memory account.
+The scheduler prices each pass at its current grid. Native views retain their ten
+passes and allocate no resolve resources. The shared reconstruction module serves
+both `place` and resolve; `SdfResolveDeviceLawTests` executes the shipped resolve
+kernel against the resample canary's analytic values and exact surface words.
+The existing resample canary exercises the shared filter through `place`; the
+reduced-resolution world canary exercises production package allocation and
+recording. These three paths cover the shared filter, the compiled resolve, and
+the complete world graph without a test-only package.
+Resolve bytecode loads and counts with the immutable `SdfKernelSet`, so a native
+run adds only those bytecode bytes. Its pipeline joins the residency's existing
+reloadable slots on the first reduced or variable view, preserving native pass,
+resource and pipeline counts. Reload, reflection and device recovery use the
+same kernel-set transaction as the other SDF kernels.
+
 The `primary`, `surface`, `ambient` and `views` labels expose their separate costs;
 compare the full frame, including buffer traffic and dispatch overhead.
 The iteration count describes the selected march; the evaluation count sums

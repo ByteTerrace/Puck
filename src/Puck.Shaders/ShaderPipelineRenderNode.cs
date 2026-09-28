@@ -339,7 +339,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     // Whether history built for the installed graph's frame extent carries into a candidate planned at another unchanged:
     // same declaration shape, and, for an image, the same resolved extent, each resolved against the frame extent it was
     // built for.
-    private static bool CompatibleHistory(ShaderPipelineResource old, ShaderPipelineResource current, (uint Width, uint Height) previousExtent, (uint Width, uint Height) extent) {
+    private static bool CompatibleHistory(ShaderPipelineResource old, ShaderPipelineResource current, ShaderPipelineStorageCounts previousCounts, ShaderPipelineStorageCounts counts) {
         if (
             (old.Kind != current.Kind) ||
             !string.Equals(
@@ -351,12 +351,16 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             (
                 (current.Kind == ShaderPipelineResourceKind.Image) &&
                 ((old.Dimensions?.Resolve(
-                    frameHeight: previousExtent.Height,
-                    frameWidth: previousExtent.Width
-                ) ?? previousExtent) != (current.Dimensions?.Resolve(
-                    frameHeight: extent.Height,
-                    frameWidth: extent.Width
-                ) ?? extent))
+                    frameHeight: previousCounts.Height,
+                    frameWidth: previousCounts.Width,
+                    renderWidth: previousCounts.RenderWidth,
+                    renderHeight: previousCounts.RenderHeight
+                ) ?? (previousCounts.Width, previousCounts.Height)) != (current.Dimensions?.Resolve(
+                    frameHeight: counts.Height,
+                    frameWidth: counts.Width,
+                    renderWidth: counts.RenderWidth,
+                    renderHeight: counts.RenderHeight
+                ) ?? (counts.Width, counts.Height)))
             ) ||
             (old.SizeBytes != current.SizeBytes) ||
             (old.Initialization != current.Initialization)
@@ -410,7 +414,9 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                     CreateExportImage(
                         extent: (declaration.Dimensions?.Resolve(
                             frameHeight: m_height,
-                            frameWidth: m_width
+                            frameWidth: m_width,
+                            renderWidth: counts.RenderWidth,
+                            renderHeight: counts.RenderHeight
                         ) ?? (m_width, m_height)),
                         resource: resource
                     );
@@ -431,7 +437,9 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                     resource.Images = new IGpuImage[resource.Count];
                     var extent = (declaration.Dimensions?.Resolve(
                         frameHeight: m_height,
-                        frameWidth: m_width
+                        frameWidth: m_width,
+                        renderWidth: counts.RenderWidth,
+                        renderHeight: counts.RenderHeight
                     ) ?? (m_width, m_height));
                     var usage = UsageOf(
                         plan: plan,
@@ -884,6 +892,8 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             m_installedCounts = key.Counts;
             m_installedCounter = CounterOf(plan: key.Pipeline!.Plan);
             m_installedCountRevision = key.CountRevision;
+            m_installedRenderExtent = RenderExtentOf(plan: key.Pipeline.Plan);
+            m_installedRenderRevision = key.RenderRevision;
             if (key.Candidate) {
                 m_pending = null;
                 m_resizePending = false;
@@ -1632,6 +1642,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     private Surface RenderFrame(in FrameContext context, IGpuExportableImage? exported, out ulong exportValue, out bool exportWritten) {
         exportValue = 0UL;
         exportWritten = false;
+        UpdateRenderExtents();
 
         var selectedResource = m_resourceLookup[(m_selectedOutput ?? m_pipeline!.Plan.DefaultOutput)];
         var slotIndex = ((int)(m_frame % m_inFlight));

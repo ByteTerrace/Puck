@@ -597,30 +597,25 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         return true;
     }
     /// <summary>Places a view of the world this frame: the synthesized root reads the view's producer at its rect's
-    /// extent at its render scale, shown or not, so the view renders before the root first shows it, and, when the view
+    /// output extent, shown or not, so the view renders before the root first shows it, and, when the view
     /// is shown, reconstructs its output into the rect at the given sharpness. The first view is also the base the root
     /// draws everything over. A view the synthesized root does not place (one past its <see cref="WorldRootGraph.Views"/>, or any view under a
     /// graph that places none) is ignored.</summary>
     /// <param name="view">The 0-based view.</param>
     /// <param name="region">The view's normalized rect.</param>
-    /// <param name="renderScale">The view's render scale in (0, 1]; any other value renders native.</param>
     /// <param name="sharpness">The reconstruction's sharpness, from 0 (bilinear) to 1 (clamped Catmull-Rom).</param>
     /// <param name="shown">Whether the root draws the view's output into its rect this frame.</param>
     /// <param name="uncovered">Whether part of the display lies outside everything the root shows this frame, so the
     /// first view's place pass, when the view is not shown, writes the letterbox color everywhere rather than standing
     /// for its base (<see cref="RenderGraphPlacement.Uncovered"/>).</param>
     /// <returns><see langword="true"/> when the root places the view this frame.</returns>
-    public bool PlaceView(int view, NormalizedRect region, float renderScale, float sharpness, bool shown, bool uncovered) {
+    public bool PlaceView(int view, NormalizedRect region, float sharpness, bool shown, bool uncovered) {
         if (
             (m_synthesized is not { Plan: not null } synthesized) ||
             (((uint)view) >= ((uint)synthesized.ViewPasses.Count))
         ) {
             return false;
         }
-
-        var scale = (((renderScale > 0f) && (renderScale < 1f))
-            ? renderScale
-            : 1f);
 
         m_placements[synthesized.ViewPasses[view]] = new RenderGraphPlacement(
             Uncovered: uncovered,
@@ -634,16 +629,15 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
         m_footprints.Add(item: new RenderGraphFootprint(
             Consumer: WorldViewGraphs.MainInstance,
-            Height: (region.Height * scale),
+            Height: region.Height,
             Producer: synthesized.Producers[view].Name,
-            Width: (region.Width * scale)
+            Width: region.Width
         ));
 
         return true;
     }
-    /// <summary>Places every view a composed frame of the world rendered (<see cref="PlaceView"/>), each in its rect at
-    /// its render scale, and records each view's camera for its producer (<see cref="SetCamera"/>). A view is shown once the world has rendered it, except a lone view covering the whole display at
-    /// native scale with no tonemap, which is never shown, so the root stands for the world itself; a tonemapped lone view
+    /// <summary>Places every view a composed frame of the world rendered (<see cref="PlaceView"/>), each in its output rect, and records each view's camera for its producer (<see cref="SetCamera"/>). A view is shown once the world has rendered it, except a lone view covering the whole display at
+    /// any render scale with no tonemap, which is never shown, so the root stands for the world itself; a tonemapped lone view
     /// is shown, since its place pass applies the tonemap. Before the world has composed a frame
     /// there are no views, but the world must still be scheduled, since it composes inside its own frame, so the first
     /// view is placed, not shown, over the whole display at native scale, which it renders at until its first frame names
@@ -665,7 +659,6 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         if (views.Count == 0) {
             _ = PlaceView(
                 region: whole,
-                renderScale: 1f,
                 sharpness: sharpness,
                 shown: false,
                 uncovered: !panesCover,
@@ -677,8 +670,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
         var lone = (
             (views.Count == 1) &&
-            (views[0].Region == whole) &&
-            !((views[0].RenderScale > 0f) && (views[0].RenderScale < 1f))
+            (views[0].Region == whole)
         );
         // The lone view stands for the world itself, unshown, only when its place pass has nothing to do; a tonemap is
         // applied by the view's place pass, so a tonemapped lone view is shown like any other.
@@ -713,7 +705,6 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             _ = PlaceView(
                 uncovered: !covered,
                 region: snapshot.Region,
-                renderScale: snapshot.RenderScale,
                 sharpness: sharpness,
                 shown: Shows(
                     rendered: rendered,

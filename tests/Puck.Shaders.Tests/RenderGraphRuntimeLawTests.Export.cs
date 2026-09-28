@@ -124,7 +124,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         };
         public IShaderPipelineStorageCounter? CounterOf(string instance) => this;
         public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) => new Recorder(
-            first: (context.Part == SdfWorldPackage.Fragment.Passes[0].Name),
+            first: (context.Part == SdfWorldPackage.NativeFragment.Passes[0].Name),
             owner: this
         );
 

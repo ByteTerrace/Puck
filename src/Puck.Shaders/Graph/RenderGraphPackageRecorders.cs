@@ -51,7 +51,9 @@ public readonly record struct RenderGraphPackageResource(string Version, ShaderP
 /// <see langword="null"/> for a pass whose fragment does not count (<see cref="RenderGraphFragmentPass.CountsKernelWork"/>).
 /// A recording binds the buffer read-write at every dispatch and tells its kernels the row; it records no barrier for
 /// it, since every pass only adds to it atomically.</param>
-public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuRecorder Recorder, int Slot, uint Width, uint Height, ReadOnlySpan<RenderGraphPackageResource> Inputs, ReadOnlySpan<RenderGraphPackageResource> Outputs, Span<byte> PassBlock, LeaseRetireList Leases, FrameContext Context, bool MayStandIn, IGpuBuffer? Arguments = null, RenderGraphExternalReads? Reads = null, GpuKernelCounterRow? WorkCounters = null) {
+/// <param name="FrameWidth">The instance output width; zero uses the pass width for standalone recordings.</param>
+/// <param name="FrameHeight">The instance output height; zero uses the pass height for standalone recordings.</param>
+public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuRecorder Recorder, int Slot, uint Width, uint Height, ReadOnlySpan<RenderGraphPackageResource> Inputs, ReadOnlySpan<RenderGraphPackageResource> Outputs, Span<byte> PassBlock, LeaseRetireList Leases, FrameContext Context, bool MayStandIn, IGpuBuffer? Arguments = null, RenderGraphExternalReads? Reads = null, GpuKernelCounterRow? WorkCounters = null, uint FrameWidth = 0, uint FrameHeight = 0) {
     /// <summary>Gets the command buffer to record into.</summary>
     public nint CommandBuffer { get; } = CommandBuffer;
     /// <summary>Gets the instance's counting recorder.</summary>
@@ -62,6 +64,10 @@ public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuR
     public uint Width { get; } = Width;
     /// <summary>Gets the pass's extent height, in pixels.</summary>
     public uint Height { get; } = Height;
+    /// <summary>Gets the instance output width, independently of this pass's render grid.</summary>
+    public uint FrameWidth { get; } = ((FrameWidth == 0) ? Width : FrameWidth);
+    /// <summary>Gets the instance output height, independently of this pass's render grid.</summary>
+    public uint FrameHeight { get; } = ((FrameHeight == 0) ? Height : FrameHeight);
     /// <summary>Gets the versions bound to the input ports.</summary>
     public ReadOnlySpan<RenderGraphPackageResource> Inputs { get; } = Inputs;
     /// <summary>Gets the versions bound to the output ports.</summary>
@@ -161,6 +167,17 @@ public interface IRenderGraphPackageFactory {
     /// <param name="instance">The instance's name.</param>
     /// <returns>The counter, or <see langword="null"/>.</returns>
     IShaderPipelineStorageCounter? CounterOf(string instance) => null;
+    /// <summary>Returns the instance's render extent inside its output, or null when both extents are the same.
+    /// Render-relative resources allocate at its ceiling; unsized package passes and render-relative passes record at
+    /// its current grid. A ceiling revision rebuilds beside the installed graph.</summary>
+    /// <param name="instance">The instance's name.</param>
+    /// <returns>The render-extent provider, or null.</returns>
+    IShaderPipelineRenderExtent? RenderExtentOf(string instance) => null;
+    /// <summary>Selects an implicit package instance's fragment, or null for the catalog's fragment. Returning another
+    /// immutable fragment rebuilds its graph beside the installed one; unchanged frames return the same object.</summary>
+    /// <param name="instance">The instance's name.</param>
+    /// <returns>The selected fragment, or null.</returns>
+    RenderGraphPackageFragment? FragmentOf(string instance) => null;
     /// <summary>Returns whether nothing an instance's passes of the package render from has changed since the instance's
     /// latest completed render, so that render stands for the frame. The runtime asks on the frame thread before it
     /// schedules each frame, for every instance whose graph binds no input and runs only package passes, and declares an

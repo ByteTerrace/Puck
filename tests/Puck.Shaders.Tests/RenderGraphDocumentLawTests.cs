@@ -49,7 +49,7 @@ public sealed class RenderGraphDocumentLawTests {
     [Fact]
     public void AGraphOfShaderAndPackagePassesPlansThroughThePipelinePlanner() {
         var plan = Plan(json: Graph);
-        var world = SdfWorldPackage.Fragment.Passes.Select(selector: static part => RenderGraphPackageFragment.Spliced(
+        var world = SdfWorldPackage.NativeFragment.Passes.Select(selector: static part => RenderGraphPackageFragment.Spliced(
             name: part.Name,
             pass: "world"
         )).ToArray();

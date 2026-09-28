@@ -4725,6 +4725,13 @@ counted rows recorded in the same change.
 4. **P15-4, render extent inside the output.** Render scale moves into the
    view's instance, and the spatial resolve replaces `place`'s upsample of a
    view.
+   - Landed: fixed native views keep the ten-pass fragment. Reduced or variable
+     views allocate traversal storage at their render ceiling and run one
+     output-sized spatial resolve. Its surface stores the nearest ray-distance
+     bits and exact visibility identity; coverage remains in color alpha.
+     Changing the active grid inside the ceiling neither allocates nor rebuilds.
+     Changing the ceiling uses the normal graph replacement path. The scheduler
+     and memory budget price the render and output grids separately.
    - Delivers: a fragment resource dimension resolved from a render extent the
      package states per instance (as it states counts through `CounterOf`),
      every pass before `resolve` running at that extent, the `resolve` pass in
@@ -4734,9 +4741,8 @@ counted rows recorded in the same change.
      native extent (`WorldViewGraphHost.PlaceView`). The render extent is a
      ceiling allocation and a per-frame extent inside it; a change of the ceiling
      rebuilds beside the installed graph as a resize does. At native scale with
-     reconstruction off the view must cost what it costs today: this step
-     settles whether the views pass then writes the output directly or the
-     runtime lets an instance's output stand in for its color.
+     reconstruction off, `views` writes the output directly and no resolve GPU
+     resources exist.
    - Touches: `src/Puck.Shaders/Pipeline` (`ShaderPipelineDimensions`),
      `RenderGraphPackages.cs`, `IRenderGraphPackageFactory`,
      `SdfWorldPackage.Fragment`, `SdfWorldPasses`, a new
@@ -4747,22 +4753,19 @@ counted rows recorded in the same change.
      values it holds `place` to; the mesh canaries' `scaled-*` stations hold; a
      parity re-record explains any station that moved; `world.budget` prices the
      output beside the render targets.
-   - Counted-cost gate: the resolve's dispatch and texels at a reduced scale,
-     `place`'s falling to a copy; the output at output extent in
-     device-local bytes; native scale with reconstruction off unchanged in every
-     count.
-   - Open: an exact authored extent for a view instance. A session or camera
-     view that authors a pixel resolution does not render at it: its instance's
-     extent is the scheduler's, which quantizes the display fraction upward to
-     sixteen steps an octave (`RenderGraphExtent.Quantize`), keeps a larger
-     allocation under its hysteresis, multiplies a footprint by its reader's
-     scale (`RenderGraphScheduler`), and rounds pixels up, so a 160x144
-     session renders at 165x152 on a 1920x1080 display and shrinks with the
-     reading view's render scale or split region. Its camera's aspect comes
-     from its residency's capture extent, not the authored ratio. The authored
-     resolution is an artistic choice, so an instance that states one renders
-     exactly that many texels, with the camera's aspect taken from that
-     extent; this step's render extent is where it lands.
+   - Counted-cost gate: at reduced scale the resolve writes the output texels
+     once; a placement with no other work stands in for that output. The
+     counted 1080p low workload moves its 2,073,600-texel dispatch from `place`
+     to `resolve`, with the existing SDF passes unchanged. Resolve adds its
+     output and surface storage, bindings and one pipeline. Native allocation
+     and work rows remain unchanged. The accepted exception is one immutable
+     `SdfKernelSet` bytecode load: 16,020 bytes on Vulkan and 11,492 on DirectX.
+     Keeping the kernel in that set preserves its existing atomic reload and
+     interface validation; GPU resources are still created only on demand.
+   - Authored extents are exact. A camera or session that states a pixel size
+     keeps that output size through reader scale, split layouts and display
+     resizing. Its camera uses the authored aspect on its first capture.
+     Unspecified extents keep the scheduler's quantization and hysteresis.
 5. **P15-5, the temporal resolve.** Reconstruction on.
    - Delivers: the history color and history surface as the fragment's history
      versions at output extent; reprojection through `sdfReprojection`, rejected

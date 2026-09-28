@@ -19,7 +19,7 @@ namespace Puck.SdfVm.Tests;
 /// submission identity keeps increasing across a rebuild on the owner's ledger, and that a steady-state upload allocates
 /// nothing.
 /// </summary>
-public sealed class SdfWorldTablesWorkLawTests {
+public sealed partial class SdfWorldTablesWorkLawTests {
     private const uint Extent = 64;
 
     [Fact]

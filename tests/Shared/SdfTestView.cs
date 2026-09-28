@@ -27,7 +27,7 @@ internal sealed class SdfTestView : IDisposable {
             instances: [new RenderGraphInstance(
                 ExternalPackage: RenderGraphPackageCatalog.SdfWorld,
                 Name: Instance,
-                Passes: SdfWorldPackage.Fragment.Passes.Count,
+                Passes: SdfWorldPackage.NativeFragment.Passes.Count,
                 Reads: [],
                 Refresh: RenderGraphRefresh.EveryFrame
             )],

@@ -42,7 +42,7 @@ public sealed partial class RenderGraphRuntime {
     }
     // Makes the one-pass graph a package instance renders, or returns why the package does not run as an instance: it
     // is no fragment of the engine's catalog with no input port and one image output.
-    private static RenderGraphRuntimeGraph? PackageGraphOf(string package, out string? fault) {
+    private static RenderGraphRuntimeGraph? PackageGraphOf(string package, out string? fault, RenderGraphPackageFragment? selected = null) {
         if (
             !RenderGraphPackageCatalog.Engine.TryGet(
                 id: package,
@@ -57,13 +57,22 @@ public sealed partial class RenderGraphRuntime {
             return null;
         }
 
+        fragment = (selected ?? fragment);
+        if ((fragment.InputVersions.Count != 0) || (fragment.OutputVersions.Count != 1)) {
+            fault = "selected a fragment without exactly one output and no inputs";
+            return null;
+        }
         var version = fragment.OutputVersions[0];
-        var output = fragment.Resources.First(predicate: resource => string.Equals(
+        var output = fragment.Resources.FirstOrDefault(predicate: resource => string.Equals(
             a: resource.Name,
             b: version,
             comparisonType: StringComparison.Ordinal
         ));
 
+        if (output is null) {
+            fault = $"selected a fragment whose output '{version}' has no resource declaration";
+            return null;
+        }
         if (output.Kind != ShaderPipelineResourceKind.Image) {
             fault = $"is served by a recorder, but its output '{version}' is {output.Kind}, not an image";
 
@@ -84,7 +93,7 @@ public sealed partial class RenderGraphRuntime {
             Schema: RenderGraphSchemas.Graph
         );
 
-        if (!new RenderGraphCompiler(packages: RenderGraphPackageCatalog.Engine).TryCompile(
+        if (!new RenderGraphCompiler(packages: new RenderGraphPackageCatalog(packages: [declared with { Fragment = fragment }])).TryCompile(
             definition: definition,
             diagnostics: out var diagnostics,
             plan: out var plan
@@ -154,6 +163,9 @@ public sealed partial class RenderGraphRuntime {
             return (node.Extent == (export.Width, export.Height));
         }
 
+        if (m_set.Instances[index].OutputExtent is { } exact) {
+            return (node.Extent == (((uint)exact.Width), ((uint)exact.Height)));
+        }
         var (width, height) = m_history.Allocated(index: index);
 
         return (
@@ -238,5 +250,6 @@ public sealed partial class RenderGraphRuntime {
         for (var index = 0; (index < factories.Count); index++) {
             factories[index].BeginFrame(context: in context);
         }
+        RefreshPackageFragments();
     }
 }

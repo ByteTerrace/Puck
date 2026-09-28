@@ -88,17 +88,21 @@ public sealed class SdfKernelSet {
         SdfKernel.ViewsFolds => "sdf-world-views-folds",
         SdfKernel.Sky => "sdf-sky",
         SdfKernel.BrickBake => "sdf-brick-bake",
+        SdfKernel.Resolve => "sdf-resolve",
         _ => throw new ArgumentOutOfRangeException(paramName: nameof(kernel), actualValue: kernel, message: "Not an SDF kernel."),
     };
     /// <summary>Returns the layout of the interface a kernel reads: the brick baker's
-    /// (<see cref="SdfWorldInterfaces.BrickBakeLayout"/>), or every per-view dispatch's
+    /// (<see cref="SdfWorldInterfaces.BrickBakeLayout"/>), reconstruction's
+    /// (<see cref="SdfWorldInterfaces.ResolveParameters"/>), or every native per-view dispatch's
     /// (<see cref="SdfWorldInterfaces.WorldLayout"/>), each stamped with this host's instruction set.</summary>
     /// <param name="kernel">The kernel.</param>
     /// <returns>The layout.</returns>
     public static ShaderInterfaceLayout LayoutOf(SdfKernel kernel) =>
-        ((kernel == SdfKernel.BrickBake)
-            ? SdfWorldInterfaces.BrickBakeLayout
-            : SdfWorldInterfaces.WorldLayout);
+        kernel switch {
+            SdfKernel.BrickBake => SdfWorldInterfaces.BrickBakeLayout,
+            SdfKernel.Resolve => SdfWorldInterfaces.ResolveParameters.Layout,
+            _ => SdfWorldInterfaces.WorldLayout,
+        };
     /// <summary>Returns why a kernel's compiled bytecode reads something other than this host's interface, or
     /// <see langword="null"/> when it reads that interface: <see cref="ShaderInterfaceLayout.Mismatch"/> against
     /// <see cref="LayoutOf"/>, which refuses a kernel whose pass block carries another instruction set's stamp or none, and

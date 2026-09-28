@@ -15,7 +15,7 @@ moving transforms, the screens, lights, volumes and mesh draws — live in one
 **residency** (`SdfWorldResidency`) per frame source, and the frame first
 submits one **upload** that brings those tables up to date. Then every view of
 the scene is an instance of the render graph's `sdf.world` package, and its node
-records the package's ten passes into its own submission, reading the tables
+records the package's ten native passes into its own submission, reading the tables
 the upload wrote. Upload and sky filling precede culling; camera traversal,
 surface evaluation, AO, the key light's shadow and lighting have separate dispatches. The passes finish
 that view's own output image:
@@ -25,14 +25,15 @@ that view's own output image:
 ```
 
 The render graph plans the view's passes like any other graph: the package
-declares them as a fragment (`SdfWorldPackage.Fragment`) that the graph
+declares them as a fragment (`SdfWorldPackage.NativeFragment`) that the graph
 compiler splices into the view's graph, and the planner decides every barrier
 between them. `world.counters gpu` reports the upload under the residency
 (`sdf:world` for the world's) and each view's passes under its instance, as
 `sdf.world$sky` through `sdf.world$views`. Here is what the culling and
 rendering passes do; [the engine README](../../../../src/Puck.SdfVm/README.md)
 describes the visibility records the four per-pixel passes share: one per pixel
-of each view, sixty bytes.
+of each view's render grid, 64 bytes. Reduced or variable views append the
+full-output `resolve` pass described under [render scale](#render-scale-tiers-trade-resolution-for-frame-time).
 
 **mask** (`sdf-instance-cull.comp.hlsl`) computes, for every 16×16 screen tile, the
 set of instances that could possibly matter to that tile—a bitmask, one bit per
@@ -87,9 +88,8 @@ render at different cost. Compare all five passes when measuring per-pixel field
 work between kernels can reduce register pressure but adds buffer traffic.
 
 No pass assembles views. Each view's output is its instance's own image, sized
-to the view's render extent, and the render graph's `place` pass puts it in its
-seat rect on the root image, upsampling it where the view rendered below
-native. In split screen each view is an instance of its own (`world`,
+to its output extent. Reduced views reconstruct their current color in `resolve`
+before the render graph's `place` pass puts that output in its seat rect. In split screen each view is an instance of its own (`world`,
 `world$2`, and so on) over the one residency, so the graph schedules and places
 the seats the same way it places panes.
 
@@ -152,22 +152,24 @@ per-pixel `views` costs.
 
 When the shading epilogue is the cost and you need the frame to fit a tighter
 budget, the lever is to render a view at *reduced* resolution and upsample it
-afterwards. Each view carries a `RenderScale`. The host sets the view's
-footprint in the render graph to its rect at that scale, the graph quantizes
-the footprint to an extent, and the view's instance renders its output image at
-exactly that extent. Every per-view pass (sky, mask, beam, primary, surface,
-ambient, shadow, views) reads the same extent from the view's row, so the whole
-pipeline agrees on the smaller render target. The graph's `place` pass
-reconstructs the result at native resolution with a four-tap bilinear filter,
-blended toward clamped Catmull-Rom by the upscale sharpness.
+afterwards. Each view carries a `RenderScale` ceiling inside its output extent.
+The graph keeps the view's footprint at its native rect size, and an authored
+camera or session resolution stays exact even when its reader shrinks. The
+camera aspect uses that authored width and height from the first frame.
 
-The important property is that **native is byte-exact by construction**:
-`place` copies exactly when the output's extent equals its rect, and a single
-view covering the whole display at native scale is not placed at all, so a view
-at full scale is bit-identical to a pipeline with no render-scale machinery. You
-pay nothing until you dial it down. Reduced tiers expose a policy ladder that
-trades a soft upsample for a large `views` saving—the right knob when a
-heavy revealed scene needs to reach a frame-rate target that native can't hit.
+Traversal and shading use the current render grid inside a ceiling allocation.
+A smaller current grid changes dispatch dimensions and the visibility stride
+without reallocating the ceiling's targets. The final `resolve` pass writes
+full-output color with the same bilinear and clamped Catmull-Rom filter as
+`place`. It also writes the nearest ray distance and its exact identity from the
+filter's taps, without filtering either; coverage remains the color's alpha.
+`place` copies that output into the view's rect. A lone whole-display view can
+stand directly, including at a reduced internal render scale.
+
+A fixed native view keeps the original ten-pass fragment and writes its output
+directly. It allocates no resolve resources. A reduced or variable view adds one
+output-sized dispatch; its memory account includes the output beside the render
+ceiling, and its scheduling price sums the passes' current grids.
 Render scale is *presentation only*: it never touches simulation state, and which
 tier a view uses is a host decision, not baked into the content. In `Puck.World`,
 `world.render-scale` sets it for every player view and `world.upscale-sharpness`

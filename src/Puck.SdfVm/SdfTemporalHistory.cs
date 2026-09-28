@@ -49,14 +49,16 @@ public sealed class SdfTemporalHistory {
     /// <param name="epoch">The current reset inputs.</param>
     /// <param name="camera">The camera being rendered.</param>
     /// <param name="frame">The residency's consumed-frame ordinal.</param>
-    public void Prepare(SdfTemporalEpoch epoch, long frame, CameraSnapshot camera) {
+    /// <param name="renderWidth">The current sample-grid width, or zero for the output width.</param>
+    /// <param name="renderHeight">The current sample-grid height, or zero for the output height.</param>
+    public void Prepare(SdfTemporalEpoch epoch, long frame, CameraSnapshot camera, uint renderWidth = 0, uint renderHeight = 0) {
         if (!m_prepared || (epoch != m_epoch) || (frame != (m_lastFrame + 1))) {
             Reset();
         }
         m_epoch = epoch;
         m_prepared = true;
         m_lastFrame = frame;
-        m_currentView = new SdfReprojectionView(Camera: camera, Jitter: Jitter, Width: epoch.Width, Height: epoch.Height);
+        m_currentView = new SdfReprojectionView(Camera: camera, Jitter: Jitter, Width: ((renderWidth == 0) ? epoch.Width : renderWidth), Height: ((renderHeight == 0) ? epoch.Height : renderHeight));
     }
     /// <summary>Discards history while retaining its storage.</summary>
     public void Reset() {

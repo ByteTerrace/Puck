@@ -10,9 +10,11 @@ namespace Puck.SdfVm.Tests;
 /// pass entry points and bodies (<c>passes</c>). A module depends only on modules of its own layer or a lower one: it
 /// includes none above it, and it uses no symbol that only a module above it declares, because an aggregator that
 /// includes a higher module first would otherwise hide the dependency. Every source lives in a layer's directory, and
-/// every include resolves to a source in the tree.
+/// every include resolves to a source in the tree or the shared reconstruction module, which has no SDF dependency.
 /// </summary>
 public sealed partial class SdfShaderLayeringLawTests {
+    private const string SharedReconstruction = "Puck.Shaders/Assets/Shaders/Shared/reconstruction.hlsli";
+
     private static readonly string[] Layers = ["isa", "field", "frame", "march", "surface", "shade", "debug", "passes"];
 
     [Fact]
@@ -26,6 +28,7 @@ public sealed partial class SdfShaderLayeringLawTests {
                 comparer: StringComparer.Ordinal
             );
 
+        files.Add(key: SharedReconstruction, value: File.ReadAllText(path: RepositoryPaths.Resolve(relativePath: ("src/" + SharedReconstruction))));
         Assert.NotEmpty(collection: files);
         // Joined, so a failure names every violation rather than the first few.
         Assert.Equal(
@@ -171,6 +174,7 @@ public sealed partial class SdfShaderLayeringLawTests {
     }
     // A source's layer, by the directory it sits in, or -1 when it sits in none.
     private static int LayerOf(string path) {
+        if (path == SharedReconstruction) { return 0; }
         var slash = path.IndexOf(comparisonType: StringComparison.Ordinal, value: '/');
 
         return ((slash < 0)
