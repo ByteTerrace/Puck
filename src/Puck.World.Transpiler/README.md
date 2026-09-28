@@ -948,6 +948,14 @@ by the key its merge used): a finding about the root's k-th row lands on that ro
 (`BasisCompositionLawTests`). A finding about a row only a `basis` or runtime import supplied traces to no node of
 the root and reports without a span.
 
+`WorldSourceEdits` also uses these spans when a live edit is saved. It prints
+only changed authored nodes through `WorldDecompiler`, retains text outside
+their spans, and recompiles the result. `WorldSourceSave` computes the changed
+document values against the source's composed snapshot and verifies the final
+composition before an atomic write. Generated rows refuse at their owning
+construct. The [World guide](../Puck.World/README.md#the-world-as-data) describes
+the save workflow.
+
 `Lsp/PuckLanguageServer.cs` offers completion for the gate/effect/rule keywords (`if`/`else` included), `table`/
 `slot`/`pile`/`grid`/`row` and their `bounds`/`advance`/`capacity`/`behavior`/`dimensions`/`wrap`/`cellSize`/
 `origin`/`band`/`empty`/`positions`/`inverse` modifiers, and the `Puck.State` predicate/effect/`CellKind`

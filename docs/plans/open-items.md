@@ -191,6 +191,6 @@ Every package below carries its own check on the programme page; tick it there a
 - [ ] E8 editor camera.
 - [ ] E9 cost per object and GPU pass timing (startable today).
 - [ ] E10 live reload and before-and-after.
-- [ ] E11 save edits back to source.
+- [ ] E11 source-preserving save for authored rows has landed, with named generated-row refusals; E3's live duplicate and rename workflow remains.
 - [ ] E12 the shape gallery as a world, retiring `Puck.SdfVm.Debug` once the gallery reaches parity with it.
 - [ ] E13 carving and the brick bake: a carve brush whose dabs are document rows.

@@ -88,11 +88,12 @@ running console reads `.puck` the same way:
   name resolved in) moved recompile; an unchanged one is served as held.
   A re-read that no longer compiles or validates leaves the running world
   untouched. `world.load <path>.puck` reads through the same path.
-- `world.save` never writes canonical JSON over `.puck` source: with no
-  argument against a `.puck` origin, or with a `.puck` target, it is refused by
-  name and nothing is written. Save a live edit to an explicit JSON path
-  (`world.save <path>.world.json`) and port it back into the `.puck` source by
-  hand, or edit the `.puck` source directly and `world.reload`.
+- `world.save` to `.puck` uses `WorldSourceSave`: diff the live snapshot against
+  the source's composed document, print changed authored nodes and prove the
+  rewritten source before an atomic write. Unchanged source text is retained.
+  Template, compile-time `for` and module-generated rows refuse by name;
+  engine-generated names must be replaced with authored ids before saving. A refused edit
+  can be saved to a JSON target declaring the source as its `basis`.
 
 ## The author verify loop
 

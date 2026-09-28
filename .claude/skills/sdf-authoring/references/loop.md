@@ -45,15 +45,15 @@ Against a world booted `--world <file>.puck`:
   recompiles it (basis chain included) with no restart. A re-read that no
   longer compiles or validates leaves the running world untouched and echoes
   why.
-- `world.save` refuses a `.puck` target by name, including a bare
-  `world.save` against a `.puck` origin, and writes nothing: canonical JSON
-  would overwrite the source.
+- `world.save` prints changed authored nodes back into a `.puck` target,
+  retaining unrelated source text and proving the recompiled snapshot before
+  writing. Template and compile-time `for` rows refuse by name. Rename a live
+  duplicate before saving its generated id to source.
 
-`world.row.set`/`world.row` mutations act on the in-memory document. To keep
-one, `world.save <explicit-path>.world.json`, then hand-port the change back
-into the `.puck` source (or decompile a throwaway copy to diff against;
-decompiling is one-way, see below). A `world.reload` discards unsaved row
-edits, since it rebuilds from what is on disk.
+`world.row.set`/`world.row` mutations act on the in-memory document. Keep an
+authored edit with `world.save`. For an expansion-owned row, edit its generator
+or save a JSON target declaring the source as its `basis`. A `world.reload`
+discards unsaved row edits, since it rebuilds from what is on disk.
 
 ## Looking
 

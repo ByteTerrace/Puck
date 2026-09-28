@@ -43,8 +43,9 @@ forge draft's one-level swap (`CartridgeDraft.Undo`). There are no gizmos, no
 selection, no pointer picking of placements (`world.place` aims at a surface
 but picks nothing), no copy or paste, and no measurement; `world.nudge` and
 `world.turn` act on a named placement or the one the seat last placed or moved.
-`world.save` refuses a `.puck` target, so a live edit to a `.puck` world can only
-be saved as JSON.
+`world.save` writes authored edits back to a `.puck` target through the source
+printer, preserving unrelated text and proving the recomposed document before
+the atomic write. Generated rows refuse by name and offer a JSON delta.
 
 Several pieces exist with nothing using them:
 
@@ -657,9 +658,11 @@ lever, and the split view's halves differ.
 
 ### E11 — Save edits back to source
 
-**Problem:** live edits to a `.puck` world cannot be saved back, because
-`world.save` refuses a `.puck` target, so a builder's session ends in a JSON
-file beside their source or is lost.
+**Status:** source-preserving save is in place for authored rows. The printer
+rewrites changed source spans, retains untouched text and a UTF-8 byte-order
+mark, and proves the recomposed document before writing atomically. Template,
+loop and module-generated rows refuse by name. The generated-name refusal is
+also in place; E3 supplies the live duplicate and rename workflow.
 
 **Delivers:** `world.save` to a `.puck` source writes the rows the session
 changed back into that source through the transpiler's printer, keeping `let`s,
@@ -673,10 +676,11 @@ gives it an authored id, since a `.puck` source cannot spell a generated name.
 **Touches:** `Puck.World.Transpiler` (printer and decompiler),
 `Puck.Transpiler`, the mutation command module (`world.save`).
 
-**Check:** a round-trip law over a sample source: edit a placement live, save,
-compile again, and the lowered document equals the live one while every
-untouched byte is unchanged; red legs: an edit to a loop-generated row is
-refused by name, and so is a duplicate saved before it is renamed.
+**Check:** `SourceSaveLawTests` covers exact unrelated text, basis composition,
+row removal and insertion, byte-order marks, and named refusals for generated
+rows. `WorldSourceSaveIntegrationLawTests` nudges a live placement, saves and
+reloads it, and compares the resulting document while preserving the source's
+unrelated heading and tail. The laws fail when the source rewrite is bypassed.
 
 **Depends on:** E3.
 

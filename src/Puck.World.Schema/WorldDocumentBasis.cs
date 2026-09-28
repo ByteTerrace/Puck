@@ -740,7 +740,14 @@ public static class WorldDocumentBasis {
             }
         }
     }
-    private static bool TryFindRowKey(JsonArray basis, JsonArray overlay, out string key, out string ambiguity) {
+
+    /// <summary>Finds the unique row identity shared by two lists under the document composition rules.</summary>
+    /// <param name="basis">The original list.</param>
+    /// <param name="overlay">The changed list.</param>
+    /// <param name="key">The shared identity member, or empty.</param>
+    /// <param name="ambiguity">The duplicate identity refusal, or empty when the lists simply have no shared key.</param>
+    /// <returns>Whether both lists can be matched by one unique identity.</returns>
+    public static bool TryFindRowKey(JsonArray basis, JsonArray overlay, out string key, out string ambiguity) {
         key = string.Empty;
         ambiguity = string.Empty;
 
@@ -785,6 +792,7 @@ public static class WorldDocumentBasis {
 
         return false;
     }
+
     private static bool TryFindSingleListRowKey(JsonArray list, out string key) {
         foreach (var candidate in RowKeyPrecedence) {
             if (ListCarriesKey(

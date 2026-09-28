@@ -1512,9 +1512,12 @@ public static partial class WorldDefinitionSerialization {
 
         return Serialize(definition: parsed!).AsSpan().SequenceEqual(other: target);
     }
-    // The canonical bytes a definition is written as at `path`: every relative path it authors is re-expressed from
-    // the directory it was loaded from to the target's, so a document saved elsewhere still names the files it named.
-    private static byte[] SerializeBeside(WorldDefinition definition, string path) {
+
+    /// <summary>Serializes a definition beside a destination, expressing relative asset paths from that directory.</summary>
+    /// <param name="definition">The definition, including its original document directory.</param>
+    /// <param name="path">The destination document path.</param>
+    /// <returns>The canonical UTF-8 bytes with relocated document fields.</returns>
+    public static byte[] SerializeBeside(WorldDefinition definition, string path) {
         var bytes = Serialize(definition: definition);
 
         if (definition.DocumentDirectory is not { } origin) {
@@ -1537,7 +1540,6 @@ public static partial class WorldDefinitionSerialization {
 
         return CanonicalJsonDocument.Serialize(node: tree);
     }
-
     /// <summary>Serializes a definition to its canonical UTF-8 bytes (no BOM, LF newlines, one trailing newline).</summary>
     /// <param name="definition">The definition to serialize.</param>
     /// <returns>The canonical UTF-8 byte form.</returns>
