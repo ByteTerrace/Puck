@@ -1620,6 +1620,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             m_noLocalSeatsNarrated = false;
         }
 
+        // The camera the frame's first view renders with, the spectator above included: the viewer a window fits its
+        // eye to while no seat resolves a view (WorldSeatViewports.Viewer).
+        m_viewports.PublishFirstView(camera: m_views[0].Camera);
+
         // Publish this frame's audio snapshot AFTER the transforms are packed and the view rigs resolved: emitter
         // poses read the packed leaf transforms; the listener reads the seat cameras once per produced
         // frame, from the produce path where render poses are already resolved. The presentation delta ages the

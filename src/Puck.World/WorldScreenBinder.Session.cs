@@ -285,7 +285,7 @@ internal sealed partial class WorldScreenBinder {
         );
     }
     // A WINDOW session's fit (WorldWindowFrustumFit.FitFrom), asked as its view dresses: the eye is the camera the
-    // primary local seat's view renders with in this same frame, the apertures the boot document's face and the
+    // frame renders its viewer with in this same frame (WorldSeatViewports.Viewer), the apertures the boot document's face and the
     // counterpart the destination's mirror declares, and the glass the row ReconcileScreens last applied.
     private Func<CameraSnapshot?>? FitWindow(SessionFeed feed) => ((m_viewports is { } viewports)
         ? WorldWindowFrustumFit.FitFrom(

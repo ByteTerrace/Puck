@@ -41,9 +41,10 @@ public sealed class WorldWindowFrustumFitLawTests {
     // arch's glass.
     private static readonly Vector3 Occluder = new(x: 0f, y: 1.5f, z: 4f);
 
+    // The first two are the canary's eyes: the camera its seat's view renders with at each of its two body poses.
     internal static readonly Vector3[] Eyes = [
-        new(x: 1f, y: 1.6f, z: 9f),
-        new(x: -1f, y: 1.6f, z: 9f),
+        new(x: 1f, y: 1.6f, z: 6f),
+        new(x: -1f, y: 1.6f, z: 6f),
         new(x: 0.4f, y: 2.1f, z: 3f),
     ];
 
@@ -352,7 +353,7 @@ public sealed class WorldWindowFrustumFitLawTests {
     }
     // A pick through the window reaches exactly as far as the window renders: the far distance is measured from the
     // mapped eye, as the view pass measures it, not from the glass the ray starts on. The marker's near surface lies
-    // about 14.5 units from the first eye; a far distance of 14 ends the view short of it, and one of 15 reaches it.
+    // about 11.5 units from the first eye; a far distance of 11 ends the view short of it, and one of 12 reaches it.
     [Fact]
     public void AWindowPickEndsAtTheFarDistanceMeasuredFromTheMappedEye() {
         var destination = AuthoredGameFixtures.Load(relativePath: Destination);
@@ -386,9 +387,9 @@ public sealed class WorldWindowFrustumFitLawTests {
 
         var surface = (Vector3.Distance(value1: Fit(eye: eye).Position, value2: Marker) - 0.5f);
 
-        Assert.InRange(actual: surface, high: 15f, low: 14f);
-        Assert.False(condition: Picks(farDistance: 14f));
-        Assert.True(condition: Picks(farDistance: 15f));
+        Assert.InRange(actual: surface, high: 12f, low: 11f);
+        Assert.False(condition: Picks(farDistance: 11f));
+        Assert.True(condition: Picks(farDistance: 12f));
     }
     // A pick through the window sees only what lies beyond the aperture: the destination's occluder stands on the ray
     // between the mapped eye and the glass, so a ray from the eye itself meets it, while the window's ray, which starts
@@ -512,5 +513,68 @@ public sealed class WorldWindowFrustumFitLawTests {
             Assert.NotNull(@object: camera);
             Assert.Equal(expected: MathF.Sign(x: side), actual: MathF.Sign(x: (ImageOf(camera: camera.Value, point: Marker).X - 0.5f)));
         }
+    }
+    // A world with no seat joined renders the frame through its spectator camera, and the window fits its eye to that
+    // camera, the one the frame renders with, rather than falling back to the ordinary session projection. The spectator
+    // stands over the seat spawns' centroid, so moving the spawn moves the camera, and the window fitted from it moves
+    // the marker's image toward the side the camera moved to.
+    [Fact]
+    public void ANoSeatWorldsWindowFitsFromTheSpectator_AndMovingItReframesTheWindow() {
+        using var state = new TemporaryDirectory(prefix: "puck-portal-window-spectator-");
+        using var host = WorldBootHarness.Compose(
+            presentation: WorldHostPresentation.Offscreen,
+            stateDirectory: state,
+            world: Local
+        ).Build();
+        var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
+        var client = host.Services.GetRequiredService<WorldClient>();
+        var viewports = host.Services.GetRequiredService<WorldSeatViewports>();
+        var destination = AuthoredGameFixtures.Load(relativePath: Destination);
+        var row = DoorRow();
+        var fit = WorldWindowFrustumFit.FitFrom(
+            destination: () => destination,
+            local: () => client.Definition,
+            screen: () => row,
+            viewports: viewports
+        );
+
+        for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
+            _ = client.Roster.VacateSeat(slot: slot);
+        }
+
+        (CameraSnapshot Spectator, CameraSnapshot Window) Dress() {
+            var frame = presenter.CaptureFrame(
+                deltaSeconds: 0f,
+                height: 144U,
+                interpolationAlpha: 1f,
+                width: 256U
+            );
+
+            Assert.False(condition: viewports.Seat(slot: 0).Present);
+
+            var spectator = Assert.Single(collection: frame.Views).Camera;
+            var window = fit();
+
+            Assert.NotNull(@object: window);
+            Assert.Equal(expected: Fit(eye: spectator.Position), actual: window.Value);
+
+            return (spectator, window.Value);
+        }
+
+        var (before, beforeWindow) = Dress();
+        var spawns = client.Definition.SpawnPoints;
+
+        client.DeliverDefinition(definition: (client.Definition with {
+            SpawnPointsRaw = [.. spawns.Select(selector: static spawn => (spawn with { Position = (((Vector3)spawn.Position) + new Vector3(x: 4f, y: 0f, z: 0f)) }))],
+        }));
+
+        var (after, afterWindow) = Dress();
+
+        Assert.Equal(
+            expected: 4f,
+            actual: (after.Position.X - before.Position.X),
+            tolerance: Tolerance
+        );
+        Assert.True(condition: (ImageOf(camera: afterWindow, point: Marker).X > ImageOf(camera: beforeWindow, point: Marker).X));
     }
 }
