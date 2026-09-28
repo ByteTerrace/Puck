@@ -285,8 +285,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
         m_height = Math.Max(val1: m_height, val2: height);
     }
     /// <summary>Returns the frame the residency renders this frame, capturing it from the frame source now when it has not
-    /// captured it yet: a camera view filming the same world takes it before any of the world's views render, and the
-    /// world renders the same frame.</summary>
+    /// captured it yet: a routed residency takes its host's frame before capturing its own, so both render with the
+    /// same presentation clock and latched routes.</summary>
     /// <param name="context">The host's frame context, whose presentation delta and interpolation fraction the capture
     /// reads.</param>
     /// <returns>The frame, or <see langword="null"/> when the residency has filmed none yet.</returns>

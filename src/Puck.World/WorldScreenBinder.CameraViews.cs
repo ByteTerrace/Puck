@@ -1,22 +1,33 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using Puck.Abstractions.Cameras;
+using Puck.Abstractions.Presentation;
 using Puck.Commands;
-using Puck.Hosting;
 using Puck.Maths;
 using Puck.SdfVm;
 using Puck.SdfVm.Views;
 using Puck.Shaders;
+using Puck.SignedDistance;
 using Puck.World.Client;
 
 namespace Puck.World;
 
 // Camera views: each camera a screen, a HUD frame or a probe export shows is a registration here, which the render graph
-// runs as an sdf.world instance of that name, rendering a residency of its own (CreateCameraResidency) that films the
-// frame the world renders from the registration's rig.
+// runs as an sdf.world instance of that name. The instance renders a view of the world's own frame from the world's
+// residency: the presentation's dress films each registration's camera into the frame after its own views (FilmViews).
 internal sealed partial class WorldScreenBinder : IWorldViewScenes {
     // The camera each view last rendered from, which a hit on a screen showing it continues through.
     private readonly Dictionary<string, CameraSnapshot> m_viewCameras = new(comparer: StringComparer.Ordinal);
+    // Each camera view's index in the world's frame this frame, and how many views the presentation dressed before them.
+    private readonly Dictionary<string, int> m_cameraViewIndices = new(comparer: StringComparer.Ordinal);
+
+    private int m_hostViewCount;
+
+    /// <summary>Gets the restrictions a camera view adds to the world's quality: a low-resolution diegetic display skips
+    /// ambient occlusion and soft shadows.</summary>
+    public static SdfViewQuality CameraViewQuality { get; } = new() {
+        DisableAmbientOcclusion = true,
+        DisableSoftShadows = true,
+    };
 
     // A same-kind pose/aim/FOV/rig/anchor/extent edit re-wires the live registration in place (a freshly compiled rig plus
     // its anchor sources); its instance and every wired slot survive untouched. The registration's row snapshot advances
@@ -111,7 +122,7 @@ internal sealed partial class WorldScreenBinder : IWorldViewScenes {
     }
     // A camera program's state bindings, placement subjects, and blend names all resolve against the live document,
     // which only the client anchor source carries (the same seam StaticAnchorPosition/GroupCentroid read). Without
-    // one there is no document to compile against and the view renders nothing.
+    // one there is no document to compile against and the view frames the world origin.
     private void CompileCameraRig(CameraRegistration registration, WorldCamera camera) {
         if (m_anchors is WorldClient client) {
             registration.Rig = WorldCameraRigCompiler.Compile(
@@ -231,8 +242,8 @@ internal sealed partial class WorldScreenBinder : IWorldViewScenes {
         slot.View = null;
         ReleaseOrphanedCameraView(name: view.Name);
     }
-    // Releases a camera registration: its instance leaves the render graph, which disposes its engine once the device
-    // has finished every submission that may sample its output.
+    // Releases a camera registration: its instance leaves the render graph, which disposes its passes and output once
+    // the device has finished every submission that may sample them.
     private void ReleaseView(string name) {
         _ = m_cameraViews.Remove(key: name);
         _ = m_parkedViews.Remove(item: name);
@@ -555,69 +566,105 @@ internal sealed partial class WorldScreenBinder : IWorldViewScenes {
 
         return false;
     }
+    /// <inheritdoc/>
+    /// <remarks>Each camera view is a view of the frame after the presentation's own, at the quality of its first view
+    /// with ambient occlusion and soft shadows off (<see cref="CameraViewQuality"/>): a low-resolution diegetic display
+    /// may add restrictions to the world's quality but never lift one. The view's instance renders it from the world's
+    /// residency (<see cref="TryResolveView"/>), and the registration's export is set on its node.</remarks>
+    public void FilmViews(DynamicTransform[] transforms, ulong authoritativeTick, float presentationSeconds, List<SdfViewSnapshot> views) {
+        ArgumentNullException.ThrowIfNull(argument: transforms);
+        ArgumentNullException.ThrowIfNull(argument: views);
 
-    // Resolves the camera a registration films from this frame against the frame the world node renders, which it
-    // captures first when no view has yet this frame: its anchor, then its rig. A view bound to an anchor that does not
-    // resolve this frame (a companion shape not yet packed, a placement that just despawned) films nothing rather than
-    // rendering from a default pose; an unbound view (a world-anchored eye) always films.
-    private bool TryFilm(string name, in FrameContext context, [NotNullWhen(returnValue: true)] out SdfFrame? frame, out CameraSnapshot camera, [NotNullWhen(returnValue: true)] out CameraRegistration? registration) {
-        frame = null;
-        camera = default;
+        m_viewTransforms = transforms;
+        m_viewAuthoritativeTick = authoritativeTick;
+        m_hostViewCount = views.Count;
+        m_cameraViewIndices.Clear();
 
-        if (
-            (ViewHost is not { } host) ||
-            !m_cameraViews.TryGetValue(
-                key: name,
-                value: out registration
-            ) ||
-            (registration.Rig is not { } rig)
-        ) {
-            registration = null;
+        var quality = ((views.Count > 0)
+            ? views[0].Quality.Restrict(other: CameraViewQuality)
+            : CameraViewQuality
+        );
 
-            return false;
+        foreach (var (name, registration) in m_cameraViews) {
+            m_cameraViewIndices[name] = views.Count;
+            views.Add(item: new SdfViewSnapshot(
+                Camera: FilmCamera(
+                    name: name,
+                    presentationSeconds: presentationSeconds,
+                    registration: registration
+                ),
+                Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)
+            ) {
+                Quality = quality,
+            });
+
+            if (Runtime?.NodeOf(instance: name) is { } node) {
+                node.Export = registration.Export;
+            }
         }
+    }
+    /// <summary>Returns the view of the world's frame an instance numbered for one of the presentation's own views renders:
+    /// the numbered view, or the last of the presentation's own views when the frame has fewer, never a camera view's.</summary>
+    /// <param name="view">The view the instance's name numbers.</param>
+    /// <returns>The view's index in the world's frame.</returns>
+    public int HostView(int view) => Math.Clamp(
+        max: Math.Max(
+            val1: 0,
+            val2: (m_hostViewCount - 1)
+        ),
+        min: 0,
+        value: view
+    );
 
-        frame = host.HostFrame(context: in context);
-
-        if (frame is null) {
-            return false;
-        }
-
+    // The camera a registration films from this frame: its anchor, then its rig, at the frame's presentation time and
+    // authoritative tick. A camera whose anchor does not resolve this frame (a companion shape not yet packed, a placement
+    // that just despawned) keeps the camera it last filmed from; one that has never filmed frames from its rig at the
+    // default anchor, and one with no rig (no client to compile against) from the world origin.
+    private CameraSnapshot FilmCamera(string name, CameraRegistration registration, float presentationSeconds) {
         var anchor = default(SdfAnchor);
-
-        if (registration.AnchorSource is { } source) {
-            if (
-                (registration.AnchorIdSource?.Invoke() is not { } anchorId) ||
-                !source.TryResolveAnchor(
+        var resolved = (
+            (registration.AnchorSource is not { } source) ||
+            (
+                (registration.AnchorIdSource?.Invoke() is { } anchorId) &&
+                source.TryResolveAnchor(
                     anchor: out anchor,
                     anchorId: anchorId
                 )
-            ) {
-                return false;
-            }
+            )
+        );
+
+        if (
+            !resolved &&
+            m_viewCameras.TryGetValue(
+                key: name,
+                value: out var last
+            )
+        ) {
+            return last;
         }
 
-        var clock = new SdfCameraClock(
-            PresentationSeconds: frame.Time,
-            AuthoritativeTick: m_viewAuthoritativeTick
+        var (eye, target, fovRadians) = ((registration.Rig is { } rig)
+            ? rig.Resolve(
+                anchor: in anchor,
+                clock: new SdfCameraClock(
+                    AuthoritativeTick: m_viewAuthoritativeTick,
+                    PresentationSeconds: presentationSeconds
+                )
+            )
+            : (Vector3.Zero, -Vector3.UnitZ, (MathF.PI / 3f))
         );
-
-        var (eye, target, fovRadians) = rig.Resolve(
-            anchor: in anchor,
-            clock: in clock
-        );
-
         // The declared extent sets the aspect, whatever extent the render graph schedules the view at.
-        camera = CameraSnapshot.LookAt(
+        var camera = CameraSnapshot.LookAt(
             fieldOfViewRadians: fovRadians,
             position: eye,
             target: target,
             viewportHeight: registration.Row.RenderHeight,
             viewportWidth: registration.Row.RenderWidth
         );
+
         m_viewCameras[name] = camera;
 
-        return true;
+        return camera;
     }
 
     private sealed class EntityPartAnchorSource(WorldScreenBinder owner, WorldAnchor.EntityPart part) : ISdfAnchorSource {

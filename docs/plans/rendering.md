@@ -4191,48 +4191,39 @@ item 2 landed.
    own observation of the destination and renders its own residency, so a
    portal window and a traveller's routed view of one destination keep two
    residencies until the window reads the endpoint's mirror.
-   Open work: render each camera view as a view of the world's own residency
-   rather than a residency of its own. Per-view quality removes the only
-   reason a camera view has one: `SdfCameraFrameSource` films the host frame
-   through another camera at a restricted quality, which a view of the host
-   frame expresses directly. Done, it deletes `SdfCameraFrameSource`, the
-   binder's `CreateCameraResidency` and `FilmCamera`, and every camera view's
-   tables, and a diegetic screen showing a live camera (a race billboard)
-   costs its passes and scratch, not a copy of the world's tables.
-   - Measured on the shipped world, RTX 2060, after 120 ready ticks: six
-     residencies, the world's and five camera views' (the dive, jump, kart
-     and studio arrival cameras and `studioStage`). On Vulkan, 676.4 MB
-     device-local allocated (629.5 MB peak), of which 219.5 MB is in the
-     host-visible device-local aperture (180.2 MB peak, against the 2060's
-     214 MB heap). On Direct3D 12, 602.8 MB device-local (579.2 MB peak), with
-     no aperture use. The aperture split came from counting
-     `GpuMemoryRole.HostVisibleDeviceLocal` allocations as their own rows in
-     `GpuDeviceMemoryWork` (`gpu.memory.host-visible-device-local.*`), which
-     the counted proof needs and `puck counters` does not report yet. The
-     counters workload shows no camera view on a screen, so it runs one
-     residency and moves only by those rows.
-   - Approach. A camera view must film this frame: its anchors read the
-     frame's packed transforms, and its rig reads the frame's time and the
-     authoritative tick. So the presenter's `Dress` hands the binder its
-     transforms, time and tick after the seat views and the spectator
-     fallback. The binder appends each registration's view (camera, full
-     region, the first seat view's quality restricted by no ambient
-     occlusion and no soft shadows), records its index, and sets the
-     registration's export on its node. `TryResolveView` resolves a camera
-     instance to the world's residency at that index. The root's resolve
-     clamps `world$n` to the seat views, since the recorder clamps an index
-     to the frame's last view, which would then be a camera. A registered
-     camera must always resolve: an unresolved instance's build throws and
-     refuses its node. A camera whose anchor does not resolve keeps its last
-     camera, or before its first frames from the rig at the default anchor.
-     Screens need no change: a pass binds screens from its own instance's
-     reads, and an instance never reads itself. The views then sample the
-     world's brick pool rather than the uncarved-hull fallback, so carved
-     geometry changes on camera screens.
-   - Proof: aperture and device-local bytes and the residency count, before
-     and after, on the shipped world and the counters workload, on both
-     backends; `view-screens`, the camera-view canaries, `portal-window` and
-     `puck parity`.
+   A camera view renders a view of the world's own residency at its own
+   quality. A diegetic screen showing a live camera (a race billboard)
+   costs its instance's passes, output and scratch while sharing the world's
+   tables and brick pool.
+   - The presenter's `Dress` hands the binder its packed transforms, time and
+     authoritative tick after the own views and spectator fallback are
+     latched. `FilmViews` appends each registration's camera with a full
+     region and the first own view's quality restricted by no ambient
+     occlusion and no soft shadows, records its index, and sets its export
+     on its node. `TryResolveView` resolves it into the world's residency.
+     The presenter places only its own views, and the root clamps `world$n`
+     to those views. The package prepares the host before refreshing view
+     bindings, including frames serving captures. A camera whose anchor
+     does not resolve keeps its last filmed camera; its first frame uses
+     the rig at the default anchor, or the world origin without a rig.
+   - A pass binds screens from its own instance's reads. A camera reads
+     screen views, including itself, through their previous-frame outputs;
+     the world's views read them within the frame. Screen mappings, bound
+     flags and lights are shared frame state, set once before recording.
+   - `GpuDeviceMemoryWork` counts host-visible device-local allocations,
+     releases and peak held bytes in `gpu.memory.host-visible-device-local.*`,
+     beside the totals in `gpu.memory.device-local.*`. The aperture rows
+     identify the table memory pressure independently of other device memory.
+   - The shipped world runs one residency where it ran six, the world's and
+     five camera views' (the dive, jump, kart and studio arrival cameras and
+     `studioStage`). After 120 ready ticks on the RTX 2060, Vulkan allocates
+     493.5 MB device-local (485.7 MB peak), 41.7 MB of it in the aperture
+     (41.6 MB peak), where six residencies allocated 676.4 MB (629.5 MB peak)
+     with 219.5 MB in the aperture (180.2 MB peak, against a 214 MB heap).
+     Direct3D 12 allocates 504.8 MB (500.9 MB peak) where it allocated
+     602.8 MB (579.2 MB peak), with no aperture use either way. The counters
+     workload shows no camera view on a screen, so it runs one residency
+     either way.
    - A session screen or window onto another world cannot fold into the
      world's residency, since it renders another program from another
      mirror, local, remote or unrouted alike. It folds into its
@@ -4483,10 +4474,9 @@ resolution, and stay there.
   - a view that was parked or not shown is shown again;
   - reconstruction is turned on, or a debug view is turned on or off. While a
     debug view is on, the resolve is spatial, as the tonemap is off then;
-  - a residency renders a frame that does not follow its view's previous render,
-    which cannot happen while each camera and session residency holds one view
-    and the world's views render in lockstep, and is checked rather than
-    assumed.
+  - a residency renders a frame that does not follow its view's previous render:
+    camera views share the world's residency and can refresh at different
+    cadences, so this check is per instance.
 
   Everything else, including a large camera move, is left to per-pixel
   rejection.
@@ -4612,7 +4602,7 @@ counted rows recorded in the same change.
      a `converge` capture until P15-5 adds the lever.
    - Touches: `SdfWorldPackage.Values`, `SdfFrameBlock`,
      `frame/sdf-viewport.hlsli`, `sdf-mesh.vert.hlsl`, `ViewProjection`,
-     `SdfCameraProgram`, `SdfCameraFrameSource`, `SdfWorldPasses`,
+     `SdfCameraProgram`, `WorldScreenBinder.FilmViews`, `SdfWorldPasses`,
      `WorldCaptureRow`, `WorldCaptureScheduler`, `OffscreenTickHostedService`
      (composing the N frames at the held tick), `WorldFramePresenter` (the frozen
      snapshot), the world schemas.
@@ -4683,8 +4673,8 @@ counted rows recorded in the same change.
      by identity and depth; neighbourhood rectification; the reactive alpha from
      the views stage; the convergence rule in `IsUnchanged`; `place`'s
      contrast-adaptive sharpen at equal extent; and the `world.temporal` lever
-     with its presets, which a camera or session view's residency reads only
-     when its levers ask for reconstruction.
+     with its presets, which each camera or session view reads only when its
+     quality asks for reconstruction.
    - Touches: `SdfWorldPackage.Fragment`, `passes/sdf-resolve.comp.hlsl`,
      `passes/sdf-hit-stages.hlsli`, `SdfWorldPasses`, `place.comp.hlsl`,
      `PlacePackage`, `WorldSessionLevers`, `WorldRenderLeverCommandModule`,

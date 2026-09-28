@@ -1,15 +1,15 @@
 using Puck.Hosting;
 using Puck.SdfVm;
-using Puck.SdfVm.Views;
 using Puck.SignedDistance;
 using Puck.World.Client;
 
 namespace Puck.World;
 
 // The views the world renders beside its own, as the render graph runs them: each camera registration and each session
-// screen is an sdf.world instance (WorldViewInstances) rendering a residency of its own, which the binder creates when the
-// render graph's package first resolves the instance and releases once the registration or the session is gone. The
-// binder hands the instances to its mappings, which the view graph host composes into the running set.
+// screen is an sdf.world instance (WorldViewInstances). A camera view is a view of the world's own frame, rendered from
+// the world's residency (FilmViews); a session screen renders a residency of its own, which the binder creates when the
+// render graph's package first resolves the instance and releases once the session is gone. The binder hands the
+// instances to its mappings, which the view graph host composes into the running set.
 internal sealed partial class WorldScreenBinder {
     // The kernels every view's residency records with, read once from the composition's pipeline cache.
     private SdfKernelSet? m_viewKernels;
@@ -25,17 +25,18 @@ internal sealed partial class WorldScreenBinder {
 
     // The views as the render graph last received them, set again whenever a registration, a screen or a session moves.
     private readonly WorldViewSet m_views = new();
-    // Each view's residency by instance name, and for a session's the frame source it renders; released views reused.
+    // Each session view's residency by instance name, and the frame source it renders; released views reused.
     private readonly Dictionary<string, ViewResidency> m_viewResidencies = new(comparer: StringComparer.Ordinal);
     private readonly List<string> m_releasedViews = [];
 
-    /// <summary>Gets or sets the world's residency, whose frame (<see cref="SdfWorldResidency.HostFrame"/>) every camera
-    /// view films; <see langword="null"/> in a presentation with no render graph, where no view renders.</summary>
+    /// <summary>Gets or sets the world's residency, which renders every camera view as a view of the world's frame, and
+    /// whose frame each routed residency films first; <see langword="null"/> in a presentation with no render graph, where
+    /// no view renders.</summary>
     public SdfWorldResidency? ViewHost { get; set; }
 
-    /// <summary>Hands the binder what the frame the world renders presents, as the presenter captures it: the packed
-    /// transforms a camera's entity-part and seat anchors resolve against, and the simulation tick its rig's clock
-    /// reads.</summary>
+    /// <summary>Hands the binder the frame the world renders once the presenter has captured it: its packed transforms and
+    /// simulation tick, which the camera views filmed it with (<see cref="FilmViews"/>). The routed residencies no scene
+    /// presents any longer are released, and an armed crossing capture is served.</summary>
     /// <param name="transforms">The frame's packed dynamic transforms.</param>
     /// <param name="authoritativeTick">The latest authoritative simulation tick available to presentation.</param>
     /// <exception cref="ArgumentNullException"><paramref name="transforms"/> is <see langword="null"/>.</exception>
@@ -47,8 +48,9 @@ internal sealed partial class WorldScreenBinder {
         ReconcileRoutedResidencies();
         CrossingCapture?.Present();
     }
-    /// <summary>Returns the view a view instance renders: a camera registration's or a session screen's residency, created
-    /// the first time the render graph's package asks for it once the views are configured.</summary>
+    /// <summary>Returns the view a view instance renders: a camera registration's view of the world's frame, or a session
+    /// screen's residency, created the first time the render graph's package asks for it once the views are
+    /// configured.</summary>
     /// <param name="name">The instance's name.</param>
     /// <param name="view">The view, when this returns <see langword="true"/>.</param>
     /// <returns><see langword="true"/> when the instance is a view this binder registered and the views are
@@ -61,26 +63,21 @@ internal sealed partial class WorldScreenBinder {
 
         if (
             (m_viewPipelines is null) ||
-            (m_viewHostSource is not { } host)
+            (m_viewHostSource is null)
         ) {
             return false;
         }
 
         if (m_cameraViews.ContainsKey(key: name)) {
-            if (!m_viewResidencies.TryGetValue(
-                key: name,
-                value: out var camera
-            )) {
-                camera = CreateCameraResidency(
-                    host: host,
-                    name: name
-                );
-                m_viewResidencies[name] = camera;
+            if (ViewHost is not { } world) {
+                return false;
             }
 
+            // Before the first dress, view zero gives builds the world's tables. BeginFrame refreshes the binding
+            // after the host films its cameras and before any pass records.
             view = new SdfWorldView(
-                Residency: camera.Residency,
-                View: 0
+                Residency: world,
+                View: m_cameraViewIndices.GetValueOrDefault(key: name)
             );
 
             return true;
@@ -116,48 +113,6 @@ internal sealed partial class WorldScreenBinder {
         return true;
     }
 
-    // A camera view's residency: its frame source films the frame the world renders from the registration's camera, no
-    // brick pool (a view never bakes carves, and the default pool would cost megabytes per view; a filmed sampled region
-    // renders through the kernels' uncarved-hull fallback), sized to the world's worst-case capacities, and its work
-    // counted under the view's name in world.counters. Low-resolution diegetic displays skip soft shadows and ambient
-    // occlusion, which a view may add to the host's levers but never lift.
-    private ViewResidency CreateCameraResidency(ISdfFrameSource host, string name) {
-        var source = new SdfCameraFrameSource(host: host) {
-            Quality = new SdfViewQuality {
-                DisableAmbientOcclusion = true,
-                DisableSoftShadows = true,
-            },
-        };
-        var residency = new SdfWorldResidency(
-            brickPoolVoxelCapacity: 0,
-            dynamicTransformCapacity: m_viewDynamicTransformCapacity,
-            film: context => FilmCamera(
-                context: in context,
-                name: name,
-                source: source
-            ),
-            frameSource: source,
-            height: 1U,
-            instanceCapacity: m_viewInstanceCapacity,
-            kernels: ViewKernels(),
-            name: name,
-            pipelines: m_viewPipelines!,
-            programWordCapacity: m_viewProgramWordCapacity,
-            screenSources: this,
-            width: 1U
-        );
-
-        RegisterViewWork(
-            lifetime: residency.WorkLifetime,
-            name: name,
-            work: residency.Work
-        );
-
-        return new ViewResidency(
-            Residency: residency,
-            Source: source
-        );
-    }
     // A session screen's residency, rendering the session feed's frame source on its own clock.
     private ViewResidency CreateSessionResidency(string name, SdfCompositionFrameSource source) {
         var residency = new SdfWorldResidency(
@@ -185,44 +140,19 @@ internal sealed partial class WorldScreenBinder {
             Source: source
         );
     }
-    // Films a camera view's frame: the camera its registration resolves this frame against the frame the world renders,
-    // and the export a probe reads it through, which the view's node copies into.
-    private bool FilmCamera(in FrameContext context, string name, SdfCameraFrameSource source) {
-        if (!TryFilm(
-            camera: out var camera,
-            context: in context,
-            frame: out var frame,
-            name: name,
-            registration: out var registration
-        )) {
-            return false;
-        }
-
-        source.Camera = camera;
-        source.HostFrame = frame;
-
-        if (Runtime?.NodeOf(instance: name) is { } node) {
-            node.Export = registration.Export;
-        }
-
-        return true;
-    }
     private SdfKernelSet ViewKernels() =>
         (m_viewKernels ??= m_viewPipelines!.LoadDeployed(bytecodeExtension: SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: m_viewHostsOnDirectX)));
-    // Releases the residency of every view that is no camera registration and no session with the frame source its
-    // residency renders: the view's instance leaves the render graph, whose passes give back their holds once the device
+    // Releases every session residency whose frame source differs from its session's: the view's instance leaves the
+    // render graph, whose passes give back their holds once the device
     // has finished with them.
     private void ReconcileViewResidencies() {
         m_releasedViews.Clear();
 
         foreach (var (name, view) in m_viewResidencies) {
-            if (
-                !m_cameraViews.ContainsKey(key: name) &&
-                !ReferenceEquals(
-                    objA: SessionFeedOf(name: name)?.FrameSource,
-                    objB: view.Source
-                )
-            ) {
+            if (!ReferenceEquals(
+                objA: SessionFeedOf(name: name)?.FrameSource,
+                objB: view.Source
+            )) {
                 m_releasedViews.Add(item: name);
             }
         }

@@ -5,7 +5,7 @@ namespace Puck.Abstractions.Tests;
 
 /// <summary>
 /// Laws for <see cref="GpuDeviceMemoryWork"/>: allocations and releases count at the size each allocation was counted
-/// with, the peak is the most bytes held at once, only the device-local role counts, a release of an object never
+/// with, the peak is the most bytes held at once, the aperture rows count the host-mapped part, only the adapter's roles count, a release of an object never
 /// counted counts nothing, an allocation is counted once per device, the same handle on two devices is two entries, a
 /// device's teardown names every allocation it still holds, and the class legend makes the byte counts
 /// per-backend-deterministic and the peak pacing.
@@ -60,6 +60,25 @@ public sealed class GpuDeviceMemoryWorkLawTests {
         Assert.False(condition: work.CountReleased(allocation: 0x10, device: Device));
         Assert.Equal(expected: (0L, 0L), actual: (Read(kind: GpuDeviceMemoryWork.Allocated, work: work), work.Held));
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => GpuDeviceMemoryWork.IsCounted(role: ((GpuMemoryRole)7)));
+    }
+    // The aperture rows are the part of the device-local rows the host maps: a small heap on a discrete adapter, which each
+    // residency's ring tables live in.
+    [Fact]
+    public void TheApertureRowsCountThePartOfDeviceLocalMemoryTheHostMaps() {
+        var work = new GpuDeviceMemoryWork(backend: "vulkan");
+
+        Assert.True(condition: Allocate(work: work, allocation: 0x10, bytes: 4096L));
+        Assert.True(condition: Allocate(work: work, allocation: 0x20, bytes: 1024L, role: GpuMemoryRole.HostVisibleDeviceLocal));
+        Assert.True(condition: Allocate(work: work, allocation: 0x30, bytes: 512L, role: GpuMemoryRole.HostVisibleDeviceLocal));
+        Assert.True(condition: work.CountReleased(allocation: 0x20, device: Device));
+        Assert.True(condition: Allocate(work: work, allocation: 0x40, bytes: 256L, role: GpuMemoryRole.HostVisibleDeviceLocal));
+        Assert.True(condition: work.CountReleased(allocation: 0x10, device: Device));
+
+        Assert.Equal(expected: 5888L, actual: Read(kind: GpuDeviceMemoryWork.Allocated, work: work));
+        Assert.Equal(expected: 5120L, actual: Read(kind: GpuDeviceMemoryWork.Released, work: work));
+        Assert.Equal(expected: 1792L, actual: Read(kind: GpuDeviceMemoryWork.ApertureAllocated, work: work));
+        Assert.Equal(expected: 1024L, actual: Read(kind: GpuDeviceMemoryWork.ApertureReleased, work: work));
+        Assert.Equal(expected: 1536L, actual: Read(kind: GpuDeviceMemoryWork.AperturePeak, work: work));
     }
     [Fact]
     public void AnUncountedReleaseCountsNothing() {
@@ -125,6 +144,9 @@ public sealed class GpuDeviceMemoryWorkLawTests {
                 ("gpu.memory.device-local.allocated", "bytes", WorkClass.PerBackendDeterministic),
                 ("gpu.memory.device-local.released", "bytes", WorkClass.PerBackendDeterministic),
                 ("gpu.memory.device-local.peak", "bytes", WorkClass.Pacing),
+                ("gpu.memory.host-visible-device-local.allocated", "bytes", WorkClass.PerBackendDeterministic),
+                ("gpu.memory.host-visible-device-local.released", "bytes", WorkClass.PerBackendDeterministic),
+                ("gpu.memory.host-visible-device-local.peak", "bytes", WorkClass.Pacing),
             ],
             actual: [.. work.WorkKinds.ToArray().Select(selector: static kind => (kind.Name, kind.Unit, kind.Class))]
         );

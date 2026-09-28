@@ -635,7 +635,8 @@ instance name: `world` is the first view's node, whose passes are
 `sdf.world$sky` through `sdf.world$views`, `main` the root's node, whose passes
 are the place, post and overlay passes, and each pane its own node. It counts
 each residency's upload beside them: the world's as `sdf:world`, and each
-camera or session view's as `sdf:<name>`.
+session or routed scene's as `sdf:<name>`. Camera instances share the world's
+upload and tables; their passes and scratch count under their instance names.
 
 ### Graph instances in a World
 
