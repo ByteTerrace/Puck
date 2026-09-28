@@ -15,7 +15,7 @@ namespace Puck.World;
 /// verb routes <see cref="CommandRouting.Simulation"/> (they buffer and drain like every other <see cref="WorldMutation"/>)
 /// and returns <see cref="CommandResult.None"/> — the server prints the loud <c>[world.mutation: … applied/rejected]</c> line.
 /// </summary>
-public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority, IServerLink link) : ICommandModule {
+public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority) : ICommandModule {
     // Narrower than Grantee.TokenGrammar: a group member/ownership party is never group:<id> or document:<id>
     // (a group cannot itself be a member — see this class's own remarks) or world (never a real actor).
     private const string MemberTokenGrammar = "seat1..seat4|console|addon:<name>|peer:<n>:<generation>";
@@ -160,6 +160,10 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority, IS
                     );
                 }
 
+                if (!authority.TryResolveLink(context: context, error: out var error, link: out var link, verb: "world.group.form")) {
+                    return error;
+                }
+
                 link.SubmitWorldMutation(mutation: new WorldMutation.FormGroup(
                     Principal: context.Principal,
                     Id: args[0].ToString(),
@@ -283,6 +287,10 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority, IS
                     return CommandResult.Error(output: $"[world.ownership.offer: '{args[2].ToString()}' is not an integer tick]");
                 }
 
+                if (!authority.TryResolveLink(context: context, error: out var error, link: out var link, verb: "world.ownership.offer")) {
+                    return error;
+                }
+
                 link.SubmitWorldMutation(mutation: new WorldMutation.OfferOwnership(
                     Principal: context.Principal,
                     Subject: subject,
@@ -319,8 +327,7 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority, IS
             routing: CommandRouting.Simulation
         );
 
-        // Local function, not a static method: shares `link` with the module instance — accept/reclaim take the
-        // identical <subject> shape and differ only in Reclaim.
+        // Local function: accept/reclaim take the identical <subject> shape and differ only in Reclaim.
         CommandResult Settle(CommandContext context, in WireArgs args, string verb, bool reclaim) {
             if (args.Count != 1) {
                 return CommandResult.Usage(
@@ -336,6 +343,10 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority, IS
                 return CommandResult.Error(output: $"[{verb}: unknown subject '{args[0].ToString()}' — group:<id>]");
             }
 
+            if (!authority.TryResolveLink(context: context, error: out var error, link: out var link, verb: verb)) {
+                return error;
+            }
+
             link.SubmitWorldMutation(mutation: new WorldMutation.SettleOwnership(
                 Principal: context.Principal,
                 Subject: subject,
@@ -345,8 +356,8 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority, IS
             return CommandResult.None;
         }
 
-        // Local function, not a static method: shares `link` with the module instance — join/leave/kick above take
-        // the identical <group-id> <principal> shape and differ only in which WorldMutation kind they build.
+        // Local function: join/leave/kick above take the identical <group-id> <principal> shape and differ only in which
+        // WorldMutation kind they build.
         CommandResult Handle(CommandContext context, in WireArgs args, string verb, Build build) {
             if (args.Count != 2) {
                 return CommandResult.Usage(
@@ -360,6 +371,10 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority, IS
                 principal: out var member
             )) {
                 return CommandResult.Error(output: $"[{verb}: unknown principal '{args[1].ToString()}' — {MemberTokenGrammar}]");
+            }
+
+            if (!authority.TryResolveLink(context: context, error: out var error, link: out var link, verb: verb)) {
+                return error;
             }
 
             link.SubmitWorldMutation(mutation: build(

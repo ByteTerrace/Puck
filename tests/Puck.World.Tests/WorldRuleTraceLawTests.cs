@@ -249,7 +249,6 @@ public sealed class WorldRuleTraceLawTests {
         );
         var registry = new CommandRegistry(modules: [new WorldStateCommandModule(
                 authority: new FakeConsoleAuthority(instance: row.Instance),
-                link: row.Instance.Link,
                 echoes: new WorldDeferredVerbEchoes()
             )]);
 

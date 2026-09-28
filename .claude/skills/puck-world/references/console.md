@@ -34,6 +34,14 @@ X>()` in `WorldBootComposition`; `CommandRegistry` aggregates all modules and
 observers at construction and throws on any duplicate name/alias (including
 its built-ins `help`, `wire.ack`, `wire.errors`).
 
+A shared module in `Puck.World.Console` never takes a link at construction: a verb
+that submits resolves the instance the console addresses on each call
+(`IWorldConsoleAuthority.TryResolveInstance` or `TryResolveLink`) and submits
+through that instance's `WorldInstance.SubmissionLink`, so no verb acts on boot
+while the console addresses another instance (`WorldConsoleAddressLawTests`).
+The `Puck.World`-resident desktop modules still take the boot link, which is
+safe only because the desktop's authority always resolves boot.
+
 Two definition factories, plus two `Puck.World` wrappers over them. A sweep that
 stops at the two factories MISSES most registration sites — the wrappers carry
 ~69 of them.

@@ -45,8 +45,7 @@ public sealed class EnumCellConsoleLawTests {
         );
         var registry = new CommandRegistry(modules: [new WorldStateCommandModule(
             authority: new ConsoleAuthority(instance: row.Instance),
-            echoes: new WorldDeferredVerbEchoes(),
-            link: row.Instance.Link
+            echoes: new WorldDeferredVerbEchoes()
         )]);
         string? refusal = null;
 

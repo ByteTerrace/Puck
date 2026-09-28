@@ -552,8 +552,7 @@ public sealed class VectorStateLawTests {
         using var row = HostRow.Build(definition: definition, name: "boot");
         var registry = new CommandRegistry(modules: [new WorldStateCommandModule(
             authority: new FakeConsoleAuthority(instance: row.Instance),
-            echoes: new WorldDeferredVerbEchoes(),
-            link: row.Instance.Link
+            echoes: new WorldDeferredVerbEchoes()
         )]);
 
         var result = registry.Submit(line: "world.state memories m1");
@@ -596,8 +595,7 @@ public sealed class VectorStateLawTests {
         using var row = HostRow.Build(definition: definition, name: "boot");
         var registry = new CommandRegistry(modules: [new WorldStateCommandModule(
             authority: new FakeConsoleAuthority(instance: row.Instance),
-            echoes: new WorldDeferredVerbEchoes(),
-            link: row.Instance.Link
+            echoes: new WorldDeferredVerbEchoes()
         )]);
 
         // 1. Query as Console (unrestricted): both gift and secret appear
@@ -638,8 +636,7 @@ public sealed class VectorStateLawTests {
         using var rowHidden = HostRow.Build(definition: defWithHidden, name: "boot2");
         var registryHidden = new CommandRegistry(modules: [new WorldStateCommandModule(
             authority: new FakeConsoleAuthority(instance: rowHidden.Instance),
-            echoes: new WorldDeferredVerbEchoes(),
-            link: rowHidden.Instance.Link
+            echoes: new WorldDeferredVerbEchoes()
         )]);
 
         var hiddenCommandSource = new TextCommandSource(registry: registryHidden);
@@ -909,8 +906,7 @@ public sealed class VectorStateLawTests {
         using var row = HostRow.Build(definition: definition, name: "boot");
         var registry = new CommandRegistry(modules: [new WorldStateCommandModule(
             authority: new FakeConsoleAuthority(instance: row.Instance),
-            echoes: new WorldDeferredVerbEchoes(),
-            link: row.Instance.Link
+            echoes: new WorldDeferredVerbEchoes()
         )]);
 
         string? diag = null;

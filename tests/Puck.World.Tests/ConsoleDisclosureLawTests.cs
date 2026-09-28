@@ -259,7 +259,6 @@ public sealed class ConsoleDisclosureLawTests {
             IWorldConsoleAuthority authority = (leaky
                 ? new LeakyAuthority(instance: m_row.Instance)
                 : new FixedAuthority(instance: m_row.Instance));
-            var link = m_row.Instance.Link;
             var echoes = new WorldDeferredVerbEchoes();
             var guard = new WorldRowStepWindowGuard();
 
@@ -268,15 +267,15 @@ public sealed class ConsoleDisclosureLawTests {
                 new WorldCurveCommandModule(authority: authority),
                 new WorldDynamicsCommandModule(authority: authority),
                 new WorldExtensionsCommandModule(authority: authority),
-                new WorldGrantCommandModule(authority: authority, link: link),
-                new WorldGroupCommandModule(authority: authority, link: link),
+                new WorldGrantCommandModule(authority: authority),
+                new WorldGroupCommandModule(authority: authority),
                 new WorldLightingCommandModule(authority: authority),
-                new WorldLookCommandModule(authority: authority, link: link),
-                new WorldMachineCommandModule(authority: authority, link: link),
+                new WorldLookCommandModule(authority: authority),
+                new WorldMachineCommandModule(authority: authority),
                 new WorldNetworkCommandModule(authority: authority),
                 new WorldRowCommandModule(authority: authority, echoes: echoes, stepGuard: guard),
                 new WorldSculptCommandModule(authority: authority, echoes: echoes, stepGuard: guard),
-                new WorldStateCommandModule(authority: authority, echoes: echoes, link: link),
+                new WorldStateCommandModule(authority: authority, echoes: echoes),
                 new WorldTabletopCommandModule(authority: authority),
                 new WorldUpdateCommandModule(authority: authority),
             ]);

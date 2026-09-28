@@ -166,8 +166,7 @@ public sealed class ConsoleEchoGrammarCommandModuleTests {
             definition: (Fixtures.BuildDocument() with { Groups = groups })
         );
         var registry = new CommandRegistry(modules: [new WorldGroupCommandModule(
-                authority: new FakeConsoleAuthority(instance: row.Instance),
-                link: row.Instance.Link
+                authority: new FakeConsoleAuthority(instance: row.Instance)
             )]);
 
         var result = registry.Submit(line: "world.groups");
@@ -196,8 +195,7 @@ public sealed class ConsoleEchoGrammarCommandModuleTests {
             definition: Fixtures.BuildDocument()
         );
         var registry = new CommandRegistry(modules: [new WorldGroupCommandModule(
-                authority: new FakeConsoleAuthority(instance: row.Instance),
-                link: row.Instance.Link
+                authority: new FakeConsoleAuthority(instance: row.Instance)
             )]);
 
         var result = registry.Submit(line: "world.groups");
@@ -214,8 +212,7 @@ public sealed class ConsoleEchoGrammarCommandModuleTests {
             definition: Fixtures.BuildDocument()
         );
         var registry = new CommandRegistry(modules: [new WorldLookCommandModule(
-                authority: new FakeConsoleAuthority(instance: row.Instance),
-                link: row.Instance.Link
+                authority: new FakeConsoleAuthority(instance: row.Instance)
             )]);
 
         var result = registry.Submit(line: "world.population.spawn disc NaN 5");

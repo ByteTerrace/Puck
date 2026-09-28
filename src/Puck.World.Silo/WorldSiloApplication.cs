@@ -169,7 +169,6 @@ public static class WorldSiloApplication {
         builder.Services.AddSingleton<ICommandModule, SiloCommandModule>();
         builder.Services.AddSingleton<ICommandModule, WorldWaitCommandModule>();
         builder.Services.AddSingleton<ICommandModule, WorldNetworkCommandModule>();
-        builder.Services.AddSingleton<Puck.World.Protocol.IServerLink, SiloServerLink>();
         builder.Services.AddSingleton<Puck.World.Protocol.WorldDeferredVerbEchoes>();
         builder.Services.AddSingleton<ICommandModule, WorldStateCommandModule>();
         builder.Services.AddSingleton<ICommandModule, WorldExtensionsCommandModule>();
