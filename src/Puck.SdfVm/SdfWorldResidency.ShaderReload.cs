@@ -180,7 +180,7 @@ public sealed partial class SdfWorldResidency {
                 value: result
             );
         }
-        Console.Error.WriteLine(value: $"[world.shaders.reload: request={result.RequestId} {result.State} generation={result.Generation} pipelines={result.ChangedPipelines}{((result.Error is { } error)
+        Console.Error.WriteLine(value: $"[shaders.reload: request={result.RequestId} {result.State} generation={result.Generation} pipelines={result.ChangedPipelines}{((result.Error is { } error)
             ? $" error={error}"
             : "")}]");
     }

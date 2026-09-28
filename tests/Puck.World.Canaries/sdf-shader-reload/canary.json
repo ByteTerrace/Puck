@@ -20,8 +20,8 @@
       { "verb": "world.shaders.status", "occurrence": 1, "outcome": "accepted" }
     ],
     "expect": [
-      { "type": "line", "name": "applied-tree-installs-one-pipeline", "stream": "stderr", "match": "exact", "text": "[world.shaders.reload: request=1 applied generation=1 pipelines=1]" },
-      { "type": "line", "name": "foreign-tree-fails-and-keeps-the-generation", "stream": "stderr", "match": "contains", "text": "[world.shaders.reload: request=2 failed generation=1 pipelines=0 error=" },
+      { "type": "line", "name": "applied-tree-installs-one-pipeline", "stream": "stderr", "match": "exact", "text": "[shaders.reload: request=1 applied generation=1 pipelines=1]" },
+      { "type": "line", "name": "foreign-tree-fails-and-keeps-the-generation", "stream": "stderr", "match": "contains", "text": "[shaders.reload: request=2 failed generation=1 pipelines=0 error=" },
       { "type": "line", "name": "foreign-stamp-named", "stream": "stderr", "match": "contains", "text": "the module's pass block is 'passGroupIsa00000000'" },
       { "type": "line", "name": "status-reports-the-refusal", "stream": "stdout", "match": "contains", "text": "[world.shaders.status: request=2 state=failed generation=1 pipelines=0" }
     ]
@@ -36,8 +36,8 @@
       { "verb": "world.shaders.status", "occurrence": 1, "outcome": "accepted" }
     ],
     "expect": [
-      { "type": "line", "name": "foreign-tree-fails-first", "stream": "stderr", "match": "contains", "text": "[world.shaders.reload: request=1 failed generation=0 pipelines=0 error=" },
-      { "type": "line", "name": "applied-tree-installs-second", "stream": "stderr", "match": "exact", "text": "[world.shaders.reload: request=2 applied generation=1 pipelines=1]" }
+      { "type": "line", "name": "foreign-tree-fails-first", "stream": "stderr", "match": "contains", "text": "[shaders.reload: request=1 failed generation=0 pipelines=0 error=" },
+      { "type": "line", "name": "applied-tree-installs-second", "stream": "stderr", "match": "exact", "text": "[shaders.reload: request=2 applied generation=1 pipelines=1]" }
     ]
   }
 }

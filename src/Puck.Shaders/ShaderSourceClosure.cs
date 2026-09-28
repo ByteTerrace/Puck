@@ -328,6 +328,39 @@ public sealed partial class ShaderSourceClosure {
             value: (".." + Path.DirectorySeparatorChar)
         ));
     }
+    /// <summary>Returns a source's text with each include directive naming the path <paramref name="map"/> gives its
+    /// include instead, the include resolved as <see cref="Collect"/> resolves it (against the source's directory) and
+    /// every other character kept, so no line moves.</summary>
+    /// <param name="text">The source's text.</param>
+    /// <param name="path">The source's path, which a relative include resolves against.</param>
+    /// <param name="map">Maps an include's full path to the path the directive names instead.</param>
+    /// <returns>The text.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="text"/>, <paramref name="path"/> or
+    /// <paramref name="map"/> is <see langword="null"/>.</exception>
+    public static string WithIncludes(string text, string path, Func<string, string> map) {
+        ArgumentNullException.ThrowIfNull(argument: text);
+        ArgumentNullException.ThrowIfNull(argument: path);
+        ArgumentNullException.ThrowIfNull(argument: map);
+
+        var directory = (Path.GetDirectoryName(path: Path.GetFullPath(path: path)) ?? Environment.CurrentDirectory);
+
+        return IncludePattern().Replace(
+            evaluator: match => {
+                var include = match.Groups[1];
+                var start = (include.Index - match.Index);
+
+                return string.Concat(
+                    str0: match.Value.AsSpan(length: start, start: 0),
+                    str1: map(arg: Path.GetFullPath(path: Path.Combine(
+                        path1: directory,
+                        path2: include.Value
+                    ))),
+                    str2: match.Value.AsSpan(start: (start + include.Length))
+                );
+            },
+            input: text
+        );
+    }
 
     // Multiline: every include line is found, not only one that opens the file.
     [GeneratedRegex(pattern: @"^[ \t]*#[ \t]*include[ \t]*[<""]([^>""\r\n]+)[>""]", options: RegexOptions.Multiline)]

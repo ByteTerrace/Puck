@@ -43,7 +43,7 @@ status of `unchanged` means no kernel's bytecode changed — usually an edit in
 code that no shipped kernel compiles. A compile error fails the request with
 each error's file, line and column. The issuing text session's later lines wait
 for the request to settle, and its outcome prints on stderr
-(`[world.shaders.reload: request=N applied|unchanged|failed ...]`).
+(`[shaders.reload: request=N applied|unchanged|failed ...]`).
 
 `status` stays `pending` while the sources compile, the bytecode loads and the
 changed pipelines are created on the thread pool

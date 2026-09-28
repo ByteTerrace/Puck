@@ -193,10 +193,10 @@ public sealed partial class ShaderCompiler {
     }
     // Runs one step: its options, then the include directory, the output and the input. Every compile step's tool runs
     // here, so a run is counted here.
-    private async Task<ChildProcessResult> RunStepAsync(ShaderCompileStep step, string input, string output, string? includeDirectory, CancellationToken cancellationToken) {
+    private async Task<ChildProcessResult> RunStepAsync(ShaderCompileStep step, string input, string output, IReadOnlyList<string> includeDirectories, CancellationToken cancellationToken) {
         var args = new List<string>(collection: step.Options);
 
-        if (!string.IsNullOrWhiteSpace(value: includeDirectory)) { args.Add(item: ("-I" + includeDirectory)); }
+        foreach (var includeDirectory in includeDirectories) { args.Add(item: ("-I" + includeDirectory)); }
 
         args.AddRange(collection: ["-Fo", output, input]);
 
