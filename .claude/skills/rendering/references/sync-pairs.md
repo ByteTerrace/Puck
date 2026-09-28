@@ -46,7 +46,13 @@ the stamp the kernels' interfaces carry (`SdfIsaHlsl.Stamp`, the `passGroup`
 variable's name in `sdf-world.interface.hlsli` and `sdf-bricks.interface.hlsli`),
 so every kernel's bytecode reflects the instruction set it was compiled against,
 and a reload holds each changed kernel to the host's interface, stamp and
-bindings (`SdfKernelSet.InterfaceMismatch`). Host-side law tests
+bindings (`SdfKernelSet.InterfaceMismatch`). `SdfFieldDeviceLawTests`
+(`tests/Puck.World.Tests`, probe kernel `Assets/Shaders/sdf-field.comp.hlsl`)
+runs the interpreter on Vulkan and Direct3D 12 hardware against
+`SdfFieldEvaluator`, directly where it accepts a program and through an
+equivalent at each point for the refused warps and displacements its oracles
+describe; a new op the evaluator refuses gets an oracle there when one point
+has an equivalent. Host-side law tests
 (`PackEnvironmentLawTests`, `SdfViewsKernelVariantLawTests`,
 `WorldRenderEnvelopeLawTests`) pin only their C# half; `SdfFrameBlockLawTests`
 holds the frame block's writer to the generated offsets.

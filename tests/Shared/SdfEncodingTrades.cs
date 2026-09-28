@@ -38,15 +38,15 @@ internal static class SdfEncodingTrades {
     public static uint[] RigidLeafRotationXySwapped(SdfProgram program) {
         var words = program.Words.ToArray();
         var segmentOffset = SegmentDirectoryOf(program: program, words: words);
-        var segmentCount = (int)words[((segmentOffset * 4) + SdfProgram.SegmentCountLane)];
-        var planOffset = (int)words[((segmentOffset * 4) + SdfProgram.SegmentRigidPlanLane)];
+        var segmentCount = ((int)words[((segmentOffset * 4) + SdfProgram.SegmentCountLane)]);
+        var planOffset = ((int)words[((segmentOffset * 4) + SdfProgram.SegmentRigidPlanLane)]);
         var leaves = 0;
 
         for (var segment = 0; (segment < segmentCount); segment++) {
-            leaves += (int)words[(((planOffset + segment) * 4) + 1)];
+            leaves += ((int)words[(((planOffset + segment) * 4) + 1)]);
         }
         for (var leaf = 0; (leaf < leaves); leaf++) {
-            var rotation = (((planOffset + segmentCount) + (3 * leaf) + 1) * 4);
+            var rotation = ((((planOffset + segmentCount) + (3 * leaf)) + 1) * 4);
 
             (words[rotation], words[(rotation + 1)]) = (words[(rotation + 1)], words[rotation]);
         }
@@ -60,11 +60,11 @@ internal static class SdfEncodingTrades {
         var words = program.Words.ToArray();
 
         foreach (var instruction in program.Instructions.Where(predicate: static instruction => ((instruction.Op == SdfOp.ShapeBlend) && ((instruction.Shape & SdfProgram.ShapeTypeMask) == ((uint)SdfShapeType.Path))))) {
-            var table = (int)BitConverter.SingleToUInt32Bits(value: instruction.Data0.X);
-            var edges = (int)instruction.Data0.Y;
+            var table = ((int)BitConverter.SingleToUInt32Bits(value: instruction.Data0.X));
+            var edges = ((int)instruction.Data0.Y);
 
             for (var edge = 0; (edge < edges); edge++) {
-                var radii = ((table + (2 * edge) + 1) * 4);
+                var radii = (((table + (2 * edge)) + 1) * 4);
 
                 (words[radii], words[(radii + 1)]) = (words[(radii + 1)], words[radii]);
             }
