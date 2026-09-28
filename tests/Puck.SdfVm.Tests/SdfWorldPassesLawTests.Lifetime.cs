@@ -1,6 +1,5 @@
 using Puck.Abstractions.Gpu;
 using Puck.Hosting;
-using Puck.SignedDistance;
 using Puck.Testing;
 using Xunit;
 
@@ -9,13 +8,13 @@ namespace Puck.SdfVm.Tests;
 public sealed partial class SdfWorldPassesLawTests {
     [Fact]
     public void AFailedSynchronousLeaseAcquireReleasesEveryLeaseItTook() {
-        var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version);
+        var gpu = new FakeGpuDevice();
         var pipelines = SdfTestPipelines.Cache();
         using var residency = new SdfWorldResidency(
             brickPoolVoxelCapacity: 0,
             frameSource: new FixedFrameSource(frame: Frame()),
             height: Extent,
-            kernels: SdfTestPipelines.Kernels() with { Shadow = ReadOnlyMemory<byte>.Empty },
+            kernels: SdfTestPipelines.Kernels().With(bytecode: ReadOnlyMemory<byte>.Empty, kernel: SdfKernel.Shadow),
             name: "refused-leases",
             pipelines: pipelines,
             width: Extent
