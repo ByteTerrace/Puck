@@ -35,8 +35,8 @@ public sealed class SdfMeshLawTests {
     /// refused by name too.</summary>
     [Fact]
     public void AMeshOrARegionPastTheExactFloatRangeIsRefusedByName() {
-        Assert.Equal(expected: (SdfMesh.MaxTriangles - 1), actual: (int)(float)(SdfMesh.MaxTriangles - 1));
-        Assert.Equal(expected: SdfMeshRegion.MaxDraws, actual: (int)(float)SdfMeshRegion.MaxDraws);
+        Assert.Equal(actual: ((int)((float)(SdfMesh.MaxTriangles - 1))), expected: (SdfMesh.MaxTriangles - 1));
+        Assert.Equal(actual: ((int)((float)SdfMeshRegion.MaxDraws)), expected: SdfMeshRegion.MaxDraws);
 
         var indices = GC.AllocateUninitializedArray<uint>(length: (3 * (SdfMesh.MaxTriangles + 1)));
         var triangles = Assert.Throws<ArgumentException>(testCode: () => new SdfMesh(indices: indices, positions: Positions));
@@ -63,8 +63,11 @@ public sealed class SdfMeshLawTests {
     // A draw list that only counts: the region refuses it on its count before reading any draw.
     private sealed class CountedDraws(int count) : IReadOnlyList<SdfMeshDraw> {
         public int Count => count;
+
         public SdfMeshDraw this[int index] => throw new InvalidOperationException(message: "The count alone decides.");
+
         public IEnumerator<SdfMeshDraw> GetEnumerator() => throw new InvalidOperationException(message: "The count alone decides.");
+
         System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
 }

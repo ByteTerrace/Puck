@@ -18,11 +18,11 @@ public sealed partial class SdfShaderLayeringLawTests {
     [Fact]
     public void NoModuleDependsOnAHigherLayer() {
         var root = RepositoryPaths.Resolve(relativePath: SdfWorldInterfaces.KernelDirectory);
-        var files = Directory.EnumerateFiles(path: root, searchPattern: "*.hlsl*", searchOption: SearchOption.AllDirectories)
-            .Where(predicate: static path => (path.EndsWith(value: ".hlsl", comparisonType: StringComparison.Ordinal) || path.EndsWith(value: ".hlsli", comparisonType: StringComparison.Ordinal)))
+        var files = Directory.EnumerateFiles(path: root, searchOption: SearchOption.AllDirectories, searchPattern: "*.hlsl*")
+            .Where(predicate: static path => (path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".hlsl") || path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".hlsli")))
             .ToDictionary(
                 elementSelector: File.ReadAllText,
-                keySelector: path => Path.GetRelativePath(path: path, relativeTo: root).Replace(oldChar: '\\', newChar: '/'),
+                keySelector: path => Path.GetRelativePath(path: path, relativeTo: root).Replace(newChar: '/', oldChar: '\\'),
                 comparer: StringComparer.Ordinal
             );
 
@@ -154,9 +154,9 @@ public sealed partial class SdfShaderLayeringLawTests {
                         continue;
                     }
 
-                    var counted = paths.Where(predicate: declarer => !passMacros || (LayerOf(path: declarer) != (Layers.Length - 1))).ToArray();
+                    var counted = paths.Where(predicate: declarer => (!passMacros || (LayerOf(path: declarer) != (Layers.Length - 1)))).ToArray();
 
-                    if ((counted.Length > 0) && counted.All(predicate: declarer => (declarer != path) && (LayerOf(path: declarer) > layer))) {
+                    if ((counted.Length > 0) && counted.All(predicate: declarer => ((declarer != path) && (LayerOf(path: declarer) > layer)))) {
                         upward[symbol] = counted;
                     }
                 }
@@ -171,7 +171,7 @@ public sealed partial class SdfShaderLayeringLawTests {
     }
     // A source's layer, by the directory it sits in, or -1 when it sits in none.
     private static int LayerOf(string path) {
-        var slash = path.IndexOf(value: '/', comparisonType: StringComparison.Ordinal);
+        var slash = path.IndexOf(comparisonType: StringComparison.Ordinal, value: '/');
 
         return ((slash < 0)
             ? -1
@@ -434,8 +434,8 @@ public sealed partial class SdfShaderLayeringLawTests {
             return false;
         }
     }
-    private static bool IsIdentifier(string? token) => ((token is { Length: > 0 }) && (char.IsLetter(c: token[0]) || (token[0] == '_')));
 
+    private static bool IsIdentifier(string? token) => ((token is { Length: > 0 }) && (char.IsLetter(c: token[0]) || (token[0] == '_')));
     [GeneratedRegex(pattern: "//[^\\n]*|/\\*.*?\\*/", options: RegexOptions.Singleline)]
     private static partial Regex CommentPattern();
     [GeneratedRegex(pattern: "\\bfor\\s*\\(")]
