@@ -1,0 +1,25 @@
+# The engine ready first: its pipeline set installed and its first frame produced.
+world.wait ready 45
+world.cadence off
+world.wait 10
+# The scene with no grid at all: the capture a hidden grid must agree with.
+world.screenshot {run}/plain.png
+world.wait 10
+# The seat builds with a one-unit grid on a working plane at the platform's height.
+player.build
+world.grid pitch 1
+world.grid plane 1
+world.grid on
+world.wait 10
+world.screenshot {run}/plane.png
+world.wait 10
+# The grid on every surface: the floor, the platform, the ramp and the wall.
+world.grid surface
+world.wait 10
+world.screenshot {run}/surface.png
+world.wait 10
+# The grid hidden again.
+world.grid off
+world.wait 10
+world.screenshot {run}/off.png
+world.wait 10

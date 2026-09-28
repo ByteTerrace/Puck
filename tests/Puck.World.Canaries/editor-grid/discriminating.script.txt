@@ -1,0 +1,20 @@
+# The positive script without player.build: the seat plays, so the grid its verbs switch on never draws.
+world.wait ready 45
+world.cadence off
+world.wait 10
+world.screenshot {run}/plain.png
+world.wait 10
+world.grid pitch 1
+world.grid plane 1
+world.grid on
+world.wait 10
+world.screenshot {run}/plane.png
+world.wait 10
+world.grid surface
+world.wait 10
+world.screenshot {run}/surface.png
+world.wait 10
+world.grid off
+world.wait 10
+world.screenshot {run}/off.png
+world.wait 10
