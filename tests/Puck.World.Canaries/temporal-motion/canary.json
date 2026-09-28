@@ -1,0 +1,442 @@
+{
+  "id": "temporal-motion",
+  "title": "Visibility reprojection retains mesh and camera motion on the first edited render and settles on the next",
+  "binding": "The existing authored command scheduler submits a slab placement edit at tick 69 and a camera-anchor placement edit at tick 79. They apply on ticks 70 and 80 before those ticks arm captures. The still capture warms display encoding. Every moved region has more than 16 pixels of leftward correspondence, saturating the red motion channel to zero; green remains one half and valid blue is one. The following rendered frame has zero motion and red one half. The discriminating source captures one tick later, so both nonzero motion claims fail while settled claims hold. Schedule manifests and state exports are retained under each run.",
+  "bootShape": "offscreen",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
+  "timeoutSeconds": 60,
+  "positive": {
+    "world": "tests/Puck.World.Canaries/temporal-motion/fixture.puck",
+    "runSchedule": true,
+    "script": "capture.script.txt",
+    "commands": [
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.debug-view",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 1,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "imageRegion",
+        "name": "the-initial-mesh-is-still",
+        "capture": "state/captures/still~60.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.435,
+          0.447,
+          0.483,
+          0.54
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.49,
+          0.49,
+          0.99,
+          1
+        ],
+        "maximum": [
+          0.51,
+          0.51,
+          1,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "mesh-move-crosses-tiles",
+        "capture": "state/captures/moved~70.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.595,
+          0.447,
+          0.647,
+          0.54
+        ],
+        "reduce": "every",
+        "minimum": [
+          0,
+          0.49,
+          0.99,
+          1
+        ],
+        "maximum": [
+          0.01,
+          0.51,
+          1,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "mesh-history-settles",
+        "capture": "state/captures/settled~71.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.595,
+          0.447,
+          0.647,
+          0.54
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.49,
+          0.49,
+          0.99,
+          1
+        ],
+        "maximum": [
+          0.51,
+          0.51,
+          1,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "camera-pan-moves-mesh",
+        "capture": "state/captures/panned~80.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.712,
+          0.453,
+          0.769,
+          0.554
+        ],
+        "reduce": "every",
+        "minimum": [
+          0,
+          0.49,
+          0.99,
+          1
+        ],
+        "maximum": [
+          0.01,
+          0.51,
+          1,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "camera-pan-moves-static-sdf",
+        "capture": "state/captures/panned~80.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.388,
+          0.467,
+          0.456,
+          0.589
+        ],
+        "reduce": "every",
+        "minimum": [
+          0,
+          0.49,
+          0.99,
+          1
+        ],
+        "maximum": [
+          0.01,
+          0.51,
+          1,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "camera-history-settles",
+        "capture": "state/captures/panSettled~81.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.712,
+          0.453,
+          0.769,
+          0.554
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.49,
+          0.49,
+          0.99,
+          1
+        ],
+        "maximum": [
+          0.51,
+          0.51,
+          1,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/temporal-motion/discriminating.puck",
+    "runSchedule": true,
+    "script": "capture.script.txt",
+    "commands": [
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.debug-view",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 1,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "imageRegion",
+        "name": "the-initial-mesh-is-still",
+        "capture": "state/captures/still~60.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.435,
+          0.447,
+          0.483,
+          0.54
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.49,
+          0.49,
+          0.99,
+          1
+        ],
+        "maximum": [
+          0.51,
+          0.51,
+          1,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "mesh-move-crosses-tiles",
+        "capture": "state/captures/moved~71.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.595,
+          0.447,
+          0.647,
+          0.54
+        ],
+        "reduce": "every",
+        "minimum": [
+          0,
+          0.49,
+          0.99,
+          1
+        ],
+        "maximum": [
+          0.01,
+          0.51,
+          1,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "mesh-history-settles",
+        "capture": "state/captures/settled~72.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.595,
+          0.447,
+          0.647,
+          0.54
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.49,
+          0.49,
+          0.99,
+          1
+        ],
+        "maximum": [
+          0.51,
+          0.51,
+          1,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "camera-pan-moves-mesh",
+        "capture": "state/captures/panned~81.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.712,
+          0.453,
+          0.769,
+          0.554
+        ],
+        "reduce": "every",
+        "minimum": [
+          0,
+          0.49,
+          0.99,
+          1
+        ],
+        "maximum": [
+          0.01,
+          0.51,
+          1,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "camera-pan-moves-static-sdf",
+        "capture": "state/captures/panned~81.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.388,
+          0.467,
+          0.456,
+          0.589
+        ],
+        "reduce": "every",
+        "minimum": [
+          0,
+          0.49,
+          0.99,
+          1
+        ],
+        "maximum": [
+          0.01,
+          0.51,
+          1,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "camera-history-settles",
+        "capture": "state/captures/panSettled~82.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.712,
+          0.453,
+          0.769,
+          0.554
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.49,
+          0.49,
+          0.99,
+          1
+        ],
+        "maximum": [
+          0.51,
+          0.51,
+          1,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      }
+    ]
+  }
+}

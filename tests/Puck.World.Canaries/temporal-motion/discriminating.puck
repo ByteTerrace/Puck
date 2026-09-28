@@ -1,0 +1,199 @@
+// Exact-tick motion proof: the discriminating source captures one settled frame later.
+schema: "puck.world.definition.v1"
+documentId: "temporal-motion"
+
+cameras [
+  {
+    anchor: null
+    name: "mesh-cam"
+    renderHeight: 144
+    renderWidth: 256
+    rig {
+      name: "mesh-cam"
+      operations [
+        anchor(subject: placement(placementId: `camera-anchor`))
+        offset(value: [0, 2.5, 7], worldAxes: true)
+        lookAt(subject: placement(placementId: `camera-anchor`), targetOffset: [0, 0.8, 0], worldAxes: true)
+        fieldOfView(fieldOfViewRadians: 0.9)
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+]
+
+host {
+  authority: null
+  backend: auto
+  exitAfterSeconds: 0
+  fullscreen: false
+  genlock: null
+  height: 144
+  journalDepth: 2000
+  listen: null
+  presentMode: Immediate
+  presentation: offscreen
+  surfaceFormat: r8g8b8a8
+  targetHertz: 0
+  width: 256
+}
+
+placements {
+  placement "camera-anchor" {
+    prototype: "camera-anchor"
+    position [0, 0, 0]
+  }
+
+  placement "anchor" {
+    prototype: "anchor"
+    position [-2.5, 0, 0]
+  }
+
+  placement "slab" {
+    prototype: "slab"
+    position [-0.5, 0, 0]
+  }
+}
+
+prototypes {
+  prototype "camera-anchor" {
+    document {
+      name: "camera-anchor"
+      schema: "puck.creation.v1"
+      palette [{ color: "#FFFFFF" }]
+      shape Sphere "hidden" {
+        material: 0
+        position [0, -30, 0]
+        scale [0.01, 0.01, 0.01]
+      }
+    }
+  }
+
+  prototype "anchor" {
+    document {
+      name: "anchor"
+      palette [
+        {
+          color: "#8C7A5D"
+          roughness: 0.55
+          sheen: 0
+          specular: 0.25
+        }
+        {
+          color: "#3E8FB0"
+          roughness: 0.35
+          sheen: 0.15
+          specular: 0.4
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "base" {
+        chamfer: 0.2
+        material: 0
+        position [0, 0.6, 0]
+        scale [0.6, 0.6, 0.6]
+      }
+    }
+  }
+
+  prototype "slab" {
+    document {
+      name: "slab"
+      palette [
+        {
+          color: "#8C7A5D"
+          roughness: 0.55
+          sheen: 0
+          specular: 0.25
+        }
+        {
+          color: "#3E8FB0"
+          roughness: 0.35
+          sheen: 0.15
+          specular: 0.4
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Sphere "hidden" {
+        material: 0
+        position [0, -20, 0]
+        scale [0.05, 0.05, 0.05]
+      }
+    }
+    mesh {
+      indices [
+        0
+        1
+        2
+        0
+        2
+        3
+      ]
+      material: 1
+      vertices [
+        [-0.5, 0.3, 0]
+        [0.5, 0.3, 0]
+        [0.5, 1.3, 0]
+        [-0.5, 1.3, 0]
+      ]
+    }
+  }
+}
+
+simulation {
+  rateHz: 30
+}
+
+views {
+  layout "mesh" {
+    seatCount: 0
+    slots [
+      {
+        camera: "mesh-cam"
+        height: 1
+        width: 1
+        x: 0
+        y: 0
+      }
+    ]
+    transitionRenderScale: 1
+    transitionSeconds: 0
+  }
+
+  seatControl {
+    maxPitch: 1.2
+    minPitch: -0.35
+    yawReference: "World"
+  }
+
+  seatRig "mesh-seat" {
+    version: "puck.camera.program.v1"
+    operations [
+      orbit(distance: 5, pitch: 0.3, yaw: 0)
+      lookAt(subject: reference())
+      fieldOfView(fieldOfViewRadians: 0.9)
+    ]
+  }
+}
+
+
+grants [
+  { grantee: "seat1" capability: Mutate subject: "section:placements" }
+]
+
+schedule {
+  settleTicks: 4
+  rows [
+    { tick: 69 principal: "seat1" command: "world.row.set placements slab position [1.5,0,0]" }
+    { tick: 79 principal: "seat1" command: "world.row.set placements camera-anchor position [-1.5,0,0]" }
+  ]
+}
+
+captures {
+  rows [
+    { station: still ticks [60] instance: "world" palette [{ material: 0 color: "#FFFFFF" }] }
+    { station: moved ticks [71] instance: "world" palette [{ material: 0 color: "#FFFFFF" }] }
+    { station: settled ticks [72] instance: "world" palette [{ material: 0 color: "#FFFFFF" }] }
+    { station: panned ticks [81] instance: "world" palette [{ material: 0 color: "#FFFFFF" }] }
+    { station: panSettled ticks [82] instance: "world" palette [{ material: 0 color: "#FFFFFF" }] }
+  ]
+}
