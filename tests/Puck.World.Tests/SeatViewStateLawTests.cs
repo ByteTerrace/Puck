@@ -13,6 +13,22 @@ public sealed class SeatViewStateLawTests {
     /// intended behavior change from the deleted copy's own unclamped <c>1 - exp(-rate * dt)</c>, which moved
     /// backward away from the target for a negative rate instead of holding still.</summary>
     [Fact]
+    public void ExplicitRecenterCutsAnUnsmoothedCameraAndOrdinaryFramesDoNot() {
+        var state = new WorldSeatViewState();
+        var before = state.CutRevision;
+
+        state.Recenter();
+        Assert.True(condition: (state.CutRevision > before));
+        var cut = state.CutRevision;
+        var eye = Vector3.UnitZ;
+        var target = Vector3.Zero;
+
+        for (var frame = 0; (frame < 3); frame++) {
+            state.Follow(dynamics: SdfCameraDynamics.None, enabled: false, deltaSeconds: 0.1f, eye: ref eye, target: ref target);
+            Assert.Equal(expected: cut, actual: state.CutRevision);
+        }
+    }
+    [Fact]
     public void Follow_NegativeRate_HoldsTheLiveYawExactly() {
         var state = new WorldSeatViewState();
 

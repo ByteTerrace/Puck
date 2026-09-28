@@ -4,6 +4,9 @@ namespace Puck.Shaders;
 
 // The capture of the published output: a surface format read back as it is, any other image through the display encode.
 public sealed partial class ShaderPipelineRenderNode {
+    /// <summary>Polls a pending capture against the last published image without rendering another sample.</summary>
+    public void PollCapture() => CaptureIfPending();
+
     // A capture armed after a selection reads that selection: while its preview builds, the published image is still the
     // previous selection's, so the capture waits for the frame that publishes the new one. A published image no surface
     // carries (a float working image) is captured through the display encode's SDR, which waits while its pipeline

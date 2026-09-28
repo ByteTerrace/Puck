@@ -966,11 +966,15 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             condition: m_disposed,
             instance: this
         );
+        if ((request.Converge > 0) && ((m_producers[index] is not null) || (m_sources[index] is not null))) {
+            throw new InvalidOperationException(message: "A convergence capture requires a rendered graph instance.");
+        }
         m_capture.Arm(
             pendingPath: PendingCapturePath,
             request: request
         );
         m_captureInstance = index;
+        BeginConvergence(captured: index, request: request);
     }
 
     /// <inheritdoc/>
@@ -1029,7 +1033,10 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     /// history.</exception>
     /// <exception cref="ArgumentOutOfRangeException">A root or footprint fraction, or the budget, is out of
     /// range.</exception>
-    public Surface ProduceFrame(in RenderGraphFrame frame, in FrameContext context) {
+    public Surface ProduceFrame(in RenderGraphFrame frame, in FrameContext context) =>
+        ProduceFrameCore(frame: in frame, context: ConvergenceContext(context: in context));
+
+    private Surface ProduceFrameCore(in RenderGraphFrame frame, in FrameContext context) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
@@ -1059,10 +1066,24 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         m_unproduced = 0;
 
         var renders = schedule.Renders;
+        var holdingConvergence = ((m_convergence is { Converge: > 0, Completion.IsCompleted: false } request) &&
+            (m_convergenceFrames >= request.Converge) &&
+            (m_nodes[m_captureInstance]?.PendingCapturePath == request.Path));
 
         for (var position = 0; (position < renders.Count); position++) {
             var index = renders[position];
             var row = schedule.Instances[index];
+
+            // The display encoder may still be building after the last requested sample. Keep the contributing
+            // images alive until readback completes; another render would silently capture a later jitter sample.
+            if (holdingConvergence && m_convergenceInstances.Contains(item: index)) {
+                if (index == m_captureInstance) {
+                    m_nodes[index]?.PollCapture();
+                }
+                m_unproduced++;
+                schedule.Next.Withdraw(index: index, previous: prior);
+                continue;
+            }
 
             // An external producer submits through its own ring, at the scheduled extent, before its consumers render. A
             // capture of it moves to it first, and it serves the capture from the next frame it produces. A render it
@@ -1156,6 +1177,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             // UnservedCaptureReasonOf explains it.
             if (
                 (index == m_captureInstance) &&
+                CanServeConvergence &&
                 node.IsReady &&
                 (m_standInReads[index] is null) &&
                 (m_taintedReads[index] is null)
@@ -1187,6 +1209,11 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 continue;
             }
 
+            if ((index == m_captureInstance) && IsConverging(index: index) &&
+                (m_standInReads[index] is null) && (m_taintedReads[index] is null)) {
+                m_convergenceFrames++;
+            }
+
             m_previous[index] = m_current[index];
             m_current[index] = new Output(
                 Buffer: node.LatestOutputBuffer(),
@@ -1206,7 +1233,6 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
         return RootImage();
     }
-
     // The root's latest completed image: a graph root's output, or an external root's latest output, whose acquisition is
     // released at once, since the surface is valid only until the next frame, the first time the producer can replace it.
     private Surface RootImage() {

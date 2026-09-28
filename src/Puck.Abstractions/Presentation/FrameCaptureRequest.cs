@@ -22,7 +22,10 @@ public sealed class FrameCaptureRequest {
 
     /// <summary>Creates an unserved request. The caller owns directory creation and path policy.</summary>
     /// <param name="path">The PNG path.</param>
-    public FrameCaptureRequest(string path) {
+    /// <param name="converge">The number of frozen rendered samples to capture; zero captures the next frame normally.</param>
+    public FrameCaptureRequest(string path, int converge = 0) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: converge);
+        Converge = converge;
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         Path = path;
     }
@@ -32,6 +35,8 @@ public sealed class FrameCaptureRequest {
     public Task<FrameCaptureResult> Completion => m_completion.Task;
     /// <summary>Gets the requested PNG path.</summary>
     public string Path { get; }
+    /// <summary>Gets the number of frozen samples requested, or zero for an ordinary capture.</summary>
+    public int Converge { get; }
 
     /// <summary>Refuses an unserved request: a renderer being disposed, or the requester withdrawing a capture it
     /// will no longer wait for, which a <see cref="CaptureRequestSlot"/> still holding it then drops. A write that

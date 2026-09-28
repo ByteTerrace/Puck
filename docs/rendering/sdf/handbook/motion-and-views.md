@@ -124,12 +124,31 @@ greater depth. The pass block carries the camera's own near plane
 from that plane but never nearer than `SdfFrameBlock.MinimumNear`
 (`SdfFrameBlock.NearOf`, `SDF_MINIMUM_NEAR` in the kernels): every surface
 march starts where its ray crosses it, and the mesh pass clips there. Normalized device coordinates put +Y
-up, a view's UV origin is its top-left corner, and each sample is a pixel
-center with no jitter. `RayParameter` turns a depth back into the distance
+up and a view's UV origin is its top-left corner. Ordinary rendering samples
+the pixel center. A capture with a positive `converge` count samples a repeating
+eight-position Halton (2, 3) sequence whose first position is the center.
+`ViewProjection.Jitter` carries the offset in normalized device coordinates;
+the SDF pass block carries it in render pixels, with positive Y down.
+The shared viewport lens applies the same offset to mesh projection and SDF
+rays. `RayParameter` turns a depth back into the distance
 the march records, measured along the normalized ray through the sample. The
 previous frame's transforms ride beside the current ones; a view without a
 usable history carries its own matrices as the previous ones and so reports
-no motion. Nothing renders through these matrices yet.
+no motion. The mesh pass uses the same projection convention.
+
+A scheduled capture's `converge: N` holds presentation at the armed tick's
+first composition and captures the Nth rendered sample. Presentation time,
+animation poses, camera followers and frame values remain fixed, and the
+presentation interval is zero. Only the view's sample index advances.
+A capture can request up to 256 samples; zero retains ordinary capture behavior.
+The `temporal-jitter` canary checks the center and offset samples repeating
+after eight renders on each backend. Color reconstruction is not enabled yet.
+
+Each instance keeps its own history epoch. A camera cut, resolved-view change
+(including a follow in place), output extent or render ceiling change, debug
+mode change, sampling switch, or discontinuity in the residency's consumed
+frames resets the sample count. Resetting changes CPU state without clearing
+or reallocating GPU storage.
 
 ## Views are render-graph instances
 

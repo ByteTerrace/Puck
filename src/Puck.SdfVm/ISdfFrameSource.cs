@@ -4,6 +4,9 @@ namespace Puck.SdfVm;
 
 /// <summary>Supplies scene, view, transform, and optional auxiliary content for each SDF render frame.</summary>
 public interface ISdfFrameSource {
+    /// <summary>Holds presentation at the capture's first composition until its request completes.</summary>
+    /// <param name="request">The converging capture, whose completion releases the hold.</param>
+    void BeginConvergence(Puck.Abstractions.Presentation.FrameCaptureRequest request) { }
     /// <summary>Drops any device-owned resources held outside the main engine. The next produced frame rebuilds them
     /// against the replacement device. Default no-op for CPU-only frame sources.</summary>
     void NotifyDeviceLost() { }

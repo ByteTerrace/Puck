@@ -247,6 +247,12 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
             width: width
         );
 
+        var temporal = m_owner.TemporalOf(
+            instance: m_context.Instance, view: m_view, width: width, height: height, debug: tables.PassValues.DebugMode
+        );
+
+        SdfFrameBlock.WriteTemporal(block: recording.PassBlock, jitter: temporal.Jitter, historyFrames: temporal.Frames);
+
         SdfFrameBlock.WriteWorkCounterRow(
             block: recording.PassBlock,
             row: WorkCountersOf(recording: in recording).Row

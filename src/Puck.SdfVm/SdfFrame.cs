@@ -11,6 +11,9 @@ namespace Puck.SdfVm;
 /// <param name="Region">The view's normalized display region, which sizes its output when no host asks for an
 /// extent (the render graph's scheduled extent).</param>
 public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedRect Region) {
+    /// <summary>The camera's cut revision, moved when its framing is reseeded or a layout slot changes its source.</summary>
+    public long CutRevision { get; init; }
+
     /// <summary>The view's render scale in (0, 1]: the fraction of its region's extent its output renders at when no
     /// host asks for an extent (the render graph's scheduled extent); a host placing the output reconstructs
     /// it into the region. 1 (the default) renders native. Presentation-only: hosts drop it during camera transitions

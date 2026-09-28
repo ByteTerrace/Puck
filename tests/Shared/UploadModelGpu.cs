@@ -220,7 +220,7 @@ internal sealed class UploadModelGpu :
     void IGpuBindings.DestroyPool(nint poolHandle) { }
     void IGpuBindings.DestroySampler(nint samplerHandle) { }
     void IGpuBindings.WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride) => m_bindings[(descriptorSetHandle, binding)] = bufferHandle;
-    void IGpuBindings.WriteConstantBuffer(nint descriptorSetHandle, uint binding, uint arrayElement, nint bufferHandle, ulong bufferSize) { }
+    void IGpuBindings.WriteConstantBuffer(nint descriptorSetHandle, uint binding, uint arrayElement, nint bufferHandle, ulong bufferSize) => m_bindings[(descriptorSetHandle, binding)] = bufferHandle;
     void IGpuBindings.WriteSampledImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) { }
     void IGpuBindings.WriteSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint samplerHandle) { }
     void IGpuBindings.WriteStorageImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) { }

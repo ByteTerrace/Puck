@@ -48,6 +48,10 @@ public static class SdfWorldPackage {
     /// <summary>The pass-group value holding the off-axis frustum's tangent-space center offset, zero for a symmetric
     /// camera (<c>float2</c>).</summary>
     public const string FrustumOffset = "frustumOffset";
+    /// <summary>The ray offset in render pixels, with positive Y down (<c>float2</c>).</summary>
+    public const string Jitter = "jitter";
+    /// <summary>The number of preceding rendered samples in the current history epoch (<c>uint</c>).</summary>
+    public const string HistoryFrames = "historyFrames";
     /// <summary>The pass-group value holding the forward distance of the view camera's own near plane, in world units,
     /// zero for a camera whose image begins at its eye (<c>float</c>).</summary>
     public const string NearDistance = "nearDistance";
@@ -257,6 +261,8 @@ public static class SdfWorldPackage {
         Value(name: TanHalfFieldOfView, type: ShaderValueType.Float),
         Value(name: AspectRatio, type: ShaderValueType.Float),
         Value(name: FrustumOffset, type: ShaderValueType.Float2),
+        Value(name: Jitter, type: ShaderValueType.Float2),
+        Value(name: HistoryFrames, type: ShaderValueType.Uint),
         Value(name: NearDistance, type: ShaderValueType.Float),
         Value(name: FarDistance, type: ShaderValueType.Float),
         Value(name: DebugMode, type: ShaderValueType.Uint),

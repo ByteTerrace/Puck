@@ -68,6 +68,10 @@
               "null"
             ],
             "default": null
+          },
+          "converge": {
+            "description": "The number of frozen presentation frames to compose at the armed tick before capturing; zero captures normally. A positive count resets each contributing view\u0027s temporal history and advances only its sample index.",
+            "type": "integer"
           }
         },
         "required": [

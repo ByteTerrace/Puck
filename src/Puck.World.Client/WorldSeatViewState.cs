@@ -25,7 +25,23 @@ public sealed class WorldSeatViewState {
 
     private float m_pitch;
     private float m_yaw;
+    private long m_cutRevision;
+    private long m_observedBoomCut;
+    private long m_observedRigRevision;
 
+    /// <summary>Gets the camera cut revision, including a replaced authored rig and an explicit recenter.</summary>
+    public long CutRevision {
+        get {
+            lock (m_gate) {
+                if ((m_observedBoomCut != m_boom.CutRevision) || (m_observedRigRevision != m_rigCache.Revision)) {
+                    m_observedBoomCut = m_boom.CutRevision;
+                    m_observedRigRevision = m_rigCache.Revision;
+                    m_cutRevision++;
+                }
+                return m_cutRevision;
+            }
+        }
+    }
     public float Pitch { get { lock (m_gate) { return m_pitch; } } }
     public float Yaw { get { lock (m_gate) { return m_yaw; } } }
 
@@ -135,7 +151,7 @@ public sealed class WorldSeatViewState {
                     eye: ref eye,
                     target: ref target
                 );
-            } else {
+            } else if (m_boom.Seeded) {
                 m_boom.Reseed();
             }
         }
