@@ -19,16 +19,17 @@ namespace Puck.World;
 /// (<see cref="WorldSeatAuthorityRouter"/>): a seat that crossed into another world reads that world's document and
 /// submits through that world's own link, whose admission names its verdict, and never touches the world it left. A
 /// seat's selection (its current placement, its reference, the height its plane followed) belongs to the world it was
-/// made in and does not cross with it. A slot with no route edits the world the console addresses. Every verb here is
-/// bindable; the engine's build page binds them.</para></summary>
+/// made in and does not cross with it. A slot with no route edits the world the console addresses, through that
+/// instance's own link. Every verb here is bindable; the engine's build page binds them.</para>
+/// <para>Placement edits run through one <see cref="WorldEditorEditQueue"/> per world activation, keyed by the world's
+/// authority and <see cref="WorldDocumentVersion.Activation"/> and retired with the world's link.</para></summary>
 /// <param name="seats">Each seat's editor state.</param>
 /// <param name="authority">Resolves the world a command addresses when its slot has no route.</param>
-/// <param name="link">The link placement edits in the console's world are submitted over.</param>
 /// <param name="echoes">Publishes each submitted edit's deferred verdict.</param>
 /// <param name="stepGuard">The per-tick-window row claim every row-editing door shares.</param>
 /// <param name="seatRouter">Each seat's authority route, so a seat's edits follow it into the world it is presented in;
 /// <see langword="null"/> on a host whose seats never leave the console's world.</param>
-public sealed partial class WorldEditorCommandModule(WorldEditorSeats seats, IWorldConsoleAuthority authority, IServerLink link, WorldDeferredVerbEchoes echoes, WorldRowStepWindowGuard stepGuard, WorldSeatAuthorityRouter? seatRouter = null) : ICommandModule {
+public sealed partial class WorldEditorCommandModule(WorldEditorSeats seats, IWorldConsoleAuthority authority, WorldDeferredVerbEchoes echoes, WorldRowStepWindowGuard stepGuard, WorldSeatAuthorityRouter? seatRouter = null) : ICommandModule {
     /// <summary>The verb that moves a seat's grid.</summary>
     public const string GridCommand = "world.grid";
     /// <summary>The finest grid pitch <c>world.grid pitch down</c> reaches, in world units.</summary>
@@ -38,11 +39,12 @@ public sealed partial class WorldEditorCommandModule(WorldEditorSeats seats, IWo
     /// <summary>The verb that moves a seat's snapping.</summary>
     public const string SnapCommand = "world.snap";
 
-    // The world a verb edits: its instance name as the seat's route names it, its document as this host sees it, the
-    // link an edit is submitted through, the input window an edit targets, and the guard its console's other row-editing
-    // doors claim rows in, which only the console's own world has: a routed world's rows are edited here by this module
-    // alone, one edit in flight per placement.
-    private readonly record struct EditWorld(string Name, WorldDefinition Definition, IServerLink Link, ulong Window, WorldRowStepWindowGuard? Guard);
+    // The world a verb edits: its name as the seat's route names it, the authority identity it answers as, its document
+    // and that document's version as this host last saw them, the read of whatever it delivers next, the link an edit is
+    // submitted through, the token cancelled when that link's world goes away, the mirror its documents arrive on (none
+    // for the console's own world, whose live document is read directly), the input window an edit targets, and the guard
+    // its console's other row-editing doors claim rows in, which only the console's own world has.
+    private readonly record struct EditWorld(string Name, string Authority, WorldDefinition Definition, WorldDocumentVersion Version, Func<WorldDeliveredDocument> Delivered, IServerLink Link, CancellationToken Lifetime, WorldSessionMirror? Mirror, ulong Window, WorldRowStepWindowGuard? Guard);
 
     private static string Format(float value) => value.ToString(
         format: "0.####",
@@ -104,24 +106,37 @@ public sealed partial class WorldEditorCommandModule(WorldEditorSeats seats, IWo
             !string.Equals(a: route.Endpoint.Identity, b: instance.Name, comparisonType: StringComparison.Ordinal)
         ) {
             var endpoint = route.Endpoint;
+            var document = endpoint.Mirror.Document;
 
             world = new EditWorld(
-                Definition: endpoint.Definition,
+                Authority: route.Entity.Authority,
+                Definition: document.Definition,
+                Delivered: () => endpoint.Mirror.Document,
                 Guard: null,
+                Lifetime: endpoint.Retired,
                 Link: endpoint.Submissions,
+                Mirror: endpoint.Mirror,
                 Name: endpoint.Identity,
+                Version: document.Version,
                 Window: endpoint.NextInputTick
             );
 
             return true;
         }
 
+        var server = instance.Server;
+
         world = new EditWorld(
-            Definition: instance.Server.Definition,
+            Authority: server.AuthorityIdentity,
+            Definition: server.Definition,
+            Delivered: () => new WorldDeliveredDocument(Definition: server.Definition, Version: server.DocumentVersion),
             Guard: stepGuard,
-            Link: link,
+            Lifetime: instance.Retired,
+            Link: (instance.ConsoleLink ?? instance.Link),
+            Mirror: null,
             Name: instance.Name,
-            Window: instance.Server.NextInputTick
+            Version: server.DocumentVersion,
+            Window: server.NextInputTick
         );
 
         return true;

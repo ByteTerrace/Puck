@@ -542,6 +542,10 @@ public static class WorldPeerWireFormat {
                         )
                         : (WorldDurableWatermark?)null
                     );
+                    var version = new WorldDocumentVersion(
+                        Activation: reader.ReadGuid(),
+                        Sequence: reader.ReadInt64()
+                    );
 
                     if (!reader.TryFinish(failure: out var wireFailure)) {
                         result = null;
@@ -595,7 +599,8 @@ public static class WorldPeerWireFormat {
                         DurableWatermark: watermark,
                         OperationId: operationId,
                         PayloadDigest: payloadDigest,
-                        PersistenceStatus: persistence
+                        PersistenceStatus: persistence,
+                        Version: version
                     );
 
                     if (!outcome.IsValid) {
@@ -773,6 +778,8 @@ public static class WorldPeerWireFormat {
                             }
                             writer.WriteUInt64(value: watermark.Tick);
                         }
+                        writer.WriteGuid(value: mutation.Outcome.Version.Activation);
+                        writer.WriteInt64(value: mutation.Outcome.Version.Sequence);
 
                         return WriteDownstreamAsync(
                             body: writer.WrittenMemory,

@@ -773,7 +773,8 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
                             body: frame.Body.Span,
                             definition: out var definition,
                             tier: out var definitionTier,
-                            failure: out var definitionFailure
+                            failure: out var definitionFailure,
+                            version: out var definitionVersion
                         ) ||
                             (definition is null)
                         ) {
@@ -801,7 +802,10 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
                             location: ref m_definition,
                             value: definition
                         );
-                        sink.DeliverDefinition(definition: definition);
+                        sink.DeliverDefinition(
+                            definition: definition,
+                            version: definitionVersion
+                        );
                         break;
                     }
                 case WorldFederationResponse.Snapshot: {

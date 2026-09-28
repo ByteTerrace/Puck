@@ -393,7 +393,7 @@ public sealed class ObserverDisclosureLawTests {
 
         public void DeliverAnswer(in QueryAnswer answer) { }
         public void DeliverComposition(WorldComposition composition) { }
-        public void DeliverDefinition(WorldDefinition definition) { }
+        public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) { }
         public void DeliverSessionLever(WorldSessionLever lever) { }
         public void DeliverSnapshot(in WorldSnapshot snapshot) {
             var entries = snapshot.Entries.Span;
@@ -407,6 +407,6 @@ public sealed class ObserverDisclosureLawTests {
             LastTick = snapshot.Tick;
             LastAuthority = snapshot.Authority;
         }
-        public void DeliverState(WorldDefinition definition, in WorldStateStamp stamp) { }
+        public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) { }
     }
 }

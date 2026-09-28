@@ -72,7 +72,7 @@ public sealed class SeatRouteDeliveryLawTests {
             identity: "boot",
             nextInputTick: static () => 2UL,
             observe: sink => {
-                sink.DeliverDefinition(definition: local);
+                sink.DeliverDefinition(definition: local, version: default);
                 sink.DeliverSnapshot(snapshot: Snapshot(
                     authority: "boot",
                     tick: 1UL
@@ -90,7 +90,7 @@ public sealed class SeatRouteDeliveryLawTests {
             nextInputTick: static () => 6UL,
             observe: sink => {
                 remoteSink = sink;
-                sink.DeliverDefinition(definition: remote);
+                sink.DeliverDefinition(definition: remote, version: default);
                 sink.DeliverSnapshot(snapshot: Snapshot(
                     authority: "north",
                     tick: 5UL
@@ -145,7 +145,8 @@ public sealed class SeatRouteDeliveryLawTests {
                 Everything: false,
                 MovedRows: new[] { 0 },
                 Tick: 5UL
-            )
+            ),
+            version: default
         );
 
         var readsBefore = Reads(mirror: routed);

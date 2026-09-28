@@ -811,10 +811,10 @@ public sealed class SessionObservationLawTests {
     private sealed class FaultingSink : IClientSink {
         public void DeliverAnswer(in QueryAnswer answer) => throw new InvalidOperationException(message: "faulting observer");
         public void DeliverComposition(WorldComposition composition) => throw new InvalidOperationException(message: "faulting observer");
-        public void DeliverDefinition(WorldDefinition definition) => throw new InvalidOperationException(message: "faulting observer");
+        public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) => throw new InvalidOperationException(message: "faulting observer");
         public void DeliverSessionLever(WorldSessionLever lever) => throw new InvalidOperationException(message: "faulting observer");
         public void DeliverSnapshot(in WorldSnapshot snapshot) => throw new InvalidOperationException(message: "faulting observer");
-        public void DeliverState(WorldDefinition definition, in WorldStateStamp stamp) => throw new InvalidOperationException(message: "faulting observer");
+        public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) => throw new InvalidOperationException(message: "faulting observer");
     }
     // A sink that, on its first tick delivery (its attach primer is not a fan-out), tries to observe the same world as a
     // session from inside the delivery.
@@ -829,7 +829,7 @@ public sealed class SessionObservationLawTests {
         }
         public void DeliverComposition(WorldComposition composition) {
         }
-        public void DeliverDefinition(WorldDefinition definition) {
+        public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) {
         }
         public void DeliverSessionLever(WorldSessionLever lever) {
         }
@@ -852,7 +852,7 @@ public sealed class SessionObservationLawTests {
             );
             Refusal = refusal;
         }
-        public void DeliverState(WorldDefinition definition, in WorldStateStamp stamp) {
+        public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) {
         }
     }
     // An observer that takes its attach primer, then throws on the first tick it is delivered.
@@ -863,7 +863,7 @@ public sealed class SessionObservationLawTests {
         }
         public void DeliverComposition(WorldComposition composition) {
         }
-        public void DeliverDefinition(WorldDefinition definition) {
+        public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) {
         }
         public void DeliverSessionLever(WorldSessionLever lever) {
         }
@@ -872,7 +872,7 @@ public sealed class SessionObservationLawTests {
                 throw new InvalidOperationException(message: "faulting observer");
             }
         }
-        public void DeliverState(WorldDefinition definition, in WorldStateStamp stamp) {
+        public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) {
         }
     }
     // An observer that takes its attach primer, then throws on the next definition it is delivered.
@@ -883,7 +883,7 @@ public sealed class SessionObservationLawTests {
         }
         public void DeliverComposition(WorldComposition composition) {
         }
-        public void DeliverDefinition(WorldDefinition definition) {
+        public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) {
             if (++m_definitions > 1) {
                 throw new InvalidOperationException(message: "faulting observer");
             }
@@ -892,7 +892,7 @@ public sealed class SessionObservationLawTests {
         }
         public void DeliverSnapshot(in WorldSnapshot snapshot) {
         }
-        public void DeliverState(WorldDefinition definition, in WorldStateStamp stamp) {
+        public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) {
         }
     }
 }

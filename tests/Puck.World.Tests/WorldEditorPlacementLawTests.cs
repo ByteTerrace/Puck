@@ -18,9 +18,10 @@ namespace Puck.World.Tests;
 /// surface-resting place, which needs the presentation's static field.
 /// </summary>
 public sealed class WorldEditorPlacementLawTests {
-    private sealed class FakeConsoleAuthority(WorldInstance instance) : IWorldConsoleAuthority {
+    // Resolves whichever instance the console addresses now, so a law can stop one and start another under its name.
+    private sealed class FakeConsoleAuthority(Func<WorldInstance> instance) : IWorldConsoleAuthority {
         public bool TryResolve(CommandContext context, out WorldInstance resolved, out string refusal) {
-            resolved = instance;
+            resolved = instance();
             refusal = string.Empty;
 
             return true;
@@ -51,11 +52,10 @@ public sealed class WorldEditorPlacementLawTests {
             name: "boot"
         );
     }
-    internal static CommandRegistry BuildRegistry(HostRow row, WorldEditorSeats seats, WorldSeatAuthorityRouter? routes = null, WorldDeferredVerbEchoes? echoes = null) => new(modules: [
+    internal static CommandRegistry BuildRegistry(HostRow row, WorldEditorSeats seats, WorldSeatAuthorityRouter? routes = null, WorldDeferredVerbEchoes? echoes = null, Func<WorldInstance>? console = null) => new(modules: [
         new WorldEditorCommandModule(
-            authority: new FakeConsoleAuthority(instance: row.Instance),
+            authority: new FakeConsoleAuthority(instance: (console ?? (() => row.Instance))),
             echoes: (echoes ?? new WorldDeferredVerbEchoes()),
-            link: row.Instance.Link,
             seats: seats,
             seatRouter: routes,
             stepGuard: new WorldRowStepWindowGuard()
@@ -206,10 +206,10 @@ public sealed class WorldEditorPlacementLawTests {
         Assert.Equal(actual: ((Vector3)awayLink.Placement(index: 0).Position), expected: (AwayCrate + step));
 
         // The first applies, and the queued edit goes next: the crate lands at base + 3 steps, not base + 1.
-        awayLink.Complete(index: 0, result: RecordingLink.Applied);
+        awayLink.Complete(index: 0, result: awayLink.Applied());
         Assert.Equal(actual: awayLink.Submitted.Count, expected: 2);
         Assert.Equal(actual: ((Vector3)awayLink.Placement(index: 1).Position), expected: (AwayCrate + (3f * step)));
-        awayLink.Complete(index: 1, result: RecordingLink.Applied);
+        awayLink.Complete(index: 1, result: awayLink.Applied());
         Assert.Equal(actual: awayLink.Submitted.Count, expected: 2);
 
         // Two more; the world refuses the one in flight: the one queued on it is dropped, and the crate rolls back to

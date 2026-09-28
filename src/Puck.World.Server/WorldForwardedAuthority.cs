@@ -273,7 +273,8 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
             Look: server.Population.LookIndex(index: bodyIndex),
             CatalogRig: server.Population.CatalogRig(index: bodyIndex),
             PlacementId: server.Population.InhabitantPlacementId(index: bodyIndex),
-            Definition: server.Definition
+            Definition: server.Definition,
+            Version: server.DocumentVersion
         );
     }
     /// <summary>Releases the held-input lease this arm owns and refuses further intent publication. Release and

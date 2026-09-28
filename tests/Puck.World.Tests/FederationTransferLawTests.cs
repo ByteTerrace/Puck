@@ -2143,16 +2143,13 @@ public sealed partial class FederationTransferLawTests {
                 ),
                 angle: FixedQ4816.FromDouble(value: 1.75)
             ),
-            BodyColor: new Vector3(
-                x: 0.25f,
-                y: 0.5f,
-                z: 0.75f
-            ),
+            BodyColor: new Vector3(x: 0.25f, y: 0.5f, z: 0.75f),
             Kit: 0,
             Look: 0,
             CatalogRig: 71,
             PlacementId: "traveler-shell",
-            Definition: Fixtures.BuildDocument()
+            Definition: Fixtures.BuildDocument(),
+            Version: new WorldDocumentVersion(Activation: Guid.NewGuid(), Sequence: 42L)
         );
 
         var encoded = WorldFederationCodec.EncodeRoute(
@@ -2182,6 +2179,7 @@ public sealed partial class FederationTransferLawTests {
             expected: expected.Tick,
             actual: actual.Tick
         );
+        Assert.Equal(actual: actual.Version, expected: expected.Version);
         Assert.Equal(
             expected: expected.Position,
             actual: actual.Position

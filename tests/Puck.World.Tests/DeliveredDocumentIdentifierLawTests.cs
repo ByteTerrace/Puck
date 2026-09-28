@@ -27,11 +27,13 @@ public sealed class DeliveredDocumentIdentifierLawTests {
                     authority: "127.0.0.1:5000",
                     definition: live,
                     revision: 3,
-                    tier: tier
+                    tier: tier,
+                    version: default
                 ),
                 definition: out var delivered,
                 tier: out var decodedTier,
-                failure: out var failure
+                failure: out var failure,
+                version: out _
             ),
             $"{tier} delivery refused: {failure.Detail}"
         );
@@ -147,17 +149,11 @@ public sealed class DeliveredDocumentIdentifierLawTests {
         );
         var literal = WorldProjection.Serialize(projection: projection!);
 
-        static byte[] Leaf(byte[] payload) {
-            var body = new byte[(payload.Length + 1)];
-
-            body[0] = ((byte)WorldDisclosureTier.Presentation);
-            payload.CopyTo(
-                array: body,
-                index: 1
-            );
-
-            return body;
-        }
+        static byte[] Leaf(byte[] payload) => WorldFederationCodec.DocumentLeaf(
+            payload: payload,
+            tier: WorldDisclosureTier.Presentation,
+            version: default
+        );
 
         var referencing = Encoding.UTF8.GetBytes(s: Encoding.UTF8.GetString(bytes: literal).Replace(
             comparisonType: StringComparison.Ordinal,
@@ -171,13 +167,15 @@ public sealed class DeliveredDocumentIdentifierLawTests {
                 body: Leaf(payload: referencing),
                 definition: out _,
                 tier: out _,
-                failure: out _
+                failure: out _,
+                version: out _
             ),
             controlOutcome: () => WorldFederationCodec.TryDecodeDocument(
                 body: Leaf(payload: literal),
                 definition: out _,
                 tier: out _,
-                failure: out _
+                failure: out _,
+                version: out _
             )
         );
     }

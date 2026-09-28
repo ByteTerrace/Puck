@@ -126,7 +126,16 @@ removal, transform, or draw-site fire—the client stores the fresh
 definition for state reads and recompiles nothing). A state delivery carries a
 `WorldStateStamp`: the tick and engine tick the values hold as of, and the
 catalog ordinals of the rows whose values moved, whose memory is the sender's
-and valid only for the call. `IWorldStateView.cs` is the state half of the
+and valid only for the call. Both deliveries carry the definition's
+`WorldDocumentVersion`: the activation the server minted when it was built and
+the install it reflects, one more at every install of a new live definition.
+A mutation verdict carries the version it applied at (or was refused against),
+so a reader orders a verdict against a delivered document exactly, whichever
+arrives first: a document at or past a verdict's version reflects that edit.
+`WorldSessionMirror` publishes a delivered definition and its version as one
+`WorldDeliveredDocument` and raises `DocumentDelivered` after each delivery.
+The version is delivery metadata; no hash, checkpoint or replay reads it.
+`IWorldStateView.cs` is the state half of the
 presentation view: the narrow reader, one cell by row ordinal, that the state
 mirror reads every presentation read of state through. `WorldStateMirror.cs` is
 that mirror, a flat slot table refreshed from each delivery's stamp, and

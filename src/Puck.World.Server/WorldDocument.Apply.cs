@@ -945,7 +945,7 @@ public sealed partial class WorldDocument {
     // document-only.
     internal void Install(WorldDefinition definition, bool rebuildPopulation, WorldRuleCompilation? compilation = null, StateArena? arena = null) {
         m_pendingDefinitionDelivery = true;
-        m_definition = definition;
+        AdoptDefinition(definition: definition);
         Host.InputHold.Reconfigure(settings: definition.CompiledInputHold);
         definition = Host.RecompileRules(arena: arena, compilation: compilation, definition: definition);
         // Unconditional, like RecompileRules above: a group/member count is capacity-bounded, so a full resync costs
@@ -1028,7 +1028,7 @@ public sealed partial class WorldDocument {
     private readonly List<WorldPeerEventEntry> m_inhabitCountDisconnected = [];
 
     private void InstallRuntimeStateValue(WorldDefinition definition, WorldMutation mutation, StateArena? arena = null) {
-        m_definition = definition;
+        AdoptDefinition(definition: definition);
         // A state-value install is a fresh seed of the arena: ordinary rows enter through the import door, while a
         // pool candidate arrives as the already-validated typed replacement prepared before commit.
         if (arena is null) {
@@ -1937,7 +1937,7 @@ public sealed partial class WorldDocument {
         // during its own attach primer must not take down whoever called AttachSink, and is detached before it ever
         // reaches an ordinary tick delivery.
         try {
-            sink.DeliverDefinition(definition: m_definition);
+            sink.DeliverDefinition(definition: m_definition, version: Host.DocumentVersion);
 
             var primer = BuildPrimerSnapshot();
 

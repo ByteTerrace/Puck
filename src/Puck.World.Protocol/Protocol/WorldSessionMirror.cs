@@ -41,7 +41,7 @@ public sealed class WorldSessionMirror : IClientSink {
     // The bounded entity table uses the same schema ceiling as the client. Appearance-catalog size is unrelated.
     private const int EntityCapacity = WorldBodiesLimits.CapacityCeiling;
 
-    private WorldDefinition m_definition;
+    private WorldDeliveredDocument m_document;
     private int m_definitionRevision;
 
     // The rows state deliveries moved since the presentation last followed them: written by the delivering thread,
@@ -122,7 +122,10 @@ public sealed class WorldSessionMirror : IClientSink {
     public WorldSessionMirror(WorldDefinition placeholder) {
         ArgumentNullException.ThrowIfNull(argument: placeholder);
 
-        m_definition = placeholder;
+        m_document = new WorldDeliveredDocument(
+            Definition: placeholder,
+            Version: default
+        );
         m_stateView = new WorldDocumentStateView(definition: () => Definition);
         m_kitColliders = CompileColliders(definition: placeholder);
         m_kitBodyContacts = CompileBodyContacts(definition: placeholder);
@@ -133,11 +136,18 @@ public sealed class WorldSessionMirror : IClientSink {
         }
     }
 
+    /// <summary>Raised on the delivering thread after each delivered definition or state is published as
+    /// <see cref="Document"/>, with the version it carries.</summary>
+    public event Action<WorldDocumentVersion>? DocumentDelivered;
+
     /// <summary>The authority named by the latest delivered snapshot.</summary>
     public string Authority => Volatile.Read(location: ref m_authority);
     /// <summary>The destination's live world definition — the boot/attach definition until a later mutation batch or
     /// swap delivers a new one.</summary>
-    public WorldDefinition Definition => Volatile.Read(location: ref m_definition);
+    public WorldDefinition Definition => Document.Definition;
+    /// <summary>The destination's live world definition together with its version, published as one pair: a
+    /// placeholder carries <see langword="default"/> until the first delivery.</summary>
+    public WorldDeliveredDocument Document => Volatile.Read(location: ref m_document);
     /// <summary>The monotonic definition-delivery counter — bumped each time the destination delivers a new
     /// definition, the rebuild-watch component <c>WorldSessionSceneEmitter</c> reads.</summary>
     public int DefinitionRevision => Volatile.Read(location: ref m_definitionRevision);
@@ -293,6 +303,25 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <summary>The entity's latest-tick render position (the other interpolation endpoint).</summary>
     /// <param name="index">The 0-based entity index.</param>
     public Vector3 CurrentPosition(int index) => m_currentPosition[index];
+
+    // Publishes a delivered definition and its version as one pair; the same pair delivered again is kept, so a
+    // repeated delivery allocates nothing.
+    private void Publish(WorldDefinition definition, WorldDocumentVersion version) {
+        var current = Volatile.Read(location: ref m_document);
+
+        if (ReferenceEquals(objA: current.Definition, objB: definition) && (current.Version == version)) {
+            return;
+        }
+
+        Volatile.Write(
+            location: ref m_document,
+            value: new WorldDeliveredDocument(
+                Definition: definition,
+                Version: version
+            )
+        );
+    }
+
     /// <inheritdoc/>
     public void DeliverAnswer(in QueryAnswer answer) {
         // The mirror drives no console — nothing here ever queries the destination.
@@ -302,7 +331,7 @@ public sealed class WorldSessionMirror : IClientSink {
         // No window composer observes a destination through this seam.
     }
     /// <inheritdoc/>
-    public void DeliverDefinition(WorldDefinition definition) {
+    public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         Volatile.Write(
@@ -313,11 +342,12 @@ public sealed class WorldSessionMirror : IClientSink {
             location: ref m_kitBodyContacts,
             value: CompileBodyContacts(definition: definition)
         );
-        Volatile.Write(
-            location: ref m_definition,
-            value: definition
+        Publish(
+            definition: definition,
+            version: version
         );
         _ = Interlocked.Increment(location: ref m_definitionRevision);
+        DocumentDelivered?.Invoke(obj: version);
     }
     /// <inheritdoc/>
     public void DeliverSessionLever(WorldSessionLever lever) {
@@ -471,17 +501,18 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <inheritdoc/>
     /// <remarks>The stamp's moved rows are kept until <see cref="FollowState"/> takes them, so the presentation reads
     /// only the bound slots of rows that moved.</remarks>
-    public void DeliverState(WorldDefinition definition, in WorldStateStamp stamp) {
+    public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         // A value-only mutation cannot have changed a kit's collider or body-contact mode: publish the fresh
         // definition for state-value reads without recompiling either table or bumping the rebuild-watch revision.
         // The definition publishes before its rows are noted, so a follower that takes a row reads a definition at
         // least as new as the delivery that moved it.
-        Volatile.Write(
-            location: ref m_definition,
-            value: definition
+        Publish(
+            definition: definition,
+            version: version
         );
+        DocumentDelivered?.Invoke(obj: version);
 
         lock (m_stampGate) {
             if (stamp.Everything) {
@@ -617,7 +648,7 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <param name="index">The 0-based entity index.</param>
     /// <returns>The entity's look row.</returns>
     public WorldLook Look(int index) => WorldDefinitionRows.ResolveLook(
-        rows: m_definition.Looks,
+        rows: Definition.Looks,
         index: m_look[index]
     );
     /// <summary>The entity's previous-tick render attitude (one interpolation endpoint).</summary>
@@ -655,7 +686,10 @@ public sealed class WorldSessionMirror : IClientSink {
         }
 
         lock (m_snapshotWriteGate) {
-            DeliverDefinition(definition: route.Definition);
+            DeliverDefinition(
+                definition: route.Definition,
+                version: route.Version
+            );
             _ = Interlocked.Increment(location: ref m_snapshotSequence);
             var position = route.Position.ToVector3();
             var orientation = route.Orientation.ToQuaternion();

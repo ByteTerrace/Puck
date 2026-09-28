@@ -16,7 +16,9 @@ public interface IClientSink {
     /// swap — the client stores it and bumps its definition revision so the frame source re-reads the scene/screens
     /// and every shape-derived table recompiles on its next rebuild.</summary>
     /// <param name="definition">The world definition now live on the server.</param>
-    void DeliverDefinition(WorldDefinition definition);
+    /// <param name="version">The version of <paramref name="definition"/>: the server's activation and the install it
+    /// reflects, which a reader orders mutation verdicts against.</param>
+    void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version);
     /// <summary>Delivers the server's live world definition after an applied mutation batch that changed only cell
     /// values — a cell write, removal, transform, or draw-site fire, never a row/channel/register/HUD shape (the
     /// same state-mutation test the server's own installer used to decide the mutation touched values only). The
@@ -24,9 +26,10 @@ public interface IClientSink {
     /// bumping the definition-delivery revision or recompiling anything <see cref="DeliverDefinition"/>
     /// would.</summary>
     /// <param name="definition">The world definition now live on the server.</param>
+    /// <param name="version">The version of <paramref name="definition"/>, as <see cref="DeliverDefinition"/> carries it.</param>
     /// <param name="stamp">The tick the values hold as of and the rows whose values moved since the previous
     /// delivery.</param>
-    void DeliverState(WorldDefinition definition, in WorldStateStamp stamp);
+    void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp);
     /// <summary>Delivers an accepted LIVE window-composition override for the client to apply to its composer (the
     /// <c>view.override layout</c>/<c>view.override camera</c> path).</summary>
     /// <param name="composition">The composition override.</param>

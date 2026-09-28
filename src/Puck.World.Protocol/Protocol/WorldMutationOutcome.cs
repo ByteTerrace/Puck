@@ -70,6 +70,8 @@ public readonly record struct WorldMutationBinding(Guid OperationId, Principal A
 /// <param name="AffectedGroupRevision">The affected group's revision, when this operation changes membership.</param>
 /// <param name="PersistenceStatus">Durability state independent of <paramref name="Decision"/>.</param>
 /// <param name="DurableWatermark">The durable journal watermark, when available.</param>
+/// <param name="Version">The version of the live document the operation was decided against: for an applied operation,
+/// the document its install produced; for a refused one, the document live when it was refused.</param>
 public readonly record struct WorldMutationOutcome(
     Guid OperationId,
     Principal Actor,
@@ -79,7 +81,8 @@ public readonly record struct WorldMutationOutcome(
     string Detail,
     long? AffectedGroupRevision,
     WorldMutationPersistenceStatus PersistenceStatus,
-    WorldDurableWatermark? DurableWatermark
+    WorldDurableWatermark? DurableWatermark,
+    WorldDocumentVersion Version
 ) {
     /// <summary>Gets whether the mutation was applied.</summary>
     public bool Applied => (Decision == WorldMutationDecision.Applied);
@@ -100,12 +103,15 @@ public readonly record struct WorldMutationOutcome(
         ((AffectedGroupRevision is null) || (AffectedGroupRevision.Value >= 0)) &&
         ((PersistenceStatus is not (WorldMutationPersistenceStatus.Durable)) || (DurableWatermark is { IsValid: true })) &&
         ((PersistenceStatus is not (WorldMutationPersistenceStatus.NotRequested or WorldMutationPersistenceStatus.Pending)) || (DurableWatermark is null)) &&
-        ((DurableWatermark is null) || DurableWatermark.Value.IsValid));
+        ((DurableWatermark is null) || DurableWatermark.Value.IsValid) &&
+        Version.IsDelivered &&
+        (Version.Sequence >= 0L));
     /// <summary>Gets whether the mutation was refused.</summary>
     public bool Refused => (Decision == WorldMutationDecision.Refused);
 
     private static WorldMutationOutcome Create(
         WorldMutationBinding binding,
+        WorldDocumentVersion version,
         WorldMutationDecision decision,
         string code,
         string detail,
@@ -135,7 +141,9 @@ public readonly record struct WorldMutationOutcome(
             (affectedGroupRevision is < 0) ||
             (durableWatermark is { IsValid: false }) ||
             ((persistenceStatus == WorldMutationPersistenceStatus.Durable) && (durableWatermark is null)) ||
-            ((persistenceStatus is WorldMutationPersistenceStatus.NotRequested or WorldMutationPersistenceStatus.Pending) && (durableWatermark is not null))
+            ((persistenceStatus is WorldMutationPersistenceStatus.NotRequested or WorldMutationPersistenceStatus.Pending) && (durableWatermark is not null)) ||
+            !version.IsDelivered ||
+            (version.Sequence < 0L)
         ) {
             throw new ArgumentException(
                 message: "Outcome durability and revision facts are malformed.",
@@ -152,13 +160,15 @@ public readonly record struct WorldMutationOutcome(
             (detail ?? string.Empty),
             affectedGroupRevision,
             persistenceStatus,
-            durableWatermark
+            durableWatermark,
+            version
         );
     }
 
     /// <summary>Builds an applied outcome.</summary>
     public static WorldMutationOutcome AppliedOutcome(
         WorldMutationBinding binding,
+        WorldDocumentVersion version,
         string code,
         string detail = "",
         long? affectedGroupRevision = null,
@@ -171,11 +181,13 @@ public readonly record struct WorldMutationOutcome(
         decision: WorldMutationDecision.Applied,
         detail: detail,
         durableWatermark: durableWatermark,
-        persistenceStatus: persistenceStatus
+        persistenceStatus: persistenceStatus,
+        version: version
     );
     /// <summary>Builds a refused outcome. Refusal remains the decision even when its receipt is durable.</summary>
     public static WorldMutationOutcome RefusedOutcome(
         WorldMutationBinding binding,
+        WorldDocumentVersion version,
         string code,
         string detail,
         long? affectedGroupRevision = null,
@@ -188,7 +200,8 @@ public readonly record struct WorldMutationOutcome(
         decision: WorldMutationDecision.Refused,
         detail: detail,
         durableWatermark: durableWatermark,
-        persistenceStatus: persistenceStatus
+        persistenceStatus: persistenceStatus,
+        version: version
     );
 }
 /// <summary>Computes the immutable actor-plus-canonical-mutation binding for an envelope.</summary>

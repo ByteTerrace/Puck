@@ -6,7 +6,8 @@ namespace Puck.World.Server;
 
 /// <summary>The complete observable head of a committed traveler route. A forwarding chain returns the final
 /// writer's address, clock, and pose in one answer so input and presentation can advance to the same authority
-/// epoch without an inactive-body interval.</summary>
+/// epoch without an inactive-body interval. <paramref name="Definition"/> is delivered with <paramref name="Version"/>, the
+/// version the final writer installed it at.</summary>
 public readonly record struct WorldAuthorityRouteDescription(
     string Endpoint,
     WorldEntityAddress Entity,
@@ -18,5 +19,6 @@ public readonly record struct WorldAuthorityRouteDescription(
     byte Look,
     byte CatalogRig,
     string? PlacementId,
-    WorldDefinition Definition
+    WorldDefinition Definition,
+    WorldDocumentVersion Version
 );

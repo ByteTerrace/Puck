@@ -11,13 +11,17 @@ public sealed partial class WorldDocument {
     internal void DeliverPending() {
         if (m_pendingDefinitionDelivery) {
             Host.ForgetMovedRows();
-            Host.Output.DeliverDefinition(definition: m_definition);
+            Host.Output.DeliverDefinition(
+                definition: m_definition,
+                version: Host.DocumentVersion
+            );
         } else if (m_pendingStateDelivery) {
             var stamp = Host.TakeStateStamp();
 
             Host.Output.DeliverState(
                 definition: m_definition,
-                stamp: in stamp
+                stamp: in stamp,
+                version: Host.DocumentVersion
             );
             Host.ForgetMovedRows();
         }

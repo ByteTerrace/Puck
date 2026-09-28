@@ -180,25 +180,31 @@ public sealed partial class WorldOutputHub {
     /// <summary>Fans the live world definition out to every typed subscriber (once per step with at least one applied
     /// edit, or a definition swap). A faulting sink is isolated and detached — see the class remarks.</summary>
     /// <param name="definition">The definition now live on the server.</param>
-    public void DeliverDefinition(WorldDefinition definition) =>
+    /// <param name="version">The version of <paramref name="definition"/>.</param>
+    public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) =>
         Deliver(
             callSite: nameof(DeliverDefinition),
-            deliver: static (sink, payload) => sink.DeliverDefinition(definition: payload),
-            payload: definition
+            deliver: static (sink, payload) => sink.DeliverDefinition(
+                definition: payload.Definition,
+                version: payload.Version
+            ),
+            payload: (Definition: definition, Version: version)
         );
     /// <summary>Fans the live world definition out to every typed subscriber after a value-only mutation (see
     /// <see cref="IClientSink.DeliverState"/>). A faulting sink is isolated and detached — see the class
     /// remarks.</summary>
     /// <param name="definition">The definition now live on the server.</param>
+    /// <param name="version">The version of <paramref name="definition"/>.</param>
     /// <param name="stamp">The tick the values hold as of and the rows whose values moved.</param>
-    public void DeliverState(WorldDefinition definition, in WorldStateStamp stamp) =>
+    public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) =>
         Deliver(
             callSite: nameof(DeliverState),
             deliver: static (sink, payload) => sink.DeliverState(
                 definition: payload.Definition,
-                stamp: payload.Stamp
+                stamp: payload.Stamp,
+                version: payload.Version
             ),
-            payload: (Definition: definition, Stamp: stamp)
+            payload: (Definition: definition, Stamp: stamp, Version: version)
         );
     /// <summary>Fans an accepted live session lever out to every typed subscriber. A faulting sink is isolated and
     /// detached — see the class remarks.</summary>

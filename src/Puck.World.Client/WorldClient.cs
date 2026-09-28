@@ -43,6 +43,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     // applied mutation batch or a swap. The frame source re-reads scene/screens from this behind the revision check.
     private WorldDefinition m_definition;
     private int m_definitionRevision;
+    private WorldDocumentVersion m_documentVersion;
 
     // The field rows a snapshot's field-cell writes moved, handed to the state mirror.
     private readonly int[] m_movedFields = new int[WorldFieldCapacity.MaxFields];
@@ -74,6 +75,8 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     /// <summary>The monotonic definition-delivery counter — bumped each time the server delivers a new definition. The
     /// frame source watches it to know a scene/screen change landed (distinct from a population/roster change).</summary>
     public int DefinitionRevision => m_definitionRevision;
+    /// <summary>The version of the latest delivered definition, or <see langword="default"/> before the first delivery.</summary>
+    public WorldDocumentVersion DocumentVersion => m_documentVersion;
     /// <summary>The client seat table.</summary>
     public PlayerRoster Roster => m_roster;
     /// <summary>Gets the static-scene query field, or <see langword="null"/> when none is resolved.</summary>
@@ -776,12 +779,13 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         }
     }
     /// <inheritdoc/>
-    public void DeliverDefinition(WorldDefinition definition) {
+    public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         // Store the live definition and bump the delivery revision (one component of WriteRevision), so the frame source rebuilds
         // its program and re-reads scene/screens on its next capture. Poses still flow only through snapshots.
         m_definition = definition;
+        m_documentVersion = version;
         m_channels = WorldChannelTable.Compile(channels: definition.Channels);
         m_targets = WorldTargetRegisterTable.Compile(
             registers: definition.TargetRegisters,
@@ -922,10 +926,11 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     /// <remarks>A value-only mutation cannot have changed channels, target registers, or scene shape: the fresh
     /// definition is stored for state-value reads without bumping the frame source's rebuild-watch revision, and the
     /// state mirror refreshes the slots bound to the rows the stamp names.</remarks>
-    public void DeliverState(WorldDefinition definition, in WorldStateStamp stamp) {
+    public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         m_definition = definition;
+        m_documentVersion = version;
         m_stateMirror.Refresh(stamp: in stamp);
     }
     /// <summary>The complete durable address of the active occupant in a local slot.</summary>

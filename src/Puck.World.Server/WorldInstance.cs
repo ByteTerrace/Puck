@@ -17,6 +17,8 @@ public sealed class WorldInstance : IDisposable {
     private readonly IDisposable? m_ownedAdjacencies;
     private readonly WorldPeerNetwork? m_ownedNetwork;
 
+    private readonly CancellationTokenSource m_retired = new();
+
     /// <summary>Initializes one running instance's held graph.</summary>
     /// <param name="name">The console-facing instance name, unique among running instances.</param>
     /// <param name="origin">Reads the document path this instance currently answers for. A delegate rather than a
@@ -94,6 +96,9 @@ public sealed class WorldInstance : IDisposable {
     public bool IsPaused { get; set; }
     /// <summary>This instance's own transport — see this type's constructor remarks.</summary>
     public IServerLink Link { get; }
+    /// <summary>Cancelled when this instance is disposed (stopped or reaped): its server steps no more, and nothing
+    /// submitted to it is answered afterwards.</summary>
+    public CancellationToken Retired => m_retired.Token;
     /// <summary>The link a console submits this row's lines through, which registers each in the console's table so its
     /// verdict answers and counts, or <see langword="null"/> when the host keeps no console table for the row; a
     /// console then submits through <see cref="Link"/>, registering nothing.</summary>
@@ -142,6 +147,11 @@ public sealed class WorldInstance : IDisposable {
     /// <summary>Disposes what this instance owns. A no-op for a boot instance, whose machine host belongs to the
     /// container and outlives any retirement of the entry.</summary>
     public void Dispose() {
+        // Cancelled, never disposed, so a late reader of Retired still gets the cancelled token.
+        if (!m_retired.IsCancellationRequested) {
+            m_retired.Cancel();
+        }
+
         m_ownedAdjacencies?.Dispose();
         OwnedMachines?.Dispose();
         Door?.Dispose();

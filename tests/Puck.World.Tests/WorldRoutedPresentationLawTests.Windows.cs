@@ -146,7 +146,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
 
         var retained = frame.Environment.Lanes.ToArray();
 
-        north.Mirror.DeliverDefinition(definition: AwayDocument());
+        north.Mirror.DeliverDefinition(definition: AwayDocument(), version: default);
         _ = Capture(source: scene.FrameSource);
         var changed = Capture(source: scene.FrameSource);
 

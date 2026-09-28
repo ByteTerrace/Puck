@@ -50,7 +50,10 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         }
 
         m_withheld = false;
-        inner.DeliverDefinition(definition: Disclose(definition: server.Definition)!);
+        inner.DeliverDefinition(
+            definition: Disclose(definition: server.Definition)!,
+            version: server.DocumentVersion
+        );
     }
 
     /// <summary>Discloses a definition as this session's tier shows it — see
@@ -112,14 +115,17 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     }
     public void DeliverComposition(WorldComposition composition) {
     }
-    public void DeliverDefinition(WorldDefinition definition) {
+    public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) {
         if (!Discloses()) {
             return;
         }
 
         Forward(deliver: () => {
             m_withheld = false;
-            inner.DeliverDefinition(definition: Disclose(definition: definition)!);
+            inner.DeliverDefinition(
+                definition: Disclose(definition: definition)!,
+                version: version
+            );
         });
     }
     public void DeliverSessionLever(WorldSessionLever lever) {
@@ -145,7 +151,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     }
     // A projection renumbers the rows it keeps, so a state stamp's row ordinals name the authority's rows, not the
     // projection's: below Replica the observer takes the whole disclosed definition instead.
-    public void DeliverState(WorldDefinition definition, in WorldStateStamp stamp) {
+    public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) {
         if (!Discloses()) {
             return;
         }
@@ -158,14 +164,18 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
                 (Tier != WorldDisclosureTier.Replica)
             ) {
                 m_withheld = false;
-                inner.DeliverDefinition(definition: Disclose(definition: definition)!);
+                inner.DeliverDefinition(
+                    definition: Disclose(definition: definition)!,
+                    version: version
+                );
 
                 return;
             }
 
             inner.DeliverState(
                 definition: definition,
-                stamp: in copy
+                stamp: in copy,
+                version: version
             );
         });
     }

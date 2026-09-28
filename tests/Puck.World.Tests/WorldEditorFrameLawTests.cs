@@ -265,7 +265,6 @@ public sealed class WorldEditorFrameLawTests {
             new WorldEditorCommandModule(
                 authority: new FakeConsoleAuthority(instance: row.Instance),
                 echoes: new WorldDeferredVerbEchoes(),
-                link: row.Instance.Link,
                 seatRouter: routes,
                 seats: seats,
                 stepGuard: new WorldRowStepWindowGuard()

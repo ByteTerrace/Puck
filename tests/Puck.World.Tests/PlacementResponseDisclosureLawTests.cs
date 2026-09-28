@@ -69,14 +69,16 @@ public sealed class PlacementResponseDisclosureLawTests {
             definition: fixture.Server.Definition,
             recipient: recipient,
             revision: 1,
-            tier: WorldDisclosureTier.Presentation
+            tier: WorldDisclosureTier.Presentation,
+            version: default
         );
 
         Assert.True(condition: WorldFederationCodec.TryDecodeDocument(
             body: bytes,
             definition: out var served,
             failure: out var failure,
-            tier: out _
+            tier: out _,
+            version: out _
         ), userMessage: $"the served document did not decode: {failure}");
 
         return served!.Placements;

@@ -141,7 +141,7 @@ public sealed partial class FederationTransferLawTests {
             Assert.True(condition: WorldProjection.TryDeserialize(
                 projection: out var projection,
                 reason: out var reason,
-                utf8Json: frame.Body.Span[1..]
+                utf8Json: frame.Body.Span[WorldFederationCodec.DocumentHeaderBytes..]
             ), userMessage: reason);
 
             return projection!;

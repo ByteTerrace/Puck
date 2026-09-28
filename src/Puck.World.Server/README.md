@@ -98,7 +98,12 @@ typed completions (`WorldSubmissionResult`); its `Mutation` case carries a
 and payload, independent of a `WorldMutationPersistenceStatus`
 (`NotRequested`/`Pending`/`Durable`/`RecoveryRequired`) and, once durable, a
 `WorldDurableWatermark` naming the covering root publication, checkpoint, and
-journal sequence. Deliveries fan out through
+journal sequence. Every outcome also carries the `WorldDocumentVersion` of
+the live document it was decided against: the install an applied mutation
+produced, or the document a refusal met. `WorldServer.DocumentVersion` is that
+version: an activation minted per server and the install ordinal
+`WorldDocument.AdoptDefinition` moves forward at every install. Deliveries
+fan out through
 `WorldOutputHub.cs`, which supports multiple subscribed sinks. A sink's live
 definition delivery is `DeliverDefinition` after a shape change or
 `DeliverState` after a value-only write—see `Puck.World.Protocol`'s

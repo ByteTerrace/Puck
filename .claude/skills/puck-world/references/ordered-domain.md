@@ -174,6 +174,8 @@ rejection and on stdout for an acceptance.
   `Submit`), so the transport never names `WorldServer`.
 - `IClientSink` — 6 deliveries: `DeliverSnapshot`, `DeliverAnswer`,
   `DeliverDefinition` (a shape change), `DeliverState` (a value-only write),
+  both carrying the definition's `WorldDocumentVersion` (activation plus install
+  ordinal, also on every `WorldMutationOutcome`),
   `DeliverComposition`, `DeliverSessionLever`.
 - `AttachSink` is a subscribe (multi-sink via `WorldOutputHub`, with a primer
   snapshot to the newly attached sink only).

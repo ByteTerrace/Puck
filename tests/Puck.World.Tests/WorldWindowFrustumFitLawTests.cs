@@ -566,7 +566,7 @@ public sealed class WorldWindowFrustumFitLawTests {
 
         client.DeliverDefinition(definition: (client.Definition with {
             SpawnPointsRaw = [.. spawns.Select(selector: static spawn => (spawn with { Position = (((Vector3)spawn.Position) + new Vector3(x: 4f, y: 0f, z: 0f)) }))],
-        }));
+        }), version: default);
 
         var (after, afterWindow) = Dress();
 

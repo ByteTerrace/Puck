@@ -67,16 +67,6 @@ public sealed partial class WorldEditorCommandModule {
 
         return (snapped with { Y = ((below is { Normal.Y: > RestingNormalY } ground) ? ground.Point.Y : point.Y) });
     }
-    // The creation's name and the first number no placement takes, delivered or held by an edit (IsTaken).
-    private string MintId(EditWorld world, string prototype) {
-        for (var n = 1; ; n++) {
-            var id = $"{prototype}{n}";
-
-            if (!IsTaken(id: id, world: world)) {
-                return id;
-            }
-        }
-    }
     private SnapReference? ReferenceFor(WorldDefinition definition, string world, int slot, Vector3 pitch, string? excluding) => (
         ((seats.ReferenceOf(slot: slot, world: world) is { } id) &&
         !string.Equals(a: id, b: excluding, comparisonType: StringComparison.Ordinal) &&
@@ -84,27 +74,35 @@ public sealed partial class WorldEditorCommandModule {
             ? WorldEditorGeometry.ReferenceOf(definition: definition, pitch: pitch, placement: placement)
             : null
     );
-    // The placement a nudge or turn acts on, as the seat last edited it (LatestOf): the named one, else the seat's
-    // current one; refused when its position is resolved through something else (a parent, an attachment, a board),
-    // which is what to move instead.
-    private bool TryTarget(EditWorld world, int slot, string? named, string verb, out WorldPlacement placement, out CommandResult refusal) {
-        placement = null!;
+    // The placement a nudge or turn acts on: the named one, else the seat's current one there.
+    private bool TryTargetId(EditWorld world, int slot, string? named, string verb, out string id, out CommandResult refusal) {
         refusal = CommandResult.None;
 
-        if ((named ?? seats.CurrentOf(slot: slot, world: world.Name)) is not { } id) {
-            refusal = CommandResult.Error(output: $"[{verb}: seat {PlayerRoster.DisplayNumber(slot: slot)} has no current placement; name one]");
+        if ((named ?? seats.CurrentOf(slot: slot, world: world.Name)) is { } found) {
+            id = found;
 
-            return false;
+            return true;
         }
 
-        if (LatestOf(id: id, world: world) is not { } found) {
+        id = string.Empty;
+        refusal = CommandResult.Error(output: $"[{verb}: seat {PlayerRoster.DisplayNumber(slot: slot)} has no current placement; name one]");
+
+        return false;
+    }
+    // Whether a nudge or turn may act on its base (the placement as its line holds it): refused when there is none, and
+    // when its position is resolved through something else (a parent, an attachment, a board), which is what to move
+    // instead.
+    private static bool TryMovable(EditWorld world, string id, WorldPlacement? basis, string verb, out CommandResult refusal) {
+        refusal = CommandResult.None;
+
+        if (basis is null) {
             refusal = CommandResult.Error(output: $"[{verb}: no placement '{id}' in '{world.Name}']");
 
             return false;
         }
 
         if (
-            (found.Position.Reference is not null) ||
+            (basis.Position.Reference is not null) ||
             ((WorldDefinitionRows.FindPlacement(id: id, placements: world.Definition.Placements) is { } delivered) &&
             (WorldDefinitionRows.ResolvedPosition(definition: world.Definition, placement: delivered) != ((Vector3)delivered.Position)))
         ) {
@@ -113,9 +111,26 @@ public sealed partial class WorldEditorCommandModule {
             return false;
         }
 
-        placement = found;
-
         return true;
+    }
+    // Edits one placement: its base is read, the edit composed on it, and the edit admitted, as one step under its world's
+    // queue (WorldEditorEditQueue.Offer), so no verdict settles in between.
+    private CommandResult EditPlacement(CommandContext context, EditWorld world, string id, string verb, Func<WorldPlacement, WorldPlacement> change) {
+        if (!TryTargetOf(refusal: out var refusal, target: out var target, verb: verb, world: world)) {
+            return refusal;
+        }
+
+        var admission = target.Queue.Offer(
+            compose: (WorldPlacement? basis, bool queues, out CommandResult composeRefusal) => (TryMovable(basis: basis, id: id, refusal: out composeRefusal, verb: verb, world: world)
+                ? ComposeEdit(context: context, queues: queues, refusal: out composeRefusal, row: change(arg: basis!), verb: verb, world: world)
+                : null),
+            delivered: WorldDefinitionRows.FindPlacement(id: id, placements: world.Definition.Placements),
+            id: id,
+            verb: verb,
+            version: world.Version
+        );
+
+        return Admit(admission: admission, context: context, slot: context.Slot, target: target, world: world);
     }
     private CommandResult NudgeHandler(CommandContext context, WireArgs args) {
         if (args.Count is not (2 or 3)) {
@@ -135,7 +150,7 @@ public sealed partial class WorldEditorCommandModule {
         var slot = context.Slot;
         var definition = world.Definition;
 
-        if (!TryTarget(world: world, named: ((at == 1) ? args[0].ToString() : null), placement: out var placement, refusal: out var refusal, slot: slot, verb: NudgeCommand)) {
+        if (!TryTargetId(id: out var id, named: ((at == 1) ? args[0].ToString() : null), refusal: out var refusal, slot: slot, verb: NudgeCommand, world: world)) {
             return refusal;
         }
 
@@ -146,34 +161,37 @@ public sealed partial class WorldEditorCommandModule {
             1 => Vector3.UnitY,
             _ => Vector3.UnitZ,
         };
-        var position = ((Vector3)placement.Position);
-        Vector3 moved;
+        var reference = ReferenceFor(definition: definition, world: world.Name, excluding: id, pitch: pitch, slot: slot);
 
-        if (ReferenceFor(definition: definition, world: world.Name, excluding: placement.Id, pitch: pitch, slot: slot) is { } reference) {
-            var local = Vector3.Transform(rotation: Quaternion.Inverse(value: reference.Frame), value: (position - reference.Origin));
+        return EditPlacement(
+            change: placement => {
+                var position = ((Vector3)placement.Position);
+                Vector3 moved;
 
-            local += (unit * (steps * Component(axis: axis, value: reference.Pitch)));
+                if (reference is { } captured) {
+                    var local = Vector3.Transform(rotation: Quaternion.Inverse(value: captured.Frame), value: (position - captured.Origin));
 
-            if (snap.Enabled) {
-                local = GridSnap.SnapToWorldLattice(p: local, pitch: (reference.Pitch * unit));
-            }
+                    local += (unit * (steps * Component(axis: axis, value: captured.Pitch)));
 
-            moved = (reference.Origin + Vector3.Transform(rotation: reference.Frame, value: local));
-        } else {
-            moved = (position + (unit * (steps * Component(axis: axis, value: pitch))));
+                    if (snap.Enabled) {
+                        local = GridSnap.SnapToWorldLattice(p: local, pitch: (captured.Pitch * unit));
+                    }
 
-            if (snap.Enabled) {
-                moved = GridSnap.SnapToWorldLattice(p: moved, pitch: (pitch * unit));
-            }
-        }
+                    moved = (captured.Origin + Vector3.Transform(rotation: captured.Frame, value: local));
+                } else {
+                    moved = (position + (unit * (steps * Component(axis: axis, value: pitch))));
 
-        return SubmitPlacement(
+                    if (snap.Enabled) {
+                        moved = GridSnap.SnapToWorldLattice(p: moved, pitch: (pitch * unit));
+                    }
+                }
+
+                return (placement with { Position = moved });
+            },
             context: context,
-            from: placement,
-            placement: (placement with { Position = moved }),
-            world: world,
-            slot: slot,
-            verb: NudgeCommand
+            id: id,
+            verb: NudgeCommand,
+            world: world
         );
     }
     private CommandResult PlaceHandler(CommandContext context, WireArgs args) {
@@ -185,10 +203,18 @@ public sealed partial class WorldEditorCommandModule {
             return editRefusal;
         }
 
+        if (!TryTargetOf(refusal: out var targetRefusal, target: out var target, verb: PlaceCommand, world: world)) {
+            return targetRefusal;
+        }
+
         var slot = context.Slot;
         var definition = world.Definition;
         var current = ((seats.CurrentOf(slot: slot, world: world.Name) is { } currentId)
-            ? LatestOf(id: currentId, world: world)
+            ? target.Queue.Latest(
+                delivered: WorldDefinitionRows.FindPlacement(id: currentId, placements: definition.Placements),
+                id: currentId,
+                version: world.Version
+            )
             : null);
         var prototype = ((args.Count >= 1) ? args[0].ToString() : current?.PrototypeId);
 
@@ -198,12 +224,6 @@ public sealed partial class WorldEditorCommandModule {
 
         if (!definition.Creations.Any(predicate: creation => string.Equals(a: creation.Id.Value, b: prototype, comparisonType: StringComparison.Ordinal))) {
             return CommandResult.Error(output: $"[{PlaceCommand}: no creation '{prototype}']");
-        }
-
-        var id = ((args.Count == 2) ? args[1].ToString() : MintId(prototype: prototype, world: world));
-
-        if (IsTaken(id: id, world: world)) {
-            return CommandResult.Error(output: $"[{PlaceCommand}: a placement '{id}' already exists]");
         }
 
         if (seats.AimProbe?.Invoke(arg: slot) is not { } aim) {
@@ -219,31 +239,42 @@ public sealed partial class WorldEditorCommandModule {
         var pitch = seats.GridOf(document: definition.Editor, slot: slot).ResolvedPitch;
         var snap = seats.SnapOf(document: definition.Editor, slot: slot);
         var yaw = (template?.YawDegrees ?? 0f);
-        var placement = new WorldPlacement(
-            Id: id,
-            Position: Land(
-                aim: aim,
-                definition: definition,
-                halfExtents: new Vector3(value: (0.5f * scale)),
-                pitch: pitch,
-                reference: ReferenceFor(definition: definition, world: world.Name, excluding: null, pitch: pitch, slot: slot),
-                slot: slot,
-                snap: snap
-            ),
-            PrototypeId: prototype,
-            Scale: scale,
-            Solid: (template?.Solid ?? new WorldSolid(Margin: 0f)),
-            YawDegrees: (snap.Enabled ? GridSnap.SnapYawDegrees(stepDegrees: snap.AngleStepDegrees, yawDegrees: yaw) : yaw)
+        var position = Land(
+            aim: aim,
+            definition: definition,
+            halfExtents: new Vector3(value: (0.5f * scale)),
+            pitch: pitch,
+            reference: ReferenceFor(definition: definition, world: world.Name, excluding: null, pitch: pitch, slot: slot),
+            slot: slot,
+            snap: snap
         );
 
-        return SubmitPlacement(
-            context: context,
-            from: null,
-            placement: placement,
-            slot: slot,
+        // The id, asked for or minted as the creation's name and the first number neither the delivered document nor any
+        // edit holds, is chosen with the edit's admission, so two places before any verdict never share one.
+        var admission = target.Queue.OfferNew(
+            compose: (string id, out CommandResult refusal) => ComposeEdit(
+                context: context,
+                queues: false,
+                refusal: out refusal,
+                row: new WorldPlacement(
+                    Id: id,
+                    Position: position,
+                    PrototypeId: prototype,
+                    Scale: scale,
+                    Solid: (template?.Solid ?? new WorldSolid(Margin: 0f)),
+                    YawDegrees: (snap.Enabled ? GridSnap.SnapYawDegrees(stepDegrees: snap.AngleStepDegrees, yawDegrees: yaw) : yaw)
+                ),
+                verb: PlaceCommand,
+                world: world
+            ),
+            inDocument: id => (WorldDefinitionRows.FindPlacement(id: id, placements: definition.Placements) is not null),
+            named: ((args.Count == 2) ? args[1].ToString() : null),
+            prefix: prototype,
             verb: PlaceCommand,
-            world: world
+            version: world.Version
         );
+
+        return Admit(admission: admission, context: context, slot: slot, target: target, world: world);
     }
     private IEnumerable<CommandDefinition> PlacementVerbs() {
         yield return CommandDefinition.WithWireArgs(
@@ -278,26 +309,27 @@ public sealed partial class WorldEditorCommandModule {
         }
 
         var slot = context.Slot;
-        var definition = world.Definition;
 
-        if (!TryTarget(world: world, named: ((args.Count == 2) ? args[0].ToString() : null), placement: out var placement, refusal: out var refusal, slot: slot, verb: TurnCommand)) {
+        if (!TryTargetId(id: out var id, named: ((args.Count == 2) ? args[0].ToString() : null), refusal: out var refusal, slot: slot, verb: TurnCommand, world: world)) {
             return refusal;
         }
 
-        var snap = seats.SnapOf(document: definition.Editor, slot: slot);
-        var yaw = (placement.YawDegrees + (steps * snap.AngleStepDegrees));
+        var snap = seats.SnapOf(document: world.Definition.Editor, slot: slot);
 
-        if (snap.Enabled) {
-            yaw = GridSnap.SnapYawDegrees(stepDegrees: snap.AngleStepDegrees, yawDegrees: yaw);
-        }
+        return EditPlacement(
+            change: placement => {
+                var yaw = (placement.YawDegrees + (steps * snap.AngleStepDegrees));
 
-        return SubmitPlacement(
+                if (snap.Enabled) {
+                    yaw = GridSnap.SnapYawDegrees(stepDegrees: snap.AngleStepDegrees, yawDegrees: yaw);
+                }
+
+                return (placement with { YawDegrees = (yaw % 360f) });
+            },
             context: context,
-            from: placement,
-            placement: (placement with { YawDegrees = (yaw % 360f) }),
-            world: world,
-            slot: slot,
-            verb: TurnCommand
+            id: id,
+            verb: TurnCommand,
+            world: world
         );
     }
 }

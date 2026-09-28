@@ -80,7 +80,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
         identity: identity,
         nextInputTick: static () => 2UL,
         observe: sink => {
-            sink.DeliverDefinition(definition: definition);
+            sink.DeliverDefinition(definition: definition, version: default);
             sink.DeliverSnapshot(snapshot: Snapshot(
                 authority: identity,
                 position: position
@@ -186,7 +186,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
 
         _ = client.Roster.VacateSeat(slot: 0);
         _ = client.Roster.VacateSeat(slot: 1);
-        client.DeliverDefinition(definition: (client.Definition with { ViewsRaw = (client.Definition.Views with { Layouts = [] }) }));
+        client.DeliverDefinition(definition: (client.Definition with { ViewsRaw = (client.Definition.Views with { Layouts = [] }) }), version: default);
         _ = Capture(source: presenter);
         Assert.Single(collection: presenter.CaptureFrame(deltaSeconds: 1f, height: 36U, interpolationAlpha: 1f, width: 64U).Views);
         Assert.False(condition: presenter.TryRoutedView(index: out _, scene: out _, view: 0));

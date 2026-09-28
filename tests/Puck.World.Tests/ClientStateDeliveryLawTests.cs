@@ -71,7 +71,8 @@ public sealed class ClientStateDeliveryLawTests {
                 Everything: true,
                 MovedRows: default,
                 Tick: 0UL
-            )
+            ),
+            version: default
             );
 
             Assert.Same(
@@ -108,7 +109,7 @@ public sealed class ClientStateDeliveryLawTests {
         );
 
         // A real shape change recompiles both tables and bumps the rebuild-watch revision, in contrast.
-        client.DeliverDefinition(definition: fixture.Server.Definition);
+        client.DeliverDefinition(definition: fixture.Server.Definition, version: default);
 
         Assert.NotSame(
             expected: installedChannels,

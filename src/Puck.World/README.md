@@ -483,11 +483,17 @@ therefore moves the placement once per press. When the world refuses an edit,
 or its link fails to take it, every edit queued on it is dropped and the
 placement rolls back to the value the world last confirmed, with a
 `rolled back to` line naming it. A new placement's id is never one an edit in
-flight or queued holds.
+flight or queued holds. Reading the base, composing the edit on it and admitting
+it happen as one step, so no verdict lands in between.
 
-The world stamps no version on the documents it delivers, so a confirmed value
-is held until a delivered document shows it. A document that arrives late, from
-before the edit applied, never moves the placement back.
+Every verdict and every delivered document carries the world's document version
+(`WorldDocumentVersion`), so a confirmed value is held until a delivered document
+at or past its verdict arrives, and released to that document whatever it shows:
+a late document never moves the placement back, and an undo is simply a newer
+document. The queue belongs to one activation of one world and lives as long as
+that world's link here. When the seat crosses onward, or the instance stops or is
+reaped, every edit still in flight or queued is abandoned with an `abandoned` line
+naming it, and nothing is kept.
 
 The grid rides each view's pass block (`SdfViewSnapshot.Grid`), so one seat can
 build on a grid while another plays. [The editor plan](../../docs/plans/editor.md)

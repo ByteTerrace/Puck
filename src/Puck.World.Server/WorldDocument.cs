@@ -25,6 +25,9 @@ public sealed partial class WorldDocument {
 
     private WorldDefinition m_base;
     private WorldDefinition m_definition;
+    // The install ordinal of m_definition within this activation (WorldDocumentVersion.Sequence): bumped by
+    // AdoptDefinition, the one door every live-definition install goes through.
+    private long m_sequence;
     private WorldDocumentSubmissionReceipt? m_lastDocumentReceipt;
     // The solid-field revision — bumped each time m_solids is rebuilt (a solid-affecting edit under the field provider),
     // the world.collision.status read-back. Starts at 1 when the boot world uses the field provider, else 0.
@@ -44,6 +47,9 @@ public sealed partial class WorldDocument {
     internal string BaseOrigin => m_baseOrigin;
     /// <summary>Gets the live world definition, swapped in place as buffered edits apply.</summary>
     internal WorldDefinition Definition => m_definition;
+    /// <summary>Gets the install ordinal of the live definition within this activation: zero for the boot document,
+    /// one more at every install since.</summary>
+    internal long Sequence => m_sequence;
 
     /// <summary>Gets the server whose arena, entity table, grants and narration this pipeline runs against.</summary>
     private WorldServer Host => m_host;
@@ -98,9 +104,12 @@ public sealed partial class WorldDocument {
         m_base = definition;
         m_baseOrigin = origin;
     }
-    /// <summary>Swaps the live definition.</summary>
+    /// <summary>Swaps the live definition and moves its install ordinal forward.</summary>
     /// <param name="definition">The new live definition.</param>
-    internal void AdoptDefinition(WorldDefinition definition) => m_definition = definition;
+    internal void AdoptDefinition(WorldDefinition definition) {
+        m_definition = definition;
+        m_sequence++;
+    }
 
     /// <summary>Adopts a rebuilt solid field and bumps its revision.</summary>
     /// <param name="solids">The new field, or <see langword="null"/> under the analytic provider.</param>

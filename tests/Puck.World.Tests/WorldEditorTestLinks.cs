@@ -6,11 +6,37 @@ using Puck.World.Protocol;
 namespace Puck.World.Tests;
 
 /// <summary>A link that records every envelope it is handed and each envelope's completion, as a destination world
-/// would receive them, so a law answers each verdict itself, in the order it chooses.</summary>
+/// would receive them, so a law answers each verdict itself, in the order it chooses. It stands for the destination's
+/// installs too: <see cref="Version"/> is the document the destination last installed, which an applied verdict moves
+/// forward and a law delivers to the destination's mirror.</summary>
 /// <param name="definition">The destination's document, which answers its population queries.</param>
 internal sealed class RecordingLink(WorldDefinition definition) : IServerLink {
-    /// <summary>Gets a verdict that applied.</summary>
-    public static WorldSubmissionResult Applied { get; } = new WorldSubmissionResult.Mutation(Outcome: new WorldMutationOutcome(
+    /// <summary>Gets a verdict the destination's grant check refused.</summary>
+    public static WorldSubmissionResult Refused { get; } = new WorldSubmissionResult.Refusal(Code: "world.grant.denied", Detail: "the seat may not mutate placements here");
+
+    /// <summary>Gets or sets the destination's activation: a law moves it to stand for another world behind the same
+    /// link.</summary>
+    public Guid Activation { get; set; } = Guid.NewGuid();
+    /// <summary>Gets each submitted envelope's completion, in submission order.</summary>
+    public List<Action<WorldSubmissionResult>?> Completions { get; } = [];
+
+    /// <summary>Gets or sets whether the link throws instead of accepting an envelope, as a closed link does.</summary>
+    public bool Fails { get; set; }
+    /// <summary>Gets or sets what the link answers each envelope with before it returns, or <see langword="null"/> to
+    /// leave every verdict to <see cref="Complete"/>.</summary>
+    public Func<WorldSubmissionResult>? Inline { get; set; }
+    /// <summary>Gets or sets the destination's install ordinal.</summary>
+    public long Sequence { get; set; }
+
+    /// <summary>Gets each submitted envelope, in submission order.</summary>
+    public List<WorldSubmissionPayload> Submitted { get; } = [];
+
+    /// <summary>Gets the version of the document the destination last installed.</summary>
+    public WorldDocumentVersion Version => new(Activation: Activation, Sequence: Sequence);
+
+    /// <summary>Returns a verdict that applied: the destination installs the edit, one past its last install.</summary>
+    /// <returns>The verdict.</returns>
+    public WorldSubmissionResult Applied() => new WorldSubmissionResult.Mutation(Outcome: new WorldMutationOutcome(
         Actor: Principal.Console,
         AffectedGroupRevision: null,
         Code: "world.mutation.applied",
@@ -19,24 +45,11 @@ internal sealed class RecordingLink(WorldDefinition definition) : IServerLink {
         DurableWatermark: null,
         OperationId: Guid.NewGuid(),
         PayloadDigest: "digest",
-        PersistenceStatus: WorldMutationPersistenceStatus.NotRequested
-    ));
-    /// <summary>Gets a verdict the destination's grant check refused.</summary>
-    public static WorldSubmissionResult Refused { get; } = new WorldSubmissionResult.Refusal(Code: "world.grant.denied", Detail: "the seat may not mutate placements here");
-
-    /// <summary>Gets each submitted envelope's completion, in submission order.</summary>
-    public List<Action<WorldSubmissionResult>?> Completions { get; } = [];
-    /// <summary>Gets or sets whether the link throws instead of accepting an envelope, as a closed link does.</summary>
-    public bool Fails { get; set; }
-    /// <summary>Gets or sets the verdict the link answers each envelope with before it returns, or
-    /// <see langword="null"/> to leave every verdict to <see cref="Complete"/>.</summary>
-    public WorldSubmissionResult? Inline { get; set; }
-    /// <summary>Gets each submitted envelope, in submission order.</summary>
-    public List<WorldSubmissionPayload> Submitted { get; } = [];
-
-    /// <summary>Answers one submitted envelope with a verdict.</summary>
-    /// <param name="index">The envelope's submission index.</param>
-    /// <param name="result">The verdict.</param>
+        PersistenceStatus: WorldMutationPersistenceStatus.NotRequested,
+        Version: new WorldDocumentVersion(Activation: Activation, Sequence: ++Sequence)
+    ));    /// <summary>Answers one submitted envelope with a verdict.</summary>
+           /// <param name="index">The envelope's submission index.</param>
+           /// <param name="result">The verdict.</param>
     public void Complete(int index, WorldSubmissionResult result) => Completions[index]?.Invoke(obj: result);
     /// <summary>Returns the placement one submitted envelope upserts.</summary>
     /// <param name="index">The envelope's submission index.</param>
@@ -58,7 +71,7 @@ internal sealed class RecordingLink(WorldDefinition definition) : IServerLink {
         Completions.Add(item: completion);
 
         if (Inline is { } verdict) {
-            completion?.Invoke(obj: verdict);
+            completion?.Invoke(obj: verdict());
         }
 
         return Submitted.Count;
@@ -83,17 +96,20 @@ internal static class EditorEndpoints {
     /// <summary>Returns an endpoint of a world named <paramref name="identity"/> under the authority of the same name.</summary>
     /// <param name="identity">The instance and authority name.</param>
     /// <param name="definition">The world's document.</param>
-    /// <param name="link">The link its edits are submitted over.</param>
+    /// <param name="link">The link its edits are submitted over, whose version the document is delivered at.</param>
     /// <param name="pose">Where its body 0 stands, in its own coordinates.</param>
     /// <returns>The endpoint.</returns>
-    public static WorldAuthorityEndpoint Of(string identity, WorldDefinition definition, IServerLink link, Vector3 pose) => new(
+    public static WorldAuthorityEndpoint Of(string identity, WorldDefinition definition, RecordingLink link, Vector3 pose) => new(
         adjacencies: static () => null,
         clockOwnedHere: false,
         definition: () => definition,
         identity: identity,
         nextInputTick: static () => 2UL,
         observe: sink => {
-            sink.DeliverDefinition(definition: definition);
+            sink.DeliverDefinition(
+                definition: definition,
+                version: link.Version
+            );
             sink.DeliverSnapshot(snapshot: new WorldSnapshot(
                 Authority: identity,
                 EngineTick: 1680UL,

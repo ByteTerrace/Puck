@@ -267,7 +267,7 @@ public sealed class WorldFieldRowLawTests {
         var emitter = new WorldFieldEmitter(client: client);
         var bakes = new RecordingBrickBakes();
 
-        client.DeliverDefinition(definition: definition);
+        client.DeliverDefinition(definition: definition, version: default);
         emitter.AdvanceBricks(bakes: bakes);
 
         // The first advance bakes the zero lattice: a flat field, every voxel the empty-space bound.

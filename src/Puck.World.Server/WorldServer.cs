@@ -100,6 +100,9 @@ public sealed partial class WorldServer : IWorldServerHost {
     private readonly WorldMutationBudgetMeter m_mutationBudget = new();
     // The multi-subscriber output hub — supports a local sink plus N future connections. See WorldOutputHub's own remarks.
     private readonly WorldOutputHub m_output = new();
+    // This activation's identity in WorldDocumentVersion: delivery metadata, never simulation state, so a fresh one
+    // per server leaves every hash and replay untouched.
+    private readonly Guid m_activation = Guid.NewGuid();
     // The arena host every state effect and resolved transform fires through, rebuilt with the arena.
     private WorldArenaHost m_arenaHost = null!;
 
@@ -238,6 +241,12 @@ public sealed partial class WorldServer : IWorldServerHost {
     public ulong CompletedEngineTicks => m_tick.CompletedEngineTicks;
     /// <summary>Gets the live world definition this server runs — swapped in place as buffered edits apply.</summary>
     public WorldDefinition Definition => m_document.Definition;
+    /// <summary>Gets the version of <see cref="Definition"/>: this server's activation, minted once at construction,
+    /// and the install ordinal within it. Every delivered document and every mutation verdict carries it.</summary>
+    public WorldDocumentVersion DocumentVersion => new(
+        Activation: m_activation,
+        Sequence: m_document.Sequence
+    );
     /// <summary>Observes each visiting-world durable-state verdict for a tape.</summary>
     public Action<WorldDocumentSubmissionReceipt>? DocumentSubmissionTap { get; set; }
     /// <summary>Gets the optional host sink for the player-keyed durable writes emitted by each completed tick.</summary>

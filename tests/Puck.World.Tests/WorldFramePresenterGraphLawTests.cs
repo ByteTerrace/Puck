@@ -141,7 +141,7 @@ public sealed class WorldFramePresenterGraphLawTests : IDisposable {
         }
 
         calls.Clear();
-        client.DeliverDefinition(definition: (client.Definition with { ScreensRaw = [Showing(camera: SecondCamera)] }));
+        client.DeliverDefinition(definition: (client.Definition with { ScreensRaw = [Showing(camera: SecondCamera)] }), version: default);
 
         // The host prepares a frame before its runtime captures the world's, so the change frame publishes the screens,
         // and declares the views they read, before any capture has seen the delivery.

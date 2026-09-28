@@ -157,15 +157,19 @@ public sealed partial class WorldTick {
             }
 
             if (op is WorldPendingOp.Mutate { Binding: { } binding, Completion: { } completion }) {
+                // The live document's version right after this op: the install it produced, or the document it was
+                // refused against. A later op of this drain installs past it, never below it.
                 var outcome = (ok
                     ? WorldMutationOutcome.AppliedOutcome(
-                        binding,
-                        "world.mutation.applied"
+                        binding: binding,
+                        code: "world.mutation.applied",
+                        version: Host.DocumentVersion
                     )
                     : WorldMutationOutcome.RefusedOutcome(
-                        binding,
-                        "world.mutation.refused",
-                        (Host.Document.LastMutationFailureDetail ?? "mutation was refused")
+                        binding: binding,
+                        code: "world.mutation.refused",
+                        detail: (Host.Document.LastMutationFailureDetail ?? "mutation was refused"),
+                        version: Host.DocumentVersion
                     )
                 );
 

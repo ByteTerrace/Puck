@@ -54,7 +54,7 @@ public sealed class BodyStampScaleLawTests {
     public void AScaleRowWriteMovesTheRevisionAndTheNextPackUsesTheNewScale() {
         var session = new WorldSessionMirror(placeholder: Document(scale: 1d));
 
-        session.DeliverDefinition(definition: Document(scale: 1d));
+        session.DeliverDefinition(definition: Document(scale: 1d), version: default);
         session.DeliverSnapshot(snapshot: new WorldSnapshot(
             Entries: new EntitySnapshot[] {
                 new(
@@ -107,7 +107,8 @@ public sealed class BodyStampScaleLawTests {
         // A state-only write of the body's scale cell moves the census component, and the next frame packs at it.
         session.DeliverState(
             definition: Document(scale: 0.5d),
-            stamp: new WorldStateStamp(EngineTick: 3360UL, Everything: true, MovedRows: ReadOnlyMemory<int>.Empty, Tick: 2UL)
+            stamp: new WorldStateStamp(EngineTick: 3360UL, Everything: true, MovedRows: ReadOnlyMemory<int>.Empty, Tick: 2UL),
+            version: default
         );
 
         var moved = Revision(emitter: emitter);

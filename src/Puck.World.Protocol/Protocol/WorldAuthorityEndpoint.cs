@@ -14,6 +14,7 @@ public sealed class WorldAuthorityEndpoint : IDisposable {
     private readonly WorldSessionMirror m_mirror;
     private readonly Func<ulong> m_nextInputTick;
     private readonly IDisposable m_observationLease;
+    private readonly CancellationTokenSource m_retired = new();
     private readonly Func<IClientSink, IDisposable> m_observe;
 
     public WorldAuthorityEndpoint(
@@ -68,8 +69,17 @@ public sealed class WorldAuthorityEndpoint : IDisposable {
     public ulong NextInputTick => m_nextInputTick();
     /// <summary>The endpoint's ordinary submission door.</summary>
     public IServerLink Submissions { get; }
+    /// <summary>Cancelled when this endpoint is disposed: nothing submitted through it afterwards is answered.</summary>
+    public CancellationToken Retired => m_retired.Token;
 
-    public void Dispose() => m_observationLease.Dispose();
+    public void Dispose() {
+        m_observationLease.Dispose();
+
+        // Cancelled, never disposed, so a late reader of Retired still gets the cancelled token.
+        if (!m_retired.IsCancellationRequested) {
+            m_retired.Cancel();
+        }
+    }
     /// <summary>Brings the state mirror over this authority's delivered rows up to its latest delivery and returns
     /// it: the one path presentation reads this authority's state through (see
     /// <see cref="WorldSessionMirror.FollowState"/>).</summary>

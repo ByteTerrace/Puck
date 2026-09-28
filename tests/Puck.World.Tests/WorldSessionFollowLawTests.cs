@@ -71,7 +71,7 @@ public sealed class WorldSessionFollowLawTests {
     private static WorldSessionMirror Session(WorldDefinition definition) {
         var session = new WorldSessionMirror(placeholder: definition);
 
-        session.DeliverDefinition(definition: definition);
+        session.DeliverDefinition(definition: definition, version: default);
 
         return session;
     }
@@ -140,7 +140,8 @@ public sealed class WorldSessionFollowLawTests {
         // A value write of the bound cell, delivered as state (not a new definition shape).
         session.DeliverState(
             definition: Document(bump: "#112233"),
-            stamp: new WorldStateStamp(EngineTick: 2UL, Everything: true, MovedRows: ReadOnlyMemory<int>.Empty, Tick: 2UL)
+            stamp: new WorldStateStamp(EngineTick: 2UL, Everything: true, MovedRows: ReadOnlyMemory<int>.Empty, Tick: 2UL),
+            version: default
         );
         emitter.WriteRevision(destination: after);
 
