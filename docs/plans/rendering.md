@@ -5482,6 +5482,11 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
 
 1. **P18-1, a baseline to measure against.** Today's sky, held still before
    anything moves.
+   - Landed: four sky parity captures, the discriminating `sky-layers` and
+     `sky-cycle` canaries, and isolated still, drift, twinkle and cycle counters
+     workloads. Both backends pass with debug layers and agree on the counted
+     baseline. The still workload can skip a node entirely; an absent sample
+     is not a measured zero. The RTX 2060 floor recording remains owner-assisted.
    - Delivers: the parity world gains a sky station authoring every current
      feature (gradient, fog, sun disc, stars with twinkle, clouds with drift,
      shear and spin, a cycle), captured at several ticks across the cycle; the
