@@ -45,6 +45,8 @@ internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness
     /// <summary>The world's SDF residency, or <see langword="null"/> until the render factory has run.</summary>
     public SdfWorldResidency? Residency { get; set; }
     /// <inheritdoc/>
+    public bool CapturesSettled => (Root?.PendingCapturePath is null);
+    /// <inheritdoc/>
     public bool IsReady => (
         (Residency?.IsReady ?? false) &&
         (Root?.Runtime.UnservedCaptureReason is null) &&
@@ -55,9 +57,9 @@ internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness
     /// over a completed world output, then the bake schedule's while a bake the presentation would draw is still
     /// baking.</remarks>
     public string? NotReadyReason => (((Residency is { } residency) && (Root is { } root))
-        ? (residency.NotReadyReason ?? root.Runtime.UnservedCaptureReason ?? (BakesSettled
+        ? (residency.NotReadyReason ?? (root.Runtime.UnservedCaptureReason ?? (BakesSettled
             ? null
-            : "the creation bakes are settling: a prototype the presentation would draw baked is still queued or baking"))
+            : "the creation bakes are settling: a prototype the presentation would draw baked is still queued or baking")))
         : "the renderer has not been composed: no frame has been produced"
     );
     /// <summary>The presentation's bake schedule, or <see langword="null"/> until the render factory has run.</summary>
@@ -68,6 +70,7 @@ internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness
 
     // A schedule must reconcile before readiness can decide whether it draws bakes, and settle while it draws them.
     private bool BakesSettled => ((Settings is not { } settings) || (Bakes is not { } bakes) || bakes.IsReadyForDrawing(bakes: settings.Bakes));
+
     /// <summary>The render graph's root, the render host every captured and presented frame comes from, or
     /// <see langword="null"/> until the render factory has run. <c>world.screenshot</c> arms captures on it, so the
     /// readback is the frame the display shows.</summary>

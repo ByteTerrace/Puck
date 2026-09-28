@@ -708,7 +708,13 @@ Facts a script needs:
   presentation draws its bakes, settled, or
   the deadline passes, and reports which on standard error. A script that
   reads rendered work (`world.counters gpu`) waits on it, since a cold driver
-  cache can hold the first frame back for many ticks.
+  cache can hold the first frame back for many ticks. `world.wait captures
+  <seconds>` holds until every capture `world.screenshot` armed on the render
+  graph's root has written its file or been refused, and reports
+  `[captures: settled at tick T]` on standard error. A script that takes one
+  capture after another waits on it between them, since `world.screenshot`
+  refuses while a capture is still pending and frames can trail ticks on a busy
+  machine.
 - **Timing.** The console drains before every fixed step. A piped script's
   lines up to its first `world.wait` run before the first tick, and the line
   after a `world.wait` that releases at tick R runs before tick R+1. The

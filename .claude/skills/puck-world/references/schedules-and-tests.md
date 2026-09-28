@@ -43,7 +43,10 @@ ready by `WorldCaptureScheduler.HoldBudgetSeconds` (60), each summed over the
 run; past either the capture is refused as `unserved`, naming the pipeline
 build and its progress when the build spent it, and the run steps on. A script
 that reads rendered work waits with `world.wait ready <seconds>`, and one that
-reads a drawn bake with `world.wait bakes <seconds>`, never a tick count.
+reads a drawn bake with `world.wait bakes <seconds>`, never a tick count. A
+script that takes several `world.screenshot` captures fences each one with
+`world.wait captures <seconds>` before arming the next, since a pending capture
+refuses the next arm and a tick count is a race under load.
 A capture still owed at the run's end is refused before the render root is
 disposed (`IFixedStepSimulation.SettleOwedFrames`). The windowed host never
 holds. `world.counters` shows the hold under `world.captures`
