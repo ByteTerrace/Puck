@@ -95,6 +95,7 @@ public static class VulkanPresenterServiceRegistration {
                 offscreenImageApi: offscreenImageApi
             ),
                 Naming = naming,
+                TimestampFactory = new VulkanGpuTimestampFactory(deviceContext: deviceContext, naming: naming),
                 PipelineFactory = new VulkanGpuPipelineFactory(
                 allocator: allocator,
                 computePipelineApi: computePipelineApi,

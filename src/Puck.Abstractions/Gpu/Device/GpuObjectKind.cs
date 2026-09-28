@@ -24,4 +24,6 @@ public enum GpuObjectKind : byte {
     CommandBuffer = 7,
     /// <summary>A render pass: a <c>VkRenderPass</c>. A Direct3D 12 render pass is recorded state, not an object.</summary>
     RenderPass = 8,
+    /// <summary>A timestamp query pool: a <c>VkQueryPool</c>, or an <c>ID3D12QueryHeap</c>.</summary>
+    TimestampPool = 9,
 }

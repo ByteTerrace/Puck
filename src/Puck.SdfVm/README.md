@@ -497,8 +497,11 @@ completion does not promise an exact simulation tick or durable disk storage.
 
 The presentation picker is `SdfWorldPasses.PickerOf`: `Request` samples normalized
 view coordinates once, and `Demand` keeps a hover current with one asynchronous
-request in flight. Only the selected visibility pixel's 16-byte V row is copied;
-the graph owns transfer and host-read barriers. The frame's immutable `ISdfPickMap`
+request in flight. Ordinary hover copies the selected visibility pixel's 16-byte
+V row, including its step and primary-query counts. An inspector request copies
+48 bytes through the packed geometric normal and captures that frame's camera,
+jitter and cut revision, so point reconstruction never uses a later camera.
+The graph owns transfer and host-read barriers. The frame's immutable `ISdfPickMap`
 travels with the request. SDF identity names a program instance ordinal plus one,
 mesh identity a draw ordinal; the winning shape's exact transform slot stays in
 L.x, separate from its instance's conservative bound slot. The remaining L words

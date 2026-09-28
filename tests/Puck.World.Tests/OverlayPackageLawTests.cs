@@ -242,6 +242,31 @@ public sealed partial class OverlayPackageLawTests {
             expected: 0L
         );
     }
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void HiddenOverlayStillReportsGpuAndCpuRegionStorage(bool staged) {
+        using var rig = new Rig(staged: staged);
+
+        _ = ProduceUntilPublished(node: rig.Node);
+        var memory = rig.Node.RegionMemory;
+
+        Assert.True(condition: (memory.CpuShadowBytes >= ((ulong)rig.OverlayBytes)));
+        Assert.True(condition: (memory.CpuScratchBytes >= ((ulong)rig.OverlayBytes)));
+        // RegionBytes includes package storage; the node also owns the frame and pass uniform rings.
+        Assert.Equal(expected: (rig.Node.RegionBytes + ((2UL * IGpuBindings.ConstantBufferAlignment) * InFlight)),
+            actual: (memory.Gpu.DeviceLocal + memory.Gpu.HostVisible));
+        if (staged) {
+            Assert.True(condition: (memory.Gpu.HostVisible >= (((ulong)rig.OverlayBytes) * InFlight)));
+        } else {
+            Assert.True(condition: (memory.Gpu.DeviceLocal >= (((ulong)rig.OverlayBytes) * InFlight)));
+        }
+        var hidden = memory;
+
+        rig.ShowCursor();
+        _ = rig.Node.ProduceFrame(context: default);
+        Assert.Equal(expected: hidden, actual: rig.Node.RegionMemory);
+    }
 
     private sealed class Rig : IDisposable {
         private readonly CursorStore m_cursor = new();
@@ -302,6 +327,8 @@ public sealed partial class OverlayPackageLawTests {
                 },
                 vertexBytecode: new byte[] { 1 }
             );
+
+            OverlayBytes = package.Regions(context: null!)[0].ByteCount;
             var packages = new RenderGraphPackageRecorders(regionCopy: new GpuRegionCopyPass(kernel: new byte[] { 1 }, pipelines: new GpuPassPipelineCache()));
 
             Observed = new ObservedPackageFactory(
@@ -344,6 +371,7 @@ public sealed partial class OverlayPackageLawTests {
 
         public FakeGpuDevice Gpu { get; }
         public ShaderPipelineRenderNode Node { get; }
+        public int OverlayBytes { get; }
         // What the overlay's recorder was handed and recorded itself.
         public ObservedPackageFactory Observed { get; }
 

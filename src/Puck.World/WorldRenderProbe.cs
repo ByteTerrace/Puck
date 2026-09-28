@@ -23,6 +23,7 @@ namespace Puck.World;
 internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness {
     private readonly Lock m_gate = new();
     private readonly List<WorkEntry> m_views = [];
+    private readonly Dictionary<string, string> m_residencyNames = new(comparer: StringComparer.Ordinal);
 
     /// <summary>The <c>sdf.transforms</c> counters as <c>world.counters</c> reads them: registered with the probe before
     /// the frame presenter exists, and pointed at the presenter's moved set when the presenter is built, so reading the
@@ -154,7 +155,13 @@ internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness
     }
 
     // The work node a residency's uploads read as.
-    private static string ResidencyNode(string name) => $"sdf:{name}";
+    private string ResidencyNode(string name) {
+        if (!m_residencyNames.TryGetValue(key: name, value: out var node)) {
+            node = $"sdf:{name}";
+            m_residencyNames.Add(key: name, value: node);
+        }
+        return node;
+    }
     private void RemoveView(string name) =>
         _ = m_views.RemoveAll(match: entry => string.Equals(
             a: entry.Name,

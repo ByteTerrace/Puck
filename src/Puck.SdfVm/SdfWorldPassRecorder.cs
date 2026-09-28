@@ -285,7 +285,9 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         )) {
             var visibility = recording.Inputs[VisibilityInputIndex()];
 
-            m_pick!.Prepare(slot: recording.Slot, width: width, height: height, frame: frame, version: visibility.Version);
+            m_pick!.Prepare(slot: recording.Slot, width: width, height: height, frame: frame, version: visibility.Version,
+                sample: new SdfReprojectionView(Camera: frame.Views[view].Camera, Jitter: temporal.Jitter, Width: width, Height: height),
+                cut: frame.Views[view].CutRevision);
             if (ReferenceEquals(objA: m_owner.FragmentOf(instance: m_context.Instance), objB: SdfWorldPackage.NativeFragment)) {
                 residency.MarkRendered(view: view);
                 m_owner.MarkRendered(instance: m_context.Instance, view: in m_view);

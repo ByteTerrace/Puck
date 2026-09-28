@@ -42,6 +42,8 @@ public sealed class GpuDeviceServices {
     /// <see cref="GpuObjectNaming.Off"/>, the default, when the device names nothing. Every wrap carries it over
     /// unchanged.</summary>
     public GpuObjectNaming Naming { get; init; } = GpuObjectNaming.Off;
+    /// <summary>Gets the optional timestamp-pool factory. Missing means timing is unavailable; every wrap preserves it.</summary>
+    public IGpuTimestampFactory? TimestampFactory { get; init; }
     /// <summary>Gets the surface-transfer factory (readback, upload and import).</summary>
     public required IGpuSurfaceTransferFactory SurfaceTransferFactory { get; init; }
 }

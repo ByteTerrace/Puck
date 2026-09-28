@@ -299,6 +299,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 device: m_device
             );
 
+            runtime.RegionCpuScratchBytes = checked((runtime.RegionCpuScratchBytes + declared[index].CpuScratchBytes));
             runtime.Regions[index] = CreateRegion(
                 byteCount: declared[index].ByteCount,
                 copyPipeline: copyPipeline,
@@ -397,6 +398,7 @@ public sealed partial class ShaderPipelineRenderNode {
             return;
         }
 
+        EndTiming(command: command, pass: m_regionCopyPass, slot: slot);
         m_gpu.Recorder.EndDebugGroup(commandBufferHandle: command);
         m_gpu.Recorder.EndCommandBuffer(commandBufferHandle: command);
         commands.Insert(
@@ -410,6 +412,7 @@ public sealed partial class ShaderPipelineRenderNode {
         var recorder = m_gpu.Recorder;
 
         recorder.BeginCommandBuffer(commandBufferHandle: command);
+        BeginTiming(command: command, pass: m_regionCopyPass, slot: m_copySlot);
         recorder.BeginDebugGroup(
             commandBufferHandle: command,
             label: "region copies"

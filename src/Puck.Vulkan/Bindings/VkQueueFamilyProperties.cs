@@ -15,7 +15,7 @@ public struct VkQueueFamilyProperties {
     public uint QueueFlags;
     /// <summary>The number of queues in the family.</summary>
     public uint QueueCount;
-    /// <summary>The number of meaningful high-order bits in timestamps written by queues in this family, or zero if timestamps are unsupported.</summary>
+    /// <summary>The number of meaningful low-order bits in timestamps written by queues in this family, or zero if timestamps are unsupported.</summary>
     public uint TimestampValidBits;
     /// <summary>The minimum granularity, in texels, supported for image transfer operations on queues in this family.</summary>
     public VkExtent3D MinImageTransferGranularity;
