@@ -103,6 +103,28 @@ public sealed class CanaryManifestLoaderLawTests : IDisposable {
         }
         """;
 
+    [InlineData("true", true)]
+    [InlineData("false", false)]
+    [InlineData("null", null)]
+    [InlineData("1", null)]
+    [Theory]
+    public void AScheduledLegIsAnExplicitBooleanAndOrdinaryLegsStayUnarmed(string spelling, bool? armed) {
+        var directory = Path.Combine(m_root, "tests", "Puck.World.Canaries", "good-one");
+        File.WriteAllText(path: Path.Combine(directory, "canary.json"), contents: LegManifest(
+            id: "good-one", worldPrefix: "tests/Puck.World.Canaries/good-one/",
+            relaunch: $"\n\"runSchedule\": {spelling},"));
+        var loaded = CanaryManifestLoader.TryLoadAll(repositoryRoot: m_root, strict: false,
+            manifests: out var manifests, refused: out var refused, error: out _);
+        Assert.True(condition: loaded);
+        if (armed is { } expected) {
+            Assert.Equal(expected: expected, actual: manifests[0].Positive.RunSchedule);
+            Assert.False(condition: manifests[0].Discriminating.RunSchedule);
+        } else {
+            Assert.Empty(collection: manifests);
+            Assert.Contains(collection: refused, filter: refusal => refusal.Reason.Contains(value: "runSchedule must be true or false", comparisonType: StringComparison.Ordinal));
+        }
+    }
+
     [Fact]
     public void ASkippedManifestFailsAWholeSuiteRunAndLeavesANamedSelectionAlone() {
         // Skipping keeps the other proofs running; it must not also make the suite report green with one of its

@@ -58,6 +58,7 @@ public static class SdfFrameBlock {
     private static readonly int GridWorldFrame = Offset(member: SdfWorldPackage.GridWorldFrame);
     private static readonly int GridWorldOrigin = Offset(member: SdfWorldPackage.GridWorldOrigin);
     private static readonly int GridWorldPitch = Offset(member: SdfWorldPackage.GridWorldPitch);
+    private static readonly int PreviousView = Offset(member: SdfWorldPackage.PreviousView);
     private static readonly int Jitter = Offset(member: SdfWorldPackage.Jitter);
     private static readonly int HistoryFrames = Offset(member: SdfWorldPackage.HistoryFrames);
     private static readonly int ImageExtent = Offset(member: SdfWorldPackage.ImageExtent);
@@ -94,6 +95,26 @@ public static class SdfFrameBlock {
         WriteSingle(block: block, offset: (Jitter + sizeof(float)), value: jitter.Y);
         WriteUInt32(block: block, offset: HistoryFrames, value: historyFrames);
     }
+    /// <summary>Writes the preceding render's camera and jittered lens for visibility reprojection.</summary>
+    /// <param name="block">The pass block.</param>
+    /// <param name="view">The preceding view and sample grid.</param>
+    /// <param name="valid">Whether the preceding render belongs to this epoch.</param>
+    public static void WritePreviousView(Span<byte> block, SdfReprojectionView view, bool valid) {
+        var rows = MemoryMarshal.Cast<byte, float>(span: block.Slice(start: PreviousView, length: (24 * sizeof(float))));
+        rows.Clear();
+        if (!valid) {
+            return;
+        }
+        var camera = view.Camera;
+        rows[0] = camera.Position.X; rows[1] = camera.Position.Y; rows[2] = camera.Position.Z; rows[3] = 1f;
+        rows[4] = camera.Right.X; rows[5] = camera.Right.Y; rows[6] = camera.Right.Z; rows[7] = camera.TanHalfFieldOfView;
+        rows[8] = camera.Up.X; rows[9] = camera.Up.Y; rows[10] = camera.Up.Z; rows[11] = camera.AspectRatio;
+        rows[12] = camera.Forward.X; rows[13] = camera.Forward.Y; rows[14] = camera.Forward.Z;
+        rows[16] = view.Width; rows[17] = view.Height;
+        rows[20] = camera.Near;
+        rows[21] = (camera.FrustumOffset.X + (((2f * view.Jitter.X) / view.Width) * camera.AspectRatio * camera.TanHalfFieldOfView));
+        rows[22] = (camera.FrustumOffset.Y - (((2f * view.Jitter.Y) / view.Height) * camera.TanHalfFieldOfView));
+    }
     /// <summary>Writes the pass's row of the work counters into its pass block (<see cref="ShaderWorkCounters.Row"/>),
     /// which <see cref="Write"/> leaves alone: the row names the pass, never what the view renders from, so a view's
     /// signature (<see cref="SdfWorldTables.ViewSignature"/>) never reads it.</summary>
@@ -128,6 +149,7 @@ public static class SdfFrameBlock {
         ArgumentNullException.ThrowIfNull(argument: frame);
 
         WriteTemporal(block: block, jitter: Vector2.Zero, historyFrames: 0);
+        WritePreviousView(block: block, view: default, valid: false);
 
         var snapshot = frame.Views[view];
         var camera = snapshot.Camera;

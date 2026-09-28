@@ -33,6 +33,7 @@ public sealed partial class SdfWorldTables {
             m_frameFences[((int)((m_uploads - 1UL) % FrameRingSize))].Wait();
         }
 
+        var previousSlot = m_currentSlot;
         m_currentSlot = slot;
         m_uploads++;
 
@@ -60,7 +61,9 @@ public sealed partial class SdfWorldTables {
             m_work.SkipPass(pass: BricksPass);
         }
         m_work.EnterPass(pass: UploadPass);
+        RecordPreviousTables(commandBuffer: commandBuffer, previousSlot: previousSlot);
         RecordRegionCopies();
+        CompletePreviousTables(commandBuffer: commandBuffer);
         m_work.LeavePass();
         recorder.EndDebugGroup(commandBufferHandle: commandBuffer);
         recorder.EndCommandBuffer(commandBufferHandle: commandBuffer);

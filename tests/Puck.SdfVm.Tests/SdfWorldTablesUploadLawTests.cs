@@ -24,7 +24,7 @@ namespace Puck.SdfVm.Tests;
 /// mapping reaches the device as its draw form and an unchanged one owes nothing; and an engine rebuilt after a device
 /// loss owes every table again and reads back exact.
 /// </summary>
-public sealed class SdfWorldTablesUploadLawTests {
+public sealed partial class SdfWorldTablesUploadLawTests {
     // The packed width of a dynamic transform (isa/sdf-world.interface.hlsli sdfDynamicTransforms).
     private const int DynamicTransformBytes = 48;
     private const uint Extent = 64;
@@ -274,7 +274,7 @@ public sealed class SdfWorldTablesUploadLawTests {
         );
         Assert.Equal(
             expected: Packed(transforms: transforms),
-            actual: gpu.DeviceLocal(sizeBytes: ((ulong)(Slots * DynamicTransformBytes)))
+            actual: gpu.DeviceLocal(sizeBytes: ((ulong)(Slots * DynamicTransformBytes)), part: "dynamic-transforms")
         );
     }
     [Fact]
@@ -952,7 +952,7 @@ public sealed class SdfWorldTablesUploadLawTests {
         // The device-local dynamic-transform table holds exactly the frame's packed transforms.
         public void AssertDeviceTransforms() => Assert.Equal(
             expected: Packed(transforms: m_transforms),
-            actual: Gpu.DeviceLocal(sizeBytes: ((ulong)(m_transforms.Length * DynamicTransformBytes)))
+            actual: Gpu.DeviceLocal(sizeBytes: ((ulong)(m_transforms.Length * DynamicTransformBytes)), part: "dynamic-transforms")
         );
         public void Dispose() {
             Engine.Dispose();

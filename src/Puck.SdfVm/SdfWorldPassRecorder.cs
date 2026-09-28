@@ -252,6 +252,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
         );
 
         SdfFrameBlock.WriteTemporal(block: recording.PassBlock, jitter: temporal.Jitter, historyFrames: temporal.Frames);
+        SdfFrameBlock.WritePreviousView(block: recording.PassBlock, view: temporal.PreviousView, valid: temporal.HasPreviousView);
 
         SdfFrameBlock.WriteWorkCounterRow(
             block: recording.PassBlock,

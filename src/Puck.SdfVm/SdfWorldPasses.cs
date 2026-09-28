@@ -157,6 +157,7 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
             var snapshot = views[Math.Min(val1: view.View, val2: (views.Count - 1))];
 
             entry.Temporal.Prepare(
+                camera: snapshot.Camera,
                 epoch: new SdfTemporalEpoch(
                     Binding: entry.Bindings,
                     Cut: snapshot.CutRevision,

@@ -59,13 +59,14 @@ float3 sdfMeshRow(uint record, uint row) {
 float3 sdfMeshWorldDirection(uint record, float3 v) {
     return (((v.x * sdfMeshRow(record, 0u)) + (v.y * sdfMeshRow(record, 1u))) + (v.z * sdfMeshRow(record, 2u)));
 }
-// The world position of a draw's index `k`: the position that index names, under the draw's matrix (p * M, the row-vector
-// convention, so the fourth row is the translation).
-float3 sdfMeshWorldPosition(uint record, uint k) {
+// The object position of the vertex a draw's index `k` names.
+float3 sdfMeshObjectPosition(uint record, uint k) {
     uint word = sdfMeshVertexAt(record, k);
-    float3 p = asfloat(uint3(sdfMeshRegion[word], sdfMeshRegion[(word + 1u)], sdfMeshRegion[(word + 2u)]));
-
-    return (sdfMeshWorldDirection(record, p) + sdfMeshRow(record, 3u));
+    return asfloat(uint3(sdfMeshRegion[word], sdfMeshRegion[(word + 1u)], sdfMeshRegion[(word + 2u)]));
+}
+// Its world position under the draw's row-vector matrix; the fourth row carries translation.
+float3 sdfMeshWorldPosition(uint record, uint k) {
+    return (sdfMeshWorldDirection(record, sdfMeshObjectPosition(record, k)) + sdfMeshRow(record, 3u));
 }
 // An object-space normal under a draw's normal matrix (the inverse transpose of its matrix, so a nonuniform scale keeps
 // the normal perpendicular to the surface).

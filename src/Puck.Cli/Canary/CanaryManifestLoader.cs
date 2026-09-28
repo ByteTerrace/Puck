@@ -624,6 +624,7 @@ internal static partial class CanaryManifestLoader {
             "hideShaderCompiler",
             "package",
             "relaunch",
+            "runSchedule",
             "script",
             "world"
         );
@@ -724,6 +725,15 @@ internal static partial class CanaryManifestLoader {
             };
         }
 
+        var runSchedule = false;
+        if (element.TryGetProperty(propertyName: "runSchedule", value: out var scheduleElement)) {
+            runSchedule = scheduleElement.ValueKind switch {
+                JsonValueKind.True => true,
+                JsonValueKind.False => false,
+                _ => throw new CanaryManifestRefusal(message: $"{context} runSchedule must be true or false."),
+            };
+        }
+
         var authorities = ReadAuthorities(
             canaryDirectory: canaryDirectory,
             context: context,
@@ -771,6 +781,10 @@ internal static partial class CanaryManifestLoader {
             );
         }
 
+        if (runSchedule && ((authorities.Count != 0) || (authorityWorldPath is not null) || (relaunch is not null))) {
+            throw new CanaryManifestRefusal(message: $"{context} runSchedule requires one process without authorities, authorityWorld or relaunch.");
+        }
+
         return new CanaryLeg(
             Assertions: assertions,
             Authorities: authorities,
@@ -788,6 +802,7 @@ internal static partial class CanaryManifestLoader {
                 repositoryRoot: repositoryRoot
             ),
             Relaunch: relaunch,
+            RunSchedule: runSchedule,
             ScriptPath: scriptPath,
             WorldPath: worldPath
         );
@@ -1782,6 +1797,10 @@ internal static partial class CanaryManifestLoader {
             )
             ) {
                 throw new CanaryManifestRefusal(message: $"canary '{id}' discriminating leg changes neither world nor script; prose alone cannot make the positive observation turn red.");
+            }
+
+            if ((bootShape == CanaryBootShape.Stub) && (positive.RunSchedule || discriminating.RunSchedule)) {
+                throw new CanaryManifestRefusal(message: $"canary '{id}' runSchedule requires a direct World boot, not bootShape 'stub'.");
             }
 
             var backends = ReadBackends(

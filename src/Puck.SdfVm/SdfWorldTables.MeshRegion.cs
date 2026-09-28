@@ -72,6 +72,7 @@ public sealed partial class SdfWorldTables {
                     layout: layout,
                     meshes: m_meshPlacements
                 );
+                StageMeshMotion(words: words, draws: draws.Count);
                 EnsureMeshRegionCapacity(bytes: layout.Bytes);
                 _ = m_meshRegion.Write(
                     bytes: MemoryMarshal.AsBytes(span: words),
@@ -113,6 +114,7 @@ public sealed partial class SdfWorldTables {
 
         m_meshRegion.Dispose();
         m_meshRegion = replacement;
+        m_seedMeshHistory = true;
         m_bindingRevision++;
         Volatile.Write(
             location: ref m_meshRegionBytes,
