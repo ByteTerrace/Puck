@@ -74,6 +74,7 @@ public sealed class ScheduledStepVocabularyLawTests {
             "channel.ordinal.8",
             "channel.ordinal.9",
             "player.bind",
+            "player.build",
             "player.camera",
             "player.cycle",
             "player.look",
@@ -92,6 +93,11 @@ public sealed class ScheduledStepVocabularyLawTests {
             "source.pointer.direction",
             "source.pointer.origin",
             "view.override",
+        ]),
+        ("edits a placement from a seat's editor state (its aim, grid and current placement), which a step pins by writing the row with world.row.set instead", [
+            "world.nudge",
+            "world.place",
+            "world.turn",
         ]),
         ("a chat channel, whose effect is a message rather than state", [
             "chat.allow",

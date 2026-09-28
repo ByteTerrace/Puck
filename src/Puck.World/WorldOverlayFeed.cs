@@ -31,6 +31,7 @@ internal sealed class WorldOverlayFeed {
     // per-frame delegate allocation.
     private readonly BindingPageView?[] m_activeBarView;
     private readonly WorldBindingBarControl m_bindingBar;
+    private readonly WorldEditorSeats m_editor;
     private readonly WorldSeatBindings m_bindings;
     private readonly GamepadManager? m_gamepads;
     private readonly string[][] m_hintLines;
@@ -74,8 +75,10 @@ internal sealed class WorldOverlayFeed {
     /// (a non-Windows host) — the bar then themes for the unknown family.</param>
     /// <param name="icons">The boot document's resolved icon table (badges and bound-action icons alike).</param>
     /// <param name="viewports">Each seat's published viewport for the frame just dressed.</param>
+    /// <param name="editor">Each seat's editor state, whose read-only answer badges the build page's label.</param>
     /// <exception cref="ArgumentNullException">A required argument is <see langword="null"/>.</exception>
-    public WorldOverlayFeed(PlayerRoster roster, WorldSeatBindings bindings, WorldBindingBarControl bindingBar, InputRouter router, BindingBarStore store, GamepadManager? gamepads, WorldIconTable icons, WorldSeatViewports viewports) {
+    public WorldOverlayFeed(PlayerRoster roster, WorldSeatBindings bindings, WorldBindingBarControl bindingBar, InputRouter router, BindingBarStore store, GamepadManager? gamepads, WorldIconTable icons, WorldSeatViewports viewports, WorldEditorSeats editor) {
+        ArgumentNullException.ThrowIfNull(argument: editor);
         ArgumentNullException.ThrowIfNull(argument: bindings);
         ArgumentNullException.ThrowIfNull(argument: bindingBar);
         ArgumentNullException.ThrowIfNull(argument: icons);
@@ -85,6 +88,7 @@ internal sealed class WorldOverlayFeed {
         ArgumentNullException.ThrowIfNull(argument: viewports);
 
         m_viewports = viewports;
+        m_editor = editor;
         m_bindings = bindings;
         m_bindingBar = bindingBar;
         m_gamepads = gamepads;
@@ -398,7 +402,9 @@ internal sealed class WorldOverlayFeed {
                     )
                 : ReadOnlyMemory<string>.Empty),
                 Label: (barText
-                ? (view.Label ?? view.PageId)
+                ? ((string.Equals(a: view.PageId, b: WorldEditorBindings.BuildPage, comparisonType: StringComparison.Ordinal) && m_editor.IsReadOnly(slot: slot))
+                    ? WorldEditorBindings.ReadOnlyLabel
+                    : (view.Label ?? view.PageId))
                 : string.Empty),
                 Modifiers: m_modifiers[viewIndex].AsMemory(
                     length: modifierCount,

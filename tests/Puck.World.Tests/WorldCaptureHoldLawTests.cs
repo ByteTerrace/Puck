@@ -62,6 +62,7 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
     }
     // The view's readiness as the World's render probe presents it.
     private sealed class ViewReadiness(SdfTestView view) : IWorldEngineReadiness {
+        public bool CapturesSettled => true;
         public bool IsReady => view.IsReady;
         public string? NotReadyReason => view.NotReadyReason;
     }

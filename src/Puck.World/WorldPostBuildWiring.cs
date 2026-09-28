@@ -327,6 +327,7 @@ internal static class WorldPostBuildWiring {
         var renderSettings = services.GetRequiredService<WorldRenderSettings>();
         var pacing = services.GetRequiredService<PresentPacingControl>();
         var bindingBarVisibility = services.GetRequiredService<WorldBindingBarVisibility>();
+        var editorSeats = services.GetRequiredService<WorldEditorSeats>();
 
         // The authored gameplay-cue lane: emitCue publishes a deterministic token from simulation. Audio consumes
         // that token through the same document-authored cue table as built-in events; an optional body association
@@ -350,6 +351,7 @@ internal static class WorldPostBuildWiring {
                 var snapshot = WorldSaveSnapshot.Compose(
                     audio: audioDirector,
                     bindingBar: bindingBarVisibility,
+                    editor: editorSeats,
                     pacing: pacing,
                     render: renderSettings,
                     server: worldServer,

@@ -181,6 +181,12 @@
 #define SDF_FILTER_NEAREST 0u
 #define SDF_FILTER_LINEAR  1u
 
+// Puck.SdfVm.GridOverlayFlags.
+#define SDF_GRID_NONE    0u
+#define SDF_GRID_WORLD   1u
+#define SDF_GRID_OBJECT  2u
+#define SDF_GRID_SURFACE 4u
+
 // The environment's rows in the pass block's environment array (SdfEnvironment) and its light kinds.
 #define SDF_ENV_ROW_COUNT           53u
 #define SDF_ENV_CONTROL_ROW         0u

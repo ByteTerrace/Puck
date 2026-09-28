@@ -113,6 +113,7 @@ public sealed class WorldSaveAuthoredDocumentLawTests(WorldSaveAuthoredDocumentL
             var snapshot = WorldSessionLevers.Fold(
                 audio: new UnengagedAudioLever(),
                 bindingBar: new WorldBindingBarVisibility(),
+                editor: new WorldEditorSeats(),
                 definition: WorldSessionCapture.Capture(
                     definition: server.Definition,
                     engineTick: server.CompletedEngineTicks,

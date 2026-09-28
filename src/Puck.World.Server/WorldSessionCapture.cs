@@ -70,8 +70,8 @@ public static class WorldSessionCapture {
     }
     /// <summary>Names the session dimensions a save writes differently from <paramref name="definition"/>: each
     /// section, among <c>render</c>, <c>population</c>, <c>machines</c>, <c>screens</c>, <c>audio</c>, <c>host</c>,
-    /// and <c>bindings</c>, whose raw member <paramref name="snapshot"/> replaced. Settled <c>state</c> is not named,
-    /// since an advancing cell keeps moving whether or not anything is saved.</summary>
+    /// <c>bindings</c>, and <c>editor</c>, whose raw member <paramref name="snapshot"/> replaced. Settled <c>state</c>
+    /// is not named, since an advancing cell keeps moving whether or not anything is saved.</summary>
     /// <param name="definition">The server's live definition.</param>
     /// <param name="snapshot">The whole save snapshot composed from it, both halves folded.</param>
     /// <returns><c>none</c> when a save writes the definition as it is, else the drifted dimensions joined by
@@ -91,6 +91,7 @@ public static class WorldSessionCapture {
             ("audio", !Equals(objA: snapshot.AudioRaw, objB: definition.AudioRaw)),
             ("host", !Equals(objA: snapshot.HostRaw, objB: definition.HostRaw)),
             ("bindings", !Equals(objA: snapshot.BindingOverlaysRaw, objB: definition.BindingOverlaysRaw)),
+            ("editor", !Equals(objA: snapshot.EditorRaw, objB: definition.EditorRaw)),
         ];
         var drifted = dimensions.Where(predicate: static dimension => dimension.Drifted).Select(selector: static dimension => dimension.Name).ToArray();
 

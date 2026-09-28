@@ -1,18 +1,8 @@
+using System.Collections.Concurrent;
 using System.Numerics;
 
 namespace Puck.World.Authoring;
 
-/// <summary>The rotation-snap increment: no snap, 90°, or 45°. A yaw-only caller applies it to a scalar yaw; a
-/// full-orientation caller snaps to the nearest element of a precomputed coarse-orientation candidate set (see
-/// <see cref="GridSnap.SnapRotation"/>).</summary>
-public enum RotationSnap {
-    /// <summary>No rotation snapping.</summary>
-    Off = 0,
-    /// <summary>Snap to the nearest 90° lattice orientation (the 24-element octahedral rotation group).</summary>
-    Deg90 = 1,
-    /// <summary>Snap to the nearest 45° lattice orientation (a richer 45°-granular candidate set).</summary>
-    Deg45 = 2,
-}
 /// <summary>A captured align-to-shape reference — the frozen guide a moved shape snaps against. Snapshotted at
 /// capture time so a later delete/move of the source shape never disturbs the guide. All fields are authoring-side
 /// floats.</summary>
@@ -37,42 +27,17 @@ public readonly record struct SnapReference(
 /// <param name="Enabled">Whether snapping is active at all (off = every function returns its input untouched).</param>
 /// <param name="Pitch">The world-lattice per-axis pitch (origin at world 0). A component &lt;= 0 = free on that axis
 /// (e.g. <c>Pitch.Y = 0</c> leaves vertical placement floor-rest / unsnapped).</param>
-/// <param name="Rotation">The rotation-snap increment.</param>
+/// <param name="AngleStepDegrees">The rotation-snap increment, in degrees; zero or less leaves rotation free.</param>
 /// <param name="Reference">The align-to-shape reference, or null for world-lattice-only.</param>
 public readonly record struct SnapConfig(
     bool Enabled,
     Vector3 Pitch,
-    RotationSnap Rotation,
+    float AngleStepDegrees,
     SnapReference? Reference
 ) {
     /// <summary>Gets the disabled configuration: snapping off, zero pitch on every axis, no rotation snap, no
-    /// reference — the neutral starting point every session begins from (snapping is opt-in).</summary>
+    /// reference.</summary>
     public static SnapConfig Disabled => default;
-
-    /// <summary>Creates a disabled config pre-loaded with a lattice pitch on X/Z only (Y left free) — the shape a
-    /// caller enables verbatim for floor-rest placement, where vertical position is never snapped.</summary>
-    /// <param name="pitch">The X/Z lattice spacing, world units.</param>
-    public static SnapConfig Planar(float pitch) =>
-        new(
-            Enabled: false,
-            Pitch: new Vector3(
-                x: pitch,
-                y: 0f,
-                z: pitch
-            ),
-            Rotation: RotationSnap.Off,
-            Reference: null
-        );
-    /// <summary>Creates a disabled config pre-loaded with a uniform lattice pitch on all three axes (X/Y/Z alike) —
-    /// the shape a caller enables verbatim for full 3D placement (e.g. a free-floating workbench object).</summary>
-    /// <param name="pitch">The per-axis lattice spacing, world units.</param>
-    public static SnapConfig Uniform(float pitch) =>
-        new(
-            Enabled: false,
-            Pitch: new Vector3(value: pitch),
-            Rotation: RotationSnap.Off,
-            Reference: null
-        );
 }
 /// <summary>
 /// Grid-locking's pure snap math — the authoring-side float core shared by every editing surface. Every function
@@ -122,12 +87,14 @@ public static class GridSnap {
 
         return [.. unique];
     }
-    private static float IncrementDegrees(RotationSnap mode) =>
-        mode switch {
-            RotationSnap.Deg90 => 90f,
-            RotationSnap.Deg45 => 45f,
-            _ => 0f,
-        };
+    // The whole turn a coarse-orientation step divides into, or zero when it does not divide a turn exactly.
+    private static int StepsPerTurn(float stepDegrees) {
+        var steps = MathF.Round(x: (360f / stepDegrees));
+
+        return ((MathF.Abs(x: ((steps * stepDegrees) - 360f)) < 1.0e-3f)
+            ? ((int)steps)
+            : 0);
+    }
     // The nearest of the true face-to-face / inner-flush / center candidate set. The moved shape's
     // CENTER lands so its near FACE meets the reference face: outer butt-join at ±(h + candH), inner-flush at
     // ±(h - candH), center-align at 0. candH == 0 collapses to the center-on-face set {-h, 0, +h}.
@@ -282,23 +249,37 @@ public static class GridSnap {
             )
         );
     }
-    /// <summary>Snaps a full orientation to the nearest coarse-orientation candidate: the nearest element of the
-    /// 24-element octahedral group (Deg90) or the richer 45°-granular set (Deg45) by geodesic distance —
-    /// argmax |dot(q, candidate)|, robust against quaternion double-cover. Off returns the input.</summary>
+    /// <summary>Snaps a full orientation to the nearest orientation composed of whole steps about the coordinate axes,
+    /// by geodesic distance (argmax |dot(q, candidate)|, robust against the quaternion double cover): at 90° the
+    /// 24-element octahedral group. A step of zero or less returns the input.</summary>
     /// <param name="orientation">The orientation to snap.</param>
-    /// <param name="mode">The rotation increment.</param>
+    /// <param name="stepDegrees">The step, in degrees: at least <see cref="MinOrientationStepDegrees"/> and dividing a
+    /// whole turn exactly.</param>
     /// <returns>The snapped orientation (normalized).</returns>
-    public static Quaternion SnapRotation(Quaternion orientation, RotationSnap mode) {
-        var candidates = mode switch {
-            RotationSnap.Deg90 => OctahedralGroup,
-            RotationSnap.Deg45 => Deg45Set,
-            _ => null,
-        };
-
-        if (candidates is null) {
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="stepDegrees"/> is positive and under
+    /// <see cref="MinOrientationStepDegrees"/>, or does not divide a whole turn.</exception>
+    public static Quaternion SnapRotation(Quaternion orientation, float stepDegrees) {
+        if (!(stepDegrees > 0f)) {
             return orientation;
         }
 
+        var steps = StepsPerTurn(stepDegrees: stepDegrees);
+
+        if (
+            (stepDegrees < MinOrientationStepDegrees) ||
+            (steps == 0)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: stepDegrees,
+                message: $"A full-orientation snap takes a step of at least {MinOrientationStepDegrees} degrees that divides a whole turn.",
+                paramName: nameof(stepDegrees)
+            );
+        }
+
+        var candidates = OrientationSets.GetOrAdd(
+            key: steps,
+            valueFactory: static count => BuildOrientationSet(stepDegrees: (360f / count))
+        );
         var normalized = Quaternion.Normalize(value: orientation);
         var best = candidates[0];
         var bestDot = -1f;
@@ -334,24 +315,21 @@ public static class GridSnap {
             ? (MathF.Round(x: (p.Z / pitch.Z)) * pitch.Z)
             : p.Z)
         );
-    /// <summary>Snaps a scalar yaw (degrees) to the rotation increment — world-sculpt's yaw-only path. Off
-    /// returns the input.</summary>
-    /// <param name="yawDegrees">The yaw, degrees.</param>
-    /// <param name="mode">The rotation increment.</param>
-    /// <returns>The snapped yaw, degrees.</returns>
-    public static float SnapYawDegrees(float yawDegrees, RotationSnap mode) {
-        var step = IncrementDegrees(mode: mode);
+    /// <summary>Snaps a yaw to the nearest whole multiple of the step. A step of zero or less returns the input.</summary>
+    /// <param name="yawDegrees">The yaw, in degrees.</param>
+    /// <param name="stepDegrees">The step, in degrees.</param>
+    /// <returns>The snapped yaw, in degrees.</returns>
+    public static float SnapYawDegrees(float yawDegrees, float stepDegrees) => ((stepDegrees > 0f)
+        ? (MathF.Round(x: (yawDegrees / stepDegrees)) * stepDegrees)
+        : yawDegrees
+    );
 
-        return ((step > 0f)
-            ? (MathF.Round(x: (yawDegrees / step)) * step)
-            : yawDegrees
-        );
-    }
+    /// <summary>The smallest step a full-orientation snap takes, in degrees; a finer one would build a candidate set
+    /// too large to search.</summary>
+    public const float MinOrientationStepDegrees = 30f;
 
-    // The 24-element proper octahedral (cube) rotation group and the richer 45°-granular candidate set, precomputed
-    // once. Both are generated by composing coordinate-axis rotations at the increment and deduplicating by
-    // near-quaternion-equality; used ONLY as a nearest-by-dot candidate pool, so the Euler generation carries no
-    // gimbal ambiguity into the result.
-    private static readonly Quaternion[] OctahedralGroup = BuildOrientationSet(stepDegrees: 90f);
-    private static readonly Quaternion[] Deg45Set = BuildOrientationSet(stepDegrees: 45f);
+    // The coarse-orientation candidate sets, one per whole-turn step count, built the first time a step asks for one.
+    // Each composes coordinate-axis rotations at the step and deduplicates by near-quaternion-equality, and serves only
+    // as a nearest-by-dot pool, so the Euler generation carries no gimbal ambiguity into the result.
+    private static readonly ConcurrentDictionary<int, Quaternion[]> OrientationSets = new();
 }

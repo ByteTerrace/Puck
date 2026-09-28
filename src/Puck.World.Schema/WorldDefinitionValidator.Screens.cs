@@ -1,9 +1,25 @@
+using System.Numerics;
 using Puck.Commands;
 using Puck.Maths;
 
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
+    // The per-axis effective-extent check for a box solidity facet: a margin that inverts any axis (halfExtent + margin
+    // <= 0) is rejected by name, not turned into a negative-extent collider.
+    private static void RequirePositiveEffectiveExtent(Vector3 halfExtents, float margin, string path, List<string> errors) {
+        if (!float.IsFinite(f: margin)) {
+            return;
+        }
+
+        if (
+            ((halfExtents.X + margin) <= 0f) ||
+            ((halfExtents.Y + margin) <= 0f) ||
+            ((halfExtents.Z + margin) <= 0f)
+        ) {
+            errors.Add(item: $"{path} {margin} inverts the collider (halfExtent + margin must be > 0 on every axis).");
+        }
+    }
     // A non-empty kebab-case token: lowercase ASCII letters/digits, single hyphens between them, no leading/trailing
     // hyphen. The channel/link-name grammar.
     private static bool IsKebabCase(string value) {

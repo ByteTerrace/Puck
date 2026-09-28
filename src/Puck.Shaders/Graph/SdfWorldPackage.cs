@@ -73,17 +73,22 @@ public static class SdfWorldPackage {
     /// <summary>The pass-group value holding the slice plane's signed offset along its axis, in world units
     /// (<c>float</c>).</summary>
     public const string DebugSliceOffset = "debugSliceOffset";
-    /// <summary>The pass-group value holding the grid overlay's flags: bit 0 the world floor grid, bit 1 the object grid
-    /// (<c>uint</c>).</summary>
+    /// <summary>The pass-group value holding the view's grid flags: bit 0 the world grid on the working plane, bit 1 the
+    /// object grid, bit 2 the world grid projected onto every surface (<c>uint</c>).</summary>
     public const string GridFlags = "gridFlags";
-    /// <summary>The pass-group value holding the floor height the world grid draws on (<c>float</c>).</summary>
-    public const string GridFloorY = "gridFloorY";
-    /// <summary>The pass-group value holding the world grid's pitch on X and Z, in world units, zero disabling an axis
-    /// (<c>float2</c>).</summary>
+    /// <summary>The pass-group value holding the working plane's height the world grid draws on, in world units
+    /// (<c>float</c>).</summary>
+    public const string GridPlaneY = "gridPlaneY";
+    /// <summary>The pass-group value holding the grid's line width in pixels at the surface, which the on-plane band
+    /// scales with (<c>float</c>).</summary>
+    public const string GridLineWidth = "gridLineWidth";
+    /// <summary>The pass-group value holding the world grid's pitch on X, Y and Z, in world units, zero disabling an axis
+    /// (<c>float3</c>).</summary>
     public const string GridWorldPitch = "gridWorldPitch";
     /// <summary>The pass-group value holding the object grid's reference origin in world space (<c>float3</c>).</summary>
     public const string GridObjectOrigin = "gridObjectOrigin";
-    /// <summary>The pass-group value holding the object grid's pitch on its reference X and Z (<c>float2</c>).</summary>
+    /// <summary>The pass-group value holding the object grid's pitch on its reference X, Y and Z, zero disabling an axis
+    /// (<c>float3</c>).</summary>
     public const string GridObjectPitch = "gridObjectPitch";
     /// <summary>The pass-group value holding the object grid's reference orientation quaternion, xyzw
     /// (<c>float4</c>).</summary>
@@ -262,10 +267,11 @@ public static class SdfWorldPackage {
         Value(name: DebugSliceAxis, type: ShaderValueType.Float),
         Value(name: DebugSliceOffset, type: ShaderValueType.Float),
         Value(name: GridFlags, type: ShaderValueType.Uint),
-        Value(name: GridFloorY, type: ShaderValueType.Float),
-        Value(name: GridWorldPitch, type: ShaderValueType.Float2),
+        Value(name: GridPlaneY, type: ShaderValueType.Float),
+        Value(name: GridLineWidth, type: ShaderValueType.Float),
+        Value(name: GridWorldPitch, type: ShaderValueType.Float3),
         Value(name: GridObjectOrigin, type: ShaderValueType.Float3),
-        Value(name: GridObjectPitch, type: ShaderValueType.Float2),
+        Value(name: GridObjectPitch, type: ShaderValueType.Float3),
         Value(name: GridObjectFrame, type: ShaderValueType.Float4),
         Value(name: GridObjectPatchRadius, type: ShaderValueType.Float),
         Value(name: FiniteDifferenceNormals, type: ShaderValueType.Uint),

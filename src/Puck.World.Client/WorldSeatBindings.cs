@@ -109,9 +109,11 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     // the reveal's carrier: a gated overlay's chords/pages appear only once the fact it names is set. Absence always
     // composes (today's behavior). Unfilled trailing slots stay null, which WorldBindingComposer.Compose already
     // skips (profile/session are routinely null too), so no second pass to re-size the array is needed.
+    // The engine's editor layer (WorldEditorBindings.Layer) composes beneath all of them, from the world's layers as they
+    // compose this call, so it follows the same gates.
     private BindingProfileDocument?[] BaseLayers(IReadOnlyList<WorldBindingOverlay> overlays, WorldDefinition definition, ulong tick, ulong engineTick, BindingProfileDocument? profile, BindingProfileDocument? session) {
-        var layers = new BindingProfileDocument?[(overlays.Count + 2)];
-        var index = 0;
+        var layers = new BindingProfileDocument?[(overlays.Count + 3)];
+        var index = 1;
 
         foreach (var overlay in overlays) {
             if (
@@ -131,6 +133,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         layers[index++] = profile;
         // Live session rebinds compose LAST — the freshest authoring wins within every group.
         layers[index] = session;
+        layers[0] = WorldEditorBindings.Layer(worldLayers: layers.AsSpan(start: 1));
 
         return layers;
     }
@@ -1149,6 +1152,14 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         )
         );
     }
+    /// <summary>Returns a value indicating whether seat <paramref name="slot"/> builds: its
+    /// <see cref="WorldContextFamilies.Editor"/> family holds <see cref="WorldContextFamilies.EditorBuild"/>.</summary>
+    /// <param name="slot">The 0-based seat slot.</param>
+    public bool IsBuilding(int slot) => string.Equals(
+        a: ModeState(family: WorldContextFamilies.Editor, slot: slot),
+        b: WorldContextFamilies.EditorBuild,
+        comparisonType: StringComparison.Ordinal
+    );
     /// <summary>Returns a value indicating whether seat <paramref name="slot"/>'s currently published state, on any
     /// AUTHORED family its routed document declares, targets <see cref="WorldSeatModeState.CameraTarget"/> — the
     /// frame source's own condition for resolving <see cref="WorldViewDefaults.CameraRig"/> instead of
@@ -1214,6 +1225,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
             families: m_definitions[slot].SeatModes,
             slot: slot
         );
+        m_contextStates[slot][WorldContextFamilies.Editor] = WorldContextFamilies.EditorPlay;
         DeriveActiveGroup(slot: slot);
     }
     /// <inheritdoc/>
@@ -1575,18 +1587,30 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
 
         return null;
     }
-    /// <summary>Resolves an AUTHORED (world-declared) seat-mode family by name for seat <paramref name="slot"/>'s
-    /// currently routed document — the lookup <c>player.mode</c> validates a family/state token through. Built-in
-    /// families (roster, engagement, layout) are never resolved here; they are not player-settable.</summary>
+    /// <summary>Resolves a seat-mode family <c>player.mode</c> may flip by name for seat <paramref name="slot"/>: the
+    /// built-in <see cref="EditorFamily"/>, or an AUTHORED (world-declared) family of the seat's currently routed
+    /// document. The other built-in families (roster, engagement, layout) are never resolved here; they are not
+    /// player-settable.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
     /// <param name="family">The family name to resolve.</param>
     public WorldSeatModeFamily? TryResolveMode(int slot, string family) => ((((uint)slot) < SeatCount)
-        ? FindSeatMode(
-            definition: m_definitions[slot],
-            family: family
-        )
+        ? (string.Equals(a: family, b: WorldContextFamilies.Editor, comparisonType: StringComparison.Ordinal)
+            ? EditorFamily
+            : FindSeatMode(
+                definition: m_definitions[slot],
+                family: family
+            ))
         : null
     );
+
+    /// <summary>Gets the built-in editor family as a mode family: <see cref="WorldContextFamilies.EditorPlay"/> and
+    /// <see cref="WorldContextFamilies.EditorBuild"/>, starting in play, neither targeting a camera.</summary>
+    public static WorldSeatModeFamily EditorFamily { get; } = new(
+        DefaultState: WorldContextFamilies.EditorPlay,
+        Name: WorldContextFamilies.Editor,
+        States: [new WorldSeatModeState(Name: WorldContextFamilies.EditorPlay), new WorldSeatModeState(Name: WorldContextFamilies.EditorBuild)]
+    );
+
     /// <summary>Checks a prospective live session layer against the seat's actual current composition and routed
     /// channel table without installing it. Stale route-local rows in older layers receive the same surgical filtering
     /// <see cref="RecomposeSeat"/> applies, while a structural or surviving vocabulary error refuses the candidate.
@@ -1790,6 +1814,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
             m_contextStates[slot] = new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
                 [WorldContextFamilies.Roster] = WorldContextFamilies.RosterUnjoined,
                 [WorldContextFamilies.Engagement] = WorldContextFamilies.EngagementNone,
+                [WorldContextFamilies.Editor] = WorldContextFamilies.EditorPlay,
             };
             m_seatContexts[slot] = (seedDocument.Contexts ?? []);
             m_composed[slot] = seedDocument;

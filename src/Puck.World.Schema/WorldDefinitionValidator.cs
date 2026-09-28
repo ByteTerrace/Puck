@@ -838,21 +838,6 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{name} must be finite and positive.");
         }
     }
-    // The per-axis effective-extent check for a box solidity facet: a margin that inverts any axis (halfExtent + margin
-    // <= 0) is rejected by name, not turned into a negative-extent collider.
-    private static void RequirePositiveEffectiveExtent(Vector3 halfExtents, float margin, string path, List<string> errors) {
-        if (!float.IsFinite(f: margin)) {
-            return;
-        }
-
-        if (
-            ((halfExtents.X + margin) <= 0f) ||
-            ((halfExtents.Y + margin) <= 0f) ||
-            ((halfExtents.Z + margin) <= 0f)
-        ) {
-            errors.Add(item: $"{path} {margin} inverts the collider (halfExtent + margin must be > 0 on every axis).");
-        }
-    }
     // The general bounded-float door every closed-interval check (unit alphas, gain ceilings, half-angle cones, …)
     // folds onto: finite, and within [min, max] with either edge switchable to an open bound (e.g. a half-angle's
     // 0 is excluded — a zero-width cone senses nothing — while its 180 ceiling is admitted).
@@ -1118,6 +1103,10 @@ public static partial class WorldDefinitionValidator {
 
         ValidatePlayerDefaults(
             defaults: definition.PlayerDefaults,
+            errors: errors
+        );
+        ValidateEditor(
+            editor: definition.Editor,
             errors: errors
         );
         ValidateSteerBinding(

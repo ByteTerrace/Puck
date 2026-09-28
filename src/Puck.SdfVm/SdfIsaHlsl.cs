@@ -246,6 +246,7 @@ public static class SdfIsaHlsl {
             value: SdfFrameBlock.MinimumNear
         );
         declarations.Members<GpuSamplerFilter>(prefix: "SDF_FILTER");
+        declarations.Members<GridOverlayFlags>(prefix: "SDF_GRID");
         declarations.Section(title: "The environment's rows in the pass block's environment array (SdfEnvironment) and its light kinds.");
         declarations.Count(name: "SDF_ENV_ROW_COUNT", value: SdfEnvironment.RowCount);
         declarations.Count(name: "SDF_ENV_CONTROL_ROW", value: SdfEnvironment.ControlRow);

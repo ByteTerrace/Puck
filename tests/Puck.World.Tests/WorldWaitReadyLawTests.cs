@@ -8,7 +8,8 @@ namespace Puck.World.Tests;
 /// CONTRACT UNDER TEST: <c>world.wait ready &lt;seconds&gt;</c> holds only its issuing session until the engine
 /// readiness it was composed with reads ready, whatever the tick, and a host that composes no renderer refuses it by
 /// name; <c>world.wait bakes &lt;seconds&gt;</c> holds the same way until the bake readiness reads settled, and a host
-/// that bakes nothing refuses it by name. The readiness here is a flag the law sets, so nothing is timed; the deadline path is left to the canaries that
+/// that bakes nothing refuses it by name; <c>world.wait captures &lt;seconds&gt;</c> holds the same way until every armed
+/// capture has landed, and a host that composes no renderer refuses it by name. The readiness here is a flag the law sets, so nothing is timed; the deadline path is left to the canaries that
 /// run a real engine.
 /// </summary>
 public sealed class WorldWaitReadyLawTests {
@@ -25,6 +26,7 @@ public sealed class WorldWaitReadyLawTests {
         public WorldConsoleWaitGate GateFor(WorldInstance instance) => gate;
     }
     private sealed class FlagReadiness : IWorldEngineReadiness {
+        public bool CapturesSettled { get; set; }
         public bool IsReady { get; set; }
         public string? NotReadyReason => (IsReady
             ? null
@@ -139,6 +141,7 @@ public sealed class WorldWaitReadyLawTests {
             name: "boot"
         );
         var bakes = new FlagBakes();
+
         var (source, session, answered) = Console(
             bakes: bakes,
             readiness: null,
@@ -177,6 +180,54 @@ public sealed class WorldWaitReadyLawTests {
         Assert.Equal(
             actual: bakelessAnswers.Select(selector: static answer => (answer.Result.IsError, answer.Result.Output)),
             expected: [(true, "[world.wait: refused (this host bakes nothing, so no bake will ever settle)]")]
+        );
+    }
+    [Fact]
+    public void ACapturesWaitHoldsItsSessionUntilEveryCaptureHasLandedAndRefusesWithoutARenderer() {
+        using var row = HostRow.Build(
+            definition: Fixtures.BuildDocument(),
+            name: "boot"
+        );
+        var readiness = new FlagReadiness { IsReady = true };
+
+        var (source, session, answered) = Console(
+            readiness: readiness,
+            row: row
+        );
+        var (headless, headlessSession, headlessAnswers) = Console(
+            readiness: null,
+            row: row
+        );
+
+        // A capture is pending: the engine is ready, so only the capture's landing can release the hold.
+        session.Enqueue(line: "world.wait captures 600");
+        session.Enqueue(line: "probe");
+
+        for (var drain = 0; (drain < 8); drain++) {
+            source.Collect();
+        }
+
+        var armed = Assert.Single(collection: answered);
+
+        Assert.Equal(
+            actual: (armed.Line, armed.Result.IsError, armed.Result.Output),
+            expected: ("world.wait captures 600", false, "[world.wait: holding until the captures have landed, at most 600 seconds, from tick 0]")
+        );
+
+        readiness.CapturesSettled = true;
+        source.Collect();
+
+        Assert.Equal(
+            actual: answered.Select(selector: static answer => answer.Line),
+            expected: ["world.wait captures 600", "probe"]
+        );
+
+        headlessSession.Enqueue(line: "world.wait captures 5");
+        headless.Collect();
+
+        Assert.Equal(
+            actual: headlessAnswers.Select(selector: static answer => (answer.Result.IsError, answer.Result.Output)),
+            expected: [(true, "[world.wait: refused (this host composes no renderer, so no capture will ever land)]")]
         );
     }
 }

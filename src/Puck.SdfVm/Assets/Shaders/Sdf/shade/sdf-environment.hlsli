@@ -1,15 +1,10 @@
-// The screen surfaces' shading: the grid overlay colors, the CRT glass, the glyph decals, the bounded volumes and the
-// screen sources a screen hit samples.
+// The screen surfaces' shading: the CRT glass, the glyph decals, the bounded volumes and the screen sources a screen hit
+// samples.
 #ifndef SHADE_SDF_ENVIRONMENT_HLSLI
 #define SHADE_SDF_ENVIRONMENT_HLSLI
 #include "../frame/sdf-environment.hlsli"
 
 #ifdef SDF_SCREEN_SOURCES
-static const float GridFadeDistance = 32.0;                       // the world grid fades to flat past this (far-field anti-moire)
-static const float GridGrazeCos = 0.30;                           // bands vanish as the view flattens against the plane
-static const float3 GridWorldLineColor = float3(0.34, 0.56, 0.95);  // cool — the world floor lattice
-static const float3 GridObjectLineColor = float3(0.96, 0.66, 0.28); // warm — the reference's own lattice
-
 // CRT glass-face knobs. The glass's warp, the bezel's width among it, is each screen's published mapping
 // (ScreenMappingData); these are its look: near-square corners, a crisp dark bezel edge, faint aperture-grille stripes,
 // subtle native-line scanlines, and a soft bright-pixel bloom knee, so a game on it looks almost exactly like a real

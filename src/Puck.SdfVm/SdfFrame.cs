@@ -1,4 +1,3 @@
-using System.Numerics;
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Presentation;
 using Puck.SignedDistance;
@@ -16,6 +15,9 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
     /// it into the region. 1 (the default) renders native. Presentation-only: hosts drop it during camera transitions
     /// and for mostly-hidden views.</summary>
     public float RenderScale { get; init; } = 1f;
+    /// <summary>The editor grid the view draws, which its pass block carries (<see cref="SdfFrameBlock"/>); a view that
+    /// draws none carries <see cref="GridOverlayState.Hidden"/>.</summary>
+    public GridOverlayState Grid { get; init; } = GridOverlayState.Hidden;
     /// <summary>The quality the view renders at. Each view's pass block carries its own, so views of one frame, and of
     /// one residency, render the same scene at different cost. The default is full quality.</summary>
     public SdfViewQuality Quality { get; init; }
@@ -121,8 +123,6 @@ public sealed record SdfFrame(
     /// <summary>The lit path's lights, stylization gains, and sky as one lane table. The default is the pinned sun
     /// and hemisphere ambient an unauthored world renders.</summary>
     public SdfEnvironment Environment { get; init; } = SdfEnvironment.Default();
-    /// <summary>The object grid's reference frame orientation (the lattice renders in this frame's coordinates).</summary>
-    public Quaternion GridObjectFrame { get; init; } = Quaternion.Identity;
     /// <summary>The far distance, in world units: the depth at which every camera march ends — the fine march's far
     /// exit, the beam's cone proofs (tile entry, the four-bound gap search, the F1 far bound) and every "nothing
     /// proven" tile-plane sentinel, and the depth/overshoot debug ramps. Authored as world data
@@ -174,20 +174,6 @@ public sealed record SdfFrame(
     /// block carries it as <c>enableShadowProxy</c> (<see cref="SdfFrameBlock"/>). An unset frame uploads 0 and the
     /// proxy stays off.</summary>
     public bool EnableShadowProxy { get; init; }
-    /// <summary>The grid-lock overlay flags (bit0 = draw the world floor grid, bit1 = draw the object grid). The pass
-    /// block carries it as <c>gridFlags</c> (<see cref="SdfFrameBlock"/>). Default 0 = no overlay, so a frame that
-    /// never sets it uploads the same zeros as before.</summary>
-    public uint GridFlags { get; init; }
-    /// <summary>The floor plane height the world grid draws on (the overlay gates on the surface being near this Y).</summary>
-    public float GridFloorY { get; init; }
-    /// <summary>The object grid's reference frame origin (world space).</summary>
-    public Vector3 GridObjectOrigin { get; init; }
-    /// <summary>The object grid's finite-patch radius (reference-local units); 0 disables the object grid.</summary>
-    public float GridObjectPatchRadius { get; init; }
-    /// <summary>The object grid's per-axis in-plane pitch (reference-local X/Z).</summary>
-    public Vector2 GridObjectPitch { get; init; }
-    /// <summary>The world floor grid's per-axis lattice pitch on X/Z (world units); 0 disables the grid on that axis.</summary>
-    public Vector2 GridWorldPitch { get; init; }
     /// <summary>Gets the deterministic tick clock the sky reads: the star-twinkle phase and the integrated cloud offsets.</summary>
     /// <remarks>
     /// <para>

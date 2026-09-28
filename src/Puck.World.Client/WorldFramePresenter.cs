@@ -1535,6 +1535,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 Camera: camera,
                 Region: region
             ) {
+                Grid = SeatGrid(slot: slot),
                 Quality = quality,
                 RenderScale = (m_settings.RenderScale * transitionScale),
             });
@@ -1749,9 +1750,11 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     /// <see langword="null"/> for a presentation with no render graph, whose instance slots then show nothing.</param>
     /// <param name="bakes">The schedule pumped once per captured frame to keep the definition's creation bakes current,
     /// or <see langword="null"/> for a presentation that bakes nothing.</param>
+    /// <param name="editor">Each seat's editor state, or <see langword="null"/> for a fresh one with nothing moved.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldFramePresenter(FrameRateMonitor frameRate, WorldClient client, IWorldSimulationClock simulation, WorldRenderSettings settings, IWorldScreenPresenter binder, WorldRenderEnvelope envelope, WorldSeatBindings seatBindings, WorldStampPool animator, IWorldAudioFrameFeed audio, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldContinuum continuum, WorldTextCatalog text, IWorldAdjacencySource adjacencies, MarkerStore markers, Func<string, OverlayResolvedGlyph> resolveIcon, WorldSpeechClock speech, IOverlayPredicateEvaluator? overlayFacts = null, WorldViewGraphHost? graphs = null, WorldBakeSchedule? bakes = null) {
+    public WorldFramePresenter(FrameRateMonitor frameRate, WorldClient client, IWorldSimulationClock simulation, WorldRenderSettings settings, IWorldScreenPresenter binder, WorldRenderEnvelope envelope, WorldSeatBindings seatBindings, WorldStampPool animator, IWorldAudioFrameFeed audio, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldContinuum continuum, WorldTextCatalog text, IWorldAdjacencySource adjacencies, MarkerStore markers, Func<string, OverlayResolvedGlyph> resolveIcon, WorldSpeechClock speech, IOverlayPredicateEvaluator? overlayFacts = null, WorldViewGraphHost? graphs = null, WorldBakeSchedule? bakes = null, WorldEditorSeats? editor = null) {
         ArgumentNullException.ThrowIfNull(argument: frameRate);
+        Editor = (editor ?? new WorldEditorSeats());
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: anchor);
         ArgumentNullException.ThrowIfNull(argument: speech);

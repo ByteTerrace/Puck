@@ -1,10 +1,11 @@
 // The light stage: shades one pixel from its surface sample (SdfSurfaceSample) into the view's working color, the sky on
 // a miss. It samples a bound screen, re-resolves the material, lights the surface through the one light interface
-// (sdf-light.hlsli), the key light under the soft shadow the shadow stage wrote, and applies the grid overlays, the
+// (sdf-light.hlsli), the key light under the soft shadow the shadow stage wrote, and applies the editor grid, the
 // distance fog and the silhouette coverage; the volumes and the debug views follow it.
 #ifndef SHADE_SDF_LIGHT_STAGE_HLSLI
 #define SHADE_SDF_LIGHT_STAGE_HLSLI
 #include "sdf-light.hlsli"
+#include "sdf-grid.hlsli"
 #ifdef SDF_VIEWS_PASS
 
 float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s) {
@@ -204,21 +205,9 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s) {
     }
 
     if (useFinalShading) {
-#ifdef SDF_SCREEN_SOURCES
-        // The grid overlays tint the lit color before the distance fog, so a far grid still recedes. The world grid
-        // paints the floor plane by height (its material id is assigned at run time); the object grid is a finite patch
-        // in the reference frame.
-        uint gridFlags = passGroup.gridFlags;
-        float gridFloorY = passGroup.gridFloorY;
-
-        if (((gridFlags & 1u) != 0u) && (abs(surfacePoint.y - gridFloorY) < 0.02)) {
-            color = applyWorldFloorGrid(color, surfacePoint.xz, passGroup.gridWorldPitch, p.rayDirection, s.t);
-        }
-
-        if ((gridFlags & 2u) != 0u) {
-            color = applyObjectGrid(color, surfacePoint, p.rayDirection, gridFloorY);
-        }
-#endif
+        // The editor grid tints the lit color before the distance fog, so a far grid still recedes. It reads the
+        // geometric normal, which the soften above never widens.
+        color = sdfApplyGrid(color, surfacePoint, s.normal, p.rayDirection, (p.pixelFootprint * s.t));
 
         float fog = (1.0 - exp(-worldSkyFogDensity() * s.t));
         color = lerp(color, skyGradient(p.rayDirection), fog);

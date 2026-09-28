@@ -4,27 +4,31 @@ namespace Puck.World.Client;
 
 public static partial class WorldSessionLevers {
     /// <summary>Folds the live presentation levers into their document homes for a <c>world.save</c> snapshot: the
-    /// render levers into <c>render</c>, the master volume into <c>audio</c>, the present target into <c>host</c>, and
-    /// the primary seat's forced binding-bar visibility into the first <c>bindingOverlays</c> row. The authority half
-    /// (<c>Puck.World.Server.WorldSessionCapture</c>) folds first.
+    /// render levers into <c>render</c>, the master volume into <c>audio</c>, the present target into <c>host</c>, the
+    /// primary seat's forced binding-bar visibility into the first <c>bindingOverlays</c> row, and the primary seat's
+    /// moved grid and snapping into <c>editor</c>. The authority half (<c>Puck.World.Server.WorldSessionCapture</c>)
+    /// folds first.
     /// <para>A lever folds only into a section the document authors, and a section whose lever agrees with it comes
     /// back as the same instance, so an absent section stays absent and an authored one keeps exactly the members its
     /// author wrote. An absent section resolves to the engine's inert value, which is not a section a saved document
     /// may claim: an absent <c>audio</c> section, for one, resolves to a zero speaker radius the validator refuses in
-    /// an authored one.</para></summary>
+    /// an authored one. The <c>editor</c> section is the one exception: its defaults are a valid section, so a moved
+    /// value folds into an absent one too, and an unmoved seat leaves it as authored.</para></summary>
     /// <param name="definition">The definition to fold into, normally the authority half's snapshot.</param>
     /// <param name="settings">The live render-lever settings.</param>
     /// <param name="pacing">The live present-rate control.</param>
     /// <param name="audio">The audio director owning the master-volume lever.</param>
     /// <param name="bindingBar">The live per-seat binding-bar visibility overrides.</param>
+    /// <param name="editor">The live per-seat editor state.</param>
     /// <returns>The folded definition.</returns>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public static WorldDefinition Fold(WorldDefinition definition, WorldRenderSettings settings, PresentPacingControl pacing, IWorldAudioLever audio, WorldBindingBarVisibility bindingBar) {
+    public static WorldDefinition Fold(WorldDefinition definition, WorldRenderSettings settings, PresentPacingControl pacing, IWorldAudioLever audio, WorldBindingBarVisibility bindingBar, WorldEditorSeats editor) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: settings);
         ArgumentNullException.ThrowIfNull(argument: pacing);
         ArgumentNullException.ThrowIfNull(argument: audio);
         ArgumentNullException.ThrowIfNull(argument: bindingBar);
+        ArgumentNullException.ThrowIfNull(argument: editor);
 
         return (definition with {
             RenderRaw = FoldRender(
@@ -39,6 +43,7 @@ public static partial class WorldSessionLevers {
                 host: definition.HostRaw,
                 pacing: pacing
             ),
+            EditorRaw = editor.Fold(authored: definition.EditorRaw),
             BindingOverlaysRaw = FoldBindingOverlays(
                 overlays: definition.BindingOverlaysRaw,
                 visibility: bindingBar

@@ -300,7 +300,48 @@ internal sealed partial class PlayerCommandModule {
             verb: CameraCommand
         );
     }
+    // The no-token build toggle a key or button fires: the seat's editor family flips between play and build through
+    // the same ApplyMode player.mode editor takes. A seat whose principal may not change the placements still builds,
+    // and the echo says it is read-only, as its refused edits will.
+    private CommandResult BuildHandler(CommandContext context, WireArgs args) {
+        var (slot, error) = SeatCommandArgs.ResolveSlot(
+            args: in args,
+            at: 0,
+            context: context,
+            verb: WorldEditorBindings.ToggleCommand
+        );
+
+        if (error is { } resolveError) {
+            return resolveError;
+        }
+
+        var target = (m_seatBindings.IsBuilding(slot: slot)
+            ? WorldContextFamilies.EditorPlay
+            : WorldContextFamilies.EditorBuild);
+        var result = ApplyMode(
+            context: context,
+            modeFamily: WorldSeatBindings.EditorFamily,
+            slot: slot,
+            targetState: WorldSeatBindings.EditorFamily.States.First(predicate: state => (state.Name == target)),
+            verb: WorldEditorBindings.ToggleCommand
+        );
+
+        return ((m_seatBindings.IsBuilding(slot: slot) && !m_server.Grants.Allows(
+            capability: WorldCapability.Mutate,
+            principal: context.Principal,
+            subject: GrantSubject.Section(section: WorldSection.Placements)
+        ).IsAllowed)
+            ? (result with { Output = $"{result.Output}\n[{WorldEditorBindings.ToggleCommand}: read-only — {context.Principal.Describe()} cannot mutate placements]" })
+            : result);
+    }
     private IEnumerable<CommandDefinition> ModeVerbs() {
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
+            name: WorldEditorBindings.ToggleCommand,
+            description: $"Flips a seat between playing and building: player.build [seat] (seat 1..{PlayerRoster.MaxSlots}, default 1), the same flip player.mode editor build|play makes. While a seat builds, its bindings resolve in the engine's build group (the build page: the toggle, the grid and snapping, placing, and nudging and turning the seat's current placement) and its view draws its grid. A seat whose principal may not mutate placements still builds, and the echo marks it read-only.",
+            handler: BuildHandler,
+            routing: CommandRouting.Simulation
+        );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: CameraCommand,

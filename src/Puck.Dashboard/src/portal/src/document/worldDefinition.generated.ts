@@ -70,6 +70,7 @@ export type WorldDefinition = {
   machines?: (WorldMachine | null)[] | null;
   ruleGroups?: (RuleGroupDeclaration | null)[] | null;
   sets?: (CellSetRow | null)[] | null;
+  editor?: WorldEditorDefaults | null;
   /**
    * Gets the basis document this file layers over, as a file path resolved against this document's own directory — the document-composition member (see WorldDocumentBasis). A file naming a basis is a delta: it authors only what differs, inheriting every omitted member from the (recursively composed) basis chain. Unrelated to the coordinate basis the validator's geometry speaks of.
    */
@@ -4726,6 +4727,100 @@ export type WorldDistributionRegionScatter = {
    * The hash seed, folded with the world seed.
    */
   seed?: number;
+};
+
+export type WorldEditorCamera = {
+  /**
+   * The orbit rate at full input, in radians per second; positive.
+   */
+  orbitRate?: number;
+  /**
+   * The pan rate at full input, in world units per second; positive.
+   */
+  panRate?: number;
+  /**
+   * The exponential dolly rate at full input, per second; positive.
+   */
+  zoomRate?: number;
+  /**
+   * The fly rate at full input, in world units per second; positive.
+   */
+  flyRate?: number;
+  /**
+   * The lowest orbit pitch, in radians; above -π/2 and below MaxPitch.
+   */
+  minPitch?: number;
+  /**
+   * The highest orbit pitch, in radians; below π/2.
+   */
+  maxPitch?: number;
+  /**
+   * The nearest orbit distance, in world units; positive and below MaxDistance.
+   */
+  minDistance?: number;
+  /**
+   * The farthest orbit distance, in world units.
+   */
+  maxDistance?: number;
+};
+
+export type WorldEditorDefaults = {
+  /**
+   * The grid; absent takes every grid default.
+   */
+  grid?: WorldEditorGrid | null;
+  /**
+   * The snapping; absent takes every snapping default.
+   */
+  snap?: WorldEditorSnap | null;
+  /**
+   * The editor camera's feel; absent takes every camera default.
+   */
+  camera?: WorldEditorCamera | null;
+};
+
+export type WorldEditorGrid = {
+  /**
+   * Whether the grid draws.
+   */
+  visible?: boolean;
+  /**
+   * Where the world grid draws.
+   */
+  mode?: WorldEditorGridMode;
+  /**
+   * The world lattice's pitch on X, Y and Z, in world units; every component positive.
+   */
+  pitch?: DocumentVector3;
+  /**
+   * The working plane's height, in world units, when the mode is Plane.
+   */
+  planeY?: number;
+  /**
+   * The drawn line's width, in pixels; positive.
+   */
+  lineWidth?: number;
+};
+
+export type WorldEditorGridMode = "Surface" | "Follow" | "Plane";
+
+export type WorldEditorSnap = {
+  /**
+   * Whether positions snap to the grid.
+   */
+  enabled?: boolean;
+  /**
+   * The angle a turn steps and a rotation snaps to, in degrees; in (0, 180].
+   */
+  angleStepDegrees?: number;
+  /**
+   * Whether a placement rests on the surface under the pointer.
+   */
+  surface?: boolean;
+  /**
+   * How far a captured reference's own grid reaches around it, in multiples of its largest half extent; positive.
+   */
+  objectPatchRadius?: number;
 };
 
 /**
