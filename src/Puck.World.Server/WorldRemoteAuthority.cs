@@ -134,7 +134,7 @@ public readonly record struct WorldFederationAnswer(WorldFederationResponse Kind
 /// is what keeps a dead neighbour from stalling the tick. A caller that could be told "not yet" would have to hold
 /// state across ticks the adjacency scan is concurrently re-deriving, so no path here returns one.</para>
 /// </remarks>
-public sealed partial class WorldRemoteAuthority : IDisposable {
+public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDisposable {
     /// <summary>The detail every federation request answers with when this run holds no signing identity.</summary>
     private const string UnconfiguredDetail = "this run holds no federation signing identity";
 
@@ -246,8 +246,7 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
     /// <summary>Gets the hub this authority's narration is delivered through, or <see langword="null"/> when none
     /// was attached — the seam its own <see cref="WorldFederatedServerLink"/> narrates a held credential through
     /// too, rather than carrying a second hub reference.</summary>
-    internal WorldOutputHub? NarrationHub => m_narrationHub;
-
+    public WorldOutputHub? NarrationHub => m_narrationHub;
     public string Authority => ((Volatile.Read(location: ref m_authority) is { Length: > 0 } observed)
         ? observed
         : PeerAuthority
@@ -295,9 +294,21 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
     /// <param name="kind">The request kind.</param>
     /// <param name="body">The encoded request leaf.</param>
     /// <returns>The peer's answer, or a named refusal when the lane could not deliver one in time.</returns>
-    public WorldFederationAnswer AwaitAnswer(string sourceAuthority, WorldFederationRequest kind, byte[] body) {
+    public WorldFederationAnswer AwaitAnswer(string sourceAuthority, WorldFederationRequest kind, byte[] body) => AnswerAsync(
+        body: body,
+        kind: kind,
+        sourceAuthority: sourceAuthority
+    ).GetAwaiter().GetResult();
+    /// <summary>Issues one routed request on the source namespace's lane and returns its answer without waiting for it:
+    /// the peer's answer, or a named refusal when the lane cannot carry it or the peer does not answer within
+    /// <see cref="RoutedRequestDeadline"/> on the host clock.</summary>
+    /// <param name="sourceAuthority">The authenticated source namespace whose lane carries the request.</param>
+    /// <param name="kind">The request kind.</param>
+    /// <param name="body">The encoded request leaf.</param>
+    /// <returns>The answer, completed on whatever thread the lane answers on.</returns>
+    public Task<WorldFederationAnswer> AnswerAsync(string sourceAuthority, WorldFederationRequest kind, byte[] body) {
         if (m_submissionAuthority is { } upstream) {
-            return upstream.AwaitAnswer(
+            return upstream.AnswerAsync(
                 body: body,
                 kind: kind,
                 sourceAuthority: sourceAuthority
@@ -305,10 +316,10 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
         }
 
         if (LacksSigningIdentity()) {
-            return WorldFederationAnswer.Refused(
+            return Task.FromResult(result: WorldFederationAnswer.Refused(
                 detail: UnconfiguredDetail,
                 refusal: WireRefusal.LaneUnavailable
-            );
+            ));
         }
 
         var lane = LaneFor(
@@ -317,20 +328,45 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
         );
 
         if (!lane.IsAvailable) {
-            return WorldFederationAnswer.Refused(
+            return Task.FromResult(result: WorldFederationAnswer.Refused(
                 refusal: WireRefusal.LaneUnavailable,
                 detail: $"the federation lane to '{Endpoint}' is reconnecting"
-            );
+            ));
         }
 
-        return AnswerWithinDeadline(
-            kind: kind,
-            task: EnqueueAnswerAsync(
+        return WithinDeadlineAsync(
+            answer: EnqueueAnswerAsync(
                 body: body,
                 kind: kind,
                 lane: lane
-            )
+            ),
+            clock: m_clock,
+            endpoint: Endpoint,
+            kind: kind
         );
+    }
+    /// <summary>Bounds one routed answer by <see cref="RoutedRequestDeadline"/> on a clock: the answer when it arrives in
+    /// time, else a named <see cref="WireRefusal.LaneUnavailable"/> refusal.</summary>
+    /// <param name="answer">The pending answer.</param>
+    /// <param name="clock">The clock the deadline elapses on.</param>
+    /// <param name="endpoint">The peer's endpoint, as the refusal names it.</param>
+    /// <param name="kind">The request kind, as the refusal names it.</param>
+    /// <returns>The answer, or the refusal.</returns>
+    public static async Task<WorldFederationAnswer> WithinDeadlineAsync(Task<WorldFederationAnswer> answer, TimeProvider clock, string endpoint, WorldFederationRequest kind) {
+        ArgumentNullException.ThrowIfNull(argument: answer);
+        ArgumentNullException.ThrowIfNull(argument: clock);
+
+        try {
+            return await answer.WaitAsync(
+                timeout: RoutedRequestDeadline,
+                timeProvider: clock
+            ).ConfigureAwait(continueOnCapturedContext: false);
+        } catch (TimeoutException) {
+            return WorldFederationAnswer.Refused(
+                refusal: WireRefusal.LaneUnavailable,
+                detail: $"'{endpoint}' did not answer {kind} within {RoutedRequestDeadline.TotalSeconds:0.#}s"
+            );
+        }
     }
     public bool TryCredential(int bodyIndex, out string sourceAuthority, out WorldMobilityIdentity mobility) {
         if (TryRouteCredential(
@@ -541,23 +577,6 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
     // The one wait on a lane's answer. The tick thread needs an answer inside the tick (see AwaitAnswer), so the caller
     // blocks on the awaited deadline rather than on a wall-clock Task.Wait: the deadline is a WaitAsync on the host
     // clock, and the lane's task itself never faults, so the only non-answer is that deadline elapsing.
-    private WorldFederationAnswer AnswerWithinDeadline(Task<WorldFederationAnswer> task, WorldFederationRequest kind) {
-        if (!task.IsCompleted) {
-            try {
-                task.WaitAsync(
-                    timeout: RoutedRequestDeadline,
-                    timeProvider: m_clock
-                ).GetAwaiter().GetResult();
-            } catch (TimeoutException) {
-                return WorldFederationAnswer.Refused(
-                    refusal: WireRefusal.LaneUnavailable,
-                    detail: $"'{Endpoint}' did not answer {kind} within {RoutedRequestDeadline.TotalSeconds:0.#}s"
-                );
-            }
-        }
-
-        return task.Result;
-    }
     private LaneRoute CurrentRoute() => m_route.Lane;
     private static string DescribeHandshake(WireFrameRead read, string stage) =>
         (read.Ok
@@ -976,10 +995,12 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
         // mints a second crossing for the same seat — the traveler then arrives at the destination twice. A step
         // that ran out of time is an answered refusal, which the caller resolves once: terminal for a reservation,
         // in doubt for a commit.
-        answer = AnswerWithinDeadline(
-            kind: kind,
-            task: task
-        );
+        answer = WithinDeadlineAsync(
+            answer: task,
+            clock: m_clock,
+            endpoint: Endpoint,
+            kind: kind
+        ).GetAwaiter().GetResult();
         _ = m_transferSteps.TryRemove(
             key: key,
             value: out _

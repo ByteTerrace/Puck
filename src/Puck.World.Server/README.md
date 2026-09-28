@@ -1280,7 +1280,12 @@ forwarded to a committed traveler's destination answers through the same typed
 completion (`WorldLocalForwardedAuthority.TryApplySubmission`,
 `IWorldForwardedAuthority.TryForwardSubmission`): a buffered mutation's answer is
 the verdict the destination's tick applied, which the peer host awaits before it
-writes the completion back.
+writes the completion back. On the traveler's side, `WorldFederatedServerLink`
+submits a mutation that carries a completion without waiting: the call returns at
+once, and the verdict, or the routed deadline's refusal
+(`world.transport.completion_unavailable`, naming the deadline), reaches the
+completion when the lane answers (`WorldRemoteAuthority.AnswerAsync`). Other
+submissions still wait for their answer, bounded by the same deadline.
 
 The route follows later transfers whether a hop is local or reached over QUIC.
 Each hop checks its own source-scoped credential before following the next route,

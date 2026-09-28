@@ -29,6 +29,9 @@ namespace Puck.World;
 /// cross-row reference) still runs where it always has, at whole-document revalidation when the buffered mutation
 /// applies at the tick boundary. <c>puck schema</c> is DOCUMENTATION for a payload's shape, never a gate this verb
 /// consults.</para>
+/// <para>Every verb reads the instance the console addresses and submits back through that instance's own
+/// <see cref="WorldInstance.SubmissionLink"/>, carrying the activation of the document it read, so an edit never lands
+/// in another instance than the one it was composed on.</para>
 /// <para>Every mutation here carries the identity its ingress door stamped (see <see cref="CommandContext.Principal"/>) —
 /// Console for a typed line — and that identity is not a formality: <see cref="WorldServer"/>'s per-section
 /// <see cref="WorldCapability.Mutate"/> grant check applies to EVERY submitted mutation regardless of which module
@@ -39,7 +42,7 @@ namespace Puck.World;
 /// wraps the built <see cref="WorldRowAssignment"/> and what additive offset the r1 sequence takes.</para>
 /// <para><c>world.kits</c> is a plain census read-back, not a row verb — the kits section's only listing.</para>
 /// </remarks>
-public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authority, IServerLink link, WorldDeferredVerbEchoes echoes, WorldRowStepWindowGuard? stepGuard = null) : ICommandModule {
+public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authority, WorldDeferredVerbEchoes echoes, WorldRowStepWindowGuard? stepGuard = null) : ICommandModule {
     private const string PropertiesNamesPath = "properties.names";
 
     // The section table — the one thing that legitimately stays as data (CLAUDE.md: a table over these rows is
@@ -56,61 +59,6 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
     // whichever verb issues it.
     private readonly WorldRowStepWindowGuard m_stepGuard = (stepGuard ?? new());
 
-    // The one r1/cycle assignment-sequence builder both kits and looks reduce to — they differ only in which
-    // WorldMutation kind wraps the built WorldRowAssignment and r1's own additive offset (the two sequences must not
-    // land on the same index for the same tick, so each table keeps its own authored offset).
-    private CommandResult BuildAssignment(in WireArgs args, int r1Offset, Func<Principal, WorldRowAssignment, WorldMutation> toMutation, Principal principal, string verb) {
-        if (args.Is(
-            index: 1,
-            value: WorldSequence.R1
-        )) {
-            return link.Submit(
-                mutation: toMutation(
-                    principal,
-                    new WorldRowAssignment(
-                        Sequence: new WorldSequence(
-                            Name: WorldSequence.R1,
-                            Offset: r1Offset,
-                            Step: 0f
-                        ),
-                        Rows: []
-                    )
-                ),
-                echoes: echoes,
-                verb: "world.assign"
-            );
-        }
-
-        if (args.Is(
-            index: 1,
-            value: "cycle"
-        )) {
-            if (args.Count < 3) {
-                return CommandResult.Error(output: $"[{verb}: cycle needs at least one name]");
-            }
-
-            return link.Submit(
-                mutation: toMutation(
-                    principal,
-                    new WorldRowAssignment(
-                        Sequence: new WorldSequence(
-                            Name: WorldSequence.Index,
-                            Offset: 0,
-                            Step: 0f
-                        ),
-                        Rows: TailIdentifiers(
-                            args: args,
-                            start: 2
-                        )
-                    )
-                ),
-                echoes: echoes,
-                verb: "world.assign"
-            );
-        }
-
-        return CommandResult.Error(output: $"[{verb}: unknown sequence '{args[1].ToString()}' — r1 | cycle]");
-    }
     private static IReadOnlyDictionary<string, RowSection> BuildSections() => WithViewSections(sections: new Dictionary<string, RowSection>(comparer: StringComparer.Ordinal) {
         // Keyed sections: set + remove + read (world.row.step's row lookup).
         ["kits"] = new RowSection(
@@ -873,7 +821,7 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
             _ = obj.Remove(propertyName: property);
         }
     }
-    private CommandResult HandleAdd(WorldServer server, CommandContext context, WireArgs args) {
+    private CommandResult HandleAdd(WorldServer server, IServerLink link, CommandContext context, WireArgs args) {
         if (args.Count < 3) {
             return CommandResult.Usage(
                 form: "<path> [<key>] <listPath> <json> [after=<selector>]",
@@ -1053,45 +1001,10 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
             verb: "world.row.add"
         );
     }
-    private CommandResult HandleAssign(CommandContext context, WireArgs args) {
-        if (args.Count < 2) {
-            return CommandResult.Usage(
-                form: "kits|looks r1 | cycle <name> [<name>…]",
-                verb: "world.assign"
-            );
-        }
-
-        var principal = context.Principal;
-        var target = args[0].ToString();
-
-        return target switch {
-            "kits" => BuildAssignment(
-            args: args,
-            r1Offset: 1,
-            toMutation: static (principal, assignment) => new WorldMutation.SetKitAssignment(
-                Assignment: assignment,
-                Principal: principal
-            ),
-            principal: principal,
-            verb: "world.assign kits"
-        ),
-            "looks" => BuildAssignment(
-            args: args,
-            r1Offset: 129,
-            toMutation: static (principal, assignment) => new WorldMutation.SetLookAssignment(
-                Assignment: assignment,
-                Principal: principal
-            ),
-            principal: principal,
-            verb: "world.assign looks"
-        ),
-            _ => CommandResult.Error(output: $"[world.assign: unknown target '{target}' — kits|looks]"),
-        };
-    }
     // world.row.remove's list-element form: locates the named list field (a plain dotted/bracketed path, resolving
     // through any intermediate selector — "document.shapes[name=forearmL].swings"), removes the ONE element
     // <selector> names, and submits the whole modified row through the SAME section Upsert the whole-row form uses.
-    private CommandResult HandleListRemove(WorldServer server, CommandContext context, WireArgs args) {
+    private CommandResult HandleListRemove(WorldServer server, IServerLink link, CommandContext context, WireArgs args) {
         var path = args[0].ToString();
 
         if (!Sections.TryGetValue(
@@ -1219,7 +1132,7 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
     // the whole modified row through the SAME section Upsert the whole-row form uses — so the spliced field crosses
     // the row's own JsonTypeInfo exactly once, at reparse, which is where its declared shape (including a bindable
     // field's "state.row.key" string arm) is actually validated.
-    private CommandResult HandleLiteralSet(WorldServer server, CommandContext context, WireArgs args, string path, RowSection section) {
+    private CommandResult HandleLiteralSet(WorldServer server, IServerLink link, CommandContext context, WireArgs args, string path, RowSection section) {
         var keyed = (section.Remove is not null);
 
         if (
@@ -1481,7 +1394,7 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
 
         return new CommandResult(Output: $"[world.row: {path}{keySuffix}{fieldSuffix} = {node.ToJsonString()}]");
     }
-    private CommandResult HandleRemove(WorldServer server, CommandContext context, WireArgs args) {
+    private CommandResult HandleRemove(WorldServer server, IServerLink link, CommandContext context, WireArgs args) {
         // The list-element form (world.row.remove <path> [<key>] <listPath> <selector>) is 3 tokens for a keyless
         // section, 4 for a keyed one — neither collides with the whole-row form's fixed 2, so the dispatch is by
         // count alone, no JSON-shape heuristic needed (every token here is a plain address, never a payload).
@@ -1489,6 +1402,7 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
             return HandleListRemove(
                 args: args,
                 context: context,
+                link: link,
                 server: server
             );
         }
@@ -1549,7 +1463,7 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
             )
         );
     }
-    private CommandResult HandleSet(WorldServer server, CommandContext context, WireArgs args) {
+    private CommandResult HandleSet(WorldServer server, IServerLink link, CommandContext context, WireArgs args) {
         if (args.Count < 1) {
             return CommandResult.Usage(
                 form: "<path> <json>",
@@ -1605,6 +1519,7 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
             return HandleLiteralSet(
                 args: args,
                 context: context,
+                link: link,
                 path: path,
                 section: section,
                 server: server
@@ -1639,7 +1554,7 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
             )
         );
     }
-    private CommandResult HandleStep(WorldServer server, CommandContext context, WireArgs args) {
+    private CommandResult HandleStep(WorldServer server, IServerLink link, CommandContext context, WireArgs args) {
         if (args.Count is (< 1 or > 2)) {
             return CommandResult.Usage(
                 form: "<path> <delta>",
@@ -2061,10 +1976,10 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
             name: "world.row.set",
             description: "Upserts ANY document row or section by its dotted MEMBER PATH — the document's own camelCase JSON names (see puck schema for payload shapes): world.row.set <path> <json>. Keyed sections (kits, cameras, screens, speakers, placements, creations, tunes, patches, looks, addons, bindingOverlays, state, rules, hud.panels, views.layouts, views.graphs, groups.kinds, interactions.interactions) upsert one row addressed by its own key; keyless sections (motion, render, audio, authoring, collision, host, inputHold, hud.defaults, spawnPoints, views.seatRig, views.seatControl, views.post, playerDefaults.seatLook) replace the whole row (views.post takes its whole ordered JSON array, so a post pass is added, reordered or removed by writing the list). ONE grammar exception: properties.names takes a BARE NAME token, not JSON — world.row.set properties.names <name> declares it idempotently. A SECOND, LITERAL form sets ONE field inside a row instead of the whole thing: world.row.set <path> <key> <fieldPath> <json> for a keyed section, world.row.set <path> <fieldPath> <json> for a keyless one — discriminated from the whole-row form by the second token's own shape (a bare key/field path never starts with '{' or '['). <fieldPath> is the same dotted/bracketed grammar world.row.step and world.row read — a numeric index (shapes[3]) or a name/id-addressed selector (shapes[name=forearmL], palette[1].specular), refused by name when a selector matches none or more than one element, listing the candidates. Composes the modified row and submits it through the SAME Upsert the whole-row form uses, so a field's own declared type (a DocumentVector3's [x,y,z]-or-'state.row.key' binding-string arm, a nullable field's JSON null to clear) is validated at reparse exactly as it always is. Two edits to the SAME row in one tick window collide — the second composes from the same pre-drain base and would revert the first — and are refused by name; fence with world.wait, or compose one JSON row with the whole-row form. An unknown path is refused by name, naming every admissible sibling. Buffers and applies at the tick boundary like every WorldMutation; a full-document revalidation rejects loudly. This verb performs NO schema validation of its own — a JSON parse failure echoes inline and submits nothing; every semantic check still runs at apply.",
             handler: (context, args) => {
-                if (!authority.TryResolveServer(
+                if (!authority.TryResolveInstance(
                     context: context,
                     error: out var error,
-                    server: out var server,
+                    instance: out var instance,
                     verb: "world.row.set"
                 )) {
                     return error;
@@ -2073,7 +1988,8 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
                 return HandleSet(
                     args: args,
                     context: context,
-                    server: server
+                    link: instance.SubmissionLink,
+                    server: instance.Server
                 );
             },
             routing: CommandRouting.Simulation
@@ -2083,10 +1999,10 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
             name: "world.row.remove",
             description: "Removes ONE row from a KEYED document section by its dotted MEMBER PATH and key: world.row.remove <path> <key>. Keyed sections are the same set world.row.set upserts into (kits, cameras, screens [key is the integer index], speakers, placements, creations, tunes, patches, looks, addons, bindingOverlays, state, rules, hud.panels, views.layouts, views.graphs, groups.kinds, interactions.interactions), plus properties.names (BARE NAME token — world.row.remove properties.names <name>). A KEYLESS path (motion, render, audio, authoring, collision, host, inputHold, hud.defaults, spawnPoints, views.seatRig, views.seatControl, views.post, playerDefaults.seatLook) has no remove — it is refused by name. A SECOND form removes ONE ELEMENT of a list field instead of a whole row: world.row.remove <path> <key> <listPath> <selector> for a keyed section, world.row.remove <path> <listPath> <selector> for a keyless one (discriminated by argument count — 4 vs 3 — never by JSON shape, since neither token carries a payload). <listPath> is the dotted/bracketed path TO the list field (document.shapes, document.shapes[name=forearmL].swings); <selector> is a bare 0-based index or field=value, refused by name when it names none or more than one element, listing the candidates. Composes and submits a whole-row upsert through the SAME section table the row-level form uses; two edits to the same row in one tick window collide and are refused by name — fence with world.wait. An unknown path is refused by name, naming every admissible sibling. Buffers and applies at the tick boundary; rejected loudly if no row carries that key.",
             handler: (context, args) => {
-                if (!authority.TryResolveServer(
+                if (!authority.TryResolveInstance(
                     context: context,
                     error: out var error,
-                    server: out var server,
+                    instance: out var instance,
                     verb: "world.row.remove"
                 )) {
                     return error;
@@ -2095,7 +2011,8 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
                 return HandleRemove(
                     args: args,
                     context: context,
-                    server: server
+                    link: instance.SubmissionLink,
+                    server: instance.Server
                 );
             },
             routing: CommandRouting.Simulation
@@ -2136,10 +2053,10 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
             name: "world.row.step",
             description: "Steps ONE FIELD inside a document row or section by a delta — world.row.step <path> <delta>, one level deeper than world.row.set's own whole-row/whole-section path. <path> is <section>.<field> for a keyless section (render.sharpness) or <section>.<key>.<field> for a keyed one (creations.myrow.document.shapes[3].material, creations.myrow.document.shapes[name=forearmL].rounding) — the same section table world.row.set resolves against, and the same [n]/[field=value] list-selector grammar world.row.set's literal form and world.row read (a selector refused by name when it matches none or more than one element, listing the candidates). Field-type semantics: a number adds delta, typed by the field's real CLR type (an integer field steps in exact integer arithmetic, a float/double field in floating point — a fractional step on a whole-numbered float lands, and an out-of-range integer step refuses by name rather than throwing); a JSON boolean toggles on any nonzero delta; a named enum (the row's own C# member spelling) cycles forward/backward by delta's sign, wrapping. A vector, a nested object, or a plain (non-enum) string refuses by name. Bindable: a chord row carries the delta as a constant Axis1D value in place of the argument; the typed form takes an explicit numeric token. Buffers and applies through the SAME section Upsert world.row.set uses, at the tick boundary; a full-document revalidation still gates the result, and the accept/reject narration arrives there (no synchronous applied-result echo; a drain rejection additionally prints a per-verb [world.row.step: …] line). A second step against the same row in one tick window is refused by name — both would compose from the same pre-drain base and the later would revert the earlier; fence with world.wait between steps.",
             handler: (context, args) => {
-                if (!authority.TryResolveServer(
+                if (!authority.TryResolveInstance(
                     context: context,
                     error: out var error,
-                    server: out var server,
+                    instance: out var instance,
                     verb: "world.row.step"
                 )) {
                     return error;
@@ -2148,7 +2065,8 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
                 return HandleStep(
                     args: args,
                     context: context,
-                    server: server
+                    link: instance.SubmissionLink,
+                    server: instance.Server
                 );
             },
             routing: CommandRouting.Simulation,
@@ -2159,10 +2077,10 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
             name: "world.row.add",
             description: "Inserts ONE element into a LIST field inside a row: world.row.add <path> <key> <listPath> <json> [after=<selector>] for a keyed section, world.row.add <path> <listPath> <json> [after=<selector>] for a keyless one. <listPath> is the dotted/bracketed path TO the list field (document.shapes, document.palette, document.shapes[name=forearmL].swings — the same grammar world.row.set's literal form and world.row.step resolve a field through, walked all the way to the list itself); <json> is the new element's inline JSON. Omitting after= appends; after=<n> inserts after that 0-based index; after=<field>=<value> inserts after the element whose own field equals value, refused by name when it names none or more than one, listing the candidates. Composes and submits a whole-row upsert through the SAME section table world.row.set uses; two edits to the same row in one tick window collide and are refused by name — fence with world.wait. Buffers and applies at the tick boundary; a full-document revalidation rejects loudly.",
             handler: (context, args) => {
-                if (!authority.TryResolveServer(
+                if (!authority.TryResolveInstance(
                     context: context,
                     error: out var error,
-                    server: out var server,
+                    instance: out var instance,
                     verb: "world.row.add"
                 )) {
                     return error;
@@ -2171,7 +2089,8 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
                 return HandleAdd(
                     args: args,
                     context: context,
-                    server: server
+                    link: instance.SubmissionLink,
+                    server: instance.Server
                 );
             },
             routing: CommandRouting.Simulation

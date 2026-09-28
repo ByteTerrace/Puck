@@ -95,9 +95,7 @@ public sealed partial class WorldEditorCommandModule(WorldEditorSeats seats, IWo
         world = default;
         refusal = CommandResult.None;
 
-        if (!authority.TryResolve(context: context, instance: out var instance, refusal: out var reason)) {
-            refusal = CommandResult.Error(output: $"[{verb}: refused ({reason})]");
-
+        if (!authority.TryResolveInstance(context: context, error: out refusal, instance: out var instance, verb: verb)) {
             return false;
         }
 
@@ -131,7 +129,7 @@ public sealed partial class WorldEditorCommandModule(WorldEditorSeats seats, IWo
             Delivered: () => new WorldDeliveredDocument(Definition: server.Definition, Version: server.DocumentVersion),
             Guard: (stepGuard, () => WorldRowStepWindow.Of(server: server)),
             Lifetime: instance.Retired,
-            Link: (instance.ConsoleLink ?? instance.Link),
+            Link: instance.SubmissionLink,
             Mirror: null,
             Name: instance.Name,
             Version: server.DocumentVersion

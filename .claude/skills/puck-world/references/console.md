@@ -392,8 +392,11 @@ Same rule for per-field convenience: a BESPOKE per-section verb that reads a row
 changes one field, and submits the whole row back is a stale read against the
 same batch's own composing writes — a defect class, not a shortcut. The general
 literal field/list doors below do exactly this shape, safely, because they share
-ONE window guard (`WorldRowStepWindowGuard`) that refuses a second read-modify-
-whole-row-write against the same row inside one tick window of one world (a
+ONE window guard (`WorldRowStepWindowGuard`) and, like every door that reads the
+addressed instance before writing it, submit through that instance's own
+`WorldInstance.SubmissionLink` (resolved with `TryResolveInstance`). The guard
+refuses a second read-modify-whole-row-write against the same row inside one tick
+window of one world (a
 `WorldRowStepWindow`: one claim set per authority and activation, emptied when
 its tick moves on and dropped when that activation stops, so another world or
 activation never inherits or erases a claim) rather than letting the later one silently

@@ -96,6 +96,10 @@ public sealed class WorldInstance : IDisposable {
     public bool IsPaused { get; set; }
     /// <summary>This instance's own transport — see this type's constructor remarks.</summary>
     public IServerLink Link { get; }
+    /// <summary>Gets the link a console submits to this instance through: its <see cref="ConsoleLink"/>, which registers
+    /// each console line it mints for its verdict, when it keeps one, else its own <see cref="Link"/>. Whatever a console
+    /// reads from this instance it writes back through here, never through another instance's link.</summary>
+    public IServerLink SubmissionLink => (ConsoleLink ?? Link);
     /// <summary>Cancelled when this instance is disposed (stopped or reaped): its server steps no more, and nothing
     /// submitted to it is answered afterwards.</summary>
     public CancellationToken Retired => m_retired.Token;
