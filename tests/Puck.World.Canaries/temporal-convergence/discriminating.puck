@@ -1,0 +1,261 @@
+// Bootstrapped from a Puck world document. The '.puck' source is canonical: edit it and
+// compile, never the '.world.json' beside it.
+//
+// Decompiling again would OVERWRITE this file and discard every 'let', 'template' and
+// 'for' in it, none of which the document carries.
+
+schema: "puck.world.definition.v1"
+documentId: "temporal-convergence"
+
+cameras [
+  {
+    anchor: null
+    name: "counters-cam"
+    renderHeight: 128
+    renderWidth: 128
+    rig {
+      name: "counters-cam"
+      operations [
+        anchor(subject: worldPoint(point: [0, 2.5, 7]))
+        lookAt(subject: worldPoint(point: [0, 0.8, 0]))
+        fieldOfView(fieldOfViewRadians: 0.9)
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    anchor: null
+    name: "reference"
+    renderHeight: 256
+    renderWidth: 256
+    rig {
+      name: "reference"
+      operations [
+        anchor(subject: worldPoint(point: [0, 2.5, 7]))
+        lookAt(subject: worldPoint(point: [0, 0.8, 0]))
+        fieldOfView(fieldOfViewRadians: 0.9)
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+]
+
+host {
+  authority: null
+  backend: auto
+  exitAfterSeconds: 0
+  fullscreen: false
+  genlock: null
+  height: 128
+  journalDepth: 2000
+  listen: null
+  presentMode: Immediate
+  presentation: offscreen
+  surfaceFormat: r8g8b8a8
+  targetHertz: 0
+  width: 128
+}
+
+placements {
+  policy {
+    authoringHeadroomPlacements: 0
+    authoringHeadroomScreens: 0
+    candidateCap: 1
+    candidateRadius: 1
+    derivedFaceScreens: 1
+    maxPlacementScale: 1
+    minPlacementScale: 1
+    previewDeadlineFrames: 1
+  }
+
+  placement "blockA" {
+    prototype: "block"
+    position [-1.5, 0, 0]
+  }
+
+  placement "blockB" {
+    prototype: "block"
+    position [1.5, 0, 0]
+    yawDegrees: 30deg
+  }
+
+  placement "reference-demand" {
+    prototype: "screen"
+    position [0, -50, 0]
+    faceSources [
+      {
+        face: "display"
+        source: view(cameraName: "reference")
+      }
+    ]
+  }
+}
+
+prototypes {
+  prototype "block" {
+    document {
+      frames [
+        {
+          name: "idle"
+          transforms []
+        }
+      ]
+      name: "block"
+      palette [
+        {
+          color: "#8C7A5D"
+          roughness: 0.55
+          sheen: 0
+          specular: 0.25
+        }
+        {
+          color: "#3E8FB0"
+          roughness: 0.35
+          sheen: 0.15
+          specular: 0.4
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "base" {
+        chamfer: 0.2
+        material: 0
+        position [0, 0.6, 0]
+        scale [0.6, 0.6, 0.6]
+      }
+
+      shape Sphere "cap" {
+        material: 1
+        position [0, 1.5, 0]
+        scale [0.4, 0.4, 0.4]
+      }
+    }
+  }
+
+  prototype "screen" {
+    document {
+      behavior {
+        faces [
+          {
+            defaultSource: null
+            name: "display"
+            shapeId: 0
+          }
+        ]
+      }
+      frames [
+        {
+          name: "idle"
+          transforms []
+        }
+      ]
+      name: "screen"
+      palette [
+        {
+          color: "#DDE8EA"
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "panel" {
+        material: 0
+        position [0, 0, 0]
+        scale [0.9, 0.6, 0.05]
+      }
+    }
+  }
+}
+
+render {
+  low {
+    shadows: Off
+    ambientOcclusion: false
+    renderScale: Half
+  }
+}
+
+simulation {
+  rateHz: 30
+}
+
+views {
+  layout "counters" {
+    seatCount: 0
+    slots [
+      {
+        camera: "counters-cam"
+        height: 1
+        width: 1
+        x: 0
+        y: 0
+      }
+    ]
+    transitionRenderScale: 1
+    transitionSeconds: 0
+  }
+
+  seatControl {
+    maxPitch: 1.2
+    minPitch: -0.35
+    yawReference: World
+  }
+
+  seatRig "counters-seat" {
+    version: "puck.camera.program.v1"
+    operations [
+      orbit(distance: 5, pitch: 0.3, yaw: 0)
+      lookAt(subject: reference())
+      fieldOfView(fieldOfViewRadians: 0.9)
+    ]
+  }
+}
+
+captures {
+  rows [
+    {
+      station: center
+      ticks [60]
+      instance: "world"
+      converge: 1
+      palette [
+        {
+          material: 0
+          color: "#FFFFFF"
+        }
+      ]
+    }
+    {
+      station: converged
+      ticks [65]
+      instance: "world"
+      converge: 1
+      palette [
+        {
+          material: 0
+          color: "#FFFFFF"
+        }
+      ]
+    }
+    {
+      station: reference
+      ticks [70]
+      instance: "reference"
+      palette [
+        {
+          material: 0
+          color: "#FFFFFF"
+        }
+      ]
+    }
+    {
+      station: repeat
+      ticks [75]
+      instance: "world"
+      converge: 1
+      palette [
+        {
+          material: 0
+          color: "#FFFFFF"
+        }
+      ]
+    }
+  ]
+}

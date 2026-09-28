@@ -1,0 +1,318 @@
+{
+  "id": "temporal-convergence",
+  "title": "Eight frozen temporal samples approach a twice-output spatial reference and reproduce exactly",
+  "binding": "The 128x128 live view uses temporal reconstruction at the Quarter tier, whose shared scale quantizer chooses a 72x72 render grid. A hidden screen registers the same camera at exact 256x256 with authored temporal off, retaining a native spatial reference. Captures freeze the live view for one or eight samples; the reference is box-filtered 2x2 in captured RGB codes. The stated maximum and mean code limits bound the eight-sample result. A repeated eight-sample capture must be RGB-identical. The discriminating world requests only one sample for both captures, retaining every path and reference while exposing the centered coarse-grid result. The sky counter must write 5184 texels, proving the actual 72x72 grid. Two later counter reads require the world submission unchanged once the view converges.",
+  "bootShape": "offscreen",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
+  "timeoutSeconds": 60,
+  "positive": {
+    "world": "tests/Puck.World.Canaries/temporal-convergence/fixture.puck",
+    "script": "capture.script.txt",
+    "commands": [
+      {
+        "verb": "world.temporal",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.render-scale",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.ao",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.shadows",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.upscale-sharpness",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 2,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "imageComparison",
+        "name": "eight-samples-match-the-box-filtered-double-extent-reference",
+        "capture": "state/captures/converged~65.png",
+        "reference": "state/captures/reference~70.png",
+        "referenceScale": 2,
+        "extent": [
+          128,
+          128
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          1
+        ],
+        "maxErrorCodes": 64,
+        "meanErrorCodes": 1.5,
+        "holds": true
+      },
+      {
+        "type": "imageComparison",
+        "name": "frozen-convergence-repeats-exactly",
+        "capture": "state/captures/converged~65.png",
+        "reference": "state/captures/repeat~75.png",
+        "referenceScale": 1,
+        "extent": [
+          128,
+          128
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          1
+        ],
+        "maxErrorCodes": 0,
+        "meanErrorCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "line",
+        "name": "quarter-grid-writes-72-squared-sky-texels",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "march.steps=0 texels.written=5184 copies.buffer-bytes=0",
+        "present": true
+      },
+      {
+        "type": "response",
+        "name": "settled-first",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 1,
+        "count": 2,
+        "extract": [
+          {
+            "name": "world-first",
+            "field": "submission",
+            "line": "node world work"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "settled-second",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 2,
+        "count": 2,
+        "extract": [
+          {
+            "name": "world-second",
+            "field": "submission",
+            "line": "node world work"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "converged-view-stops-rendering",
+        "operator": "equal",
+        "left": {
+          "value": "world-first"
+        },
+        "right": {
+          "value": "world-second"
+        }
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/temporal-convergence/discriminating.puck",
+    "script": "capture.script.txt",
+    "commands": [
+      {
+        "verb": "world.temporal",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.render-scale",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.ao",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.shadows",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.upscale-sharpness",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 2,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "imageComparison",
+        "name": "eight-samples-match-the-box-filtered-double-extent-reference",
+        "capture": "state/captures/converged~65.png",
+        "reference": "state/captures/reference~70.png",
+        "referenceScale": 2,
+        "extent": [
+          128,
+          128
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          1
+        ],
+        "maxErrorCodes": 64,
+        "meanErrorCodes": 1.5,
+        "holds": false
+      },
+      {
+        "type": "imageComparison",
+        "name": "frozen-convergence-repeats-exactly",
+        "capture": "state/captures/converged~65.png",
+        "reference": "state/captures/repeat~75.png",
+        "referenceScale": 1,
+        "extent": [
+          128,
+          128
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          1
+        ],
+        "maxErrorCodes": 0,
+        "meanErrorCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "line",
+        "name": "quarter-grid-writes-72-squared-sky-texels",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "march.steps=0 texels.written=5184 copies.buffer-bytes=0",
+        "present": true
+      },
+      {
+        "type": "response",
+        "name": "settled-first",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 1,
+        "count": 2,
+        "extract": [
+          {
+            "name": "world-first",
+            "field": "submission",
+            "line": "node world work"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "settled-second",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 2,
+        "count": 2,
+        "extract": [
+          {
+            "name": "world-second",
+            "field": "submission",
+            "line": "node world work"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "converged-view-stops-rendering",
+        "operator": "equal",
+        "left": {
+          "value": "world-first"
+        },
+        "right": {
+          "value": "world-second"
+        }
+      }
+    ]
+  }
+}
