@@ -230,7 +230,10 @@ profile.
 
 - `ReferenceSchedule.OperationCostBound(op, kind)` answers a reference-cycle
   price only for an operation the manifest prices, and returns
-  `CostBound.Unmodeled` with its reason for everything else.
+  `CostBound.Unmodeled` with its reason for everything else. An operation
+  priced by a reference kernel takes that kernel's representative service, so
+  a kernel the capture leaves unresolved leaves every operation it prices
+  unmodeled, with the kernel's reason.
 - `ReferenceSchedule.Coverage` lists, per registered vocabulary, how many
   operations are priced and which are still unmodeled.
 - The memory coefficients are unmodeled throughout, so

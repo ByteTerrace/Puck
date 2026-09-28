@@ -36,13 +36,9 @@ of a world's sheet takes the one computation admission runs. Search (§6) spends
 resumable allowance per job, chance plies and playouts included, in the same
 heuristic units. The evidence manifest
 (`src/Puck.State/ReferenceSchedule.json`) pins eight targets and prices the
-unary, bit-field and bit-insert expression operations. The binary kernel
-resolves on the four AArch64 targets, where its costliest arm is a fixed-point
-division through the 128-bit slow path, but not on x86-64. There its lowering
-checks that a class constructor has run, and the cold path that runs one reaches
-the runtime's class-constructor runner, whose indirect calls and loops have no
-bound. Pricing it needs that trigger declared as an excluded cold path, the way
-a managed throw is. Every other reachable operation is registered
+unary, binary, bit-field and bit-insert expression operations; the binary price
+is its costliest arm, a fixed-point division through the 128-bit slow path.
+Every other reachable operation is registered
 there with its named size parameters and an explicit unmodeled reason — the
 remaining expression kernels, the effect arms, the arena transforms, the draw
 sources, the search methods and candidate shapes — each enumerated by a law

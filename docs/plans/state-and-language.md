@@ -26,10 +26,9 @@ every package is complete.
   outside the sixteen, in the [Parlor package](../../worlds/parlor/README.md#lineup).
 - **Embeddings** is done. The reference schedule's evidence is landed:
   `src/Puck.State/ReferenceSchedule.json` pins eight targets across two ISA
-  families and prices the unary, bit-field and bit-insert expression
+  families and prices the unary, binary, bit-field and bit-insert expression
   operations. Every other reachable operation is registered with its named size
-  parameters and an explicit unmodeled reason — the binary kernel, which
-  resolves on AArch64 but not on x86-64, the function, program and fold
+  parameters and an explicit unmodeled reason — the function, program and fold
   kernels,
   the fourteen effect arms, the fifteen arena transforms, the five draw
   sources, the two search methods and six candidate shapes, and the whole
@@ -315,7 +314,7 @@ condition the chance ply's exact average rests on; the outcome count never
 was.
 
 The reference schedule and shared report are implemented in part. The manifest
-pins the evidence targets, prices the unary, bit-field and bit-insert
+pins the evidence targets, prices the unary, binary, bit-field and bit-insert
 expression operations, and registers every other reachable
 operation with its size parameters and an explicit unmodeled reason;
 `puck bench state-evidence` reproduces the pinned instruction-service rows and

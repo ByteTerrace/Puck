@@ -358,9 +358,10 @@ is true when BMI2 is present, unless the processor is AMD or Hygon below family
 `0x19` (Zen 3). `ParallelBitDeposit`, `ParallelBitExtract` and the four Morton members
 take the hardware path only when it is true. `BitManipulation.IsParallelBitsFast`
 makes the same decision as a pure function of vendor, family and BMI2 support.
-The gate changes speed only, because both paths return the same bits. The JIT
-folds the field to a constant, so a fast host runs the same code it would
-without the gate.
+The gate changes speed only, because both paths return the same bits. The
+assembly's module initializer sets it before any Maths code runs, so the class
+has no static constructor: a path that tests the gate pays a load and a branch,
+and never a check that a constructor has run.
 
 | Member | Result |
 |---|---|
