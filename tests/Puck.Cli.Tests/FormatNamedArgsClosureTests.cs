@@ -400,6 +400,48 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
         );
     }
     /// <summary>
+    /// Formatting a tree of sibling projects outside any Puck checkout evaluates them in one batch, with the SDK the
+    /// projects themselves select, and each project's calls bind against its own closure: the library's call into its
+    /// own type and the sample's call into the library are both named.
+    /// </summary>
+    [Fact]
+    public void ABatchedFormatOfSiblingProjectsOutsideACheckoutEvaluatesBoth() {
+        var (library, sample) = BuildReferencingPair(
+            librarySource: "namespace Library;\n\npublic static class Reach {\n    public static string Join(string left, string right) => (left + right);\n    public static string Twice(string value) => Join(value, value);\n}\n",
+            sampleSource: "namespace Sample;\n\ninternal static class Probe {\n    public static string Use() => Library.Reach.Join(\"a\", \"b\");\n}\n"
+        );
+
+        Assert.Null(@object: RepositoryPaths.Ascend(
+            probe: static directory => (File.Exists(path: Path.Combine(path1: directory.FullName, path2: "Puck.slnx")) ? directory.FullName : null),
+            start: m_root
+        ));
+
+        var (code, report) = Format(
+            configuration: "Release",
+            root: m_root
+        );
+
+        Assert.Equal(
+            actual: code,
+            expected: 0
+        );
+        Assert.DoesNotContain(
+            actualString: report,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "skipped"
+        );
+        Assert.Contains(
+            actualString: File.ReadAllText(path: Path.Combine(path1: Path.GetDirectoryName(path: library)!, path2: "Library.cs")),
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "Join(left: value, right: value)"
+        );
+        Assert.Contains(
+            actualString: File.ReadAllText(path: Path.Combine(path1: Path.GetDirectoryName(path: sample)!, path2: "Sample.cs")),
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "Library.Reach.Join(left: \"a\", right: \"b\")"
+        );
+    }
+    /// <summary>
     /// A member another project makes visible with <c>InternalsVisibleTo</c> binds only in a compilation carrying the
     /// name the grant was made to, which is the project's own assembly name. Under any other name the call has an
     /// inaccessible candidate rather than a method, and is left positional.
