@@ -339,7 +339,7 @@ public static class WorldDocumentBasis {
 
         return true;
     }
-    private static JsonArray MergeList(JsonArray basis, JsonArray overlay, string path) {
+    private static JsonArray MergeList(JsonArray basis, JsonArray overlay, string path, WorldDocumentOrigins? origins) {
         if (
             (overlay.Count > 0) &&
             IsReplaceMarker(node: overlay[index: 0])
@@ -352,7 +352,7 @@ public static class WorldDocumentBasis {
                     path: $"{path}[{index}]",
                     context: "a '$replace'-marked list replaces wholesale; its rows carry no further compose vocabulary"
                 );
-                replaced.Add(value: overlay[index: index]?.DeepClone());
+                replaced.Add(value: WorldDocumentOrigins.Clone(node: overlay[index: index], origins: origins));
             }
 
             return replaced;
@@ -376,7 +376,7 @@ public static class WorldDocumentBasis {
                 );
             }
 
-            return ((JsonArray)overlay.DeepClone());
+            return ((JsonArray)WorldDocumentOrigins.Clone(node: overlay, origins: origins)!);
         }
 
         var merged = new JsonArray();
@@ -392,7 +392,7 @@ public static class WorldDocumentBasis {
             );
 
             if (overlayIndex < 0) {
-                merged.Add(value: basisObject.DeepClone());
+                merged.Add(value: WorldDocumentOrigins.Clone(node: basisObject, origins: origins));
 
                 continue;
             }
@@ -421,11 +421,12 @@ public static class WorldDocumentBasis {
                 basis: basisObject,
                 overlay: overlayRow
             )) {
-                merged.Add(value: overlayRow.DeepClone());
+                merged.Add(value: WorldDocumentOrigins.Clone(node: overlayRow, origins: origins));
             } else {
-                var mergedRow = ((JsonObject)basisObject.DeepClone());
+                var mergedRow = ((JsonObject)WorldDocumentOrigins.Clone(node: basisObject, origins: origins)!);
 
                 MergeObject(
+                    origins: origins,
                     target: mergedRow,
                     overlay: overlayRow,
                     path: $"{path}[{key}={DescribeKey(value: basisKey)}]"
@@ -450,12 +451,12 @@ public static class WorldDocumentBasis {
                 node: appended,
                 path: $"{path}[{index}]"
             );
-            merged.Add(value: appended.DeepClone());
+            merged.Add(value: WorldDocumentOrigins.Clone(node: appended, origins: origins));
         }
 
         return merged;
     }
-    private static void MergeObject(JsonObject target, JsonObject overlay, string path) {
+    private static void MergeObject(JsonObject target, JsonObject overlay, string path, WorldDocumentOrigins? origins) {
         foreach (var (name, value) in overlay) {
             if (
                 string.Equals(
@@ -488,9 +489,10 @@ public static class WorldDocumentBasis {
                     basis: basisObject,
                     overlay: overlayObject
                 )) {
-                    target[propertyName: name] = overlayObject.DeepClone();
+                    target[propertyName: name] = WorldDocumentOrigins.Clone(node: overlayObject, origins: origins);
                 } else {
                     MergeObject(
+                        origins: origins,
                         overlay: overlayObject,
                         path: memberPath,
                         target: basisObject
@@ -506,6 +508,7 @@ public static class WorldDocumentBasis {
             ) {
                 target[propertyName: name] = MergeList(
                     basis: basisList,
+                    origins: origins,
                     overlay: overlayList,
                     path: memberPath
                 );
@@ -513,10 +516,10 @@ public static class WorldDocumentBasis {
                 continue;
             }
 
-            target[propertyName: name] = value.DeepClone();
+            target[propertyName: name] = WorldDocumentOrigins.Clone(node: value, origins: origins);
         }
     }
-    private static JsonArray MergeSiblingArray(JsonArray existing, JsonArray overlay, JsonNode? restated, string overlayName, Dictionary<string, string> owners, string path) {
+    private static JsonArray MergeSiblingArray(JsonArray existing, JsonArray overlay, JsonNode? restated, string overlayName, Dictionary<string, string> owners, string path, WorldDocumentOrigins? origins) {
         if (!TryFindRowKey(
             ambiguity: out var ambiguity,
             basis: existing,
@@ -546,7 +549,7 @@ public static class WorldDocumentBasis {
             return existing;
         }
 
-        var merged = ((JsonArray)existing.DeepClone());
+        var merged = ((JsonArray)WorldDocumentOrigins.Clone(node: existing, origins: origins)!);
         var restatedArray = (restated as JsonArray);
 
         foreach (var row in overlay) {
@@ -559,7 +562,7 @@ public static class WorldDocumentBasis {
             );
 
             if (existingIndex < 0) {
-                merged.Add(value: rowObject.DeepClone());
+                merged.Add(value: WorldDocumentOrigins.Clone(node: rowObject, origins: origins));
                 owners[$"{path}[{DescribeKey(value: rowKey)}]"] = overlayName;
 
                 continue;
@@ -599,7 +602,7 @@ public static class WorldDocumentBasis {
 
         return merged;
     }
-    private static void MergeSiblingObject(JsonObject target, JsonObject overlay, JsonNode? restated, string overlayName, Dictionary<string, string> owners, string path) {
+    private static void MergeSiblingObject(JsonObject target, JsonObject overlay, JsonNode? restated, string overlayName, Dictionary<string, string> owners, string path, WorldDocumentOrigins? origins) {
         foreach (var (name, value) in overlay) {
             var memberPath = $"{path}.{name}";
             var childRestated = ((restated as JsonObject)?[name]);
@@ -608,7 +611,7 @@ public static class WorldDocumentBasis {
                 jsonNode: out var existing,
                 propertyName: name
             )) {
-                target[propertyName: name] = value?.DeepClone();
+                target[propertyName: name] = WorldDocumentOrigins.Clone(node: value, origins: origins);
                 RecordFreshOwnership(
                     node: target[propertyName: name],
                     owners: owners,
@@ -628,6 +631,7 @@ public static class WorldDocumentBasis {
             )
             ) {
                 MergeSiblingObject(
+                    origins: origins,
                     overlay: overlayObject,
                     overlayName: overlayName,
                     owners: owners,
@@ -645,6 +649,7 @@ public static class WorldDocumentBasis {
             ) {
                 target[propertyName: name] = MergeSiblingArray(
                     existing: existingArray,
+                    origins: origins,
                     overlay: overlayArray,
                     overlayName: overlayName,
                     owners: owners,
@@ -945,17 +950,19 @@ public static class WorldDocumentBasis {
     /// Neither input is mutated.</summary>
     /// <param name="basis">The basis document's tree.</param>
     /// <param name="overlay">The derived document's tree.</param>
+    /// <param name="origins">Optional authored scalar origins carried through retained values.</param>
     /// <param name="composed">The composed tree on success; <see langword="null"/> on refusal.</param>
     /// <param name="reason">The one-line refusal reason, or empty on success.</param>
     /// <returns><see langword="true"/> when the merge composed.</returns>
-    public static bool TryMerge(JsonObject basis, JsonObject overlay, out JsonObject? composed, out string reason) {
+    public static bool TryMerge(JsonObject basis, JsonObject overlay, out JsonObject? composed, out string reason, WorldDocumentOrigins? origins = null) {
         ArgumentNullException.ThrowIfNull(argument: basis);
         ArgumentNullException.ThrowIfNull(argument: overlay);
 
         try {
-            var target = ((JsonObject)basis.DeepClone());
+            var target = ((JsonObject)WorldDocumentOrigins.Clone(node: basis, origins: origins)!);
 
             MergeObject(
+                origins: origins,
                 overlay: overlay,
                 path: "$",
                 target: target
@@ -986,10 +993,11 @@ public static class WorldDocumentBasis {
     /// <param name="imports">Each import's display name (for the refusal message) paired with its fully composed
     /// tree, in authored order.</param>
     /// <param name="restated">The importing file's own body — the sole exemption from a sibling collision.</param>
+    /// <param name="origins">Optional authored scalar origins carried through retained values.</param>
     /// <param name="composed">The folded layer on success; <see langword="null"/> on refusal.</param>
     /// <param name="reason">The one-line refusal reason, or empty on success.</param>
     /// <returns><see langword="true"/> when every import folded without an unresolved collision.</returns>
-    public static bool TryMergeImports(IReadOnlyList<(string Name, JsonObject Tree)> imports, JsonObject restated, out JsonObject? composed, out string reason) {
+    public static bool TryMergeImports(IReadOnlyList<(string Name, JsonObject Tree)> imports, JsonObject restated, out JsonObject? composed, out string reason, WorldDocumentOrigins? origins = null) {
         ArgumentNullException.ThrowIfNull(argument: imports);
         ArgumentNullException.ThrowIfNull(argument: restated);
 
@@ -999,6 +1007,7 @@ public static class WorldDocumentBasis {
         try {
             foreach (var (name, tree) in imports) {
                 MergeSiblingObject(
+                    origins: origins,
                     overlay: tree,
                     overlayName: name,
                     owners: owners,
