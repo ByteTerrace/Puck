@@ -1,0 +1,12 @@
+world.cadence off
+world.wait ready 60
+pipeline.wait feedback installed 60
+world.gpu-timing
+world.gpu-timing off
+world.wait 10
+world.gpu-timing
+pipeline.inspect feedback
+world.gpu-timing off
+world.wait 5
+world.gpu-timing
+pipeline.inspect feedback

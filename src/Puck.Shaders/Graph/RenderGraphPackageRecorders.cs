@@ -202,7 +202,11 @@ public interface IRenderGraphPackageFactory {
 /// <summary>A host-written region a package pass's recorder writes (<see cref="IRenderGraphPackageFactory.Regions"/>).</summary>
 /// <param name="Name">The region's part name, which names its buffers after the instance and the pass.</param>
 /// <param name="ByteCount">The region's size, in bytes; positive and a whole number of uints.</param>
-public readonly record struct RenderGraphPackageRegion(string Name, int ByteCount);
+public readonly record struct RenderGraphPackageRegion(string Name, int ByteCount) {
+    /// <summary>Gets the package writer's retained CPU scratch payload for this region, in bytes. The node separately
+    /// counts the region's own CPU shadow and upload header; this value must not include either.</summary>
+    public ulong CpuScratchBytes { get; init; }
+}
 /// <summary>What a recorder is built and created for: one package pass of one instance's graph, on one device.</summary>
 /// <param name="Instance">The instance's name.</param>
 /// <param name="Pass">The pass's name in the instance's graph.</param>

@@ -83,7 +83,7 @@ public sealed partial class WorldStampPool {
 
         private WorldPickTarget? m_pickTarget;
 
-        public WorldPickTarget PickTarget => m_pickTarget ??= new WorldPickTarget(Placement: Row?.Id, BodyIndex: BodyIndex);
+        public WorldPickTarget PickTarget => m_pickTarget ??= new WorldPickTarget(Placement: Row?.Id, BodyIndex: BodyIndex) { Prototype = Creation.Id, StampPoolSlots = SlotsPerPlacement };
 
         // The registration's reads of the client's state mirror: every lane operand, driver signal and gate, pose and
         // effector reference the look reads, bound to BodyIndex so a $body key names the wearing body. Released when
@@ -304,7 +304,7 @@ public sealed partial class WorldStampPool {
     }
     // One pool slot's emission: palette, Pass 1 authored ungrouped shapes, Pass 2 blend groups, then the
     // creation's text runs as ONE root-anchored dynamic instance.
-    private static void EmitOne(SdfProgramBuilder builder, WorldBakedColors colors, Registration? live, bool probeWorstCase, int rootSlot, float maxPlacementScale, PackedFontAtlasCatalog? textCatalog) {
+    private static void EmitOne(SdfProgramBuilder builder, WorldBakedColors colors, Registration? live, bool probeWorstCase, int rootSlot, float maxPlacementScale, PackedFontAtlasCatalog? textCatalog, WorldPickMapBuilder? picks) {
         var document = live?.Creation.EngineDocument;
         var shapes = (document?.Shapes ?? []);
         // The probe reserves a FULL distinct palette per pool slot (the conservative material bound); a live slot
@@ -318,6 +318,8 @@ public sealed partial class WorldStampPool {
                 tint: null
             )
         );
+
+        if (live is not null) { picks?.Materials(prototype: live.Creation.Id, ids: paletteIds); }
         var placementScale = (probeWorstCase
             ? maxPlacementScale
             : (live?.Scale ?? 1f)
@@ -1307,6 +1309,7 @@ public sealed partial class WorldStampPool {
                 colors: colors,
                 live: live,
                 maxPlacementScale: maxPlacementScale,
+                picks: picks,
                 probeWorstCase: probeWorstCase,
                 rootSlot: rootSlot,
                 textCatalog: textCatalog

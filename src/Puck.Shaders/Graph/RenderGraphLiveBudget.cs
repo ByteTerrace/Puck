@@ -127,6 +127,12 @@ public sealed class RenderGraphLiveBudget {
                     .Append(value: " bytes");
             }
 
+            if (runtime.RegionMemory(instance: index) is { } memory) {
+                _ = into.Append(value: " region-device-bytes=").Append(value: memory.Gpu.DeviceLocal)
+                    .Append(value: " region-host-bytes=").Append(value: memory.Gpu.HostVisible)
+                    .Append(value: " region-cpu-shadow-bytes=").Append(value: memory.CpuShadowBytes)
+                    .Append(value: " region-cpu-scratch-bytes=").Append(value: memory.CpuScratchBytes);
+            }
             AppendLedger(
                 into: into,
                 work: runtime.Work(instance: index)

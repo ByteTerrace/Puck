@@ -7,6 +7,11 @@ textures, and an impostor.
 The evaluators expose structural line-of-sight work envelopes derived from their
 compiled programs and fixed march budgets. These counts carry no cycle price.
 
+`SdfProgram.InspectInstance` reads exclusive packed ownership and culling facts for a
+live instance. Its count includes instructions and their data/bounds, owned segment
+and rigid-leaf rows, shape side tables and part bindings. Shared tables stay in the
+program-level remainder; inspection never re-emits a prototype.
+
 ## Documentation
 
 - [SDF renderer and field reference](https://github.com/ByteTerrace/Puck/blob/main/docs/rendering/sdf/README.md) — program model, solid primitives, field evaluator, and Lipschitz analysis.

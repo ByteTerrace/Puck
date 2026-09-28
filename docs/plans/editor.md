@@ -67,9 +67,11 @@ Several pieces exist with nothing using them:
   constructs, and the planner draws its analytic carves through
   `SdfDebugRenderer.EmitCarve`. The brick pool itself is live: height fields
   upload their bricks into it (`WorldFieldEmitter`).
-- GPU work is counted, never timed. The timestamp interfaces that once existed
-  (`IGpuTimingPool`, `GpuTimingStage`, `GpuTimestampCapabilities` under
-  `Puck.Abstractions/Gpu/Timing`) were deleted and survive only in git history.
+
+GPU work remains counted for correctness and quality decisions. The optional
+`world.gpu-timing` readout records named pass timestamp pairs through
+`IGpuTimestampFactory` on both backends, after submission fences. Timing is off
+by default and remains observational; it never changes a rendering decision.
 
 The building blocks the packages reuse are in place. The overlay draws rects,
 rings, wedges, panels, icons and text (`OverlayFrameBuilder`), and has no line
@@ -470,7 +472,28 @@ editor command module.
 names the placement and material and equals the verb's echo; a steady frame
 allocates nothing; red leg: the pointer on the sky prints `hit=none`).
 
-**Depends on:** E2.
+**Storage rule:** composition sums every overlay writer's declared text-word
+reservation and rounds the sum up to a power of two. The current four-seat
+composition reserves 26,721 words and allocates 32,768. A writer exceeding its
+own reservation refuses by channel name; it cannot consume another writer's
+share. The inspector reserves 32 lines of 96 characters per seat. Text that
+cannot fit is replaced by an explicit `editor refused` diagnostic, also charged
+to the existing overlay refusal counters. There is no on-demand reallocation.
+The off state emits no inspector records, but its shared backing storage remains
+allocated. Graph inspection reports the installed regions' device and
+host-visible bytes, CPU shadow payloads, and package/row/upload scratch payloads
+separately. These are logical payload bytes, excluding managed object headers,
+backend alignment, retired graphs and unrelated application state.
+
+The material name is its existing authored address `<prototype>.palette[slot]`,
+shown beside the exact program material index. The asynchronous pixel carries
+that frame's immutable identity map and camera; a later camera or palette never
+changes the answer's world point or material name. Pointer steps and query counts
+come from the same visibility record. A passthrough pane supplies its own rendered
+residency and quality to the inspector, cost report and pass timings. Pass timing
+and FPS appear only while `world.gpu-timing` is enabled.
+
+**Depends on:** E2's shared GPU picking mechanism; selection tools remain E2 work.
 
 ### E6 — Why is this dark or invisible
 
@@ -606,10 +629,27 @@ the pole).
 `Puck.Shaders` (`ShaderPipelineRenderNode`), `Puck.SdfVm` (`SdfWorldTables`).
 
 **Check:** `WorldCostLawTests` (fixture placements' counts equal their emitter's;
-red leg: a scoped creation counted per shape fails); `GpuTimingLawTests` over
+red leg: a scoped creation counted per shape fails); `ShaderPipelineRenderNodeLawTests` over
 the fake device (on: two queries per pass, named and fault-wrapped, released on
 device loss; off: zero queries; red leg: a node that forgets `LeavePass` fails
 the pair count). The laws assert the mechanism and never a time.
+
+**Accounting rule:** placement program words are the words owned by its live
+instance rows, instruction headers/data/bounds, segments, rigid leaves, shape
+side tables and part bindings. Shared headers, palettes, grid and part assets
+are printed separately, alongside other instances such as bodies. Placement
+words plus other-instance words plus shared words equal the live `world.budget`
+program total. No prototype is re-emitted to estimate this number. A hidden
+field instance and its live mesh draw remain visible in the report. Bake representation
+is captured at emission with that frame's map; another world's cache cannot change it.
+
+Timestamp pools are allocated only on demand. Each recorded pass gets one pair;
+readback waits for its submission fence, rejects a replaced graph or an earlier
+enable epoch, and averages at most 32 completed pairs. Disabling hides readings
+immediately and releases pools after their fences. Device loss releases all
+query/readback ownership. GPU timestamp readback and retained CPU sample payloads
+are reported separately. Times and FPS are observational and never become
+correctness assertions or quality inputs.
 
 **Depends on:** nothing; E5 for the panel; the rendering plan's one-pixel
 readback for step 3.

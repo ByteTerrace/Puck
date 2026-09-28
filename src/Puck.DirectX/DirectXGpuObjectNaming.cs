@@ -25,6 +25,7 @@ public sealed unsafe class DirectXGpuObjectNaming(DirectXDeviceContext deviceCon
             case GpuObjectKind.CommandPool:
             case GpuObjectKind.Image:
             case GpuObjectKind.Pipeline:
+            case GpuObjectKind.TimestampPool:
                 break;
             default:
                 return;

@@ -1416,6 +1416,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         // seat slot.
         var seatViewFallbackRegion = default(NormalizedRect);
         var seatViewFallbackCamera = default(CameraSnapshot);
+        var seatViewFallbackIndex = 0;
         var hasSeatViewFallback = false;
         var markerSeatCount = 0;
         Span<bool> seatSlotBound = stackalloc bool[PlayerRoster.MaxSlots];
@@ -1452,6 +1453,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                         hasSeatViewFallback = true;
                         seatViewFallbackCamera = namedCamera;
                         seatViewFallbackRegion = region;
+                        seatViewFallbackIndex = (m_views.Count - 1);
                     }
                 }
 
@@ -1493,6 +1495,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 camera: in camera,
                 height: height,
                 region: region,
+                renderInstance: ViewProducerName(view: m_views.Count),
                 slot: slot,
                 width: width
             );
@@ -1560,6 +1563,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                         camera: in seatViewFallbackCamera,
                         height: height,
                         region: seatViewFallbackRegion,
+                        renderInstance: ViewProducerName(view: seatViewFallbackIndex),
                         slot: slot,
                         width: width
                     );

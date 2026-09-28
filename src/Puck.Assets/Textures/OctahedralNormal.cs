@@ -41,8 +41,17 @@ public static class OctahedralNormal {
     /// <param name="v">The second code.</param>
     /// <returns>The unit direction.</returns>
     public static (double X, double Y, double Z) Decode(byte u, byte v) {
-        var x = (((2.0 * u) - 255.0) / 255.0);
-        var y = (((2.0 * v) - 255.0) / 255.0);
+        return DecodeSigned(x: (((2.0 * u) - 255.0) / 255.0), y: (((2.0 * v) - 255.0) / 255.0));
+    }
+    /// <summary>Decodes the renderer's two signed-normalized 16-bit octahedral coordinates. The reserved pair
+    /// <c>(-32768, -32768)</c> means no normal and returns zero.</summary>
+    /// <param name="packed">The X coordinate in bits 0..15 and Y coordinate in bits 16..31.</param>
+    /// <returns>The unit direction, or zero for the no-normal sentinel.</returns>
+    public static (double X, double Y, double Z) DecodeSnorm16(uint packed) => ((packed == 0x80008000U)
+        ? (0.0, 0.0, 0.0)
+        : DecodeSigned(x: (((short)packed) / 32767.0), y: (((short)(packed >> 16)) / 32767.0)));
+
+    private static (double X, double Y, double Z) DecodeSigned(double x, double y) {
         var z = ((1.0 - Math.Abs(value: x)) - Math.Abs(value: y));
 
         if (z < 0.0) {
@@ -53,7 +62,6 @@ public static class OctahedralNormal {
 
         return ((x / length), (y / length), (z / length));
     }
-
     private static double Sign(double value) =>
         ((value >= 0.0) ? 1.0 : -1.0);
 }

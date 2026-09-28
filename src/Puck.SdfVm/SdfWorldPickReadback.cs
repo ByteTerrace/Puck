@@ -1,17 +1,21 @@
 using System.Buffers.Binary;
+using System.Numerics;
+using Puck.Assets.Textures;
 using Puck.Abstractions.Gpu;
 using Puck.Shaders;
 
 namespace Puck.SdfVm;
 
-// The pass owns each slot's sixteen-byte V-row readback; its view's picker polls only signaled submissions.
+// Each slot owns a V-row readback and, only when an inspector asks, a V-through-N surface readback.
+// Its view's picker polls only signaled submissions; changing demand never replaces an in-flight buffer.
 internal sealed class SdfWorldPickReadback : IDisposable {
     private const int PickBytes = 16;
+    private const int SurfaceBytes = 48;
 
     private readonly SdfWorldPicker m_picker;
     private readonly RenderGraphPackageRecorderContext m_context;
     private readonly Slot[] m_slots;
-    private readonly byte[] m_bytes = new byte[PickBytes];
+    private readonly byte[] m_bytes = new byte[SurfaceBytes];
 
     private bool m_disposed;
 
@@ -25,17 +29,22 @@ internal sealed class SdfWorldPickReadback : IDisposable {
         picker.Attach(readback: this);
     }
 
-    public void Prepare(int slot, uint width, uint height, SdfFrame frame, string version) {
+    public void Prepare(int slot, uint width, uint height, SdfFrame frame, string version, SdfReprojectionView sample, long cut) {
         Poll();
         var target = m_slots[slot];
 
         target.Record = false;
         target.Submit = false;
-        if (!m_picker.Take(frame: frame, height: height, request: out var request, width: width)) {
+        if (!m_picker.Take(cut: cut, frame: frame, height: height, request: out var request, sample: sample, width: width)) {
             return;
         }
-        target.Buffer ??= m_context.Services.BufferFactory.CreateReadback(sizeBytes: PickBytes,
-            name: new GpuObjectName(owner: m_context.Instance, part: m_context.Pass, detail: "pick", index: slot));
+        if (request.Sample is not null) {
+            target.SurfaceBuffer ??= m_context.Services.BufferFactory.CreateReadback(sizeBytes: SurfaceBytes,
+                name: new GpuObjectName(owner: m_context.Instance, part: m_context.Pass, detail: "pick-surface", index: slot));
+        } else {
+            target.IdentityBuffer ??= m_context.Services.BufferFactory.CreateReadback(sizeBytes: PickBytes,
+                name: new GpuObjectName(owner: m_context.Instance, part: m_context.Pass, detail: "pick", index: slot));
+        }
         target.Request = request;
         target.Version = version;
         target.Record = true;
@@ -53,7 +62,7 @@ internal sealed class SdfWorldPickReadback : IDisposable {
 
         readback = new RenderGraphBufferReadback(Version: target.Version!,
             SourceOffsetBytes: (((((ulong)request.Y) * request.Width) + request.X) * SdfWorldPackage.VisibilityRecordByteLength),
-            SizeBytes: PickBytes, Destination: target.Buffer!);
+            SizeBytes: ((ulong)target.SizeBytes), Destination: target.Buffer!);
         return true;
     }
     public void Submitted(int slot, IGpuSubmissionFence fence) {
@@ -71,11 +80,18 @@ internal sealed class SdfWorldPickReadback : IDisposable {
                 continue;
             }
             slot.Fence = null;
-            slot.Buffer!.Read(destination: m_bytes);
+            slot.Buffer!.Read(destination: m_bytes.AsSpan(start: 0, length: slot.SizeBytes));
+            var identity = BinaryPrimitives.ReadUInt32LittleEndian(source: m_bytes.AsSpan(start: 4));
+            var normal = (((identity != 0) && (slot.Request.Sample is not null))
+                ? OctahedralNormal.DecodeSnorm16(packed: BinaryPrimitives.ReadUInt32LittleEndian(source: m_bytes.AsSpan(start: 44)))
+                : (0.0, 0.0, 0.0));
+
             m_picker.Publish(result: slot.Request with {
                 Distance = BitConverter.Int32BitsToSingle(value: BinaryPrimitives.ReadInt32LittleEndian(source: m_bytes)),
-                Identity = BinaryPrimitives.ReadUInt32LittleEndian(source: m_bytes.AsSpan(start: 4)),
+                Identity = identity,
                 Material = BinaryPrimitives.ReadInt32LittleEndian(source: m_bytes.AsSpan(start: 8)),
+                Normal = new Vector3(x: ((float)normal.Item1), y: ((float)normal.Item2), z: ((float)normal.Item3)),
+                Flags = BinaryPrimitives.ReadUInt32LittleEndian(source: m_bytes.AsSpan(start: 12)),
             });
         }
     }
@@ -86,12 +102,18 @@ internal sealed class SdfWorldPickReadback : IDisposable {
         m_disposed = true;
         m_picker.Detach(readback: this);
         foreach (var slot in m_slots) {
-            slot.Buffer?.Dispose();
+            slot.IdentityBuffer?.Dispose();
+            slot.SurfaceBuffer?.Dispose();
         }
     }
 
     private sealed class Slot {
-        public IGpuReadbackBuffer? Buffer;
+        public IGpuReadbackBuffer? IdentityBuffer;
+        public IGpuReadbackBuffer? SurfaceBuffer;
+
+        public IGpuReadbackBuffer? Buffer => ((Request.Sample is null) ? IdentityBuffer : SurfaceBuffer);
+        public int SizeBytes => ((Request.Sample is null) ? PickBytes : SurfaceBytes);
+
         public IGpuSubmissionFence? Fence;
         public SdfPickResult Request;
         public string? Version;

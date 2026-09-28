@@ -257,7 +257,7 @@
         "name": "inspect-reports-what-the-node-created",
         "stream": "stdout",
         "match": "exact",
-        "text": "  work lifetime: created.pipelines=0 created.shader-modules=0 created.images=9 created.buffers=12 created.descriptor-pools=1 created.descriptor-sets=18",
+        "text": "  work lifetime: created.pipelines=0 created.shader-modules=0 created.images=9 created.buffers=12 created.descriptor-pools=1 created.descriptor-sets=18 created.timestamp-pools=0",
         "present": true
       },
       {
@@ -265,7 +265,7 @@
         "name": "status-reports-the-node-counters",
         "stream": "stdout",
         "match": "exact",
-        "text": "      work lifetime: created.pipelines=0 created.shader-modules=0 created.images=9 created.buffers=12 created.descriptor-pools=1 created.descriptor-sets=18]",
+        "text": "      work lifetime: created.pipelines=0 created.shader-modules=0 created.images=9 created.buffers=12 created.descriptor-pools=1 created.descriptor-sets=18 created.timestamp-pools=0]",
         "present": true
       }
     ]

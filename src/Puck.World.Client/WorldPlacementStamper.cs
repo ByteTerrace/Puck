@@ -622,6 +622,8 @@ public static class WorldPlacementStamper {
 
             var firstInstance = builder.InstanceCount;
             var firstMesh = (meshDraws?.Count ?? 0);
+            var bakedMesh = (((meshDraws is not null) && (tint is null) && DrawsItsBake(creation: creation.EngineDocument))
+                ? bakedMeshFor?.Invoke(arg: placement.ShownPrototypeId) : null);
 
             EmitPlacement(
                 builder: builder,
@@ -641,12 +643,12 @@ public static class WorldPlacementStamper {
                     min: 0
                 )],
                 meshDraws: meshDraws,
-                bakedMesh: (((meshDraws is not null) && (tint is null) && DrawsItsBake(creation: creation.EngineDocument))
-                    ? bakedMeshFor?.Invoke(arg: placement.ShownPrototypeId)
-                    : null)
+                bakedMesh: bakedMesh
             );
             if (picks is not null) {
-                var target = new WorldPickTarget(Placement: placement.Id, BodyIndex: null);
+                var target = new WorldPickTarget(Placement: placement.Id, BodyIndex: null) { DrawsBake = ((bakedMesh is not null) && (meshDraws!.Count > firstMesh)), Prototype = creation.Id };
+
+                picks.Materials(prototype: creation.Id, ids: paletteIds);
 
                 picks.Instances(first: firstInstance, end: builder.InstanceCount, target: target);
                 picks.Meshes(first: firstMesh, end: (meshDraws?.Count ?? 0), target: target);
