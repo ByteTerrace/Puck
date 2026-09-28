@@ -1,0 +1,8 @@
+world.temporal on
+world.render-scale quarter
+world.ao off
+world.shadows off
+world.upscale-sharpness 0
+world.cadence off
+world.wait ready 600
+world.wait 100

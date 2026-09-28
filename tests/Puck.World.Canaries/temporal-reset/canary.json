@@ -1,0 +1,152 @@
+{
+  "id": "temporal-reset",
+  "title": "An authored camera cut starts temporal reconstruction on the exact spatial frame",
+  "binding": "The live Quarter-tier view has accumulated history before the scheduled camera lens edit applies at tick 70. A separate exact-size camera already uses the final lens and authored temporal off, and captures the spatial reference at tick 60. The first edited live render must match all reference RGB codes exactly. The discriminating world applies the same edit one tick earlier while retaining capture tick 70, so the captured second temporal sample must differ from the centered spatial frame. Both cameras share the same scene, aspect, render scale and output size.",
+  "bootShape": "offscreen",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
+  "timeoutSeconds": 60,
+  "positive": {
+    "world": "tests/Puck.World.Canaries/temporal-reset/fixture.world.json",
+    "script": "capture.script.txt",
+    "runSchedule": true,
+    "commands": [
+      {
+        "verb": "world.temporal",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.render-scale",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.ao",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.shadows",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.upscale-sharpness",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "imageComparison",
+        "name": "first-cut-frame-is-the-spatial-resolve-exactly",
+        "capture": "state/captures/cut~70.png",
+        "reference": "state/captures/reference~60.png",
+        "referenceScale": 1,
+        "extent": [
+          128,
+          128
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          1
+        ],
+        "maxErrorCodes": 0,
+        "meanErrorCodes": 0,
+        "holds": true
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/temporal-reset/discriminating.world.json",
+    "script": "capture.script.txt",
+    "runSchedule": true,
+    "commands": [
+      {
+        "verb": "world.temporal",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.render-scale",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.ao",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.shadows",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.upscale-sharpness",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "imageComparison",
+        "name": "first-cut-frame-is-the-spatial-resolve-exactly",
+        "capture": "state/captures/cut~70.png",
+        "reference": "state/captures/reference~60.png",
+        "referenceScale": 1,
+        "extent": [
+          128,
+          128
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          1
+        ],
+        "maxErrorCodes": 0,
+        "meanErrorCodes": 0,
+        "holds": false
+      }
+    ]
+  }
+}
