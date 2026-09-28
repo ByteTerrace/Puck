@@ -245,6 +245,10 @@ public static class SdfIsaHlsl {
             name: "SDF_MINIMUM_NEAR",
             value: SdfFrameBlock.MinimumNear
         );
+        declarations.Count(
+            name: "SDF_NOISE_PERIOD_CELLS",
+            value: SdfVolume.NoisePeriodCells
+        );
         declarations.Members<GpuSamplerFilter>(prefix: "SDF_FILTER");
         declarations.Members<GridOverlayFlags>(prefix: "SDF_GRID");
         declarations.Section(title: "The environment's rows in the pass block's environment array (SdfEnvironment) and its light kinds.");

@@ -497,6 +497,7 @@ public static class WorldBootComposition {
         // The render.lighting read-back — world.lighting. The fields themselves are authored through
         // world.row.set render.
         services.AddSingleton<ICommandModule, WorldLightingCommandModule>();
+        services.AddSingleton<ICommandModule, WorldTimelineCommandModule>();
         // The inhabitation + creation-facet READ-BACK surface — world.inhabitants, world.faces,
         // world.attachments, world.portals. The facets themselves are authored through
         // world.row.set placements <json>.

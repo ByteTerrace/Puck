@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Puck.Abstractions.Presentation;
+using Puck.Hosting;
 using Puck.SdfVm;
 using Puck.SignedDistance;
 using Puck.Testing;
@@ -151,21 +152,27 @@ public sealed partial class WorldRoutedPresentationLawTests {
 
         Assert.NotEqual(expected: retained, actual: changed.Environment.Lanes.ToArray());
     }
-    // A routed view's sky clock (its stars' twinkle and its clouds' drift) is the destination's delivered tick: the sky
-    // it shows moves as its world does, whatever the viewer's own world has reached. Its presentation clock is still the
-    // viewer's frame's.
+    // A routed view's sky clock (its stars' twinkle, its clouds' drift, its media's motion) is the destination's presented
+    // tick: the sky it shows moves as its world does, whatever the viewer's own world has reached. Its presentation time
+    // is still the viewer's frame's.
     [Fact]
     public void ARoutedViewsSkyClockIsTheDestinationsTick() {
         using var north = Endpoint(definition: AwayDocument(), identity: Away, position: AwayPose);
         SdfFrame? viewer = null;
         var scene = new WorldRoutedScene(bodyColor: north.Mirror.BodyColor, endpoint: north, hostFrame: () => viewer);
 
-        viewer = (Capture(source: scene.FrameSource) with { SampleIndex = 7u, Time = 3f });
+        viewer = (Capture(source: scene.FrameSource) with {
+            Clock = new PresentedTick(
+                Fraction: 0d,
+                Whole: 123456789UL
+            ),
+            Time = 3f,
+        });
 
         var frame = Capture(source: scene.FrameSource);
 
-        Assert.NotEqual(expected: viewer.SampleIndex, actual: ((uint)north.EngineTick));
-        Assert.Equal(actual: frame.SampleIndex, expected: ((uint)north.EngineTick));
+        Assert.NotEqual(expected: viewer.Clock, actual: frame.Clock);
+        Assert.Equal(actual: frame.Clock, expected: north.FollowState().Presented);
         Assert.Equal(actual: frame.Time, expected: viewer.Time);
 
         north.Mirror.DeliverSnapshot(snapshot: Snapshot(authority: Away, position: AwayPose) with {
@@ -174,7 +181,8 @@ public sealed partial class WorldRoutedPresentationLawTests {
         });
         var advanced = scene.FrameSource.CaptureFrame(deltaSeconds: 5f, height: 36U, interpolationAlpha: 1f, width: 64U);
 
-        Assert.Equal(actual: advanced.SampleIndex, expected: 50400U);
+        Assert.Equal(actual: advanced.Clock, expected: north.FollowState().Presented);
+        Assert.Equal(actual: advanced.Clock.Whole, expected: 50400UL);
         Assert.Equal(actual: advanced.Time, expected: viewer.Time);
     }
 }

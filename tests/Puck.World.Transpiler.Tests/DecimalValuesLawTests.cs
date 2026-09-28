@@ -209,6 +209,29 @@ public sealed class DecimalValuesLawTests {
             expected: 0.25m
         );
     }
+    [InlineData("min", "20", "1200")]
+    [InlineData("h", "5.5", "19800")]
+    [InlineData("h", "24", "86400")]
+    [Theory]
+    public void MinutesAndHoursConvertToSecondsExactly(string unit, string authored, string expected) {
+        Assert.True(condition: Puck.Transpiler.Units.UnitConversion.TryConvertExact(
+            converted: out var seconds,
+            dimension: Puck.Transpiler.Units.UnitDimension.Seconds,
+            unit: unit,
+            value: decimal.Parse(s: authored, provider: System.Globalization.CultureInfo.InvariantCulture)
+        ));
+        Assert.Equal(
+            actual: seconds,
+            expected: decimal.Parse(s: expected, provider: System.Globalization.CultureInfo.InvariantCulture)
+        );
+        // Red leg: an hour is no length, so a metres field refuses it.
+        Assert.False(condition: Puck.Transpiler.Units.UnitConversion.TryConvertExact(
+            converted: out _,
+            dimension: Puck.Transpiler.Units.UnitDimension.Meters,
+            unit: unit,
+            value: 1m
+        ));
+    }
     [Fact]
     public void AnIntegerLiteralAnswersWithItsValue() => Assert.Equal(
         actual: DecimalValues.FromLiteral(literal: Literal(

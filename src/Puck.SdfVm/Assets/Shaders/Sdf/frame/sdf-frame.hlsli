@@ -1,12 +1,12 @@
 // The view a dispatch renders, its visibility records and mesh samples, and its tile planes and instance masks.
 #ifndef FRAME_SDF_FRAME_HLSLI
 #define FRAME_SDF_FRAME_HLSLI
-// The world values (imageExtent, tileGrid, viewportCount, screenCount, instanceMaskWordCount, sampleIndex and the view
-// the set renders, viewBase) are the views set's block, passGroup, written per view by SdfFrameBlock:
+// The world values (imageExtent, tileGrid, viewportCount, screenCount, instanceMaskWordCount and the view the set
+// renders, viewBase) are the views set's block, passGroup, written per view by SdfFrameBlock:
 // imageExtent is the engine extent, the largest a view renders and the per-view visibility record stride; tileGrid the
 // tiles per viewport, the cull buffer's per-viewport stride; viewportCount every view the frame renders; screenCount one
 // past the highest screen whose source is bound (the views passes only); instanceMaskWordCount the live program's per-tile mask width;
-// sampleIndex the deterministic tick clock star twinkle reads; meshDraws the frame's mesh draws, zero when no mesh draws
+// meshDraws the frame's mesh draws, zero when no mesh draws
 // and the mesh visibility target holds nothing this frame. Each view renders through its own set of dispatches, one
 // deep in Z, so a kernel's view is worldViewOf(id.z).
 

@@ -32,7 +32,7 @@ float3 sdfViewsStage(SdfPixel p) {
 #ifdef SDF_SCREEN_SOURCES
     // The bounded emissive volumes composite after the surface or sky color is final, and never paint through solid
     // geometry: each is clipped to the span from the near plane to the hit distance, or to the far distance on a miss.
-    color = shadeVolumes(color, p.rayOrigin, p.rayDirection, worldRayDistanceAt(p.view, p.rayDirection, worldNearDistance(p.view)), (s.hit ? s.t : p.farDistance), p.pixel, p.view.position.w);
+    color = shadeVolumes(color, p.rayOrigin, p.rayDirection, worldRayDistanceAt(p.view, p.rayDirection, worldNearDistance(p.view)), (s.hit ? s.t : p.farDistance), p.pixel);
 #endif
 
     return sdfDebugView(p, s, color);

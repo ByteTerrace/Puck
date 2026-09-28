@@ -367,19 +367,19 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             Time: 0f,
             Views: m_views
         ) {
+            // The destination's own presented tick, never the viewer's, so its sky and media show its authority's time.
+            Clock = m_mirror.FollowState().Presented,
             DynamicTransforms = transforms,
             MovedTransforms = moved,
             // The mirrored world's own far plane (its render.farDistance), so the panel frames the same depth its
             // authority renders.
             FarDistance = m_dressedFarDistance,
-            // The mirrored world's own sky and lighting, along its render.cycle when it authors one, on its own clock: the
-            // destination's delivered engine tick, never the viewer's.
+            // The mirrored world's own sky and lighting, along its render.cycle when it authors one.
             Environment = m_cycle.Resolve(
                 definition: m_mirror.Definition,
                 mirror: m_mirror.FollowState(),
                 revision: m_mirror.DefinitionRevision
             ),
-            SampleIndex = unchecked((uint)m_mirror.EngineTick),
             // The mirrored world's static placements' meshes, then its stamp pool's.
             MeshDraws = meshDraws,
             MeshDrawsRevision = meshDrawsRevision,

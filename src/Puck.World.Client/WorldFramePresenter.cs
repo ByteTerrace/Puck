@@ -1698,9 +1698,9 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             // The environment: the static render.lighting/render.sky lanes, or this frame's point along
             // render.cycle when the world authors one (a world.row.set render lands on the next frame).
             Environment = lighting,
-            // The sky's clock (twinkle, cloud motion), taken from the deterministic tick counter and never from
-            // m_elapsedSeconds so a replay at tick N draws the identical sky.
-            SampleIndex = ((uint)m_simulation.ElapsedTicks),
+            // The sky's and the media's clock: the engine tick the state mirror presented this frame's bound state at,
+            // never m_elapsedSeconds, so a frame at a given tick and fraction draws the same sky on every run.
+            Clock = m_client.StateMirror.Presented,
         };
 
         return m_dressedFrame;

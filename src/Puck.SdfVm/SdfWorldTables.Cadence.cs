@@ -12,12 +12,13 @@ namespace Puck.SdfVm;
 //   - m_programRevision  : the uploaded program (words, live instance-mask width, kernel variant, reseeded screen-surface
 //                          table, invariant instance grid) and every kernel reload — bumped by UploadProgram and
 //                          InstallReload.
-//   - the world values    : the bound screen count, the twinkle tick and the mesh draws' count.
+//   - the world values    : the bound screen count and the mesh draws' count.
 //   - the pass block      : the view's camera basis, fov/aspect, off-axis offset, far distance and debug view mode, every
-//                          lever and the environment (SdfFrameBlock), less the presentation time and the render extent,
-//                          which the scheduler renders a view again for when it moves. Time free-runs every frame, so
-//                          hashing it would make the signature never repeat; what reads it (bounded volumes) forces a
-//                          render below.
+//                          lever and the environment (SdfFrameBlock) with its presented-tick bakes (the twinkle phase,
+//                          the cloud offsets), less the render extent, which the scheduler renders a view again for when
+//                          it moves.
+//   - m_volumeRegion     : the bounded media, whose advection and pulse are baked from the presented tick, so a view
+//                          showing one renders again exactly when the presented tick moves it.
 //   - m_dynamicTransformRevision : bumped whenever a frame packs an owed dynamic-transform row, so the table is never
 //                          re-hashed. Also covers the frame instance grid (a pure function of these transforms + the
 //                          program).
@@ -30,15 +31,13 @@ namespace Puck.SdfVm;
 //   - m_programDeclaresScreenSlab : a bound screen's image content updates in place each frame with the same view handle,
 //                          unseen by any packed span, so any declared ScreenSlab force-renders.
 //   - AnyBrickBaking()  : an in-progress carve bake writing brick voxels each upload.
-//   - frame.Volumes     : bounded volumes animate on the excluded time lane, and their table is not hashed.
 public sealed partial class SdfWorldTables {
     private readonly byte[] m_signatureBlock = new byte[SdfFrameBlock.SizeBytes];
 
     private ulong m_tablesSignature;
 
     /// <summary>Returns whether the frame the tables hold forces every view to render whatever its signature: a
-    /// declared screen slab, whose bound image changes in place; a carve bake in progress; or a bounded volume, which
-    /// animates on the presentation clock.</summary>
+    /// declared screen slab, whose bound image changes in place, or a carve bake in progress.</summary>
     /// <param name="frame">The frame the tables packed.</param>
     /// <returns><see langword="true"/> when no view's latest render may stand for the frame.</returns>
     public bool ForcesRender(SdfFrame frame) {
@@ -47,13 +46,12 @@ public sealed partial class SdfWorldTables {
         return (
             !frame.EnableCadenceGate ||
             m_programDeclaresScreenSlab ||
-            AnyBrickBaking() ||
-            (frame.Volumes.Count > 0)
+            AnyBrickBaking()
         );
     }
     /// <summary>Returns the 64-bit FNV-1a signature of what one view renders from in the frame the tables hold: the
     /// tables' signature (<see cref="UpdateTablesSignature"/>) folded with the view's pass block
-    /// (<see cref="SdfFrameBlock"/>), written with no presentation time and no render extent. A collision would need a
+    /// (<see cref="SdfFrameBlock"/>), written with no render extent. A collision would need a
     /// 64-bit hash clash across two genuinely different input sets — negligible, and still only presentation, never
     /// simulation.</summary>
     /// <param name="frame">The frame the tables packed.</param>
@@ -68,7 +66,6 @@ public sealed partial class SdfWorldTables {
             block: block,
             frame: frame,
             height: 0u,
-            sceneTime: 0f,
             tables: PassValues,
             view: view,
             width: 0u
@@ -93,11 +90,11 @@ public sealed partial class SdfWorldTables {
             m_dynamicTransformRevision,
             unchecked((ulong)m_meshRevision),
             m_meshDrawCount,
-            m_sampleIndex,
             BoundScreenCount(),
         ];
 
         hash.Add(values: MemoryMarshal.AsBytes(span: values));
+        hash.Add(values: m_volumeRegion.Contents);
         hash.Add(values: m_screenSurfaceRegion.Contents);
         hash.Add(values: m_screenMappingRegion.Contents);
         hash.Add(values: m_screenLightScratch);

@@ -12,8 +12,8 @@
 // picked log-uniformly in temperature from ~3000 K (orange) through ~6500 K (white) to ~15000 K (blue-white), each
 // tint normalized to a unit peak channel so it colours the star without changing the luminosity law. Twinkling is
 // optional: a hash-chosen share of the stars dip by the authored depth and recover, each riding its own small
-// harmonic and phase of the authored period on the deterministic tick counter (reduced by an integer modulo first,
-// so the phase is exact however long the session runs, and a replay at tick N twinkles identically). The disc is
+// harmonic and phase of the authored period, whose phase the host bakes from the presented tick (exact however long
+// the session runs, and identical at a given tick on every run). The disc is
 // measured ANGULARLY — the star's cell point is decoded back to a direction and the pixel's angle to it compared
 // against StarRadiusFraction of one cell's angular pitch (≈ π/density) — so a star is round everywhere on the sky
 // rather than stretched by the projection's anisotropy. No texture, no session state — the identical (direction,
@@ -31,7 +31,7 @@ static const float3 StarSpectrum[7] = {         // blackbody tints, unit peak ch
     float3(0.79, 0.85, 1.00),
     float3(0.71, 0.80, 1.00)
 };
-float3 sdfStarField(float3 direction, float density, float brightness, uint seed, float twinkleShare, float twinkleDepth, uint twinklePeriodTicks, uint tick) {
+float3 sdfStarField(float3 direction, float density, float brightness, uint seed, float twinkleShare, float twinkleDepth, float twinklePhase) {
     density = max(density, 1.0);
 
     float2 cellF = (((sdfOctEncode(direction) * 0.5) + 0.5) * density);
@@ -51,9 +51,9 @@ float3 sdfStarField(float3 direction, float density, float brightness, uint seed
 
     if (((float)h2.z * SDF_INV_2POW32) < twinkleShare) {
         // Two sines at distinct small harmonics of the period, phase-offset per star, multiplied: an irregular dip
-        // pattern that still closes exactly at the period boundary, so the integer modulo never shows a seam.
+        // pattern that still closes exactly at the period boundary, so the phase's wrap never shows a seam.
         uint3 h3 = sdfPcg3d(h2);
-        float phase = ((float)(tick % twinklePeriodTicks) / (float)twinklePeriodTicks);
+        float phase = twinklePhase;
         float harmonicA = (float)(1u + (h3.x % 3u));
         float harmonicB = (float)(2u + (h3.y % 3u));
         float offset = ((float)h3.z * SDF_INV_2POW32);
@@ -70,27 +70,16 @@ float3 sdfStarField(float3 direction, float density, float brightness, uint seed
 
     return (((coverage * brightness) * luminosity) * tint);
 }
-// Value noise on the integer lattice: one sdfPcg3d per corner (seed folded in), quintic-smoothed bilinear blend.
-// The cell coordinates are hashed by their float bit patterns, so negative cells are as distinct as positive ones.
-float sdfLatticeNoise(float2 p, uint seed) {
-    float2 cell = floor(p);
-    float2 f = (p - cell);
-    float2 u = ((f * f * f) * ((f * ((f * 6.0) - 15.0)) + 10.0));
-    float a = ((float)sdfPcg3d(uint3(asuint(cell.x), asuint(cell.y), seed)).x * SDF_INV_2POW32);
-    float b = ((float)sdfPcg3d(uint3(asuint(cell.x + 1.0), asuint(cell.y), seed)).x * SDF_INV_2POW32);
-    float c = ((float)sdfPcg3d(uint3(asuint(cell.x), asuint(cell.y + 1.0), seed)).x * SDF_INV_2POW32);
-    float d = ((float)sdfPcg3d(uint3(asuint(cell.x + 1.0), asuint(cell.y + 1.0), seed)).x * SDF_INV_2POW32);
-
-    return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
-}
-// Four octaves of lattice noise (lacunarity 2, gain ½), each octave on its own seed, normalized to [0, 1].
+// Four octaves of the periodic lattice noise (lacunarity 2, gain ½), each octave on its own seed, normalized to
+// [0, 1]. The whole-number lacunarity keeps every octave periodic in the base lattice's period, so the layer's
+// host-reduced drift and shear offsets never show a seam.
 float sdfCloudFbm(float2 p, uint seed) {
     float value = 0.0;
     float amplitude = 0.5;
 
     [unroll]
     for (uint octave = 0u; (octave < 4u); octave++) {
-        value += (amplitude * sdfLatticeNoise(p, (seed + octave)));
+        value += (amplitude * sdfPeriodicNoise2(p, (seed + octave)));
         p = ((p * 2.0) + 17.0);
         amplitude *= 0.5;
     }
@@ -227,7 +216,7 @@ float3 skyColor(float3 direction) {
     // Stars read only above the local horizon — a night sky under the ground plane is never visible to the camera
     // and would otherwise tile through geometry for nothing.
     if (direction.y > 0.0) {
-        color += sdfStarField(direction, worldSkyStarDensity(), worldSkyStarBrightness(), worldSkyStarSeed(), worldSkyStarTwinkleShare(), worldSkyStarTwinkleDepth(), worldSkyStarTwinklePeriodTicks(), passGroup.sampleIndex);
+        color += sdfStarField(direction, worldSkyStarDensity(), worldSkyStarBrightness(), worldSkyStarSeed(), worldSkyStarTwinkleShare(), worldSkyStarTwinkleDepth(), worldSkyStarTwinklePhase());
     }
 
     // Clouds sit over everything above them — the gradient, the sun disc and the stars — by their own coverage mask.

@@ -21,7 +21,7 @@ own emitter and supplies `IDocumentVocabulary` for the two questions generic val
 | `Lowering/` | `DocumentLowering` (values, arithmetic, indexing, `for`/template expansion), `DocumentScope`, `DocumentValueComparer`, and `DocumentScalars`/`DocumentBuiltins`—the scalar and collection function vocabulary. |
 | `Modules/` | `ModuleResolver`: `import` resolution and alias composition. |
 | `Rewriting/` | `PuckSyntaxRewriter` and `PuckMigration`: a named rewrite over the tree, and what it declares it reshapes. |
-| `Units/` | `UnitDimension`/`UnitConversion`: what `deg`, `rad`, `s`, `ms`, `m`, `cm`, `mm`, `hz`, `%` represent. |
+| `Units/` | `UnitDimension`/`UnitConversion`: what `deg`, `rad`, `s`, `ms`, `min`, `h`, `m`, `cm`, `mm`, `hz`, `%` represent. |
 | (root) | `CompilationResult<T>`, and `PuckDslVocabulary`—the DSL's spelling of `Puck.State`'s cell-kind enum. |
 
 ## Names
@@ -336,7 +336,7 @@ The two evaluators fold a name differently, on purpose:
   double fold already agrees with the fixed-point one exactly on whole numbers.
 - A fractional literal lowers as the decimal its text spells, to the 28 significant digits a `decimal` holds, and
   stays exact through arithmetic that is closed over finite decimals: a sign, `+`, `-`, `*`, and a unit whose scale
-  is a power of ten (`ms`, `cm`, `mm`, `%`). A result a `decimal` would overflow on or round, a product or a
+  is a power of ten (`ms`, `cm`, `mm`, `%`) or a whole multiple (`min`, `h`). A result a `decimal` would overflow on or round, a product or a
   conversion too small for its scale included, is computed in `double` instead, which keeps its magnitude. A
   fractional quotient or remainder, a folded function and degrees into radians are always computed in `double`; a
   decimal field reads such a result at its 15 significant digits, the same on every runtime. One value has one

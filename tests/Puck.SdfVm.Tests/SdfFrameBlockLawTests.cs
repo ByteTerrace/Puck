@@ -107,13 +107,11 @@ public sealed class SdfFrameBlockLawTests {
             block: block,
             frame: frame,
             height: 200u,
-            sceneTime: frame.Time,
             tables: new SdfPassValues(
                 DebugMode: 4,
                 Environment: environment,
                 InstanceMaskWordCount: 2u,
                 MeshDraws: 5u,
-                SampleIndex: 9u,
                 ScreenCount: 3u
             ),
             view: 0,
@@ -201,13 +199,11 @@ public sealed class SdfFrameBlockLawTests {
                 block: block,
                 frame: frame,
                 height: 200u,
-                sceneTime: frame.Time,
                 tables: new SdfPassValues(
                     DebugMode: 0,
                     Environment: new float[SdfEnvironment.LaneCount],
                     InstanceMaskWordCount: 1u,
                     MeshDraws: 0u,
-                    SampleIndex: 0u,
                     ScreenCount: 0u
                 ),
                 view: 0,
@@ -246,13 +242,11 @@ public sealed class SdfFrameBlockLawTests {
                     block: blocks[view],
                     frame: frame,
                     height: 200u,
-                    sceneTime: frame.Time,
                     tables: new SdfPassValues(
                         DebugMode: 0,
                         Environment: new float[SdfEnvironment.LaneCount],
                         InstanceMaskWordCount: 1u,
                         MeshDraws: 0u,
-                        SampleIndex: 0u,
                         ScreenCount: 0u
                     ),
                     view: view,
@@ -291,13 +285,11 @@ public sealed class SdfFrameBlockLawTests {
                 block: block,
                 frame: frame,
                 height: 200u,
-                sceneTime: frame.Time,
                 tables: new SdfPassValues(
                     DebugMode: 0,
                     Environment: new float[SdfEnvironment.LaneCount],
                     InstanceMaskWordCount: 1u,
                     MeshDraws: 0u,
-                    SampleIndex: 0u,
                     ScreenCount: 0u
                 ),
                 view: 0,
@@ -329,13 +321,11 @@ public sealed class SdfFrameBlockLawTests {
                 block: block,
                 frame: frame,
                 height: 200u,
-                sceneTime: frame.Time,
                 tables: new SdfPassValues(
                     DebugMode: 0,
                     Environment: new float[SdfEnvironment.LaneCount],
                     InstanceMaskWordCount: 1u,
                     MeshDraws: 0u,
-                    SampleIndex: 0u,
                     ScreenCount: 0u
                 ),
                 view: view,

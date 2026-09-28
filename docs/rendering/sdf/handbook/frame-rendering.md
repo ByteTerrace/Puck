@@ -256,9 +256,13 @@ pass-pipeline cache (`GpuRegionCopyPass`). An owner records a frame's owed copie
 destination before the first copy, then the copies, then one transition per
 copied buffer for its readers.
 
-A still frame therefore writes no table. The frame's presentation time and its
-drifting clouds ride the pass blocks, which the view's node writes whole each
-frame it renders. The frame instance grid is rebuilt only on a frame whose
+A still frame therefore writes no table. The sky and the bounded media animate
+on the frame's presented tick (`SdfFrame.Clock`, the tick the state mirror
+presented the frame's bound state at), reduced on the host so no pass reads a
+clock: the twinkle's phase and the clouds' drift ride the pass blocks, which the
+view's node writes whole each frame it renders, and each medium's advection and
+pulse ride the volume table, which a frame writes only when the tick moves
+them. The frame instance grid is rebuilt only on a frame whose
 transforms moved. `world.counters gpu` reports the tables' written bytes as
 `uploads.host-visible` on its `upload` line, and a brick's on its `bricks` line.
 

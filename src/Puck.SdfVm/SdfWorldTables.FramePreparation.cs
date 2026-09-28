@@ -159,11 +159,17 @@ public sealed partial class SdfWorldTables {
             floats[(b + 0)] = volume.Position.X; floats[(b + 1)] = volume.Position.Y; floats[(b + 2)] = volume.Position.Z; floats[(b + 3)] = volume.DynamicSlot;
             floats[(b + 4)] = rotation.X; floats[(b + 5)] = rotation.Y; floats[(b + 6)] = rotation.Z; floats[(b + 7)] = rotation.W;
             floats[(b + 8)] = volume.HalfExtent.X; floats[(b + 9)] = volume.HalfExtent.Y; floats[(b + 10)] = volume.HalfExtent.Z; floats[(b + 11)] = volume.Axis;
-            floats[(b + 12)] = volume.Width; floats[(b + 13)] = volume.Speed; floats[(b + 14)] = BitConverter.UInt32BitsToSingle(value: volume.Seed); floats[(b + 15)] = volume.Steps;
+            var motion = SdfVolumeMotion.At(
+                clock: frame.Clock,
+                volume: volume
+            );
+
+            floats[(b + 12)] = volume.Width; floats[(b + 13)] = motion.Advection;
+            floats[(b + 14)] = BitConverter.UInt32BitsToSingle(value: volume.Seed); floats[(b + 15)] = volume.Steps;
             floats[(b + 16)] = volume.Intensity; floats[(b + 17)] = volume.Extinction;
-            floats[(b + 18)] = volume.PulseAmplitude; floats[(b + 19)] = volume.PulseFrequency;
+            floats[(b + 18)] = motion.Pulse;
             floats[(b + 20)] = (volume.IntensityLane ?? -1); floats[(b + 21)] = volume.Ramp.Count;
-            floats[(b + 22)] = ((float)volume.Kind);
+            floats[(b + 22)] = ((float)volume.Kind); floats[(b + 23)] = motion.AdvectionZ;
             floats[(b + 40)] = volume.Coverage; floats[(b + 41)] = volume.Softness;
             for (var stop = 0; (stop < volume.Ramp.Count); stop++) {
                 var row = ((b + 24) + (stop * 4));
@@ -175,28 +181,21 @@ public sealed partial class SdfWorldTables {
         }
     }
 
-    // The deterministic tick clock star twinkle reads, the latest frame's or zero for a sky with no visible twinkle.
-    private uint m_sampleIndex;
-
     // The latest packed frame's environment rows, SdfEnvironment's lanes with the host bakes.
     private readonly float[] m_environment = new float[SdfEnvironment.LaneCount];
 
     /// <summary>Gets or sets the SDF debug view mode every pass block carries; 0 renders the final lit image.</summary>
     public int DebugMode { get; set; }
     /// <summary>Gets what every pass block of the latest packed frame takes from the tables: the bound screens, the
-    /// instance-mask width, the twinkle tick, the mesh draws, the debug view mode, and the environment rows with the host
-    /// bakes applied (<see cref="SdfFrameBlock.BakeEnvironment"/>).</summary>
+    /// instance-mask width, the mesh draws, the debug view mode, and the environment rows with the host bakes applied
+    /// (<see cref="SdfFrameBlock.BakeEnvironment"/>).</summary>
     public SdfPassValues PassValues => new(
         DebugMode: DebugMode,
         Environment: m_environment,
         InstanceMaskWordCount: InstanceMaskWordCount,
         MeshDraws: MeshDrawCount,
-        SampleIndex: SampleIndex,
         ScreenCount: BoundScreenCount()
     );
-    /// <summary>Gets the tick clock star twinkle reads in the latest packed frame, or zero when its sky twinkles
-    /// nowhere visible: the value every pass block of the frame carries.</summary>
-    public uint SampleIndex => m_sampleIndex;
     /// <summary>Gets the live program's per-tile instance-mask width, which every pass block carries.</summary>
     public uint InstanceMaskWordCount => ((uint)m_liveInstanceMaskWordCount);
 
@@ -283,21 +282,6 @@ public sealed partial class SdfWorldTables {
             draws: frame.MeshDraws,
             revision: frame.MeshDrawsRevision
         );
-
-        // The deterministic tick clock star twinkle reads (cloud motion is baked into the environment rows). It rides
-        // every pass block and the signature folds it, so the cadence never stands a frame whose tick moved; a sky with no
-        // visible twinkle packs 0, leaving a static frame to stand.
-        var environment = frame.Environment;
-        var twinkles = (
-            (environment.StarBrightness > 0f) &&
-            (environment.StarDensity > 0f) &&
-            (environment.TwinkleShare > 0f) &&
-            (environment.TwinkleDepth > 0f)
-        );
-
-        m_sampleIndex = (twinkles
-            ? frame.SampleIndex
-            : 0u);
     }
 
     private void ValidateInstanceGridCapacity(ReadOnlySpan<uint> words) {

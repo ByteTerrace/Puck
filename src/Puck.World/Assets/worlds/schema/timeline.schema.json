@@ -1,0 +1,69 @@
+{
+  "type": [
+    "object",
+    "null"
+  ],
+  "properties": {
+    "clocks": {
+      "description": "The clocks, each named once.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "One named presentation clock: a tick clock, whose phase advances with the simulation\u0027s engine tick through a period, or a state clock, whose phase is the fractional part of a state row\u0027s presented value (an advancing row wraps once per unit).",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "description": "The clock\u0027s name, unique within the section.",
+            "type": "string"
+          },
+          "periodSeconds": {
+            "description": "A tick clock\u0027s period, in seconds: a whole number of engine ticks (1/50400 s). Refused beside State.",
+            "type": [
+              "number",
+              "null"
+            ],
+            "default": null
+          },
+          "spanSeconds": {
+            "description": "What one period reads as, in the units a key\u0027s time is authored in: a day that passes in twenty minutes and reads as twenty-four hours has a span of 24h. Absent reads as the period for a tick clock and as one for a state clock.",
+            "type": [
+              "number",
+              "null"
+            ],
+            "default": null
+          },
+          "startSeconds": {
+            "description": "How far into its span a tick clock stands at engine tick zero, in SpanSeconds\u0027 units, in [0, span). Absent is zero. Refused on a state clock.",
+            "type": [
+              "number",
+              "null"
+            ],
+            "default": null
+          },
+          "state": {
+            "description": "A state clock\u0027s Fixed or Int row. Refused beside PeriodSeconds.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false,
+        "title": "WorldClock"
+      },
+      "default": null
+    }
+  },
+  "additionalProperties": false,
+  "default": null,
+  "title": "WorldTimelineSection"
+}

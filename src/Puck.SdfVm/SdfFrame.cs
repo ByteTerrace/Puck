@@ -1,5 +1,6 @@
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Presentation;
+using Puck.Hosting;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
@@ -174,20 +175,12 @@ public sealed record SdfFrame(
     /// block carries it as <c>enableShadowProxy</c> (<see cref="SdfFrameBlock"/>). An unset frame uploads 0 and the
     /// proxy stays off.</summary>
     public bool EnableShadowProxy { get; init; }
-    /// <summary>Gets the deterministic tick clock the sky reads: the star-twinkle phase and the integrated cloud offsets.</summary>
-    /// <remarks>
-    /// <para>
-    /// This must be fed from the deterministic tick clock — <c>WorldSimulation.ElapsedTicks</c> — and never from
-    /// <see cref="Time"/>, which is a presentation-clock accumulation that advances by wall-clock deltas, so a replay
-    /// at tick N renders the identical sky.
-    /// </para>
-    /// <para>
-    /// When the sky has visible twinkle it rides the composite push constant, which the engine's frame signature
-    /// folds in, so the cadence gate never skips a frame whose tick moved; a sky without visible twinkle pushes 0 and a
-    /// static frame stays skippable.
-    /// </para>
-    /// </remarks>
-    public uint SampleIndex { get; init; }
+    /// <summary>Gets the presented engine tick the sky and the bounded media animate on: the star-twinkle phase, the
+    /// cloud layer's drift, shear and spin, and each medium's advection and pulse, all reduced on the host
+    /// (<see cref="SdfFrameBlock.BakeEnvironment"/>, the volume table), so no pass reads a raw tick. It comes from the
+    /// state mirror of the world the frame draws, never from <see cref="Time"/>, which advances by wall-clock
+    /// deltas, so a frame at a given tick and fraction draws the same sky and media on every run.</summary>
+    public PresentedTick Clock { get; init; }
     /// <summary>Selects the four-tap finite-difference surface normal instead of the default analytic forward-mode
     /// gradient dual. The default <see langword="false"/> uses analytic normals (one dual field evaluation at the hit —
     /// exact through the transform chain, immune to finite-difference cancellation). The pass block carries it as

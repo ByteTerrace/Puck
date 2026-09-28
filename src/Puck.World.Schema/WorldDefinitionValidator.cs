@@ -390,75 +390,6 @@ public static partial class WorldDefinitionValidator {
 
         return false;
     }
-    private static void ValidateRenderCycle(WorldDefinition definition, List<string> errors) {
-        if (definition.Render.Cycle is not { } cycle) {
-            return;
-        }
-
-        var row = definition.State.FirstOrDefault(predicate: candidate => string.Equals(
-            a: candidate.Name.Value,
-            b: cycle.State,
-            comparisonType: StringComparison.Ordinal
-        ));
-
-        if (row is null) {
-            errors.Add(item: $"render.cycle.state names no state row '{cycle.State}'.");
-        } else if (row.Kind is not (CellKind.Fixed or CellKind.Int)) {
-            errors.Add(item: $"render.cycle.state '{cycle.State}' must be a Fixed or Int row.");
-        }
-
-        if (cycle.Keys is not { Count: >= 2 }) {
-            errors.Add(item: "render.cycle.keys must carry at least two keys.");
-
-            return;
-        }
-
-        // A key over an unauthored section moves the PINNED topology (the sun and hemisphere; the two-stop gradient
-        // and the fog), which is what the cycle track resolves it against.
-        var lightingShape = ResolvedLightingShape(lighting: definition.Render.Lighting);
-        var skyShape = (definition.Render.Sky ?? WorldRenderSky.Pinned);
-
-        for (var index = 0; (index < cycle.Keys.Count); index++) {
-            var key = cycle.Keys[index];
-            var path = $"render.cycle.keys[{index}]";
-
-            if (
-                !float.IsFinite(f: key.At) ||
-                (key.At < 0f) ||
-                (key.At >= 1f)
-            ) {
-                errors.Add(item: $"{path}.at must be finite and in [0, 1).");
-            } else if (
-                (index > 0) &&
-                (key.At <= cycle.Keys[(index - 1)].At)
-            ) {
-                errors.Add(item: $"{path}.at must exceed the previous key's.");
-            }
-
-            ValidateRenderLighting(
-                definition: definition,
-                errors: errors,
-                lighting: key.Lighting,
-                path: $"{path}.lighting",
-                shape: lightingShape
-            );
-            ValidateRenderSky(
-                definition: definition,
-                errors: errors,
-                path: $"{path}.sky",
-                sky: key.Sky,
-                shape: skyShape,
-                lighting: lightingShape
-            );
-        }
-
-        ValidateRenderCycleResolution(
-            cycle: cycle,
-            errors: errors,
-            lightingShape: lightingShape,
-            skyShape: skyShape
-        );
-    }
     // The fields a key may leave to inheritance are judged where they RESOLVE, not where they are written: each key
     // holds every field the previous key left it, the first inherits from the statics and then from the last key
     // (the wrap), so a stop order or an ink band that is fine in every fragment can still resolve inverted. Walks
@@ -1063,6 +994,10 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
         ValidateRenderCycle(
+            definition: definition,
+            errors: errors
+        );
+        ValidateTimeline(
             definition: definition,
             errors: errors
         );

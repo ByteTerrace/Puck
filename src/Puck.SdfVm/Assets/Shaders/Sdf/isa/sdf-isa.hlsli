@@ -176,6 +176,7 @@
 #define SDF_SCREEN_MATERIAL            65535
 #define SDF_MAX_SCREEN_SURFACES        32u
 #define SDF_MINIMUM_NEAR               0.02
+#define SDF_NOISE_PERIOD_CELLS         4096u
 
 // Puck.Abstractions.Gpu.GpuSamplerFilter.
 #define SDF_FILTER_NEAREST 0u
