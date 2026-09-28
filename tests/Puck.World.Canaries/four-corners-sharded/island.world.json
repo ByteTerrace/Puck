@@ -1,0 +1,35 @@
+{
+  "basis": "../../../src/Puck.World/Assets/worlds/puck",
+  "machines": [
+    {
+      "name": "arcade$agb-screen",
+      "running": false
+    },
+    {
+      "name": "arcade$cgb-screen",
+      "running": false
+    },
+    {
+      "name": "arcade$handheld-screen",
+      "running": false
+    }
+  ],
+  "references": [
+    {
+      "name": "nw",
+      "document": "quilt-nw"
+    },
+    {
+      "name": "ne",
+      "document": "quilt-ne"
+    },
+    {
+      "name": "se",
+      "document": "quilt-se"
+    },
+    {
+      "name": "sw",
+      "document": "quilt-sw"
+    }
+  ]
+}

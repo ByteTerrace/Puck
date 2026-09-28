@@ -4,35 +4,35 @@
   "bootShape": "headless",
   "requirements": [],
   "timeoutSeconds": 120,
-  "binding": "Five real Puck.World processes (nw, ne, se, sw, island) each bind a distinct dynamic loopback endpoint and trust each other's generated federation identity, and each raises its own bodies.networkPlayers so an arrival from a peer has a slot to land in. Only nw's script drives a body: posed five units inside nw's own ground on its east face's centre line and flown outward, it crosses that face at x=66 onto ne's process — not onto a local shadow of ne's document — and nw's own transcript names the endpoint it forwarded to and reads the traveler back at an instance-qualified address on the far side. The discriminating leg keeps the same five worlds and the same topology and poses the traveler at the same spot, but never flies it, so no crossing and no remote-authority naming can be asserted against it. The onward hops of the ring are not asserted here: a body that has arrived over a federation hop is minted rigid on the destination, and a rigid body's own transfer is refused by name (\"cross-world transfer of a rigid body is not supported\"), so a second remote hop cannot leave the first destination at all. seamless-four-corners-circuit proves the same four-hop ring colocated.",
+  "binding": "Five real Puck.World processes (nw, ne, se, sw, island), each booting this canary's own delta over the shipped Four Corners shard or island that stops the arcade's machines (running: false, so the host keeps their state and never advances them) and names its neighbours as the other deltas, each bind a distinct dynamic loopback endpoint and trust each other's generated federation identity, and each raises its own bodies.networkPlayers so an arrival from a peer has a slot to land in. Only nw's script drives a body: posed five units inside nw's own ground on its east face's centre line and flown outward, it crosses that face at x=66 onto ne's process — not onto a local shadow of ne's document — and nw's own transcript names the endpoint it forwarded to and reads the traveler back at an instance-qualified address on the far side. The discriminating leg keeps the same five worlds and the same topology and poses the traveler at the same spot, but never flies it, so no crossing and no remote-authority naming can be asserted against it. The onward hops of the ring are not asserted here: a body that has arrived over a federation hop is minted rigid on the destination, and a rigid body's own transfer is refused by name (\"cross-world transfer of a rigid body is not supported\"), so a second remote hop cannot leave the first destination at all. seamless-four-corners-circuit proves the same four-hop ring colocated.",
   "fixtures": [],
   "positive": {
-    "world": "src/Puck.World/Assets/worlds/shards/quilt-nw.world.json",
+    "world": "tests/Puck.World.Canaries/four-corners-sharded/quilt-nw.world.json",
     "script": "nw-positive.script.txt",
     "authorities": [
       {
         "id": "nw",
-        "world": "src/Puck.World/Assets/worlds/shards/quilt-nw.world.json",
+        "world": "tests/Puck.World.Canaries/four-corners-sharded/quilt-nw.world.json",
         "script": "nw-positive.script.txt"
       },
       {
         "id": "ne",
-        "world": "src/Puck.World/Assets/worlds/shards/quilt-ne.world.json",
+        "world": "tests/Puck.World.Canaries/four-corners-sharded/quilt-ne.world.json",
         "script": "ground-watch.script.txt"
       },
       {
         "id": "se",
-        "world": "src/Puck.World/Assets/worlds/shards/quilt-se.world.json",
+        "world": "tests/Puck.World.Canaries/four-corners-sharded/quilt-se.world.json",
         "script": "ground-watch.script.txt"
       },
       {
         "id": "sw",
-        "world": "src/Puck.World/Assets/worlds/shards/quilt-sw.world.json",
+        "world": "tests/Puck.World.Canaries/four-corners-sharded/quilt-sw.world.json",
         "script": "ground-watch.script.txt"
       },
       {
         "id": "island",
-        "world": "src/Puck.World/Assets/worlds/puck.world.json",
+        "world": "tests/Puck.World.Canaries/four-corners-sharded/island.world.json",
         "script": "ground-watch.script.txt"
       }
     ],
@@ -227,32 +227,32 @@
     ]
   },
   "discriminating": {
-    "world": "src/Puck.World/Assets/worlds/shards/quilt-nw.world.json",
+    "world": "tests/Puck.World.Canaries/four-corners-sharded/quilt-nw.world.json",
     "script": "nw-discriminating.script.txt",
     "authorities": [
       {
         "id": "nw",
-        "world": "src/Puck.World/Assets/worlds/shards/quilt-nw.world.json",
+        "world": "tests/Puck.World.Canaries/four-corners-sharded/quilt-nw.world.json",
         "script": "nw-discriminating.script.txt"
       },
       {
         "id": "ne",
-        "world": "src/Puck.World/Assets/worlds/shards/quilt-ne.world.json",
+        "world": "tests/Puck.World.Canaries/four-corners-sharded/quilt-ne.world.json",
         "script": "ground-watch.script.txt"
       },
       {
         "id": "se",
-        "world": "src/Puck.World/Assets/worlds/shards/quilt-se.world.json",
+        "world": "tests/Puck.World.Canaries/four-corners-sharded/quilt-se.world.json",
         "script": "ground-watch.script.txt"
       },
       {
         "id": "sw",
-        "world": "src/Puck.World/Assets/worlds/shards/quilt-sw.world.json",
+        "world": "tests/Puck.World.Canaries/four-corners-sharded/quilt-sw.world.json",
         "script": "ground-watch.script.txt"
       },
       {
         "id": "island",
-        "world": "src/Puck.World/Assets/worlds/puck.world.json",
+        "world": "tests/Puck.World.Canaries/four-corners-sharded/island.world.json",
         "script": "ground-watch.script.txt"
       }
     ],
