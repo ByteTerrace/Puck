@@ -18,10 +18,9 @@
         "src/Puck.Transpiler/Parsing/PuckParser.Rules.cs": 2059,
         "src/Puck.World.Authoring/Authoring/CreationCanonicalizer.cs": 2457,
         "src/Puck.World.Client/PlayerRoster.cs": 2243,
-        "src/Puck.World.Console/WorldRowCommandModule.cs": 2416,
-        "src/Puck.World.Schema/WorldDefinitionFileSource.cs": 2118,
+        "src/Puck.World.Console/WorldRowCommandModule.cs": 2315,
         "src/Puck.World.Schema/WorldDefinitionValidator.Metadata.cs": 2047,
-        "src/Puck.World.Schema/WorldDefinitionValidator.Placements.cs": 2394,
+        "src/Puck.World.Schema/WorldDefinitionValidator.Placements.cs": 2375,
         "src/Puck.World.Schema/WorldDefinitionValidator.cs": 2382,
         "src/Puck.World.Schema/WorldNameRegistry.cs": 2039,
         "src/Puck.World.Server/WorldBody.Step.cs": 2167,
@@ -40,7 +39,7 @@
         "tests/Puck.Maths.Tests/Subjects.PresentedPhase4ZetaAndKnots.cs": 2369,
         "tests/Puck.Maths.Tests/Subjects.PresentedStructuralClaims.cs": 2019,
         "tests/Puck.Maths.Tests/Subjects.PrimeAndExtensionFields.cs": 2184,
-        "tests/Puck.World.Tests/FederationTransferLawTests.cs": 2392,
+        "tests/Puck.World.Tests/FederationTransferLawTests.cs": 2390,
         "tests/Puck.World.Tests/HoldLawTests.cs": 2041
     }
 }
