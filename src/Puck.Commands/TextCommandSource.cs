@@ -189,7 +189,8 @@ public sealed class TextCommandSource : ITextCommandSink {
     /// <param name="dueNextTick">Whether a simulation-routed line is due in the next tick that snapshots input
     /// rather than at the capture clock's now (<see cref="TextCommandSession.DueNextTick"/>).</param>
     /// <returns>A text sink permanently stamped as <see cref="Principal.Seat"/> for <paramref name="slot"/>.</returns>
-    public TextCommandSession CreateSeatSession(InputRouter router, int slot, Action<string, CommandResult>? onResult = null, bool dueNextTick = false) {
+    /// <param name="onSettled">An optional callback after the command and any deferred work have settled.</param>
+    public TextCommandSession CreateSeatSession(InputRouter router, int slot, Action<string, CommandResult>? onResult = null, bool dueNextTick = false, Action<string, CommandResult>? onSettled = null) {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentOutOfRangeException.ThrowIfNegative(slot);
 
@@ -206,6 +207,7 @@ public sealed class TextCommandSource : ITextCommandSink {
         return CreateSession(
             dueNextTick: dueNextTick,
             onResult: onResult,
+            onSettled: onSettled,
             principal: Principal.Seat(slot: slot),
             simulationSink: router.CreateSeatTextSink(slot: slot),
             slot: slot

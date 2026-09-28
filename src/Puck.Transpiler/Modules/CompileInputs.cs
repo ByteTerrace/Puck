@@ -24,26 +24,22 @@ public enum CompileInputKind {
 /// <param name="ContentHash">The <see cref="ContentPin.Hex"/> of the bytes read, for <see cref="CompileInputKind.Content"/>,
 /// or of the names listed, for <see cref="CompileInputKind.Listing"/>; empty otherwise.</param>
 public readonly record struct CompileInput(string Path, CompileInputKind Kind, string ContentHash) {
+    /// <summary>Reads the current answer to the same filesystem query, without recording a compiler input.</summary>
+    /// <returns>The current existence, content, or listing fact. A missing content file answers absent.</returns>
+    /// <exception cref="IOException">The file or directory cannot be read.</exception>
+    /// <exception cref="UnauthorizedAccessException">Access to the file or directory is refused.</exception>
+    public CompileInput ReadCurrent() => Kind switch {
+        CompileInputKind.Listing => new CompileInput(Path, Kind, CompileInputs.ListingHash(files: CompileInputs.FilesIn(directory: Path))),
+        CompileInputKind.Content when File.Exists(path: Path) => new CompileInput(Path, Kind, ContentPin.OfFile(path: Path).Hex),
+        _ => new CompileInput(Path, (File.Exists(path: Path) ? CompileInputKind.Present : CompileInputKind.Absent), string.Empty),
+    };
     /// <summary>Returns whether the file system still answers this fact the way it answered the compile: the file is
     /// still absent, still present, or still holds the same bytes, or the directory still lists the same files.</summary>
     /// <returns><see langword="true"/> when the fact still holds; <see langword="false"/> when it moved or the file
     /// can no longer be read.</returns>
     public bool StillHolds() {
         try {
-            return Kind switch {
-                CompileInputKind.Absent => !File.Exists(path: Path),
-                CompileInputKind.Present => File.Exists(path: Path),
-                CompileInputKind.Listing => string.Equals(
-                    a: CompileInputs.ListingHash(files: CompileInputs.FilesIn(directory: Path)),
-                    b: ContentHash,
-                    comparisonType: StringComparison.Ordinal
-                ),
-                _ => (File.Exists(path: Path) && string.Equals(
-                    a: ContentPin.OfFile(path: Path).Hex,
-                    b: ContentHash,
-                    comparisonType: StringComparison.Ordinal
-                )),
-            };
+            return (this == ReadCurrent());
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             return false;
         }

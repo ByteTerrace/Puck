@@ -652,6 +652,19 @@ public static class WorldBootComposition {
         ));
         services.AddSingleton<ICommandObserver>(implementationFactory: static sp => sp.GetRequiredService<WorldScheduleRunner>());
         services.AddSingleton<ICommandModule, WorldScheduleCommandModule>();
+        services.AddSingleton(implementationFactory: static sp => {
+            var source = sp.GetRequiredService<WorldDefinitionSource>();
+            var catalog = sp.GetRequiredService<WorldMachineCatalog>();
+
+            return new WorldSourceWatch(
+                sourcePath: () => source.SourcePath,
+                catalogFingerprint: MachineCatalogFingerprint(machineCatalog: catalog),
+                catalog: catalog);
+        });
+        services.AddSingleton<ICommandModule>(implementationFactory: static sp => new WorldWatchCommandModule(
+            watch: sp.GetRequiredService<WorldSourceWatch>(),
+            source: () => sp.GetRequiredService<TextCommandSource>(),
+            router: sp.GetRequiredService<Func<InputRouter>>()));
         // Launcher owns the one TextCommandSource and its stdout/stderr + operator-tape result fan-out. World
         // contributes only this wait gate; AddLauncherTerminalShared composes every contributed gate into that
         // source, so adding world.wait cannot sever the launcher's administrative mirror or deferred observers.

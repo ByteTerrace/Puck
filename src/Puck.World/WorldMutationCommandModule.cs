@@ -30,7 +30,7 @@ namespace Puck.World;
 /// one — and that identity is not a formality: <see cref="WorldServer"/>'s per-section <see cref="WorldCapability.Mutate"/>
 /// grant check applies to EVERY submitted mutation regardless of which module produced it, so revoking a
 /// principal's grant over a section refuses that principal's writes here exactly like any other's.</para></remarks>
-internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink link, WorldDeferredVerbEchoes echoes, WorldDefinitionSource definitionSource, WorldRenderSettings renderSettings, Client.WorldAudioDirector audioDirector, PresentPacingControl pacing, Client.WorldBindingBarVisibility bindingBarVisibility, Client.WorldEditorSeats editorSeats, Client.WorldTextCatalog textCatalog, WorldMachineCatalog machineCatalog, WorldScheduleRoot scheduleRoot) : ICommandModule {
+internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink link, WorldDeferredVerbEchoes echoes, WorldDefinitionSource definitionSource, WorldRenderSettings renderSettings, Client.WorldAudioDirector audioDirector, PresentPacingControl pacing, Client.WorldBindingBarVisibility bindingBarVisibility, Client.WorldEditorSeats editorSeats, Client.WorldTextCatalog textCatalog, WorldMachineCatalog machineCatalog, WorldScheduleRoot scheduleRoot, WorldSourceWatch sourceWatch) : ICommandModule {
     // Buffer a mutation over the link and return a quiet ack — the server prints the loud accept/reject line when the
     // buffered edit applies at the tick boundary, and the barrier guarantees a following world.status sees the result.
     // world.load's own trailing-token grammar: <path> [force], where `force` is recognized only as the LAST token.
@@ -288,6 +288,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 }
 
                 var path = definitionSource.SourcePath;
+                using var sourceReads = sourceWatch.RecordReads(path: path);
 
                 // See world.load's own remarks: reuses server.Neighbours, the one live-session resolver.
                 if (!WorldDefinitionLoader.TryLoadFileForAdmission(
@@ -300,7 +301,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     path: path,
                     reason: out var reason
                 )) {
-                    return CommandResult.Error(output: $"[world.reload: {reason}]");
+                    return sourceWatch.Refuse(diagnostic: reason);
                 }
 
                 var loaded = admission!.Definition;
@@ -310,7 +311,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     origin: path,
                     reason: out reason
                 )) {
-                    return CommandResult.Error(output: $"[world.reload: text assets refused: {reason}]");
+                    return sourceWatch.Refuse(diagnostic: $"text assets refused: {reason}");
                 }
 
                 return link.SubmitRebuild(

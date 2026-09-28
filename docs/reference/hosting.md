@@ -33,6 +33,11 @@ capability authentication.
   host bridges keystrokes in (`ConsoleInputSink` in `Puck.Launcher`).
 - *Presentation observability:* frame capture, latest-value publication, and
   emitted light remain outside the simulation trajectory.
+- *Source-watch debounce:* `DependencyWatch` polls comparable dependency facts
+  at a bounded interval and requests work after a quiet period. Refreshing the
+  dependency set preserves pending edits, including a dependency changed while
+  compilation was running. The caller supplies presentation timestamps; a
+  source watch never changes simulation state directly.
 
 ## The host boundary
 

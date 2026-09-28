@@ -624,9 +624,10 @@ readback for step 3.
 
 ### E10 — Live reload and before-and-after
 
-**Problem:** a builder who saves a `.puck` file must still type `world.reload`,
-loses their place when they do, and cannot compare the world before and after a
-change.
+**Status:** the source watch uses the graph watch's shared debounce and the
+existing reload command. It covers compile and document-composition inputs,
+keeps the latest reload diagnostic for the inspector and toast, and reconciles
+selection ids after a rebuild. Before-and-after presentation remains open.
 
 **Delivers:**
 
