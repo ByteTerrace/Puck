@@ -47,12 +47,13 @@ internal sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, st
 
     public void DeliverAnswer(in QueryAnswer answer) { }
     public void DeliverComposition(WorldComposition composition) { }
-    public void DeliverDefinition(WorldDefinition definition) {
+    public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) {
         if (Current()) {
             Write(
             WorldFederationResponse.Definition,
             WorldFederationCodec.EncodeDocument(
                 definition,
+                version,
                 tier,
                 authority,
                 revision(),
@@ -89,7 +90,10 @@ internal sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, st
     }
     // The wire carries one definition-frame kind; a value-only delivery rides the same encode until the wire
     // grammar grows its own state/definition split.
-    public void DeliverState(WorldDefinition definition, in WorldStateStamp stamp) => DeliverDefinition(definition: definition);
+    public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) => DeliverDefinition(
+        definition: definition,
+        version: version
+    );
     public void PrimeRoute(in WorldAuthorityRouteDescription route) => Write(
         WorldFederationResponse.Route,
         WorldFederationCodec.EncodeRoute(

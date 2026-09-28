@@ -17,18 +17,15 @@ public sealed class WorldPipelineResizedWaitLawTests {
     private const uint Extent = 8;
 
     private static CompiledShaderPipeline Fill() {
-        var plan = new ShaderPipelineCompiler().Compile(definition: new ShaderPipelineDefinition(
+        var plan = new ShaderPipelineCompiler().Compile(definition: new RenderGraphDefinition(
             name: "fill",
             outputs: ["image"],
             passes: [new ShaderPipelinePass(
                 EntryPoint: "main",
                 Inputs: [],
-                Kind: ShaderPipelinePassKind.Compute,
+                Kind: ShaderPipelineDocumentPassKind.Compute,
                 Name: "fill",
-                Outputs: [new ResourceReference(
-                    Binding: 0,
-                    Name: "image"
-                )],
+                Outputs: ["image"],
                 Source: "fill.hlsl"
             )],
             resources: [new ShaderPipelineResource(
@@ -61,18 +58,18 @@ public sealed class WorldPipelineResizedWaitLawTests {
         using var directory = new TemporaryDirectory();
         using var gate = new ManualResetEventSlim(initialState: true);
         var reports = new List<string>();
-        var gpu = new FakeGpuDevice(reportVersion: 0) {
-            BeforeComputePipeline = () => gate.Wait(),
+        var gpu = new FakeGpuDevice() {
+            BeforeComputePipeline = _ => gate.Wait(),
         };
         using var node = new ShaderPipelineRenderNode(
+            pipelines: new GpuPassPipelineCache(),
             deviceContext: gpu,
-            gpu: gpu,
             height: Extent,
             hostsOnDirectX: false,
             name: "fill",
             width: Extent
         );
-        using var runtime = new WorldPipelineRuntime(
+        using var runtime = new WorldViewGraphHost(
             documentDirectory: directory.RootPath,
             packager: new ShaderPackager(compiler: new ShaderCompiler(
                 cacheDirectory: directory.PathOf(name: "cache"),
@@ -82,10 +79,15 @@ public sealed class WorldPipelineResizedWaitLawTests {
             Report = (name, message) => reports.Add(item: $"[pipeline: {name} {message}]"),
         };
 
-        runtime.Register(
-            name: "fill",
-            node: node
+        using var instances = FakeGraphInstances.Attach(
+            create: _ => node,
+            host: runtime
         );
+
+        runtime.Reconcile(views: new WorldViewDefaults(Graphs: [new WorldViewGraph(
+            Name: "fill",
+            Source: "fill.hlsl"
+        )]));
         node.Swap(pipeline: Fill());
         Assert.True(condition: SpinWait.SpinUntil(
             condition: () => {

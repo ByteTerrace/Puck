@@ -22,14 +22,17 @@ internal sealed record AffectedCanary(string Directory, IReadOnlyList<string> Fi
 /// <param name="Suites">The test suites, ordinal order.</param>
 /// <param name="Unmapped">Changed World sources the coverage index does not know, so no canary could be chosen for
 /// them; ordinal order.</param>
+/// <param name="Deleted">World sources deleted since the base that neither the current index nor the one the base
+/// recorded names, so no canary could be chosen for them and no recording ever can; ordinal order.</param>
 /// <param name="Worlds">Changed <c>.puck</c> sources that declare <c>test</c> blocks, for <c>puck test</c>; ordinal
 /// order.</param>
-internal sealed record AffectedPlan(IReadOnlyList<string> Canaries, bool Catalog, bool Everything, bool Parity, IReadOnlyList<string> Suites, IReadOnlyList<string> Unmapped, IReadOnlyList<string> Worlds);
+internal sealed record AffectedPlan(IReadOnlyList<string> Canaries, bool Catalog, bool Everything, bool Parity, IReadOnlyList<string> Suites, IReadOnlyList<string> Unmapped, IReadOnlyList<string> Worlds, IReadOnlyList<string> Deleted);
 /// <summary>
 /// Chooses the suites and canaries a set of changed files needs, and nothing wider. Suites follow the project graph:
 /// a changed project and every project that references it, transitively. Canaries follow what they were recorded
 /// executing (the coverage index) plus the files their manifests name. A change the rules cannot place is reported,
-/// never silently widened into "run everything".
+/// never silently widened into "run everything". A file the index cannot know, such as a project file or a shader, is
+/// placed through the indexed sources it stands for.
 /// </summary>
 internal static class AffectedSelection {
     // Changing any of these changes how every project builds.
@@ -62,6 +65,22 @@ internal static class AffectedSelection {
     /// <param name="worldClosure">The projects the World executable is built from, itself included.</param>
     /// <param name="declaresTests">Whether a changed <c>.puck</c> source declares <c>test</c> blocks.</param>
     /// <param name="catalogInputs">Whether a changed file is an input of the shipped catalog's tree compile.</param>
+    /// <param name="canariesReaching">The canaries whose manifest worlds and fixtures reach a changed file through the
+    /// documents they name (<see cref="AffectedDocuments"/>); none when none do.</param>
+    /// <param name="standInsFor">The indexed sources a changed file the index does not know stands for
+    /// (<see cref="AffectedStandIns"/>): their canaries are its canaries, and a file with an indexed stand-in is not
+    /// unmapped.</param>
+    /// <param name="deleted">The changed files deleted since the base, or <see langword="null"/> for none: nothing reads
+    /// them, and one no index places is listed in <see cref="AffectedPlan.Deleted"/>, never as unmapped.</param>
+    /// <param name="recorded">The index as the base recorded it, which places a deleted file the current index no longer
+    /// names, or <see langword="null"/> for none.</param>
+    /// <param name="recordedStandInsFor">The stand-ins a deleted file had in the tree the base recorded
+    /// (<see cref="AffectedStandIns"/> over <see cref="AffectedRevisionTree"/>), looked up in <paramref name="recorded"/>
+    /// and then the current index, or <see langword="null"/> for none.</param>
+    /// <param name="recordedCanariesReaching">The canaries whose manifest worlds and fixtures reached a deleted file
+    /// through the documents the base's tree held (<see cref="AffectedDocuments"/> over
+    /// <see cref="AffectedRevisionTree"/>), or <see langword="null"/> for none; a deleted file is never reached in the
+    /// working tree.</param>
     /// <returns>The plan.</returns>
     public static AffectedPlan Select(
         IReadOnlyList<string> changed,
@@ -71,13 +90,20 @@ internal static class AffectedSelection {
         Func<string, IReadOnlyList<string>> consumersOf,
         IReadOnlySet<string> worldClosure,
         Func<string, bool> declaresTests,
-        Func<string, string?, bool> catalogInputs
+        Func<string, string?, bool> catalogInputs,
+        Func<string, IReadOnlyList<string>> standInsFor,
+        Func<string, IReadOnlySet<string>> canariesReaching,
+        IReadOnlySet<string>? deleted = null,
+        IReadOnlyDictionary<string, IReadOnlySet<string>>? recorded = null,
+        Func<string, IReadOnlyList<string>>? recordedStandInsFor = null,
+        Func<string, IReadOnlySet<string>>? recordedCanariesReaching = null
     ) {
         var catalog = false;
         var everything = false;
         var seeds = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
         var selected = new SortedSet<string>(comparer: StringComparer.Ordinal);
         var unmapped = new SortedSet<string>(comparer: StringComparer.Ordinal);
+        var gone = new SortedSet<string>(comparer: StringComparer.Ordinal);
         var worlds = new SortedSet<string>(comparer: StringComparer.Ordinal);
         // Deepest directory first, so a nested project owns its files rather than its parent.
         var owners = projects.OrderByDescending(keySelector: static project => project.Directory.Length).ToArray();
@@ -93,24 +119,61 @@ internal static class AffectedSelection {
                 continue;
             }
 
+            var isDeleted = (deleted?.Contains(item: path) ?? false);
+
             if (
+                !isDeleted &&
                 path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".puck") &&
                 declaresTests(arg: path)
             ) {
                 _ = worlds.Add(item: path);
             }
 
+            var named = false;
+
             foreach (var canary in canaries) {
                 if (
                     IsUnder(path: path, directory: canary.Directory) ||
                     canary.Files.Contains(value: path, comparer: StringComparer.Ordinal)
                 ) {
+                    named = true;
                     _ = selected.Add(item: canary.Id);
                 }
             }
 
-            if (coverage.TryGetValue(key: path, value: out var executedBy)) {
+            // A deleted file is reached through the documents the base's tree held, which named it; the working tree's
+            // documents can name it no longer.
+            var reaching = (isDeleted
+                ? (recordedCanariesReaching?.Invoke(arg: path) ?? new HashSet<string>())
+                : canariesReaching(arg: path));
+
+            selected.UnionWith(other: reaching);
+
+            var mapped = (
+                coverage.TryGetValue(key: path, value: out var executedBy) ||
+                (isDeleted && (recorded?.TryGetValue(key: path, value: out executedBy) ?? false)) ||
+                named ||
+                (reaching.Count > 0)
+            );
+
+            if (executedBy is not null) {
                 selected.UnionWith(other: executedBy);
+            } else {
+                // A deleted file stands for what the tree the base recorded said it stood for, in the index that base
+                // recorded; a file the working tree holds stands for what it says now, in the current index.
+                var standIns = (isDeleted
+                    ? (recordedStandInsFor?.Invoke(arg: path) ?? [])
+                    : standInsFor(arg: path));
+
+                foreach (var standIn in standIns) {
+                    if (
+                        (isDeleted && (recorded?.TryGetValue(key: standIn, value: out var standInExecutedBy) ?? false)) ||
+                        coverage.TryGetValue(key: standIn, value: out standInExecutedBy)
+                    ) {
+                        mapped = true;
+                        selected.UnionWith(other: standInExecutedBy);
+                    }
+                }
             }
 
             var owner = owners.FirstOrDefault(predicate: project => IsUnder(path: path, directory: project.Directory));
@@ -127,9 +190,11 @@ internal static class AffectedSelection {
 
             if (
                 worldClosure.Contains(item: owner.Name) &&
-                !coverage.ContainsKey(key: path)
+                !mapped
             ) {
-                _ = unmapped.Add(item: path);
+                _ = (isDeleted
+                    ? gone.Add(item: path)
+                    : unmapped.Add(item: path));
             }
         }
 
@@ -173,7 +238,8 @@ internal static class AffectedSelection {
             Parity: parity,
             Suites: [.. reached.Where(predicate: static project => project.IsSuite).Select(selector: static project => project.Name).Order(comparer: StringComparer.Ordinal)],
             Unmapped: [.. unmapped],
-            Worlds: [.. worlds]
+            Worlds: [.. worlds],
+            Deleted: [.. gone]
         );
     }
 }

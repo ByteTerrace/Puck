@@ -17,17 +17,19 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
     // their zeros would be unobservable and are not cleared. Convert moves history to shader-read and gray to general.
     // The fullscreen copy moves gray to shader-read and its target to render-target in its one barrier command buffer;
     // its render pass leaves the target shader-readable, and publication, outside every pass, moves it to the output
-    // layout. Every pass pushes its 96-byte frame block.
+    // layout. Every pass binds its frame group set and its pass group set and pushes nothing, and uploads nothing: every
+    // slot has held its pass block since the graph installed. Outside every pass the node sends the frame group's whole
+    // region, one 256-byte constant-buffer view, which it rewrites every frame.
     internal static readonly string[] InitializationWork = [
-        "work accumulate executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=3 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=1 push-constants=96 descriptor-writes=2 uploads.host-visible=0 clears=1",
-        "work convert executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=2 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=1 push-constants=96 descriptor-writes=2 uploads.host-visible=0 clears=0",
-        "work copy executed: dispatches=0 dispatches.indirect=0 draws=1 render-passes=1 command-buffers=2 barriers.image=2 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=1 push-constants=96 descriptor-writes=1 uploads.host-visible=0 clears=0",
-        "work outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=1 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0",
+        "work accumulate executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=3 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=2 uploads.host-visible=0 clears=1 copies=0 march.steps=0 texels.written=0",
+        "work convert executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=2 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=2 uploads.host-visible=0 clears=0 copies=0 march.steps=0 texels.written=0",
+        "work copy executed: dispatches=0 dispatches.indirect=0 draws=1 render-passes=1 command-buffers=0 barriers.image=2 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=1 uploads.host-visible=0 clears=0 copies=0 march.steps=0 texels.written=0",
+        "work outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=1 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=256 clears=0 copies=0 march.steps=0 texels.written=0",
     ];
     // The next submission: nothing is cleared, the previous history is already shader-read, and the slot written next
     // was discarded by the reset, so accumulate transitions it to general.
     internal static readonly string[] SecondWork = [
-        "work accumulate executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=1 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=1 push-constants=96 descriptor-writes=2 uploads.host-visible=0 clears=0",
+        "work accumulate executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=1 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=2 uploads.host-visible=0 clears=0 copies=0 march.steps=0 texels.written=0",
         InitializationWork[1],
         InitializationWork[2],
         InitializationWork[3],
@@ -35,7 +37,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
     // Once every slot has cycled, the slot accumulate writes was last read as shader-read, so it takes the planned
     // transition back to general.
     internal static readonly string[] SteadyWork = [
-        "work accumulate executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=1 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=1 push-constants=96 descriptor-writes=2 uploads.host-visible=0 clears=0",
+        "work accumulate executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=1 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=2 uploads.host-visible=0 clears=0 copies=0 march.steps=0 texels.written=0",
         InitializationWork[1],
         InitializationWork[2],
         InitializationWork[3],
@@ -59,7 +61,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             plan: plan,
             shaders: plan.Passes.ToDictionary(
                 elementSelector: static pass => Shader(
-                    kind: pass.Declaration.Kind,
+                    kind: pass.Declaration!.Kind,
                     name: pass.Name
                 ),
                 keySelector: static pass => pass.Name
@@ -72,9 +74,8 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
     private static List<string> CountersScriptLines(CompiledShaderPipeline pipeline) {
         var gpu = new FakePipelineGpu();
         using var node = new ShaderPipelineRenderNode(
+            pipelines: new GpuPassPipelineCache(),
             deviceContext: gpu,
-            gpu: gpu,
-            graphics: gpu,
             height: 64,
             hostsOnDirectX: false,
             inFlightFrames: InFlight,
@@ -339,11 +340,11 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
     public void ThePipelineCountersCanaryExpectsWhatTheNodeCountsForItsFixtures() {
         var positive = CountersScriptLines(pipeline: CanaryPipeline(
             canary: "pipeline-feedback",
-            fileName: "feedback.pipeline.json"
+            fileName: "feedback.graph.json"
         ));
         var fourPass = CountersScriptLines(pipeline: CanaryPipeline(
             canary: "pipeline-counters",
-            fileName: "four-pass.pipeline.json"
+            fileName: "four-pass.graph.json"
         ));
 
         // Each leg's own exact lines hold on its own fixture, and the positive's turn red on the four-pass variant.
@@ -373,7 +374,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
 
             Assert.Equal(
                 actual: residency.GetProperty(propertyName: "text").GetString(),
-                expected: $"{Puck.Commands.ConsoleRecord.ContinuationIndent}residency: parameters={CanaryPipeline(canary: "pipeline-feedback", fileName: "feedback.pipeline.json").Plan.ParameterBytes} bytes policy="
+                expected: $"{Puck.Commands.ConsoleRecord.ContinuationIndent}residency: parameters={CanaryPipeline(canary: "pipeline-feedback", fileName: "feedback.graph.json").Plan.ParameterBytes} bytes policy="
             );
         }
         // The canary's per-pass lines are continuation lines of the inspect answer, indented by its framing.
@@ -391,7 +392,11 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
     [Fact]
     public void TheNodeCountsTheGpuObjectsItCreates() {
         var gpu = new FakePipelineGpu();
-        using var node = InstalledNode(gpu: gpu);
+        var cache = new GpuPassPipelineCache();
+        using var node = InstalledNode(
+            gpu: gpu,
+            pipelines: cache
+        );
         IWorkCounterSource source = node;
 
         Assert.Equal(
@@ -399,13 +404,20 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
                 builder: new StringBuilder(),
                 source: source
             )),
-            // Per compute pass a pipeline and a module, two modules and one graphics pipeline for the fullscreen pass, three
-            // slots of the history, gray and drawn images, and a descriptor pool and set per pass and slot.
-            expected: ["work lifetime: created.pipelines=3 created.shader-modules=4 created.images=9 created.buffers=0 created.descriptor-pools=9 created.descriptor-sets=9"]
+            // Three slots of the history, gray and drawn images, three slots of the frame group's and each pass's constant
+            // buffer, the graph's one descriptor pool, and per pass and slot a frame group set and a pass group set. The
+            // passes' pipelines and modules are the pass-pipeline cache's, so the node's line counts none of them.
+            expected: ["work lifetime: created.pipelines=0 created.shader-modules=0 created.images=9 created.buffers=12 created.descriptor-pools=1 created.descriptor-sets=18"]
         );
         Assert.Equal(
             actual: source.WorkKinds.ToArray(),
             expected: GpuWork.LifetimeKinds.ToArray()
+        );
+        // The cache counts them instead: per compute pass a pipeline and a module, and two modules and one graphics
+        // pipeline for the fullscreen pass.
+        Assert.Equal(
+            actual: (Created(cache: cache, kind: GpuWork.PipelinesCreated), Created(cache: cache, kind: GpuWork.ShaderModulesCreated)),
+            expected: (3L, 4L)
         );
     }
 }

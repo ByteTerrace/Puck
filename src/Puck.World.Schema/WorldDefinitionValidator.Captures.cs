@@ -3,7 +3,7 @@ using Puck.World.Authoring;
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
-    // Structural only: station uniqueness and spelling, tick ordering/uniqueness within a station, and a parseable palette. Which
+    // Structural only: station uniqueness and spelling, the instance it reads, tick ordering/uniqueness within a station, and a parseable palette. Which
     // camera a station's ticks actually show is a document DECISION (state + rules + a camera program's select op),
     // never checked here — a station name is a label, not a reference.
     private static void ValidateCaptures(WorldDefinition definition, List<string> errors) {
@@ -55,6 +55,36 @@ public static partial class WorldDefinitionValidator {
                 reason: out var stationReason
             )) {
                 errors.Add(item: $"{path}.station {stationReason}.");
+            }
+
+            // A capture names the root by omitting the name, a views.graphs row by its name, and, in the render graph
+            // composition synthesizes, the SDF world beneath whatever is drawn over it.
+            if (
+                (row.Instance is { } instance) &&
+                !(definition.Views.Graphs ?? []).Any(predicate: graph => string.Equals(
+                    a: graph?.Name,
+                    b: instance,
+                    comparisonType: StringComparison.Ordinal
+                )) &&
+                ((definition.Views.Root is not null) || !string.Equals(
+                    a: instance,
+                    b: WorldViewGraphs.WorldInstance,
+                    comparisonType: StringComparison.Ordinal
+                ))
+            ) {
+                errors.Add(item: $"{path}.instance '{instance}' names no render-graph instance a capture can read: name a views.graphs row, '{WorldViewGraphs.WorldInstance}' for the SDF world before its post passes and overlay in a world that names no root, or omit it for the root.");
+            }
+
+            // A screen's capture reads the source instance its row's source is, which only a machine, producer or probe
+            // source has.
+            if (row.Screen is { } screen) {
+                if (row.Instance is not null) {
+                    errors.Add(item: $"{path} names both instance '{row.Instance}' and screen {screen}; a station captures one of them.");
+                } else if (definition.Screens.FirstOrDefault(predicate: candidate => (candidate.Index == screen)) is not { } shown) {
+                    errors.Add(item: $"{path}.screen {screen} names no declared screen.");
+                } else if (shown.Source is not (WorldScreenSource.Machine or WorldScreenSource.Producer or WorldScreenSource.Probe)) {
+                    errors.Add(item: $"{path}.screen {screen} shows no machine, producer or probe source, so it reads no source instance a capture can read.");
+                }
             }
 
             ValidateCaptureTicks(

@@ -96,8 +96,7 @@ public sealed class WorldRowFieldEditLawTests {
     private static CommandRegistry BuildRegistry(HostRow row) => new(modules: [
         new WorldRowCommandModule(
             authority: new FakeConsoleAuthority(instance: row.Instance),
-            echoes: new WorldDeferredVerbEchoes(),
-            link: row.Instance.Link
+            echoes: new WorldDeferredVerbEchoes()
         ),
     ]);
     private static ShapeDocument FindShape(HostRow row, string name) => MothDocument(row: row).Shapes!.Single(predicate: shape => string.Equals(

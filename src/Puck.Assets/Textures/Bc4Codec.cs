@@ -1,3 +1,5 @@
+using Puck.Abstractions.Gpu;
+
 namespace Puck.Assets.Textures;
 
 /// <summary>
@@ -14,8 +16,7 @@ namespace Puck.Assets.Textures;
 /// <c>(max - min) / 14 + 1</c>).</para>
 /// </summary>
 public static class Bc4Codec {
-    /// <summary>The bytes of one block.</summary>
-    public const int BlockBytes = 8;
+    internal static readonly int BlockBytes = ((int)GpuPixelFormats.UnitBytes(format: GpuPixelFormat.Bc4Unorm));
 
     /// <summary>Writes the eight-entry palette the endpoints <paramref name="e0"/> and <paramref name="e1"/> select.</summary>
     /// <param name="e0">The first endpoint.</param>
@@ -142,9 +143,6 @@ public static class Bc4Codec {
 /// <see cref="Bc4Codec"/> block followed by the second's. A unit normal stored in two channels (see
 /// <see cref="OctahedralNormal"/>) reconstructs its third component from them.</summary>
 public static class Bc5Codec {
-    /// <summary>The bytes of one block.</summary>
-    public const int BlockBytes = 16;
-
     /// <summary>Decodes one block.</summary>
     /// <param name="block">The block's sixteen bytes.</param>
     /// <param name="values">The destination: sixteen texels of two channels each, texel <c>(x, y)</c> at

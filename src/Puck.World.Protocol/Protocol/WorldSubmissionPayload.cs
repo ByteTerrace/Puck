@@ -27,9 +27,15 @@ public abstract record WorldSubmissionPayload {
     /// the three document sources named by <see cref="Protocol.WorldRebuildRequest.Kind"/>.</summary>
     /// <param name="Value">The rebuild request.</param>
     public sealed record Rebuild(WorldRebuildRequest Value) : WorldSubmissionPayload;
-    /// <summary>A live world-document edit (one <see cref="Protocol.WorldMutation"/> kind).</summary>
+    /// <summary>A live world-document edit (one <see cref="Protocol.WorldMutation"/> kind), with the activation of the
+    /// world whose document it was composed on when it has one: the server refuses it by name
+    /// (<c>world.mutation.activation_mismatch</c>), before applying anything, when that is not its own
+    /// <see cref="WorldDocumentVersion.Activation"/>. A mutation composed on no read of a document carries none and is
+    /// not checked.</summary>
     /// <param name="Value">The mutation.</param>
-    public sealed record Mutation(WorldMutation Value) : WorldSubmissionPayload;
+    /// <param name="ExpectedActivation">The activation of the world whose document the mutation was composed on, or
+    /// <see langword="null"/> for none.</param>
+    public sealed record Mutation(WorldMutation Value, Guid? ExpectedActivation = null) : WorldSubmissionPayload;
     /// <summary>A journal undo request (<c>world.undo</c>).</summary>
     /// <param name="Count">How many trailing mutations to undo (at least 1).</param>
     public sealed record Undo(int Count) : WorldSubmissionPayload;

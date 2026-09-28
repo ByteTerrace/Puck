@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Puck.Abstractions;
+using Puck.Abstractions.Presentation;
 
 namespace Puck.Shaders;
 
@@ -22,7 +23,7 @@ public enum ShaderPipelineLoadStatus : byte {
 /// <param name="Dependencies">Every file the load read, including those of a failed pass.</param>
 /// <param name="Message">The summary or the refusal reason.</param>
 public sealed record ShaderPipelineLoadResult(ShaderPipelineLoadStatus Status, CompiledShaderPipeline? Pipeline, IReadOnlyList<string> Dependencies, string Message);
-/// <summary>Loads a pipeline document or a one-off shader into the same planned, compiled candidate.
+/// <summary>Loads a graph document or a one-off shader into the same planned, compiled candidate.
 /// No GPU objects are created here; callers may load candidates on a background worker.</summary>
 public sealed class ShaderPipelineLoader {
     // A fullscreen triangle has no vertex buffer. Its UV convention is top-left, matching pipeline images.
@@ -48,7 +49,6 @@ public sealed class ShaderPipelineLoader {
         """;
 
     private readonly ShaderCompiler m_compiler;
-    private readonly ShaderPipelineCompiler m_planner = new();
 
     /// <summary>Creates a source loader over the shared cross-backend compiler.</summary>
     public ShaderPipelineLoader(ShaderCompiler compiler) {
@@ -56,6 +56,26 @@ public sealed class ShaderPipelineLoader {
         m_compiler = compiler;
     }
 
+    // The texts a pass's ports are named in: its source and every include it reaches but its generated interface. A
+    // closure the compiler would refuse has none, so the compile reports that refusal by its own name.
+    private static IEnumerable<string>? PortTexts((string Path, string Text) generated, string source, string sourcePath) {
+        try {
+            var closure = ShaderSourceClosure.Collect(
+                generated: new Dictionary<string, string>(comparer: PuckPaths.Comparer) { [generated.Path] = generated.Text },
+                limits: ShaderSourceLimits.Default,
+                sources: [(sourcePath, source)]
+            );
+
+            return [source, .. closure.Contents
+                .Where(predicate: pair => !PuckPaths.Comparer.Equals(
+                    x: pair.Key,
+                    y: generated.Path
+                ))
+                .Select(selector: static pair => pair.Value)];
+        } catch (ShaderClosureRefusedException) {
+            return null;
+        }
+    }
     private static bool SourcesMatch(IReadOnlyDictionary<string, string> hashes) {
         try {
             foreach (var (path, expected) in hashes) {
@@ -74,7 +94,13 @@ public sealed class ShaderPipelineLoader {
     }
 
     /// <summary>Loads and compiles every planned pass. A failure in any pass refuses the entire candidate.</summary>
-    public ShaderPipelineLoadResult Load(string name, string path, CancellationToken cancellationToken = default) {
+    /// <param name="name">The instance name, which names a one-off shader's pipeline and its one pass.</param>
+    /// <param name="path">The path of the graph document or one-off shader.</param>
+    /// <param name="cancellationToken">The token that cancels the compile.</param>
+    /// <param name="tier">The quality tier every pass compiles for, or <see langword="null"/> for the variant no tier
+    /// names.</param>
+    /// <returns>The outcome.</returns>
+    public ShaderPipelineLoadResult Load(string name, string path, CancellationToken cancellationToken = default, QualityTier? tier = null) {
         path = Path.GetFullPath(path: path);
         var dependencies = new HashSet<string>(comparer: PuckPaths.Comparer) { path };
         var sourceTexts = new Dictionary<string, string>(comparer: PuckPaths.Comparer);
@@ -111,21 +137,24 @@ public sealed class ShaderPipelineLoader {
                 path: path,
                 text: Capture(sourcePath: path)
             );
-            var plan = m_planner.Compile(definition: definition);
+            var plan = RenderGraphCompiler.ShaderPasses.Compile(definition: definition).Pipeline;
             var shaders = new Dictionary<string, CompiledShader>(comparer: StringComparer.Ordinal);
             var diagnostics = new List<string>();
+            // A tier the graph does not declare compiles its default variant.
+            var variant = definition.VariantOf(tier: tier);
             var directory = Path.GetDirectoryName(path: path)!;
             // Capture every root stage before invoking tools. A candidate cannot combine different revisions
-            // of a file reused by several passes; includes are snapshotted by the source compiler.
+            // of a file reused by several passes; includes are snapshotted by the source compiler. A graph over no package
+            // plans shader passes alone.
             foreach (var pass in plan.Passes) {
                 Capture(sourcePath: Path.GetFullPath(
-                pass.Declaration.Source,
+                pass.Declaration!.Source,
                 directory
             ));
             }
             foreach (var planned in plan.Passes) {
                 cancellationToken.ThrowIfCancellationRequested();
-                var pass = planned.Declaration;
+                var pass = planned.Declaration!;
                 var sourcePath = Path.GetFullPath(
                     pass.Source,
                     directory
@@ -136,6 +165,25 @@ public sealed class ShaderPipelineLoader {
                     pass: planned,
                     sourcePath: sourcePath
                 );
+
+                if (
+                    (PortTexts(
+                        generated: generated,
+                        source: sourceTexts[sourcePath],
+                        sourcePath: sourcePath
+                    ) is { } texts) &&
+                    (ShaderPipelinePassPorts.UnnamedPort(
+                        pass: pass,
+                        texts: texts
+                    ) is { } unnamed)
+                ) {
+                    return new ShaderPipelineLoadResult(
+                        Dependencies: dependencies.ToArray(),
+                        Message: $"[SHADERPIPE_INTERFACE] {unnamed}",
+                        Pipeline: null,
+                        Status: ShaderPipelineLoadStatus.Failed
+                    );
+                }
                 var request = new ShaderCompilationRequest(
                     generatedIncludes: new Dictionary<string, string>(comparer: PuckPaths.Comparer) { [generated.Path] = generated.Text },
                     name: pass.Name,
@@ -143,7 +191,8 @@ public sealed class ShaderPipelineLoader {
                         pass: pass,
                         source: sourceTexts[sourcePath],
                         sourcePath: sourcePath
-                    )
+                    ),
+                    tier: variant
                 );
                 var shader = m_compiler.CompileAsync(
                     cancellationToken: cancellationToken,
@@ -184,6 +233,18 @@ public sealed class ShaderPipelineLoader {
                         Status: ShaderPipelineLoadStatus.Failed
                     );
                 }
+                // A document pass binds where its interface places it; a source that declares a binding of its own
+                // anywhere else is refused by name here, before any device sees it.
+                foreach (var (stage, module) in shader.SpirvByStage) {
+                    if (planned.Parameters.Layout.Mismatch(reflected: SpirvInterfaceReader.Read(module: module.Span)) is { } mismatch) {
+                        return new ShaderPipelineLoadResult(
+                            Dependencies: dependencies.ToArray(),
+                            Message: $"[SHADERPIPE_INTERFACE] Pass '{pass.Name}' {stage}: {mismatch}",
+                            Pipeline: null,
+                            Status: ShaderPipelineLoadStatus.Failed
+                        );
+                    }
+                }
                 shaders.Add(
                     key: pass.Name,
                     value: shader
@@ -193,8 +254,10 @@ public sealed class ShaderPipelineLoader {
             var candidate = new CompiledShaderPipeline(
                 plan: plan,
                 shaders: shaders
-            );
-            var message = $"compiled: {plan.Passes.Count} passes; outputs={string.Join(
+            ) {
+                Tier = variant,
+            };
+            var message = $"compiled: {plan.Passes.Count} passes{ShaderPackageVariant.Describe(requested: tier, variant: variant)}; outputs={string.Join(
                 separator: ",",
                 values: plan.Outputs
             )}";
@@ -229,9 +292,9 @@ public sealed class ShaderPipelineLoader {
     }
     /// <summary>Reads a document using trim-safe metadata, or synthesizes a one-pass definition for a source file.</summary>
     /// <param name="name">The instance name, which names a one-off shader's pipeline and its one pass.</param>
-    /// <param name="path">The path of the pipeline document or one-off shader.</param>
+    /// <param name="path">The path of the graph document or one-off shader.</param>
     /// <returns>The definition.</returns>
-    public static ShaderPipelineDefinition ReadDefinition(string name, string path) {
+    public static RenderGraphDefinition ReadDefinition(string name, string path) {
         path = Path.GetFullPath(path: path);
 
         return ParseDefinition(
@@ -240,19 +303,20 @@ public sealed class ShaderPipelineLoader {
             text: File.ReadAllText(path: path)
         );
     }
-    /// <summary>Parses the definition a source declares: a <c>.json</c> path as a <c>puck.shader.pipeline.v1</c>
-    /// document, an <c>.hlsl</c> path as a one-off shader forming a one-pass pipeline. It is the one rule every reader
-    /// of a pipeline source applies.</summary>
+    /// <summary>Parses the definition a source declares: a <c>.json</c> path as a <c>puck.render.graph.v1</c> document,
+    /// an <c>.hlsl</c> path as a one-off shader forming the one-pass graph
+    /// <see cref="RenderGraphDefinition.FromShaderSource"/> makes. It is the one rule every reader of a pipeline source
+    /// applies.</summary>
     /// <param name="name">The instance name, which names a one-off shader's pipeline and its one pass.</param>
     /// <param name="path">The full path of the source.</param>
     /// <param name="text">The source's text, read by the caller so the definition and any hash of it describe one
     /// read.</param>
     /// <returns>The definition.</returns>
-    /// <exception cref="JsonException">A pipeline document is malformed.</exception>
-    /// <exception cref="InvalidDataException">A pipeline document is <c>null</c>, or <paramref name="path"/> names a
+    /// <exception cref="JsonException">A graph document is malformed.</exception>
+    /// <exception cref="InvalidDataException">A graph document is <c>null</c>, or <paramref name="path"/> names a
     /// package's manifest rather than its directory.</exception>
     /// <exception cref="ArgumentException">A one-off shader's extension names no supported stage.</exception>
-    public static ShaderPipelineDefinition ParseDefinition(string name, string path, string text) {
+    public static RenderGraphDefinition ParseDefinition(string name, string path, string text) {
         ArgumentNullException.ThrowIfNull(argument: text);
 
         if (string.Equals(
@@ -266,16 +330,13 @@ public sealed class ShaderPipelineLoader {
             comparisonType: StringComparison.OrdinalIgnoreCase,
             value: ".json"
         )) {
-            return ShaderPipelineDefinition.FromShaderSource(
+            return RenderGraphDefinition.FromShaderSource(
                 name: name,
                 sourcePath: path
             );
         }
 
-        return (JsonSerializer.Deserialize(
-            json: text,
-            jsonTypeInfo: ShaderPipelineJsonContext.Default.ShaderPipelineDefinition
-        ) ?? throw new InvalidDataException(message: $"Pipeline '{path}' is null."));
+        return RenderGraphDefinition.Parse(json: text);
     }
     /// <summary>Returns the declarations a pass's source includes to read its frame block: the text
     /// <see cref="ShaderInterfaceHlsl"/> generates from the pass's interface, at the path
@@ -308,7 +369,7 @@ public sealed class ShaderPipelineLoader {
     public static IReadOnlyList<ShaderStageSource> StagesOf(ShaderPipelinePass pass, string sourcePath, string source) {
         ArgumentNullException.ThrowIfNull(argument: pass);
 
-        if (pass.Kind == ShaderPipelinePassKind.Compute) {
+        if (pass.Kind == ShaderPipelineDocumentPassKind.Compute) {
             return [new ShaderStageSource(
                 EntryPoint: pass.EntryPoint,
                 Path: sourcePath,
@@ -316,7 +377,7 @@ public sealed class ShaderPipelineLoader {
                 Stage: ShaderStage.Compute
             )];
         }
-        if (pass.Kind == ShaderPipelinePassKind.Geometry) {
+        if (pass.Kind == ShaderPipelineDocumentPassKind.Geometry) {
             return [
                 new ShaderStageSource(
                     EntryPoint: (pass.Geometry?.VertexEntryPoint ?? throw new InvalidDataException(message: $"Geometry pass '{pass.Name}' declares no geometry.")),

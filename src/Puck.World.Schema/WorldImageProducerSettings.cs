@@ -40,8 +40,8 @@ public sealed record WorldQrSettings(string Payload, string EcLevel = "M", int Q
 /// (the default) or <see cref="WorldCameraSensor.Infrared"/>, the infrared frame source a Windows Hello capable device
 /// carries. Each sensor gets its own shared feed, so different sources may request different sensors at once; the
 /// engine honors a Windows Face Authentication Profile V2 when published and admits simultaneous capture only after both
-/// native streams prove live. An absent infrared source faults the bind loudly (the slot shows the no-signal
-/// card).</param>
+/// native streams prove live. An absent infrared source faults the bind loudly (the slot shows unbound
+/// glass).</param>
 /// <param name="Seat">The 1-based local seat this source names: a camera is an input device seated like a pad, never
 /// hardware named directly. <see langword="null"/> means the enclosing seat scope (an identity's HUD panel, a
 /// seat-scoped probe socket) or seat 1 at world scope. Validated within <c>1..population.localSeats</c> when present.
@@ -75,6 +75,12 @@ public static class WorldImageProducerSettings {
     public const string CameraId = "camera";
     /// <summary>The desktop-capture producer's id.</summary>
     public const string CaptureId = "capture";
+    /// <summary>The producer id of a <see cref="WorldScreenSource.Machine"/> source's render-graph instance. The machine
+    /// arm stays typed because it names a <c>machines</c> row, so no document producer may take this id.</summary>
+    public const string MachineId = "machine";
+    /// <summary>The producer id of a <see cref="WorldScreenSource.Probe"/> source's render-graph instance. The probe arm
+    /// stays typed because it names a <c>probes</c> row, so no document producer may take this id.</summary>
+    public const string ProbeId = "probe";
     /// <summary>The QR producer's id.</summary>
     public const string QrId = "qr";
     /// <summary>The test-pattern producer's id.</summary>

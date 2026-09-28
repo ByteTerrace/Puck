@@ -1,12 +1,15 @@
+using Puck.Abstractions.Presentation;
+
 namespace Puck.Overlays;
 
 /// <summary>
 /// The drawn-cursor writer: renders each visible seat's pointer from an <see cref="ICursorSource"/> snapshot — a
 /// hairline ring around a small center dot at the hotspot, plus the hover label (the tooltip text) beside it — all
 /// inside a <see cref="OverlayFrameBuilder.BeginClip"/> scope on the seat's viewport rect, so the cursor is confined
-/// to its own split-screen view. Hover lights the ACCENT hue; the bare cursor stays in the primary text hue. Pure
-/// record emission; no GPU types and no OS cursor — the pointer's on-screen echo is a composed overlay layer like
-/// every other surface.
+/// to its own split-screen view. Hover lights the ACCENT hue; the bare cursor stays in the primary text hue. A hovered
+/// display pane (<see cref="OverlayCursorFrame.HoveredPane"/>) is outlined in the accent hue by four hairline edges
+/// inside its rect, unclipped, beneath the cursors. Pure record emission; no GPU types and no OS cursor — the
+/// pointer's on-screen echo is a composed overlay layer like every other surface.
 /// </summary>
 public sealed class CursorWriter : IOverlaySeatEmitter<OverlayCursorSeat> {
     // The same emptied-viewport guard the marker writer applies before opening a clip scope on the region.
@@ -15,6 +18,9 @@ public sealed class CursorWriter : IOverlaySeatEmitter<OverlayCursorSeat> {
     /// <summary>The hover-label character clamp — the ONE source <see cref="OverlayChannelLeases"/> reads for the
     /// cursor channel's text-word reservation; every label <c>WriteText</c> call clamps to it.</summary>
     public const int MaxLabelChars = 48;
+    /// <summary>The elements a hovered pane's outline writes, once per frame: its four edges. The ONE source
+    /// <see cref="OverlayChannelLeases"/> reads for the outline's share of the cursor channel's element reservation.</summary>
+    public const int PaneOutlineElements = 4;
     /// <summary>The largest ring radius a seat may publish, px — the writer's own declared cap (the world-authored
     /// size is validated against its document band; this is the render-side backstop the host clamps to).</summary>
     public const float MaxSizePx = 64f;
@@ -41,6 +47,70 @@ public sealed class CursorWriter : IOverlaySeatEmitter<OverlayCursorSeat> {
             seat: in seat
         );
 
+    // Four accent edges, each a hairline wide (at least one pixel) and inside the pane's rect, so the outline never
+    // covers a neighbouring pane. A pane under a pixel wide or tall draws none.
+    private void EmitPaneOutline(OverlayFrameBuilder builder, NormalizedRect pane) {
+        var x = (pane.X * builder.Width);
+        var y = (pane.Y * builder.Height);
+        var w = (pane.Width * builder.Width);
+        var h = (pane.Height * builder.Height);
+
+        if (
+            (w < 1f) ||
+            (h < 1f)
+        ) {
+            return;
+        }
+
+        var chrome = m_theme.Current.Chrome;
+        var edge = MathF.Min(
+            x: MathF.Max(
+                x: m_theme.Current.Elevation.EdgeHairlineWidth,
+                y: 1f
+            ),
+            y: (MathF.Min(
+                x: w,
+                y: h
+            ) * 0.5f)
+        );
+
+        builder.WriteRect(
+            alpha: chrome.CursorAlpha,
+            h: edge,
+            radius: 0f,
+            role: OverlayColorRole.Accent,
+            w: w,
+            x: x,
+            y: y
+        );
+        builder.WriteRect(
+            alpha: chrome.CursorAlpha,
+            h: edge,
+            radius: 0f,
+            role: OverlayColorRole.Accent,
+            w: w,
+            x: x,
+            y: ((y + h) - edge)
+        );
+        builder.WriteRect(
+            alpha: chrome.CursorAlpha,
+            h: (h - (2f * edge)),
+            radius: 0f,
+            role: OverlayColorRole.Accent,
+            w: edge,
+            x: x,
+            y: (y + edge)
+        );
+        builder.WriteRect(
+            alpha: chrome.CursorAlpha,
+            h: (h - (2f * edge)),
+            radius: 0f,
+            role: OverlayColorRole.Accent,
+            w: edge,
+            x: ((x + w) - edge),
+            y: (y + edge)
+        );
+    }
     private void EmitSeat(OverlayFrameBuilder builder, in OverlayCursorSeat seat) {
         var region = seat.Viewport;
 
@@ -119,6 +189,14 @@ public sealed class CursorWriter : IOverlaySeatEmitter<OverlayCursorSeat> {
 
         if (!m_source.TrySnapshot(frame: out var frame)) {
             return;
+        }
+
+        // The hovered pane's outline goes first, so every seat's cursor draws over it.
+        if (frame.HoveredPane is { } pane) {
+            EmitPaneOutline(
+                builder: builder,
+                pane: pane
+            );
         }
 
         OverlaySeatLoop.Emit(

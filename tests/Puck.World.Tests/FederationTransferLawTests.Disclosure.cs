@@ -141,7 +141,7 @@ public sealed partial class FederationTransferLawTests {
             Assert.True(condition: WorldProjection.TryDeserialize(
                 projection: out var projection,
                 reason: out var reason,
-                utf8Json: frame.Body.Span[1..]
+                utf8Json: frame.Body.Span[WorldFederationCodec.DocumentHeaderBytes..]
             ), userMessage: reason);
 
             return projection!;
@@ -225,7 +225,7 @@ public sealed partial class FederationTransferLawTests {
         Assert.Equal(expected: GateOpen, actual: PrototypeOf(body: 5, placements: fixture.Server.Definition.Placements));
 
         using var oracle = LocalOracle(subject: DisclosureSource);
-        var security = new WorldAttestedAuthenticator(
+        var security = Authenticator(
             trustEntries: () => [TrustEntryFor(oracle: oracle)],
             oracle: oracle
         );

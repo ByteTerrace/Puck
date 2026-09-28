@@ -1,7 +1,7 @@
 namespace Puck.Abstractions.Gpu;
 
 /// <summary>The shared fullscreen-triangle vertex data every single-pass fragment shader (the overlay, the
-/// swapchain blit, a post-render extension) draws through.</summary>
+/// swapchain blit, a views.post pass) draws through.</summary>
 public static class FullscreenTriangle {
     /// <summary>The byte stride between consecutive vertices — one <see cref="GpuVertexFormat.R32G32Float"/>
     /// POSITION attribute at offset 0.</summary>

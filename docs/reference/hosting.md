@@ -2,9 +2,9 @@
 
 Puck.Hosting is the shared host substrate between deterministic simulation and
 presentation. A **host** owns the outer loop: it measures time, advances the
-simulation in fixed steps, routes services and exclusive capabilities through a
-tree of render nodes, and publishes completed surfaces without letting GPU or
-capture work become simulation state.
+simulation in fixed steps, routes services and exclusive capabilities to its
+render root, and publishes completed surfaces without letting GPU or capture
+work become simulation state.
 
 It depends on `Puck.Abstractions` for presentation, machine, capture, and GPU
 contracts, on [Commands and input](commands.md) for fixed-step
@@ -14,9 +14,10 @@ capability authentication.
 
 ## Key features
 
-- *One recursive render contract:* `IRenderNode` produces a `Surface`, may host
-  children, and receives device-loss notifications without changing simulation
-  state.
+- *One render root:* `IRenderRoot` produces the `Surface` a host presents and
+  receives device-loss notifications without changing simulation state. The
+  World's root is the render graph runtime's node, so everything a frame shows
+  is an instance of that graph rather than a child of the root.
 - *Deterministic fixed-step context:* `EngineTicks` provides an integer time
   base that divides common update rates exactly. `FrameContext` keeps
   authoritative simulation ticks separate from presentation-only wall time and
@@ -30,9 +31,6 @@ capability authentication.
   `ConsoleTapeStore`; `ConsoleLineEditor` owns the prompt row's caret-addressed
   buffer and command history. Renderers read `IConsoleTapeSource`; the window
   host bridges keystrokes in (`ConsoleInputSink` in `Puck.Launcher`).
-- *Safe parallel stepping:* `ISteppableRenderNode` separates serial shared-state
-  preparation from parallel private-state execution; GPU work stays on the
-  render thread.
 - *Presentation observability:* frame capture, latest-value publication, and
   emitted light remain outside the simulation trajectory.
 
@@ -49,34 +47,31 @@ graph LR
     Commands --> Pump
     Pump --> Simulation["🌍 Deterministic simulation"]
     Pump --> Context["🧭 FrameContext"]
-    Context --> Tree["🌳 IRenderNode tree"]
-    Simulation --> Tree
-    Tree --> Surface["🖼️ Root Surface"]
+    Context --> Root["🌳 IRenderRoot"]
+    Simulation --> Root
+    Root --> Surface["🖼️ Root Surface"]
     Surface --> Present["🖥️ Swapchain / capture"]
 ```
 
-## Quick start: a render node
+## Quick start: a render root
 
-An `IRenderNode` can return CPU pixels or a GPU image-view handle. This minimal
-node produces a one-pixel CPU surface and has no device-owned resources to
+An `IRenderRoot` can return CPU pixels or a GPU image-view handle. This minimal
+root produces a one-pixel CPU surface and has no device-owned resources to
 release:
 
 ```csharp
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 
-sealed class StatusPixelNode : IRenderNode {
+sealed class StatusPixelRoot : IRenderRoot {
     private readonly byte[] pixels = [0x20, 0x80, 0xE0, 0xFF];
-
-    public NodeDescriptor Descriptor { get; } = new(
-        Name: "status-pixel",
-        SurfaceId: SurfaceId.New());
 
     public Surface ProduceFrame(in FrameContext context) => Surface.CpuPixels(
         pixels: pixels,
         width: 1,
         height: 1,
-        format: SurfaceFormat.R8G8B8A8Unorm);
+        format: GpuPixelFormat.R8G8B8A8Unorm);
 
     public void Dispose() { }
 }
@@ -179,20 +174,51 @@ The fields most often confused in `FrameContext` have distinct meanings:
 
 ## Render lifecycle and publication
 
-Every `IRenderNode` has a stable `NodeDescriptor`, produces one `Surface`, and
-is disposable. Hosting nodes that own children forward `OnDeviceLost` through
-the tree. Nodes that own device resources release stale handles there and
-rebuild them on a later frame; device loss must not advance or reset simulation.
+A host has one `IRenderRoot`, which produces one `Surface` a frame and is
+disposable. A root that owns device resources releases stale handles in
+`OnDeviceLost` and rebuilds them on a later frame, and a root holding an armed
+capture refuses it (`CaptureRequestSlot.RefuseForDeviceLoss`); device loss must
+not advance or reset simulation. The World's root, `RenderGraphRuntimeNode`,
+forwards the loss to its runtime, which releases every instance's node and
+producer. The host disposes its root while the device is still alive, so the
+root also disposes the services it is handed as holdings
+(`RenderGraphRuntimeNode.Holdings`), such as the screen binder's camera feeds,
+which the container would otherwise release after the device.
 
-For hosts that parallelize CPU stepping, `ISteppableRenderNode` divides the
-work into three phases:
+Both GPU hosts recover from a loss through one policy, `DeviceLossRecovery` in
+`Puck.Launcher`. It writes a `[device-lost] reason 0x…` line to standard error,
+drains what the device still runs, calls `OnDeviceLost` on the render root
+while the lost device still exists, and then rebuilds the device in place
+through an `IDeviceRebuild`, retrying every 250 ms for up to 10 seconds while
+the adapter is absent. The windowed host rebuilds through its presenter
+(`PresenterDeviceRebuild`). The offscreen host rebuilds through the rebuild
+the World's offscreen GPU activation registers: on Vulkan the presenter
+rebuilds on the hidden window's surface, and on Direct3D 12 the device context
+is recreated with no swap chain. More than eight losses with no frame between
+them, a device that does not return in time, or a host with nothing to rebuild
+through ends the run; the windowed host closes, and the offscreen host faults.
+A run that ends has still drained and released the render root first, so every
+capture armed at the loss is refused by name rather than left unserved.
 
-1. `PrepareStep(in FrameContext)` runs serially and may drain shared input or
-   timelines. It reports whether the node has work.
-2. `ExecuteStep()` may run in parallel, but touches only the node's private
-   state.
-3. `ProduceFrame(in FrameContext)` remains on the render thread and performs
-   GPU work.
+On Direct3D 12 both hosts follow one retry rule, in
+`DirectXDeviceContext.Recreate`: a rebuild that fails in Direct3D 12 itself,
+the device's creation or the windowed host's new swap chain, has not got its
+device back yet and is retried within the budget; any other failure ends the
+recovery. Every call a removal can reach on a frame or capture path, the
+command allocator, list and committed-resource creates included, answers
+through `DirectXCommandCalls`, so a removed device surfaces as the neutral
+device loss rather than a `COMException` the policy never sees. A surface
+upload, readback or import stays on the device it first created its objects on
+(`DirectXDeviceOwnership`, the peer of `VulkanDeviceOwnership`): its owner
+releases it before the device goes, and a holder that outlives a loss refuses
+the replacement device and its own late release by name.
+
+The operator's `gpu.faults lose [<n>]` loses the device on the nth frame a GPU
+host produces from then on, on a healthy GPU: each host counts its frames
+against the faults inside the frame body the policy guards, and the armed frame
+throws the device loss there, so the recovery runs exactly as for a real one.
+The `device-loss` and `device-loss-windowed` canaries run it on both backends
+with a capture armed at the loss.
 
 `FrameCaptureController` owns an optional capture session, including its
 engine-time cadence, frame indexing, budget, and capture-only fault isolation.
@@ -210,7 +236,7 @@ boundary, and until then it presents what it already has. A newer request
 cancels the pending build with `Cancel`, and the discarded result is released
 when the build finishes. Before the device goes away, `CancelAndWait` blocks
 until the build's current unit of work returns, so nothing is created on a
-device being torn down. The SDF engine's pipelines and live shader-pipeline
+device being torn down. The SDF pipeline set's build and live shader-pipeline
 compilations both use it.
 
 A node that samples an image another producer keeps writing, such as a camera
@@ -219,17 +245,24 @@ handle with an optional release callback and token. The node holds each such
 lease in a `LeaseRetireList` until a fence wait proves the submission that
 sampled it has finished, then retires the list, which runs every release once
 in the order the leases were held. A node with frames in flight keeps one list
-per frame-ring slot and moves each frame's list into its slot when it submits.
-The SDF engine node and the unified overlay both use it.
+per frame slot and moves each frame's list into its slot when it submits.
+Every graph instance's `ShaderPipelineRenderNode` uses it: an SDF view's passes
+take each screen's lease into their node's list, and the overlay package moves
+its HUD frames' leases into its node's list.
 
 `RenderGraphScheduler` decides which views render in a frame. Every view is a
 `RenderGraphInstance`: a name, a refresh (a frame divisor or a rate in hertz),
-the passes one render records, and the instances it may read.
-`RenderGraphInstanceSet.TryCreate` validates a set and orders it so every
-producer renders before the consumers that read it in the same frame. A read of
-the instance's own output, or a read declared previous-frame, takes the
-producer's last completed frame instead. A loop of same-frame reads is refused
-with `SameFrameCycle`, naming every instance in the loop. `Schedule` is a pure
+the passes one render records, the instances it may read, and what its output
+carries: an image, or a buffer such as the world's SDF brick pool. Each read
+carries a kind too, the same `ShaderPipelineResourceKind` a graph version
+declares. `RenderGraphInstanceSet.TryCreate` validates a set and orders it so
+every producer renders before the consumers that read it in the same frame,
+whatever the read carries. A read of the instance's own output, or a read
+declared previous-frame, takes the producer's last completed frame instead. A
+loop of same-frame reads is refused with `SameFrameCycle`, naming every
+instance in the loop, and a read whose kind is not what its producer's output
+carries is refused with `KindMismatch`, naming the consumer and the producer.
+`Schedule` is a pure
 function of the set, a `RenderGraphFrame`, and the previous frame's
 `RenderGraphHistory`. The frame carries the display's extent and rate, the
 instances the display shows (`RenderGraphRoot`), how much of each rendering
@@ -247,12 +280,44 @@ and the frame's pass-pixel budget:
 - The instances the display does not show directly spend at most the budget,
   priced as passes times pixels. The stalest due instance goes first, so an
   instance the budget defers is first in line on the next frame.
+- A buffer read has no footprint. A consumer that renders reads it, so the
+  producer is demanded whenever a consumer is, renders at most once a frame
+  before its same-frame readers, and renders at no extent for no pass-pixels.
+  A root or footprint that names a buffer is refused.
+- A source is an external instance whose package is `source.<producer id>`
+  (`RenderGraphInstance.Source`), which reads nothing and carries its
+  producer's settings. It is demanded as any shown producer is and renders at
+  most once a frame, but at what its producer declares in the frame's
+  `RenderGraphSourceState`: its cadence and its negotiated extent, never a
+  refresh or a footprint. A static source renders once, a tick source at most
+  once per completed simulation tick (`RenderGraphFrame.Tick`), and a rate
+  source at most its rate, counted in presented frames at the display's rate
+  (`RenderGraphFrame.DisplayHertz`, which a host takes from
+  `FrameContext.DisplayHertz`, the rate its pacer targets). While the
+  display's rate is unknown (zero, as offscreen) a rate source is refused: it
+  does not render, and its row reads `RenderGraphInstanceStatus.Refused`. A
+  source whose producer declares nothing or no extent does not render. The
+  runtime declares an upload's state and a source producer's
+  (`IRenderGraphSourceProducer.Descriptor`) itself, after the host's. Cadence is
+  counted in ticks and frames, never the wall clock.
+  `RenderGraphHistory.Withdraw` takes back a render the producer could not
+  complete, so its cadence counts from its last completed frame.
 
 The schedule lists every instance with its status, extent, divisor, passes and
-price, the renders in order, and the frame of its output each rendering
-consumer reads. Nothing renders through it yet: the live renderer still
-composes its views itself, and moving it onto the scheduler is P11b in
-[the rendering programme](../plans/rendering.md#p11--the-frame-graph-document-and-nested-views).
+price, the renders in order, and the frame and kind of the output each
+rendering consumer reads. The caller owns it: `Schedule` fills a `RenderGraphSchedule`
+created for the set, together with the history the next frame reads
+(`RenderGraphSchedule.Next`). Scheduling into a schedule replaces everything it
+held, and a refused frame leaves it unchanged. The next frame goes into another
+schedule, because a schedule's own `Next` cannot be its input. A host that
+alternates two schedules schedules a steady frame without allocating once their
+read lists have grown to the frame's reads, and `RenderGraphFrame` is a value,
+so describing each frame over the same root and footprint lists allocates
+nothing either. The main view and the `views.graphs` panes render through it
+(`RenderGraphRuntime` in `Puck.Shaders`), and so do the source instances the
+screens show and the camera and session views, which an `sdf.world` view's
+passes sample through the reads the runtime binds for them; screens themselves
+render inside the SDF frame.
 
 `RenderGraphHitWalk` follows a hit through nested instances. Each instance
 reports, through `IRenderGraphHitScene`, the source placements in its world
@@ -266,7 +331,10 @@ point. A walk continues at most the limit it is given, which is normally
 It ends on a producer's pixels, on an instance's world, off a source, at the
 limit, on an image the showing instance does not read, or at an instance with
 no camera. Every step maps in fixed point, so the same inputs walk the same
-path on every run.
+path on every run. A World host walks its runtime's live instance set from the
+pane mappings it publishes each frame, with each view's seat camera and each
+pane's paired camera; no instance reports the surfaces in its world yet, so a
+walk that continues into an instance ends on that instance's world.
 
 `PublishBuffer<T>` is the smaller handoff for immutable latest-state values. A
 single writer swaps a holder reference and readers snapshot the newest value.
@@ -277,7 +345,7 @@ intermediate publications is correct.
 
 | Area | Types | Purpose |
 |---|---|---|
-| Render tree | `IRenderNode`, `ISteppableRenderNode`, `NodeDescriptor`, `SurfaceId` | Recursive surface production and lifecycle |
+| Render root | `IRenderRoot` | The surface a host presents each frame, and its device-loss and teardown lifecycle |
 | Fixed-step time | `EngineTicks`, `TickClock`, `FrameContext`, `FixedStepContext`, `IFixedStepSimulation` | Integer simulation time and presentation context |
 | Input time | `InputClock`, `OsTimeCorrelator` | Monotonic capture timestamps and native event correlation |
 | Host scope | `IHostContext`, `HostContext`, `ChainedHostContext`, `HostCapabilityContribution` | Inherited services and exclusive held capabilities |
@@ -286,7 +354,7 @@ intermediate publications is correct.
 | Observation | `FrameCaptureController`, `PublishBuffer<T>` | Capture sessions and latest-value handoff |
 | Background work | `BackgroundBuild<T>` | A candidate built on the thread pool and installed at a frame boundary |
 | Sampled images | `GpuImageLease`, `LeaseRetireList` | An image a submission samples, released once that submission retires |
-| View scheduling | `RenderGraphInstance`, `RenderGraphInstanceSet`, `RenderGraphScheduler`, `RenderGraphExtent` | Which views render in a frame, at what extent, rate and price |
+| View scheduling | `RenderGraphInstance`, `RenderGraphInstanceSet`, `RenderGraphScheduler`, `RenderGraphExtent`, `RenderGraphSourceState` | Which views and sources render in a frame, at what extent, rate or cadence, and price |
 | Nested hits | `RenderGraphHitWalk`, `IRenderGraphHitScene`, `RenderGraphHitPath` | Where a pick through views that show other views lands |
 | Child processes | `ChildProcess`, `ChildProcessResult` | Tool runs and driven companions started from an argument vector |
 
@@ -295,6 +363,16 @@ emulator diagnostics run. `RunAsync` takes an argument
 vector, never a shell expression. It reads both captured streams while the child
 runs, so a child that fills a pipe buffer on either stream still runs to exit, and
 it returns only after both reads finish, so the tail of the output is never lost.
+A read ends only when every process holding the pipe has closed it. A process the
+child started with inherited handles, such as a build node or a compiler server,
+can hold it long after the child exits. Once the child exits, the reads therefore
+get `ExitDrainGrace` to finish on the run's clock. Release cancels the pending byte
+read, consumes a snapshot of the bytes still buffered in the pipe, and presents EOF
+to the text decoder. This preserves output even when a reader has not been scheduled
+before the grace expires, including a final line without a newline.
+`OpenOutputReader` and `DrainAfterExitAsync` apply the same bound to a caller that
+pumps its own streams. Caller cancellation ends the grace early and still joins
+the pumps before disposing their streams.
 The run is bounded by an optional timeout on a caller-supplied `TimeProvider` and
 by cancellation. Either bound kills the whole process tree and drains both
 streams. A timeout is reported as `TimedOut` in the result, while cancellation

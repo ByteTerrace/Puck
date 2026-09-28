@@ -85,7 +85,7 @@ views {
       slots [
         {
           height: 1
-          pipeline: pipelineName
+          instance: pipelineName
           width: 0.5
           x: 0
           y: 0
@@ -107,7 +107,7 @@ views {
       slots [
         {
           height: 1
-          pipeline: "compare-pipeline-front"
+          instance: "compare-pipeline-front"
           width: 0.5
           x: 0
           y: 0
@@ -129,7 +129,7 @@ views {
       slots [
         {
           height: 1
-          pipeline: "compare-pipeline-rear"
+          instance: "compare-pipeline-rear"
           width: 0.5
           x: 0
           y: 0
@@ -151,7 +151,7 @@ views {
       slots [
         {
           height: 1
-          pipeline: "compare-pipeline-flight"
+          instance: "compare-pipeline-flight"
           width: 0.5
           x: 0
           y: 0
@@ -173,7 +173,7 @@ views {
       slots [
         {
           height: 1
-          pipeline: "compare-pipeline-face"
+          instance: "compare-pipeline-face"
           width: 0.5
           x: 0
           y: 0
@@ -195,7 +195,7 @@ views {
       slots [
         {
           height: 1
-          pipeline: "compare-pipeline-rear"
+          instance: "compare-pipeline-rear"
           width: 1
           x: 0
           y: 0
@@ -210,7 +210,7 @@ views {
       slots [
         {
           height: 1
-          pipeline: "compare-pipeline-front"
+          instance: "compare-pipeline-front"
           width: 1
           x: 0
           y: 0
@@ -225,7 +225,7 @@ views {
       slots [
         {
           height: 1
-          pipeline: "compare-pipeline-face"
+          instance: "compare-pipeline-face"
           width: 1
           x: 0
           y: 0
@@ -240,7 +240,7 @@ views {
       slots [
         {
           height: 1
-          pipeline: pipelineName
+          instance: pipelineName
           width: 1
           x: 0
           y: 0
@@ -270,7 +270,7 @@ views {
       slots [
         {
           height: 1
-          pipeline: "compare-pipeline-flight"
+          instance: "compare-pipeline-flight"
           width: 1
           x: 0
           y: 0
@@ -300,7 +300,7 @@ views {
       slots [
         {
           height: 1
-          pipeline: "compare-pipeline-pack-rear"
+          instance: "compare-pipeline-pack-rear"
           width: 0.5
           x: 0
           y: 0
@@ -322,7 +322,7 @@ views {
       slots [
         {
           height: 1
-          pipeline: "compare-pipeline-pack-side"
+          instance: "compare-pipeline-pack-side"
           width: 0.5
           x: 0
           y: 0
@@ -344,7 +344,7 @@ views {
       slots [
         {
           height: 1
-          pipeline: "compare-pipeline-pack-rear"
+          instance: "compare-pipeline-pack-rear"
           width: 1
           x: 0
           y: 0
@@ -359,7 +359,7 @@ views {
       slots [
         {
           height: 1
-          pipeline: "compare-pipeline-pack-side"
+          instance: "compare-pipeline-pack-side"
           width: 1
           x: 0
           y: 0
@@ -404,7 +404,7 @@ views {
       slots [
         {
           height: 1
-          pipeline: "compare-pipeline-pack-three-quarter"
+          instance: "compare-pipeline-pack-three-quarter"
           width: 0.5
           x: 0
           y: 0
@@ -426,7 +426,7 @@ views {
       slots [
         {
           height: 1
-          pipeline: "compare-pipeline-pack-three-quarter"
+          instance: "compare-pipeline-pack-three-quarter"
           width: 1
           x: 0
           y: 0
@@ -456,7 +456,7 @@ views {
       slots [
         {
           height: 1
-          pipeline: pipelineName
+          instance: pipelineName
           width: 1
           x: 0
           y: 0
@@ -482,55 +482,55 @@ views {
     }
   ]
 
-  pipeline "compare-pipeline" {
+  graph "compare-pipeline" {
     camera: "three-quarter"
     source: pipelineSource
     timeScale: 1
   }
 
-  pipeline "moth-pipeline" {
+  graph "moth-pipeline" {
     camera: "three-quarter"
     source: pipelineSource
     timeScale: 1
   }
 
-  pipeline "compare-pipeline-front" {
+  graph "compare-pipeline-front" {
     camera: "front"
     source: pipelineSource
     timeScale: 1
   }
 
-  pipeline "compare-pipeline-rear" {
+  graph "compare-pipeline-rear" {
     camera: "rear"
     source: pipelineSource
     timeScale: 1
   }
 
-  pipeline "compare-pipeline-flight" {
+  graph "compare-pipeline-flight" {
     camera: "flight-stage"
     source: pipelineSource
     timeScale: 1
   }
 
-  pipeline "compare-pipeline-face" {
+  graph "compare-pipeline-face" {
     camera: "face"
     source: pipelineSource
     timeScale: 1
   }
 
-  pipeline "compare-pipeline-pack-rear" {
+  graph "compare-pipeline-pack-rear" {
     camera: "pack-rear"
     source: pipelineSource
     timeScale: 1
   }
 
-  pipeline "compare-pipeline-pack-side" {
+  graph "compare-pipeline-pack-side" {
     camera: "pack-side"
     source: pipelineSource
     timeScale: 1
   }
 
-  pipeline "compare-pipeline-pack-three-quarter" {
+  graph "compare-pipeline-pack-three-quarter" {
     camera: "pack-three-quarter"
     source: pipelineSource
     timeScale: 1

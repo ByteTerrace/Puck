@@ -1,5 +1,4 @@
 using System.CommandLine;
-using System.Text;
 
 using Puck.World;
 
@@ -30,66 +29,17 @@ internal static class RegistryCommand {
             return 1;
         }
 
-        var path = Path.Combine(
-            path1: repositoryRoot,
-            path2: RelativePath
-        );
-        var text = WorldNameRegistry.Render();
-
-        if (!check) {
-            File.WriteAllText(
-                path: path,
-                contents: text,
-                encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
-            );
-            Console.Out.WriteLine(value: $"registry: wrote {RelativePath} ({WorldNameRegistry.Sites.Count} sites).");
-
-            return 0;
-        }
-
-        if (!File.Exists(path: path)) {
-            Console.Error.WriteLine(value: $"registry: {RelativePath} is missing; run `puck registry` to write it.");
-
-            return 1;
-        }
-
-        var onDisk = File.ReadAllText(path: path).ReplaceLineEndings(replacementText: "\n");
-
-        if (string.Equals(
-            a: onDisk,
-            b: text,
-            comparisonType: StringComparison.Ordinal
-        )) {
-            Console.Out.WriteLine(value: $"registry: {RelativePath} matches the model ({WorldNameRegistry.Sites.Count} sites).");
-
-            return 0;
-        }
-
-        var expected = text.Split(separator: '\n');
-        var actual = onDisk.Split(separator: '\n');
-        var line = 0;
-
-        while (
-            (line < expected.Length) &&
-            (line < actual.Length) &&
-            string.Equals(
-            a: expected[line],
-            b: actual[line],
-            comparisonType: StringComparison.Ordinal
+        return (CliGeneratedFile.WriteOrCheck(
+            check: check,
+            detail: $" ({WorldNameRegistry.Sites.Count} sites)",
+            relativePath: RelativePath,
+            repositoryRoot: repositoryRoot,
+            source: "the model",
+            text: WorldNameRegistry.Render(),
+            verb: "registry"
         )
-        ) {
-            line++;
-        }
-
-        Console.Error.WriteLine(value: $"registry: {RelativePath} disagrees with the model at line {(line + 1)}; run `puck registry` to rewrite it.");
-        Console.Error.WriteLine(value: $"  on disk:   {((line < actual.Length)
-            ? actual[line]
-            : "(end of file)")}");
-        Console.Error.WriteLine(value: $"  generated: {((line < expected.Length)
-            ? expected[line]
-            : "(end of file)")}");
-
-        return 1;
+            ? 0
+            : 1);
     }
 
     public static Command Create() => CliOptions.CheckVerb(

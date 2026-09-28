@@ -157,14 +157,14 @@
       "Microsoft.FeatureManagement": {
         "type": "Direct",
         "requested": "[4.*, 5.0.0)",
-        "resolved": "4.7.0",
-        "contentHash": "f+XutOuZZLNq6OJV8z7nys+k89W3PUsoJJgrbYTXd20GvDyJfQ9A8o2MSU8FZT7DY6jQOq3I4KO/+NHsXHdACw=="
+        "resolved": "4.8.0",
+        "contentHash": "p1dzpXano+DTet2/hQGb+J91QonETabPYmO5BdqpsWOPq2C3WsWbm1BICTNlWqL81EVGrRrjpQh9mRNX55ZKmQ=="
       },
       "Microsoft.Graph": {
         "type": "Direct",
         "requested": "[6.*, 7.0.0)",
-        "resolved": "6.6.0",
-        "contentHash": "DeV3w6IdICWhfSK9gsjqkEi1xACBw+/N5/FQ59RMtvYhr0YD6yRSBGTOCnz8UdPTvhpdMW4/brgh/moRRySMZA==",
+        "resolved": "6.7.0",
+        "contentHash": "TyW7c/4W1uHwqDoQ4HPb/fL6A16CUqM206djAcCSLlYNX3pi7mcLjrIgD0T5VETJp7eQ/LeEU/Yfy1W5239G9A==",
         "dependencies": {
           "Microsoft.Graph.Core": "4.0.1"
         }
@@ -172,10 +172,10 @@
       "OpenTelemetry.Instrumentation.Http": {
         "type": "Direct",
         "requested": "[1.*, 2.0.0)",
-        "resolved": "1.18.0",
-        "contentHash": "/X57peOOa4a+9V4DSVXbuIWdsAxmU5gsxw8lu+gJU0zuewsYhC9f6qdm8GEW0VvqG9e+gxn0HdVR5G3YHcWDTw==",
+        "resolved": "1.19.0",
+        "contentHash": "+egJpWBRfYP3ldfexV2bmJyzOWkkOPVYikw/vUEtbUvf2exJfY3RGInXrYlubhBIH6rmNEn6sI/FmqenZJwkjw==",
         "dependencies": {
-          "OpenTelemetry.Api.ProviderBuilderExtensions": "[1.18.0, 2.0.0)"
+          "OpenTelemetry.Api.ProviderBuilderExtensions": "[1.19.0, 2.0.0)"
         }
       },
       "Azure.Core": {
@@ -556,15 +556,15 @@
       },
       "OpenTelemetry.Api": {
         "type": "Transitive",
-        "resolved": "1.18.0",
-        "contentHash": "Dhzm5oughIY9EWckt2J1yXcEbXpki5WCL2q7prJoYxzH6C7jdkfGtPMTkUVZZ4AhjJKzQnlC+kLSIlmIVwC4Vw=="
+        "resolved": "1.19.0",
+        "contentHash": "ZupI0cvo9Jyk2IwLLMrXQm3PvX67tCBIiFws5fslm2Xw7gYctq5wZiGPS+mKmMususAAE9+jyv5Jp7ADxdZDJw=="
       },
       "OpenTelemetry.Api.ProviderBuilderExtensions": {
         "type": "Transitive",
-        "resolved": "1.18.0",
-        "contentHash": "io6A6PJFp3vIObRGf6oPjdHsdglkinXt/0SpTDJHrVnsLxUtOzwh/QwTsnhBJ43wJ6QcGMkyNzsSSY8XEB1Q5Q==",
+        "resolved": "1.19.0",
+        "contentHash": "V+nYo7IIqH7cXagkERfGZUNstdoZQkplpn+hZMkLBlJ0ZJNQBvTMv2Cvjq8eqqxkB9lmBw+CUH78hWxJB1Vdcg==",
         "dependencies": {
-          "OpenTelemetry.Api": "1.18.0"
+          "OpenTelemetry.Api": "1.19.0"
         }
       },
       "OpenTelemetry.Extensions.Hosting": {

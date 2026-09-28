@@ -16,29 +16,17 @@ public interface IWorldTransferForwarder {
     void ResolveContinuations(WorldServer source);
     /// <summary>Forwards one intent addressed to a departed traveler incarnation.</summary>
     bool TryForwardIntent(WorldServer source, in WorldMobilityIdentity mobility, in IntentSubmission submission, out string reason);
-    /// <summary>Forwards one typed submission addressed to a departed traveler incarnation.</summary>
-    bool TryForwardSubmission(WorldServer source, in WorldMobilityIdentity mobility, WorldSubmissionPayload payload, out WorldSubmissionResult? result, out string reason);
-    /// <summary>Forwards a typed submission while preserving its caller operation id.</summary>
-    bool TryForwardSubmission(WorldServer source, in WorldMobilityIdentity mobility, WorldSubmissionPayload payload, Guid operationId, out WorldSubmissionResult? result, out string reason) {
-        if (
-            (operationId == Guid.Empty) &&
-            (payload is WorldSubmissionPayload.Mutation)
-        ) {
-            result = new WorldSubmissionResult.Refusal(
-                Code: "world.mutation.operation_id_missing",
-                Detail: "mutation operation id is required"
-            );
-            reason = "mutation operation id is required";
-            return false;
-        }
-        return TryForwardSubmission(
-            mobility: in mobility,
-            payload: payload,
-            reason: out reason,
-            result: out result,
-            source: source
-        );
-    }
+    /// <summary>Forwards one typed submission addressed to a departed traveler incarnation, preserving its caller
+    /// operation id; its typed result reaches <paramref name="completion"/> exactly once when it reached an authority
+    /// (see <see cref="IWorldForwardedAuthority.TryForwardSubmission"/>).</summary>
+    /// <param name="source">The authority whose committed onward route is followed.</param>
+    /// <param name="mobility">The traveler credential.</param>
+    /// <param name="payload">The submission payload.</param>
+    /// <param name="operationId">The caller's operation id.</param>
+    /// <param name="completion">Receives the typed result.</param>
+    /// <param name="reason">The named refusal on failure.</param>
+    /// <returns><see langword="true"/> when the submission reached an authority.</returns>
+    bool TryForwardSubmission(WorldServer source, in WorldMobilityIdentity mobility, WorldSubmissionPayload payload, Guid operationId, Action<WorldSubmissionResult> completion, out string reason);
     /// <summary>Resolves the final observable authority epoch behind a departed traveler incarnation.</summary>
     bool TryDescribeForwarding(WorldServer source, in WorldMobilityIdentity mobility, out WorldAuthorityRouteDescription route, out string reason);
     /// <summary>Streams the current owner's projection for an already authenticated departed traveler.</summary>

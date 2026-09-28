@@ -1,4 +1,3 @@
-using Puck.Commands;
 using Puck.Abstractions;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -226,8 +225,9 @@ public sealed partial class WorldInstanceHost {
             var portalDefaults = (instance.Server.Definition.Portals?.PortalDefaults ?? new WorldPortalDefaults(Travel: WorldPortalTravel.Body));
 
             // This hit's own candidate cohort — the source instance's whole active local-seat set for a
-            // `party` door, or just the entering seat for `body`. Read live, not cached.
-            var cohortSlots = ((scope == TransferScope.Party)
+            // `party` door a local seat enters, or just the entering body otherwise: a traveller that is no local seat
+            // belongs to no local party. Read live, not cached.
+            var cohortSlots = (((scope == TransferScope.Party) && (hit.Seat < instance.Server.Population.LocalSeatCount))
                 ? ActiveLocalSeats(server: instance.Server)
                 : [hit.Seat]
             );
@@ -296,7 +296,7 @@ public sealed partial class WorldInstanceHost {
                 group.Slots.Add(item: slot);
             }
 
-            group.Descriptions.Add(item: $"{hit.Placement.Id}/{hit.Face.Face} seat {(hit.Seat + 1)}");
+            group.Descriptions.Add(item: $"{hit.Placement.Id}/{hit.Face.Face} {TravellerName(index: hit.Seat, localSeatCount: instance.Server.Population.LocalSeatCount)}");
         }
 
         foreach (var key in order) {
@@ -751,10 +751,6 @@ public sealed partial class WorldInstanceHost {
             return false;
         }
 
-        var cohort = new[] { new WorldSessionResolver.CohortMember(
-            Principal: Principal.Seat(slot: 0),
-            IdentityId: null
-        ) };
         var referencedDocument = ResolveReferenceDocument(
             source: source,
             neighbourKey: reference.NeighbourKey
@@ -800,7 +796,7 @@ public sealed partial class WorldInstanceHost {
             sourceDefinition: source.Server.Definition,
             destination: destination,
             referencedDocument: canonicalDocument,
-            cohort: cohort,
+            cohort: [],
             resolved: out resolved,
             reason: out reason
         )) {
@@ -855,10 +851,6 @@ public sealed partial class WorldInstanceHost {
             return false;
         }
 
-        var cohort = new[] { new WorldSessionResolver.CohortMember(
-            Principal: Principal.Seat(slot: 0),
-            IdentityId: null
-        ) };
         var referencedDocument = ResolveReferenceDocument(
             source: source,
             neighbourKey: reference.NeighbourKey
@@ -873,7 +865,7 @@ public sealed partial class WorldInstanceHost {
             m_resolver.TryDeriveScopeKey(
             sourceDefinition: source.Server.Definition,
             destination: destination,
-            cohort: cohort,
+            cohort: [],
             scopeKey: out var scopeKey,
             reason: out _
         ) &&
@@ -911,7 +903,7 @@ public sealed partial class WorldInstanceHost {
             sourceDefinition: source.Server.Definition,
             destination: destination,
             referencedDocument: canonicalDocument,
-            cohort: cohort,
+            cohort: [],
             resolved: out var resolved,
             reason: out reason
         )) {
@@ -956,6 +948,7 @@ public sealed partial class WorldInstanceHost {
             catalog: m_machineCatalog,
             catalogFingerprint: m_catalogFingerprint,
             admission: out var admission,
+            contentHash: out _,
             instanceIdentity: instanceName,
             neighbours: neighbours,
             path: resolvedPath,

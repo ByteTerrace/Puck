@@ -21,7 +21,7 @@ own emitter and supplies `IDocumentVocabulary` for the two questions generic val
 | `Lowering/` | `DocumentLowering` (values, arithmetic, indexing, `for`/template expansion), `DocumentScope`, `DocumentValueComparer`, and `DocumentScalars`/`DocumentBuiltins`—the scalar and collection function vocabulary. |
 | `Modules/` | `ModuleResolver`: `import` resolution and alias composition. |
 | `Rewriting/` | `PuckSyntaxRewriter` and `PuckMigration`: a named rewrite over the tree, and what it declares it reshapes. |
-| `Units/` | `UnitDimension`/`UnitConversion`: what `deg`, `rad`, `s`, `ms`, `m`, `cm`, `mm`, `hz`, `%` represent. |
+| `Units/` | `UnitDimension`/`UnitConversion`: what `deg`, `rad`, `s`, `ms`, `min`, `h`, `m`, `cm`, `mm`, `hz`, `%` represent. |
 | (root) | `CompilationResult<T>`, and `PuckDslVocabulary`—the DSL's spelling of `Puck.State`'s cell-kind enum. |
 
 ## Names
@@ -324,7 +324,7 @@ something else, or nothing, in a document.
 The two evaluators fold a name differently, on purpose:
 
 - A function defined over integers (the bit, lattice, grid, and combinatorial family—
-  `greatestCommonDivisor`, `leastCommonMultiple`, `floorModulo`, `binomialCoefficient`, `primeAt`, `setBitCount`,
+  `greatestCommonDivisor`, `leastCommonMultiple`, `floorDivide`, `floorModulo`, `power`, `modularPower`, `modularInverse`, `binomialCoefficient`, `primeAt`, `setBitCount`,
   `hexIndex`, `mortonIndex`, `hilbertIndex`, `pairMinimum`, `pairMaximum`, and the rest) is evaluated by the engine's
   own `ExpressionArithmetic` rather than reimplemented here. Integers are exact in both evaluators, so delegating
   makes a numeric disagreement between a rule and a document impossible rather than merely unlikely.
@@ -336,7 +336,7 @@ The two evaluators fold a name differently, on purpose:
   double fold already agrees with the fixed-point one exactly on whole numbers.
 - A fractional literal lowers as the decimal its text spells, to the 28 significant digits a `decimal` holds, and
   stays exact through arithmetic that is closed over finite decimals: a sign, `+`, `-`, `*`, and a unit whose scale
-  is a power of ten (`ms`, `cm`, `mm`, `%`). A result a `decimal` would overflow on or round, a product or a
+  is a power of ten (`ms`, `cm`, `mm`, `%`) or a whole multiple (`min`, `h`). A result a `decimal` would overflow on or round, a product or a
   conversion too small for its scale included, is computed in `double` instead, which keeps its magnitude. A
   fractional quotient or remainder, a folded function and degrees into radians are always computed in `double`; a
   decimal field reads such a result at its 15 significant digits, the same on every runtime. One value has one
@@ -439,16 +439,16 @@ when non-empty, a present container is true, and an absent value is false.
 
 ## Names are spelled out
 
-`absolute`, `squareRoot`, `ceiling`, `minimum`, `maximum`, `floorModulo`, `greatestCommonDivisor`,
-`leastCommonMultiple`, `setBitCount`, `binomialCoefficient`, `primeAt`, `sine`, `cosine`, `hexIndex`, `mortonIndex`,
+`absolute`, `squareRoot`, `ceiling`, `minimum`, `maximum`, `floorModulo`, `floorDivideModulo`, `greatestCommonDivisor`,
+`extendedGreatestCommonDivisor`, `leastCommonMultiple`, `modularInverse`, `setBitCount`, `binomialCoefficient`, `primeAt`, `sine`, `cosine`, `hexIndex`, `mortonIndex`,
 `hilbertIndex`, `pairMinimum`, `pairMaximum`—every name in the shared vocabulary is spelled out in full, never
 abbreviated. Puck prefers function syntax and a verbose, explanatory name over an operator glyph or an
 abbreviation wherever the two would otherwise compete.
 
 This is why there is no `//` integer-division operator: `//` opens a line comment (`PuckWhiteSpaceParser` skips it
-everywhere, not only at statement starts), so `a // b` can only ever read as `a` followed by a comment. `floor(a /
-b)` is the spelling — the same `floor` the rule language has, with the same rounding, rather than a second
-operator invented here for one case.
+everywhere, not only at statement starts), so `a // b` can only ever read as `a` followed by a comment. `floorDivide(a, b)` is the spelling of
+the floored quotient in both languages, and `floorModulo(a, b)` its partner; in an Int rule `a / b` truncates, so
+`floor(a / b)` floors only a document's real quotient and is not the same operation.
 
 ## State engine dependency
 

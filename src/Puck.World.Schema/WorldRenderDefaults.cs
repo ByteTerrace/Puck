@@ -1,7 +1,7 @@
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
+using Puck.Abstractions.Presentation;
 using Puck.Assets.Documents;
-using System.Text.Json;
 
 namespace Puck.World;
 
@@ -42,9 +42,12 @@ public sealed record WorldCamera(
                 return true;
             }
 
-            foreach (var candidate in (Anchors ?? [])) {
-                if (candidate?.Anchor is WorldAnchor.Seat) {
-                    return true;
+            // By index: a per-frame caller reads this, and an interface enumerator would allocate.
+            if (Anchors is { } anchors) {
+                for (var index = 0; (index < anchors.Count); index++) {
+                    if (anchors[index]?.Anchor is WorldAnchor.Seat) {
+                        return true;
+                    }
                 }
             }
 
@@ -83,11 +86,6 @@ public readonly record struct WorldQualityPreset(
 /// <param name="LowRaw">The <c>world.quality low</c> preset.</param>
 /// <param name="MediumRaw">The <c>world.quality medium</c> preset.</param>
 /// <param name="HighRaw">The <c>world.quality high</c> preset.</param>
-/// <param name="Extensions">The post-render extension chain, composed over the world's rendered output in list
-/// order — e.g. <c>[{ "id": "sdf-film-grain", "config": { "intensity": 0.08 } }]</c>. Optional; an absent or
-/// empty list is the byte-identical default path (no extension composed). Every id must name a shipped shader
-/// set — a <c>puck.shader.manifest.v1</c> manifest's file stem (checked at document load); each entry's own
-/// <c>config</c> is validated against that manifest's declared config schema at boot and by <c>puck schema</c>.</param>
 /// <param name="Lighting">The scene's directional sun and ambient term. Optional, and every field within it is
 /// optional individually — an absent section, or an absent field within it, resolves to <c>SdfFrame</c>'s pinned
 /// default for that field, so a world renders unchanged until it authors one.</param>
@@ -98,7 +96,8 @@ public readonly record struct WorldQualityPreset(
 /// Optional; absent leaves <paramref name="Lighting"/>/<paramref name="Sky"/> static.</param>
 /// <param name="Environment">The analytic studio-reflection softboxes and horizon gradient a GGX specular lobe
 /// reflects. Optional; absent (no softboxes, a black horizon) contributes nothing to the shaded color.</param>
-/// <param name="Tonemap">The tonemap applied to the frame's final color. Optional; absent is
+/// <param name="Tonemap">The tonemap the root graph applies to the SDF scene: each view, as its place pass reconstructs
+/// it. The letterbox color, every pane (display-referred) and the HUD are never tonemapped. Optional; absent is
 /// <see cref="WorldTonemap.None"/> — the stylized shaded color, unchanged.</param>
 /// <param name="FarDistance">The far distance in world units: the depth at which every camera march ends — the far
 /// plane the renderer's fine march exits at, the reach of the beam's cone proofs, and the depth the fog and depth
@@ -117,7 +116,6 @@ public sealed record WorldRenderDefaults(
     [property: JsonPropertyName("low"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldQualityPreset? LowRaw = null,
     [property: JsonPropertyName("medium"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldQualityPreset? MediumRaw = null,
     [property: JsonPropertyName("high"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldQualityPreset? HighRaw = null,
-    IReadOnlyList<WorldRenderExtensionEntry>? Extensions = null,
     WorldRenderLighting? Lighting = null,
     WorldRenderSky? Sky = null,
     WorldRenderCycle? Cycle = null,
@@ -136,35 +134,25 @@ public sealed record WorldRenderDefaults(
     public const float MinFarDistance = 1f;
 
     /// <summary>Gets the inert absence — shadows off, no crowd radius, no ambient occlusion, native scale, no
-    /// authored presets, the engine's pinned far distance. The engine holds no render posture of its own: the
-    /// standard boot levers and preset table are AUTHORED, in <c>Assets/worlds/standard.world.json</c>, and a world
-    /// inherits them by naming that document as its basis.</summary>
+    /// authored presets, the engine's pinned far distance. The engine holds no render posture of its own: a world
+    /// authors its boot levers and its preset table in its own <c>render</c> section, or inherits them from its
+    /// basis or an import; the shipped worlds share one preset table, <c>Assets/worlds/quality.puck</c>.</summary>
     public static WorldRenderDefaults Absent { get; } = new WorldRenderDefaults();
 
-    /// <summary>Returns the authored preset for a quality tier keyword (case-insensitive
-    /// <c>low</c>/<c>medium</c>/<c>high</c>), or <see langword="null"/> when the token names none or the world
-    /// authors no such preset — the <c>world.quality</c> verb refuses by name either way.</summary>
-    /// <param name="name">The quality tier keyword.</param>
+    /// <summary>Returns the authored preset for a quality tier, or <see langword="null"/> when the world authors none
+    /// for it, which the <c>world.quality</c> verb refuses by name. The tiers are the engine's one quality vocabulary
+    /// (<see cref="QualityTiers"/>), the one a <c>views.graphs</c> row and a shader package's variants name.</summary>
+    /// <param name="tier">The quality tier.</param>
     /// <returns>The matching authored preset, or <see langword="null"/>.</returns>
-    public WorldQualityPreset? Preset(string name) {
-        return (name.ToUpperInvariant() switch {
-            "LOW" => LowRaw,
-            "MEDIUM" => MediumRaw,
-            "HIGH" => HighRaw,
+    public WorldQualityPreset? Preset(QualityTier tier) {
+        return (tier switch {
+            QualityTier.Low => LowRaw,
+            QualityTier.Medium => MediumRaw,
+            QualityTier.High => HighRaw,
             _ => null,
         });
     }
 }
-/// <summary>One entry in <see cref="WorldRenderDefaults.Extensions"/> — a shipped shader set's id plus the values
-/// for its manifest-declared config fields.</summary>
-/// <param name="Id">The shader set id (its <c>puck.shader.manifest.v1</c> manifest's file stem) — checked against the
-/// shipped vocabulary at document load (<see cref="WorldExtensionVocabularyHook.IsRegisteredPostRenderExtension"/>),
-/// never interpreted here.</param>
-/// <param name="Config">The set's config values, or <see langword="null"/> when the manifest declares none or every
-/// field has a default. Not validated at document load — the manifest's declared config schema validates it at
-/// boot (matching <see cref="WorldScreenSource.Machine"/>'s <c>Options</c>, the identical shallow-then-deep
-/// precedent), refusing boot with the set id and reason on a malformed value.</param>
-public sealed record WorldRenderExtensionEntry(string Id, JsonElement? Config = null);
 /// <summary>The lit path's lights and stylization as world data. Absent renders the pinned sun and hemisphere an
 /// unauthored world always had; present, the list IS the lights — an authored list without a hemisphere has no
 /// ambient. Every field of every light is optional individually and resolves to the engine's pinned default for its
@@ -368,12 +356,13 @@ public sealed record WorldRenderCycle(string State, IReadOnlyList<WorldRenderCyc
 /// <param name="Lighting">The lighting fields this key moves, or <see langword="null"/>.</param>
 /// <param name="Sky">The sky fields this key moves, or <see langword="null"/>.</param>
 public sealed record WorldRenderCycleKey(float At, WorldRenderLighting? Lighting = null, WorldRenderSky? Sky = null);
-/// <summary>The tonemap applied to the frame's final color — see <see cref="WorldRenderDefaults.Tonemap"/>.</summary>
+/// <summary>The tonemap the root graph applies to the frame before the HUD — see
+/// <see cref="WorldRenderDefaults.Tonemap"/>.</summary>
 [JsonConverter(typeof(StrictEnumConverter<WorldTonemap>))]
 public enum WorldTonemap {
-    /// <summary>No remap: the stylized shaded color, as every world rendered before this field existed.</summary>
+    /// <summary>No remap: the stylized shaded color.</summary>
     None = 0,
-    /// <summary>A filmic (ACES-fit) curve on the frame's final color.</summary>
+    /// <summary>A filmic (ACES-fit) curve over each view, applied by the root graph's place pass for the view.</summary>
     Filmic = 1,
 }
 /// <summary>The analytic studio reflections a GGX specular lobe reflects — see

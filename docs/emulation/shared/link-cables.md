@@ -68,7 +68,8 @@ their port, and both pace the pair the same way:
 ## Infrared and peripheral emulation
 
 Two more media ride the same pacing: an infrared link between two machines, and
-a printer on one machine's serial cable.
+a printer on one machine's serial cable. A light gun shares the infrared
+receiver but is host input, not a paced peer.
 
 ### Infrared link (`IrLinkSession`)
 
@@ -90,6 +91,26 @@ a printer on one machine's serial cable.
 - `IrLinkSession` pairs two machines directly. The hosted linked machine group
   wires only the serial cable (`SerialLinkGroupCore`), and the Humble battery's
   infrared stages exercise the infrared link.
+
+### Light gun (`LightGunComponent`)
+
+- A photodiode accessory on the infrared receive line. It adds its light to
+  whatever a peer and self-sensing supply, so a game reads it through RP bit 1
+  or a HuC IR window with the receiver armed, exactly as it reads a peer.
+- It sees light while its aim lands on the screen and the pixel under the aim
+  is at least half bright by integer Rec. 601 luma. It reads the framebuffer
+  the PPU draws in place, so a pixel the current frame has not reached yet
+  still shows the previous frame's color, the persistence an LCD has.
+- A host aims it through `MachinePadState.Pointer`, a `MachinePointer` holding
+  exact 1/65536 fractions of the screen, applied with the rest of the pad at
+  each input segment. The held aim is snapshot state, and the gun's trigger is
+  an ordinary joypad button.
+- The Humble battery's `light-gun` stage exercises it with
+  `LightGunProbeCartridge`, which draws a white and a black half and publishes
+  what it senses. The advanced brick has no light gun and ignores the pointer.
+- A forge cartridge reads it through the `$light` operand, which arms RP and
+  yields 1 while light arrives; the World's `light-gun` canary aims a seat's
+  pointer at `light-gun.cgb.puck` headless.
 
 ### Game Boy Printer (`GamePrinterDevice`)
 - Emulates the external thermal printer connected via serial cable (`GamePrinterLinkSession`).

@@ -64,7 +64,8 @@ internal static partial class AzureCommand {
                         context.Outputs,
                         "worldSiloStorageEndpoint"
                     ))),
-                    context.Owner
+                    context.Owner,
+                    context.Clock
                 ),
                 source,
                 candidate,
@@ -109,13 +110,11 @@ internal static partial class AzureCommand {
                 cancellationToken
             ).ConfigureAwait(continueOnCapturedContext: false);
 
-            if (!WorldDefinitionFileSource.TryParseComposed(
-                System.Text.Encoding.UTF8.GetString(bytes: bytes.Span),
-                row.Value,
-                null,
-                false,
-                out var definition,
-                out var reason
+            if (!WorldDefinitionLoader.TryReadPublishable(
+                definition: out var definition,
+                json: System.Text.Encoding.UTF8.GetString(bytes: bytes.Span),
+                reason: out var reason,
+                sourceName: row.Value
             )) { throw new InvalidDataException(message: reason); }
             var root = await authority.LoadRootAsync(
                 cancellationToken: cancellationToken,

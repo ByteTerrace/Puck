@@ -57,7 +57,7 @@ public static class WorldCameraRigCompiler {
     /// resolve against.</param>
     /// <param name="interactive">Whether the program's orbit op folds in <see cref="IWorldCameraProgramRig.Look"/> —
     /// true for the seat rig a joined seat steers, false for an authored camera that renders its own angles.</param>
-    /// <param name="mirror">The state mirror the program's bound operands register their slots with and read each
+    /// <param name="mirror">The state mirror whose registered slots the program's bound operands read each
     /// frame.</param>
     /// <returns>A fresh presentation rig.</returns>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
@@ -68,8 +68,7 @@ public static class WorldCameraRigCompiler {
 
         var translation = new Translation(
             definition: definition,
-            interactive: interactive,
-            mirror: mirror
+            interactive: interactive
         );
 
         _ = translation.Translate(program: program);
@@ -166,14 +165,14 @@ public static class WorldCameraRigCompiler {
         }
     }
 
-    // One per-frame scalar slot's source: the state mirror slot an authored binding reads (-1 for none), or the
+    // One per-frame scalar slot's source: the authored binding whose mirror slot it reads (null for none), or the
     // group-spread widening an offset op's pullback applies. Exactly one arm is live per slot.
-    private readonly record struct ScalarSource(int MirrorSlot, float Fallback, float SpreadPullback);
+    private readonly record struct ScalarSource(StateBinding? Binding, float Fallback, float SpreadPullback);
     // One per-frame subject slot's source — an authored subject other than the program's own reference pose.
     private readonly record struct SubjectSource(WorldCameraSubject Subject);
     // The authored-to-IR walk. Programs are keyed by authored name so a blend that reaches the same program twice
     // (and a cycle the validator would have refused) compiles to one entry rather than recursing forever.
-    private sealed class Translation(WorldDefinition definition, bool interactive, WorldStateMirror mirror) {
+    private sealed class Translation(WorldDefinition definition, bool interactive) {
         private readonly Dictionary<string, int> m_indexByName = new(comparer: StringComparer.Ordinal);
 
         public List<SdfCameraProgram> Programs { get; } = [];
@@ -233,11 +232,8 @@ public static class WorldCameraRigCompiler {
             var slot = ScalarSources.Count;
 
             ScalarSources.Add(item: new ScalarSource(
+                Binding: binding,
                 Fallback: fallback,
-                MirrorSlot: mirror.Register(
-                binding: in binding,
-                conversion: WorldStateConversion.Number
-            ),
                 SpreadPullback: 0f
             ));
 
@@ -254,8 +250,8 @@ public static class WorldCameraRigCompiler {
             var slot = ScalarSources.Count;
 
             ScalarSources.Add(item: new ScalarSource(
+                Binding: null,
                 Fallback: 1f,
-                MirrorSlot: -1,
                 SpreadPullback: pullback
             ));
 
@@ -496,9 +492,12 @@ public static class WorldCameraRigCompiler {
             for (var index = 0; (index < m_scalarSources.Count); index++) {
                 var source = m_scalarSources[index];
 
-                scalars[index] = ((source.MirrorSlot >= 0)
+                scalars[index] = ((source.Binding is { } binding)
                     ? (m_mirror.TryNumber(
-                        slot: source.MirrorSlot,
+                        slot: m_mirror.SlotOf(
+                            binding: in binding,
+                            conversion: WorldStateConversion.Number
+                        ),
                         value: out var bound
                     )
                         ? bound

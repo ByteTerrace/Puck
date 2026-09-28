@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json.Nodes;
+using Puck.Cli.Canary;
 using Puck.Cli.Qualification;
 
 using Xunit;
@@ -11,12 +12,13 @@ namespace Puck.Cli.Tests;
 /// qualification could not honor, naming the member: an unknown or missing member, a foreign schema tag, a backend no
 /// leg boots, a validation layer on a backend the profile does not run, an odd resolution axis, a workload named twice
 /// or booting anything but a package-relative <c>.world.json</c>, and a matrix cell with no threshold row, two, or a
-/// pipeline threshold that disagrees with its workload. The checked-in profile loads. A valid profile expands into
+/// pipeline threshold that disagrees with its workload. The checked-in profile loads, and its functional list names
+/// only offscreen canaries and every <c>pipeline-*</c> canary. A valid profile expands into
 /// backend-major cells, and each cell's script arms exactly the waits, readings, inspections and releases its
 /// expectation counts, with a resize naming the exact extents its layout slot halves to.
 /// </summary>
 public sealed class ReleaseProfileLawTests {
-    private const string Layout = """{"name":"pipeline","seatCount":0,"slots":[{"camera":null,"height":1,"pipeline":"ink","width":1,"x":0,"y":0}],"transitionRenderScale":1,"transitionSeconds":0.25}""";
+    private const string Layout = """{"name":"pipeline","seatCount":0,"slots":[{"camera":null,"height":1,"instance":"ink","width":1,"x":0,"y":0}],"transitionRenderScale":1,"transitionSeconds":0.25}""";
 
     private static JsonObject Valid() => JsonNode.Parse(json: """
         {
@@ -32,10 +34,10 @@ public sealed class ReleaseProfileLawTests {
               "pipeline": { "instance": "ink", "layout": "pipeline", "settleFrames": 4, "reloads": 2, "resizes": 1, "loads": 3 }, "timeoutSeconds": 120 }
           ],
           "thresholds": [
-            { "workload": "world", "backend": "vulkan", "width": 1280, "height": 800, "peakOwnedPipelineBytes": null },
-            { "workload": "world", "backend": "directx", "width": 1280, "height": 800, "peakOwnedPipelineBytes": null },
-            { "workload": "ink", "backend": "vulkan", "width": 1280, "height": 800, "peakOwnedPipelineBytes": 155648000 },
-            { "workload": "ink", "backend": "directx", "width": 1280, "height": 800, "peakOwnedPipelineBytes": 155648000 }
+            { "workload": "world", "backend": "vulkan", "width": 1280, "height": 800, "peakOwnedPipelineBytes": null, "peakDeviceLocalBytes": null },
+            { "workload": "world", "backend": "directx", "width": 1280, "height": 800, "peakOwnedPipelineBytes": null, "peakDeviceLocalBytes": null },
+            { "workload": "ink", "backend": "vulkan", "width": 1280, "height": 800, "peakOwnedPipelineBytes": 155648000, "peakDeviceLocalBytes": null },
+            { "workload": "ink", "backend": "directx", "width": 1280, "height": 800, "peakOwnedPipelineBytes": 155648000, "peakDeviceLocalBytes": null }
           ],
           "deferred": [{ "check": "FrameTime", "reason": "Timing is deferred." }]
         }
@@ -72,7 +74,7 @@ public sealed class ReleaseProfileLawTests {
             ? null
             : new QualificationPipelineRows(
                 Layout: JsonNode.Parse(json: Layout)!.AsObject(),
-                Source: "../pipelines/ink.pipeline.json"
+                Source: "../pipelines/ink.graph.json"
             ));
 
         Assert.True(condition: QualificationPlan.TryWrite(
@@ -99,6 +101,30 @@ public sealed class ReleaseProfileLawTests {
             expected: ((profile.Backends.Count * profile.Workloads.Count) * profile.Resolutions.Count)
         );
         Assert.Contains(collection: profile.Deferred, filter: static deferral => (deferral.Check == QualificationDeferredCheck.DeviceLocalPeak));
+    }
+    [Fact]
+    public void TheCheckedInProfileRunsEveryPipelineCanaryAndOnlyOffscreenProofs() {
+        Assert.True(condition: ReleaseProfileLoader.TryLoad(
+            path: RepositoryPaths.Resolve(relativePath: ReleaseProfileLoader.DefaultPath),
+            profile: out var profile,
+            reason: out var reason
+        ), userMessage: reason);
+        Assert.True(condition: CanaryManifestLoader.TryLoadAll(
+            error: out var error,
+            manifests: out var manifests,
+            refused: out _,
+            repositoryRoot: RepositoryPaths.RequireRoot(),
+            strict: false
+        ), userMessage: error);
+
+        var byId = manifests.ToDictionary(keySelector: static manifest => manifest.Id);
+
+        foreach (var id in profile.Functional) {
+            Assert.True(condition: byId.TryGetValue(key: id, value: out var manifest), userMessage: $"functional: '{id}' names no canary");
+            Assert.Equal(actual: manifest.BootShape, expected: CanaryBootShape.Offscreen);
+        }
+
+        Assert.Empty(collection: byId.Keys.Where(predicate: static id => id.StartsWith(comparisonType: StringComparison.Ordinal, value: "pipeline-")).Except(second: profile.Functional));
     }
     [Fact]
     public void AStrictParseRefusesUnknownAndMissingMembersAndForeignValues() {
@@ -139,6 +165,7 @@ public sealed class ReleaseProfileLawTests {
         Assert.Contains(expectedSubstring: "two threshold rows", actualString: Refusal(edit: static document => document["thresholds"]!.AsArray().Add(value: document["thresholds"]![0]!.DeepClone())));
         Assert.Contains(expectedSubstring: "must be null", actualString: Refusal(edit: static document => document["thresholds"]![0]!["peakOwnedPipelineBytes"] = 1));
         Assert.Contains(expectedSubstring: "positive byte count", actualString: Refusal(edit: static document => document["thresholds"]![2]!["peakOwnedPipelineBytes"] = null));
+        Assert.Contains(expectedSubstring: "peakDeviceLocalBytes must be a positive byte count or null", actualString: Refusal(edit: static document => document["thresholds"]![0]!["peakDeviceLocalBytes"] = 0));
         Assert.Contains(expectedSubstring: "not one of the profile's resolutions", actualString: Refusal(edit: static document => document["thresholds"]![3]!["width"] = 1920));
         Assert.Contains(expectedSubstring: "no workload", actualString: Refusal(edit: static document => document["thresholds"]![3]!["workload"] = "other"));
     }
@@ -171,8 +198,16 @@ public sealed class ReleaseProfileLawTests {
         Assert.Equal(actual: script.Expectation.Releases, expected: 0);
         Assert.Equal(actual: script.Expectation.ArmedWaits, expected: 0);
         Assert.Equal(actual: lines.Count(predicate: static line => (line == "world.reload")), expected: 2);
+        Assert.Equal(actual: script.Expectation.WorldReloads, expected: 2);
         Assert.Equal(actual: lines.Count(predicate: static line => (line == "world.counters --json")), expected: 4);
         Assert.Equal(actual: lines.Count(predicate: static line => (line == "world.wait 60")), expected: 2);
+        Assert.Equal(
+            actual: lines.Where(predicate: static line => line.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: "world."
+            )).Take(count: 2),
+            expected: ["world.cadence off", $"world.wait ready {QualificationPlan.ReadySeconds}"]
+        );
     }
     [Fact]
     public void APipelineCellArmsWhatItsExpectationCounts() {
@@ -184,16 +219,17 @@ public sealed class ReleaseProfileLawTests {
         Assert.Equal(actual: script.Expectation.Inspections, expected: (((2 + pipeline.Reloads) + (2 * pipeline.Resizes)) + pipeline.Loads));
         Assert.Equal(actual: lines.Count(predicate: static line => (line == "pipeline.inspect ink")), expected: (script.Expectation.Inspections + script.Expectation.Releases));
         Assert.Equal(actual: script.Expectation.Releases, expected: pipeline.Loads);
-        Assert.Equal(actual: lines.Count(predicate: static line => (line == "world.row.remove views.pipelines ink")), expected: pipeline.Loads);
+        Assert.Equal(actual: lines.Count(predicate: static line => (line == "world.row.remove views.graphs ink")), expected: pipeline.Loads);
         Assert.Equal(actual: script.Expectation.ArmedWaits, expected: lines.Count(predicate: static line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: "pipeline.wait ")));
         Assert.Equal(actual: script.Expectation.CountersReadings, expected: 4);
         Assert.Equal(actual: script.Expectation.SoakWindows, expected: [(0, 1), (2, 3)]);
+        Assert.Equal(actual: script.Expectation.WorldReloads, expected: 0);
         Assert.Equal(actual: lines.Count(predicate: static line => (line == "pipeline.reload ink")), expected: pipeline.Reloads);
         Assert.Contains(collection: lines, expected: "pipeline.wait ink resized 640 400 40");
         Assert.Contains(collection: lines, expected: "pipeline.wait ink resized 1280 800 40");
         Assert.Contains(collection: lines, expected: "pipeline.wait ink counted 4 40");
-        Assert.Contains(collection: lines, expected: "pipeline.load ink ../pipelines/ink.pipeline.json");
-        Assert.Contains(collection: lines, filter: static line => (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "world.row.set views.layouts ") && line.Contains(comparisonType: StringComparison.Ordinal, value: "\"pipeline\":null")));
+        Assert.Contains(collection: lines, expected: "pipeline.load ink ../pipelines/ink.graph.json");
+        Assert.Contains(collection: lines, filter: static line => (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "world.row.set views.layouts ") && line.Contains(comparisonType: StringComparison.Ordinal, value: "\"instance\":null")));
         Assert.Contains(collection: lines, filter: static line => (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "world.row.set views.layouts ") && line.Contains(comparisonType: StringComparison.Ordinal, value: "\"width\":0.5")));
     }
     [Fact]
@@ -213,7 +249,7 @@ public sealed class ReleaseProfileLawTests {
 
         static QualificationPipelineRows Rows(string layout) => new(
             Layout: JsonNode.Parse(json: layout)!.AsObject(),
-            Source: "ink.pipeline.json"
+            Source: "ink.graph.json"
         );
 
         Assert.False(condition: QualificationPlan.TryWrite(
@@ -226,7 +262,7 @@ public sealed class ReleaseProfileLawTests {
         Assert.False(condition: QualificationPlan.TryWrite(
             cell: cell,
             reason: out var missing,
-            rows: Rows(layout: Layout.Replace(comparisonType: StringComparison.Ordinal, newValue: "\"pipeline\":\"other\"", oldValue: "\"pipeline\":\"ink\"")),
+            rows: Rows(layout: Layout.Replace(comparisonType: StringComparison.Ordinal, newValue: "\"instance\":\"other\"", oldValue: "\"instance\":\"ink\"")),
             script: out _
         ));
         Assert.Contains(actualString: missing, expectedSubstring: "no slot");
@@ -234,7 +270,7 @@ public sealed class ReleaseProfileLawTests {
     [Fact]
     public void RowsAreReadFromWhatTheWorldAuthors() {
         var pipeline = new QualificationPipeline(Instance: "ink", Layout: "pipeline", Loads: 1, Reloads: 1, Resizes: 1, SettleFrames: 4);
-        var world = string.Concat(str0: """{"views":{"layouts":[""", str1: Layout, str2: """],"pipelines":[{"name":"ink","source":"../pipelines/ink.pipeline.json"}]}}""");
+        var world = string.Concat(str0: """{"views":{"layouts":[""", str1: Layout, str2: """],"graphs":[{"name":"ink","source":"../pipelines/ink.graph.json"}]}}""");
 
         Assert.True(condition: QualificationPlan.TryReadRows(
             pipeline: pipeline,
@@ -242,7 +278,7 @@ public sealed class ReleaseProfileLawTests {
             rows: out var rows,
             worldText: world
         ), userMessage: reason);
-        Assert.Equal(actual: rows!.Source, expected: "../pipelines/ink.pipeline.json");
+        Assert.Equal(actual: rows!.Source, expected: "../pipelines/ink.graph.json");
         Assert.False(condition: QualificationPlan.TryReadRows(
             pipeline: (pipeline with { Layout = "absent" }),
             reason: out var noLayout,
@@ -256,6 +292,6 @@ public sealed class ReleaseProfileLawTests {
             rows: out _,
             worldText: world
         ));
-        Assert.Contains(actualString: noPipeline, expectedSubstring: "views.pipelines");
+        Assert.Contains(actualString: noPipeline, expectedSubstring: "views.graphs");
     }
 }

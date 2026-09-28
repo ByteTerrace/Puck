@@ -32,6 +32,11 @@ public enum WindowInputKind {
     /// without an equivalent event (Wayland today) never emits this kind. Never reaches
     /// <see cref="WindowInputMapper"/>: the pump intercepts it before mapping.</summary>
     FocusLost,
+
+    /// <summary>The pointer left the window's client area, so the window reports no absolute position until the next
+    /// <see cref="PointerPosition"/> — carries no other data. A platform without an equivalent event never emits this
+    /// kind. Never reaches <see cref="WindowInputMapper"/>: the pump intercepts it before mapping.</summary>
+    PointerLeft,
 }
 /// <summary>
 /// Specifies the modifier keys held alongside a <see cref="WindowInputEvent"/> (bitwise-combinable).
@@ -84,6 +89,10 @@ public readonly record struct WindowInputEvent(
     /// <summary>A neutral OS-focus-lost notification.</summary>
     public static WindowInputEvent FocusLost() {
         return new WindowInputEvent(Kind: WindowInputKind.FocusLost);
+    }
+    /// <summary>A neutral pointer-left-the-client-area notification.</summary>
+    public static WindowInputEvent PointerLeft() {
+        return new WindowInputEvent(Kind: WindowInputKind.PointerLeft);
     }
     /// <summary>A neutral named-key press (<see cref="CommandPhase.Started"/>).</summary>
     public static WindowInputEvent KeyDown(KeyCode key, InputDeviceId deviceId = default) {

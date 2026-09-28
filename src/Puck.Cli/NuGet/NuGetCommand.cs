@@ -205,7 +205,7 @@ internal static class NuGetCommand {
 
         foreach (var project in projects) {
             using var metadata = JsonDocument.Parse(await CliProcess.RunCheckedAsync(
-                arguments: ["msbuild", project, "-nologo", "-getProperty:PackageId,Version"],
+                arguments: ["msbuild", project, "-nologo", "--disable-build-servers", "-getProperty:PackageId,Version"],
                 fileName: "dotnet",
                 workingDirectory: root,
                 capture: true
@@ -217,6 +217,8 @@ internal static class NuGetCommand {
                 throw new InvalidDataException(message: $"{id} overrides the shared version {version}.");
             }
             if (!expected.Add(item: id)) { throw new InvalidDataException(message: $"Duplicate package ID: {id}."); }
+            // The package batch streams its builds to the console and deliberately reuses nodes across the shared
+            // project graph. Metadata and release smoke probes disable build servers to keep children scoped to the verb.
             if (!noBuild) {
                 await CliProcess.RunCheckedAsync(
                     arguments: ["restore", project, "--locked-mode"],

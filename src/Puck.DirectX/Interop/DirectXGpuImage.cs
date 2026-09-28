@@ -9,11 +9,12 @@ namespace Puck.DirectX.Interop;
 /// A Direct3D 12 <see cref="IGpuImage"/>: a default-heap texture created by <see cref="DirectXTextures"/> with the
 /// resource flags, initial state and optimized clear value its declared usages need. <see cref="ImageHandle"/> is the raw
 /// resource (barriers, copies and readbacks name it); <see cref="ImageViewHandle"/> is a <see cref="DirectXImageView"/>
-/// token the descriptor allocator turns into a UAV or SRV, and a framebuffer into a render-target or depth-stencil view.
+/// token <see cref="DirectXGpuBindings"/> turns into a UAV or SRV, and a framebuffer into a render-target or depth-stencil view.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXGpuImage : IGpuImage {
     private readonly GCHandle m_imageViewToken;
+    private readonly GpuDeviceMemoryWork? m_memory;
 
     private bool m_disposed;
     private nint m_resource;
@@ -23,7 +24,10 @@ public sealed unsafe class DirectXGpuImage : IGpuImage {
     /// <param name="format">The neutral format, which <paramref name="request"/> carries translated.</param>
     /// <param name="usage">The declared usages; <see cref="GpuImageUsages.Validate"/> refuses a request that breaks a
     /// rule before anything is created.</param>
-    public DirectXGpuImage(DirectXGpuImageRequest request, GpuPixelFormat format, GpuImageUsage usage) {
+    /// <param name="clearDepth">The depth a depth attachment is cleared to (its attachment's
+    /// <see cref="GpuDepthAttachment.ClearDepth"/>, which the factory validated), which it is created with as its optimized
+    /// clear value; unused for any other usage.</param>
+    public DirectXGpuImage(DirectXGpuImageRequest request, GpuPixelFormat format, GpuImageUsage usage, float clearDepth) {
         var (deviceContext, dxgiFormat, width, height) = request;
 
         ArgumentNullException.ThrowIfNull(deviceContext);
@@ -40,6 +44,7 @@ public sealed unsafe class DirectXGpuImage : IGpuImage {
         Width = width;
 
         var (flags, clearValue) = DirectXTextures.OfUsage(
+            clearDepth: clearDepth,
             format: dxgiFormat,
             usage: usage
         );
@@ -52,8 +57,10 @@ public sealed unsafe class DirectXGpuImage : IGpuImage {
             format: dxgiFormat,
             height: height,
             initialState: initialState,
+            memory: deviceContext.Memory,
             width: width
         ));
+        m_memory = deviceContext.Memory;
         DirectXResourceStates.Register(
             resource: m_resource,
             state: initialState
@@ -91,6 +98,10 @@ public sealed unsafe class DirectXGpuImage : IGpuImage {
         }
 
         if (0 != m_resource) {
+            DirectXDeviceMemory.CountReleased(
+                memory: m_memory,
+                resource: m_resource
+            );
             _ = ((IUnknown*)m_resource)->Release();
             m_resource = 0;
         }

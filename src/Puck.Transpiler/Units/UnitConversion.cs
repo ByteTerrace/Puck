@@ -10,7 +10,8 @@ public enum UnitDimension {
     Degrees,
     /// <summary>Radians-native: <c>deg</c> converts to radians, <c>rad</c> passes through.</summary>
     Radians,
-    /// <summary>Seconds-native: <c>s</c> passes through, <c>ms</c> divides by 1000.</summary>
+    /// <summary>Seconds-native: <c>s</c> passes through, <c>ms</c> divides by 1000, <c>min</c> multiplies by 60 and
+    /// <c>h</c> by 3600.</summary>
     Seconds,
     /// <summary>Metres-native: <c>m</c> passes through, <c>cm</c> divides by 100, <c>mm</c> by 1000.</summary>
     Meters,
@@ -29,7 +30,7 @@ public static class UnitConversion {
     private static readonly string[] HertzUnits = ["hz"];
     private static readonly string[] MetersUnits = ["m", "cm", "mm"];
     private static readonly string[] RadiansUnits = ["deg", "rad"];
-    private static readonly string[] SecondsUnits = ["s", "ms"];
+    private static readonly string[] SecondsUnits = ["s", "ms", "min", "h"];
 
     /// <summary>Returns the unit spellings <paramref name="dimension"/> accepts, for a diagnostic message.</summary>
     /// <param name="dimension">The dimension to describe.</param>
@@ -50,13 +51,31 @@ public static class UnitConversion {
     /// <param name="unit">The suffix as written; matched without regard to case.</param>
     /// <param name="converted">The converted value.</param>
     /// <returns><see langword="true"/> when <paramref name="dimension"/> accepts <paramref name="unit"/> at a
-    /// power-of-ten scale and a decimal holds the converted value exactly. Degrees into radians returns
-    /// <see langword="false"/>, and so does a value so small that dividing it would round: both are
+    /// power-of-ten scale or a whole-number multiple and a decimal holds the converted value exactly. Degrees into
+    /// radians returns <see langword="false"/>, and so does a value so small that dividing it would round: both are
     /// <see cref="TryConvert"/>'s.</returns>
     /// <remarks>KEEP IN SYNC with <see cref="TryConvert"/>: every unit it accepts at a rational scale is accepted
     /// here at the same scale.</remarks>
     public static bool TryConvertExact(UnitDimension dimension, decimal value, string unit, out decimal converted) {
         ArgumentNullException.ThrowIfNull(unit);
+
+        decimal? multiplier = ((dimension, unit.ToLowerInvariant()) switch {
+            (UnitDimension.Seconds, "min") => 60m,
+            (UnitDimension.Seconds, "h") => 3600m,
+            _ => null,
+        });
+
+        if (multiplier is { } factor) {
+            try {
+                converted = (value * factor);
+
+                return true;
+            } catch (OverflowException) {
+                converted = value;
+
+                return false;
+            }
+        }
 
         decimal? divisor = ((dimension, unit.ToLowerInvariant()) switch {
             (UnitDimension.Degrees, "deg") => 1m,
@@ -130,6 +149,16 @@ public static class UnitConversion {
                 }
                 if (lowerUnit == "ms") {
                     converted = (numericValue / 1000.0);
+
+                    return true;
+                }
+                if (lowerUnit == "min") {
+                    converted = (numericValue * 60.0);
+
+                    return true;
+                }
+                if (lowerUnit == "h") {
+                    converted = (numericValue * 3600.0);
 
                     return true;
                 }

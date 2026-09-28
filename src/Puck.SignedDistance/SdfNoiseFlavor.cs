@@ -1,7 +1,7 @@
 namespace Puck.SignedDistance;
 
-// Values must match Shaders/Sdf/sdf-vm.hlsli (SDF_NOISE_*); rides the SDF_OP_CELL_JITTER Blend lane (header.z).
-/// <summary>How a <see cref="SdfOp.CellJitter"/> op distributes its per-cell POSITION offset (r0). Reshapes ONLY the
+/// <summary>How a <see cref="SdfOp.CellJitter"/> op distributes its per-cell POSITION offset (r0), carried in the op's
+/// Blend lane and read by the kernels as <c>SDF_NOISE_*</c> from the generated <c>sdf-isa.hlsli</c>. Reshapes ONLY the
 /// displacement — the tumble and the material variant are UNAFFECTED. Every flavor keeps the offset in
 /// <c>[0,1)^3</c> before centering, so <c>(r0 − 0.5) · jitter</c> stays within <c>±jitter/2</c> per axis — the SAME
 /// bound White has — and <c>SdfProgram.AnalyzeLipschitz</c>'s reach-independent clamp is unchanged for all three.</summary>

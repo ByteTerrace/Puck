@@ -13,11 +13,13 @@ public interface IVulkanCommandBufferRecordingApi {
     /// <param name="request">The record request identifying the device and command buffer.</param>
     /// <returns>A <see cref="VkResult"/> indicating whether recording began successfully.</returns>
     VkResult BeginCommandBuffer(VulkanCommandBufferRecordRequest request);
-    /// <summary>Begins recording into a command buffer. No usage flags are set, so the recording may be cached and resubmitted across frames.</summary>
+    /// <summary>Begins recording into a command buffer. No one-time flag is set, so the recording may be cached and resubmitted across frames.</summary>
     /// <param name="device">The command table of the logical device.</param>
     /// <param name="commandBufferHandle">The native <c>VkCommandBuffer</c> handle to begin recording into.</param>
+    /// <param name="resubmittedWhilePending">Whether the recording is submitted again before an earlier submission of
+    /// it has completed (<c>VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT</c>).</param>
     /// <returns>A <see cref="VkResult"/> indicating whether recording began successfully.</returns>
-    VkResult BeginCommandBuffer(VulkanDeviceCommands device, nint commandBufferHandle);
+    VkResult BeginCommandBuffer(VulkanDeviceCommands device, nint commandBufferHandle, bool resubmittedWhilePending = false);
     /// <summary>Opens a named debug-marker label (<c>vkCmdBeginDebugUtilsLabelEXT</c>) scoping the commands recorded
     /// until the matching <see cref="EndDebugLabel"/> — surfaced by GPU capture tools. A no-op when
     /// <c>VK_EXT_debug_utils</c> is unavailable; it records no GPU work and never affects rendered output.</summary>
@@ -30,12 +32,13 @@ public interface IVulkanCommandBufferRecordingApi {
     /// <param name="device">The command table of the logical device.</param>
     /// <param name="commandBufferHandle">The native <c>VkCommandBuffer</c> handle the label is recorded into.</param>
     void EndDebugLabel(VulkanDeviceCommands device, nint commandBufferHandle);
-    /// <summary>Binds a single descriptor set at set number 0 for the graphics bind point.</summary>
+    /// <summary>Binds a single descriptor set at a set number for the graphics bind point.</summary>
     /// <param name="device">The command table of the logical device.</param>
     /// <param name="commandBufferHandle">The native <c>VkCommandBuffer</c> handle the command is recorded into.</param>
     /// <param name="pipelineLayoutHandle">The native <c>VkPipelineLayout</c> handle compatible with the descriptor set.</param>
+    /// <param name="firstSet">The set number the set is bound at.</param>
     /// <param name="descriptorSetHandle">The native <c>VkDescriptorSet</c> handle to bind.</param>
-    void BindDescriptorSet(VulkanDeviceCommands device, nint commandBufferHandle, nint pipelineLayoutHandle, nint descriptorSetHandle);
+    void BindDescriptorSet(VulkanDeviceCommands device, nint commandBufferHandle, nint pipelineLayoutHandle, uint firstSet, nint descriptorSetHandle);
     /// <summary>Binds one or more descriptor sets starting at set number 0 for the graphics bind point.</summary>
     /// <param name="device">The command table of the logical device.</param>
     /// <param name="commandBufferHandle">The native <c>VkCommandBuffer</c> handle the command is recorded into.</param>
@@ -108,6 +111,11 @@ public interface IVulkanCommandBufferRecordingApi {
     /// <param name="width">The width, in pixels, of the scissor rectangle.</param>
     /// <param name="height">The height, in pixels, of the scissor rectangle.</param>
     void SetScissor(VulkanDeviceCommands device, nint commandBufferHandle, int x, int y, uint width, uint height);
+    /// <summary>Records a dynamic viewport 0.</summary>
+    /// <param name="device">The command table of the logical device.</param>
+    /// <param name="commandBufferHandle">The native <c>VkCommandBuffer</c> handle the command is recorded into.</param>
+    /// <param name="viewport">The viewport; a negative height flips the y axis.</param>
+    void SetViewport(VulkanDeviceCommands device, nint commandBufferHandle, in VkViewport viewport);
     /// <summary>Begins a render pass instance for the request's framebuffer and render pass, clearing the color attachment to opaque black over the full render area, with inline subpass contents.</summary>
     /// <param name="request">The record request identifying the device, command buffer, render pass, framebuffer, and render area.</param>
     void StartRenderPass(VulkanCommandBufferRecordRequest request);
@@ -116,12 +124,14 @@ public interface IVulkanCommandBufferRecordingApi {
     /// <param name="commandBufferHandle">The native <c>VkCommandBuffer</c> handle the command is recorded into.</param>
     /// <param name="pipelineHandle">The native <c>VkPipeline</c> handle to bind.</param>
     void BindComputePipeline(VulkanDeviceCommands device, nint commandBufferHandle, nint pipelineHandle);
-    /// <summary>Binds one or more descriptor sets starting at set number 0 for the compute bind point.</summary>
+    /// <summary>Binds one or more descriptor sets starting at a set number for the compute bind point.</summary>
     /// <param name="device">The command table of the logical device.</param>
     /// <param name="commandBufferHandle">The native <c>VkCommandBuffer</c> handle the command is recorded into.</param>
     /// <param name="pipelineLayoutHandle">The native <c>VkPipelineLayout</c> handle compatible with the descriptor sets.</param>
-    /// <param name="descriptorSetHandles">The native <c>VkDescriptorSet</c> handles to bind, in order from set 0.</param>
-    void BindComputeDescriptorSets(VulkanDeviceCommands device, nint commandBufferHandle, nint pipelineLayoutHandle, ReadOnlySpan<nint> descriptorSetHandles);
+    /// <param name="firstSet">The set number the first set is bound at.</param>
+    /// <param name="descriptorSetHandles">The native <c>VkDescriptorSet</c> handles to bind, in order from
+    /// <paramref name="firstSet"/>.</param>
+    void BindComputeDescriptorSets(VulkanDeviceCommands device, nint commandBufferHandle, nint pipelineLayoutHandle, uint firstSet, ReadOnlySpan<nint> descriptorSetHandles);
     /// <summary>Records a compute dispatch.</summary>
     /// <param name="device">The command table of the logical device.</param>
     /// <param name="commandBufferHandle">The native <c>VkCommandBuffer</c> handle the command is recorded into.</param>
@@ -153,6 +163,10 @@ public interface IVulkanCommandBufferRecordingApi {
     /// <param name="destinationAccessMask">A bitmask of <c>VkAccessFlagBits</c> giving the destination access scope.</param>
     /// <param name="sourceStageMask">A bitmask of <c>VkPipelineStageFlagBits</c> giving the source stage scope.</param>
     /// <param name="destinationStageMask">A bitmask of <c>VkPipelineStageFlagBits</c> giving the destination stage scope.</param>
+    /// <param name="sourceQueueFamily">The queue family the image's ownership is transferred from, or
+    /// <see cref="VulkanQueueFamily.Ignored"/> for a barrier that transfers none.</param>
+    /// <param name="destinationQueueFamily">The queue family the image's ownership is transferred to, or
+    /// <see cref="VulkanQueueFamily.Ignored"/> for a barrier that transfers none.</param>
     void TransitionImageLayout(
         VulkanDeviceCommands device,
         nint commandBufferHandle,
@@ -165,7 +179,9 @@ public interface IVulkanCommandBufferRecordingApi {
         uint sourceAccessMask,
         uint destinationAccessMask,
         uint sourceStageMask,
-        uint destinationStageMask
+        uint destinationStageMask,
+        uint sourceQueueFamily = VulkanQueueFamily.Ignored,
+        uint destinationQueueFamily = VulkanQueueFamily.Ignored
     );
     /// <summary>Records a buffer memory barrier over the whole of one buffer, scoped to the given accesses and stages.</summary>
     /// <param name="device">The command table of the logical device.</param>
@@ -220,6 +236,15 @@ public interface IVulkanCommandBufferRecordingApi {
     );
     /// <summary>Records vkCmdFillBuffer with a zero pattern.</summary>
     void FillBuffer(VulkanDeviceCommands device, nint commandBufferHandle, nint bufferHandle, ulong sizeBytes);
+    /// <summary>Records <c>vkCmdCopyBuffer</c> with one region: the first <paramref name="sizeBytes"/> of the source
+    /// into the start of the destination.</summary>
+    /// <param name="device">The command table of the logical device.</param>
+    /// <param name="commandBufferHandle">The native <c>VkCommandBuffer</c> handle the command is recorded into.</param>
+    /// <param name="sourceBufferHandle">The native <c>VkBuffer</c> copied, created as a transfer source.</param>
+    /// <param name="destinationBufferHandle">The native <c>VkBuffer</c> written, created as a transfer destination.</param>
+    /// <param name="sizeBytes">The bytes copied; positive.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="sizeBytes"/> is zero.</exception>
+    void CopyBuffer(VulkanDeviceCommands device, nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes);
     /// <summary>Records a copy of a width × height region between two 2D, single-layer color images, from origin to origin.</summary>
     /// <param name="device">The command table of the logical device.</param>
     /// <param name="commandBufferHandle">The native <c>VkCommandBuffer</c> handle the command is recorded into.</param>
@@ -256,12 +281,17 @@ public interface IVulkanCommandBufferRecordingApi {
         uint width,
         uint height
     );
-    /// <summary>Records a copy from a tightly packed buffer into a width × height region of a 2D, single-layer color image at the given offset.</summary>
+    /// <summary>Records a copy from tightly packed buffer bytes into a width × height region of one mip level of a 2D,
+    /// single-layer color image at the given offset. A block-compressed image's buffer bytes are rows of blocks, and its
+    /// region may end at the level's edge short of a whole block.</summary>
     /// <param name="device">The command table of the logical device.</param>
     /// <param name="commandBufferHandle">The native <c>VkCommandBuffer</c> handle the command is recorded into.</param>
     /// <param name="bufferHandle">The native <c>VkBuffer</c> handle to copy from.</param>
+    /// <param name="bufferOffset">The offset, in bytes, of the region's first texel or block in the buffer; a multiple
+    /// of the format's texel or block size.</param>
     /// <param name="imageHandle">The native <c>VkImage</c> handle to copy to.</param>
     /// <param name="imageLayout">The current layout of the image, as a <c>VkImageLayout</c> value.</param>
+    /// <param name="mipLevel">The mip level of the image the region is in.</param>
     /// <param name="imageOffsetX">The x texel offset of the destination region.</param>
     /// <param name="imageOffsetY">The y texel offset of the destination region.</param>
     /// <param name="width">The width, in texels, of the region to copy.</param>
@@ -270,8 +300,10 @@ public interface IVulkanCommandBufferRecordingApi {
         VulkanDeviceCommands device,
         nint commandBufferHandle,
         nint bufferHandle,
+        ulong bufferOffset,
         nint imageHandle,
         uint imageLayout,
+        uint mipLevel,
         int imageOffsetX,
         int imageOffsetY,
         uint width,

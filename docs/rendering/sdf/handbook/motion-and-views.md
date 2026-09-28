@@ -1,11 +1,12 @@
 # Motion and views
 
 Puck stores camera poses as presentation data, separate from the moving world
-and its simulation state. The `ViewStack` lets an in-world screen show another
-render, including a screen that contains a render, without creating a
-render-loop paradox. A shared view region keeps a wall of a hundred monitors
-close to the cost of four, while explicit screen seams distinguish image
-content from the SDF surface that displays it.
+and its simulation state. An in-world screen shows another render, including a
+screen that contains a render, as an instance of the render graph, which reads
+itself at its previous frame rather than creating a render-loop paradox. The
+render graph's scheduler renders each view once a frame at most and only while
+something shows it, while explicit screen seams distinguish image content from
+the SDF surface that displays it.
 
 ## Anchors name poses instead of holding references
 
@@ -117,8 +118,12 @@ basis. Rasterized geometry does, and `ViewProjection`
 is right-handed and view space looks down −Z. The projection is reversed-Z
 with an infinite far plane: depth is `near / d` for forward distance `d`, 1 on
 the near plane and falling toward 0, so a nearer surface always has the
-greater depth. The SDF engine's near plane is `SdfWorldEngine.ConeNear`, the
-distance where every camera cone starts. Normalized device coordinates put +Y
+greater depth. The pass block carries the camera's own near plane
+(`CameraSnapshot.Near`, zero when its image begins at the eye) as
+`nearDistance`, and the bounded volumes composite from it. Surfaces render
+from that plane but never nearer than `SdfFrameBlock.MinimumNear`
+(`SdfFrameBlock.NearOf`, `SDF_MINIMUM_NEAR` in the kernels): every surface
+march starts where its ray crosses it, and the mesh pass clips there. Normalized device coordinates put +Y
 up, a view's UV origin is its top-left corner, and each sample is a pixel
 center with no jitter. `RayParameter` turns a depth back into the distance
 the march records, measured along the normalized ray through the sample. The
@@ -126,84 +131,81 @@ previous frame's transforms ride beside the current ones; a view without a
 usable history carries its own matrices as the previous ones and so reports
 no motion. Nothing renders through these matrices yet.
 
-## ViewStack registers named image content
+## Views are render-graph instances
 
 A diegetic screen—a booted cabinet's CRT, a security monitor, a creation's
 preview easel—needs *something* to show. That something might be a posed
-camera looking at the room, a hosted guest machine's raw framebuffer, or an
-entirely separate SDF world rendered offscreen. `ViewStack` is the one
-vocabulary all three speak, and the reason it exists as a single primitive
-rather than three bespoke pools is the useful contract: **a view is
-content registered by name, and anything that resolves to an image handle
-qualifies**—the stack does not care whether that handle came from a camera,
-a guest, or another whole world.
+camera looking at the room, a hosted guest machine's framebuffer, or an
+entirely separate SDF world rendered offscreen. Each is an instance of the
+render graph (`RenderGraphInstance`), and a screen reads the instance it
+shows: a guest machine or a producer as a source instance, a camera or
+another world as a view instance (`WorldViewInstances`).
 
-```csharp
-public interface IViewContent {
-    nint Resolve(in ViewRenderContext context);  // 0 = no signal
-    Vector3 RoomGlow { get; }                     // light this content emits into the room
-    bool IsBudgeted => true;                      // does resolving cost a real render pass?
-}
-```
+- **A camera view** is an `sdf.world` instance named by its camera's
+  registration, rendering a view of the world's own frame from the world's
+  residency: the presentation's dress films the registration's camera into the
+  frame after its own views (`WorldScreenBinder.FilmViews`), so the view shares
+  the program, transforms, clock, brick pool and tables, at the world's quality
+  without ambient occlusion or soft shadows. Its camera comes from a rig posed
+  against a live anchor; one whose anchor does not resolve keeps the camera it
+  last filmed from. Its first frame uses the rig at the default anchor when
+  that anchor is unresolved, or the world origin when there is no rig.
+  It films an already-lit world and contributes no light of its own.
+  Each instance records at its requested extent. The presenter's own cameras
+  and viewports use the display extent, so a larger probe export does not
+  change their aspect ratios or pointer mapping.
+- **A session view** is an `sdf.world` instance too, rendering another world's
+  own frame source. A screen showing it shows a **world inside the world**.
+  A window session (`projection: window`, on a face whose portal facet maps a
+  counterpart) renders each frame through an off-axis camera fitted, from the
+  viewer's eye mapped through the door's isometry, to the face's glass mapped
+  the same way (`WorldWindowFrustumFit`): it shows what a traveller standing at
+  the eye would see through the door, and the image parallaxes as the eye
+  moves. The glass shows the image edge to edge, with no bezel. The frustum's
+  shear rides the camera (`CameraSnapshot.FrustumOffset`), and so does its near
+  plane, the mapped glass's own plane (`CameraSnapshot.Near`): the view pass
+  starts every ray on the glass and a hit through the image starts its ray
+  there, so the window shows only what lies beyond the aperture, never the
+  destination's geometry between the mapped eye and the glass. The far
+  distance still counts from the mapped eye, so a pick through the window
+  reaches exactly as far as the window renders.
 
-Two shapes implement it today:
-
-- **`SdfCameraView`**—a tiny offscreen `SdfWorldEngine`, posed each resolve
-  by a rig against a live anchor. This is a camera: it films an
-  already-lit world and contributes no light of its own.
-- **`WorldSessionView`**—another world's own frame source, rendered
-  offscreen exactly like a camera view renders the host world. A screen
-  wired to this view shows a **world inside the world**, and if that inner
-  world itself wires a screen to another session view, the chain composes.
-
-Content whose resolve is a cheap read of a handle some other path already
-keeps current declares `IsBudgeted => false` and resolves every frame,
-regardless of the round-robin below.
-
-**Registration is cheap; refreshing is not—so they are budgeted
-separately.** Up to `OffscreenRenderBudget.RegisteredViews` (64) views may be live at once;
-holding a registration costs only a small amount of state. But only
-`OffscreenRenderBudget.PerProducedFrame` (4, the presentation budget declared
-once in `Puck.Abstractions`) of the *budgeted* views actually pay a real render
-pass on any one produced frame. Views beyond the budget share it round-robin: an
-unrefreshed view keeps showing its last resolved image until the cursor
-reaches it again. This is why a wall of a hundred security monitors costs
-the same per-frame render budget as four—the wall is diegetically honest
-(most monitors show a slightly stale frame, exactly like a real bank of
-CRTs fed by a shared switcher) without ever costing a hundred render passes.
-
-**Withdrawal is the registrant's job, not the stack's.** A registered
-budgeted view keeps rendering every round-robin turn for as long as it stays
-registered, whether or not any screen currently samples it—the stack
-deliberately has no "is anyone watching" gate, because it cannot see every
-legitimate reason to keep a view alive (a view transition might be sampling
-it by name without ever wiring it to a screen). A registrant that wants a
-view to stop costing a render pass releases it itself, the moment its own
-notion of "wanted" turns false.
+**The scheduler decides what renders.** A view renders only while something
+shows it: a screen, through the footprint of its declared extent inside the
+world's view, or a HUD frame or a probe export, which the display shows
+directly. It renders at most once a frame however many screens show it, at the
+extent its footprint asks, and at the refresh `world.view-refresh` sets (a
+window session on every frame); between refreshes every consumer reads its
+latest completed image. A view nothing shows renders nothing and keeps its
+last image. The cost of every view is priced in the schedule and
+`world.budget` like any instance's, with no fixed view count.
 
 ### The self-reference rule
 
-The one rule that keeps this from becoming an infinite hall of mirrors:
-**inside view V's own render, any screen surface currently wired to V binds
-to nothing (the flat fallback material).** A view never samples the image
-it is itself in the middle of writing—doing so would compound the
-previous frame's picture into itself, frame after frame, drifting toward a
-runaway feedback loop. Every *other* screen, including one wired to a
-*different* view, resolves normally. That asymmetry is what makes
-one-frame-lag TV-in-TV legal and useful: a view showing a screen that shows
-a different view composes fine; a view showing a screen that shows itself
-does not, and is the one case the stack actively prevents rather than
-merely discouraging.
+A view filming the world reads every view, itself included, at its previous
+frame, and the world reads every view within the frame. **Inside view V's own
+render, a screen showing V samples V's previous image**: a read of a view's own
+output binds the output it completed before this frame, so a view never samples
+the image it is in the middle of writing. A mirror
+facing itself therefore shows the frame before, and two cameras filming each
+other's screens each show the other's previous frame, never a same-frame loop.
 
 ```text
-     view A renders  ──> screen wired to view A  ──> BLOCKED (binds 0, self-reference)
-     view A renders  ──> screen wired to view B  ──> fine (B's last resolved frame, 1-frame lag)
-     view B renders  ──> screen wired to view A  ──> fine
+     world renders   ──> screen showing view A  ──> A's image of this frame
+     view A renders  ──> screen showing view A  ──> A's previous image
+     view A renders  ──> screen showing view B  ──> B's previous image
 ```
+
+A hit on a screen showing a view continues through that view's camera into
+the world it films (`RenderGraphHitWalk`), up to the graph's nesting depth. A
+hit on a portal's window continues through the camera the window last rendered
+from into the destination, where no screen stands (a projected destination's
+screens bind dark), and ends on the surface its ray meets among the
+destination's static placements (`RenderGraphHitPath.Surface`).
 
 ## View transitions move regions and switch content
 
-A `ViewLayout` is a snapshot of which registered view occupies which
+A `ViewLayout` is a snapshot of which view occupies which
 normalized screen region, slot by slot. A `ViewTransition` eases between two
 layouts over time—but it eases only the *region*: the *view occupying*
 that region is a hard cut at the eased midpoint (progress 0.5), not a
@@ -233,42 +235,43 @@ This is the distinction that is easiest to blur and most important not to.
 A screen surface in the world touches **two entirely separate systems**,
 and they answer two different questions:
 
-**A child** is a render this frame **composites in**: it occupies one of
-the frame's viewport slots, gets skipped by the cone-march beam and the
-first render stage the way any other viewport does, and the compositor
-copies its finished surface into place. This is about **layout**—how many
+**A pane** is a render this frame **places over the world**: a
+`views.graphs` instance that a layout slot names. It is a render-graph
+instance with its own shader, not an SDF view, so it takes none of the SDF
+engine's viewports. The root graph's `place` pass draws its finished image
+into the slot's rect over the SDF world. This is about **layout**—how many
 things this frame renders and where each one's pixels land.
 
 **A screen source** is a program-declared `ScreenSlab` shape's **material**:
-its lit face samples a bound image through a CRT glass treatment (barrel
-curve, bezel, scanlines, vignette, glint, bloom), and separately, that same
+its lit face samples a bound image, drawn from the screen's published mapping,
+through a CRT glass treatment (bezel, scanlines, vignette, glint, bloom), and separately, that same
 bound image's average color is summed into the room as colored light. This
 is about **shading**—what a particular surface in the world *looks like*
 and what it *contributes to the room's lighting*, independent of anything
 about frame layout.
 
-A `ViewStack` entry is the thing that *produces* the image handle a screen
-source samples—the view and the screen surface are two ends of a wire,
-not one object. `SetScreenSource(index, 0)`—a provider that returns no
-handle—unbinds that wire: the face falls back to its flat/procedural "no
-signal" material, never simply goes black. A screen reading solid black is
-a *different* bug (a dead image or a zeroed room-light entry), never the
-correct look for "nothing is wired here."
+A render-graph instance is the thing that *produces* the image a screen
+source samples—the instance and the screen surface are two ends of a wire,
+not one object. A screen reading no instance is unbound
+(`SdfWorldTables.SetScreenBound`): the face shades as dark glass, lit faintly
+by the sun, the look of a
+display with nothing behind it.
 
 The conflation to watch for: treating a screen surface as if it needs a
-*viewport slot* to show something, or treating a *child* render as if it
-needs a `ScreenSlab` material to appear. Neither is true. A child is pure
-layout; a screen source is pure shading fed by a wire. A booted cabinet's
-CRT is a `ScreenSlab` sampling a view's handle—never a viewport child of
-the room's own frame.
+*layout slot* to show something, or treating a *pane* as if it needs a
+`ScreenSlab` material to appear. Neither is true. A pane is pure layout; a
+screen source is pure shading fed by a wire. A booted cabinet's CRT is a
+`ScreenSlab` sampling an instance's image—never a pane of the room's own frame.
 
 ---
 
 ## Related resources
 
 - [.claude/skills/rendering/SKILL.md](../../../../.claude/skills/rendering/SKILL.md)
-  —"Views" and "Composition, anchors, views, and queries" sections; the two
-  content seams under "Engine semantics."
+  —the "Engine seams that bite" section, whose screens and image-sources
+  entries cover the two content seams, and "Shader manifests and pipelines,"
+  which covers views as render-graph instances.
 - Source: `src/Puck.SdfVm/SdfAnchor.cs`, `src/Puck.SdfVm/Views/SdfCameraRig.cs`,
-  `src/Puck.SdfVm/Views/ViewStack.cs`, `src/Puck.SdfVm/Views/ViewTransition.cs`,
-  `src/Puck.SdfVm/Views/{SdfCameraView,WorldSessionView}.cs`.
+  `src/Puck.SdfVm/Views/ViewTransition.cs`,
+  `src/Puck.World.Client/Sources/WorldViewInstances.cs`,
+  `src/Puck.World/WorldScreenBinder.{CameraViews,Session,Views}.cs`.

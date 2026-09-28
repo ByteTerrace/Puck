@@ -578,8 +578,8 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
             )
             ) {
                 m_seatBindings.SetProfileLayers(
-                    slot: slot,
-                    bindings: profile.Bindings
+                    profile: profile,
+                    slot: slot
                 );
             }
         }

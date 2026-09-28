@@ -1,7 +1,7 @@
 {
   "id": "pipeline-resize",
   "title": "A resize rebuilds a float-history pipeline at the new extent, installs without rendering while paused, restarts history whose extent changed from zero, and captures float outputs throughout",
-  "binding": "Both legs boot an offscreen 64x64 world whose one pipeline accumulates previous.r + 1/16 into a zero-initialized half-float history and publishes that history through the float preview, so a capture's red channel is min(n/16, 1) after n submissions of the history. Paused and reset, the graph's first submission reads 1/16 and one step 2/16 at 64x64. An edit of the layout slot to half the frame on each axis makes the host request 32x32. A resize is not a step, so the paused instance rebuilds and installs the graph at 32x32 without rendering (pipeline.wait resized) and still presents 2/16 at 64x64. In the positive leg the history's extent follows the frame, so it restarts from zero at 32x32 and the next steps read 1/16, then 2/16. Resumed, the slot returns to the whole frame, the running instance rebuilds at 64x64, and after a reset and 24 submissions the preview reads full scale. Every expectation is derived from that arithmetic, not recorded. The discriminating leg fixes the history at 64x64, so the resize carries it: the step after the resize reads 3/16 at 64x64 and the next 4/16, where the positive leg's resized captures require 32x32 at 1/16 and 2/16.",
+  "binding": "Both legs boot an offscreen 64x64 world whose one pipeline accumulates previous.r + 1/16 into a zero-initialized half-float history and publishes that history, which a capture reads through the display encode, so a capture's red channel is min(n/16, 1) after n submissions of the history. Paused and reset, the graph's first submission reads 1/16 and one step 2/16 at 64x64. An edit of the layout slot to half the frame on each axis makes the host request 32x32. A resize is not a step, so the paused instance rebuilds and installs the graph at 32x32 without rendering (pipeline.wait resized) and still presents 2/16 at 64x64. In the positive leg the history's extent follows the frame, so it restarts from zero at 32x32 and the next steps read 1/16, then 2/16. Resumed, the slot returns to the whole frame, the running instance rebuilds at 64x64, and after a reset and 24 submissions the preview reads full scale. Every expectation is derived from that arithmetic, not recorded. The discriminating leg fixes the history at 64x64, so the resize carries it: the step after the resize reads 3/16 at 64x64 and the next 4/16, where the positive leg's resized captures require 32x32 at 1/16 and 2/16.",
   "bootShape": "offscreen",
   "backends": [
     "vulkan",
@@ -12,8 +12,8 @@
   ],
   "timeoutSeconds": 60,
   "fixtures": [
-    "resize.pipeline.json",
-    "fixed-history.pipeline.json"
+    "resize.graph.json",
+    "fixed-history.graph.json"
   ],
   "positive": {
     "world": "tests/Puck.World.Canaries/pipeline-resize/fixture.world.json",

@@ -1,10 +1,10 @@
-// The film-grain pass (src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-film-grain.frag.hlsl) read through its generated pass
+// The film-grain pass (src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-film-grain.frag.hlsl) read through its generated pass
 // interface instead of a push constant and hand-numbered bindings. film-grain.interface.hlsli is generated from the
 // interface ShaderInterfaceSpikeTests declares and written beside this file at test time; it is never checked in.
 // The frame group carries the deterministic tick and the extent, the pass group the parameters, the source image and
 // its sampler. The grain frame is the tick divided by the flicker period in ticks, and tint scales the grain per
 // channel, so a white tint and a period matching the shipped pass's quantization grain identically.
-#include "sdf-vm.hlsli"
+#include "sdf-hash.hlsli"
 #include "film-grain.interface.hlsli"
 
 float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {

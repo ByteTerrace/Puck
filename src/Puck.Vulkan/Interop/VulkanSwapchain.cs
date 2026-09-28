@@ -19,13 +19,14 @@ public sealed class VulkanSwapchain : IDisposable {
     public uint ImageExtentHeight { get; }
     /// <summary>Gets the width, in pixels, of the swapchain images.</summary>
     public uint ImageExtentWidth { get; }
-    /// <summary>Gets the format of the swapchain images, as a <c>VkFormat</c> value.</summary>
-    public uint ImageFormat { get; }
+    /// <summary>Gets what the swapchain presents: its images' format and the color space they are encoded in, chosen
+    /// by <see cref="Factories.VulkanSwapchainFactory.SelectOutput"/>.</summary>
+    public DisplayOutput Output { get; }
 
     /// <summary>Initializes a new instance of the <see cref="VulkanSwapchain"/> class, taking ownership of an existing native swapchain handle.</summary>
     /// <param name="swapchainHandle">The native <c>VkSwapchainKHR</c> handle to own.</param>
     /// <param name="device">The command table of the logical device that owns the swapchain.</param>
-    /// <param name="imageFormat">The format of the swapchain images, as a <c>VkFormat</c> value.</param>
+    /// <param name="output">The format and color space of the swapchain images.</param>
     /// <param name="imageExtentWidth">The width, in pixels, of the swapchain images.</param>
     /// <param name="imageExtentHeight">The height, in pixels, of the swapchain images.</param>
     /// <param name="swapchainApi">The API used to destroy the swapchain on disposal.</param>
@@ -34,7 +35,7 @@ public sealed class VulkanSwapchain : IDisposable {
     public VulkanSwapchain(
         nint swapchainHandle,
         VulkanDeviceCommands device,
-        uint imageFormat,
+        DisplayOutput output,
         uint imageExtentWidth,
         uint imageExtentHeight,
         IVulkanSwapchainApi swapchainApi
@@ -51,7 +52,7 @@ public sealed class VulkanSwapchain : IDisposable {
 
         Handle = swapchainHandle;
         Device = device;
-        ImageFormat = imageFormat;
+        Output = output;
         ImageExtentWidth = imageExtentWidth;
         ImageExtentHeight = imageExtentHeight;
         m_swapchainApi = swapchainApi;

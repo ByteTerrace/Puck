@@ -4,6 +4,8 @@ namespace Puck.Vulkan;
 /// Common <c>VkPipelineStageFlagBits</c> values used in pipeline barriers and layout transitions. Combine with bitwise OR.
 /// </summary>
 public static class VulkanPipelineStageFlags {
+    /// <summary>The <c>VK_PIPELINE_STAGE_ALL_COMMANDS_BIT</c> value.</summary>
+    public const uint AllCommands = 0x00010000;
     /// <summary>The <c>VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT</c> value.</summary>
     public const uint BottomOfPipe = 0x00002000;
     /// <summary>The <c>VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT</c> value.</summary>
@@ -16,10 +18,14 @@ public static class VulkanPipelineStageFlags {
     public const uint EarlyFragmentTests = 0x00000100;
     /// <summary>The <c>VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT</c> value.</summary>
     public const uint FragmentShader = 0x00000080;
+    /// <summary>The <c>VK_PIPELINE_STAGE_HOST_BIT</c> value.</summary>
+    public const uint Host = 0x00004000;
     /// <summary>The <c>VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT</c> value.</summary>
     public const uint LateFragmentTests = 0x00000200;
     /// <summary>The <c>VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT</c> value.</summary>
     public const uint TopOfPipe = 0x00000001;
     /// <summary>The <c>VK_PIPELINE_STAGE_TRANSFER_BIT</c> value.</summary>
     public const uint Transfer = 0x00001000;
+    /// <summary>The <c>VK_PIPELINE_STAGE_VERTEX_SHADER_BIT</c> value.</summary>
+    public const uint VertexShader = 0x00000008;
 }

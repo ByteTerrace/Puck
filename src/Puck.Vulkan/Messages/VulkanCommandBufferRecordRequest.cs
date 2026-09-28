@@ -13,6 +13,8 @@ namespace Puck.Vulkan.Messages;
 /// <param name="Height">The height, in pixels, of the render area.</param>
 /// <param name="ClearValues">One clear value per attachment, in attachment order, or <see langword="null"/> for a
 /// render pass with one color attachment that clears to opaque black.</param>
+/// <param name="X">The left edge, in pixels, of the render area.</param>
+/// <param name="Y">The top edge, in pixels, of the render area.</param>
 public readonly record struct VulkanCommandBufferRecordRequest(
     nint CommandBufferHandle,
     VulkanDeviceCommands Device,
@@ -20,5 +22,7 @@ public readonly record struct VulkanCommandBufferRecordRequest(
     nint RenderPassHandle,
     uint Width,
     uint Height,
-    IReadOnlyList<VkClearValue>? ClearValues = null
+    IReadOnlyList<VkClearValue>? ClearValues = null,
+    int X = 0,
+    int Y = 0
 );

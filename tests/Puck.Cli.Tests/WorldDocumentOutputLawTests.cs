@@ -255,10 +255,13 @@ public sealed class WorldDocumentOutputLawTests {
         var derived = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
         var packPath = Path.Combine(path1: catalog, path2: WorldBakePack.FileName);
         var keys = new HashSet<Puck.Assets.ContentPin>();
+        // Memory-only, so every outcome is baked fresh here whatever cache the catalog's build read.
+        var store = new WorldBakeStore();
 
         foreach (var document in shipment.Documents) {
             if (!WorldSourceLoader.TryCompileWorld(
                 bakePack: WorldBakePack.Reference(documentPath: Path.Combine(path1: catalog, path2: document.Relative), packPath: packPath),
+                bakes: store,
                 catalog: machines,
                 catalogFingerprint: CliWorldVocabulary.Fingerprint(catalog: machines),
                 compiledWorld: out var fresh,
@@ -289,7 +292,7 @@ public sealed class WorldDocumentOutputLawTests {
             Assert.False(condition: File.Exists(path: packPath), userMessage: $"the catalog carries a bake pack no compiled world names a bake in");
         } else {
             var fresh = WorldBakePack.Encode(outcomes: keys.Select(selector: key => {
-                Assert.True(condition: WorldSourceLoader.Bakes.TryGetHeld(key: key, outcome: out var outcome), userMessage: $"no fresh outcome for {key.Hex}");
+                Assert.True(condition: store.TryGetHeld(key: key, outcome: out var outcome), userMessage: $"no fresh outcome for {key.Hex}");
 
                 return KeyValuePair.Create(key: key, value: outcome);
             }));

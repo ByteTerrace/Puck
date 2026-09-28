@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using Puck.Abstractions.Gpu;
 
 namespace Puck.Shaders;
 
@@ -8,22 +9,47 @@ namespace Puck.Shaders;
 /// <list type="bullet">
 /// <item><description>Each group is Vulkan descriptor set and Direct3D 12 register space
 /// <see cref="ShaderInterfaceGroup"/>'s ordinal.</description></item>
-/// <item><description>A group with values or arrays owns one constant block at binding 0; its images and samplers
-/// follow at bindings 1, 2, … in declaration order, or from 0 when the group has no block. A binding's Direct3D 12
-/// register number equals its Vulkan binding number, in the register class its kind takes (<c>b</c>, <c>t</c>,
-/// <c>u</c> or <c>s</c>).</description></item>
-/// <item><description>A block places its members in declaration order: a scalar on a 4-byte boundary, a two-component
-/// vector on an 8-byte boundary, a three- or four-component vector and every array on a 16-byte boundary. An array
-/// element is stored as one whole 16-byte row, so an array's stride is 16 on both backends, and the member after an
-/// array starts past its last row. Every gap is filled with a named <c>uint</c> padding member, so Direct3D 12's
-/// sequential constant-buffer packing lands each member exactly where the explicit Vulkan offset puts
-/// it.</description></item>
-/// <item><description>A pushed group's block (<see cref="ShaderInterface.PushConstants"/>) is a
-/// <see cref="ShaderBindingKind.PushConstants"/> binding at binding 0 of its set, placed by the same rule.</description></item>
+/// <item><description>A group with values owns one constant block at binding 0; its images, buffers, arrays and
+/// samplers follow at bindings 1, 2, … in declaration order, or from 0 when the group has no block. An arrayed image or
+/// sampler of length <c>n</c> takes <c>n</c> bindings' worth of registers, so the member after it starts <c>n</c> on. A
+/// binding's Direct3D 12 register number equals its Vulkan binding number, in the register class its kind takes
+/// (<c>b</c>, <c>t</c>, <c>u</c> or <c>s</c>).</description></item>
+/// <item><description>A block places its values in declaration order: a scalar on a 4-byte boundary, a two-component
+/// vector on an 8-byte boundary, and a three- or four-component vector on a 16-byte boundary. Every gap is filled with a
+/// named <c>uint</c> padding member, so Direct3D 12's sequential constant-buffer packing lands each member exactly where
+/// the explicit Vulkan offset puts it. A block array of four-component vectors starts on a 16-byte boundary and takes
+/// one 16-byte row per element.</description></item>
+/// <item><description>An array is a binding of its own: a read-only structured buffer of its scalar element type
+/// (<see cref="GpuBindingKind.ReadOnlyBuffer"/>), whose stride is the element's size on both backends, so element
+/// <c>i</c> lies at byte <c>4i</c> of the buffer bound there.</description></item>
+/// <item><description>A buffer binding carries its element stride (<see cref="ShaderInterfaceBinding.ElementStride"/>): a
+/// structured buffer's element size on both backends, and for a raw buffer the stride each backend's reflection reports
+/// for a byte-address buffer, <see cref="SpirvRawBufferStride"/> and <see cref="DxilRawBufferStride"/>. SPIR-V declares
+/// a raw buffer as a runtime array of <c>uint</c>, so it reflects a raw buffer and a structured buffer of a 4-byte
+/// element alike; only DXIL's reflection tells those two apart.</description></item>
+/// <item><description>A pushed index (<see cref="ShaderInterface.PushesIndex"/>) is a one-member block,
+/// <c>pushedIndex.index</c>: SPIR-V reflects it as a pushed constant block at set 0, binding 0, as it reflects any push
+/// constant, and DXIL as the constant buffer at register <c>b0</c> in space
+/// <see cref="GpuPipelineLayoutDescription.PushIndexSpace"/>.</description></item>
 /// </list>
 /// </summary>
 public sealed class ShaderInterfaceLayout {
+    /// <summary>The element stride a SPIR-V module reflects for a raw (byte-address) buffer: DXC declares its block as a
+    /// runtime array of <c>uint</c>, whose <c>ArrayStride</c> is 4.</summary>
+    public const uint SpirvRawBufferStride = ShaderValueTypes.ComponentBytes;
+    /// <summary>The element stride a DXIL container reflects for a raw (byte-address) buffer: DXC's reflection reports
+    /// <c>NumSamples</c> as 0 for a <c>ByteAddressBuffer</c> and an <c>RWByteAddressBuffer</c>, the zero stride a raw
+    /// Direct3D 12 view is written with.</summary>
+    public const uint DxilRawBufferStride = 0;
+
     private const uint RowBytes = 16;
+
+    private static readonly IReadOnlyList<ShaderInterfaceBlockMember> PushedIndexMembers = [new ShaderInterfaceBlockMember(
+        Length: 0,
+        Name: ShaderInterface.PushedIndexMemberName,
+        Offset: 0,
+        Type: ShaderValueType.Uint
+    )];
 
     /// <summary>Initializes a new instance of the <see cref="ShaderInterfaceLayout"/> class.</summary>
     /// <param name="shaderInterface">The interface to lay out.</param>
@@ -41,99 +67,223 @@ public sealed class ShaderInterfaceLayout {
                     group: group,
                     interfaceName: shaderInterface.Name,
                     members: members,
-                    pushed: (shaderInterface.PushConstants == group)
+                    variableName: shaderInterface.BlockVariableNameOf(group: group)
                 ));
             }
         }
 
+        var spirv = groups.SelectMany(selector: static group => group.Bindings).ToList();
+        var dxil = groups.SelectMany(selector: static group => group.Bindings.Select(selector: binding => (binding with {
+            ElementStride = (IsRawBuffer(
+                binding: binding,
+                group: group
+            )
+                ? DxilRawBufferStride
+                : binding.ElementStride),
+        }))).ToList();
+
+        if (shaderInterface.PushesIndex) {
+            spirv.Add(item: new ShaderInterfaceBinding(
+                Binding: 0,
+                Kind: GpuBindingKind.ConstantBuffer,
+                Members: PushedIndexMembers,
+                Name: ShaderInterface.PushedIndexVariableName,
+                Pushed: true,
+                Set: 0
+            ));
+            dxil.Add(item: new ShaderInterfaceBinding(
+                Binding: 0,
+                Kind: GpuBindingKind.ConstantBuffer,
+                Members: PushedIndexMembers,
+                Name: ShaderInterface.PushedIndexVariableName,
+                Set: GpuPipelineLayoutDescription.PushIndexSpace
+            ));
+        }
+
         Interface = shaderInterface;
         Groups = new ReadOnlyCollection<ShaderInterfaceGroupLayout>(list: groups);
-        Bindings = new ReadOnlyCollection<ShaderInterfaceBinding>(list: groups.SelectMany(selector: static group => group.Bindings).ToArray());
-        DxilBindings = new ReadOnlyCollection<ShaderInterfaceBinding>(list: Bindings.Select(selector: static binding => ((binding.Kind == ShaderBindingKind.PushConstants)
-            ? (binding with { Kind = ShaderBindingKind.ConstantBuffer })
-            : binding)).ToArray());
+        Bindings = Ordered(bindings: spirv);
+        DxilBindings = Ordered(bindings: dxil);
     }
 
-    /// <summary>Gets every binding the interface declares, ordered by set and then binding, as a SPIR-V module reflects
-    /// them.</summary>
+    /// <summary>Gets every binding the interface declares as a SPIR-V module reflects them, in
+    /// <see cref="Ordered"/> order: the pushed index, when the interface declares one, at set 0, binding 0, and a raw
+    /// buffer at <see cref="SpirvRawBufferStride"/>.</summary>
     public IReadOnlyList<ShaderInterfaceBinding> Bindings { get; }
-    /// <summary>Gets <see cref="Bindings"/> as a DXIL container reflects them: identical, except that a pushed block is a
-    /// root-constant block, which Direct3D 12 reflects as the constant buffer at register <c>b0</c>, space 0.</summary>
+    /// <summary>Gets <see cref="Bindings"/> as a DXIL container reflects them: identical, except that no block is pushed
+    /// and a raw buffer's stride is <see cref="DxilRawBufferStride"/>. A pushed index is the constant buffer at
+    /// register <c>b0</c> in space <see cref="GpuPipelineLayoutDescription.PushIndexSpace"/>.</summary>
     public IReadOnlyList<ShaderInterfaceBinding> DxilBindings { get; }
-    /// <summary>Gets the pushed group's layout, or <see langword="null"/> when the interface pushes no group.</summary>
-    public ShaderInterfaceGroupLayout? PushedGroup =>
-        Groups.FirstOrDefault(predicate: group => (group.Group == Interface.PushConstants));
     /// <summary>Gets the groups the interface uses, in set order.</summary>
     public IReadOnlyList<ShaderInterfaceGroupLayout> Groups { get; }
     /// <summary>Gets the interface this layout places.</summary>
     public ShaderInterface Interface { get; }
 
-    /// <summary>Returns why a compiled module reads the pushed block somewhere other than this layout puts it, or
-    /// <see langword="null"/> when it reads the block exactly as laid out or does not read it. The block is the binding
-    /// at set 0, binding 0 named for the pushed group, whether a SPIR-V module reflects it as push constants or a DXIL
-    /// container as a constant buffer.</summary>
+    /// <summary>Returns the neutral pipeline layout of the interface's groups: each group at its set, each binding at
+    /// its number with its kind and descriptor count, visible to the pipeline's stages, and the 4-byte index pushed when
+    /// the interface declares one (<see cref="ShaderInterface.PushesIndex"/>).</summary>
+    /// <param name="stages">The pipeline's shader stages, from its pass kind
+    /// (<see cref="ShaderPipelinePassKinds.Stages"/>).</param>
+    /// <returns>The pipeline layout.</returns>
+    /// <exception cref="ArgumentException"><paramref name="stages"/> is not compute alone or graphics stages
+    /// alone.</exception>
+    public GpuPipelineLayoutDescription PipelineLayout(GpuShaderStage stages) =>
+        new(
+            groups: Groups.Select(selector: static group => new GpuGroupLayoutDescription(
+                bindings: group.Bindings.Select(selector: static binding => new GpuGroupBinding(
+                    binding: binding.Binding,
+                    count: binding.Count,
+                    kind: binding.Kind
+                )).ToArray(),
+                ordinal: group.Set
+            )).ToArray(),
+            pushesIndex: Interface.PushesIndex,
+            stages: stages
+        );
+    /// <summary>Returns why a compiled module binds something other than this layout places, or <see langword="null"/>
+    /// when every binding it reads sits where the layout puts it. The module's bindings are held to one backend's view
+    /// at a time, <see cref="Bindings"/> as SPIR-V reflects the layout or <see cref="DxilBindings"/> as DXIL does, and
+    /// fit when every one of them fits the same view: each must be a binding of that view at its set and number, of the
+    /// same kind, as pushed or bound as the view places it, with the same element stride; and a constant block's members
+    /// must be the view's. A binding the module does not read is not reflected, so it is not checked. A DXIL container
+    /// cannot tell root constants from a bound constant buffer, so in its view the pushed index is the constant buffer
+    /// at register <c>b0</c> in space <see cref="GpuPipelineLayoutDescription.PushIndexSpace"/>. When neither
+    /// view fits, the disagreement is named against the view that fits more of the module's bindings in order. A binding
+    /// is its resource by name: two resources of one shape exchanged between their bindings fit every shape rule, so each
+    /// reflected name must be the one the view places there. Both readers name every binding (DXIL by its bind
+    /// description, SPIR-V by the debug name DXC emits); a SPIR-V module without the debug name is refused, since which
+    /// resource it binds cannot be told.
+    /// <para>A stamped interface (<see cref="ShaderInterface.Stamp"/>) holds the module to its stamp before anything else:
+    /// the module must read its pass block, and under the stamped name, since a module that reads none carries no stamp
+    /// and one whose pass block carries another stamp was compiled from other declarations.</para></summary>
     /// <param name="reflected">The module's bindings, as <see cref="SpirvInterfaceReader"/> or
     /// <see cref="DxilInterfaceReader"/> reads them.</param>
     /// <returns>The disagreement, or <see langword="null"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="reflected"/> is <see langword="null"/>.</exception>
-    public string? PushedBlockMismatch(IReadOnlyList<ShaderInterfaceBinding> reflected) {
+    public string? Mismatch(IReadOnlyList<ShaderInterfaceBinding> reflected) {
         ArgumentNullException.ThrowIfNull(argument: reflected);
 
-        if (PushedGroup is not { } group) {
+        if (StampMismatch(reflected: reflected) is { } stamp) {
+            return stamp;
+        }
+
+        if (FirstMismatch(
+            expected: Bindings,
+            reflected: reflected
+        ) is not { } spirv) {
+            return null;
+        }
+        if (FirstMismatch(
+            expected: DxilBindings,
+            reflected: reflected
+        ) is not { } dxil) {
             return null;
         }
 
+        var (_, binding, expected) = ((dxil.Index > spirv.Index)
+            ? dxil
+            : spirv);
+
+        return $"the module reads {binding}; interface '{Interface.Name}' ({Interface.Hash}) lays out {((expected is null)
+            ? $"no {(binding.Pushed ? "pushed " : "")}{binding.Kind} at set {binding.Set} binding {binding.Binding}"
+            : expected.ToString())}{(binding.Name.StartsWith(comparisonType: StringComparison.Ordinal, value: SpirvInterfaceReader.UnnamedPrefix)
+                ? $"; the module names no resource at set {binding.Set} binding {binding.Binding}, so which resource it binds there cannot be told; compile it with the debug names DXC emits"
+                : "")}.";
+    }
+    /// <summary>Orders bindings as both bytecode readers and a layout's views list them: by set, then binding, then a
+    /// bound block before a pushed one at the same place, which is where SPIR-V reports a pushed index beside a bound
+    /// frame block.</summary>
+    /// <param name="bindings">The bindings.</param>
+    /// <returns>The bindings in order.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="bindings"/> is <see langword="null"/>.</exception>
+    public static IReadOnlyList<ShaderInterfaceBinding> Ordered(IEnumerable<ShaderInterfaceBinding> bindings) {
+        ArgumentNullException.ThrowIfNull(argument: bindings);
+
+        return new ReadOnlyCollection<ShaderInterfaceBinding>(list: bindings
+            .OrderBy(keySelector: static binding => binding.Set)
+            .ThenBy(keySelector: static binding => binding.Binding)
+            .ThenBy(keySelector: static binding => binding.Pushed)
+            .ToArray());
+    }
+
+    // Why a module does not carry this layout's stamp, or null when the interface has none or the module carries it: the
+    // pass block's binding, bound at binding 0 of the pass group's set, is named for the stamp.
+    private string? StampMismatch(IReadOnlyList<ShaderInterfaceBinding> reflected) {
+        if (Interface.Stamp is not { } stamp) {
+            return null;
+        }
+
+        var group = Groups.Single(predicate: static group => (group.Group == ShaderInterfaceGroup.Pass));
         var block = reflected.FirstOrDefault(predicate: binding => (
-            (binding.Kind is ShaderBindingKind.PushConstants or ShaderBindingKind.ConstantBuffer) &&
             (binding.Set == group.Set) &&
             (binding.Binding == 0) &&
-            string.Equals(
-                a: binding.Name,
-                b: group.BlockVariableName,
-                comparisonType: StringComparison.Ordinal
-            )
+            (binding.Kind == GpuBindingKind.ConstantBuffer) &&
+            !binding.Pushed
         ));
 
         if (block is null) {
-            return null;
-        }
-        if (block.Members.SequenceEqual(second: group.BlockMembers)) {
-            return null;
+            return $"the module reads no pass block, so it carries no stamp; interface '{Interface.Name}' is stamped '{stamp}'.";
         }
 
-        var expected = new ShaderInterfaceBinding(
-            Binding: 0,
-            Kind: block.Kind,
-            Members: group.BlockMembers,
-            Name: block.Name,
-            Set: group.Set
-        );
-
-        return $"the module reads {block}; interface '{Interface.Name}' ({Interface.Hash}) lays out {expected}.";
+        return (string.Equals(a: block.Name, b: group.BlockVariableName, comparisonType: StringComparison.Ordinal)
+            ? null
+            : $"the module's pass block is '{block.Name}'; interface '{Interface.Name}' is stamped '{stamp}', whose pass block is '{group.BlockVariableName}'.");
     }
-
     private static uint AlignUp(uint value, uint alignment) =>
         ((((value + alignment) - 1) / alignment) * alignment);
-    private static ShaderBindingKind BindingKind(ShaderInterfaceMemberKind kind) =>
+    // The first reflected binding one view does not place, with the view's binding at its place, if any.
+    private static (int Index, ShaderInterfaceBinding Binding, ShaderInterfaceBinding? Expected)? FirstMismatch(IReadOnlyList<ShaderInterfaceBinding> expected, IReadOnlyList<ShaderInterfaceBinding> reflected) {
+        for (var index = 0; (index < reflected.Count); index++) {
+            var binding = reflected[index];
+            var candidate = expected.FirstOrDefault(predicate: candidate => (
+                (candidate.Set == binding.Set) &&
+                (candidate.Binding == binding.Binding) &&
+                (candidate.Kind == binding.Kind) &&
+                (candidate.Pushed == binding.Pushed)
+            ));
+
+            if (
+                (candidate is null) ||
+                !string.Equals(a: candidate.Name, b: binding.Name, comparisonType: StringComparison.Ordinal) ||
+                (candidate.ElementStride != binding.ElementStride) ||
+                (candidate.Count != binding.Count) ||
+                !binding.Members.SequenceEqual(second: candidate.Members)
+            ) {
+                return (index, binding, candidate);
+            }
+        }
+
+        return null;
+    }
+    // Whether a group's binding is a buffer with no element type, whose reflected stride is each backend's raw stride.
+    private static bool IsRawBuffer(ShaderInterfaceGroupLayout group, ShaderInterfaceBinding binding) =>
+        group.Resources.Any(predicate: resource => (
+            (resource.Binding == binding.Binding) &&
+            (resource.Kind is GpuBindingKind.ReadOnlyBuffer or GpuBindingKind.ReadWriteBuffer) &&
+            (resource.Member.Type is null)
+        ));
+    private static GpuBindingKind BindingKind(ShaderInterfaceMemberKind kind) =>
         kind switch {
-            ShaderInterfaceMemberKind.SampledImage => ShaderBindingKind.SampledImage,
-            ShaderInterfaceMemberKind.StorageImage => ShaderBindingKind.StorageImage,
-            ShaderInterfaceMemberKind.Sampler => ShaderBindingKind.Sampler,
+            ShaderInterfaceMemberKind.SampledImage => GpuBindingKind.SampledImage,
+            ShaderInterfaceMemberKind.StorageImage => GpuBindingKind.StorageImage,
+            ShaderInterfaceMemberKind.ReadOnlyBuffer or ShaderInterfaceMemberKind.Array => GpuBindingKind.ReadOnlyBuffer,
+            ShaderInterfaceMemberKind.ReadWriteBuffer => GpuBindingKind.ReadWriteBuffer,
+            ShaderInterfaceMemberKind.Sampler => GpuBindingKind.Sampler,
             _ => throw new ArgumentOutOfRangeException(
                 actualValue: kind,
                 message: "The member kind is not a binding of its own.",
                 paramName: nameof(kind)
             ),
         };
-    private static ShaderInterfaceGroupLayout LayOutGroup(ShaderInterfaceGroup group, string interfaceName, IReadOnlyList<ShaderInterfaceMember> members, bool pushed) {
+    private static ShaderInterfaceGroupLayout LayOutGroup(ShaderInterfaceGroup group, string interfaceName, string variableName, IReadOnlyList<ShaderInterfaceMember> members) {
         var set = ((uint)group);
         var blockMembers = new List<ShaderInterfaceBlockMember>();
         var cursor = 0u;
 
         foreach (var member in members.Where(predicate: static member => member.IsBlockMember)) {
             var type = member.Type!.Value;
-            var isArray = (member.Kind == ShaderInterfaceMemberKind.Array);
-            var alignment = (isArray
+            var length = (member.Length ?? 0u);
+            var alignment = ((length != 0u)
                 ? RowBytes
                 : type.ComponentCount() switch {
                     1 => 4u,
@@ -154,23 +304,15 @@ public sealed class ShaderInterfaceLayout {
                 ));
             }
 
-            if (isArray) {
-                blockMembers.Add(item: new ShaderInterfaceBlockMember(
-                    Length: member.Length!.Value,
-                    Name: member.Name,
-                    Offset: offset,
-                    Type: RowType(type: type)
-                ));
-                cursor = (offset + (RowBytes * member.Length.Value));
-            } else {
-                blockMembers.Add(item: new ShaderInterfaceBlockMember(
-                    Length: 0,
-                    Name: member.Name,
-                    Offset: offset,
-                    Type: type
-                ));
-                cursor = (offset + type.SizeBytes());
-            }
+            blockMembers.Add(item: new ShaderInterfaceBlockMember(
+                Length: length,
+                Name: member.Name,
+                Offset: offset,
+                Type: type
+            ));
+            cursor = (offset + ((length != 0u)
+                ? checked((length * RowBytes))
+                : type.SizeBytes()));
         }
 
         var bindings = new List<ShaderInterfaceBinding>();
@@ -183,21 +325,23 @@ public sealed class ShaderInterfaceLayout {
                 group: group,
                 interfaceName: interfaceName
             );
-            blockVariableName = ShaderInterface.BlockVariableName(group: group);
+            blockVariableName = variableName;
             bindings.Add(item: new ShaderInterfaceBinding(
                 Binding: 0,
-                Kind: (pushed
-                    ? ShaderBindingKind.PushConstants
-                    : ShaderBindingKind.ConstantBuffer),
+                Kind: GpuBindingKind.ConstantBuffer,
                 Members: blockMembers.AsReadOnly(),
                 Name: blockVariableName,
                 Set: set
             ));
         }
 
+        var next = ((uint)bindings.Count);
+
         foreach (var member in members.Where(predicate: static member => !member.IsBlockMember)) {
-            var binding = ((uint)bindings.Count);
+            var binding = next;
             var kind = BindingKind(kind: member.Kind);
+
+            next = checked((binding + member.DescriptorCount));
 
             resources.Add(item: new ShaderInterfaceResourceLayout(
                 Binding: binding,
@@ -206,6 +350,11 @@ public sealed class ShaderInterfaceLayout {
             ));
             bindings.Add(item: new ShaderInterfaceBinding(
                 Binding: binding,
+                Count: member.DescriptorCount,
+                ElementStride: (kind switch {
+                    GpuBindingKind.ReadOnlyBuffer or GpuBindingKind.ReadWriteBuffer => (member.Type?.SizeBytes() ?? SpirvRawBufferStride),
+                    _ => 0,
+                }),
                 Kind: kind,
                 Members: [],
                 Name: member.Name,
@@ -223,40 +372,32 @@ public sealed class ShaderInterfaceLayout {
             BlockVariableName: blockVariableName,
             Bindings: bindings.AsReadOnly(),
             Group: group,
-            Pushed: pushed,
             Resources: resources.AsReadOnly(),
             Set: set
         );
     }
-    private static ShaderValueType RowType(ShaderValueType type) =>
-        ShaderValueTypes.FromComponents(
-            count: 4,
-            kind: type.ScalarKind()
-        );
 }
-/// <summary>One image or sampler member placed at its binding.</summary>
+/// <summary>One image, buffer, array or sampler member placed at its binding.</summary>
 /// <param name="Member">The interface member.</param>
 /// <param name="Binding">The Vulkan binding number, which is also the Direct3D 12 register number.</param>
 /// <param name="Kind">The binding kind.</param>
 public sealed record ShaderInterfaceResourceLayout(
     ShaderInterfaceMember Member,
     uint Binding,
-    ShaderBindingKind Kind
+    GpuBindingKind Kind
 );
 /// <summary>One frequency group of a <see cref="ShaderInterfaceLayout"/>.</summary>
 /// <param name="Group">The frequency group.</param>
 /// <param name="Set">The Vulkan descriptor set and Direct3D 12 register space.</param>
 /// <param name="BlockTypeName">The HLSL struct name of the group's constant block, or <see langword="null"/> when the
-/// group has no values or arrays.</param>
+/// group has no values.</param>
 /// <param name="BlockVariableName">The HLSL variable name of the group's constant block, or <see langword="null"/>
-/// when the group has no values or arrays.</param>
+/// when the group has no values.</param>
 /// <param name="BlockMembers">The block's members in offset order, padding included; empty when the group has no
 /// block.</param>
 /// <param name="BlockSizeBytes">The block's size in bytes, a multiple of 16; zero when the group has no block.</param>
-/// <param name="Resources">The group's images and samplers in binding order.</param>
+/// <param name="Resources">The group's images, buffers, arrays and samplers in binding order.</param>
 /// <param name="Bindings">Every binding of the group, block first, in binding order.</param>
-/// <param name="Pushed">Whether the group's block is delivered as push constants rather than bound as a constant
-/// buffer.</param>
 public sealed record ShaderInterfaceGroupLayout(
     ShaderInterfaceGroup Group,
     uint Set,
@@ -265,6 +406,5 @@ public sealed record ShaderInterfaceGroupLayout(
     IReadOnlyList<ShaderInterfaceBlockMember> BlockMembers,
     uint BlockSizeBytes,
     IReadOnlyList<ShaderInterfaceResourceLayout> Resources,
-    IReadOnlyList<ShaderInterfaceBinding> Bindings,
-    bool Pushed
+    IReadOnlyList<ShaderInterfaceBinding> Bindings
 );

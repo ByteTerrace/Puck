@@ -1,6 +1,9 @@
 using System.Globalization;
+using System.Numerics;
 using System.Text;
 using Puck.Commands;
+using Puck.Hosting;
+using Puck.Maths;
 using Puck.World.Client;
 using Puck.World.Protocol;
 
@@ -8,8 +11,8 @@ namespace Puck.World;
 
 /// <summary>
 /// The window-composition verb surface — the LIVE session override <c>view.override</c> (composition authority that
-/// changes what every seat sees) plus the pipe-assertable <c>world.view.state</c> and
-/// <c>world.view.pointer</c> reads.
+/// changes what every seat sees) plus the pipe-assertable <c>world.view.state</c>, <c>world.view.pointer</c> and
+/// <c>world.view.panes</c> reads.
 /// The durable views-section rows are authored through the general <see cref="WorldRowCommandModule"/> —
 /// <c>world.row.set views.seatRig &lt;json&gt;</c> for the keyless row, and
 /// <c>world.row.set</c>/<c>world.row.remove views.layouts ...</c> for the keyed one. Control FEEL is not a views row
@@ -31,8 +34,9 @@ namespace Puck.World;
 /// and a boot shape that does not register the verb name refuses the document at vocabulary composition.
 /// <see cref="IServerLink"/> and <see cref="WorldViewComposer"/> are core, so <c>view.override</c> and
 /// <c>world.view.state</c> function headless; <see cref="WorldCursorFeed"/> is presentation-only, so it is optional
-/// (default <see langword="null"/>) and <c>world.view.pointer</c> refuses by name when it is absent.</para></remarks>
-internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer composer, WorldCursorFeed? cursorFeed = null, WorldRenderProbe? renderProbe = null) : ICommandModule {
+/// (default <see langword="null"/>) and <c>world.view.pointer</c> refuses by name when it is absent, as
+/// <c>world.view.panes</c> does without the GPU presentation's <see cref="WorldViewGraphHost"/>.</para></remarks>
+internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer composer, WorldClient client, WorldCursorFeed? cursorFeed = null, WorldRenderProbe? renderProbe = null, WorldViewGraphHost? graphs = null) : ICommandModule {
     // The plan-wide clear-to-absent tokens for a live override: 'auto' (and '-') clear it back to the composer's own
     // selection; any other token is the forced name.
     private static string? ClearOrName(string token) =>
@@ -48,6 +52,31 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
             ? null
             : token
         );
+    // A layout cycle ('toggle' or 'next') over the authored layouts the last composition saw, refused by name when there
+    // are none rather than clearing the override.
+    private CommandResult Cycle(CommandContext context, string? name, string token) => ((name is null)
+        ? CommandResult.Error(output: $"[view.override: layout {token} has no authored views.layouts row to select]")
+        : Submit(
+            composition: new WorldComposition.SetActiveLayout(Name: name),
+            context: context
+        ));
+    private static string NamesOf(IEnumerable<string> names) => ((string.Join(separator: ", ", values: names) is { Length: > 0 } joined)
+        ? joined
+        : "(none)");
+    // Submits an override and echoes what it asked for; the server's composition gate prints a denial by name on stderr
+    // and changes nothing.
+    private CommandResult Submit(CommandContext context, WorldComposition composition) {
+        link.SubmitComposition(
+            composition: composition,
+            principal: context.Principal
+        );
+
+        return new CommandResult(Output: composition switch {
+            WorldComposition.SetActiveLayout layout => $"[view.override: layout {(layout.Name ?? "auto")}]",
+            WorldComposition.SelectCamera camera => $"[view.override: camera {(camera.Name ?? "auto")}]",
+            _ => throw new ArgumentOutOfRangeException(paramName: nameof(composition)),
+        });
+    }
     private CommandResult DescribePointer() {
         if (cursorFeed is not { } feed) {
             return CommandResult.Error(output: "[world.view.pointer: requires a windowed boot — headless registers this verb for vocabulary parity only]");
@@ -74,6 +103,117 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
             : "none")} syscount={status.SystemReleaseCount}]"
         ));
     }
+    // A walk's step as the echo prints it: the source by kind and name, and the pixel the hit maps to, or off-source.
+    private static string DescribeStep(RenderGraphHitStep step) => string.Create(
+        provider: CultureInfo.InvariantCulture,
+        handler: $"{((step.Mapping.Source.Kind == SourceHandleKind.Producer) ? "producer" : "instance")}:{step.Mapping.Source.Name} {(step.Hit.IsOnSource ? $"pixel {step.Hit.PixelX},{step.Hit.PixelY}" : "off-source")}"
+    );
+    // A point as the echo prints it, to two decimals.
+    private static string DescribePoint(Vector3 point) => string.Create(
+        provider: CultureInfo.InvariantCulture,
+        handler: $"{point.X:0.##},{point.Y:0.##},{point.Z:0.##}"
+    );
+    // A published pane's position in drawing order, found by reference; -1 when it is no longer published.
+    private static int IndexOf(IReadOnlyList<SourceMapping> panes, SourceMapping pane) {
+        for (var index = 0; (index < panes.Count); index++) {
+            if (ReferenceEquals(
+                objA: panes[index],
+                objB: pane
+            )) {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+    // Lists the panes the render graph's root last published, in drawing order, and, given a display point, what the
+    // presentation picker and the hit walk through the live instance set answer there, then the pane the pointer hovers.
+    private CommandResult DescribePanes(WireArgs args) {
+        if (graphs is not { } host) {
+            return CommandResult.Error(output: "[world.view.panes: requires a GPU presentation — a headless boot publishes no panes]");
+        }
+        if (args.Count is not (0 or 2)) {
+            return CommandResult.Usage(
+                form: "[<x> <y>]",
+                verb: "world.view.panes"
+            );
+        }
+
+        var builder = new StringBuilder(value: "[world.view.panes: ");
+
+        _ = builder.Append(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"display {host.DisplayWidth}x{host.DisplayHeight} panes={host.Panes.Count}"
+        );
+
+        for (var index = 0; (index < host.Panes.Count); index++) {
+            _ = builder.Append(
+                provider: CultureInfo.InvariantCulture,
+                handler: $" | pane{index} {host.Panes[index].Describe()}"
+            );
+        }
+
+        if (args.Count == 2) {
+            if (
+                !float.TryParse(
+                    provider: CultureInfo.InvariantCulture,
+                    result: out var x,
+                    s: args[0].ToString(),
+                    style: NumberStyles.Float
+                ) ||
+                !float.TryParse(
+                    provider: CultureInfo.InvariantCulture,
+                    result: out var y,
+                    s: args[1].ToString(),
+                    style: NumberStyles.Float
+                ) ||
+                !float.IsFinite(f: x) ||
+                !float.IsFinite(f: y)
+            ) {
+                return CommandResult.Error(output: "[world.view.panes: expected a display point as two finite numbers, in display pixels from the top-left corner]");
+            }
+
+            var picked = (host.Picker.TryPick(
+                pick: out var pick,
+                point: new Vector2(
+                    x: x,
+                    y: y
+                )
+            )
+                ? string.Create(
+                    provider: CultureInfo.InvariantCulture,
+                    handler: $"{((pick.Source.Kind == SourceHandleKind.Producer) ? "producer" : "instance")}:{pick.Source.Name} pixel {pick.Hit.PixelX},{pick.Hit.PixelY}"
+                )
+                : "none");
+            var walk = host.Walk(point: new FixedVector2(
+                X: FixedQ4816.FromDouble(value: x),
+                Y: FixedQ4816.FromDouble(value: y)
+            ));
+            var ended = ((walk is null)
+                ? "no-runtime"
+                : string.Create(
+                    provider: CultureInfo.InvariantCulture,
+                    handler: $"{walk.End} steps={walk.Steps.Count}{((walk.Instance >= 0) ? $" in {host.InstanceName(index: walk.Instance)}" : string.Empty)}{((walk.Steps.Count > 0) ? $" last {DescribeStep(step: walk.Steps[^1])}" : string.Empty)}{((walk.Surface is { } surface) ? $" surface {DescribePoint(point: surface.ToVector3())}" : string.Empty)}"
+                ));
+
+            _ = builder.Append(
+                provider: CultureInfo.InvariantCulture,
+                handler: $" | at {x:0.###},{y:0.###} pick={picked} walk={ended}"
+            );
+        }
+
+        // The pane the pointer hovers, as the cursor feed last asked the picker; the overlay outlines it.
+        var hovered = ((host.HoveredPane is { } pane)
+            ? string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"pane{IndexOf(panes: host.Panes, pane: pane)} {((host.HoveredPick.Source.Kind == SourceHandleKind.Producer) ? "producer" : "instance")}:{host.HoveredPick.Source.Name} pixel {host.HoveredPick.Hit.PixelX},{host.HoveredPick.Hit.PixelY}"
+            )
+            : "none");
+
+        _ = builder.Append(value: " | hovered=").Append(value: hovered);
+
+        return new CommandResult(Output: builder.Append(value: ']').ToString());
+    }
     private string DescribeState() {
         var builder = new StringBuilder(value: "[world.view.state: ");
 
@@ -87,10 +227,10 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
 
         for (var index = 0; (index < composer.Slots.Count); index++) {
             var slot = composer.Slots[index];
-            var occupant = ((slot.Pipeline is { } pipeline)
-                ? (((renderProbe?.Node is { } node) && !node.HasChild(name: pipeline))
-                    ? $"pipeline:{pipeline}:missing"
-                    : $"pipeline:{pipeline}")
+            var occupant = ((slot.Instance is { } instance)
+                ? (((renderProbe?.Root?.Runtime is { } runtime) && (runtime.Instances.IndexOf(name: instance) < 0))
+                    ? $"instance:{instance}:missing"
+                    : $"instance:{instance}")
                 : ((slot.Camera is { } camera)
                     ? $"cam:{camera}"
                     : $"seat{slot.SeatOrder}"
@@ -122,7 +262,7 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "view.override",
-            description: "LIVE composition override, keyed by which slot kind it forces: view.override camera|layout <name|auto>. 'layout' forces the active window layout for every seat; 'camera' resolves every camera-bearing slot to one camera for every seat (the twin of a layout slot's own camera). 'auto' (or '-') clears the override back to the composer's own selection. A BOUND dispatch (a wheel sector or chord row, which carries no tokens) selects the LAYOUT override by its constant Axis1D value: 0 or less clears to auto, n selects the nth authored views.layouts row (document order, 1-based). Gated Control over composition; a denial prints loudly and changes nothing.",
+            description: "LIVE composition override, keyed by which slot kind it forces: view.override camera|layout <name|auto>. 'layout' forces the active window layout for every seat; 'camera' resolves every camera-bearing slot to one camera for every seat (the twin of a layout slot's own camera). 'auto' (or '-') clears the override back to the composer's own selection; 'layout toggle' and 'layout next' cycle the authored layouts. A BOUND dispatch (a wheel sector or chord row, which carries no tokens) selects the LAYOUT override by its constant Axis1D value: -1 toggles, -2 selects the next, n selects the nth authored views.layouts row (document order, 1-based), and any other value clears to auto. Echoes what it submitted ([view.override: layout <name|auto>] or [view.override: camera <name|auto>]) and refuses by name, submitting nothing, a layout or camera the live document does not author, an ordinal past its layouts, and a cycle with no authored layout. Gated Control over composition; a denial prints loudly on stderr and changes nothing.",
             routing: CommandRouting.Simulation,
             valueKind: CommandValueKind.Axis1D,
             handler: (context, args) => {
@@ -131,35 +271,22 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
                     (args.Count == 0)
                 ) {
                     var ordinal = ((int)MathF.Round(x: context.Value.AsAxis1D));
-                    string? layoutName = null;
 
-                    if (ordinal == -1) {
-                        layoutName = composer.ToggleViewportIsolation();
-                    } else if (ordinal == -2) {
-                        layoutName = composer.NextAuthoredLayoutName();
-                    } else if (ordinal >= 1) {
-                        layoutName = composer.AuthoredLayoutName(ordinal: ordinal);
-                        if (layoutName is null) {
-                            return CommandResult.Error(output: $"[view.override: no authored layout at ordinal {ordinal}]");
-                        }
-                    }
-
-                    link.SubmitComposition(
-                        composition: new WorldComposition.SetActiveLayout(Name: layoutName),
-                        principal: context.Principal
-                    );
-
-                    return CommandResult.None;
+                    return (ordinal switch {
+                        -1 => Cycle(context: context, name: composer.ToggleViewportIsolation(), token: "toggle"),
+                        -2 => Cycle(context: context, name: composer.NextAuthoredLayoutName(), token: "next"),
+                        >= 1 => ((composer.AuthoredLayoutName(ordinal: ordinal) is { } layoutName)
+                            ? Submit(context: context, composition: new WorldComposition.SetActiveLayout(Name: layoutName))
+                            : CommandResult.Error(output: $"[view.override: no authored layout at ordinal {ordinal}]")),
+                        _ => Submit(context: context, composition: new WorldComposition.SetActiveLayout(Name: null)),
+                    });
                 }
                 if ((args.Count == 1) && string.Equals(a: args[0].ToString(), b: "toggle", comparisonType: StringComparison.OrdinalIgnoreCase)) {
-                    var toggleName = composer.ToggleViewportIsolation();
-
-                    link.SubmitComposition(
-                        composition: new WorldComposition.SetActiveLayout(Name: toggleName),
-                        principal: context.Principal
+                    return Cycle(
+                        context: context,
+                        name: composer.ToggleViewportIsolation(),
+                        token: "toggle"
                     );
-
-                    return CommandResult.None;
                 }
                 if (args.Count != 2) {
                     return CommandResult.Usage(
@@ -170,40 +297,36 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
 
                 var target = args[0].ToString();
                 var token = args[1].ToString();
-                string? name;
 
-                if (string.Equals(a: target, b: "layout", comparisonType: StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(a: token, b: "toggle", comparisonType: StringComparison.OrdinalIgnoreCase)) {
-                    name = composer.ToggleViewportIsolation();
-                } else if (string.Equals(a: target, b: "layout", comparisonType: StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(a: token, b: "next", comparisonType: StringComparison.OrdinalIgnoreCase)) {
-                    name = composer.NextAuthoredLayoutName();
-                } else {
-                    name = ClearOrName(token: token);
+                if (string.Equals(a: target, b: "layout", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                    if (string.Equals(a: token, b: "toggle", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                        return Cycle(context: context, name: composer.ToggleViewportIsolation(), token: "toggle");
+                    }
+                    if (string.Equals(a: token, b: "next", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                        return Cycle(context: context, name: composer.NextAuthoredLayoutName(), token: "next");
+                    }
+
+                    var layouts = client.Definition.Views.Layouts;
+
+                    return (((ClearOrName(token: token) is { } layout) && !layouts.Any(predicate: candidate => string.Equals(a: candidate.Name, b: layout, comparisonType: StringComparison.Ordinal)))
+                        ? CommandResult.Error(output: $"[view.override: no views.layouts row named '{layout}' — layouts: {NamesOf(names: layouts.Select(selector: static candidate => candidate.Name))}]")
+                        : Submit(context: context, composition: new WorldComposition.SetActiveLayout(Name: ClearOrName(token: token))));
+                }
+                if (string.Equals(a: target, b: "camera", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                    var cameras = client.Definition.Cameras;
+
+                    return (((ClearOrName(token: token) is { } camera) && !cameras.Any(predicate: candidate => string.Equals(a: candidate.Name, b: camera, comparisonType: StringComparison.Ordinal)))
+                        ? CommandResult.Error(output: $"[view.override: no camera named '{camera}' — cameras: {NamesOf(names: cameras.Select(selector: static candidate => candidate.Name))}]")
+                        : Submit(context: context, composition: new WorldComposition.SelectCamera(Name: ClearOrName(token: token))));
                 }
 
-                WorldComposition? composition = target switch {
-                    "layout" => new WorldComposition.SetActiveLayout(Name: name),
-                    "camera" => new WorldComposition.SelectCamera(Name: name),
-                    _ => null,
-                };
-
-                if (composition is null) {
-                    return CommandResult.Error(output: $"[view.override: unknown target '{target}' — camera|layout]");
-                }
-
-                link.SubmitComposition(
-                    composition: composition,
-                    principal: context.Principal
-                );
-
-                return CommandResult.None;
+                return CommandResult.Error(output: $"[view.override: unknown target '{target}' — camera|layout]");
             }
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.view.state",
-            description: "Echoes the live window composition: world.view.state — the active layout name, selection reason (override|authored|builtin), transition progress, and each slot's rect + occupant (seat<order> | cam:<name> | pipeline:<name>, appended :missing when a pipeline slot names a views.pipelines row the render engine has not registered). A query (always echoes) — the pipe-assertable composition read.",
+            description: "Echoes the live window composition: world.view.state — the active layout name, selection reason (override|authored|builtin), transition progress, and each slot's rect + occupant (seat<order> | cam:<name> | instance:<name>, appended :missing when an instance slot names a views.graphs row the render graph does not run). A query (always echoes) — the pipe-assertable composition read.",
             handler: (context, args) => ((CommandResult.RequireNoArguments(
                 args: args,
                 verb: "world.view.state"
@@ -215,13 +338,20 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.view.pointer",
-            description: "Echoes the drawn cursor's last composed frame: world.view.pointer — the seat the pointer rides (1-based; the keyboard's seat, the one WorldPointerSink resolves the mouse onto), the cursor position in CLIENT pixels (position=), the same position mapped into the fixed FRAME extent the overlay draws in (frame= — the two diverge when the OS window is resized; WorldCursorFeed.Decide owns the mapping) and normalized within the seat's viewport (local=), the viewport rect, the visibility verdict (visible | no-position | no-view | outside-viewport | orbit-drag — WorldCursorFeed's one visibility rule), the held pointer buttons (buttons=, L/R/M in that order or '-' — the live store state, so an injected press is assertable before anything acts on it), the live hover target (hover=none, or the hovered panel/world row's label), and the seat's SYSTEM-RELEASE generation (syscount= — WorldPointer.SystemReleaseCount: how many times the store has force-cleared this seat's held buttons without a genuine release event; an edge-deriving consumer compares this against the value it captured at press time to tell a synthetic release from a real one). A query (always echoes) — the pipe-assertable pointer read, the world.view.camera sibling: live per-seat presentation state nothing else can echo.",
+            description: "Echoes the drawn cursor's last composed frame: world.view.pointer — the seat the pointer rides (1-based; the keyboard's seat, the one WorldPointerSink resolves the mouse onto), the cursor position in CLIENT pixels (position=), the same position mapped into the fixed FRAME extent the overlay draws in (frame= — the two diverge when the OS window is resized; WorldCursorFeed.Decide owns the mapping) and normalized within the seat's viewport (local=), the viewport rect, the visibility verdict (visible | no-position | no-view | outside-viewport | orbit-drag — WorldCursorFeed's one visibility rule), the held pointer buttons (buttons=, L/R/M in that order or '-' — the live store state, so an injected press is assertable before anything acts on it), the live hover target (hover=none, or the hovered HUD panel's label, else the hovered display pane's, pane '<instance>'), and the seat's SYSTEM-RELEASE generation (syscount= — WorldPointer.SystemReleaseCount: how many times the store has force-cleared this seat's held buttons without a genuine release event; an edge-deriving consumer compares this against the value it captured at press time to tell a synthetic release from a real one). A query (always echoes) — the pipe-assertable pointer read, the world.view.camera sibling: live per-seat presentation state nothing else can echo.",
             handler: (context, args) => ((CommandResult.RequireNoArguments(
                 args: args,
                 verb: "world.view.pointer"
             ) is { } refusal)
             ? refusal
             : DescribePointer()),
+            routing: CommandRouting.Immediate
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.view.panes",
+            description: "Echoes the panes the render graph's root last published, in drawing order (the world's shown views, then the views.graphs panes): world.view.panes [<x> <y>] — the display extent and, per pane, its SourceMapping (the source by its instance handle, the pane's normalized rect, the source extent the instance last rendered at, the crop, layout, fit, any warp and the destination). Given a display point in display pixels from the top-left corner, it also echoes what the presentation picker answers there (pick=<kind>:<instance> pixel <x>,<y>, or none off every source) and how the hit walk through the live instance set ends (walk=<end> steps=<n>, the instance whose world it ended in, and last <kind>:<source> pixel <x>,<y>, or off-source, for its last hit: a pane, or a screen standing in a view's world, whose mapping world.screens prints, then, when the walk ends in a session's world, surface <x>,<y>,<z>: where its last ray meets the destination's static placements, in the destination's space, so a pick through a portal names the point it lands on). It ends with the pane the pointer hovers, as the drawn cursor's feed last asked the same picker for the pointer's display point each frame (hovered=pane<i> <kind>:<instance> pixel <x>,<y>, which the overlay outlines in the accent hue, or none: no pointer on the window, a steering drag, a hidden cursor policy, a letterbox bar, or no published pane beneath). The pipeline pane pointer maps through the same published mapping. A query (always echoes); refused by name in a boot with no GPU presentation.",
+            handler: (context, args) => DescribePanes(args: args),
             routing: CommandRouting.Immediate
         );
     }

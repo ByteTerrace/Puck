@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
+using Puck.Commands;
 using Puck.Maths;
 
 namespace Puck.World.Protocol;
@@ -44,17 +45,22 @@ public struct ChannelValues {
 }
 /// <summary>One simulation tick's player intent. The vector retains sixteen positional wire slots; the compiled
 /// world channel table assigns every declared channel consecutively and resolves claimed roles to those authored
-/// ordinals.</summary>
+/// ordinals. Beside the vector, an intent may carry the seat's pointer ray, which fits no channel.</summary>
 /// <param name="Channels">The raw per-ordinal fixed-point values.</param>
-public readonly record struct PlayerIntent(ChannelValues Channels) {
+/// <param name="SourceRay">The seat's world-space pointer ray this tick, quantized once at the host
+/// (<see cref="Puck.Commands.CommandValueQuantization.QuantizeAxis3D"/>), or <see langword="null"/> when the seat points
+/// at nothing. The server maps it through a <c>Simulation</c> screen's row in fixed point
+/// (<see cref="WorldScreenMappings.Normalized"/>) and never trusts a host-computed hit.</param>
+public readonly record struct PlayerIntent(ChannelValues Channels, SourceRay? SourceRay = null) {
     /// <summary>Reads one channel's raw value by ordinal — zero for an ordinal no declared channel claims.</summary>
     /// <param name="ordinal">The channel ordinal (<c>0..</c><see cref="ChannelLimits.MaxChannels"/><c>-1</c>).</param>
     public FixedQ4816 this[int ordinal] => Channels[ordinal];
 
     /// <summary>Determines structural equality with <paramref name="other"/> over the WHOLE vector, comparing per
-    /// ordinal. Declared explicitly because the compiler-synthesized record-struct equality would otherwise compare
-    /// <see cref="ChannelValues"/> as a single opaque field (an <c>InlineArray</c> exposes only its first backing
-    /// field to reflection-based equality) — silently comparing only ordinal 0 instead of the vector.</summary>
+    /// ordinal, and the pointer ray. Declared explicitly because the compiler-synthesized record-struct equality would
+    /// otherwise compare <see cref="ChannelValues"/> as a single opaque field (an <c>InlineArray</c> exposes only its
+    /// first backing field to reflection-based equality) — silently comparing only ordinal 0 instead of the
+    /// vector.</summary>
     public bool Equals(PlayerIntent other) {
         for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
             if (Channels[ordinal] != other.Channels[ordinal]) {
@@ -62,10 +68,10 @@ public readonly record struct PlayerIntent(ChannelValues Channels) {
             }
         }
 
-        return true;
+        return (SourceRay == other.SourceRay);
     }
-    /// <summary>Returns a hash consistent with <see cref="Equals(PlayerIntent)"/> — folded over every ordinal, for the same
-    /// reason <see cref="Equals(PlayerIntent)"/> is declared explicitly.</summary>
+    /// <summary>Returns a hash consistent with <see cref="Equals(PlayerIntent)"/> — folded over every ordinal and the
+    /// pointer ray, for the same reason <see cref="Equals(PlayerIntent)"/> is declared explicitly.</summary>
     public override int GetHashCode() {
         var hash = new HashCode();
 
@@ -73,10 +79,12 @@ public readonly record struct PlayerIntent(ChannelValues Channels) {
             hash.Add(value: Channels[ordinal]);
         }
 
+        hash.Add(value: SourceRay);
+
         return hash.ToHashCode();
     }
     /// <summary>Returns this intent with one ordinal replaced — the composition-channel write path (a bound kit
-    /// effect, a wire press, a held device value).</summary>
+    /// effect, a wire press, a held device value). The pointer ray is kept.</summary>
     /// <param name="ordinal">The channel ordinal to replace.</param>
     /// <param name="value">The raw fixed-point value to write.</param>
     public PlayerIntent WithChannel(int ordinal, FixedQ4816 value) {
@@ -84,7 +92,7 @@ public readonly record struct PlayerIntent(ChannelValues Channels) {
 
         channels[ordinal] = value;
 
-        return new PlayerIntent(Channels: channels);
+        return (this with { Channels = channels });
     }
 }
 /// <summary>What fills an entity's intent gaps between tape segments.</summary>

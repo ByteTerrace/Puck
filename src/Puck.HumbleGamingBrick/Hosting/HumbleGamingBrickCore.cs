@@ -24,6 +24,7 @@ public sealed partial class HumbleGamingBrickCore : IQueuedMachineCore {
     private readonly IFramebuffer m_framebuffer;
     private readonly IJoypad m_joypad;
     private readonly IKey1 m_key1;
+    private readonly ILightGun m_lightGun;
     private readonly SystemBus m_systemBus;
     private readonly ITiltSensor m_tiltSensor;
     private readonly StateWriter m_timeTravelWriter = new(capacity: 4096);
@@ -54,7 +55,7 @@ public sealed partial class HumbleGamingBrickCore : IQueuedMachineCore {
     /// <param name="configuration">The hardware model, cartridge, optional boot ROM, and tick resolution.</param>
     /// <param name="savePath">Optional battery-save path; null keeps saves in memory.</param>
     /// <param name="dmgSpeed">Whether to hold the reported pacing rate at 4,194,304 LCD dots/second, including
-    /// double speed. Choose true when using <see cref="CyclesPerSecond"/> to pace a hardware-speed host loop.</param>
+    /// double speed. Choose true when using <see cref="CycleRate"/> to pace a hardware-speed host loop.</param>
     public HumbleGamingBrickCore(MachineConfiguration configuration, string? savePath = null, bool dmgSpeed = false) {
         CheckpointIdentity = MachineCheckpointIdentity.Compute(
             FormattableString.Invariant(formattable: $"puck.hgb.core.v1/{MachineIdentity.CurrentVersion}/{((int)configuration.Model)}/{configuration.TickResolution.SubdivisionLog2}/{dmgSpeed}"),
@@ -69,6 +70,7 @@ public sealed partial class HumbleGamingBrickCore : IQueuedMachineCore {
         m_framebuffer = m_machine.GetRequiredService<IFramebuffer>();
         m_joypad = m_machine.GetRequiredService<IJoypad>();
         m_key1 = m_machine.GetRequiredService<IKey1>();
+        m_lightGun = m_machine.GetRequiredService<ILightGun>();
         m_systemBus = m_machine.GetRequiredService<SystemBus>();
         m_tiltSensor = m_machine.GetRequiredService<ITiltSensor>();
 
@@ -78,11 +80,11 @@ public sealed partial class HumbleGamingBrickCore : IQueuedMachineCore {
     /// <inheritdoc/>
     public string CheckpointIdentity { get; }
     /// <inheritdoc/>
-    public ulong CyclesPerSecond =>
-        ((!m_dmgSpeed && m_key1.IsDoubleSpeed)
+    public MachineCycleRate CycleRate =>
+        new(cycles: ((!m_dmgSpeed && m_key1.IsDoubleSpeed)
             ? (2UL * MachineCyclesPerSecond)
             : MachineCyclesPerSecond
-        );
+        ));
     /// <inheritdoc/>
     public long NativeFrameIndex =>
         ((long)(m_machine.Machine.Clock.CycleCount / DotsPerFrame));
@@ -98,10 +100,11 @@ public sealed partial class HumbleGamingBrickCore : IQueuedMachineCore {
         m_machine;
 
     /// <inheritdoc/>
-    public void ApplyInput(in MachinePadState input) =>
+    public void ApplyInput(in MachinePads input) =>
         BrickPad.Apply(
             joypad: m_joypad,
-            pad: in input,
+            lightGun: m_lightGun,
+            pad: in input[0],
             tiltSensor: m_tiltSensor
         );
     /// <summary>Advances by a budget of LCD dots, carrying instruction overshoot into the next call. CPU double
@@ -129,7 +132,7 @@ public sealed partial class HumbleGamingBrickCore : IQueuedMachineCore {
             start: 0
         ));
     /// <inheritdoc/>
-    public ITimeTravelLookahead<MachinePadState> CreateLookahead() =>
+    public ITimeTravelLookahead<MachinePads> CreateLookahead() =>
         new HumbleGamingBrickLookahead(
             instance: m_machine.Fork(),
             oneFrameCycles: DotsPerFrame

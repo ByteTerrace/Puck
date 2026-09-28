@@ -13,7 +13,7 @@ public sealed partial class SdfProgram {
     // The operand lanes a shape carries as reinterpreted integer BITS rather than a float value, as a bit per lane over
     // (Data0.xyzw, Data1.xyzw). A bit pattern there reads as NaN or an infinity as often as it reads as a number, so the
     // finiteness sweep must skip exactly these and no others. KEEP IN SYNC with the asuint() reads in
-    // Assets/Shaders/Sdf/sdf-vm.hlsli: sdfGlyphUnpackUv(data0.x)/sdfGlyphUnpackUv(data0.y), sdfSampledRegion's
+    // Assets/Shaders/Sdf/field/sdf-shapes.hlsli: sdfGlyphUnpackUv(data0.x)/sdfGlyphUnpackUv(data0.y), sdfSampledRegion's
     // asuint(data1.y) packedDims / asuint(data1.z) brickWordOffset, and sdfConvexPolygonSolid's asuint(data0.x)
     // (table offset, vertex count) — patched from a finite 0f placeholder to its real packed value AFTER this sweep
     // runs (see PatchConvexPolygonProfileOffsets), so registering the lane here is a defense against a future caller
@@ -74,25 +74,25 @@ public sealed partial class SdfProgram {
         }
         if (
             (instruction.Op == SdfOp.RotatePlane) &&
-            ((instruction.Shape > 2u) || (instruction.Blend > 2u))
+            (!Enum.IsDefined(value: ((SdfPlane)instruction.Shape)) || !Enum.IsDefined(value: ((SdfAxis)instruction.Blend)))
         ) {
             throw new ArgumentException(
-                message: $"Instruction {index} requires plane and driver indices in [0, 2].",
+                message: $"Instruction {index} requires a defined SdfPlane and SdfAxis.",
                 paramName: paramName
             );
         }
         if (
             (instruction.Op == SdfOp.Shear) &&
-            ((instruction.Shape > 2u) || (instruction.Blend > 2u) || (instruction.Shape == instruction.Blend))
+            (!Enum.IsDefined(value: ((SdfAxis)instruction.Shape)) || !Enum.IsDefined(value: ((SdfAxis)instruction.Blend)) || (instruction.Shape == instruction.Blend))
         ) {
             throw new ArgumentException(
-                message: $"Instruction {index} requires distinct shear axes in [0, 2].",
+                message: $"Instruction {index} requires distinct defined shear axes.",
                 paramName: paramName
             );
         }
         if (
             (instruction.Op == SdfOp.AxialProfile) &&
-            ((instruction.Shape > 2u) || (instruction.Data1.Y <= 0f) || (instruction.Data0.W <= 0f))
+            (!Enum.IsDefined(value: ((SdfAxis)instruction.Shape)) || (instruction.Data1.Y <= 0f) || (instruction.Data0.W <= 0f))
         ) {
             throw new ArgumentException(
                 message: $"Instruction {index} requires an axis in [0, 2], positive start scale and inverse span.",
@@ -267,7 +267,7 @@ public sealed partial class SdfProgram {
     private static void RequirePackedBlend(uint blend, int index, string paramName) {
         if (!Enum.IsDefined(value: ((SdfBlendOp)blend))) {
             throw new ArgumentException(
-                message: $"SDF ISA v{SdfIsa.Version} refuses undeclared blend {blend} at instruction {index}.",
+                message: $"The SDF instruction set refuses undeclared blend {blend} at instruction {index}.",
                 paramName: paramName
             );
         }
@@ -621,7 +621,7 @@ public sealed partial class SdfProgram {
 
             if (!Enum.IsDefined(value: ((SdfShapeType)instruction.Shape))) {
                 throw new ArgumentException(
-                    message: $"SDF ISA v{SdfIsa.Version} refuses undeclared shape {instruction.Shape} at instruction {index}.",
+                    message: $"The SDF instruction set refuses undeclared shape {instruction.Shape} at instruction {index}.",
                     paramName: instructionsParamName
                 );
             }
@@ -648,7 +648,7 @@ public sealed partial class SdfProgram {
             }
 
             if (instruction.Material >= ((uint)SdfProgramBuilder.ScreenMaterialId)) {
-                // The sentinel band: SdfProgramBuilder.ScreenMaterialId is the plain procedural screen material (it
+                // The sentinel band: SdfProgramBuilder.ScreenMaterialId is the plain screen material, unbound glass (it
                 // reads no side table), and every id above it decodes to a direct screen-surface index.
                 if (instruction.Material == ((uint)SdfProgramBuilder.ScreenMaterialId)) {
                     continue;
@@ -674,7 +674,7 @@ public sealed partial class SdfProgram {
             }
         }
 
-        var seenScreenIndices = 0u;   // A bit per slot: MaxScreenSurfaces is 32, the same width the engine's screenMask push word carries.
+        Span<bool> seenScreenIndices = stackalloc bool[SdfProgramBuilder.MaxScreenSurfaces];
 
         foreach (var surface in m_screenSurfaces) {
             if (
@@ -687,16 +687,14 @@ public sealed partial class SdfProgram {
                 );
             }
 
-            var bit = (1u << surface.ScreenIndex);
-
-            if (0u != (seenScreenIndices & bit)) {
+            if (seenScreenIndices[surface.ScreenIndex]) {
                 throw new ArgumentException(
                     message: $"Two screen surfaces declare index {surface.ScreenIndex}. The packed table is indexed BY screen index, so one would silently overwrite the other.",
                     paramName: screenSurfacesParamName
                 );
             }
 
-            seenScreenIndices |= bit;
+            seenScreenIndices[surface.ScreenIndex] = true;
 
             if (!VectorFunctions.IsFinite(vector: surface.Origin)) {
                 throw new ArgumentOutOfRangeException(
@@ -771,7 +769,7 @@ public sealed partial class SdfProgram {
                 var raw = ((uint)opcode);
 
                 throw new ArgumentException(
-                    message: $"SDF ISA v{SdfIsa.Version} refuses undeclared opcode {raw} (0x{raw:X8}) at instruction {index}.",
+                    message: $"The SDF instruction set refuses undeclared opcode {raw} (0x{raw:X8}) at instruction {index}.",
                     paramName: "instructions"
                 );
             }

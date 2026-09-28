@@ -146,14 +146,14 @@ public static partial class WorldDefinitionValidator {
         RequireIntRange(
             value: host.Width,
             min: 1,
-            max: 16384,
+            max: WorldHostDefaults.MaxDisplayExtent,
             name: "host.width",
             errors: errors
         );
         RequireIntRange(
             value: host.Height,
             min: 1,
-            max: 16384,
+            max: WorldHostDefaults.MaxDisplayExtent,
             name: "host.height",
             errors: errors
         );
@@ -185,11 +185,23 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"host.presentMode '{host.PresentMode}' is not a defined PresentMode.");
         }
 
+        if (!Enum.IsDefined(value: host.ColorSpace)) {
+            errors.Add(item: $"host.colorSpace '{host.ColorSpace}' is not a defined DisplayColorSpace.");
+        }
+
         if (
-            !Enum.IsDefined(value: host.SurfaceFormat) ||
-            (host.SurfaceFormat == SurfaceFormat.Unknown)
+            (host.PaperWhiteNits is { } paperWhite) &&
+            (
+                double.IsNaN(d: paperWhite) ||
+                (paperWhite < DisplayOutput.SdrWhiteNits) ||
+                (paperWhite > DisplayOutput.MaxPaperWhiteNits)
+            )
         ) {
-            errors.Add(item: $"host.surfaceFormat '{host.SurfaceFormat}' must be a defined non-Unknown SurfaceFormat.");
+            errors.Add(item: $"host.paperWhiteNits {paperWhite} must be {DisplayOutput.SdrWhiteNits} to {DisplayOutput.MaxPaperWhiteNits} nits.");
+        }
+
+        if (WorldHostTokens.ParseSurfaceFormat(token: WorldHostTokens.SurfaceFormatToken(format: host.SurfaceFormat)) is null) {
+            errors.Add(item: $"host.surfaceFormat '{host.SurfaceFormat}' must be {WorldHostTokens.SurfaceFormatRgba} or {WorldHostTokens.SurfaceFormatBgra}.");
         }
 
         if (

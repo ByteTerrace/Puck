@@ -33,7 +33,7 @@ namespace Puck.World;
 /// (<c>world.grant … edit state:&lt;name&gt; verbs:UpsertStateCell,RemoveStateCell</c>), which admits the per-cell
 /// writes while denying the whole-row pair — the difference between bumping a row and redefining it. Revoking either
 /// grant, or narrowing its mask, refuses that principal's writes here, whichever verb produced them.</remarks>
-public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority authority, IServerLink link, WorldDeferredVerbEchoes echoes) : ICommandModule {
+public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority authority, WorldDeferredVerbEchoes echoes) : ICommandModule {
     private static string DescribeCell(WorldStateReadView view, WorldStateRow row, string key, CellValue value, StateAdvance? advance, StateDynamics? dynamics, StateCycle? cycle, StateCellClock? clock) =>
         $"[world.state.cell '{row.Name}'.'{key}' value={DescribeValue(
             row: row,
@@ -556,7 +556,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
     // folded in here); everything else — int/fixed/bool, OR a row this door cannot yet see live — falls through to
     // the numeric/bool token grammar, exactly as this verb always has. A text row declared and written to in the
     // SAME buffered batch (before this door can see it live) is the one case that still needs two steps.
-    private CommandResult HandleCellSet(WorldServer server, CommandContext context, WireArgs args) {
+    private CommandResult HandleCellSet(WorldServer server, IServerLink link, CommandContext context, WireArgs args) {
         if (args.Count < 2) {
             return CommandResult.Usage(
                 form: "<row> <key> <value> [add] | <row> <key> <text...> | <row> <key> <base64url-vector>",
@@ -896,10 +896,10 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             name: "world.state.cell.set",
             description: $"Upserts one cell inside an already-declared row, leaving the row's own shape untouched (declare or redeclare the row with world.row.set state <row-json>): world.state.cell.set <row> <key> <value> [add] | <row> <key> <text...> | <row> <key> <base64url-vector>. The row's declared kind decides the form. When <row> is already live as a text-kind row, everything after <key> is the text, spaces included and unquoted, replacing the cell; 'add' is refused there. When <row> is already live as a vector-kind row, the one token after <key> is the unpadded base64url encoding of the vector's signed 8-bit components. Otherwise (int, fixed or bool, or a row the same batch has not yet declared, which this command cannot see live) <value> is a single token resolved at compose against the row's declared kind, so a same-batch world.row.set state that declares <row> ahead of this line composes first and this line lands against it: decimal text for a fixed-kind row (e.g. \"12.5\"), a whole number for int (or, on a row naming an enum, one of its member names), or true|false for bool, never raw FixedQ4816 bits. The optional trailing 'add' adds <value> to the key's current value (0 if the key is absent) instead of replacing it; it is refused on bool. Any row is reachable; pass the reserved key '{WorldStateRow.SlotKey}' to write a one-value row's own cell. Writing '{WorldStateRow.SlotKey}' on a row declaring 'advance' rebases it: the written value becomes the new base and its epoch becomes this tick, as redeclaring the row does. Writing a keyed cell that carries its own advance rebases that cell the same way, preserving its rate. A row or cell declaring 'dynamics' rebases the same way, preserving which dynamics row it names: its Y0/V0 become the live eased value and velocity at this tick (never the raw write) plus a velocity kick signed by that row's own response, and its epoch becomes this tick. The write moves the truth, never the follower's own position, which keeps chasing from wherever it was. A trailing 'add' adds to the row's live truth (the accumulated value for 'advance', the stored value itself for 'dynamics', never the eased follower position) rather than to the stored base. Buffers and applies at the tick boundary. Refused, against the candidate this batch has built so far rather than a stale read, if <row> names no state row (declare it first), if a numeric/bool write targets a text-kind row or the reverse, if 'add' targets a bool-kind row, if <value> does not parse under <row>'s kind, if the written text exceeds StateCapacity.MaxTextValueLength, if <key> carries the reserved '$' prefix and is not '{WorldStateRow.SlotKey}' (draw and generator bookkeeping such as a cursor or the drawn masks lives in the row's own fields, never in a cell this command can reach), or, at whole-document revalidation, if the resulting value falls outside the row's declared envelope, a non-negative row's value would go negative, the write would grow the row past its capacity, or the acting principal lacks a Mutate/section:state or Edit/state:<row> hold admitting UpsertStateCell.",
             handler: (context, args) => {
-                if (!authority.TryResolveServer(
+                if (!authority.TryResolveInstance(
                     context: context,
                     error: out var error,
-                    server: out var server,
+                    instance: out var instance,
                     verb: "world.state.cell.set"
                 )) {
                     return error;
@@ -908,7 +908,8 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                 return HandleCellSet(
                     args: args,
                     context: context,
-                    server: server
+                    link: instance.SubmissionLink,
+                    server: instance.Server
                 );
             },
             routing: CommandRouting.Simulation
@@ -923,6 +924,10 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                         form: "<row> <key>",
                         verb: "world.state.cell.remove"
                     );
+                }
+
+                if (!authority.TryResolveLink(context: context, error: out var error, link: out var link, verb: "world.state.cell.remove")) {
+                    return error;
                 }
 
                 return link.Submit(mutation: new WorldMutation.RemoveStateCell(
@@ -1102,6 +1107,10 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                     for (var index = 1; (index < args.Count); index++) {
                         keys[(index - 1)] = args[index].ToString();
                     }
+                }
+
+                if (!authority.TryResolveLink(context: context, error: out var error, link: out var link, verb: "world.generate")) {
+                    return error;
                 }
 
                 return link.Submit(mutation: new WorldMutation.Generate(

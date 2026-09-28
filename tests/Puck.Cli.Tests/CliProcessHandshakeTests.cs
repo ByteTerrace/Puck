@@ -44,6 +44,44 @@ public sealed class CliProcessHandshakeTests {
 
         _ = await Assert.ThrowsAnyAsync<OperationCanceledException>(testCode: () => run.WaitAsync(cancellationToken: TestContext.Current.CancellationToken));
     }
+    // A child that exits before reading its input leaves the runner writing into a pipe whose reader is gone: the write
+    // that flushes the input's head fails and leaves its bytes buffered, and the close that sends end of stream flushes
+    // them again. The pipe here is the one a child's exit leaves, a real anonymous pipe whose only reader handle is
+    // closed before anything is written, behind the same buffered stream and auto-flushing writer as a redirected
+    // standard input. The runner's input ends without throwing, so the child's own exit and output decide the run.
+    [Fact]
+    public async Task InputToAChildThatExitedWithoutReadingItEndsTheInputNotTheRun() {
+        using var pipe = new System.IO.Pipes.AnonymousPipeServerStream(direction: System.IO.Pipes.PipeDirection.Out);
+
+        pipe.DisposeLocalCopyOfClientHandle();
+
+        using var stream = new FileStream(
+            access: FileAccess.Write,
+            bufferSize: 4096,
+            handle: new Microsoft.Win32.SafeHandles.SafeFileHandle(
+                ownsHandle: false,
+                preexistingHandle: pipe.SafePipeHandle.DangerousGetHandle()
+            ),
+            isAsync: false
+        );
+        var writer = new StreamWriter(
+            bufferSize: 4096,
+            encoding: new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+            stream: stream
+        ) { AutoFlush = true };
+        var rest = CliProcess.WriteInputHead(
+            input: new string(c: 'x', count: (64 * 1024)),
+            writer: writer
+        );
+
+        await CliProcess.WriteInputAsync(
+            cancellationToken: TestContext.Current.CancellationToken,
+            continuationInput: string.Empty,
+            continueAfter: null,
+            input: rest,
+            writer: writer
+        );
+    }
     [Fact]
     public void AnAlreadyCancelledTokenStartsNoChild() {
         using var cancellation = new CancellationTokenSource();

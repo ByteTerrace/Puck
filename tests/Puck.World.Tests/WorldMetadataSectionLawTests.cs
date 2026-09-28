@@ -396,7 +396,7 @@ public sealed class WorldMetadataSectionLawTests {
         );
 
         Assert.True(
-            condition: WorldDefinitionFileSource.TryLoad(
+            condition: Fixtures.TryLoadDrawn(
                 path: deltaPath,
                 definition: out _,
                 contentHash: out var before,
@@ -415,7 +415,7 @@ public sealed class WorldMetadataSectionLawTests {
         );
 
         Assert.True(
-            condition: WorldDefinitionFileSource.TryLoad(
+            condition: Fixtures.TryLoadDrawn(
                 path: deltaPath,
                 definition: out _,
                 contentHash: out var after,

@@ -7,9 +7,12 @@ namespace Puck.Vulkan.Factories;
 
 /// <summary>
 /// The default <see cref="IVulkanLogicalDeviceFactory"/>: it creates a logical device, enabling the
-/// swapchain extension always and the optional pipeline-executable-properties,
-/// storage-image-without-format, and GPU capability-floor (fp16, 16-bit storage, subgroup-size-control)
-/// features only when the physical device supports them.
+/// swapchain extension, <c>shaderSampledImageArrayDynamicIndexing</c> and <c>fragmentStoresAndAtomics</c> always, refusing a
+/// device without either,
+/// and the optional pipeline-executable-properties,
+/// storage-image-without-format, block-compressed texture (<c>textureCompressionBC</c>), external memory and semaphore,
+/// timeline-semaphore, and GPU capability-floor (fp16, 16-bit storage, subgroup-size-control) features only when the
+/// physical device supports them.
 /// </summary>
 public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
     /// <summary>Diagnostic introspection extension (compiled register counts etc.); enabled
@@ -38,6 +41,9 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
     // the pipeline-stage create-info; probing the device's Features2 with it returns FALSE on hardware that DOES
     // support the feature.
     private const uint StructureTypePhysicalDeviceSubgroupSizeControlFeatures = 1000225002;
+    // VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES; its first VkBool32 is timelineSemaphore, which a
+    // Direct3D 12 shared fence imported as a semaphore needs.
+    private const uint StructureTypePhysicalDeviceTimelineSemaphoreFeatures = 1000207000;
     private const string SwapchainExtension = "VK_KHR_swapchain";
 
     /// <summary>Win32 external-memory import, for sampling a texture another backend (Direct3D 12) produced
@@ -47,6 +53,13 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
         "VK_KHR_external_memory",
         "VK_KHR_external_memory_win32",
     ];
+    /// <summary>Win32 external-semaphore import, for waiting on a Direct3D 12 shared fence imported as a timeline
+    /// semaphore (<c>VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_D3D12_FENCE_BIT</c>). Enabled whenever supported, with the
+    /// timeline-semaphore feature; the base extension is core in Vulkan 1.1.</summary>
+    private static readonly string[] ExternalSemaphoreExtensions = [
+        "VK_KHR_external_semaphore",
+        "VK_KHR_external_semaphore_win32",
+    ];
     /// <summary>Closed-loop present-timing extensions: <c>present_id</c> tags each present, <c>present_wait</c> blocks
     /// until it is displayed. Enabled only when both extensions AND both features are supported; otherwise the host pacer
     /// stays open-loop. present_wait depends on present_id, so both are required together.</summary>
@@ -54,11 +67,31 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
         "VK_KHR_present_id",
         "VK_KHR_present_wait",
     ];
-    // 0-based VkPhysicalDeviceFeatures flag indices for storage-image read/write without a
-    // shader format qualifier (shaderStorageImage*WithoutFormat) — needed to write image
-    // views whose format (commonly BGRA8) has no GLSL format qualifier. Enabled only when
-    // the device reports them; callers that need them probe separately and fall back otherwise.
-    private static readonly uint[] StorageImageFeatureIndices = [31u, 32u, 36u];
+
+    // The 0-based VkPhysicalDeviceFeatures flag index of textureCompressionBC: every BC1 to BC7 format is sampleable
+    // from optimal-tiling images. VulkanLogicalDevice.SamplesBlockCompression records whether it was enabled, and an
+    // upload of a block-compressed format refuses a device without it.
+    private const uint TextureCompressionBcFeatureIndex = 22u;
+    // The 0-based VkPhysicalDeviceFeatures flag index of shaderSampledImageArrayDynamicIndexing: an array of sampled
+    // images or samplers may be indexed by a dynamically uniform value, as the SDF screen shading always indexes its
+    // screen sources and samplers, so a device without it is refused.
+    private const uint SampledImageArrayDynamicIndexingFeatureIndex = 34u;
+    // The 0-based VkPhysicalDeviceFeatures flag index of fragmentStoresAndAtomics: a fragment stage may write and
+    // atomically add to storage buffers, as the SDF mesh pass's fragments count the texels they write, so a device without
+    // it is refused.
+    private const uint FragmentStoresAndAtomicsFeatureIndex = 26u;
+
+    // The base features every device is created with, in index order, the order they are enabled in, each with its name and what needs
+    // it; a device reporting any of them absent is refused naming it.
+    private static readonly (uint Index, string Feature, string Need)[] RequiredBaseFeatures = [
+        (FragmentStoresAndAtomicsFeatureIndex, "fragmentStoresAndAtomics", "the SDF mesh pass's fragments need to count the texels they write"),
+        (SampledImageArrayDynamicIndexingFeatureIndex, "shaderSampledImageArrayDynamicIndexing", "the SDF screen shading needs to index its screen sources and samplers"),
+    ];
+    // 0-based VkPhysicalDeviceFeatures flag indices enabled only when the device reports them: textureCompressionBC,
+    // storage-image read/write without a shader format qualifier (shaderStorageImage*WithoutFormat), needed to write
+    // image views whose format (commonly BGRA8) has no GLSL format qualifier, and dynamic indexing of storage-image
+    // arrays; callers that need those probe separately and fall back otherwise.
+    private static readonly uint[] OptionalBaseFeatureIndices = [TextureCompressionBcFeatureIndex, 31u, 32u, 36u];
 
     private readonly IVulkanLogicalDeviceApi m_logicalDeviceApi;
     private readonly IVulkanPhysicalDeviceApi m_physicalDeviceApi;
@@ -154,6 +187,22 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
             extensions.AddRange(collection: ExternalMemoryExtensions);
         }
 
+        if (m_physicalDeviceApi.HasDeviceExtension(
+            extensionName: "VK_KHR_external_semaphore_win32",
+            instance: instance,
+            physicalDeviceHandle: physicalDeviceHandle
+        )) {
+            extensions.AddRange(collection: ExternalSemaphoreExtensions);
+        }
+
+        if (m_physicalDeviceApi.IsExtensionFeatureSupported(
+            instance: instance,
+            physicalDeviceHandle: physicalDeviceHandle,
+            structureType: StructureTypePhysicalDeviceTimelineSemaphoreFeatures
+        )) {
+            featureStructureTypes.Add(item: StructureTypePhysicalDeviceTimelineSemaphoreFeatures);
+        }
+
         var presentTiming = SupportsPresentTiming(
             instance: instance,
             physicalDeviceHandle: physicalDeviceHandle
@@ -177,14 +226,39 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
 
         return (extensions, featureStructureTypes);
     }
-    private IReadOnlyList<uint> ComposeFeatureIndices(VulkanInstanceCommands instance, nint physicalDeviceHandle) {
-        var support = m_physicalDeviceApi.GetFeatureSupport(
+    private IReadOnlyList<uint> ComposeFeatureIndices(VulkanInstanceCommands instance, nint physicalDeviceHandle) =>
+        FeatureIndicesOf(support: m_physicalDeviceApi.GetFeatureSupport(
             instance: instance,
             physicalDeviceHandle: physicalDeviceHandle
-        );
+        ));
+
+    /// <summary>Returns the <c>VkPhysicalDeviceFeatures</c> flag indices a device is created with: the required
+    /// <c>shaderSampledImageArrayDynamicIndexing</c>, which the SDF screen shading's indexed screen sources and samplers
+    /// need, and <c>fragmentStoresAndAtomics</c>, with which the SDF mesh pass's fragments count the texels they write,
+    /// then each optional feature the device reports.</summary>
+    /// <param name="support">The device's base features, one flag per <c>VkPhysicalDeviceFeatures</c> member in
+    /// declaration order.</param>
+    /// <returns>The flag indices to enable.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="support"/> is <see langword="null"/>.</exception>
+    /// <exception cref="GpuDeviceUnavailableException">The device does not report a required feature; the message names
+    /// it.</exception>
+    public static IReadOnlyList<uint> FeatureIndicesOf(IReadOnlyList<bool> support) {
+        ArgumentNullException.ThrowIfNull(argument: support);
+
         var featureIndices = new List<uint>();
 
-        foreach (var index in StorageImageFeatureIndices) {
+        foreach (var (index, feature, need) in RequiredBaseFeatures) {
+            if (
+                (index >= support.Count) ||
+                !support[((int)index)]
+            ) {
+                throw VulkanResultExtensions.Unavailable(reason: $"The Vulkan device does not report {feature}, which {need}.");
+            }
+
+            featureIndices.Add(item: index);
+        }
+
+        foreach (var index in OptionalBaseFeatureIndices) {
             if (
                 (index < support.Count) &&
                 support[((int)index)]
@@ -195,6 +269,7 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
 
         return featureIndices;
     }
+
     private VkQueue CreateQueue(
         VulkanDeviceCommands device,
         uint queueFamilyIndex
@@ -255,6 +330,29 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
         );
     }
 
+    /// <summary>Refuses, by name, a device that cannot bind the grouped binding contract: fewer descriptor sets than
+    /// its <see cref="GpuPipelineLayoutDescription.GroupCount"/> groups, or a push-constant range smaller than its
+    /// <see cref="GpuPipelineLayoutDescription.PushIndexBytes"/>-byte pushed index. Every supported device reports far
+    /// more of each.</summary>
+    /// <param name="capabilities">The physical device's capabilities, read before the device is created.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="capabilities"/> is <see langword="null"/>.</exception>
+    /// <exception cref="GpuDeviceUnavailableException">The device reports fewer descriptor sets or push-constant bytes
+    /// than the contract binds; the message names each limit it misses.</exception>
+    public static void RequireGroupedBinding(GpuDeviceCapabilities capabilities) {
+        ArgumentNullException.ThrowIfNull(argument: capabilities);
+
+        var missing = new List<string>(capacity: 2);
+
+        if (capabilities.MaxBoundDescriptorSets < GpuPipelineLayoutDescription.GroupCount) {
+            missing.Add(item: $"maxBoundDescriptorSets is {capabilities.MaxBoundDescriptorSets}, below the {GpuPipelineLayoutDescription.GroupCount} binding groups");
+        }
+        if (capabilities.MaxPushConstantBytes < GpuPipelineLayoutDescription.PushIndexBytes) {
+            missing.Add(item: $"maxPushConstantsSize is {capabilities.MaxPushConstantBytes}, below the {GpuPipelineLayoutDescription.PushIndexBytes}-byte pushed index");
+        }
+        if (missing.Count != 0) {
+            throw VulkanResultExtensions.Unavailable(reason: $"The Vulkan device cannot bind Puck's grouped binding contract: {string.Join(separator: "; ", values: missing)}.");
+        }
+    }
     /// <inheritdoc/>
     public VulkanLogicalDevice Create(
         VulkanInstance instance,
@@ -271,16 +369,24 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
             instance: instance.Commands,
             physicalDeviceHandle: physicalDevice.Handle
         );
+        var capabilities = m_physicalDeviceApi.GetDeviceCapabilities(
+            instance: instance.Commands,
+            physicalDeviceHandle: physicalDevice.Handle
+        );
+
+        RequireGroupedBinding(capabilities: capabilities);
+
+        var featureIndices = ComposeFeatureIndices(
+            instance: instance.Commands,
+            physicalDeviceHandle: physicalDevice.Handle
+        );
 
         var (extensionNames, featureStructureTypes) = ComposeExtensionsAndFeatures(
             instance: instance.Commands,
             physicalDeviceHandle: physicalDevice.Handle
         );
         var request = new VulkanLogicalDeviceCreateRequest(
-            EnabledFeatureIndices: ComposeFeatureIndices(
-                instance: instance.Commands,
-                physicalDeviceHandle: physicalDevice.Handle
-            ),
+            EnabledFeatureIndices: featureIndices,
             EnabledFeatureStructureTypes: featureStructureTypes,
             ExtensionNames: extensionNames,
             Instance: instance.Commands,
@@ -334,9 +440,11 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
                 physicalDevice: physicalDevice,
                 presentQueue: presentQueue
             ) {
+                Capabilities = capabilities,
                 Identity = identity,
                 MemoryProfile = memoryProfile,
                 PipelineCache = pipelineCache,
+                SamplesBlockCompression = featureIndices.Contains(value: TextureCompressionBcFeatureIndex),
             };
         } catch {
             pipelineCache?.Dispose();

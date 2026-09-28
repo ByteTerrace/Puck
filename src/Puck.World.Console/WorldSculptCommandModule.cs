@@ -18,14 +18,14 @@ namespace Puck.World;
 /// <see cref="WorldRowCommandModule.TryComposeRemove"/>), stamped with the principal the issuing ingress stamped
 /// (<c>context.Principal</c> — never a principal this module constructs, and never a re-dispatched text line,
 /// which would stamp the shared injection sink's Console identity over whoever actually issued the verb), and
-/// submitted over the link as ordinary <see cref="WorldMutation"/> rows — so the whole-document revalidation, the
+/// submitted through the addressed instance's own <see cref="WorldInstance.SubmissionLink"/> as ordinary <see cref="WorldMutation"/> rows — so the whole-document revalidation, the
 /// per-section <c>Mutate</c> grant check, the tick-boundary apply, the replay tape's recorded mutation entries, and
 /// the deferred <c>[creation.sculpt: …]</c> verdict echo every other row mutation crosses govern a sculpt's edits
 /// identically. Composition is all-or-nothing: a row that fails to compose, or that already has an edit buffered in
 /// this tick window (the shared <see cref="WorldRowStepWindowGuard"/>), refuses the whole sculpt by name before
 /// anything is submitted. There is deliberately no <c>--write</c> flag: writing to disk is <c>world.save</c>.
 /// </summary>
-public sealed class WorldSculptCommandModule(IWorldConsoleAuthority authority, IServerLink link, WorldDeferredVerbEchoes echoes, WorldRowStepWindowGuard stepGuard) : ICommandModule {
+public sealed class WorldSculptCommandModule(IWorldConsoleAuthority authority, WorldDeferredVerbEchoes echoes, WorldRowStepWindowGuard stepGuard) : ICommandModule {
     // The handful of sections a sculpt's SculptPatch (JsonNode-only, no Schema reference — see CreationBuilder's
     // remarks) addresses by their raw document member path, which occasionally differs from the console's own
     // dotted row-verb vocabulary (world.row.set's own path table, Puck.World.WorldRowCommandModule). Identity for
@@ -137,14 +137,17 @@ public sealed class WorldSculptCommandModule(IWorldConsoleAuthority authority, I
                         : "none registered")}]");
                 }
 
-                if (!authority.TryResolveServer(
+                if (!authority.TryResolveInstance(
                     context: context,
                     error: out var error,
-                    server: out var server,
+                    instance: out var instance,
                     verb: "creation.sculpt"
                 )) {
                     return error;
                 }
+
+                var server = instance.Server;
+                var link = instance.SubmissionLink;
 
                 var principal = context.Principal;
                 var document = JsonSerializer.SerializeToNode(
@@ -176,7 +179,7 @@ public sealed class WorldSculptCommandModule(IWorldConsoleAuthority authority, I
                 // Compose every row first (all-or-nothing): a refusal here names the row and submits nothing.
                 var touched = SculptPatch.TouchedRows(results: results);
                 var composed = new List<(string Identity, WorldMutation Mutation)>(capacity: touched.Count);
-                var window = server.NextInputTick;
+                var window = WorldRowStepWindow.Of(server: server);
 
                 foreach (var row in touched) {
                     var verb = PathToVerb.GetValueOrDefault(
@@ -245,10 +248,12 @@ public sealed class WorldSculptCommandModule(IWorldConsoleAuthority authority, I
                 foreach (var (identity, mutation) in composed) {
                     _ = link.Submit(
                         echoes: echoes,
+                        expectedActivation: server.DocumentVersion.Activation,
                         mutation: mutation,
+                        observe: null,
                         verb: "creation.sculpt"
                     );
-                    stepGuard.Claim(rowIdentity: identity);
+                    stepGuard.Claim(rowIdentity: identity, window: window);
                     _ = output.Append(value: '\n').Append(value: $"[creation.sculpt: {name}: {identity} {(IsRemove(mutation: mutation)
                         ? "remove"
                         : "set")} submitted as {principal.Describe()}]");

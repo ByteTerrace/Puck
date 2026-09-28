@@ -4,38 +4,50 @@ using Puck.SignedDistance;
 
 namespace Puck.World.Client;
 
-/// <summary>Renders a world's field lattice: one sampled distance brick per height field, baked on the CPU from the
-/// client's mirror whenever it changes and composed as a union with the field's authored colour. The program shape
-/// is fixed by the lattice declaration — a value change re-uploads a brick, never rebuilds the program.</summary>
+/// <summary>Renders a world's field lattice: one sampled distance brick per height field, baked on the CPU and composed
+/// as a union with the field's authored colour. A field's cells reach it the way every presentation read of state
+/// does, through the client's state mirror: the presentation manifest registers each height field's row whole
+/// (<see cref="WorldStateConversion.Row"/>, the same slot a pass's array bound to <c>state.&lt;field&gt;</c> reads),
+/// and the brick is re-baked whenever that slot moves. The program shape is fixed by the lattice declaration — a
+/// value change re-uploads a brick, never rebuilds the program; a bound colour moving rebuilds it.</summary>
 public sealed class WorldFieldEmitter : ISdfSceneEmitter {
     private const float InverseLambda = 0.57735026f; // 1/√3 — the brick pool's stored-distance scale (KEEP IN SYNC with sdfSampledRegion).
     private const int Reach = 2;
 
     private readonly WorldClient m_client;
+    private readonly WorldBakedColors m_colors;
 
     private int m_cursor;
     private float[] m_heights = [];
+    private int m_pendingChanged;
     private int m_pendingField = -1;
-    private int m_pendingRevision;
+    private float m_pendingHeightScale;
     private ulong m_pendingSerial;
     private int m_pendingSlot;
     private int m_programRevision;
     private bool[] m_ready = [];
     private ISdfBrickBakeService? m_uploadService;
-    private WorldClientFieldLattice? m_uploadedLattice;
-    private int[] m_uploadedRevisions = [];
+    private int[] m_uploadedChanged = [];
+    private int m_uploadedFieldCount;
+    private float[] m_uploadedHeightScales = [];
+    private WorldFieldLatticeDefinition? m_uploadedLattice;
     private float[] m_voxels = [];
 
+    /// <summary>Initializes a new instance of the <see cref="WorldFieldEmitter"/> class over a client.</summary>
+    /// <param name="client">The client whose delivered definition declares the fields and whose state mirror holds
+    /// their cells.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="client"/> is <see langword="null"/>.</exception>
     public WorldFieldEmitter(WorldClient client) {
         ArgumentNullException.ThrowIfNull(argument: client);
 
         m_client = client;
+        m_colors = new WorldBakedColors(mirror: client.StateMirror);
     }
 
     // Each voxel holds the distance to the union of the nearby raised columns (boxes from one cell below the origin
     // to the column top), exact within Reach cells and a conservative lower bound beyond, scaled by 1/√3 as the
     // pool stores it. Voxel (0,0,0) is centred half a cell above boxMin on every axis.
-    private void Bake(WorldClientFieldLattice lattice, float[] heights, float cell, int dimX, int dimY, int dimZ) {
+    private void Bake(WorldFieldLatticeDefinition lattice, float[] heights, float cell, int dimX, int dimY, int dimZ) {
         var far = (Reach * cell);
 
         for (var vz = 0; (vz < dimZ); vz++) {
@@ -171,8 +183,10 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
         );
     }
 
-    /// <summary>Re-bakes and uploads every height field's brick when the mirror has changed.</summary>
+    /// <summary>Re-bakes and uploads a height field's brick when its row's mirror slot has moved since the brick was
+    /// baked, or its height scale has, one field per call.</summary>
     /// <param name="bakes">The engine's brick service.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="bakes"/> is <see langword="null"/>.</exception>
     public void AdvanceBricks(ISdfBrickBakeService bakes) {
         ArgumentNullException.ThrowIfNull(argument: bakes);
 
@@ -182,30 +196,37 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
         )) {
             m_uploadService = bakes;
             m_uploadedLattice = null;
+            m_uploadedFieldCount = 0;
             m_ready = [];
-            m_uploadedRevisions = [];
+            m_uploadedChanged = [];
+            m_uploadedHeightScales = [];
             m_pendingField = -1;
             m_programRevision++;
         }
 
         if (
             !bakes.BrickBakeAvailable ||
-            (m_client.Fields is not { } lattice)
+            (m_client.Definition.Fields is not { } document)
         ) {
             return;
         }
 
-        if (!ReferenceEquals(
-            objA: lattice,
-            objB: m_uploadedLattice
-        )) {
+        var lattice = document.Lattice;
+        var fieldCount = document.Fields.Count;
+
+        if (
+            (lattice != m_uploadedLattice) ||
+            (fieldCount != m_uploadedFieldCount)
+        ) {
             m_uploadedLattice = lattice;
-            m_uploadedRevisions = new int[lattice.FieldCount];
+            m_uploadedFieldCount = fieldCount;
+            m_uploadedChanged = new int[fieldCount];
             Array.Fill(
-                array: m_uploadedRevisions,
+                array: m_uploadedChanged,
                 value: int.MinValue
             );
-            m_ready = new bool[lattice.FieldCount];
+            m_uploadedHeightScales = new float[fieldCount];
+            m_ready = new bool[fieldCount];
             m_pendingField = -1;
             m_cursor = 0;
             m_programRevision++;
@@ -221,7 +242,8 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
                 return;
             }
 
-            m_uploadedRevisions[m_pendingField] = m_pendingRevision;
+            m_uploadedChanged[m_pendingField] = m_pendingChanged;
+            m_uploadedHeightScales[m_pendingField] = m_pendingHeightScale;
 
             if (!m_ready[m_pendingField]) {
                 m_ready[m_pendingField] = true;
@@ -231,8 +253,9 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
             m_pendingField = -1;
         }
 
-        var document = lattice.Document;
-        var cell = document.Lattice.CellSize;
+        var mirror = m_client.StateMirror;
+        var cell = lattice.CellSize;
+        var cellCount = ((lattice.Width * lattice.Layers) * lattice.Depth);
         var dimX = Clamp(cells: (lattice.Width + 2));
         var dimZ = Clamp(cells: (lattice.Depth + 2));
         var dimY = BrickLayers(document: document);
@@ -251,9 +274,21 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
                 document: document,
                 ordinal: candidate
             );
-            var revision = lattice.FieldRevision(field: field);
+            var rowSlot = mirror.SlotOf(
+                binding: new StateBinding(
+                    Key: null,
+                    Row: row.Name,
+                    Target: false
+                ),
+                conversion: WorldStateConversion.Row
+            );
+            var values = mirror.RowValues(slot: rowSlot);
+            var changed = mirror.Changed(slot: rowSlot);
 
-            if (m_uploadedRevisions[field] == revision) {
+            if (
+                (values.Length < cellCount) ||
+                ((m_uploadedChanged[field] == changed) && (m_uploadedHeightScales[field] == row.HeightScale))
+            ) {
                 continue;
             }
 
@@ -265,19 +300,13 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
 
             // Queue at most one field per produced frame. The engine owns one upload staging region per ring slot;
             // repeatedly replacing a whole multi-field queue faster than it drains starves every slot but the first.
+            // A row slot's element i is lattice cell i: z, then layer, then x.
             for (var z = 0; (z < lattice.Depth); z++) {
                 for (var x = 0; (x < lattice.Width); x++) {
                     var raised = 0f;
 
                     for (var y = 0; (y < lattice.Layers); y++) {
-                        raised += (lattice.Value(
-                            cell: lattice.CellIndex(
-                                x: x,
-                                y: y,
-                                z: z
-                            ),
-                            field: field
-                        ) * row.HeightScale);
+                        raised += (((float)values[((((z * lattice.Layers) + y) * lattice.Width) + x)]) * row.HeightScale);
                     }
 
                     m_heights[((z * lattice.Width) + x)] = raised;
@@ -306,7 +335,8 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
                 )
             );
             m_pendingField = field;
-            m_pendingRevision = revision;
+            m_pendingChanged = changed;
+            m_pendingHeightScale = row.HeightScale;
             m_pendingSerial = before.Serial;
             m_pendingSlot = slot;
             m_cursor = ((candidate + 1) % heightFieldCount);
@@ -320,6 +350,9 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
 
         if (m_client.Definition.Fields is not { } document) {
             return;
+        }
+        if (!context.Probe) {
+            m_colors.Begin();
         }
 
         var lattice = document.Lattice;
@@ -352,11 +385,9 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
                 continue;
             }
 
-            // The colour resolves here, at emit time, against the live delivered definition — the brick holds only
-            // distances, so a state-bound colour follows a state cell write on the next definition revision with no
-            // re-bake.
-            var material = builder.AddMaterial(material: new SdfMaterial(Albedo: WorldColor.Resolve(
-                definition: m_client.Definition,
+            // The brick holds only distances, so a state-bound colour is read through the mirror here, and its move
+            // rebuilds the program (WriteRevision) with no re-bake.
+            var material = builder.AddMaterial(material: new SdfMaterial(Albedo: m_colors.Resolve(
                 fallback: Vector3.One,
                 value: row.Color
             )));
@@ -375,7 +406,13 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
         }
     }
     /// <inheritdoc/>
-    public void WriteRevision(Span<int> destination) => destination[0] = m_programRevision;
+    public void WriteRevision(Span<int> destination) {
+        if (m_colors.TryTakeMove()) {
+            m_programRevision++;
+        }
+
+        destination[0] = m_programRevision;
+    }
 
     /// <inheritdoc/>
     public int RevisionComponentCount => 1;

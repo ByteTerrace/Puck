@@ -1,8 +1,7 @@
 using System.Numerics;
 using Puck.Abstractions.Cameras;
-using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
-using Puck.Commands;
+using Puck.Hosting;
 using Puck.Maths;
 using Puck.Overlays;
 using Puck.SdfVm;
@@ -39,7 +38,7 @@ namespace Puck.World.Client;
 /// binder, the seat rigs, and the shimmer baseline whenever the definition revision moves, before the host captures.
 /// </para>
 /// </remarks>
-public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
+public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     // The adjacency render half — neighbour solids and delivered bodies composed through the same isometry contact
     // and handoff use, with remote avatar transforms in its own frozen slot range.
     private readonly WorldAdjacencySceneEmitter m_adjacencies;
@@ -47,6 +46,10 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     // seat-join cue site) resolves its body index through it — one resolution point, so a possession anchor swap
     // moves every derivation together.
     private readonly WorldPerceptionAnchor m_anchor;
+
+    // The query field's static placements' palettes, reused across rebuilds (WorldPlacementStamper.EmitStatic).
+    private readonly WorldStaticPalettes m_queryPalettes = new();
+
     private readonly WorldStampPool m_animator;
     // The audio director: its emitter derivation reconciles at the delivery boundary (AFTER the screen binder —
     // the chiasmus ordering, speakers consume screen slots) and its snapshot publishes at the end of every dress.
@@ -78,9 +81,13 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     // list). See ComposeMarkerCandidates/ComposeMarkerSeat.
     private readonly MarkerStore m_markers;
     private readonly IOverlayPredicateEvaluator? m_overlayFacts;
-    // Null for a document/host with no live pipeline children (no views.pipelines row was registered at boot) — every
-    // pipeline slot then falls through to its degenerate camera fallback below, never a null-reference.
-    private readonly WorldPipelineRuntime? m_pipelines;
+    private readonly WorldViewGraphHost? m_graphs;
+
+    // The display extent the last captured frame was composed for, which the next frame's pane placement reads.
+    private uint m_displayHeight;
+    private uint m_displayWidth;
+    private bool m_displayExtentSupplied;
+
     private readonly WorldBakeSchedule? m_bakes;
     private readonly Func<string, OverlayResolvedGlyph> m_resolveIcon;
     private readonly PlayerRoster m_roster;
@@ -113,20 +120,13 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     private readonly WorldSeatViewports m_viewports;
 
     private int m_builtDefinitionRevision;
-    // This produced frame's dressed SdfFrame, kept from Dress so the LATER RenderViews call can hand it to every
-    // offscreen view as the base each derives its own submission from. Null before the first Dress.
-    private SdfFrame? m_dressedFrame;
     private float m_elapsedSeconds;
+    private double m_presentedSeconds;
     private SdfProgram? m_lastProgram;
     // The no-local-seats fallback's own narration edge (see Dress's tail): true once the "presenting the world
     // camera" line has fired for the CURRENT empty stretch, cleared the instant a seat's view fills m_views again,
     // so a later departure re-narrates instead of staying silent forever.
     private bool m_noLocalSeatsNarrated;
-    // This frame's composed program + packed transforms, stashed by Dress so the post-capture jumbotron pass
-    // (RenderViews) films the SAME program the room renders. Null/empty until the first captured frame.
-    private SdfProgram? m_program;
-    // Advances exactly when the composed program is a NEW instance — the jumbotron engines' re-upload trigger.
-    private int m_programRevision;
 
     private readonly OverlayMarkerChip[][] m_markerChips = new OverlayMarkerChip[PlayerRoster.MaxSlots][];
     private readonly OverlayMarkerSeat[] m_markerSeats = new OverlayMarkerSeat[PlayerRoster.MaxSlots];
@@ -134,7 +134,6 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     // This frame's bounded volumes: the static placements' baked ones, then the stamp pool's slot-riding ones, in
     // that order up to the engine's ceiling (SdfProgramBuilder.MaxVolumes) — reused across frames.
     private readonly List<SdfVolume> m_volumes = new(capacity: SdfProgramBuilder.MaxVolumes);
-    private readonly HashSet<string> m_fedPipelines = new(comparer: StringComparer.Ordinal);
     private readonly WorldRenderCycleTrack m_cycle = new();
     // Per-frame scratch for the listener policy: each joined seat's resolved view-camera pose, slot-indexed.
     private readonly WorldSeatCameraPose[] m_seatCameraPoses = new WorldSeatCameraPose[PlayerRoster.MaxSlots];
@@ -155,6 +154,8 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     private readonly Dictionary<string, WorldCameraRigCompiler.Cache> m_namedCameraRigCache = new(comparer: StringComparer.Ordinal);
     private readonly WorldGroupAnchors m_groupAnchors = new();
     private readonly List<SdfViewSnapshot> m_views = new(capacity: PlayerRoster.MaxSlots);
+    // The frame's views: the presentation's own (m_views), which it places, then the camera views filming the frame.
+    private readonly List<SdfViewSnapshot> m_frameViews = new(capacity: PlayerRoster.MaxSlots);
     private DynamicTransform[] m_transforms = [];
     // One provider per ENGINE screen index (rebuilt each delivery): the closure re-reads the binder's live source every
     // produced frame, so a slot rotating away from text clears its decal the same frame, a slot whose live source
@@ -163,6 +164,11 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     // index by (text, catalog) identity — SetScreenDecal change-detects, but the bake itself should not re-run per frame.
     private readonly Dictionary<int, Func<SdfScreenDecalFrame?>> m_screenDecals = new();
     private readonly Dictionary<int, (WorldScreenSource.Text Text, PackedFontAtlasCatalog Catalog, SdfScreenDecalFrame Frame)> m_screenDecalCache = new();
+
+    // The ink colors the cached decals baked, read through the state mirror; a bound one moving rebakes every decal.
+    private readonly WorldBakedColors m_decalColors;
+    // The colors the presentation query field's build resolves; the query reads no material, so nothing follows them.
+    private readonly WorldBakedColors m_queryColors;
 
     // The BUILTIN viewport ladder for the player at slot-order position `index` of `count`, used only when the
     // world authors no `views.layouts` (WorldViewComposer.ResolveBuiltin's fallback). NormalizedRect convention:
@@ -453,11 +459,14 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
 
             // Only what a body can touch: a solid placement. A presentation-only placement (the wallpaper-folded
             // ground texture) has no fixed-point query twin and would refuse the whole field.
+            m_queryColors.Begin();
             WorldPlacementStamper.EmitStatic(
                 builder: builder,
                 definition: definition,
                 creations: definition.Creations,
-                placements: [.. definition.Placements.Where(predicate: static placement => (placement.Solid is not null))]
+                placements: [.. definition.Placements.Where(predicate: static placement => (placement.Solid is not null))],
+                colors: m_queryColors,
+                palettes: m_queryPalettes
             );
 
             var facets = WorldPrototypeFacets.Derive(
@@ -525,8 +534,10 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             m_screenDecals[index] = () => ResolveScreenDecal(index: capturedIndex);
         }
 
-        // Every decal rebakes on delivery: a source's colors may bind to state cells the delivery moved.
+        // Every decal rebakes on delivery, which may have changed its text; a bound ink color moving in the state mirror
+        // rebakes them too (ResolveScreenDecal).
         m_screenDecalCache.Clear();
+        m_decalColors.Begin();
         // The SAME facets.Faces the binder just reconciled its sources against, threaded to the emitter so the
         // ScreenSlab geometry it composes and the binder's bound sources never disagree about which face maps to
         // which placement — one WorldPrototypeFacets.Derive call per delivery, never two.
@@ -546,8 +557,11 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     private CameraSnapshot ResolveCamera(int slot, NormalizedRect region, uint width, uint height, float deltaSeconds, float interpolationAlpha, out Vector3 eye, out Vector3 target) {
         var route = m_continuum.Route(slot: slot);
         var views = route.Endpoint.Definition.Views;
+        // A seat presented elsewhere frames in the coordinates of the world it is presented in, where the boot world's
+        // static field is not.
+        var presentedHere = (m_continuum.PresentedElsewhere(slot: slot) is null);
 
-        if (m_continuum.TryResolveSeatPose(
+        if (m_continuum.TryResolvePresentedSeatPose(
             interpolationAlpha: interpolationAlpha,
             orientation: out var bodyOrientation,
             position: out var bodyPosition,
@@ -698,10 +712,13 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             target: ref target
         );
 
-        if (ReferenceEquals(
-            objA: rig,
-            objB: chase
-        )) {
+        if (
+            presentedHere &&
+            ReferenceEquals(
+                objA: rig,
+                objB: chase
+            )
+        ) {
             eye = WorldCameraClearance.Resolve(
                 desiredEye: eye,
                 field: m_client.StaticField,
@@ -853,8 +870,11 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         camera = default;
 
         WorldCamera? found = null;
+        var cameras = m_client.Definition.Cameras;
 
-        foreach (var row in m_client.Definition.Cameras) {
+        for (var index = 0; (index < cameras.Count); index++) {
+            var row = cameras[index];
+
             if (string.Equals(
                 a: row.Name,
                 b: name,
@@ -930,11 +950,18 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     // Updates a pipeline instance's pointer state for this frame, in the slot's OWN pixel space (origin top-left, y
     // down): the pointer's CLIENT position maps to FRAME pixels by the same per-axis frame/client scale
     // WorldCursorFeed.Decide applies (the presenters stretch the produced frame over the whole back buffer), then into
-    // the instance's pixels through its pane's published SourceMapping, which reports a point off the pane too, so a drag
-    // that leaves it keeps tracking. The position moves only while the pointer is pressed. No pointer feed (an offscreen
-    // boot), no reported position yet, or a pane with no area leaves the state untouched.
-    private void UpdatePipelinePointer(WorldPipelineRuntime.Entry entry, string name, NormalizedRect region, uint width, uint height) {
-        if (m_pipelines?.ReadPointer is not { } readPointer) {
+    // the instance's pixels through the mapping its pane last published (WorldViewGraphHost.PublishPanes), the pane as the
+    // display last showed it, which reports a point off the pane too, so a drag that leaves it keeps tracking. The
+    // position moves only while the pointer is pressed. No pointer feed (an offscreen boot), no reported position yet, or
+    // a pane that published no mapping leaves the state untouched.
+    private void UpdatePipelinePointer(WorldViewGraphHost.Entry entry, string name, uint width, uint height) {
+        if (
+            (m_graphs is not { ReadPointer: { } readPointer } graphs) ||
+            !graphs.TryGetPane(
+                instance: name,
+                mapping: out var pane
+            )
+        ) {
             return;
         }
 
@@ -956,37 +983,6 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
                 x: (sample.ClientPosition.X * (width / ((float)clientWidth))),
                 y: (sample.ClientPosition.Y * (height / ((float)clientHeight)))
             );
-        }
-
-        // The instance renders at the extent the slot's Resize gives it.
-        var sourceWidth = Math.Max(
-            val1: 1,
-            val2: ((int)(region.Width * width))
-        );
-        var sourceHeight = Math.Max(
-            val1: 1,
-            val2: ((int)(region.Height * height))
-        );
-
-        if (
-            (entry.Pane is not { Placement: SourcePlacement.Pane { Region: var shown } } pane) ||
-            (shown != region) ||
-            (pane.SourceWidth != sourceWidth) ||
-            (pane.SourceHeight != sourceHeight)
-        ) {
-            pane = SourceMapping.WholePane(
-                height: sourceHeight,
-                region: region,
-                source: SourceHandle.Instance(name: name),
-                width: sourceWidth
-            );
-
-            // A pane with no area mid-transition maps no point.
-            if (!pane.TryValidate(refusal: out _)) {
-                return;
-            }
-
-            entry.Pane = pane;
         }
 
         var coordinate = pane.MapDisplayPoint(
@@ -1021,6 +1017,10 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             return null;
         }
 
+        if (m_decalColors.TryTakeMove()) {
+            m_screenDecalCache.Clear();
+            m_decalColors.Begin();
+        }
         if (
             m_screenDecalCache.TryGetValue(
             key: index,
@@ -1040,7 +1040,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
 
         var frame = WorldScreenTextDecal.Bake(
             catalog: catalog,
-            definition: m_client.Definition,
+            colors: m_decalColors,
             text: text
         );
 
@@ -1119,14 +1119,14 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             return false;
         }
 
-        var ndcX = (Vector3.Dot(
+        var ndcX = ((Vector3.Dot(
             vector1: delta,
             vector2: camera.Right
-        ) / ((depth * camera.TanHalfFieldOfView) * camera.AspectRatio));
-        var ndcY = (Vector3.Dot(
+        ) - (depth * camera.FrustumOffset.X)) / ((depth * camera.TanHalfFieldOfView) * camera.AspectRatio));
+        var ndcY = ((Vector3.Dot(
             vector1: delta,
             vector2: camera.Up
-        ) / (depth * camera.TanHalfFieldOfView));
+        ) - (depth * camera.FrustumOffset.Y)) / (depth * camera.TanHalfFieldOfView));
 
         if (
             (MathF.Abs(x: ndcX) > 1.5f) ||
@@ -1144,15 +1144,205 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         return true;
     }
 
-    /// <inheritdoc/>
+    /// <summary>Gets or sets whether the world's view instance has completed an image (<c>RenderGraphRuntime.TryLatestImage</c>),
+    /// which a view must have before the root shows it, so a capture is never served over a stand-in; or
+    /// <see langword="null"/> before a render root is attached, when no view is shown.</summary>
+    public Func<int, bool>? ViewRendered { get; set; }
+
+    /// <summary>Prepares the render graph's frame before its runtime schedules it: reconciles a definition delivered since
+    /// the last frame first, so the screens and cameras the instances' reads are declared from are the delivered ones and a
+    /// screen retargeted to a view shows it on the frame of the change, then publishes the screens' content for the
+    /// frame (<see cref="IWorldScreenPresenter.Publish"/>), so every source the frame acquires sees one answer from
+    /// the capture gate, then reconciles the document's <c>views.graphs</c> rows and the screens' source instances onto
+    /// the runtime, hands every graph instance this frame's presented tick and
+    /// presentation time, then places each view of the world the last composed frame rendered in its rect at its render
+    /// scale and the live upscale sharpness, and, for each graph instance a slot of the last composed layout shows,
+    /// places it in its slot's rect, advances its clock, and hands it this frame's camera, pointer and its own time, and
+    /// then publishes the mapping of every pane the root draws (<see cref="WorldViewGraphHost.PublishPanes"/>), which the
+    /// pane pointer, the picker and the hit walk read. The tick is the state mirror's delivered engine tick and the time
+    /// the mirror's presented engine tick at this frame's interpolation fraction (one for an offscreen presentation), in
+    /// seconds, so a pass reads no wall clock. A lone view covering the whole display at native scale is not shown: the
+    /// root then stands for the world itself. Whether a pane covers the whole display decides whether pixels no view
+    /// covers owe the letterbox color (<see cref="WorldViewGraphHost.PlaceViews"/>). The views and slots are the ones the
+    /// last captured frame composed, since the world producer captures its frame inside the runtime's schedule, so a
+    /// layout change places its views and panes one frame later.</summary>
+    /// <param name="context">The host's frame context.</param>
+    public void PrepareGraph(in FrameContext context) {
+        // The frame context's target extent IS the launcher's live client area (window.Width/Height at this frame's
+        // BeginFrame) — the one place the World side can learn it. Published for the cursor feed's client→frame
+        // mapping (see WorldCursorFeed.Decide); the per-seat views carry the FIXED frame extent instead.
+        m_viewports.PublishClientExtent(
+            width: context.TargetWidth,
+            height: context.TargetHeight
+        );
+        // A delivered screen or camera change reaches the binder before it publishes and before the graph host declares
+        // the world instance's reads, so a screen retargeted to a view the frame already renders (a HUD root) reads it
+        // this frame instead of showing dark glass until the next. The capture's own call is then a no-op.
+        ReconcileDelivery();
+        m_binder.Publish(context: in context);
+
+        if (m_graphs is not { } graphs) {
+            return;
+        }
+
+        graphs.BeginFrame(
+            tonemap: m_client.Definition.Render.Tonemap,
+            views: m_client.Definition.Views
+        );
+
+        var width = m_displayWidth;
+        var height = m_displayHeight;
+        var deltaSeconds = ((float)context.FrameDeltaSeconds);
+        var presented = PresentedFrame(context: in context);
+        var panesCover = false;
+
+        graphs.Present(frame: in presented);
+        graphs.WriteParameters(mirror: m_client.StateMirror);
+
+        var slots = m_composer.Slots;
+
+        for (var index = 0; (index < slots.Count); index++) {
+            var composed = slots[index];
+
+            panesCover |= (
+                (composed.Instance is not null) &&
+                (composed.Region == new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f))
+            );
+        }
+
+        graphs.PlaceViews(
+            panesCover: panesCover,
+            rendered: ViewRendered,
+            sharpness: m_settings.UpscaleSharpness,
+            views: m_views
+        );
+
+        for (var index = 0; (index < slots.Count); index++) {
+            var composed = slots[index];
+            var region = composed.Region;
+
+            if (
+                (composed.Instance is not { } name) ||
+                !graphs.Place(
+                    instance: name,
+                    region: region,
+                    sharpness: m_settings.UpscaleSharpness
+                ) ||
+                !graphs.TryGet(
+                    entry: out var entry,
+                    name: name
+                )
+            ) {
+                continue;
+            }
+
+            var instanceDeltaSeconds = entry.AdvanceClock(presentedSeconds: presented.Time);
+            var row = WorldDefinitionRows.FindGraph(
+                graphs: m_client.Definition.Views.Graphs,
+                name: name
+            );
+            // The paired camera, or NONE: a row without a camera (or whose name fails to resolve) hands the graph a zero
+            // cameraFov with zero vectors — the documented "no paired camera" signal a graph branches on to keep its own
+            // pointer orbit — never a made-up default eye.
+            var cameraPos = Vector3.Zero;
+            var cameraTarget = Vector3.Zero;
+            var cameraUp = Vector3.Zero;
+            var cameraFov = 0f;
+
+            if (
+                (row?.Camera is { } cameraName) &&
+                ResolveNamedCamera(
+                    camera: out var camera,
+                    deltaSeconds: deltaSeconds,
+                    height: height,
+                    name: cameraName,
+                    region: region,
+                    width: width
+                )
+            ) {
+                cameraPos = camera.Position;
+                cameraTarget = (camera.Position + camera.Forward);
+                cameraUp = camera.Up;
+                cameraFov = (2f * MathF.Atan(x: camera.TanHalfFieldOfView));
+                graphs.SetCamera(
+                    camera: in camera,
+                    instance: name
+                );
+            }
+
+            UpdatePipelinePointer(
+                entry: entry,
+                height: height,
+                name: name,
+                width: width
+            );
+            entry.Node.Frame = (presented with {
+                CameraFov = cameraFov,
+                CameraPosition = cameraPos,
+                CameraTarget = cameraTarget,
+                CameraUp = cameraUp,
+                Pointer = entry.Pointer,
+                PointerDown = entry.PointerWasDown,
+                PointerPresses = entry.PointerPresses,
+                Time = entry.ClockSeconds,
+                TimeDelta = instanceDeltaSeconds,
+            });
+        }
+
+        graphs.PublishPanes(
+            displayHeight: height,
+            displayWidth: width
+        );
+    }
+
+    // The frame values every graph instance presents this frame, at the frame's interpolation fraction, or one for an
+    // offscreen presentation.
+    private ShaderFrameValues PresentedFrame(in FrameContext context) {
+        var frame = WorldViewGraphHost.PresentedFrame(
+            fraction: (PinsStateFraction
+                ? 1f
+                : ((float)context.InterpolationAlpha)),
+            mirror: m_client.StateMirror,
+            previousSeconds: m_presentedSeconds
+        );
+
+        m_presentedSeconds = frame.Time;
+
+        return frame;
+    }
+
     /// <inheritdoc/>
     public void AdvanceBricks(ISdfBrickBakeService bakes) => m_fields.AdvanceBricks(bakes: bakes);
+    /// <summary>Sets the display extent the next frame's graph is prepared against, as the host resizes its display:
+    /// <see cref="PrepareGraph"/> places camera-paired panes and publishes pane mappings over it before the world
+    /// producer captures that frame. Own cameras and viewports use this extent even when a camera export asks the shared
+    /// residency for a larger frame. Without a supplied display extent, <see cref="CaptureFrame"/> uses its requested extent.</summary>
+    /// <param name="width">The display's width, in pixels.</param>
+    /// <param name="height">The display's height, in pixels.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="width"/> or <paramref name="height"/> is
+    /// zero.</exception>
+    public void ResizeDisplay(uint width, uint height) {
+        ArgumentOutOfRangeException.ThrowIfZero(value: width);
+        ArgumentOutOfRangeException.ThrowIfZero(value: height);
+
+        m_displayWidth = width;
+        m_displayHeight = height;
+        m_displayExtentSupplied = true;
+    }
     /// <inheritdoc/>
     public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) {
         // deltaSeconds is the launcher's clamped presentation interval, distinct from its whole-step simulation delta.
         // It may drive visual-only animation and the FPS witness, but never feeds authoritative world state.
         m_elapsedSeconds += deltaSeconds;
         m_frameRate.Sample(deltaSeconds: deltaSeconds);
+
+        if (m_displayExtentSupplied) {
+            width = m_displayWidth;
+            height = m_displayHeight;
+        } else {
+            m_displayWidth = width;
+            m_displayHeight = height;
+        }
 
         // Simulation has already advanced on the launcher's exact fixed ticks; the client view holds the two latest
         // snapshot poses. Each active entry's render pose is Lerp(previous tick → current, alpha) plus any eased
@@ -1173,14 +1363,29 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         m_animator.Tick(deltaSeconds: deltaSeconds);
         m_emitter.Tick(deltaSeconds: deltaSeconds);
 
+        // A no-op after PrepareGraph reconciled this frame's delivery; a capture no graph prepares reconciles here.
         ReconcileDelivery();
         m_bakes?.Pump(definition: m_client.Definition);
-        return m_composed.CaptureFrame(
-            deltaSeconds: deltaSeconds,
-            height: height,
-            interpolationAlpha: interpolationAlpha,
-            width: width
-        );
+
+        m_continuum.BeginFrame();
+        try {
+            var frame = m_composed.CaptureFrame(
+                deltaSeconds: deltaSeconds,
+                height: height,
+                interpolationAlpha: interpolationAlpha,
+                width: width
+            );
+
+            // The camera views film this frame, with the transforms and route choices its dress reads.
+            m_binder.PresentFrame(
+                authoritativeTick: m_simulation.Tick,
+                transforms: m_transforms
+            );
+
+            return frame;
+        } finally {
+            m_continuum.EndFrame();
+        }
     }
 
     /// <summary>Gets a value indicating whether every frame presents bound state at the delivered tick itself rather
@@ -1188,11 +1393,10 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     public bool PinsStateFraction { get; init; }
 
     /// <inheritdoc/>
-    public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
+    public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, long meshDrawsRevision, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
         ArgumentNullException.ThrowIfNull(argument: program);
         ArgumentNullException.ThrowIfNull(argument: transforms);
 
-        m_program = program;
         m_transforms = transforms;
 
         // A rebuilt program is a NEW instance (the host hands back the previous one whenever the composed revision
@@ -1205,7 +1409,6 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
 
         if (programChanged) {
             m_lastProgram = program;
-            m_programRevision++;
             RebuildStaticField();
         }
 
@@ -1218,7 +1421,10 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         // The authored `markers` section's candidate instances, resolved once for every seat's own cull below.
         ComposeMarkerCandidates(definition: m_client.Definition);
 
+        var quality = ViewQuality();
+
         m_views.Clear();
+        BeginRoutedViews();
         Array.Clear(array: m_seatCameraPoses);
         m_viewports.BeginFrame();
 
@@ -1269,105 +1475,12 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         var markerSeatCount = 0;
         Span<bool> seatSlotBound = stackalloc bool[PlayerRoster.MaxSlots];
 
-        // Only accepted rows create instances. Completed whole-pipeline candidates swap before this frame renders.
-        m_pipelines?.Reconcile(rows: m_client.Definition.Views.Pipelines);
-        m_pipelines?.PumpWatches();
-        m_fedPipelines.Clear();
-
         foreach (var composed in m_composer.Slots) {
             var region = composed.Region;
 
-            if (composed.Pipeline is { } pipelineName) {
-                // A pipeline slot: the SDF engine skips its own camera march for this slot (see SdfEngineNode's
-                // per-frame child-mask derivation) and shows the named views.pipelines row's compiled render instead.
-                // The camera here is a degenerate placeholder used ONLY when that name never resolved in the
-                // engine's children map — never a live march (a near-zero field of view keeps it finite/valid
-                // rather than an invalid all-zero default).
-                if (
-                    (m_pipelines is { } pipelines) &&
-                    m_fedPipelines.Add(item: pipelineName) &&
-                    pipelines.TryGet(
-                    entry: out var entry,
-                    name: pipelineName
-                )
-                ) {
-                    entry.Node.Resize(
-                        height: Math.Max(
-                            val1: 1u,
-                            val2: ((uint)(region.Height * height))
-                        ),
-                        width: Math.Max(
-                            val1: 1u,
-                            val2: ((uint)(region.Width * width))
-                        )
-                    );
-
-                    var pipelineDeltaSeconds = entry.AdvanceClock(deltaSeconds: deltaSeconds);
-
-                    var pipelineRow = WorldDefinitionRows.FindPipeline(
-                        name: pipelineName,
-                        pipelines: m_client.Definition.Views.Pipelines
-                    );
-                    // The paired camera, or NONE: a row without a camera (or whose name fails to resolve) hands the
-                    // pipeline a zero cameraFov with zero vectors — the documented "no paired camera" signal a pipeline
-                    // branches on to keep its own pointer orbit — never a made-up default eye.
-                    var cameraPos = Vector3.Zero;
-                    var cameraTarget = Vector3.Zero;
-                    var cameraUp = Vector3.Zero;
-                    var cameraFov = 0f;
-
-                    if (
-                        (pipelineRow?.Camera is { } pipelineCameraName) &&
-                        ResolveNamedCamera(
-                        camera: out var pipelineCamera,
-                        deltaSeconds: deltaSeconds,
-                        height: height,
-                        name: pipelineCameraName,
-                        region: region,
-                        width: width
-                    )
-                    ) {
-                        cameraPos = pipelineCamera.Position;
-                        cameraTarget = (pipelineCamera.Position + pipelineCamera.Forward);
-                        cameraUp = pipelineCamera.Up;
-                        cameraFov = (2f * MathF.Atan(x: pipelineCamera.TanHalfFieldOfView));
-                    }
-
-                    UpdatePipelinePointer(
-                        entry: entry,
-                        height: height,
-                        name: pipelineName,
-                        region: region,
-                        width: width
-                    );
-                    entry.Node.Frame = new ShaderFrameValues(
-                        CameraFov: cameraFov,
-                        CameraPosition: cameraPos,
-                        CameraTarget: cameraTarget,
-                        CameraUp: cameraUp,
-                        Pointer: entry.Pointer,
-                        PointerDown: entry.PointerWasDown,
-                        PointerPresses: entry.PointerPresses,
-                        Time: entry.ClockSeconds,
-                        TimeDelta: pipelineDeltaSeconds
-                    );
-                }
-
-                m_views.Add(item: new SdfViewSnapshot(
-                    Camera: CameraSnapshot.LookAt(
-                        position: Vector3.UnitY,
-                        target: Vector3.Zero,
-                        fieldOfViewRadians: 0.001f,
-                        viewportWidth: width,
-                        viewportHeight: height
-                    ),
-                    Region: region
-                ) {
-                    Child = pipelineName,
-                    RenderScale = transitionScale,
-                    UpscaleSharpness = m_settings.UpscaleSharpness,
-                });
-
+            // An instance slot is placed over the SDF world by the render graph's root (PrepareGraph), so the world
+            // renders no view for it.
+            if (composed.Instance is not null) {
                 continue;
             }
 
@@ -1385,8 +1498,8 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
                         Camera: namedCamera,
                         Region: region
                     ) {
+                        Quality = quality,
                         RenderScale = (m_settings.RenderScale * transitionScale),
-                        UpscaleSharpness = m_settings.UpscaleSharpness,
                     });
                     if (!hasSeatViewFallback) {
                         hasSeatViewFallback = true;
@@ -1415,30 +1528,55 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
                 width: width
             );
 
-            // The live render-scale tier rides each view's own RenderScale: native = 1.0 is the bit-exact fast path,
-            // any lower tier renders that view's SDF at a reduced extent and upsamples. A layout transition dips it.
-            m_views.Add(item: new SdfViewSnapshot(
-                Camera: camera,
-                Region: region
-            ) {
-                RenderScale = (m_settings.RenderScale * transitionScale),
-                UpscaleSharpness = m_settings.UpscaleSharpness,
-            });
-            // The listener-policy candidate: the SAME resolved rig the seat renders through (editor rig included),
-            // so "focus" listens where the active view looks.
-            m_seatCameraPoses[slot] = new WorldSeatCameraPose(
-                Eye: eye,
-                Forward: (target - eye),
-                Joined: true
-            );
+            // The world the seat is presented in this frame, resolved before its grid: a seat that has just crossed
+            // queries the scene of the world it crossed into, which has drawn no view of it yet and so answers no
+            // surface, never the world it left; a seat that returned home queries this world again.
+            var presentedElsewhere = m_continuum.PresentedElsewhere(slot: slot);
+
+            if (presentedElsewhere is null) {
+                m_seatRoutes[slot] = default;
+            } else if (!ReferenceEquals(objA: m_seatRoutes[slot].Scene?.Endpoint, objB: presentedElsewhere)) {
+                m_seatRoutes[slot] = (SceneOf(endpoint: presentedElsewhere), -1);
+            }
+
             // The cursor feed's unproject seam: the SAME region + camera this view renders with, so a cursor ray
-            // aims exactly where the pixel under it was drawn from.
+            // aims exactly where the pixel under it was drawn from. Published before the seat's grid resolves, since
+            // a following grid casts the seat's pointer through this camera.
             m_viewports.Publish(
                 camera: in camera,
                 height: height,
                 region: region,
                 slot: slot,
                 width: width
+            );
+            // The live render-scale tier rides each view's own RenderScale: native = 1.0 is the bit-exact fast path,
+            // any lower tier renders that view's SDF at a reduced extent, which the root's place pass reconstructs. A
+            // layout transition dips it.
+            m_views.Add(item: new SdfViewSnapshot(
+                Camera: camera,
+                Region: region
+            ) {
+                Grid = SeatGrid(slot: slot),
+                Quality = quality,
+                RenderScale = (m_settings.RenderScale * transitionScale),
+            });
+            // A seat presented elsewhere keeps its place among the views, so every view keeps its index, and its view
+            // is latched into the scene of the world it is presented in, which renders it instead.
+            if (m_continuum.PresentedElsewhere(slot: slot) is { } elsewhere) {
+                RouteView(
+                    endpoint: elsewhere,
+                    view: (m_views.Count - 1)
+                );
+                m_seatRoutes[slot] = m_viewRoutes[(m_views.Count - 1)];
+            } else {
+                m_seatRoutes[slot] = default;
+            }
+            // The listener-policy candidate: the SAME resolved rig the seat renders through (editor rig included),
+            // so "focus" listens where the active view looks.
+            m_seatCameraPoses[slot] = new WorldSeatCameraPose(
+                Eye: eye,
+                Forward: (target - eye),
+                Joined: true
             );
             seatSlotBound[slot] = true;
             m_markerSeats[markerSeatCount++] = ComposeMarkerSeat(
@@ -1449,6 +1587,14 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
                 width: width
             );
         }
+
+        for (var slot = 0; (slot < m_seatRoutes.Length); slot++) {
+            if (!seatSlotBound[slot]) {
+                m_seatRoutes[slot] = default;
+            }
+        }
+
+        RetireRoutedScenes();
 
         // Published EVERY frame: an empty frame clears the chips the moment the section authors none.
         m_markers.Publish(frame: new OverlayMarkerFrame(Seats: m_markerSeats.AsMemory(
@@ -1500,12 +1646,26 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
                     Y: 0f
                 )
             ) {
+                Quality = quality,
                 RenderScale = m_settings.RenderScale,
-                UpscaleSharpness = m_settings.UpscaleSharpness,
             });
         } else {
             m_noLocalSeatsNarrated = false;
         }
+
+        // The camera the frame's first view renders with, the spectator above included: the viewer a window fits its
+        // eye to while no seat resolves a view (WorldSeatViewports.Viewer).
+        m_viewports.PublishFirstView(camera: m_views[0].Camera);
+
+        // The camera views film this frame as views of it after its own, so they render from the world's residency.
+        m_frameViews.Clear();
+        m_frameViews.AddRange(collection: m_views);
+        m_binder.FilmViews(
+            authoritativeTick: m_simulation.Tick,
+            presentationSeconds: m_elapsedSeconds,
+            transforms: transforms,
+            views: m_frameViews
+        );
 
         // Publish this frame's audio snapshot AFTER the transforms are packed and the view rigs resolved: emitter
         // poses read the packed leaf transforms; the listener reads the seat cameras once per produced
@@ -1538,109 +1698,37 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             }
         }
 
-        // Stashed on the way out (see m_dressedFrame): RenderViews runs LATER in the same produced frame and hands
-        // this exact instance to every offscreen view, which derives its own submission from it. Returning it without
-        // keeping it is what left the views building their own.
-        return m_dressedFrame = new SdfFrame(
+        m_dressedFrame = new SdfFrame(
             Program: program,
             ProgramChanged: programChanged,
             Time: m_elapsedSeconds,
-            Views: m_views,
-            WarpAmount: 0f
+            Views: m_frameViews
         ) {
-            // Shadow reach is continuous: zero skips the march; (0,1) scales gather + march reach; one uses the
-            // engine's 0 sentinel for full reach.
-            DisableAmbientOcclusion = !m_settings.AmbientOcclusion,
-            DisableSoftShadows = (m_settings.ShadowReach <= 0f),
-            // Ambient occlusion — the world.ao toggle rides the DisableAmbientOcclusion lane.
-            // The far-field isolator (world.far-field) ships ON, so the frame's flag is the negated "disable" side.
-            DisableFarBound = !m_settings.FarBound,
             DynamicTransforms = transforms,
             MovedTransforms = moved,
             // A frame whose render inputs match the previous one re-composites the retained image instead of
             // re-marching it; any camera, program, pose, lever or twinkle change renders.
             EnableCadenceGate = m_settings.CadenceGate,
             Volumes = m_volumes,
+            // Every emitter's mesh draws: the static placements' and the stamp pool's, then the neighbour worlds'.
+            MeshDraws = meshDraws,
+            MeshDrawsRevision = meshDrawsRevision,
             // The far plane every march ends at: render.farDistance off the LIVE definition (a world.row.set render
             // lands on the next frame, like the lighting below), or the engine's pinned default when unauthored.
             FarDistance = WorldRenderFarDistance.Resolve(defaults: m_client.Definition.Render),
             // The environment: the static render.lighting/render.sky lanes, or this frame's point along
             // render.cycle when the world authors one (a world.row.set render lands on the next frame).
             Environment = lighting,
-            // The sky's clock (twinkle, cloud motion), taken from the deterministic tick counter and never from
-            // m_elapsedSeconds so a replay at tick N draws the identical sky.
-            SampleIndex = ((uint)m_simulation.ElapsedTicks),
-            ShadowDistanceScale = ((m_settings.ShadowReach >= 1f)
-            ? 0f
-            : m_settings.ShadowReach),
-            // At the machine-fleet tiers the correctness-complete per-tile shadow-grid gather is the dominant frame
-            // cost (measured 64.5 ms views at 124 stand-ins versus 16.5 ms with the existing camera-tile fallback).
-            // Small sessions keep exact off-camera shadow candidates; 16/64/128-player sessions take the explicit crowd
-            // approximation, while the independent crowd-radius policy still controls which avatars cast at all.
-            UseCameraTileShadowMask = (m_settings.ShadowMask switch {
-                ShadowMaskMode.ExactGather => false,
-                ShadowMaskMode.CameraTile => true,
-                _ => (m_client.ActivePeerCount >= 16),
-            }),
-            UseFastSoftShadowMarch = (m_settings.ShadowMarch switch {
-                ShadowMarchMode.Exact => false,
-                ShadowMarchMode.Fast => true,
-                _ => (m_client.ActivePeerCount >= 16),
-            }),
-            UseFastAmbientOcclusion = (m_settings.AmbientOcclusionQuality switch {
-                AmbientOcclusionMode.Exact => false,
-                AmbientOcclusionMode.Fast => true,
-                _ => (m_client.ActivePeerCount >= 16),
-            }),
+            // The sky's and the media's clock: the engine tick the state mirror presented this frame's bound state at,
+            // never m_elapsedSeconds, so a frame at a given tick and fraction draws the same sky on every run.
+            Clock = m_client.StateMirror.Presented,
         };
+
+        return m_dressedFrame;
     }
     /// <inheritdoc/>
     public void NotifyDeviceLost() {
         m_binder.NotifyDeviceLost();
-    }
-    public void PrepareScreenSources(IGpuDeviceContext deviceContext, IGpuComputeServices gpu) {
-        // Render + upload every CPU-fed screen for this frame off the sim tick advanced during CaptureFrame, so the
-        // provider polled just after this call returns a handle to THIS frame's image. The engine seam calls this
-        // AFTER capture and BEFORE the source poll.
-        m_binder.Publish(
-            tick: m_simulation.Tick,
-            deviceContext: deviceContext,
-            gpu: gpu
-        );
-    }
-    /// <inheritdoc/>
-    public void RenderViews(in Puck.Hosting.FrameContext context) {
-        // The frame context's target extent IS the launcher's live client area (window.Width/Height at this frame's
-        // BeginFrame) — the one place the World side can learn it. Published for the cursor feed's client→frame
-        // mapping (see WorldCursorFeed.Decide); the per-seat views above carry the FIXED frame extent instead.
-        m_viewports.PublishClientExtent(
-            width: context.TargetWidth,
-            height: context.TargetHeight
-        );
-
-        // Render this frame's jumbotron views (the View screens) against the live device, feeding each the SAME world
-        // program / dynamic transforms / content clock the room renders with, so a jumbotron shows this world from its
-        // placeable camera. Called AFTER PrepareScreenSources (the CPU-fed screens the views sample are already this
-        // frame's) and BEFORE the source poll (so a View screen's provider returns this frame's offscreen render).
-        // The dressed frame is required, not optional: an offscreen view DERIVES its submission from it, so a frame
-        // this produced frame never dressed has nothing to derive from and the views hold their last resolved image
-        // for one frame rather than rendering off a fabricated one.
-        if (
-            (m_program is not { } program) ||
-            (m_dressedFrame is not { } hostFrame)
-        ) {
-            return;
-        }
-
-        m_binder.RenderViews(
-            context: in context,
-            program: program,
-            revision: m_programRevision,
-            transforms: m_transforms,
-            time: m_elapsedSeconds,
-            authoritativeTick: m_simulation.Tick,
-            hostFrame: hostFrame
-        );
     }
 
     /// <summary>Initializes a new instance of the <see cref="WorldFramePresenter"/> class, composing the world scene
@@ -1679,13 +1767,15 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     /// <param name="speech">The speech clock a <see cref="WorldAnchor.RecentSpeaker"/> camera anchor reads.</param>
     /// <param name="overlayFacts">The predicate evaluator a ranked camera anchor list selects through, or
     /// <see langword="null"/> (every candidate condition then holds).</param>
-    /// <param name="pipelines">The shared shader-pipeline runtime, or <see langword="null"/> for a document/host with no
-    /// live pipeline children — every pipeline slot then falls through to its degenerate camera fallback.</param>
+    /// <param name="graphs">The host of the document's <c>views.graphs</c> rows on the render graph, or
+    /// <see langword="null"/> for a presentation with no render graph, whose instance slots then show nothing.</param>
     /// <param name="bakes">The schedule pumped once per captured frame to keep the definition's creation bakes current,
     /// or <see langword="null"/> for a presentation that bakes nothing.</param>
+    /// <param name="editor">Each seat's editor state, or <see langword="null"/> for a fresh one with nothing moved.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldFramePresenter(FrameRateMonitor frameRate, WorldClient client, IWorldSimulationClock simulation, WorldRenderSettings settings, IWorldScreenPresenter binder, WorldRenderEnvelope envelope, WorldSeatBindings seatBindings, WorldStampPool animator, IWorldAudioFrameFeed audio, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldContinuum continuum, WorldTextCatalog text, IWorldAdjacencySource adjacencies, MarkerStore markers, Func<string, OverlayResolvedGlyph> resolveIcon, WorldSpeechClock speech, IOverlayPredicateEvaluator? overlayFacts = null, WorldPipelineRuntime? pipelines = null, WorldBakeSchedule? bakes = null) {
+    public WorldFramePresenter(FrameRateMonitor frameRate, WorldClient client, IWorldSimulationClock simulation, WorldRenderSettings settings, IWorldScreenPresenter binder, WorldRenderEnvelope envelope, WorldSeatBindings seatBindings, WorldStampPool animator, IWorldAudioFrameFeed audio, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldContinuum continuum, WorldTextCatalog text, IWorldAdjacencySource adjacencies, MarkerStore markers, Func<string, OverlayResolvedGlyph> resolveIcon, WorldSpeechClock speech, IOverlayPredicateEvaluator? overlayFacts = null, WorldViewGraphHost? graphs = null, WorldBakeSchedule? bakes = null, WorldEditorSeats? editor = null) {
         ArgumentNullException.ThrowIfNull(argument: frameRate);
+        Editor = (editor ?? new WorldEditorSeats());
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: anchor);
         ArgumentNullException.ThrowIfNull(argument: speech);
@@ -1727,6 +1817,8 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         audio.MachineSourceResolver = binder.AudioOutput;
         m_frameRate = frameRate;
         m_client = client;
+        m_decalColors = new WorldBakedColors(mirror: client.StateMirror);
+        m_queryColors = new WorldBakedColors(mirror: client.StateMirror);
         m_anchor = anchor;
         m_speech = speech;
         m_overlayFacts = overlayFacts;
@@ -1737,7 +1829,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         m_seatBindings = seatBindings;
         m_animator = animator;
         m_sdfDocuments = sdfDocuments;
-        m_pipelines = pipelines;
+        m_graphs = graphs;
         m_bakes = bakes;
 
         // Resolve the primer snapshot's render poses once so the capacity probe and the camera anchors are live before
@@ -1755,6 +1847,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             anchor: anchor,
             animator: animator,
             audio: audio,
+            bakes: bakes,
             client: client,
             continuum: continuum,
             settings: settings,

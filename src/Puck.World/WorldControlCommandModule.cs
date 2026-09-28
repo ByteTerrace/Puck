@@ -32,7 +32,7 @@ internal sealed class WorldControlCommandModule(Func<TextCommandSource> source, 
                             path => {
                                 var request = new FrameCaptureRequest(path: path);
 
-                                (probe?.Render ?? throw new InvalidOperationException(message: "Capture requires an initialized offscreen or windowed renderer.")).RequestCapture(request: request);
+                                (probe?.Root ?? throw new InvalidOperationException(message: "Capture requires an initialized offscreen or windowed renderer.")).RequestCapture(request: request);
 
                                 return request;
                             }

@@ -131,7 +131,10 @@ leaving out the creation bakes: those a
 compiled world names fill the bake cache from the build's bake pack
 (`Assets/worlds/bakes.puckbake`), and a presentation bakes any that are
 missing in the background and keeps them in the per-user `bakes` cache
-([creation bakes](../../docs/architecture/worlds.md#creation-bakes)).
+([creation bakes](../../docs/architecture/worlds.md#creation-bakes)). The
+entry point names these three per-user caches and hands them to the boot as
+`WorldCacheRoots`, so a host or test that composes World services uses
+directories of its own.
 
 Boot prints one line naming the world-definition file it loaded (an explicit
 `--world <path>` or the shipped `Assets/worlds/puck.world.json`), one
@@ -142,7 +145,8 @@ flag surface (backend, size, world, recording, user id, present mode, listen,
 connect, federation key) is declared in `Program.cs`; the graphics API is the boot-time
 choice `--backend directx|vulkan` (Direct3D 12 is the Windows default),
 because changing APIs rebuilds the whole render host. `--debug-layers` creates
-the device with its backend's validation layer, printing `[vulkan-debug]` or
+the device with its backend's validation layer (on Vulkan with synchronization
+validation), printing `[vulkan-debug]` or
 `[d3d12-debug]` lines; `puck canary --debug-layers` and `puck qualify` pass it.
 
 `--help` (or `-h`) and `--version` exit before host setup: they do not load a
@@ -169,10 +173,11 @@ every step. A step that fails then is logged and never replaces the original
 failure. Each GPU consumer releases only what it allocated, so after a failed
 bring-up nothing asks for the device.
 
-Compiled SDF shaders can change within that running host: finish `CompileShaders`,
-then issue `world.shaders.reload src/Puck.SdfVm/Assets/Shaders/Sdf` and inspect
-`world.shaders.status`. The request swaps changed compute pipelines at a frame
-boundary while retaining world and GPU scene state. Failed validation keeps the
+SDF kernels can change within that running host: edit a kernel's HLSL, then
+issue `world.shaders.reload src/Puck.SdfVm/Assets/Shaders/Sdf`, which compiles
+the kernel sources the tree carries, and inspect `world.shaders.status`. The
+request swaps changed compute pipelines at a frame boundary while retaining
+world and GPU scene state. A compile error or failed validation keeps the
 previous set. See the [shader reload contract](../Puck.SdfVm/README.md#reload-compiled-shaders)
 for scope and binding-layout limits; `world.reload` remains the world-document verb.
 
@@ -277,10 +282,13 @@ ordered domain headless exactly as windowed, and `screen.source <index> camera|c
 attempts a real device open (or, for `qr`, a real encode) and reports the
 honest failure rather than refusing as unknown.
 `WorldBootComposition.cs` is the split: `AddWorldAuthoritativeCore` registers
-in EVERY shape, `AddWorldPresentation` only when a window is composed.
+in EVERY shape, `AddWorldOffscreenPresentation` only offscreen, and
+`AddWorldPresentation` only when a window is composed. `AddWorldBoot` selects
+among them, and `WorldBootCompositionLawTests` resolves what it registers
+without a device.
 
 **Offscreen.** The document's `host.presentation: offscreen` boots a real GPU
-device and the composed-frame render pipeline (the world render alone—no post-render extension chain,
+device and the composed-frame render pipeline (the world render and its `views.post` passes—no
 unified overlay/console-mirror/binding-bar, no audio device, no gamepad or
 pointer input) with NO window and NO swap chain ever created, so
 `world.screenshot` writes real PNGs of the composed world with nothing on
@@ -295,26 +303,41 @@ call); Vulkan's device bring-up in
 this codebase is fused to a real native surface, so this shape stands up a
 native window through the SAME path the windowed shape uses but never shows
 it and never builds a swap chain against it—see
-`WorldOffscreenGpuActivation`'s remarks for the exact obstacle. Diegetic
-View-type screens (the jumbotron pool the windowed render-root factory stands
-up via `WorldScreenBinder.ConfigureViews`) are a known gap this shape does not
-compose. `WorldBootComposition.AddWorldOffscreenPresentation` and
+`WorldOffscreenGpuActivation`'s remarks for the exact obstacle. Camera and
+session screens render as in the windowed shape, through the views
+`WorldScreenBinder.ConfigureViews` sets up. `WorldBootComposition.AddWorldOffscreenPresentation` and
 `Puck.Launcher.OffscreenTickHostedService` (which produces one composed frame
 per host-loop iteration, paced by the fixed-step pump rather than vsync) are
 the seams; the server steps exactly like `host.presentation: none`
 (`HeadlessWorldSimulation`).
 
+An offscreen display has no window whose size could change, so
+`world.resize <width> <height>` (`WorldOffscreenCommandModule`, registered only
+in this shape) resizes it live, each side 1 to 16384 pixels: the host's
+`OffscreenRenderOptions` asks the next frame for the new extent, the render
+root (`RenderGraphRuntimeNode.Resize`) schedules every instance against it, and
+every camera and session view fits its declared extent to it
+(`WorldScreenBinder.ResizeDisplay`), so a capture after it lands at the new
+extent. It refuses until the renderer is ready, and with no argument it echoes
+the current extent. A windowed display keeps its document extent, which
+presentation scales to the window.
+
 Because its frames are its only output, the offscreen host holds its clock
 for them: it never steps past an armed capture's tick until that capture is
 served or refused. Whatever keeps the render chain from serving the capture
-(the engine's pipelines still building on a cold driver shader cache, or a
-device being rebuilt), the host keeps producing frames and answering the
+(the engine's pipelines still building on a cold driver shader cache, the
+creation bakes still settling, or a device being rebuilt), the host keeps
+producing frames and answering the
 console but steps no further tick, and the time it waits is spent, not owed,
-so serving the capture releases no burst. The hold is bounded: once the run
-has held its clock for 60 seconds in all (`WorldCaptureScheduler.HoldBudgetSeconds`),
-the capture is refused as `unserved` with the reason the chain gave, such as
-"the engine's pipelines never installed", and the run steps on; a later
-capture the chain still cannot serve is refused at once. `world.counters`
+so serving the capture releases no burst. The hold is bounded, and counts
+from readiness: while the engine's pipeline set builds (or rebuilds after a
+device loss), the run may hold its clock for 180 seconds in all
+(`WorldCaptureScheduler.BuildHoldBudgetSeconds`), and once the engine is ready
+for 60 seconds in all (`WorldCaptureScheduler.HoldBudgetSeconds`). Past either,
+the capture is refused as `unserved` and the run steps on; a refusal the build
+caused names it and its progress, such as "the engine's pipeline set is
+building (5 of 14 pipelines created)", and a later capture the chain still
+cannot serve is refused at once. `world.counters`
 reports the hold under `world.captures`: `world.captures.held` (engine ticks
 withheld) and `world.captures.ticks-while-armed` (ticks stepped while a
 capture waited, which stays 0 offscreen). A capture still waiting when the run
@@ -373,10 +396,131 @@ state, matched group, and precedence winner. A missing row contributes no match,
 which keeps portable profile layers usable across worlds. When the winning group
 changes, held commands and chord/page latches from the old group are cleared.
 
+## Build mode
+
+Every seat can build in any world that binds anything. `player.build [seat]`
+(F2, or Back on a pad) flips the seat between the `play` and `build` states of
+the built-in `editor` context family; `player.mode editor build|play` makes the
+same flip. The engine composes a build layer beneath the world's own binding
+layers (`WorldEditorBindings`): the toggle rides the resting page of every group
+the world binds, and a `build` group whose page binds the editor verbs is
+selected by the context row `{editor, build, build}` while the seat builds. The
+build page replaces the seat's play page, so the movement keys nudge instead of
+walking. A world that binds a build key keeps its own meaning, and a world may
+extend or rebind the build page like any other.
+
+While a seat builds, its binding bar shows the build page: the world's own bar
+when it has a bank for the `build` page, otherwise the engine's build bar, one
+row of keyboard plates above one of pad plates. A seat whose principal may not
+mutate placements still builds; its bar reads `Build (read-only)`, and its edits
+are refused by name at the tick boundary as they are from the console.
+
+| Verb | Build page | What it does |
+|---|---|---|
+| `world.grid on\|off\|toggle` | G, North | Shows or hides the seat's grid. |
+| `world.grid next\|surface\|follow\|plane <y>` | H | Chooses where it draws: on every surface, on a working plane that follows the surface under the pointer, or on a fixed plane. |
+| `world.grid pitch <x> [<z>]\|pitch up\|pitch down` | `-`, `=` | Sets the grid pitch, or halves and doubles it. |
+| `world.snap on\|off\|toggle\|angle <deg>\|surface on\|off` | N, West | Moves snapping: whether positions snap, the turn step, and whether placing rests on the surface below. |
+| `world.snap reference [<placement>]\|clear` | C | Aligns to a placement's own lattice, drawn as the orange object grid. |
+| `world.place [<creation>] [<id>]` | Enter, South | Puts a placement down where the seat aims. |
+| `world.nudge [<placement>] x\|y\|z <steps>` | WASD, R, F, d-pad | Moves a placement by whole grid steps. |
+| `world.turn [<placement>] <steps>` | Q, E, shoulders | Turns a placement by whole angle steps. |
+
+`world.grid` and `world.snap` echo the seat's whole state with no argument and
+after every change. They move presentation state only: each value a verb has
+not moved reads through to the document's `editor` section, so a reload that
+changes the section reaches every seat that never overrode it, and `world.save`
+folds seat 1's moved values back into the section. A seat that leaves forgets
+what it moved.
+
+`world.place` casts the seat's aim, through its pointer when the pointer is over
+its view and otherwise through the middle of the view, against the
+presentation's static field (the solid placements, screens and adjacencies a
+body can touch). It lands on the first surface the aim meets, or four units
+ahead of the camera when it meets none. With snapping on, the position snaps to
+the grid, or to the captured reference's lattice and faces, through
+`GridSnap`; with surface snapping on and an upward-facing surface under the
+aim, the snapped column drops back onto the surface, so a placement rests on a
+platform or a ramp instead of a lattice height. A bare `world.place` stamps
+another of the seat's current placement's creation, copying its scale, yaw and
+solidity.
+
+`world.nudge` and `world.turn` act on the named placement or the seat's current
+one (the one it last placed or moved). A nudge moves along the world axes by
+the grid pitch, or along the captured reference's axes by its lattice; with
+snapping on, the moved axis lands on the lattice. A placement whose position is
+resolved through another row (a parent, an attachment, a board) is refused by
+name. Each of the three verbs submits one `placements` upsert through the
+section upsert `world.row.set` uses, under the issuing principal and a
+row-edit window guard, so the grant check, revalidation, journal and
+`world.undo` govern it exactly as they govern every row edit.
+
+Editing follows the seat. Every build verb acts on the world the seat is
+presented in: after a seat crosses a portal into a nested world, its grid reads
+that world's `editor` section, its surface queries march that world's scene,
+and its edits are submitted through that world's own link, whose admission
+accepts them or refuses them by name. They never touch the world the seat left.
+A seat's selection (its current placement, its reference, the height its
+following plane found) belongs to the world it was made in, so a bound nudge
+after a crossing names nothing until the seat selects again there. A seat that
+sees a nested world across an adjacency, drawn in this world's frame, still
+edits in that world's own coordinates: its aim and every surface it meets are
+carried through the adjacency's isometry, the one its crossing and rendering
+use; its grid and snapping read that world's `editor` section, and its grid is
+drawn in that world's frame (`GridOverlayState.WorldOrigin` and `WorldFrame`), so
+the lines, the plane height it follows and the reference's lattice lie where its
+edits snap.
+
+Edits to one placement run one at a time (`WorldEditorEditQueue`). Each is based
+on the latest value submitted or queued for it, not on the document as it last
+arrived, which trails every edit still in flight. An edit is checked (finite
+position and yaw, positive scale) and composed under the principal that issued
+it before it queues, so a refused edit never enters the queue and a queued edit
+goes out as its own issuer's. Edits made faster than the world answers queue
+behind the one in flight: a newer edit from the same principal supersedes the
+last queued one, and another principal's queues after it. Holding a nudge key
+therefore moves the placement once per press. When the world refuses an edit,
+or its link fails to take it, every edit queued on it is dropped and the
+placement rolls back to the value the world last confirmed, with a
+`rolled back to` line naming it. A new placement's id is never one an edit in
+flight or queued holds. Reading the base from the world's newest known state (the
+newest document any endpoint reaching that world has delivered, so a seat whose
+endpoint lags never overwrites another's confirmed edit), composing the edit on it,
+admitting it and sending it happen as one step, so no verdict, delivery or
+retirement lands in between.
+
+Every verdict and every delivered document carries the world's document version
+(`WorldDocumentVersion`), so a confirmed value is held until a delivered document
+at or past its verdict arrives, and released to that document whatever it shows:
+a late document never moves the placement back, and an undo is simply a newer
+document. The queue belongs to one activation of one world: seats that reach it
+through different endpoints share its order, and each edit goes out through its
+own seat's endpoint. When an endpoint closes, or starts delivering another world
+(a crossing onward), the edits that go out through it, with every edit queued
+behind them, are abandoned with an `abandoned` line naming each; a closed
+endpoint refuses anything sent through it afterwards (`world.endpoint.retired`).
+When an instance stops or is reaped, its server answers every submission still
+pending, from any submitter, with `world.authority.stopped`, so an edit in
+flight there rolls back by name. The queue keeps nothing once its last endpoint
+is gone. Every edit carries the activation of the world whose document its base
+came from, and a world refuses one composed on another's
+(`world.mutation.activation_mismatch`), so an edit sent while a traveler's link
+has already moved on to the next world rolls back instead of landing there. The
+row doors that read a row before writing it (`world.row.add`, `.remove`, the
+literal `.set`, `.step`) and `creation.sculpt` carry it too.
+
+The grid rides each view's pass block (`SdfViewSnapshot.Grid`), so one seat can
+build on a grid while another plays. [The editor plan](../../docs/plans/editor.md)
+holds the work that follows: selection, a ghost preview, the editor camera and
+the rest.
+
 ## Shader pipelines
 
-A `views.pipelines` row names a pipeline instance and its source: a pipeline
-document, a one-off HLSL shader, or a shader package directory written by
+A `views.graphs` row (a `graph "name" { … }` block inside `views` in `.puck`)
+names an instance of a
+[frame graph](../../docs/reference/shaders.md#frame-graphs) and its source: a
+`puck.render.graph.v1` graph document, a one-off HLSL shader read as a
+one-pass graph, or a shader package directory written by
 `puck shaders package`, which loads from its precompiled binaries with its
 source tree gone and no compiler on the machine. A document or shader source
 loads the package the game's build stored for it in `Assets/worlds/packages`
@@ -386,7 +530,7 @@ compiles in the background, which needs `dxc`; without `dxc` it is refused by
 [the build's package store](../../docs/reference/shaders.md#the-builds-package-store)).
 Every pass is HLSL; it reads its
 time, pointer, camera and config from the generated frame block the
-[shader reference](../../docs/reference/shaders.md#the-frame-block)
+[shader reference](../../docs/reference/shaders.md#frame-values-extent-and-ports)
 describes. A relative
 source resolves against the CURRENTLY LOADED document's own directory, on
 both the server's override gate and the rendering host: a `world.load` of a
@@ -394,22 +538,29 @@ document from another directory moves that directory for every row the
 loaded document names, the same directory a live `pipeline.commit` binds
 against from that point on. A silo-hosted world has no local document file
 (its definition arrives from cloud storage), so a relative source there
-resolves against the executable's own directory instead. A layout
-slot selects the instance with `pipeline`; it can instead select a `camera`,
-but cannot select both. The row's optional camera supplies shader camera
-inputs, and `timeScale` seeds its presentation clock. `views.shaderToolchain`
+resolves against the executable's own directory instead. A row may instead
+name an engine `package` producer, such as `sdf.world`, in place of a source.
+A layout slot shows the instance by naming it with `instance`; it can instead
+select a `camera`, but cannot select both. The root graph places each pane
+over the world at its slot's rect, renders it at the slot's size, and feeds it
+the slot's pointer; a pane the active layout does not show is not rendered,
+and a layout change places panes one frame later. A pane or split-screen view
+under the pointer is outlined in the accent hue, and `world.view.panes`
+reports it as `hovered=`
+([pointing at a displayed source](../../docs/reference/commands.md#pointing-at-a-displayed-source)).
+The row's optional camera supplies shader camera inputs, and `timeScale` seeds its presentation clock.
+A row also takes a refresh divisor or rate and inputs bound to other rows'
+outputs, with `views.graphBudget` as the scheduler's pass-pixel ceiling and
+the bound parameters' byte ceilings, and
+`world.budget` prices each row by planning its source and each bound parameter
+in bytes per tick and per frame, then reads back what the
+render graph runtime scheduled for every instance in its latest frame: rendered
+or not, its extent, frame divisor, passes and pass-pixels, and the passes,
+dispatches and draws its newest completed submission counted. `views.shaderToolchain`
 optionally selects the directory holding `dxc`. `pipeline.sentinels <name> on`
 writes each frame-block word's echo sentinel in place of the frame values and
 config, which an [echo pass](../../docs/reference/shaders.md#pass-interfaces)
-reads back.
-
-A `views.graphs` row names an instance of a
-[frame graph](../../docs/reference/shaders.md#frame-graphs): its graph source,
-resolved like a pipeline source, a camera, a refresh divisor or rate, and
-inputs bound to other rows' outputs, with `views.graphBudget` as the
-scheduler's pass-pixel ceiling. The document validates the rows and
-`world.budget` prices each one by planning its source, but no view renders
-through a graph yet.
+reads back. The `pipeline.*` verbs address `views.graphs` rows by name.
 
 Start the three-pass feedback example from the repository root:
 
@@ -458,6 +609,22 @@ installed graph), `peak=` (what a reload of it would reach) and `budget=`.
 device's, and `pipeline.budget <name> device` removes the cap. A reload whose
 peak does not fit is refused with `SHADERPIPE_BUDGET`, and the installed graph
 keeps running.
+`gpu.faults arm <kind> [<n>]` makes the device fail the nth creation of a kind
+from now, or the next one, before the call reaches the device, so a reload can
+be refused partway through its allocation on real hardware. The kinds are
+`pipeline`, `buffer`, `image`, `render-pass`, `framebuffer`, `shader-module`,
+`command-pool` and `bindings-pool`. The refusal is `GPU_CREATION_FAULT`, naming
+the kind and the creation's number; the node releases what the candidate
+created and the installed graph keeps running. A fault fires once.
+`gpu.faults lose [<n>]` loses the device on the nth frame from now, or the next
+one, on a healthy GPU; the host recovers through its
+[device-loss policy](../../docs/reference/hosting.md), and a capture armed at
+the loss is refused as `[capture] refused <path>: <reason>`.
+`gpu.faults disarm` clears every fault, the armed loss and every count, and
+`gpu.faults list` prints `armed=<kind>:<n>,…,lose:<n>` (or `armed=none`), one
+`<kind>=<count>` field per kind, the creations since the last disarm, and
+`frames=<count>`, the frames counted since then. Only the operator's console
+runs it; a seat, binding, schedule step or world document cannot.
 `pipeline.capture` queues a PNG of the selected output, including while paused.
 The completion report says when the file has been written.
 
@@ -468,7 +635,7 @@ default. `pipeline.overrides <name>` shows every overridden field's committed
 value beside its preview, then the time scale and output the same way. It also
 shows the row revision the preview is based on and the source identity of the
 installed graph. `pipeline.commit <name>` writes the preview into the
-instance's `views.pipelines` row as `overrides`, `timeScale` and `output`, and
+instance's `views.graphs` row as `overrides`, `timeScale` and `output`, and
 `world.save` then writes the document:
 
 ```text
@@ -493,7 +660,7 @@ states the contract.
 A row naming a package reads the same way:
 
 ```text
-puck shaders package src/Puck.World/Assets/pipelines/ink.pipeline.json --output artifacts/packages/ink
+puck shaders package src/Puck.World/Assets/pipelines/ink.graph.json --output artifacts/packages/ink
 pipeline.load ink ../../../../artifacts/packages/ink
 pipeline.wait ink installed
 ```
@@ -552,11 +719,11 @@ validation. The rendered host creates it only after the mutation is accepted.
 To try a one-off shader in the example's existing slot, run
 `pipeline.load ink ../pipelines/moth.hlsl`; it replaces that instance's source
 through the same background compilation path. Return with
-`pipeline.load ink ../pipelines/ink.pipeline.json`.
+`pipeline.load ink ../pipelines/ink.graph.json`.
 
-Loading a new row does not change the active layout: select its name in a layout
-slot. The [shader reference](../../docs/reference/shaders.md#shader-pipelines-and-live-development)
-owns the pipeline document and pass contracts.
+Loading a new row does not change the active layout: name it as a layout
+slot's `instance`. The [shader reference](../../docs/reference/shaders.md#shader-pipelines-and-live-development)
+owns the graph document and pass contracts.
 
 [The Moth shader](Assets/pipelines/moth.hlsl) remains a one-pass procedural
 character example; its header controls poses and framing. Its
@@ -587,7 +754,23 @@ Facts a script needs:
   pending simulation traffic applies, so a scripted write-then-read pair
   (`world.row.set` then `world.status`, `player.bind` then
   `player.bindings`) needs no polling. `WorldConsoleWaitGate.cs` and
-  `world.wait` are the explicit waits.
+  `world.wait` are the explicit waits. `world.wait bakes <seconds>` holds until
+  the presentation's creation bakes are settled (none queued or baking), so a
+  script that reads a drawn bake waits on the bake. `world.wait ready <seconds>` waits for
+  the rendering engine instead of a tick count: it holds the session until
+  the world's SDF residency has built its tables (its pipeline set installed
+  and its first frame captured), the render graph's root has rendered over
+  a completed view and the bake schedule has reconciled and, while the
+  presentation draws its bakes, settled, or
+  the deadline passes, and reports which on standard error. A script that
+  reads rendered work (`world.counters gpu`) waits on it, since a cold driver
+  cache can hold the first frame back for many ticks. `world.wait captures
+  <seconds>` holds until every capture `world.screenshot` armed on the render
+  graph's root has written its file or been refused, and reports
+  `[captures: settled at tick T]` on standard error. A script that takes one
+  capture after another waits on it between them, since `world.screenshot`
+  refuses while a capture is still pending and frames can trail ticks on a busy
+  machine.
 - **Timing.** The console drains before every fixed step. A piped script's
   lines up to its first `world.wait` run before the first tick, and the line
   after a `world.wait` that releases at tick R runs before tick R+1. The
@@ -613,9 +796,10 @@ Facts a script needs:
 
 ## What lives here
 
-- `Program.cs`—the composition root: resolves the boot shape BEFORE any
-  registration, then calls `WorldBootComposition.AddWorldAuthoritativeCore`
-  always and `AddWorldPresentation` only when windowed;
+- `Program.cs`—the composition root: resolves the world, the host settings
+  and the command-line options BEFORE any registration, then hands them to
+  `WorldBootComposition.AddWorldBoot` as a `WorldBootInputs`, which registers
+  them, calls `AddWorldAuthoritativeCore` always, and adds the shape's host;
   `WorldPostBuildWiring.Install` wires the affordance vocabulary, RE-VALIDATES
   the boot document's binding vocabulary now that the registry is real (the
   FIRST validation, at `WorldDefinitionLoader.TryResolve` above, ran before
@@ -624,12 +808,12 @@ Facts a script needs:
   sink, and the server's echo/cue taps once, after the container builds, in
   EITHER shape. A refused re-validation prints its reason and fails the boot
   (`Install` returns `false`) before `Program.cs` ever calls `IHost.RunAsync`.
-- `WorldBootComposition.cs`—the two composition methods (above): everything
+- `WorldBootComposition.cs`—the boot's composition (above): everything
   server-safe (profiles, roster, server, grants, addons, replay tape, the
   console's tick barrier, `WorldMachineHost` and `WorldScreenBinder`—the
   machine host is core state that boots and steps in every shape, and the
   binder is CORE too, since `world.faces`/`body.engage` read its bound/
-  no-signal state even headless—every server-safe command module including
+  unbound state even headless—every server-safe command module including
   `ScreenCommandModule`, and the camera control application (the `player.mode`
   and `player.camera` verbs)—for command-vocabulary parity: a world's binding document commits
   that vocabulary in every boot shape, and the validator checks it against what
@@ -643,7 +827,7 @@ Facts a script needs:
   `Puck.Launcher.Windows.AddWindowsHostedPresentation`/
   `Puck.Launcher.Linux.AddLinuxHostedPresentation` (windowing, allocator, the
   selected backend) around its own `AddLauncherTerminal`/`AddBackendSwitcher`
-  calls; `Program.cs`'s headless branch calls
+  calls; `AddWorldBoot`'s headless branch calls
   `Puck.Launcher.AddLauncherHeadlessTerminal` plus, on Windows, a standalone
   `Puck.Platform.Windows.AddWindowsPrecisionWaiter`. The two boot shapes are
   never composed together.
@@ -700,13 +884,15 @@ Facts a script needs:
   there too: `screen.insert`/`.eject` apply through the ordered domain headless exactly as windowed, and
   `screen.source <index> camera|capture|desktop|probe|view|qr` still attempts a real
   device open (or, for `qr`, a real encode) and reports the honest failure
-  rather than refusing as unknown), and
+  rather than refusing as unknown; `world.screens` and `world.view-refresh`
+  read only the screen binder, so every shape answers them), and
   most others are server-safe (registered in `AddWorldAuthoritativeCore`,
   the fly camera application included—see above);
   `WorldRenderLeverCommandModule.cs` (the render levers: shadows, ambient
   occlusion, far field, cadence, render scale, quality and the rest) is
-  composed by both the windowed and the offscreen shapes; `WorldCommandModule.cs`
-  (frame rate, FPS target, screens, cameras, shader reload, debug view),
+  composed by both the windowed and the offscreen shapes; `WorldOffscreenCommandModule.cs`
+  (`world.resize`) by the offscreen shape alone; `WorldCommandModule.cs`
+  (frame rate, FPS target, cameras, shader reload),
   `WorldHostCommandModule.cs`, `WorldAudioCommandModule.cs`,
   `WorldRecordingCommandModule.cs`, and `WorldSdfCommandModule.cs` are
   genuinely presentation-only (unregistered headless); `WorldUiCommandModule.cs`,
@@ -1077,10 +1263,72 @@ change. A producer registers twice, once per half:
   The validator refuses an id no shape is registered under, and a settings
   member the shape does not declare, by name.
 - its runtime, an `IWorldImageProducer` in `WorldImageProducers`
-  (`Puck.World.Client`), which opens an `IWorldImageFeed` for each screen that
+  (`Puck.World.Client`), which opens an `IWorldImageFeed` for each source that
   names it. A registration is refused unless its id, content class and
-  transport match the shape's. The binder registers the shipped four; a host
-  adds its own as `IWorldImageProducer` services.
+  transport match the shape's, and a feed that declares another producer,
+  content class or transport than its registration is disposed and refused by
+  name when it opens. The binder registers the shipped four; a host adds its
+  own as `IWorldImageProducer` services. The ids `machine` and `probe` are
+  closed to document producers: they name the typed arms' source instances.
+
+A source is a render-graph instance. `WorldSourceInstances` derives one
+external instance for each distinct `producer`, `machine` or `probe` source the
+screens show, named by its content as `source$<producer>$<digest>`, whose
+package is `source.<producer id>` and which carries the source's settings (a
+machine's `instance` and `output`, a probe's `id`). The digest is 16 hex
+characters of the settings' canonical form (`ImageSourceSettings.Canonical`:
+members sorted, numbers written by value, no settings the same as empty ones),
+so equal settings share a name however they are spelled, a settings change is
+a new name and a new producer, and adding, removing or reordering screens
+renames no source. Screens showing equal sources read one instance, which the scheduler renders at most once a frame, at
+its producer's cadence and negotiated extent, and the instance's `SourceHandle`
+is its identity. `WorldImageProducers.RegisterPackages` registers one factory
+per producer under its source package, which opens the instance's feed from
+the instance's settings: an uploaded producer's (`testPattern`, `qr`) is an
+upload, whose instance the render-graph runtime converts once a frame at most
+from the region its feed writes, through the shipped conversion its format
+names. A `views.graphs` row names an uploaded producer's source package with
+its `settings` (`"package": "source.qr", "settings": { "payload": "puck" }`),
+so a layout slot shows the source as a pane and a `captures` row can capture
+it before composition. Any other producer's instance (`camera`, `capture`, a
+host's imported producer) renders through an external producer that owns the
+feed, publishes it when the runtime renders the instance and hands out its
+image through the capture gate, and the `machine` and `probe` ids register the
+binder's own. Such a source hands out an image view that only the SDF world
+samples, so a pane or graph input bound to one draws a stand-in.
+
+The live render graph runs every source a screen shows, its row's or the one a
+presentation verb bound over the row (`screen.source <index> <kind>`, a
+`screen.select` entry): the world's first view instance reads each one, and
+each frame its `sdf.world` passes bind the image the runtime hands them for a
+source to every screen showing it, under a lease their node holds until the
+submission that sampled it has finished. A live bind publishes its source's
+mapping as a row does. A screen
+showing a view or a session reads that view's own `sdf.world` instance
+(`WorldViewInstances`), which renders at its footprint's extent.
+
+Every `WorldScreenSource` arm is reproduced by an instance or a producer, and
+each is held by the laws and canaries below. Where a row names no check for
+the drawn image, none exists:
+
+| Arm | Reproduced by | Held by |
+|---|---|---|
+| `none` | no instance: `WorldSourceInstances` names none, and the engine shades the screen as unbound glass | `WorldSourceInstanceLawTests`; `world.screens` echoes `unbound`; the `uploaded-sources` canary captures the dark glass |
+| `machine` | `source.machine`, an uploaded instance whose `MachineVideoSourceUpload` writes the output's latest frame once per completed tick | `RenderGraphRuntimeLawTests.AMachineSource*`, `WorldCaptureSchedulerLawTests` (the exact verdict), the `uploaded-sources` and `instrument-clock-source` canaries |
+| `producer`, `testPattern` | `WorldTestPatternProducer`, uploaded | `ImageProducerLawTests.ATestPatternFeedStatesTheExactPatternItShowsAndTheVerdictHoldsIt`, `WorldSourceInstanceLawTests`, the `uploaded-sources` canary |
+| `producer`, `qr` | `WorldQrProducer`, uploaded | `ImageProducerLawTests.AQrFeedStatesTheCodeItRasterized`, the `uploaded-sources` canary |
+| `producer`, `camera` | the binder's `CameraProducer`, imported through `WorldCameraSourceFeed` | `ImageProducerLawTests.ACameraSourceDeclaresTheExtentItsSeatsSensorDelivers`, the `hud-frame-slots` canary (offscreen, it opens no device); a recorded camera run is deferred |
+| `producer`, `capture` | the binder's `CaptureProducer`, imported through `CaptureSlotFeed` | `ImageProducerLawTests.ACaptureOfADesktopCaptureSourceShowsTheFillAndNeverTheDesktopPixels` and `AFilledExternalSourceHandsOutItsFillAndNeverAcquiresItsFeed`, `WorldCaptureFillLawTests`; the `uploaded-sources` canary opens monitor 0 offscreen and captures its fill |
+| `view` | an `sdf.world` instance of its own, rendering the residency `WorldScreenBinder.TryResolveView` creates for it | `WorldViewPaneMappingLawTests.Views`, the `view-screens` canary |
+| `session` | an `sdf.world` instance (`WorldViewNames.Session`) rendered through the destination's own frame source | `WorldScreenMappingLawTests.EachSourceKindNamesItsInstance`, `WorldSessionFollowLawTests`; the `uploaded-sources` canary shows and captures one |
+| `text` | no image: the decal tier draws its lines (`WorldScreenTextDecal`, through `TextSourceAt`) | `WorldTextAuthoringLawTests` (`TextScreenSourceValidates`, `TextScreenRefusesWithoutCatalogUnknownFontGridAndColor`, `TextCreationFaceSourceValidates`); the `uploaded-sources` canary checks its glyphs' ink |
+| `probe` | `source.probe`, an imported instance over the probe's output ring (`ProbeSourceFeed`) | `WorldSourceInstanceLawTests`, `RenderedProbeKernelHostLawTests`, the `probe-sources` canary |
+
+A producer a host adds needs no schema, planner or runtime change:
+`ImageProducerLawTests.AThirdProducerRegistersWithNoChangeToTheDocumentModel`
+registers a third, fake producer whose documents validate and round-trip, and
+`AThirdProducersSourceIsAnInstanceTheRuntimeInstallsThroughItsRegistration`
+installs its screen's source instance through its own registration.
 
 The engine ships four producers, each with its settings record in
 `WorldImageProducerSettings`:
@@ -1090,14 +1338,14 @@ The engine ships four producers, each with its settings record in
 | `testPattern` | `width`, `height` | uploaded | deterministic |
 | `qr` | `payload`, `ecLevel` (`M`), `quietZoneModules` (4) | uploaded | deterministic |
 | `camera` | `sensor` (`Color`), `seat`, `profile`, `controls` | imported | external |
-| `capture` | `windowTitle` or `monitorIndex`, `profile` | imported (Direct3D 12) or uploaded (Vulkan) | external |
+| `capture` | `windowTitle` or `monitorIndex`, `profile` | imported (a staged copy under Vulkan) | external |
 
 Every feed carries an `ImageSourceDescriptor` (`Puck.Abstractions.Sources`),
 the one contract for an image entering rendering from outside a pass: its
 producer, transport, extent, pixel format, color encoding, cadence, stamp and
-content class. A feed whose content is external is the slot's live feed, which
-`screen.eject` clears. Any other feed is its declared feed, which survives an
-eject. A deterministic feed states the exact image it shows
+content class. `screen.eject` blanks a screen showing external content (a
+camera, a capture, a probe) and gives a screen back its row's source when that
+is not external. A deterministic feed states the exact image it shows
 (`IImageSourceReference`), which the exact verdict `ImageSourceVerdict`
 compares a read-back against.
 
@@ -1105,15 +1353,22 @@ compares a read-back against.
 camera, a desktop capture or a probe's output, resolves through
 `WorldCaptureGate`. While the gate fills, the image resolves to its declared
 capture fill (`ImageSourceDescriptor.CaptureFill`, opaque `#202020` by
-default), a 1×1 upload, and the producer's frame is never acquired. The gate
-covers screen slots, jumbotron renders of those screens, and HUD `Frame`
+default), and the producer's frame is never acquired. A fill is a 1×1 image
+converted through `source-rgba` (`WorldCaptureFills`). Its converter builds
+off the frame thread, so a fill first converted on the frame a capture is
+armed for would have no image on that frame; each fill therefore converts as
+soon as a screen shows or a HUD frame names an external source, before any
+capture is armed, and no fill converts while none does, since the gate then
+resolves nothing to one. The gate
+covers screen slots, camera views filming those screens, and HUD `Frame`
 elements. An offscreen host, which serves scheduled captures and `puck parity`,
-fills every frame. A windowed host fills from the frame a `world.screenshot`
-is armed for until two frames after it. On the first frame it fills with an
-external source bound, the jumbotron views render again, so no view shows an
-image it rendered from that source before; a view beyond that frame's
-offscreen budget (`OffscreenRenderBudget`) waits for its round-robin turn and
-may still show its older image. Simulation never
+fills every frame. A windowed host fills while a capture is armed on the
+render graph and not yet served. An image resolved outside a fill is tainted,
+and so is every render-graph instance whose latest output read one: a frame
+produced while a capture is armed renders every tainted instance the capture
+reads again, whatever its refresh, and the capture waits for a frame whose
+inputs are all untainted, so a slow view, a camera view among them, never
+carries external pixels into it. Simulation never
 reads the gate, and no external pixel reaches simulation state, a replay or the
 state hash.
 
@@ -1122,16 +1377,64 @@ of the document (a machine instance, a camera, a probe, a destination). A new
 emulator joins as a machine engine in `WorldMachineCatalog`, again with no
 schema change. Text is a decal, not an image.
 
+A screen row's `filter` chooses how its face samples the image: `Nearest`, the
+default and omitted from the document, keeps each source pixel crisp, as an
+emulator wants, and `Linear` blends between them, as a camera or a desktop
+capture wants. The row's mapping carries it, the SDF screen shading draws the
+face from that mapping, and a hit maps to the same source pixel under either.
+
 A route's `input` names where a pointer hit on the screen's source goes:
-`Presentation` (the default, hover and highlight) or `Simulation`, where a
-pointer ray arriving as `source.pointer.origin`/`source.pointer.direction`
-command values is mapped in fixed point from the row alone
+`Presentation` (the default: hover and highlight, which only a displayed pane
+receives until GPU picking reaches a screen's surface; see P4) or `Simulation`,
+where a pointer ray arriving as
+`source.pointer.origin`/`source.pointer.direction` command values is mapped in fixed point from the row alone
 (`WorldScreenMappings.Of`, the whole source inset by the glass bezel). The
 validator refuses `Passthrough` by name, because only a source the local user
 opened may send input to a host window. `world.screens` echoes each screen's
 destination as `input:<destination>`. The mapping and its laws are described in
-[the rendering plan's P13](../../docs/plans/rendering.md#p13--hit-to-source-mapping-and-input-destinations);
-nothing reads the ray from a live pointer yet.
+[the rendering plan's P13](../../docs/plans/rendering.md#p13--hit-to-source-mapping-and-input-destinations).
+On a windowed host, `WorldPointerRayCapture` casts the OS pointer through its
+seat's camera each frame and holds the two commands on that seat's lane, the
+seat folds them into its intent's `SourceRay`, and a rule reads the mapped hit
+as `$pointer:<seat>:<screenIndex>:x|y|on`, a press on it as
+`$pointer:<seat>:<screenIndex>:press:<channelName>`, and whichever
+participant points there as `$pointer:any:<screenIndex>:…`. A typed
+`source.pointer.origin <x> <y> <z>` or `source.pointer.direction <x> <y> <z>`
+is held on the seat's lane in the same way, until it is typed again,
+`source.pointer.clear` ends the ray, or the seat is vacated. `body.channels`
+echoes the ray and its hit on every `Simulation` screen.
+
+**A window captured into a pane takes input only when the local user opens it.**
+`source.passthrough open <instance> <windowTitle...>` opens the window capture a
+shown `views.graphs` pane draws (a `source.capture` row naming a window) as a
+passthrough source, once the captured window's title contains the title the
+user typed, so the user names the window that will take their input. The pane's
+published mapping then takes the `Passthrough` destination with the local-user
+opener, which `world.view.panes` shows. On a windowed host,
+`WorldSourcePassthrough` offers every raw window event to its
+`SourcePassthroughRouter` before the game sees it: pointer events over the pane
+reach the window at the pane's mapped client point, a click there gives the
+window the keyboard, keys and text then go to it instead of the game, every
+release goes where its press went, and Control+Alt+Escape returns the keyboard
+to the game. `source.passthrough close <instance>` closes one, and
+`source.passthrough` with no argument echoes where the keyboard is and each
+open source's window, captured frame, client area and DPI scale. Only the
+host's own console may run the verb, as typed text; the local operator
+attachment (`world.control`) is that console too. No binding, seat, peer,
+addon, schedule or world document can open a passthrough source or send it
+input. A source that stops showing the window it was opened on (its instance
+stops, its capture reopens onto another window, or a row of the same name
+replaces it) is closed before the next event routes. A source whose pane is
+only not published for a while stays open: its window receives nothing while the
+pane is unshown, and an event arriving then first takes the keyboard from it and
+releases what it holds. Once the same instance's pane is published again a click
+on it reaches the window again.
+Closing a source, by the verb or on removal, releases every key and button its
+window holds and returns the keyboard to the game. Delivery is Windows-only:
+the capture feed's `Win32PassthroughWindow` sends window messages to the
+captured window, described in
+[Device input](../../docs/reference/input.md#keyboard-focus-and-passthrough-sources).
+A headless or offscreen boot has no window and no such verb.
 
 **A physical camera is an input device, seated like a gamepad, never named by
 hardware.** Each enumerated device gets a reconnect-stable `InputDeviceId`
@@ -1180,23 +1483,30 @@ outputs. `machine.operation` carries expected generation and named-machine Contr
 authority; `screen.insert` and `forge.play` use that executor for named producers,
 while `screen.eject` detaches the display. Legacy screen operations remain in the
 protocol. Generic provider operations are refused during recording until the tape
-can capture their execution. `WorldScreenBinder.cs` reads a machine output's
-framebuffer handle and light and calls
-`IMachineVideoOutput.PublishFrame` each produced frame—the one GPU call this
-project still makes on a machine's behalf. It recreates its own slot for a
+can capture their execution. A screen showing a machine output reads it as a
+render-graph source instance (package `source.machine`), an uploaded source:
+once per completed tick its upload (`MachineVideoSourceUpload`, made by the
+binder's `MachineSource`) copies the output's latest complete frame into the
+instance's region (`IMachineVideoOutput.WriteFrame`, in the `Format` the output
+declares: RGBA8, or an indexed image and its palette), the instance converts it
+once however many screens show it, and the world's `sdf.world` passes bind the
+converted image to every screen showing it. A machine touches no GPU object,
+so nothing of a machine's is retired on device loss. The source is
+deterministic and states the image it last wrote, so a `captures` row naming
+the screen (`screen`) is held to it exactly (`sourceVerdict`). Device loss retires every probe's shared ring, keeping its request so the
+next publish provisions a fresh one, and the Vulkan host's headless camera
+device is disposed only after the last image made on it is released
+(`DisposeAfterDependents`), however late a submitted frame's lease releases
+it. It recreates its own slot for a
 screen index removed and later restored by `world.reset`/`.load` exactly as
-`WorldMachineHost` does (bounded to indices the render engine's boot-frozen
-provider key set already names). A recreate re-points a `ScreenSourceCell`'s
-`Slot` field rather than writing a fresh delegate into the engine's
-provider maps—`SdfEngineNode` copies those maps' delegates ONCE, at
-construction, and never re-reads this binder's own dictionaries again, so
-only the cell indirection (never a brand-new delegate) is visible to an
-already-running renderer after a remove+reset. It still OWNS the genuinely presentation
-sources—every producer feed and every jumbotron view—bound through `screen.source <index> <kind>`
-(`camera`, `capture`, `desktop`, `probe`, `view`, `qr`; it ejects a
-present machine first, through the ordered domain) and `screen.eject` (which
-routes to whichever half—machine or
-local producer—actually holds the slot). A camera source row picks its
+`WorldMachineHost` does (bounded to the indices declared at boot, which the
+world's residency binds every frame through the binder's `ISdfScreenSources`). It still
+OWNS the genuinely presentation sources bound through `screen.source <index>
+<kind>` (`camera`, `capture`, `desktop`, `probe`, `view`, `qr`; it ejects a
+present machine first, through the ordered domain)—a jumbotron view it renders
+itself, any other a source instance it shows over the row—and `screen.eject`
+(which routes to whichever half—machine or presentation source—actually holds
+the slot). A camera source row picks its
 `sensor` (`color` default, or `infrared`—its own shared feed; two-sensor
 worlds prefer the device's Windows Face Authentication Profile V2 and its
 driver-declared simultaneous native format pair. On Windows, Puck first asks
@@ -1205,6 +1515,12 @@ color and L8 IR are converted by D3D11 compute with the native format's declared
 matrix, range, and chroma siting into private RGBA textures, copied into two
 shared three-slot rings, and sampled directly by either renderer without host
 pixels.
+Each copy signals the ring's Direct3D 12 shared fence, and the frame that
+samples the slot waits for that value on the GPU (on a Vulkan host through the
+fence imported as a timeline semaphore); a device that cannot share the fence
+waits on the CPU before it publishes, and `world.screens` shows which as
+`order:fence` or `order:cpu-wait (reason)`, as it does for a desktop capture on
+its GPU route.
 Each sampled slot stays acquired until the SDF frame-ring fence proves that GPU
 submission retired, so camera and renderer cadence cannot race an overwrite;
 closing a graph likewise defers the ring's destruction across those frames.
@@ -1249,7 +1565,7 @@ boot-time load pin, so the code never claims an identity the running world no
 longer has; the echo says `hash-covers=live-definition` and carries the payload
 in full. It is deterministic in the definition alone—same document, same
 payload, every run. An
-unbound slot gets the engine's no-signal card, and a missing device is loud
+unbound slot shows dark glass, and a missing device is loud
 data in `world.screens`/`screen.state`, never a crash. A machine screen is
 engine-neutral (`Puck.Abstractions.Machines`): `WorldBootComposition`
 registers the SM83 family (`gaming-brick`) and the ARM7TDMI machine
@@ -1274,23 +1590,25 @@ simulation reads is a mutation, not a lever). `instrument.state` reads which scr
 with, whether it carries the capability, and its tempo. See
 [`Audio/README.md`](Audio/README.md) for the instrument host itself.
 
-A placeable camera's offscreen view can also be EXPORTED—read as a GPU
-texture by a consumer outside the render engine (a probe kernel, see
-`## Probes` below) rather than only sampled by a jumbotron screen.
+A placeable camera's view can also be EXPORTED—read as a GPU texture by a
+consumer outside the render engine (a probe kernel, see `## Probes` below)
+rather than only sampled by a screen.
 `WorldScreenBinder.TryGetViewExport`/`ReleaseViewExport` register/withdraw a
-named camera's `SdfCameraView` for export, sharing the SAME persistent view a
+named camera's view for export, sharing the SAME view instance a
 `screen.source <index> view` binding uses (so a camera already filmed by a
-jumbotron gains export at no extra render cost) and keeping an export-only
-camera rendering every `ViewStack` refresh even with no screen wired to it.
-Export needs the Direct3D 12 host: the exported image is opened by a Direct3D
-11 `OpenSharedResource1` elsewhere in the process, which cannot open a Vulkan
-host's opaque Vulkan-to-Vulkan export handle, so the Vulkan host refuses
-export outright rather than producing a handle nothing downstream can read.
-Export carries exactly ONE physical image (the engine's own persistent
-output, re-rendered in place every refresh) with no second buffer to rotate
-into. A shared lease admits concurrent readers of the completed image and
-defers the next writer until all of them retire; export submission drains the
-producer queue before publishing that image as readable.
+screen gains export at no extra render cost); an export-only camera is a view
+the display shows directly, so it renders at its refresh, at its declared
+extent, even with no screen wired to it.
+The exported image is a Direct3D 12 simultaneous-access texture a Direct3D 11
+`OpenSharedResource1` opens elsewhere in the process: the render device's own
+on the Direct3D 12 host, and one the binder's headless Direct3D 12 device makes
+and the render device imports on the Vulkan host. The view's node renders into
+images of its own, which its screens sample, and copies each frame into the one
+exported image in its `export copy` pass. A shared lease admits concurrent
+readers of the completed image and defers the next copy until all of them
+retire, and each copy is published with the value it signals on the image's
+shared fence, which the reader waits for on its own device; nothing drains a
+queue.
 
 ## HUD frame elements
 
@@ -1305,8 +1623,8 @@ source (no authored `seat`) means "this panel's own seat"—the seat argument
 is what resolves that, not a value baked into the source record. They are the
 registry every non-screen consumer of a `WorldFrameSource` shares: the former
 opens a non-camera producer's underlying feed the first time anything asks
-for it (idempotent—a view renders every `ViewStack` refresh with no wired
-screen narrowing its round-robin turn, a probe reads whatever its own kernel
+for it (idempotent—a view a retained frame names is shown directly by the
+display, so it renders at its refresh; a probe reads whatever its own kernel
 publishes, a capture opens through the same ladder a declared screen's capture
 source uses); a `camera` source declares nothing here at all—it instead
 rides `RetainFrameSource`/`ReleaseFrameSource`'s reference-counted table,
@@ -1355,7 +1673,7 @@ each of the kind's typed sockets (`inputs`, by socket name)—or, in place of
 every socket at once, a recorded `puck.probe.track.v1` track—and carry the
 bindings that route one of its channels to a command axis (a `probe.<name>`
 source, an ordinary bindable stick-like input any binding overlay may map), a
-presentation float (a `render.extensions` config field, or another probe's
+presentation float (a `views.post` pass's config field, or another probe's
 kind config field—patched live into its running kernel), or the existing
 camera control surface. A socket's class is `frame` (any one frame source) or
 `strobePair` (a strobing infrared sensor's lit frame and the unlit frame kept
@@ -1367,25 +1685,36 @@ instance's own seat, the same convention a `screens` row and a HUD `Frame`
 element follow; every camera socket in one probe must resolve to the same seat,
 because one kernel run has one host graph; `profile` is honored while source
 `controls` are refused in favor of probe control bindings or camera-screen
-authoring), `view` (a named `cameras[]` row's offscreen render, exported as a
-kernel-readable lease that holds the last complete image while a kernel reads),
+authoring), `view` (a named `cameras[]` row's offscreen render, exported at the
+camera's extent as a Direct3D 12 simultaneous-access texture that holds the
+last complete frame while a kernel reads, each frame published with the value
+the exporting engine signals on the texture's shared fence, which the kernel
+waits for; on the Vulkan host the texture and fence come from the binder's
+headless Direct3D 12 device and the render device imports both, and a camera
+extent edit makes the export again),
 `probe` (another declared probe's
 own texture output, read back as a ring). Any other producer is part of the
 shared frame-source vocabulary but is refused on a probe socket until a kernel
 input host exists for it. The kind's `trigger`
-socket must bind a `camera` producer source: kernels run on that sensor's own camera
-graph, so it decides which `ICameraKernelHost` a run attaches to. A kind that
+socket decides which host a run attaches to: bound to a `camera` producer
+source, the kernel runs on that sensor's own camera graph; bound to a `view` or
+a `probe` source in a row that binds no camera, it runs on the render adapter's
+own kernel host, which the binder opens and wakes once a frame and which cycles
+the kernel whenever its trigger publishes a frame (the shipped `average` kind
+measuring a view is the smallest such probe). A kind that
 declares an `output` writes a texture each cycle, at the extent its own
-`output.of` socket's source renders at; a screen shows it as a `probe` source
-(`screen.source <index> probe <id>`), and another probe's `probe` socket may
-read it back as an input in turn.
+`output.of` socket's source renders at, into a ring the binder provisions with
+a shared fence the kernel signals; a screen shows it as a `probe` source
+(`screen.source <index> probe <id>`), an imported source instance handed out
+through the capture gate like a camera's, whose order `world.screens` reports,
+and another probe's `probe` socket may read it back as an input in turn.
 
 `WorldProbes` services every declared row from the host loop's per-frame
 capture in both boot shapes (headless, every camera/view/probe socket faults
 by name for want of a live feed and a parameter binding finds no composed
 pass; a track-input probe and every axis binding run in full), resolving each
-socket against the binder's live state and (re)attaching the kernel to the
-trigger sensor's open graph whenever any socket's generation—or the output
+socket against the binder's live state and (re)attaching the kernel to its
+host (the trigger sensor's open graph, or the render adapter's own host) whenever any socket's generation—or the output
 ring's—changes; a socket whose source is not ready yet (an unpublished ring,
 an unopened camera) idles the whole probe with that fault and retries every
 frame until it resolves. A camera socket retains its own (seat, sensor,
@@ -1459,7 +1788,14 @@ All render levers are live verbs with no-arg echoes of the current value:
 `world.quality`, `world.shadows`, `world.ao`, `world.render-scale`,
 `world.upscale-sharpness`, `world.target`, `world.shadow-mask`,
 `world.shadow-march`, `world.ao-quality`, `world.view-refresh`,
-`world.debug-view`, `world.fps`. Render scale applies
+`world.debug-view`, `world.fps`. `world.quality low|medium|high` applies the
+world's own `render.low`, `render.medium` or `render.high` preset, each a
+shadow tier, an ambient-occlusion switch and a render-scale tier; the names are
+the engine's one quality vocabulary (`QualityTiers`), and a preset the world
+does not author is refused by name. The shipped worlds share one table,
+`Assets/worlds/quality.puck`: the standard world imports it, and a world on
+another basis imports it by name, so every presenting world answers each tier
+without moving its own boot levers (`ShippedWorldQualityLawTests`). Render scale applies
 to both seat views and named cameras, multiplied by any layout-transition scale.
 Named tiers are
 facades over continuous values. Do not assume a lower render scale is
@@ -1489,10 +1825,11 @@ line per kind it counts. The boot server registers its own sources:
 rebuild (`world.reload`, `world.load`, `world.reset`) that replaces the arena
 and search behind them, so a reading never goes down, and `state.rules`. A
 rendering shape adds the shader compiler's `shaders.compiler` (requests, cache
-hits and each native tool's runs) and the process's shader loads,
-`shaders.sdf-kernels`, `shaders.fullscreen-pass` and `shaders.set-manifest`
-(loads and the bytecode bytes they read); each backend adds its
-`pipeline-cache.<backend>`, and Vulkan adds `procedures.vulkan`. A rendering
+hits and each native tool's runs) and the process's SDF kernel loads,
+`shaders.sdf-kernels` (loads and the bytecode bytes they read); each backend adds its
+`pipeline-cache.<backend>` and `memory.<backend>` (device-local bytes
+allocated and released at their allocation sizes, and the peak held; swapchain
+images are never counted), and Vulkan adds `procedures.vulkan`. A rendering
 shape also registers `sdf.bakes`: the creation bakes its cache held, scheduled,
 baked and refused, and the field evaluations the bakes spent. The
 client registers `presentation.mirror`, the cells its state mirror read. A
@@ -1508,8 +1845,15 @@ the device as its backend reported it at creation — `backend`, `adapter`, PCI
 `vendor` and `device`, the driver version as displayed (`driver`) and as
 reported (`driver.raw`), `api`, and on Vulkan `driver.name`, `driver.id`,
 `conformance` and `pipeline-cache.uuid` — or says `device unavailable` before the device is brought up.
-The identity is recorded, never branched on. Then come each render node
-(`world`, its hosted pipelines, `overlay`, `view:<name>`) with its newest
+The identity is recorded, never branched on. Once the device is up, a
+`capabilities` line (and a `capabilities` object under `--json`) records what
+it can bind: `descriptor-sets` or `root-signature-words`,
+`push-constant-bytes`, the `stage.*` descriptor limits, and on Direct3D 12
+`binding-tier`, `root-signature`, `shader-model`, `heap.views`,
+`heap.samplers` and `heap.samplers-static`; it is recorded the same way. Then come each render node
+(`world` for the SDF engine, then every render-graph instance by its instance
+name, such as the root `main` and each `views.graphs` pane, then
+`view:<name>` for each offscreen view) with its newest
 completed submission's per-pass counts and its created objects, or
 `work unavailable` until a submission completes. A filter selects whole dotted
 segments (`world.counters gpu`, `world.counters state`); a filter that selects
@@ -1560,7 +1904,22 @@ arc; counts, kinds, seeds and flags held); a key states only the fields it
 moves, addresses a light by slot and a stop by index with the kinds the statics
 author, and the rest hold from the previous key. The clock is simulation
 state (an advancing `state` row—deterministic, replayed, settable with
-`world.row.set state`); the interpolation is presentation.
+`world.row.set state`); the interpolation is presentation. A key may not move
+a cloud layer's `drift`, `shear` or `spin`: each is a rate integrated from the
+tick, and a state row's value can jump between two ticks.
+
+The sky's twinkle and cloud motion and each bounded volume's advection and
+pulse run on the presented engine tick of the world the frame draws, the tick
+the state mirror presented its bound state at, reduced exactly on the host, so
+a frame at a given tick draws the same sky on every run and a routed or
+session view shows its destination's time. The top-level `timeline` section
+names presentation clocks: `{ "clocks": [ { "name": "day", "periodSeconds":
+1200, "spanSeconds": 86400, "startSeconds": 25200 }, { "name": "tide",
+"state": "tide" } ] }`. A tick clock's period is a whole number of engine
+ticks and its span is what one period reads as (in `.puck`, `periodSeconds:
+20min, spanSeconds: 24h`); a state clock's phase is its Fixed or Int row's
+fractional part. `world.timeline` echoes each clock's source, its period and
+start in engine ticks, and its phase and reading at the authority's tick.
 
 ## Engine boundaries worth knowing
 
@@ -1571,7 +1930,8 @@ state (an advancing `state` row—deterministic, replayed, settable with
   the 65536-instance ceiling. Empty stamp capacity emits no live instances.
   Camera-tile masking is a separate approximation selected by the quality
   policy or `world.shadow-mask camera-tile`.
-- `OffscreenRenderBudget.RegisteredViews = 64`: do not register a rendered view per
+- Every camera a screen, a HUD frame or a probe export shows is a view instance
+  the render graph renders at its refresh: do not show a rendered view per
   population entry.
 - XInput caps at 4 Xbox-family pads locally; HID pads are uncapped.
 
@@ -1596,17 +1956,18 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
 capture of a following composed frame. A tick wait lets rendering progress;
 confirm the capture completion before reading the file. Its stdout echo says `pending <path>`
 precisely because no file exists yet; the resolved path arrives on **stderr**
-when the frame lands, named by whichever node in the render chain served it:
-`[capture] unified overlay -> <path>`, `[capture] <shader-set id> -> <path>`
-from a composed `render.extensions` pass, or `[debug] captured frame N ->
-<path>` from the engine node at the bottom. A node that draws nothing this
-frame forwards the request inward, so the readback always lands on the node
-that actually produced the shown frame. Arming a second capture while one is still
+when the frame lands, named by whichever node served it: `[capture] main ->
+<path>` from the node of the render graph's root, which draws the
+`views.post` passes and the overlay over the world, or `[capture] world ->
+<path>` from the world's own instance when the world is the root because
+nothing is drawn over it. The root reads the frame the display shows; an
+overlay that draws nothing this frame publishes the world's image in its place,
+and the capture reads that. Arming a second capture while one is still
 pending is REFUSED by name—the earlier path would never be written—and a
 request still outstanding when the run ends prints a `WARNING` naming it. A
 scripted caller can therefore distinguish a reported write from an unserved
 request. In-process callers receive a `FrameCaptureRequest` from
-`SdfWorldRender.RequestCapture` and await its `Completion` for success or
+the render root (`RenderGraphRuntimeNode.RequestCapture`) and await its `Completion` for success or
 failure. See [the render contract](../Puck.SdfVm/README.md#capture-completion).
 
 Committed, re-runnable proofs cover most load-bearing seams as `puck canary`

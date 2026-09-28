@@ -1,9 +1,9 @@
-using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
 using Puck.Abstractions;
-using Puck.Hosting;
+using Puck.World;
+using Puck.World.Transpiler.Composition;
 
 namespace Puck.Cli.Canary;
 
@@ -12,7 +12,7 @@ internal static partial class CanaryCommand {
 
     /// <summary>One authority's throwaway federation-identity keypair — a fresh ECDSA P-256 key, its self-certifying
     /// domain fingerprint, and its SPKI bytes ready to pin into a peer's admission row.</summary>
-    private readonly record struct FederationIdentity(string Domain, string PublicKeyBase64, byte[] Pkcs8);
+    internal readonly record struct FederationIdentity(string Domain, string PublicKeyBase64, byte[] Pkcs8);
 
     /// <summary>The subject the canary's connecting-out process signs its claims as. It authors no host.authority
     /// of its own (it never listens for federation in this fixture), so Puck.World's own boot-instance fallback
@@ -24,7 +24,7 @@ internal static partial class CanaryCommand {
     // failing to compose.
     private const string WorldBodiesSectionName = "bodies";
 
-    private static FederationIdentity GenerateFederationIdentity() {
+    internal static FederationIdentity GenerateFederationIdentity() {
         using var ecdsa = System.Security.Cryptography.ECDsa.Create(curve: System.Security.Cryptography.ECCurve.NamedCurves.nistP256);
         var spki = ecdsa.ExportSubjectPublicKeyInfo();
         var fingerprint = System.Security.Cryptography.SHA256.HashData(source: spki);
@@ -35,6 +35,7 @@ internal static partial class CanaryCommand {
             Pkcs8: ecdsa.ExportPkcs8PrivateKey()
         );
     }
+
     private static JsonObject AdmissionRow(FederationIdentity peer, string peerSubject) => new() {
         ["domain"] = peer.Domain,
         ["subject"] = peerSubject,
@@ -109,10 +110,80 @@ internal static partial class CanaryCommand {
                     relativeTo: root
                 )
             );
+            RootEscapingDocuments(
+                mirror: federatedDirectory,
+                source: resolved,
+                staged: staged[given]
+            );
         }
 
         return staged;
     }
+
+    // A staged document's basis and imports resolve against its own directory. One that names a document outside the
+    // mirrored tree, as a canary's own delta over a shipped world does, would name nothing from the copy, so it is rooted
+    // where the source's resolves; one inside the tree keeps naming the staged copy, which is what a patched sibling is.
+    internal static void RootEscapingDocuments(string staged, string source, string mirror) {
+        if (JsonNode.Parse(json: File.ReadAllText(path: staged)) is not JsonObject world) {
+            return;
+        }
+
+        var stagedDirectory = Path.GetDirectoryName(path: staged)!;
+        var sourceDirectory = Path.GetDirectoryName(path: source)!;
+        var mirrorRoot = (Path.GetFullPath(path: mirror).TrimEnd(trimChar: Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar);
+        var changed = false;
+
+        string? Rooted(string name) {
+            if (
+                Path.IsPathRooted(path: name) ||
+                Path.GetFullPath(path: Path.Combine(
+                    path1: stagedDirectory,
+                    path2: name
+                )).StartsWith(
+                    comparisonType: StringComparison.OrdinalIgnoreCase,
+                    value: mirrorRoot
+                )
+            ) {
+                return null;
+            }
+
+            changed = true;
+
+            return Path.GetFullPath(path: Path.Combine(
+                path1: sourceDirectory,
+                path2: name
+            )).Replace(
+                newChar: '/',
+                oldChar: '\\'
+            );
+        }
+
+        if (
+            (world[propertyName: WorldDocumentBasis.BasisMemberName]?.GetValue<string>() is { } basis) &&
+            (Rooted(name: basis) is { } rootedBasis)
+        ) {
+            world[propertyName: WorldDocumentBasis.BasisMemberName] = rootedBasis;
+        }
+
+        foreach (var entry in ((world[propertyName: WorldDocumentBasis.ImportsMemberName] as JsonArray) ?? [])) {
+            if (
+                (entry is JsonObject import) &&
+                (import[propertyName: WorldImport.DocumentMemberName]?.GetValue<string>() is { } document) &&
+                (Rooted(name: document) is { } rootedDocument)
+            ) {
+                import[propertyName: WorldImport.DocumentMemberName] = rootedDocument;
+            }
+        }
+
+        if (changed) {
+            File.WriteAllText(
+                contents: world.ToJsonString(options: new System.Text.Json.JsonSerializerOptions { WriteIndented = true }),
+                encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+                path: staged
+            );
+        }
+    }
+
     private static void CopyDirectory(string source, string target) {
         Directory.CreateDirectory(path: target);
 
@@ -137,18 +208,71 @@ internal static partial class CanaryCommand {
             );
         }
     }
-    private static (string ClientWorld, string AuthorityWorld) PrepareFederatedWorlds(CanaryLeg leg, string runDirectory, string endpoint, FederationIdentity clientIdentity, FederationIdentity authorityIdentity) {
+
+    // A composition source declares several worlds that reach each other across their borders by document name, and
+    // the authority boots one document the runner patches. The source is compiled in place and every world it
+    // declares is staged together, through the staging a composition boot does for itself, and the world the leg
+    // enters — its `entry`, else the source's declared entry — is the document the authority boots.
+    internal static string StageFederatedComposition(string source, string? entry, string directory) {
+        _ = WorldCompileCache.Shared.TryCompile(
+            compiled: out var compiled,
+            failure: out var failure,
+            path: source
+        );
+
+        if (failure is not null) {
+            throw new InvalidOperationException(message: $"authority composition '{source}' does not compile:{Environment.NewLine}{failure.Diagnostics.FormatReport(
+                filePath: source,
+                sourceText: File.ReadAllText(path: source)
+            )}");
+        }
+        if (compiled!.Worlds.Count == 0) {
+            throw new InvalidOperationException(message: $"authority source '{source}' declares no worlds; a federated leg stages a composition's worlds or boots a document.");
+        }
+        if (!WorldStaging.TryStageComposition(
+            directory: directory,
+            entry: entry,
+            entryName: out _,
+            entryPath: out var entryPath,
+            path: source,
+            reason: out var reason,
+            worlds: compiled.Worlds
+        )) {
+            throw new InvalidOperationException(message: $"authority composition refused: {reason}");
+        }
+
+        return entryPath;
+    }
+    internal static (string ClientWorld, string AuthorityWorld) PrepareFederatedWorlds(CanaryLeg leg, string runDirectory, string endpoint, FederationIdentity clientIdentity, FederationIdentity authorityIdentity) {
         var machineCatalog = CliWorldVocabulary.EnsureInstalled();
         var catalogFingerprint = CliWorldVocabulary.Fingerprint(catalog: machineCatalog);
         var federatedDirectory = Path.Combine(
             path1: runDirectory,
             path2: "federated-worlds"
         );
-        var staged = StageFederatedWorlds(
-            federatedDirectory: federatedDirectory,
-            worldPaths: [leg.WorldPath, leg.AuthorityWorldPath!]
-        );
-        var authorityTarget = staged[leg.AuthorityWorldPath!];
+        // A composition source is compiled where it stands, so its imports resolve, and its worlds are staged
+        // together into the run's own directory; only documents are mirrored.
+        var documents = ((string[])[leg.WorldPath, leg.AuthorityWorldPath!]).Where(predicate: static path => !WorldDocumentName.IsSourceFile(path: path)).ToArray();
+        var staged = ((documents.Length == 0)
+            ? new Dictionary<string, string>(comparer: StringComparer.OrdinalIgnoreCase)
+            : StageFederatedWorlds(
+                federatedDirectory: federatedDirectory,
+                worldPaths: documents
+            ));
+        var authorityTarget = (WorldDocumentName.IsSourceFile(path: leg.AuthorityWorldPath!)
+            ? StageFederatedComposition(
+                directory: Path.Combine(
+                    path1: runDirectory,
+                    path2: "federated-composition"
+                ),
+                entry: leg.Entry,
+                source: leg.AuthorityWorldPath!
+            )
+            : staged[leg.AuthorityWorldPath!]);
+
+        if (!leg.Connect && !staged.ContainsKey(key: leg.WorldPath)) {
+            throw new InvalidOperationException(message: $"federated leg '{leg.Name}' boots the composition source '{leg.WorldPath}' beside its authority without connect; a staged client reaches the patched authority through its own staged references, which a source does not carry, so a composition client connects.");
+        }
 
         var root = (JsonNode.Parse(json: File.ReadAllText(path: authorityTarget))?.AsObject()
             ?? throw new InvalidOperationException(message: "authority world is not a JSON object"));
@@ -225,6 +349,7 @@ internal static partial class CanaryCommand {
             ? leg.WorldPath
             : staged[leg.WorldPath]), authorityTarget);
     }
+
     // A federated mesh leg (leg.Authorities.Count != 0, CANARY-SHAPE.md's N-ary shape): every authority is a
     // listener bound to its own dynamic loopback port, none dials out, and neighbours resolve each other by reading
     // a sibling document's own host.authority — the same adjacency/references mechanism a two-authority leg already
@@ -651,106 +776,4 @@ internal static partial class CanaryCommand {
             encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
         );
     }
-
-    private sealed class AuthorityCompanion : IDisposable {
-        // How long the companion may take to report its listener, and how long it may take to quit once asked. Its own
-        // --exit-after-seconds backstop outlasts both plus its client's whole timeout, so it never ends under a client.
-        public const int ListenSeconds = 5;
-        public const int QuitGraceSeconds = 10;
-
-        private readonly Process m_process;
-
-        private CancellationTokenRegistration m_cancellation;
-
-        private readonly StringBuilder m_stdout = new();
-        private readonly StringBuilder m_stderr = new();
-        private readonly Lock m_gate = new();
-
-        private AuthorityCompanion(Process process) {
-            m_process = process;
-            process.OutputDataReceived += (_, args) => {
-                if (args.Data is { } line) {
-                    lock (m_gate) {
-                        m_stdout.AppendLine(value: line);
-                    }
-                }
-            };
-            process.ErrorDataReceived += (_, args) => {
-                if (args.Data is { } line) {
-                    lock (m_gate) {
-                        m_stderr.AppendLine(value: line);
-                    }
-                }
-            };
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine();
-        }
-
-        public string Stderr { get { lock (m_gate) { return m_stderr.ToString(); } } }
-        public string Stdout { get { lock (m_gate) { return m_stdout.ToString(); } } }
-
-        // The companion serves only while its client runs: it is asked to quit when the client's session has ended,
-        // and killed only if it has not exited within the grace below.
-        public void Dispose() {
-            if (!m_process.HasExited) {
-                try {
-                    m_process.StandardInput.Write(value: RunnerQuit);
-                    m_process.StandardInput.Close();
-                } catch (IOException) {
-                    // The companion already closed its end; the wait below observes its exit.
-                }
-
-                if (!m_process.WaitForExit(timeout: TimeSpan.FromSeconds(value: QuitGraceSeconds))) {
-                    try { m_process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
-                }
-
-                m_process.WaitForExit();
-            }
-            m_cancellation.Dispose();
-            m_process.Dispose();
-        }
-        // A cancelled run kills the companion at once, whatever its client is doing.
-        public static AuthorityCompanion Start(string artifact, string world, string stateDirectory, string federationKeyPath, int exitAfterSeconds, CancellationToken cancellationToken) {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var process = ChildProcess.StartRedirected(
-                arguments: [artifact, "--world", world, "--state-dir", stateDirectory, "--exit-after-seconds", exitAfterSeconds.ToString(provider: CultureInfo.InvariantCulture), "--headless", "true", "--federation-key-file", federationKeyPath],
-                fileName: "dotnet"
-            );
-            var companion = new AuthorityCompanion(process: process);
-
-            companion.m_cancellation = cancellationToken.Register(callback: companion.Kill);
-
-            return companion;
-        }
-
-        private void Kill() {
-            try {
-                m_process.Kill(entireProcessTree: true);
-            } catch (InvalidOperationException) {
-                // It had already exited.
-            }
-        }
-
-        public bool WaitUntilListening(TimeSpan timeout) {
-            var clock = Stopwatch.StartNew();
-
-            while (clock.Elapsed < timeout) {
-                lock (m_gate) {
-                    if (m_stderr.ToString().Contains(
-                        comparisonType: StringComparison.Ordinal,
-                        value: "[world.listen: bound "
-                    )) {
-                        return true;
-                    }
-                }
-                if (m_process.HasExited) {
-                    return false;
-                }
-                _ = m_process.WaitForExit(milliseconds: 25);
-            }
-            return false;
-        }
-    }
-
 }

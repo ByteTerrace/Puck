@@ -1,3 +1,4 @@
+using Puck.Abstractions.Gpu;
 using Puck.Assets;
 using Puck.Vulkan.Interop;
 
@@ -12,7 +13,7 @@ public interface IVulkanCommandBufferRecorder {
         int imageIndex,
         VulkanFramebufferSet framebufferSet,
         VulkanRenderPass renderPass,
-        IReadOnlyDictionary<AssetContentHash, VulkanGraphicsPipeline> graphicsPipelines,
+        IReadOnlyDictionary<AssetContentHash, IGpuPipeline> graphicsPipelines,
         VulkanSwapchain swapchain,
         IReadOnlyList<VulkanDrawCommand> drawCommands
     );

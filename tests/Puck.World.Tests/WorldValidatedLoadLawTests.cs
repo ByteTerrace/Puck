@@ -130,7 +130,7 @@ public sealed class WorldValidatedLoadLawTests : IDisposable {
             machineId: Guid.NewGuid(),
             resolver: new WorldSessionResolver(),
             seats: WorldEmbodiedSeats.None,
-            stateRoot: files.RootPath
+            stateRoot: new WorldStateRoot(path: files.RootPath)
         );
 
         host.AdmitBoot(row: boot.Instance);

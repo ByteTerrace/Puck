@@ -17,6 +17,20 @@ and after replacing the arena; output rows remain unchanged by that refusal.
 and falling facts through rest, impulse, flight, and landing. `PaddleballContactLawTests`
 checks the shipped ball and court from both touching and elevated spawns.
 
+`BakeSamplingDeviceLawTests` uploads the bake sampling fixture's BC7, BC5 and
+BC6H textures with every mip level through the image upload and samples each
+probe texel at its level with `Assets/Shaders/bake-sampling.comp.hlsl`, on the
+first Vulkan device with a graphics queue, the first Direct3D 12 adapter and
+WARP, skipping by name on a host without one. `StagedRegionDeviceLawTests`
+runs an uploaded source's conversion on the same three devices with its region
+staged, chosen by handing the runtime the device's own memory profile with no
+host-visible device-local bytes, and holds a capture of each tick's image to the
+CPU reference byte for byte; its Direct3D 12 hardware leg turns the debug layer
+on and fails on any `[d3d12-debug]` line, so the law runs alone in
+`DebugLayerCollection`. The device laws share `tests/Shared`'s
+`HeadlessVulkanDevice` and `DirectXTestDevices`. `SharedFenceLawTests` orders a
+Direct3D 11 writer and a Direct3D 12 or Vulkan reader by a shared fence alone.
+
 `SeamCrossingOrchestrationLawTests` exercises authored adjacency hysteresis through
 the real instance host: a body inside the deadband retains its authority, and one
 beyond it transfers within a bounded number of ticks. `AuthoredAdjacencyHysteresisLawTests`

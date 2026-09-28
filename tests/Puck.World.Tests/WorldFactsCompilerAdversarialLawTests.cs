@@ -28,7 +28,7 @@ public sealed class WorldFactsCompilerAdversarialLawTests {
 
     [Fact]
     public void BindableCameraScalars_ExportTheirNumberOrStringWireShape() {
-        var split = WorldSchema.Export(postRenderExtensions: []);
+        var split = WorldSchema.Export(postProcessPackages: []);
         var definitions = Assert.IsType<JsonObject>(@object: split.Common["$defs"]);
         var orbit = Assert.IsType<JsonObject>(@object: definitions["WorldCameraProgramOpOrbit"]);
         var properties = Assert.IsType<JsonObject>(@object: orbit["properties"]);

@@ -1,4 +1,7 @@
 using Puck.Abstractions.Machines;
+using Puck.Platform;
+using Puck.SdfVm;
+using Puck.World.Client;
 
 namespace Puck.World;
 
@@ -7,7 +10,7 @@ namespace Puck.World;
 /// declared machine whose content file was missing, a webcam that would not open, a captured window not found), if any.</summary>
 /// <param name="Assigned">Whether a machine is booted on the screen.</param>
 /// <param name="Engine">The screen-machine engine id hosting the machine (meaningful only when <paramref name="Assigned"/>).</param>
-/// <param name="Handle">The current source image-view handle (0 = unbound → the procedural fallback).</param>
+/// <param name="Handle">The current source image-view handle (0 = unbound, dark glass).</param>
 /// <param name="FramesStepped">How many frames the machine has stepped since it booted.</param>
 /// <param name="PendingSteps">Accepted queued-machine steps not yet completed; zero for synchronous machines.</param>
 /// <param name="MaximumPendingSteps">The queued machine's finite pending-segment capacity; zero for synchronous
@@ -28,17 +31,40 @@ internal sealed partial class WorldScreenBinder {
         instance: instance,
         output: output
     );
-    /// <summary>Returns the current same-device image-view handle bound to a screen index, or 0 when the index is unbound, not
-    /// declared, or nothing has been published yet — the live state <c>world.screens</c> reports.</summary>
+    /// <summary>Returns the same-device image-view handle the world's views bound to a screen index in its latest frame, or 0
+    /// when the index is unbound, not declared, or nothing has been produced yet — the live state <c>world.screens</c>
+    /// reports.</summary>
     /// <param name="index">The engine screen-surface index.</param>
     /// <returns>The bound handle, or 0.</returns>
-    public nint CurrentHandle(int index) => (m_slots.TryGetValue(
-        key: index,
-        value: out var slot
+    public nint CurrentHandle(int index) => ((
+        m_slots.ContainsKey(key: index) &&
+        (index >= 0) &&
+        (index < SdfWorldTables.MaxScreenSurfaces) &&
+        (ViewHost is { } residency)
     )
-        ? slot.Handle()
+        ? residency.BoundScreenSource(screen: index)
         : 0
     );
+    /// <summary>Returns how the image a screen shows crosses from its producer's device to the render device: through the
+    /// shared fence the producer signals and the render device's submission waits for, or by the producer's CPU wait
+    /// and why. Only a camera on its GPU tier, a capture on its GPU route and a probe output cross devices.</summary>
+    /// <param name="index">The engine screen-surface index.</param>
+    /// <returns>The order, or <see langword="null"/> when the screen's source crosses no devices.</returns>
+    public SharedFenceOrder? FenceOrderAt(int index) {
+        var feed = ((ReadOf(screen: index) is { } instance)
+            ? FeedOf(instance: instance)
+            : null);
+
+        return (feed switch {
+            WorldCameraSourceFeed camera => CameraFenceOrderFor(
+                seat: camera.Seat,
+                sensor: camera.Sensor
+            ),
+            CaptureSlotFeed { Feed: { GpuRoute: true, Source: { } source } } => source.GpuFenceOrder,
+            ProbeSourceFeed probe => probe.Feed.Order,
+            _ => null,
+        });
+    }
     /// <summary>Returns a one-line description of every live cable link — a facade over
     /// <see cref="Server.WorldMachineHost.DescribeLinks"/>.</summary>
     public string DescribeLinks() => m_machines.DescribeLinks();
@@ -71,7 +97,7 @@ internal sealed partial class WorldScreenBinder {
             return new WorldScreenState(
                 Assigned: true,
                 Engine: machineState.Engine,
-                Handle: m_machines.Handle(index: index),
+                Handle: CurrentHandle(index: index),
                 FramesStepped: machineState.FramesStepped,
                 PendingSteps: machineState.PendingSteps,
                 MaximumPendingSteps: machineState.MaximumPendingSteps,
@@ -84,12 +110,14 @@ internal sealed partial class WorldScreenBinder {
         return new WorldScreenState(
             Assigned: false,
             Engine: null,
-            Handle: slot.Handle(),
+            Handle: CurrentHandle(index: index),
             FramesStepped: 0,
             PendingSteps: 0,
             MaximumPendingSteps: 0,
             BackpressureEvents: 0,
-            Fault: slot.CurrentFault()
+            Fault: ((ReadOf(screen: index) is { } instance)
+                ? SourceFault(instance: instance)
+                : slot.DeclaredFault)
         );
     }
     /// <summary>Gets the live decal-text source at a screen index, or <see langword="null"/> when the slot's current

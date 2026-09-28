@@ -1,0 +1,81 @@
+{
+  "id": "probe-sources",
+  "title": "A probe reads a view export ordered by the export's shared fence, and its output is a source a screen shows",
+  "binding": "The positive leg boots an offscreen 128x72 world, on each backend, with a probe 'meter' of the shipped average kind whose one socket reads the view of camera 'eye', which looks at a red ball so the ball fills its 64x36 frame, and a placed screen whose face shows the probe. The socket is the kind's trigger and reads a rendered source, so the kernel runs on the render adapter's own Direct3D 11 host, woken once a frame, and cycles whenever the exported view publishes a new frame. The view's node renders into its own images and copies each frame into the exported image, a Direct3D 12 simultaneous-access texture (on the Vulkan host, a texture and fence the binder's headless Direct3D 12 device made, which the Vulkan device imports to write and signal), and signals the shared fence behind each copy and publishes the value; the kernel waits for that value on its own device before it reads, so no queue drain orders the two devices. After 150 ticks probe.status reports the meter running on the GPU with the eye view bound to its frame socket and its latest reading of the view's mean color red: at least a quarter red and redder than it is blue; world.screens reports the placed screen showing probe:meter, bound, ordered by the output ring's shared fence (order:fence), which the kernel signals after each write, and reading the ring at the export's 64x36. screen.state reports the placed screen bound with no fault, reading the probe's output as an imported source instance through the capture gate. The eye camera's extent is then edited live to 48x27: the export is made again at the new extent rather than read at the old one, so 150 ticks later the meter still reads red and world.screens reads the screen's source at 48x27. The discriminating leg boots the same world with the meter reading camera 'sky', which looks up at nothing: the probe still runs over the fence and its screen still shows its output, but its reading is bluer than it is red and the eye edit leaves its 64x36 export alone, so the red-reading and new-extent observations turn red.",
+  "bootShape": "offscreen",
+  "backends": ["vulkan", "directx"],
+  "requirements": ["gpu"],
+  "timeoutSeconds": 60,
+  "positive": {
+    "world": "tests/Puck.World.Canaries/probe-sources/fixture.world.json",
+    "script": "probe.script.txt",
+    "commands": [
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "probe.status", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "screen.state", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.screens", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.row.set", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "probe.status", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.screens", "occurrence": 2, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "the-meter-runs-on-the-gpu-over-the-eye-view", "stream": "stdout", "match": "contains", "text": "meter kind=average input=frame=view:eye state=running tier=gpu", "present": true },
+      { "type": "line", "name": "the-screen-shows-the-probe-bound", "stream": "stdout", "match": "contains", "text": " 24 probe:meter bound ", "present": true },
+      { "type": "line", "name": "the-screen-is-ordered-by-the-output-rings-fence", "stream": "stdout", "match": "contains", "text": " order:fence mapping ", "present": true },
+      { "type": "line", "name": "the-screen-reads-the-exports-extent", "stream": "stdout", "match": "contains", "text": " source 64x36 crop ", "present": true },
+      {
+        "type": "response", "name": "the-meters-reading", "stream": "stdout", "verb": "probe.status", "occurrence": 1, "count": 2,
+        "extract": [
+          { "name": "red", "field": "red" },
+          { "name": "blue", "field": "blue" }
+        ]
+      },
+      { "type": "relation", "name": "the-meter-reads-the-balls-red", "operator": "atLeast", "left": { "value": "red" }, "minimum": 0.25 },
+      { "type": "relation", "name": "the-meters-reading-is-redder-than-blue", "operator": "greater", "left": { "value": "red" }, "right": { "value": "blue" } },
+      { "type": "line", "name": "the-screen-reads-the-probes-output", "stream": "stdout", "match": "contains", "text": "[screen.state: 24 empty bound", "present": true },
+      {
+        "type": "response", "name": "the-meters-reading-after-the-edit", "stream": "stdout", "verb": "probe.status", "occurrence": 2, "count": 2,
+        "extract": [
+          { "name": "red-after", "field": "red" },
+          { "name": "blue-after", "field": "blue" }
+        ]
+      },
+      { "type": "relation", "name": "the-meter-still-reads-the-balls-red", "operator": "greater", "left": { "value": "red-after" }, "right": { "value": "blue-after" } },
+      { "type": "line", "name": "the-export-is-made-again-at-the-edited-extent", "stream": "stdout", "match": "contains", "text": " source 48x27 crop ", "present": true }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/probe-sources/sky.world.json",
+    "script": "probe.script.txt",
+    "commands": [
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "probe.status", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "screen.state", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.screens", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.row.set", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "probe.status", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.screens", "occurrence": 2, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "the-meter-runs-on-the-gpu-over-the-sky-view", "stream": "stdout", "match": "contains", "text": "meter kind=average input=frame=view:sky state=running tier=gpu", "present": true },
+      { "type": "line", "name": "the-meter-does-not-read-the-eye-view", "stream": "stdout", "match": "contains", "text": "meter kind=average input=frame=view:eye", "present": false },
+      { "type": "line", "name": "the-screen-shows-the-probe-bound", "stream": "stdout", "match": "contains", "text": " 24 probe:meter bound ", "present": true },
+      { "type": "line", "name": "the-screen-is-ordered-by-the-output-rings-fence", "stream": "stdout", "match": "contains", "text": " order:fence mapping ", "present": true },
+      { "type": "line", "name": "the-screen-reads-the-exports-extent", "stream": "stdout", "match": "contains", "text": " source 64x36 crop ", "present": true },
+      {
+        "type": "response", "name": "the-meters-reading", "stream": "stdout", "verb": "probe.status", "occurrence": 1, "count": 2,
+        "extract": [
+          { "name": "red", "field": "red" },
+          { "name": "blue", "field": "blue" }
+        ]
+      },
+      { "type": "relation", "name": "the-meters-reading-is-bluer-than-red", "operator": "greater", "left": { "value": "blue" }, "right": { "value": "red" } },
+      { "type": "line", "name": "the-screen-reads-the-probes-output", "stream": "stdout", "match": "contains", "text": "[screen.state: 24 empty bound", "present": true },
+      { "type": "line", "name": "the-sky-export-keeps-its-extent", "stream": "stdout", "match": "contains", "text": " source 48x27 crop ", "present": false }
+    ]
+  }
+}

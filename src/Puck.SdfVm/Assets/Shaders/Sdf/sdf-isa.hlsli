@@ -1,7 +1,0 @@
-#ifndef SDF_ISA_HLSLI
-#define SDF_ISA_HLSLI
-
-#define SDF_ISA_VERSION 2u
-#define SDF_ISA_REPORT_REQUEST 0x53444656u
-
-#endif

@@ -211,6 +211,19 @@ public ref struct WireReader {
 
         return (value == 1);
     }
+    /// <summary>Reads one GUID from its 16 little-endian bytes, the mirror of <see cref="WireWriter.WriteGuid"/>.</summary>
+    /// <returns>The GUID, or <see cref="Guid.Empty"/> once a refusal has latched.</returns>
+    public Guid ReadGuid() {
+        var slice = Take(count: 16);
+
+        return (slice.IsEmpty
+            ? Guid.Empty
+            : new Guid(
+                b: slice,
+                bigEndian: false
+            )
+        );
+    }
     /// <summary>Reads one byte.</summary>
     /// <returns>The byte, or zero once a refusal has latched.</returns>
     public byte ReadByte() {
@@ -655,6 +668,13 @@ public sealed class WireWriter {
     /// <summary>Writes raw bytes with no prefix.</summary>
     /// <param name="value">The bytes.</param>
     public void WriteBytes(ReadOnlySpan<byte> value) => value.CopyTo(destination: Reserve(count: value.Length));
+    /// <summary>Writes one GUID as its 16 little-endian bytes, the mirror of <see cref="WireReader.ReadGuid"/>.</summary>
+    /// <param name="value">The value.</param>
+    public void WriteGuid(Guid value) => _ = value.TryWriteBytes(
+        bigEndian: false,
+        bytesWritten: out _,
+        destination: Reserve(count: 16)
+    );
     /// <summary>Writes one little-endian double-precision float.</summary>
     /// <param name="value">The value.</param>
     public void WriteDouble(double value) => BinaryPrimitives.WriteDoubleLittleEndian(

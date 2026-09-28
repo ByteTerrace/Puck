@@ -7,8 +7,10 @@ shipped as content for the Vulkan and Direct3D 12 paths, so every bytecode file
 must have a same-directory HLSL source with the same stem.
 
 The C# ISA and the shader ISA are one contract. Changes to op numbers, shape
-numbers, blend numbers, packed word layout, push constants, bindings, or buffer
-strides must update both sides in the same change.
+numbers, blend numbers, packed word layout, or buffer strides must update both
+sides in the same change. Bindings and block offsets are not written on either
+side: they are members of `SdfWorldInterfaces`, regenerated into the interface
+includes with `puck shaders generate`.
 
 ## DXC capability floor
 
@@ -19,6 +21,12 @@ optimization flags:
 ```text
 -fspv-target-env=vulkan1.3 -T <stage>_6_6 -O3 -enable-16bit-types
 ```
+
+These options have one statement, `ShaderCompiler.StepsOf` in `Puck.Shaders`,
+which the runtime shader compiler runs (a `world.shaders.reload` source among
+its compiles). `puck shaders generate` writes them into
+`build/ShaderRecipe.props`, the properties the build's DXC invocations read,
+and `ShaderBuildRecipeLawTests` holds each build invocation to them.
 
 These versions match the engine's supported GPU capability floor. Do not lower
 them to work around a build issue; doing so would split the shader and device
@@ -51,67 +59,72 @@ for the current hardware matrix.
 
 ## Production SDF world path
 
-These are the kernels `SdfWorldKernels` loads and `SdfWorldEngine` records, in
-recording order (`SdfFramePass`). Brick work and the table uploads record only
-when they have work. Runtime ISA probes verify the beam, the three hit passes,
-and all three views variants during initialization and compiled-shader reload;
-they do not verify rendered-image correctness. No automated gate covers the
-rendered image beyond `puck parity`, so a kernel change is judged by running
+These are the kernels `SdfKernelSet` loads, one per `SdfKernel`, in recording order: the brick
+bake in a residency's upload (`SdfWorldTables`), then each view's passes in the
+order `Puck.Shaders`' `SdfWorldPackage.Fragment` declares them, which
+`SdfWorldPassRecorder` records with the pipelines the tables hold. Every staged
+region, the brick staging among them, records `Puck.Shaders`'
+`region-copy.comp` through the device's one region-copy pipeline, which the
+residency leases rather than loads. Brick work and the region copies record
+only when they have work. The build refuses bytecode stale against its sources and
+every include, the generated `sdf-isa.hlsli` among them, so a kernel set agrees with
+the instruction set it was built with. That include's fingerprint is the stamp the
+kernels' interfaces carry in their pass block's variable name, so each kernel's
+bytecode reflects the instruction set it was compiled against, and a reload refuses a
+kernel whose stamp or bindings are not this host's. No automated gate covers the rendered image
+beyond `puck parity`, so a kernel change is judged by running
 `Puck.World` and looking at the pixels on both backends.
 
 | Shader | Role | Primary C# owner |
 |---|---|---|
-| `Sdf/sdf-brick-upload.comp.hlsl` | Copies host-baked voxel distances (a field lattice's height columns) from a staging buffer into the persistent brick pool. | `SdfWorldEngine` brick pool |
-| `Sdf/sdf-brick-bake.comp.hlsl` | Writes the closed-form sphere-carve union distance into the brick pool, sliced across frames. | `SdfWorldEngine.BrickBake.cs`, `SdfCarveBakePlanner` |
-| `Sdf/sdf-frame-upload.comp.hlsl` | Copies the changed word ranges of the viewport rows, dynamic transforms, and frame instance grid into their device-local twins, so no march kernel reads host-visible memory. | `SdfWorldEngine.Uploads.cs` |
-| `Sdf/sdf-sky.comp.hlsl` | Fills every source pixel with the authored sky before any march, so a tile the beam culls is never a stale pixel. Shares Stage 1's descriptor layout. | `SdfWorldEngine` sky pipeline |
-| `Sdf/sdf-instance-cull.comp.hlsl` | Bins the program's instances against each tile's cone into the per-tile instance mask the beam's march consumes. | `SdfWorldEngine` instance-cull pipeline |
-| `Sdf/sdf-beam.comp.hlsl` | Tile prepass. Cone-marches each `(viewport, tile)` to a conservative march start or `TileEmpty`, and writes the tile planes and part bounds the hit passes read. | `SdfWorldEngine` beam pipeline and tile buffers |
-| `Sdf/sdf-cull-args.comp.hlsl` | Reduces the tile buffer to the surviving tile bounding box, writes the indirect dispatch args, and writes the bbox origin. | `SdfWorldEngine` cull-args pipeline, indirect args buffer, cull-bounds buffer |
-| `Sdf/sdf-world-primary.comp.hlsl` | Primary traversal. Writes the visibility record's V, C and L rows per pixel; admitted hard-union roots trace their parts independently. | `SdfWorldEngine` primary pipeline |
-| `Sdf/sdf-world-surface.comp.hlsl` | Surface evaluation. Writes the visibility record's geometric normal and surface rows. | `SdfWorldEngine` surface pipeline |
-| `Sdf/sdf-world-ambient.comp.hlsl` | Ambient occlusion. Reads the geometric normals and updates the surface rows. | `SdfWorldEngine` ambient pipeline |
-| `Sdf/sdf-world-views.comp.hlsl` | Stage 1 shading, the full-ISA reference variant. Indirect-dispatched over the surviving bbox; shades the visibility records into one rect-local source texture per non-child SDF viewport. The three hit passes are this file compiled under `SDF_PRIMARY_PASS`, `SDF_SURFACE_PASS`, and `SDF_AMBIENT_PASS`. | `SdfWorldEngine` views pipeline, screen-source bindings, dynamic transforms |
-| `Sdf/sdf-world-views-folds.comp.hlsl` | Stage 1 fold-ops variant: folds, scopes, and the simple exotic shapes stay compiled; the heavy warp/noise family compiles out (`SDF_FOLD_OPS`). | `SdfWorldEngine` views-folds pipeline, `SdfViewsKernelVariant` |
-| `Sdf/sdf-world-views-core.comp.hlsl` | Stage 1 core-ops variant: every exotic op/shape case compiled out (`SDF_CORE_OPS`). `SdfViewsKernelVariants.Select` picks full, folds, or core per program at `UploadProgram` from the instruction stream, so a stripped case is unreachable and the rendered field is the same (modulo the usual DXC codegen-re-roll ±1 LSB class). Only the views kernel has stripped variants. | `SdfWorldEngine` views-core pipeline, `SdfViewsKernelVariant` |
-| `Sdf/sdf-world-composite.comp.hlsl` | Stage 2 compositor. Copies SDF or child source textures into normalized viewport regions, upsampling reduced render-scale sources, and letterboxes pixels outside every region. Needs no tile-cull knowledge: the sky pre-pass fills every source pixel. | `SdfWorldEngine` composite pipeline and output image |
+| `Sdf/passes/sdf-brick-bake.comp.hlsl` | Writes the closed-form sphere-carve union distance into the brick pool, sliced across frames: its pushed index is the slice ordinal. Reads `isa/sdf-bricks.interface.hlsli`. | `SdfWorldTables.BrickBake.cs`, `SdfCarveBakePlanner` |
+| `Sdf/passes/sdf-sky.comp.hlsl` | Fills every pixel of the set's view's output image (`output`) with the authored sky before any march, so a tile the beam culls is never a stale pixel. Binds the same frame and pass groups as every per-view kernel. | `SdfWorldTables` sky pipeline |
+| `Sdf/passes/sdf-instance-cull.comp.hlsl` | Bins the program's instances against each tile's cone into the per-tile instance mask the beam's march consumes. | `SdfWorldTables` instance-cull pipeline |
+| `Sdf/passes/sdf-beam.comp.hlsl` | Tile prepass. Cone-marches each `(viewport, tile)` to a conservative march start or `TileEmpty`, and writes the tile planes and part bounds the hit passes read. | `SdfWorldTables` beam pipeline; the `tiles` scratch of `SdfWorldPackage.Fragment` |
+| `Sdf/passes/sdf-cull-args.comp.hlsl` | Reduces the tile buffer to the surviving tile bounding box, writes the indirect dispatch args, and writes the bbox origin. | `SdfWorldTables` cull-args pipeline; the fragment's `arguments` and `cullBounds` scratch |
+| `Sdf/passes/sdf-world-primary.comp.hlsl` | Primary traversal. Writes the visibility record's V, C and L rows per pixel; admitted hard-union roots trace their parts independently. | `SdfWorldTables` primary pipeline |
+| `Sdf/passes/sdf-world-surface.comp.hlsl` | Surface evaluation. Writes the visibility record's geometric normal and surface rows. | `SdfWorldTables` surface pipeline |
+| `Sdf/passes/sdf-world-ambient.comp.hlsl` | Ambient occlusion. Reads the geometric normals and updates the surface rows. | `SdfWorldTables` ambient pipeline |
+| `Sdf/passes/sdf-world-shadow.comp.hlsl` | The key light's soft shadow. Gathers each workgroup's shadow candidates and writes the visibility record's K row. | `SdfWorldTables` shadow pipeline |
+| `Sdf/passes/sdf-world-views.comp.hlsl` | Shading, the full-ISA reference variant. Indirect-dispatched over the surviving bbox; shades the visibility records into the set's view's own output image (`output`), sized to the view's render extent. The render graph's `place` pass, not a kernel here, puts each output in its seat rect. The three hit passes are this file compiled under `SDF_PRIMARY_PASS`, `SDF_SURFACE_PASS`, and `SDF_AMBIENT_PASS`; each kernel compiles only its own stage over the pixel `sdfPixelAt` gathers. | `SdfWorldTables` views pipeline and dynamic transforms; `SdfWorldPassRecorder` screen-source bindings |
+| `Sdf/passes/sdf-world-views-folds.comp.hlsl` | The views kernel's fold-ops variant: folds, scopes, and the simple exotic shapes stay compiled; the heavy warp/noise family compiles out (`SDF_FOLD_OPS`). | `SdfWorldTables` views-folds pipeline, `SdfViewsKernelVariant` |
+| `Sdf/passes/sdf-world-views-core.comp.hlsl` | The views kernel's core-ops variant: every exotic op/shape case compiled out (`SDF_CORE_OPS`). `SdfViewsKernelVariants.Select` picks full, folds, or core per program at `UploadProgram` from the instruction stream, so a stripped case is unreachable and the rendered field is the same (modulo the usual DXC codegen-re-roll ±1 LSB class). Only the views kernel has stripped variants. | `SdfWorldTables` views-core pipeline, `SdfViewsKernelVariant` |
 
 ## Shared SDF includes
 
 | Include | Role | Keep in sync with |
 |---|---|---|
-| `Sdf/sdf-isa.hlsli` | The shader-reported SDF ISA version, written during initialization and compiled-shader reload by every kernel the ISA probes run. | `SdfIsa.Version`, verified at runtime rather than trusted by duplication |
-| `Sdf/sdf-vm.hlsli` | The primary VM include: packed instruction stream decode, shape SDFs, blends, wallpaper folds, bounds skips, segment/instance merge, dynamic transforms, materials, and `map`/`mapMasked`. Includes `sdf-ellipse.hlsli` and `sdf-parts.hlsli`. | `SdfOp`, `SdfShapeType`, `SdfBlendOp`, `SdfWallpaperGroup`, `SdfProgram`, `SdfProgramBuilder` |
-| `Sdf/sdf-world.hlsli` | World-render shared code: viewport push/data contract, screen-source sampling, camera ray generation, cone march, per-tile instance cull, and `renderView`. Includes the tile, shading, occlusion, part-bounds, visibility, primary, and surface includes below. | `SdfWorldEngine`, `SdfFrame`, `SdfScreenSurface` |
-| `Sdf/sdf-tile.hlsli` | The per-tile cull grid's binding-free vocabulary: tile size, the no-hit sentinel, and the `(viewport, tile)` flat index, shared by kernels with incompatible push-constant layouts. | `SdfWorldEngine` tile buffers |
-| `Sdf/sdf-parts.hlsli` | Root composition admission for independent part tracing, shared by the beam and primary traversal. | `SdfProgram.PartPrograms.cs` |
-| `Sdf/sdf-part-bounds.hlsli` | The primary-acceptance and AO part-bound bands the beam writes after the tile planes. | `SdfWorldEngine`'s `PartBoundFloatCount` |
-| `Sdf/sdf-visibility.hlsli` | The visibility record: its five rows, the identity encoding, the read-write and read-only bindings, and the typed load and store functions every hit pass and views use. | `SdfWorldEngine`'s `PrimaryHitByteLength` and visibility bindings |
-| `Sdf/sdf-primary.hlsli` | The marcher that full-scene and independent whole-part queries share, and the hit it returns. | `SdfWorldEngine` visibility buffer |
-| `Sdf/sdf-surface.hlsli` | The surface and ambient passes' writers of the visibility record's normal and surface rows. | `SdfWorldEngine` visibility buffer |
-| `Sdf/sdf-occlusion.hlsli` | Soft-shadow visibility toward the light direction. | None |
-| `Sdf/sdf-ellipse.hlsli` | The 2D ellipse distance. | None |
-| `Sdf/shade-layers.hlsli` | Generic shading layers in the winning instance frame. | None |
-| `Sdf/shade-weathering.hlsli` | Generic coverage masks; every surface color and response comes from the material. | None |
-| `Sdf/shade-volumes.hlsli` | Bounded emissive volumes (participating media—plumes and future kinds): the `sdfVolumes` decode, the volume-local AABB slab test, the per-volume emission/extinction integration, and the one `shadeVolumes` call site `renderView` invokes before tonemap. | `SdfWorldEngine.PackVolumes`, `Puck.SignedDistance.SdfVolume` |
+| `Sdf/isa/sdf-isa.hlsli` | Generated by `puck shaders generate` (`SdfIsaHlsl`); never edited. With the model's described encoding (`SdfEncodingProbe`) it fingerprints the instruction set, which `SdfIsaFingerprint.cs` records and whose stamp (`SdfIsaHlsl.Stamp`) the generated interfaces carry. Every opcode, shape, blend, lift, noise, cell-mode, axis, plane and wallpaper enum value, the header lane accessors and vector counts the kernels read the headers through, and the packed-layout constants. | Generated from the enums, `SdfProgram`, `SdfProgramBuilder` and `SdfInstanceGrid`; `puck shaders generate --check` fails on drift |
+| `Sdf/isa/sdf-world.interface.hlsli`, `Sdf/isa/sdf-bricks.interface.hlsli` | Generated by `puck shaders generate` from `SdfWorldInterfaces`; never edited. Every binding, register and block offset the per-view kernels and the baker read: the frame group, and the pass group of world values, tables, buffers (typed by element, a written buffer beside its read-only twin), the view's output, the screen-source array, the glyph atlas and the sampler array, one sampler per filter; the baker's frame group, slice extent, request, pool and pushed index. | Generated from `SdfWorldInterfaces`; `puck shaders generate --check` fails on drift |
+| `Sdf/field/sdf-hash.hlsli` | The integer PCG3D hash and its decorrelation constants, declaring no resource, so film grain shares it with the interpreter. | None |
+| `Sdf/field/sdf-vm.hlsli` | Now only an aggregator: includes `isa/sdf-isa.hlsli`, `isa/sdf-world.interface.hlsli`, and the field modules (packed instruction stream decode, shape SDFs, blends, wallpaper folds, bounds skips, segment/instance merge, dynamic transforms, materials, and `map`/`mapMasked`) in order. | `SdfProgram` word layout and lane decoders, `SdfProgramBuilder` |
+| `Sdf/passes/sdf-world.hlsli` | Now only an aggregator: includes `field/sdf-vm.hlsli` and the frame, march, surface, shade and debug modules — the view read from the pass block, the environment rows and the levers, screen-source sampling, camera ray generation, cone march, per-tile instance cull, and the hit stages (`passes/sdf-hit-stages.hlsli`) — in order. | `SdfWorldTables`, `SdfFrame`, `SdfScreenSurface` |
+| `Sdf/frame/sdf-tile.hlsli` | The per-tile cull grid's binding-free vocabulary: tile size, the no-hit sentinel, and the `(viewport, tile)` flat index, shareable by a kernel that reads no world interface. | The fragment's `tiles` scratch (`SdfWorldPackage.TileSize`) |
+| `Sdf/field/sdf-parts.hlsli` | Root composition admission for independent part tracing, shared by the beam and primary traversal. | `SdfProgram.PartPrograms.cs` |
+| `Sdf/march/sdf-part-bounds.hlsli` | The primary-acceptance and AO part-bound bands the beam writes after the tile planes. | `SdfWorldPackage.PartBoundFloatCount` |
+| `Sdf/field/sdf-octahedral.hlsli` | Octahedral encoding and decoding of a unit direction, shared by the star field and the visibility record's normal. | None |
+| `Sdf/frame/sdf-visibility.hlsli` | The visibility record, the surface sample record the shading stages read: its sixteen words in six rows and how the packed fields round, the identity encoding (a mesh hit's triangle rides the L row), the read-write and read-only members it reaches through `sdfVisibilityRecordBuffer`, the typed load and store functions every hit pass uses, and the whole record decoded as one `SdfSurfaceSample`. | `SdfWorldPackage.VisibilityRecordByteLength` |
+| `Sdf/march/sdf-pixel.hlsli` | The pixel a hit stage runs for (`SdfPixel`): the view, the camera ray, the tile's march bounds and instance mask, the footprint, and the lane and active flag, gathered once by `sdfPixelAt`. | The `tiles` scratch the beam writes |
+| `Sdf/march/sdf-primary.hlsli` | The marcher that full-scene and independent whole-part queries share, the march it returns (`SdfPrimaryMarch`), and the primary stage (`sdfPrimaryStage`), which bounds the march by the mesh pass's target and stores the visibility record's V, C and L rows. | The fragment's `visibility` scratch |
+| `Sdf/surface/sdf-surface.hlsli` | The surface and ambient stages (`sdfSurfaceStage`, `sdfAmbientStage`), writers of the visibility record's normal and surface rows; a mesh hit's normal comes from the triangle the record names. | The fragment's `visibility` scratch |
+| `Sdf/surface/sdf-shadow.hlsli` | The shadow stage (`sdfShadowStage`): the group shadow gather and the key light's soft-shadow march for each lit surface, into the record's K row. | The fragment's `visibility` scratch |
+| `Sdf/shade/sdf-light.hlsli` | The one light interface: `SdfLight`, one per environment light and bound screen (`sdfLightAt`), and `sdfLightResponse`, the one place a kernel branches on a light's kind. | `SdfLightKind`, the screen-light table |
+| `Sdf/shade/sdf-light-stage.hlsli` | The light stage (`sdfLightStage`): a pixel's surface sample shaded into the working color, the sky on a miss, with the screens, the material re-resolve, the lights (the key light under the shadow stage's visibility), the editor grid, the fog and the silhouette coverage. | The environment rows, the material table and the screen tables |
+| `Sdf/shade/sdf-grid.hlsli` | The editor grid (`sdfApplyGrid`): the world lattice on the working plane or projected onto every surface, and a captured reference's lattice around it, lines measured in pixels at the surface. | `GridOverlayFlags`, `GridOverlayState` |
+| `Sdf/debug/sdf-debug-views.hlsli` | The debug views (`sdfDebugView`): each numbered mode's diagnostic of the pixel's surface sample, tile or field. | `DebugViewModes.Names` |
+| `Sdf/passes/sdf-hit-stages.hlsli` | The hit stages' includes and the views stage (`sdfViewsStage`): the light stage, the volumes and the debug view. | The views pipelines |
+| `Sdf/surface/sdf-occlusion.hlsli` | Soft-shadow visibility toward the light direction. | None |
+| `Sdf/field/sdf-ellipse.hlsli` | The 2D ellipse distance. | None |
+| `Sdf/shade/shade-layers.hlsli` | Generic shading layers in the winning instance frame. | None |
+| `Sdf/shade/shade-weathering.hlsli` | Generic coverage masks; every surface color and response comes from the material. | None |
+| `Sdf/shade/shade-volumes.hlsli` | Bounded emissive volumes (participating media—plumes and future kinds): the `sdfVolumes` decode, the volume-local AABB slab test, the per-volume emission/extinction integration, and the one `shadeVolumes` call site the views stage invokes last. | `SdfWorldTables.PackVolumes`, `Puck.SignedDistance.SdfVolume` |
 
 ## Other SDF shaders
 
 | Shader | Role | Consumer |
 |---|---|---|
-| `Sdf/fullscreen.vert.hlsl` | Minimal fullscreen triangle vertex shader. | Overworld overlay, the Vulkan surface compositor, and `sdf-film-grain` |
-| `Sdf/sdf-film-grain.frag.hlsl` | Fullscreen integer-hashed film grain over the inner render node's output, declared by `sdf-film-grain.puck.shader.json`. | The `sdf-film-grain` `render.extensions` entry |
-| `Sdf/sdf-child.comp.hlsl` | Deterministic animated storage-image source for a hosted child or test pattern. | None; it compiles but no code loads it |
-
-## Neutral image and viewport kernels
-
-These compile, but no code loads them.
-
-| Shader | Role |
-|---|---|
-| `Resample/resample.comp.hlsl` | Sampled-image compute resample/crop/pixelation primitive. Source filter is chosen by the host sampler. |
-| `Viewport/pixelate.comp.hlsl` | Same-size storage-image pixelate/posterize effect. |
-| `Viewport/viewport-composite.comp.hlsl` | Source-agnostic compositor for already-sized child/source textures. No SDF tile knowledge. |
+| `Sdf/passes/fullscreen.vert.hlsl` | Minimal fullscreen triangle vertex shader. | The overlay and `sdf.film-grain` |
+| `Sdf/passes/sdf-film-grain.frag.hlsl` | Fullscreen integer-hashed film grain over the frame the pass before it wrote, the fragment stage of the `sdf.film-grain` render graph package (`RenderGraphPackageCatalog.SdfFilmGrain`). | A `views.post` row naming `sdf.film-grain` |
 
 ## Validation rule
 

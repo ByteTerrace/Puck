@@ -50,6 +50,9 @@ public sealed record BindingWheelDefinition(
     string? LabelRow = null,
     string? IconRow = null
 ) {
+    /// <summary>The label-row cell the hub reads while nothing is hovered — what releasing now does. The one reserved
+    /// key in a wheel's label row; every other key is a sector id.</summary>
+    public const string HubLabelKey = "cancel";
     /// <summary>The fewest rings a wheel may declare.</summary>
     public const int MinRings = 1;
     /// <summary>The most rings a wheel may declare.</summary>

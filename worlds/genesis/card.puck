@@ -125,19 +125,19 @@ views {
   layout "hero" {
     slots [{ camera: "hero", height: 1, width: 1, x: 0, y: 0 }]
   }
-  pipeline "card-reference" {
+  graph "card-reference" {
     camera: "compare-native"
     source: "card.hlsl"
     timeScale: 0
   }
   layout "compare" {
     slots [
-      { pipeline: "card-reference", height: 1, width: 0.5, x: 0, y: 0 }
+      { instance: "card-reference", height: 1, width: 0.5, x: 0, y: 0 }
       { camera: "compare-native", height: 1, width: 0.5, x: 0.5, y: 0 }
     ]
   }
   layout "shader" {
-    slots [{ pipeline: "card-reference", height: 1, width: 1, x: 0, y: 0 }]
+    slots [{ instance: "card-reference", height: 1, width: 1, x: 0, y: 0 }]
   }
   layout "matrix" {
     slots [{ camera: "matrix", height: 1, width: 1, x: 0, y: 0 }]

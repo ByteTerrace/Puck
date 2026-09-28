@@ -11,10 +11,11 @@ using Puck.Assets;
 namespace Puck.World;
 
 /// <summary>Loads and validates a world document from a file, always alongside the canonical content-address pin of
-/// the exact bytes read — the one implementation both the console's <c>world.load</c>/<c>world.reload</c> handlers
-/// (<c>Puck.World.WorldMutationCommandModule</c>, via <c>WorldDefinitionLoader.TryLoadFile</c>) and the replay
-/// tape's offline re-drive (<c>Puck.World.WorldReplaySnapshot.Drive</c>, through <c>WorldServer.ApplyRebuild</c>)
-/// share, so a live read and a re-drive's later re-read of the same path compute the hash the same way.
+/// the exact bytes read — the composition and pin every file read shares: <see cref="WorldDefinitionLoader.TryLoadFileForAdmission"/> (the
+/// boot, instance starts, <c>world.load</c>/<c>world.reload</c> and the replay drive's re-read of what they pinned)
+/// draws and admits what it composes, so a live read and a re-drive's later re-read of the same path compute the
+/// hash the same way. No door here admits a file: <see cref="TryReadContentPin"/> returns only the pin, for a
+/// caller comparing bytes against a recorded pin.
 /// Puck.World.Server depends on Puck.World.Schema already, so this is the lowest layer both can reach without a new
 /// project reference.</summary>
 public static partial class WorldDefinitionFileSource {
@@ -735,32 +736,38 @@ public static partial class WorldDefinitionFileSource {
 
         return true;
     }
-    private static bool TryLoadCore(string path, out WorldDefinition? definition, out string contentHash, out string reason, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims, string catalogFingerprint, IMachineValidationCatalog? catalog, IWorldDocumentSource? documents) =>
-        TryLoadCore(admission: out _, catalog: catalog, catalogFingerprint: catalogFingerprint, contentHash: out contentHash, definition: out definition, documents: documents,
-            neighbours: neighbours, path: path, reason: out reason, validateAdjacencyClaims: validateAdjacencyClaims);
-    private static bool TryLoadCore(string path, out WorldDefinition? definition, out string contentHash, out string reason, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims, string catalogFingerprint, IMachineValidationCatalog? catalog, IWorldDocumentSource? documents, out WorldDefinitionAdmission? admission) {
-        definition = null;
-        admission = null;
-        contentHash = string.Empty;
-        if (!TryLoadParsed(catalog: catalog, catalogFingerprint: catalogFingerprint, contentHash: out var parsedHash, definition: out var parsed, documents: documents, path: path, reason: out reason)) {
-            return false;
-        }
-        try {
-            if (!WorldDefinitionValidator.TryAdmitCore(admission: out admission, definition: parsed!, machines: catalog, neighbours: neighbours, proveNeighbours: validateAdjacencyClaims, reason: out var refusal)) {
-                reason = $"{path} document validation refused: {refusal}";
-                return false;
-            }
-            definition = admission!.Definition;
-            contentHash = parsedHash;
-            return true;
-        } catch (Exception exception) {
-            reason = $"{path} is not a valid {WorldDefinition.SchemaVersion} document: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
-            return false;
-        }
-    }
 
-    // Composition and content pins are shared by ordinary validated loads and boot preparation. This internal
-    // seam returns no admission: the caller must validate after any boot values have settled.
+    /// <summary>Reads the content-address pin of the document at <paramref name="path"/> and nothing else: the file
+    /// is composed and parsed exactly as <see cref="WorldDefinitionLoader.TryLoadFileForAdmission"/> composes it, so
+    /// the two compute the same pin, but no document comes back, since this read neither draws nor admits one.
+    /// A caller that runs, embeds, or keeps a document reads it through the admission door instead.</summary>
+    /// <param name="path">The document file.</param>
+    /// <param name="contentHash">The canonical content-address pin of the composition read, on success; empty on
+    /// failure.</param>
+    /// <param name="reason">The one-line refusal (an absent, unreadable or undecodable file, a refused composition,
+    /// or a document that does not parse), or empty on success.</param>
+    /// <param name="documents">The source the root and every basis/import reference read through, or
+    /// <see langword="null"/> for <see cref="LocalDocuments"/>. A source that lowers <c>.puck</c> makes the pin cover
+    /// the lowered document.</param>
+    /// <param name="catalogFingerprint">The stable metadata fingerprint partitioning composed images for this host
+    /// catalog.</param>
+    /// <param name="catalog">The selected host machine catalog used for provider rewriting, or null for structural
+    /// composition.</param>
+    /// <returns><see langword="true"/> when the file composed and parsed.</returns>
+    public static bool TryReadContentPin(string path, out string contentHash, out string reason, IWorldDocumentSource? documents = null,
+        string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) => TryLoadParsed(
+        catalog: catalog,
+        catalogFingerprint: catalogFingerprint,
+        contentHash: out contentHash,
+        definition: out _,
+        documents: documents,
+        path: path,
+        reason: out reason
+    );
+
+    // The composition and content pin every file read shares: the admission door draws, settles and admits what it
+    // returns, and the pin read keeps only the hash. It returns the parsed, undrawn document, which nothing may
+    // admit or carry before the draw.
     internal static bool TryLoadParsed(string path, out WorldDefinition? definition, out string contentHash, out string reason,
         string catalogFingerprint, IMachineValidationCatalog? catalog, IWorldDocumentSource? documents = null) {
         definition = null;
@@ -1170,11 +1177,6 @@ public static partial class WorldDefinitionFileSource {
     private static readonly Lock LocalDocumentsInstall = new();
 
     private static IWorldDocumentSource? InstalledLocalDocuments;
-
-    /// <summary>Gets the source that resolves each document name to its <c>.world.json</c> file beside the referrer and
-    /// nothing else: a name whose <c>.puck</c> source stands there is refused by name, since this source cannot compile
-    /// it and a document file beside a source is never read in its place.</summary>
-    public static IWorldDocumentSource DirectoryDocuments { get; } = new DirectoryDocumentSource();
 
     /// <summary>Gets the source every local file load resolves a <c>basis</c> or an <c>imports[].document</c> through
     /// when its caller names none: the one a host installed (<see cref="UseLocalDocuments"/>), or
@@ -1604,14 +1606,16 @@ public static partial class WorldDefinitionFileSource {
     /// <param name="reason">The one-line failure reason, or empty on success.</param>
     /// <param name="catalogFingerprint">Stable metadata fingerprint used to partition the composition cache.</param>
     /// <param name="catalog">The explicit machine catalog used for metadata rewriting, or <see langword="null"/> for structural composition without provider metadata rewriting.</param>
-    /// <param name="documents">The source every basis and import resolves through, or <see langword="null"/> for the
-    /// directory source, which reads each named document's <c>.world.json</c> file.</param>
+    /// <param name="documents">The source every basis and import resolves through, or <see langword="null"/> for
+    /// <see cref="LocalDocuments"/>.</param>
+    /// <param name="content">The document's bytes as the caller read them, or <see langword="null"/> to read the file at
+    /// <paramref name="path"/>.</param>
     /// <returns><see langword="true"/> when the file was readable and its graph composed.</returns>
-    public static bool TryComposeDocumentTree(string path, out JsonObject? tree, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, IWorldDocumentSource? documents = null) {
+    public static bool TryComposeDocumentTree(string path, out JsonObject? tree, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, IWorldDocumentSource? documents = null, byte[]? content = null) {
         tree = null;
 
         try {
-            var bytes = File.ReadAllBytes(path: path);
+            var bytes = (content ?? File.ReadAllBytes(path: path));
 
             return TryComposeDocumentTreeCore(
                 bytes: bytes,
@@ -1737,12 +1741,16 @@ public static partial class WorldDefinitionFileSource {
     /// (<see langword="null"/> for a basis link or an unaliased import), its own top-level keys, and the
     /// <c>exports</c> it authors as written (<see langword="null"/> when it authors none); empty on failure.</param>
     /// <param name="reason">The one-line failure reason, or empty on success.</param>
+    /// <param name="content">The document's bytes as the caller read them, or <see langword="null"/> to read the file at
+    /// <paramref name="path"/>.</param>
+    /// <param name="documents">The source every basis and import resolves through, or <see langword="null"/> for
+    /// <see cref="LocalDocuments"/>.</param>
     /// <returns><see langword="true"/> when the file was readable and its graph resolved.</returns>
-    public static bool TryDescribeComposition(string path, out IReadOnlyList<(string Path, string? Alias, IReadOnlyList<string> Keys, WorldExports? Exports)> layers, out string reason) {
+    public static bool TryDescribeComposition(string path, out IReadOnlyList<(string Path, string? Alias, IReadOnlyList<string> Keys, WorldExports? Exports)> layers, out string reason, byte[]? content = null, IWorldDocumentSource? documents = null) {
         var collected = new List<(string Path, string? Alias, IReadOnlyList<string> Keys, WorldExports? Exports)>();
 
         try {
-            var bytes = File.ReadAllBytes(path: path);
+            var bytes = (content ?? File.ReadAllBytes(path: path));
 
             if (!TryDescribeLayers(
                 alias: null,
@@ -1751,7 +1759,7 @@ public static partial class WorldDefinitionFileSource {
                 layers: collected,
                 reason: out reason,
                 resolvedPath: PuckPaths.Normalize(path: path),
-                source: LocalDocuments
+                source: (documents ?? LocalDocuments)
             )) {
                 layers = collected;
 
@@ -1768,72 +1776,6 @@ public static partial class WorldDefinitionFileSource {
             return false;
         }
     }
-    /// <summary>Loads and validates a world document from <paramref name="path"/>, returning the
-    /// canonical <c>sha256-64/{hex}</c> content-address pin of the exact bytes consumed — never a re-serialization
-    /// of the parsed document, so a byte the parse ignores (whitespace, member order) still moves the pin. A document naming a <c>basis</c> and/or <c>imports</c> composes its whole graph
-    /// first (see <see cref="WorldDocumentBasis"/>) and pins every touched file's raw bytes
-    /// (<see cref="ComputeChainContentHash"/>), so an edit to a template or an imported fragment moves every
-    /// dependent document's pin.
-    /// A load boundary never throws out of this method: every failure comes back as
-    /// <paramref name="reason"/>, whose opening words name the class — <c>no file at</c>, <c>cannot read</c>,
-    /// <c>cannot decode</c>, <c>&lt;path&gt; composition refused</c>, <c>&lt;path&gt; document validation
-    /// refused</c>, or <c>&lt;path&gt; is not a valid puck.world.definition.v1 document</c>. Only that last pair is a
-    /// verdict on the bytes themselves; the rest can each answer differently on a later call, so a caller acting
-    /// destructively on a refusal (<c>WorldOwnedWorlds</c> quarantines a file it cannot admit) must classify before
-    /// it acts.</summary>
-    /// <param name="path">The file to load.</param>
-    /// <param name="definition">The loaded definition on success; <see langword="null"/> on failure.</param>
-    /// <param name="contentHash">The canonical content-address pin of the bytes read, on success; empty on failure.</param>
-    /// <param name="reason">The one-line failure reason, or empty on success.</param>
-    /// <param name="neighbours">The injected neighbour resolver <see cref="WorldDefinitionValidator.Validate"/>
-    /// reads for a cross-document adjacency proof — see its own remarks. Optional here (unlike
-    /// <see cref="WorldDefinitionValidator.Validate"/>'s own required parameter): this method loads arbitrary files
-    /// for purposes that mostly have nothing to do with adjacency (catalog scans, replay re-reads, tests), so
-    /// <see langword="null"/> (the default) is the ordinary case. A caller that does have a reachable resolver at
-    /// hand should pass it.</param>
-    /// <param name="catalogFingerprint">The stable metadata fingerprint partitioning composed images for this host catalog.</param>
-    /// <param name="catalog">The selected host machine catalog used for provider rewriting and semantic validation, or null for structural composition.</param>
-    /// <param name="documents">The source the root and every basis/import reference read through, or
-    /// <see langword="null"/> to read files directly. A source that lowers <c>.puck</c> makes
-    /// <paramref name="contentHash"/> pin the lowered document, so a source edit that lowers identically keeps the
-    /// pin.</param>
-    /// <returns><see langword="true"/> when the file loaded and validated.</returns>
-    public static bool TryLoad(string path, out WorldDefinition? definition, out string contentHash, out string reason, IWorldNeighbourResolver? neighbours = null, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, IWorldDocumentSource? documents = null) =>
-        TryLoadCore(
-            catalog: catalog,
-            catalogFingerprint: catalogFingerprint,
-            contentHash: out contentHash,
-            definition: out definition,
-            documents: documents,
-            neighbours: neighbours,
-            path: path,
-            reason: out reason,
-            validateAdjacencyClaims: true
-        );
-    /// <summary>Loads a file while validating only the facts owned by that document. Used before the composition root
-    /// can supply a neighbour resolver, and by replay to obtain the bytes whose recorded content hash is compared by
-    /// the caller; a live first-load boundary must use <see cref="TryLoad"/> and prove cross-document claims.</summary>
-    /// <param name="path">The file to load.</param>
-    /// <param name="definition">The loaded definition on success; <see langword="null"/> on failure.</param>
-    /// <param name="contentHash">The canonical content-address pin of the bytes read, on success; empty on failure.</param>
-    /// <param name="reason">The one-line failure reason, or empty on success.</param>
-    /// <param name="catalogFingerprint">The stable metadata fingerprint partitioning composed images for this host catalog.</param>
-    /// <param name="catalog">The selected host machine catalog used for provider rewriting and semantic validation, or null for structural composition.</param>
-    /// <param name="documents">The source the root and every basis/import reference read through, or
-    /// <see langword="null"/> to read files directly — see <see cref="TryLoad"/>.</param>
-    /// <returns><see langword="true"/> when the file loaded and its document-local facts validated.</returns>
-    public static bool TryLoadLocally(string path, out WorldDefinition? definition, out string contentHash, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, IWorldDocumentSource? documents = null) =>
-        TryLoadCore(
-            catalog: catalog,
-            catalogFingerprint: catalogFingerprint,
-            contentHash: out contentHash,
-            definition: out definition,
-            documents: documents,
-            neighbours: null,
-            path: path,
-            reason: out reason,
-            validateAdjacencyClaims: false
-        );
     /// <summary>Parses an already composed document, binds authored state expressions. A
     /// document holding an authored name that carries <see cref="GeneratedName.FileJoiner"/> is refused by name
     /// (<see cref="WorldAuthoredNames.TryRefuseFileJoiner"/>).</summary>
@@ -1843,9 +1785,26 @@ public static partial class WorldDefinitionFileSource {
     /// <param name="reason">The named parse or schema failure.</param>
     /// <returns>Whether parsing and schema checks succeeded. No adjacency or local-world validation runs here.</returns>
     public static bool TryParseDocument(string json, string sourceName, out WorldDefinition? definition, out string reason) {
-        definition = null;
-
         WorldBootWork.Count(kind: WorldBootWork.Parses);
+
+        return TryParseCompiledDocument(
+            definition: out definition,
+            json: json,
+            reason: out reason,
+            sourceName: sourceName
+        );
+    }
+    /// <summary>Parses a compiled world's drawn definition exactly as <see cref="TryParseDocument"/> parses a composed
+    /// document, without counting a <see cref="WorldBootWork.Parses"/>. The parse is the work of a compiled-world hit,
+    /// which <see cref="WorldBootWork.CompiledHits"/> counts; whether a boot finds a compiled world depends on the
+    /// per-user cache, so counting it as a parse would make a deterministic count depend on that cache.</summary>
+    /// <param name="json">The drawn definition's JSON text.</param>
+    /// <param name="sourceName">The source name echoed in failures.</param>
+    /// <param name="definition">The parsed document; its full validity is still the caller's responsibility.</param>
+    /// <param name="reason">The named parse or schema failure.</param>
+    /// <returns>Whether parsing and schema checks succeeded.</returns>
+    public static bool TryParseCompiledDocument(string json, string sourceName, out WorldDefinition? definition, out string reason) {
+        definition = null;
 
         // This is the loader's first parse: a reference into a draw site that has not filled yet stays attached and
         // resolves on the post-draw pass (WorldDefinitionLoader), the one door that runs the draw resolver.
@@ -2128,50 +2087,6 @@ public static partial class WorldDefinitionFileSource {
     /// read, and <see cref="ForgetComposedDocuments"/> drops the lot.</summary>
     public static int ComposedDocumentsHeld => ComposedDocuments.Count;
 
-    // The directory-backed IWorldDocumentSource every local load walks over — the one place Path.Combine/
-    // Path.GetFullPath/File.Exists/File.ReadAllBytes for a basis reference live, so TryLoad's directory behavior and
-    // TryResolveChainFiles' push-side walk can never drift apart.
-    private sealed class DirectoryDocumentSource : IWorldDocumentSource {
-        public bool ResolvesFiles => true;
-
-        public bool TryRead(string name, string referrerName, out string resolvedName, out byte[]? content, out string reason) {
-            content = null;
-
-            if (!TryResolveDocumentBeside(
-                documentPath: out resolvedName,
-                name: name,
-                reason: out reason,
-                referrerName: referrerName,
-                sourcePath: out var sourcePath
-            )) {
-                return false;
-            }
-
-            if (File.Exists(path: sourcePath)) {
-                reason = $"document '{name}' (named by {referrerName}) has a .puck source at {sourcePath}, and no composer is installed to compile it; this host resolves .world.json documents only.";
-
-                return false;
-            }
-
-            if (!File.Exists(path: resolvedName)) {
-                reason = $"basis document {resolvedName} (named by {referrerName}) does not exist.";
-
-                return false;
-            }
-
-            try {
-                content = File.ReadAllBytes(path: resolvedName);
-            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-                reason = $"cannot read basis document {resolvedName}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
-
-                return false;
-            }
-
-            reason = string.Empty;
-
-            return true;
-        }
-    }
     // A fully in-memory IWorldDocumentSource for TryComposeFragmentBytes: the two names the synthetic root below
     // ever names ("host", "fragment") resolve to caller-supplied bytes, never a file. Any other name is a fragment
     // or host that itself declares basis/imports of its own — refused by name, since neither this entry point nor

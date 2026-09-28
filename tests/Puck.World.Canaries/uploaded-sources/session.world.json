@@ -1,0 +1,123 @@
+{
+  "admission": [
+    {
+      "algorithm": "",
+      "disclosure": "Replica",
+      "domain": "*",
+      "grants": [
+        {
+          "budget": 64,
+          "capability": "Observe",
+          "subject": "all"
+        }
+      ],
+      "mode": "FederatedAuthority",
+      "publicKey": "",
+      "subject": null
+    }
+  ],
+  "cameras": [
+    {
+      "anchor": null,
+      "name": "ball-cam",
+      "renderHeight": 144,
+      "renderWidth": 160,
+      "rig": {
+        "name": "ball-cam",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                1,
+                -6
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                1,
+                -12
+              ]
+            }
+          },
+          {
+            "$type": "fieldOfView",
+            "fieldOfViewRadians": 0.9
+          }
+        ],
+        "version": "puck.camera.program.v1"
+      }
+    }
+  ],
+  "documentId": "uploaded-sources-session",
+  "placements": {
+    "rows": [
+      {
+        "id": "subject",
+        "position": [
+          0,
+          0,
+          -12
+        ],
+        "prototypeId": "ball",
+        "scale": 1,
+        "yawDegrees": 0
+      }
+    ]
+  },
+  "prototypes": [
+    {
+      "document": {
+        "name": "ball",
+        "palette": [
+          {
+            "color": "#FF0000",
+            "emissive": 0.5,
+            "roughness": 0.6,
+            "sheen": 0,
+            "specular": 0
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "ball",
+            "position": [
+              0,
+              1,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              2,
+              2,
+              2
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          }
+        ]
+      },
+      "id": "ball"
+    }
+  ],
+  "schema": "puck.world.definition.v1",
+  "simulation": {
+    "rateHz": 30
+  }
+}

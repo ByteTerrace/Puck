@@ -30,12 +30,12 @@ internal static class ShaderPipelineRenderNodeBuilds {
                 },
                 timeout: TimeSpan.FromSeconds(value: 30)
             ),
-            userMessage: "The first graph never installed."
+            userMessage: $"The first graph never installed: {node.LastSwapError}"
         );
 
         return surface;
     }
-    // Selects an output and waits out the float preview it builds on the thread pool, without producing, so the next
+    // Selects an output and waits out the preview it builds on the thread pool, without producing, so the next
     // frame installs it: the frame sequence is the one a synchronous selection gave.
     public static void SelectOutputBuilt(this ShaderPipelineRenderNode node, string name) {
         node.SelectOutput(name: name);
@@ -44,7 +44,7 @@ internal static class ShaderPipelineRenderNodeBuilds {
                 condition: () => !node.IsBuildingPreview,
                 timeout: TimeSpan.FromSeconds(value: 30)
             ),
-            userMessage: "The float preview never finished building."
+            userMessage: "The preview never finished building."
         );
     }
     // Produces the frame that starts a queued build, with the driver held so the build cannot finish within it: that

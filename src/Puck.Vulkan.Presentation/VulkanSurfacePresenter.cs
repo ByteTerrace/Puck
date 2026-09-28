@@ -2,44 +2,53 @@ using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Windowing;
 using Puck.Hosting;
+using Puck.Shaders;
+
 namespace Puck.Vulkan.Presentation;
 
 /// <summary>
 /// The Vulkan <see cref="ISurfacePresenter"/>: a thin facade over the <see cref="VulkanRenderer"/> (the
 /// window and swapchain owner plus the per-frame GPU gate) and its <see cref="SurfaceCompositor"/> (the
-/// fullscreen surface blit), so the host loop drives Vulkan presentation through the backend-neutral seam
+/// fullscreen display encode), so the host loop drives Vulkan presentation through the backend-neutral seam
 /// without referencing either concrete type.
 /// </summary>
 public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentSurfaceReadback, IPresentTimingFeedback, IDeviceLostRecoverable {
     private readonly SurfaceCompositor m_compositor;
+    private readonly GpuPassPipelineCache m_pipelines;
     private readonly VulkanRenderer m_renderer;
-    private readonly IGpuSurfaceTransferFactory m_surfaceTransferFactory;
 
+    private SurfaceEncoder? m_captureEncoder;
     private IGpuSurfaceImport? m_captureImport;
     private IGpuSurfaceReadback? m_captureReadback;
 
     /// <summary>Initializes a new instance of the <see cref="VulkanSurfacePresenter"/> class.</summary>
-    /// <param name="renderer">The window and swapchain owner.</param>
-    /// <param name="compositor">The fullscreen surface-blit compositor.</param>
-    /// <param name="surfaceTransferFactory">Creates the lazily armed capture readback and shared-surface importer.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="renderer"/>, <paramref name="compositor"/>, or
-    /// <paramref name="surfaceTransferFactory"/> is <see langword="null"/>.</exception>
-    public VulkanSurfacePresenter(VulkanRenderer renderer, SurfaceCompositor compositor, IGpuSurfaceTransferFactory surfaceTransferFactory) {
+    /// <param name="renderer">The window and swapchain owner, whose device services create the lazily armed capture
+    /// readback, encoder and shared-surface importer.</param>
+    /// <param name="compositor">The fullscreen display-encode compositor.</param>
+    /// <param name="pipelines">The composition's pass pipelines, which a capture's display encode is an entry of.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="renderer"/>, <paramref name="compositor"/> or
+    /// <paramref name="pipelines"/> is <see langword="null"/>.</exception>
+    public VulkanSurfacePresenter(VulkanRenderer renderer, SurfaceCompositor compositor, GpuPassPipelineCache pipelines) {
         ArgumentNullException.ThrowIfNull(compositor);
+        ArgumentNullException.ThrowIfNull(pipelines);
         ArgumentNullException.ThrowIfNull(renderer);
-        ArgumentNullException.ThrowIfNull(surfaceTransferFactory);
 
         m_compositor = compositor;
+        m_pipelines = pipelines;
         m_renderer = renderer;
-        m_surfaceTransferFactory = surfaceTransferFactory;
     }
 
     private void ReleaseCaptureResources() {
+        m_captureEncoder?.Dispose();
+        m_captureEncoder = null;
         m_captureReadback?.Dispose();
         m_captureReadback = null;
         m_captureImport?.Dispose();
         m_captureImport = null;
     }
+
+    /// <inheritdoc/>
+    public DisplayOutput? Output => m_renderer.Output;
 
     /// <inheritdoc/>
     public void Activate(NativeSurfaceBinding binding, uint width, uint height) {
@@ -61,13 +70,13 @@ public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentSurfaceR
         );
         // Waits only on the presentation ring slot's fence (the present two frames back) instead of draining the
         // whole device, so this frame's CPU production overlaps the previous frame's GPU execution. Per-frame
-        // resource reuse is guarded by each SdfWorldEngine's own frame ring; this wait bounds host latency to the
+        // resource reuse is guarded by each SdfWorldTables's own frame ring; this wait bounds host latency to the
         // ring depth. Full drain remains the resize/device-loss/shutdown path (BeginFrame recreation,
         // RecoverFromDeviceLoss, teardown WaitIdle).
         m_renderer.WaitForFrameSlot();
     }
     /// <inheritdoc/>
-    /// <remarks>Releases the presentation stack (compositor blit resources, swapchain chain, window surface) but
+    /// <remarks>Releases the presentation stack (compositor encode resources, swapchain chain, window surface) but
     /// KEEPS the device alive: the renderer is the published device-context capability, and node resources are
     /// children of its device — a backend switch away from Vulkan must not destroy it under them. The device itself
     /// is torn down once, by the renderer's own container-owned disposal at host shutdown (mirroring the Direct3D 12
@@ -93,19 +102,29 @@ public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentSurfaceR
         ) {
             return surface;
         }
+        // A working image no capture sink reads is captured through the display encode's SDR.
+        if (
+            surface.IsSameDeviceImage &&
+            !Surface.IsSurfaceFormat(format: surface.Format)
+        ) {
+            return (m_captureEncoder ??= new SurfaceEncoder(
+                device: m_renderer,
+                directX: false,
+                owner: "presentation-capture",
+                pipelines: m_pipelines
+            )).ReadSurface(surface: surface);
+        }
 
         return SurfaceReadbackCapture.ReadSurface(
             captureImport: ref m_captureImport,
             captureReadback: ref m_captureReadback,
             deviceContext: m_renderer,
-            surface: surface,
-            surfaceTransferFactory: m_surfaceTransferFactory,
-            toGpuFormat: GpuPixelFormats.FromSurfaceFormat
+            surface: surface
         );
     }
     /// <inheritdoc/>
     public void RecoverFromDeviceLoss(NativeSurfaceBinding binding, uint width, uint height) {
-        // Release the compositor's device-level blit resources on the OLD device BEFORE it is destroyed — they are not
+        // Release the compositor's device-level encode resources on the OLD device BEFORE it is destroyed — they are not
         // swapchain resources, so RecreateDevice would otherwise leave them dangling on the device it destroys (a
         // validation error + crash). The compositor stays subscribed and rebuilds them on the new device at the next
         // BeginFrame's PresentationResourcesRecreated.

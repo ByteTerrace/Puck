@@ -141,7 +141,7 @@ public sealed class CreationEffectorLawTests {
                     BodyIndex: 0,
                     Creation: prototype,
                     Scale: 1f,
-                    Motion: WorldLookMotion.Default
+                    Look: WorldLook.Implicit
                 )],
             creations: [prototype],
             dynamics: [],
@@ -152,7 +152,7 @@ public sealed class CreationEffectorLawTests {
 
         pool.Emit(
             builder: builder,
-            definition: Definition(creation: prototype),
+            colors: WorldBakedColors.Of(definition: Definition(creation: prototype)),
             maxPlacementScale: 1f,
             probeWorstCase: false,
             slotBase: 0
@@ -188,7 +188,7 @@ public sealed class CreationEffectorLawTests {
                     BodyIndex: 0,
                     Creation: creation,
                     Scale: 1f,
-                    Motion: WorldLookMotion.Default
+                    Look: WorldLook.Implicit
                 )],
             creations: [creation],
             dynamics: [],
@@ -494,7 +494,7 @@ public sealed class CreationEffectorLawTests {
                     BodyIndex: 0,
                     Creation: creation,
                     Scale: 1f,
-                    Motion: WorldLookMotion.Default
+                    Look: WorldLook.Implicit
                 )],
             creations: [creation],
             dynamics: [],
@@ -833,7 +833,7 @@ public sealed class CreationEffectorLawTests {
                         BodyIndex: 0,
                         Creation: creation,
                         Scale: 1f,
-                        Motion: WorldLookMotion.Default
+                        Look: WorldLook.Implicit
                     )],
                 creations: [creation],
                 dynamics: [],
@@ -1162,7 +1162,7 @@ public sealed class CreationEffectorLawTests {
                         BodyIndex: 0,
                         Creation: creation,
                         Scale: 1f,
-                        Motion: WorldLookMotion.Default
+                        Look: WorldLook.Implicit
                     )],
                 creations: [creation],
                 dynamics: [],

@@ -1,5 +1,6 @@
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
+using Puck.Hosting;
 
 namespace Puck.Shaders.Tests;
 
@@ -29,7 +30,7 @@ public sealed class ShaderPipelineVersionLawTests {
     private static ShaderPipelinePass Compute(string name, ResourceReference[] inputs, ResourceReference[] outputs) => new(
         EntryPoint: "main",
         Inputs: inputs,
-        Kind: ShaderPipelinePassKind.Compute,
+        Kind: ShaderPipelineDocumentPassKind.Compute,
         Name: name,
         Outputs: outputs,
         Source: $"{name}.hlsl"
@@ -37,7 +38,7 @@ public sealed class ShaderPipelineVersionLawTests {
     private static ShaderPipelinePass Fullscreen(string name, ResourceReference[] inputs, string output) => new(
         EntryPoint: "main",
         Inputs: inputs,
-        Kind: ShaderPipelinePassKind.Fullscreen,
+        Kind: ShaderPipelineDocumentPassKind.Fullscreen,
         Name: name,
         Outputs: [output],
         Source: $"{name}.hlsl"
@@ -45,7 +46,7 @@ public sealed class ShaderPipelineVersionLawTests {
     // A chain c0 -> c1 -> c2 in one storage: seed writes c0, peek samples it, first and second each continue the
     // preserved contents, and a fullscreen pass samples c2. The passes are declared in reverse, so the order the plan
     // gives them is the planner's, not the author's.
-    private static ShaderPipelineDefinition Chain(Func<ShaderPipelineResource[], ShaderPipelineResource[]>? resources = null, Func<ShaderPipelinePass[], ShaderPipelinePass[]>? passes = null, string[]? outputs = null) {
+    private static RenderGraphDefinition Chain(Func<ShaderPipelineResource[], ShaderPipelineResource[]>? resources = null, Func<ShaderPipelinePass[], ShaderPipelinePass[]>? passes = null, string[]? outputs = null) {
         ShaderPipelineResource[] declared = [
             Image(name: "c0"),
             Image(
@@ -62,7 +63,6 @@ public sealed class ShaderPipelineVersionLawTests {
         ShaderPipelinePass[] written = [
             Fullscreen(
                 inputs: [new ResourceReference(
-                    Binding: 0,
                     Name: "c2"
                 )],
                 name: "sample",
@@ -72,7 +72,6 @@ public sealed class ShaderPipelineVersionLawTests {
                 inputs: [],
                 name: "second",
                 outputs: [new ResourceReference(
-                    Binding: 0,
                     Name: "c2"
                 )]
             ),
@@ -80,18 +79,15 @@ public sealed class ShaderPipelineVersionLawTests {
                 inputs: [],
                 name: "first",
                 outputs: [new ResourceReference(
-                    Binding: 0,
                     Name: "c1"
                 )]
             ),
             Compute(
                 inputs: [new ResourceReference(
-                    Binding: 1,
                     Name: "c0"
                 )],
                 name: "peek",
                 outputs: [new ResourceReference(
-                    Binding: 0,
                     Name: "peeked"
                 )]
             ),
@@ -99,21 +95,20 @@ public sealed class ShaderPipelineVersionLawTests {
                 inputs: [],
                 name: "seed",
                 outputs: [new ResourceReference(
-                    Binding: 0,
                     Name: "c0"
                 )]
             ),
         ];
 
-        return new ShaderPipelineDefinition(
+        return new RenderGraphDefinition(
             name: "chain",
             outputs: (outputs ?? ["image", "peeked"]),
             passes: (passes?.Invoke(arg: written) ?? written),
             resources: (resources?.Invoke(arg: declared) ?? declared)
         );
     }
-    private static ShaderPipelinePlan Plan(ShaderPipelineDefinition definition) => new ShaderPipelineCompiler().Compile(definition: definition);
-    private static IReadOnlyList<ShaderPipelineDiagnostic> Refusal(ShaderPipelineDefinition definition) =>
+    private static ShaderPipelinePlan Plan(RenderGraphDefinition definition) => new ShaderPipelineCompiler().Compile(definition: definition);
+    private static IReadOnlyList<ShaderPipelineDiagnostic> Refusal(RenderGraphDefinition definition) =>
         Assert.Throws<ShaderPipelineCompilationException>(testCode: () => Plan(definition: definition)).Diagnostics;
     private static ShaderPipelineResource[] Replace(ShaderPipelineResource[] resources, string name, Func<ShaderPipelineResource, ShaderPipelineResource> change) =>
         [.. resources.Select(selector: resource => ((resource.Name == name)
@@ -127,13 +122,13 @@ public sealed class ShaderPipelineVersionLawTests {
             shaders: plan.Passes.ToDictionary(
                 elementSelector: pass => new CompiledShader(
                     diagnostics: [],
-                    dxil: ((pass.Declaration.Kind == ShaderPipelinePassKind.Compute)
+                    dxil: ((pass.Declaration!.Kind == ShaderPipelineDocumentPassKind.Compute)
                         ? new Dictionary<ShaderStage, ReadOnlyMemory<byte>> { [ShaderStage.Compute] = bytecode }
                         : new Dictionary<ShaderStage, ReadOnlyMemory<byte>> { [ShaderStage.Vertex] = bytecode, [ShaderStage.Fragment] = bytecode }),
                     name: pass.Name,
                     sourceHash: pass.Name,
                     sourcePath: $"{pass.Name}.hlsl",
-                    spirv: ((pass.Declaration.Kind == ShaderPipelinePassKind.Compute)
+                    spirv: ((pass.Declaration.Kind == ShaderPipelineDocumentPassKind.Compute)
                         ? new Dictionary<ShaderStage, ReadOnlyMemory<byte>> { [ShaderStage.Compute] = bytecode }
                         : new Dictionary<ShaderStage, ReadOnlyMemory<byte>> { [ShaderStage.Vertex] = bytecode, [ShaderStage.Fragment] = bytecode })
                 ),
@@ -148,9 +143,8 @@ public sealed class ShaderPipelineVersionLawTests {
             : barrier);
     private static ShaderPipelineRenderNode InstalledNode(FakePipelineGpu gpu, ShaderPipelinePlan plan) {
         var node = new ShaderPipelineRenderNode(
+            pipelines: new GpuPassPipelineCache(),
             deviceContext: gpu,
-            gpu: gpu,
-            graphics: gpu,
             height: Extent,
             hostsOnDirectX: false,
             inFlightFrames: InFlight,
@@ -195,7 +189,7 @@ public sealed class ShaderPipelineVersionLawTests {
         // peek samples c0, which first overwrites, and also samples c1, which first writes: it can run neither before nor
         // after the overwrite.
         var diagnostics = Refusal(definition: Chain(passes: passes => [.. passes.Select(selector: static pass => ((pass.Name == "peek")
-            ? (pass with { Inputs = [new ResourceReference(Binding: 1, Name: "c0"), new ResourceReference(Binding: 2, Name: "c1")] })
+            ? (pass with { Inputs = [new ResourceReference(Name: "c0"), new ResourceReference(Name: "c1")] })
             : pass))]));
         var cycle = Assert.Single(collection: diagnostics, predicate: static diagnostic => (diagnostic.Code == "SHADERPIPE_CYCLE"));
 
@@ -244,7 +238,7 @@ public sealed class ShaderPipelineVersionLawTests {
                 resources: resources
             )),
             "branch" => Chain(
-                passes: static passes => [.. passes, Compute(inputs: [], name: "fork", outputs: [new ResourceReference(Binding: 0, Name: "fork")])],
+                passes: static passes => [.. passes, Compute(inputs: [], name: "fork", outputs: [new ResourceReference(Name: "fork")])],
                 resources: static resources => [.. resources, Image(from: "c0", name: "fork")],
                 outputs: ["image", "peeked", "fork"]
             ),
@@ -255,10 +249,10 @@ public sealed class ShaderPipelineVersionLawTests {
                 resources: resources
             )),
             "previous-frame-read-of-a-consumed-version" => Chain(passes: static passes => [.. passes.Select(selector: static pass => ((pass.Name == "peek")
-                ? (pass with { Inputs = [new ResourceReference(Binding: 1, Name: "c0"), new ResourceReference(Binding: 2, Name: "c1", PreviousFrame: true)] })
+                ? (pass with { Inputs = [new ResourceReference(Name: "c0"), new ResourceReference(Name: "c1", PreviousFrame: true)] })
                 : pass))]),
             "sampled-while-overwritten" => Chain(passes: static passes => [.. passes.Select(selector: static pass => ((pass.Name == "second")
-                ? (pass with { Inputs = [new ResourceReference(Binding: 1, Name: "c1")] })
+                ? (pass with { Inputs = [new ResourceReference(Name: "c1")] })
                 : pass))]),
             "kind" => Chain(resources: resources => Replace(
                 change: static resource => new ShaderPipelineResource(From: "c0", Kind: ShaderPipelineResourceKind.Buffer, Name: resource.Name, SizeBytes: 16),
@@ -271,7 +265,7 @@ public sealed class ShaderPipelineVersionLawTests {
                 resources: resources
             )),
             "unwritten" => Chain(
-                passes: static passes => [.. passes, Compute(inputs: [], name: "zed", outputs: [new ResourceReference(Binding: 0, Name: "z1")])],
+                passes: static passes => [.. passes, Compute(inputs: [], name: "zed", outputs: [new ResourceReference(Name: "z1")])],
                 resources: static resources => [.. resources, Image(initialization: ShaderPipelineInitialization.Zero, name: "z0"), Image(from: "z0", name: "z1")],
                 outputs: ["image", "peeked", "z1"]
             ),
@@ -311,11 +305,11 @@ public sealed class ShaderPipelineVersionLawTests {
         Assert.Equal(
             actual: accesses,
             expected: [
-                ("seed", "c0", GpuComputeAccess.ShaderWrite, ShaderPipelineBarrierKind.Image, GpuImageLayout.ShaderReadOnly, GpuImageLayout.General),
-                ("peek", "c0", GpuComputeAccess.ShaderRead, ShaderPipelineBarrierKind.Image, GpuImageLayout.General, GpuImageLayout.ShaderReadOnly),
-                ("first", "c1", GpuComputeAccess.ShaderRead | GpuComputeAccess.ShaderWrite, ShaderPipelineBarrierKind.Image, GpuImageLayout.ShaderReadOnly, GpuImageLayout.General),
-                ("second", "c2", GpuComputeAccess.ShaderRead | GpuComputeAccess.ShaderWrite, ShaderPipelineBarrierKind.Memory, GpuImageLayout.General, GpuImageLayout.General),
-                ("sample", "c2", GpuComputeAccess.ShaderRead, ShaderPipelineBarrierKind.Image, GpuImageLayout.General, GpuImageLayout.ShaderReadOnly),
+                ("seed", "c0", GpuAccess.ShaderWrite, ShaderPipelineBarrierKind.Image, GpuImageLayout.ShaderReadOnly, GpuImageLayout.General),
+                ("peek", "c0", GpuAccess.ShaderRead, ShaderPipelineBarrierKind.Image, GpuImageLayout.General, GpuImageLayout.ShaderReadOnly),
+                ("first", "c1", GpuAccess.ShaderRead | GpuAccess.ShaderWrite, ShaderPipelineBarrierKind.Image, GpuImageLayout.ShaderReadOnly, GpuImageLayout.General),
+                ("second", "c2", GpuAccess.ShaderRead | GpuAccess.ShaderWrite, ShaderPipelineBarrierKind.Memory, GpuImageLayout.General, GpuImageLayout.General),
+                ("sample", "c2", GpuAccess.ShaderRead, ShaderPipelineBarrierKind.Image, GpuImageLayout.General, GpuImageLayout.ShaderReadOnly),
             ]
         );
     }
@@ -348,7 +342,7 @@ public sealed class ShaderPipelineVersionLawTests {
                 continue;
             }
             foreach (var pass in plan.Passes) {
-                if (pass.Declaration.InputReferences.Any(predicate: input => ((input.Name == version) && !input.PreviousFrame))) {
+                if (pass.Declaration!.InputReferences.Any(predicate: input => ((input.Name == version) && !input.PreviousFrame))) {
                     Assert.True(
                         condition: (pass.Index < planned.ConsumedAtPassIndex),
                         userMessage: $"{pass.Name} samples {version} at {pass.Index}, after it is overwritten at {planned.ConsumedAtPassIndex}"
@@ -371,9 +365,9 @@ public sealed class ShaderPipelineVersionLawTests {
         );
         var imageStorage = plan.FindResource(name: "image")!.Storage;
         var published = new ShaderPipelineAccessState(
-            Access: GpuComputeAccess.ShaderRead,
+            Access: GpuAccess.ShaderRead,
             Layout: GpuImageLayout.General,
-            Stage: GpuComputeStage.ComputeShader | GpuComputeStage.FragmentShader
+            Stage: GpuStage.ComputeShader | GpuStage.FragmentShader
         );
         var chainStorage = plan.FindResource(name: "c0")!.Storage;
         var expected = new List<ShaderPipelineBarrier>();

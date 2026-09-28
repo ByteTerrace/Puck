@@ -15,9 +15,6 @@ public sealed class LauncherOptions {
     /// without waiting for wall clock. Intended for authored schedules and other offline runs whose inputs are
     /// already pinned to simulation ticks.</summary>
     public bool Unpaced { get; init; }
-    /// <summary>Gets the delay, in seconds, before a one-shot synthetic device-loss is injected to exercise recovery,
-    /// or <see langword="null"/> to leave it off.</summary>
-    public double? SyntheticDeviceLossSeconds { get; init; }
     /// <summary>Gets the target render rate in Hz, or <see langword="null"/> for automatic display-aware pacing. Defaults to 60.</summary>
     public double? TargetRenderRate { get; init; } = 60.0;
 }

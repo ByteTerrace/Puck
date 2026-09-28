@@ -4,31 +4,24 @@ using Puck.Shaders;
 
 namespace Puck.Cli.Shaders;
 
-/// <summary><c>puck shaders interface</c>: prints or writes the frame-block declarations a pipeline's passes, or a
-/// shader set, read through their generated interface, and optionally each interface's echo pass. A pipeline pass
-/// compiles against its declarations without a file; a shader set compiles at build, so its declarations are written
-/// beside its source and checked in.</summary>
+/// <summary><c>puck shaders interface</c>: prints or writes the frame-block declarations a pipeline's passes or an
+/// engine package read through their generated interface, and optionally each interface's echo pass. A pipeline pass
+/// compiles against its declarations without a file; an engine package's shaders compile at build, so their
+/// declarations are written beside their sources and checked in.</summary>
 internal static class InterfaceCommand {
     // Every interface the source names, with the directory its declarations resolve in.
     private static IReadOnlyList<(ShaderInterface Interface, string Directory)> InterfacesOf(string path) {
-        if (path.EndsWith(
-            comparisonType: StringComparison.OrdinalIgnoreCase,
-            value: ShaderSetManifest.FileSuffix
-        )) {
-            return [(ShaderSetManifest.ReadFrameInterface(manifestPath: path), Path.GetDirectoryName(path: path)!)];
-        }
-
-        var plan = ShaderPipelineCompiler.Plan(definition: ShaderPipelineLoader.ReadDefinition(
+        var plan = RenderGraphCompiler.ShaderPasses.Compile(definition: ShaderPipelineLoader.ReadDefinition(
             name: Path.GetFileNameWithoutExtension(path: path),
             path: path
-        ));
+        )).Pipeline;
         var directory = Path.GetDirectoryName(path: path)!;
         var interfaces = new List<(ShaderInterface Interface, string Directory)>();
 
         foreach (var pass in plan.Passes) {
             var sourceDirectory = Path.GetDirectoryName(path: Path.GetFullPath(
                 basePath: directory,
-                path: pass.Declaration.Source
+                path: pass.Declaration!.Source
             ))!;
 
             if (!interfaces.Any(predicate: entry => ((entry.Interface.Hash == pass.Parameters.Interface.Hash) && string.Equals(
@@ -44,18 +37,39 @@ internal static class InterfaceCommand {
     }
 
     public static Command Create() {
-        var source = new Argument<string>(name: "source") { Description = "The pipeline document, one-off shader source, or shader-set manifest (*.puck.shader.json)." };
+        var source = new Argument<string>(name: "source") { Description = "The graph document or one-off shader source; with --package, the directory its shaders live in." };
+        var package = new Option<string>(name: "--package") { Description = "The engine package (such as overlay or sdf.film-grain) whose declared interface to generate, rather than a document's." };
         var write = new Option<bool>(name: "--write") { Description = "Write each interface's declarations beside its source, as <interface>.interface.hlsli, rather than printing them." };
         var echo = new Option<bool>(name: "--echo") { Description = "Also generate each interface's echo pass, as <interface>.echo.hlsl." };
         var command = new Command(
-            description: "Print or write the frame-block declarations a pipeline's passes or a shader set read, and their echo passes.",
+            description: "Print or write the frame-block declarations a pipeline's passes or an engine package read, and their echo passes.",
             name: "interface"
-        ) { source, write, echo };
+        ) { source, package, write, echo };
 
         command.SetAction(action: result => {
             var path = Path.GetFullPath(path: result.GetRequiredValue(argument: source));
+            var packageId = result.GetValue(option: package);
+            RenderGraphPackage? declared = null;
 
-            if (!File.Exists(path: path)) {
+            if (packageId is not null) {
+                if (!Directory.Exists(path: path)) {
+                    return CliExit.Refuse(
+                        verb: "shaders interface",
+                        what: path,
+                        why: "no such directory."
+                    );
+                }
+                if (!RenderGraphPackageCatalog.Engine.TryGet(
+                    id: packageId,
+                    package: out declared
+                )) {
+                    return CliExit.Refuse(
+                        verb: "shaders interface",
+                        what: packageId,
+                        why: "no engine package has that id."
+                    );
+                }
+            } else if (!File.Exists(path: path)) {
                 return CliExit.Refuse(
                     verb: "shaders interface",
                     what: path,
@@ -66,7 +80,14 @@ internal static class InterfaceCommand {
             IReadOnlyList<(ShaderInterface Interface, string Directory)> interfaces;
 
             try {
-                interfaces = InterfacesOf(path: path);
+                interfaces = ((declared is null)
+                    ? InterfacesOf(path: path)
+                    : [(ShaderPipelineParameterLayout.ForPackage(
+                        config: declared.Config,
+                        members: declared.Members,
+                        package: declared.Id,
+                        pushesIndex: declared.PushesIndex
+                    ).Interface, path)]);
             } catch (Exception exception) when ((exception is InvalidDataException or System.Text.Json.JsonException or ShaderPipelineCompilationException or IOException)) {
                 return CliExit.Refuse(
                     verb: "shaders interface",

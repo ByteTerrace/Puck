@@ -96,31 +96,22 @@ internal static class WorldPrepareCommand {
             )) {
                 throw new InvalidDataException(message: $"Cannot relocate {relative}: {reason}");
             }
-            if (!WorldDefinitionFileSource.TryParseComposed(
-                definition: out var definition,
-                json: tree.ToJsonString(),
-                neighbours: null,
-                reason: out reason,
-                sourceName: path,
-                validateAdjacencyClaims: false,
+            if (!WorldDefinitionLoader.TryReadPublishable(
                 catalog: machines,
-                documentDirectory: WorldDocumentPaths.DirectoryOf(documentPath: path)
+                definition: out var definition,
+                documentDirectory: WorldDocumentPaths.DirectoryOf(documentPath: path),
+                json: tree.ToJsonString(),
+                reason: out reason,
+                sourceName: path
             )) {
                 throw new InvalidDataException(message: $"Cannot validate {relative}: {reason}");
-            }
-            if (!WorldDefinitionValidator.TryValidateLocally(
-                definition: definition!,
-                machines: machines,
-                reason: out reason
-            )) {
-                throw new InvalidDataException(message: $"Cannot admit machines in {relative}: {reason}");
             }
             File.WriteAllBytes(
                 Path.Combine(
                     path1: output,
                     path2: name
                 ),
-                WorldDefinitionSerialization.Serialize(definition: definition!)
+                WorldDefinitionSerialization.Serialize(definition: definition)
             );
         }
         Console.WriteLine(value: $"Prepared {visited.Count} hosted world definitions, with Puck as the primary world.");

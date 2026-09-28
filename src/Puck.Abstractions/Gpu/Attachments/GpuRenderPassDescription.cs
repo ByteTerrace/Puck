@@ -13,7 +13,14 @@ public readonly record struct GpuColorAttachment(GpuPixelFormat Format, GpuAttac
 /// <param name="Format">The attachment's depth format.</param>
 /// <param name="Load">What the pass does with the contents when it begins.</param>
 /// <param name="Store">What the pass does with the contents when it ends.</param>
-public readonly record struct GpuDepthAttachment(GpuPixelFormat Format, GpuAttachmentLoad Load, GpuAttachmentStore Store);
+/// <param name="ClearDepth">The depth a <see cref="GpuAttachmentLoad.Clear"/> load writes, in [0, 1]: 1
+/// (<see cref="DefaultClearDepth"/>) for a depth test that keeps the nearer of smaller depths, 0 for a reversed-Z test
+/// that keeps the greater.</param>
+public readonly record struct GpuDepthAttachment(GpuPixelFormat Format, GpuAttachmentLoad Load, GpuAttachmentStore Store, float ClearDepth = GpuDepthAttachment.DefaultClearDepth) {
+    /// <summary>The depth an attachment clears to when it names none: the far end of a depth test that keeps smaller
+    /// depths.</summary>
+    public const float DefaultClearDepth = 1f;
+}
 /// <summary>
 /// The attachments one render pass draws into, as formats and load and store operations: what a graphics pipeline is
 /// created against (<see cref="IGpuPipelineFactory"/>). The images come later, in an <see cref="IGpuFramebuffer"/>.
@@ -21,13 +28,18 @@ public readonly record struct GpuDepthAttachment(GpuPixelFormat Format, GpuAttac
 /// <param name="Colors">The color attachments, in shader output order (<c>SV_Target0</c> first); at most
 /// <see cref="MaxColorAttachments"/>.</param>
 /// <param name="Depth">The depth attachment, or <see langword="null"/> for none.</param>
-public sealed record GpuRenderPassDescription(IReadOnlyList<GpuColorAttachment> Colors, GpuDepthAttachment? Depth = null) {
+/// <param name="ShaderWrites">Whether the pipelines drawn in the pass may write through a read-write binding from their
+/// shaders (<see cref="GpuPipelineLayoutDescription.ShaderWrites"/>), as a fragment stage counting its work does:
+/// Direct3D 12 then opens the pass with <c>D3D12_RENDER_PASS_FLAG_ALLOW_UAV_WRITES</c>, which a UAV write inside a
+/// render pass requires, and refuses a pipeline that writes against a pass that does not allow it.</param>
+public sealed record GpuRenderPassDescription(IReadOnlyList<GpuColorAttachment> Colors, GpuDepthAttachment? Depth = null, bool ShaderWrites = false) {
     /// <summary>The most color attachments a render pass may have on every backend.</summary>
     public const int MaxColorAttachments = 8;
 
     /// <summary>Refuses a render pass with no attachment, too many color attachments, a color attachment in a depth format
-    /// or a depth attachment in a color format, an undefined operation, or a color final layout other than
-    /// <see cref="GpuImageLayout.RenderTarget"/> or <see cref="GpuImageLayout.ShaderReadOnly"/>.</summary>
+    /// or a depth attachment in a color format, an undefined operation, a color final layout other than
+    /// <see cref="GpuImageLayout.RenderTarget"/> or <see cref="GpuImageLayout.ShaderReadOnly"/>, or a depth clear value
+    /// outside [0, 1].</summary>
     /// <exception cref="ArgumentException">The description breaks one of those rules.</exception>
     public void Validate() {
         ArgumentNullException.ThrowIfNull(Colors);
@@ -73,6 +85,10 @@ public sealed record GpuRenderPassDescription(IReadOnlyList<GpuColorAttachment> 
                 !Enum.IsDefined(value: depth.Store)
             ) {
                 throw new ArgumentException(message: "A depth attachment's load and store operations must be defined.");
+            }
+
+            if (!(depth.ClearDepth is >= 0f and <= 1f)) {
+                throw new ArgumentException(message: $"A depth attachment clears to a depth in [0, 1], not {depth.ClearDepth}.");
             }
         }
     }

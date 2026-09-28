@@ -18,10 +18,11 @@ internal sealed record ParityCaptureOutcome(
     public bool Failed => Verdicts.Any(predicate: static verdict => !verdict.Passed);
 }
 /// <summary>
-/// The two-verdict comparator core: per capture, a content gate that must hold before any pixel work runs, then
-/// an exact stateHash check and a per-tile pixel check — computed and reported independently of each other once
-/// the gate holds. Reads frame files from the given left/right directories only; every threshold and floor comes
-/// from the contract, never a literal in this class.
+/// The comparator core: per capture, a content gate that must hold before any pixel work runs, then an exact stateHash
+/// check, a tick check holding the tick each side's frame refreshed its bound regions at to the armed tick, and a
+/// per-tile pixel check — computed and reported independently of each other once the gate holds, so a frame showing
+/// another tick fails the tick verdict whatever its pixels. Reads frame files from the given left/right directories
+/// only; every threshold and floor comes from the contract, never a literal in this class.
 /// </summary>
 internal static class ParityComparator {
     private static ParityCaptureOutcome CompareCapture(string station, ulong tick, ParityManifestCapture? leftCapture, ParityManifestCapture? rightCapture, string leftDir, string rightDir, ParityStationContract stationContract, int tileSize) {
@@ -150,6 +151,46 @@ internal static class ParityComparator {
                 Detail: $"left {leftCapture.StateHash} right {rightCapture.StateHash}"
             )));
 
+        verdicts.Add(item: (((leftCapture.RegionTick == tick) && (rightCapture.RegionTick == tick))
+            ? new ParityCaptureVerdict(
+                Detail: $"both frames refreshed their regions at the armed tick {tick}",
+                Name: "TICK-OK",
+                Passed: true
+            )
+            : new ParityCaptureVerdict(
+                Name: "TICK-FAILED",
+                Passed: false,
+                Detail: $"armed at tick {tick}; the left frame refreshed its regions at tick {leftCapture.RegionTick}, the right at tick {rightCapture.RegionTick}"
+            )));
+
+        // A capture of a source instance whose source states its image carries its exact verdict against that image; a
+        // station whose captures carry one on either side holds only when both hold.
+        if (
+            (leftCapture.SourceVerdict is not null) ||
+            (rightCapture.SourceVerdict is not null)
+        ) {
+            verdicts.Add(item: (((leftCapture.SourceVerdict is { Holds: true }) && (rightCapture.SourceVerdict is { Holds: true }))
+                ? new ParityCaptureVerdict(
+                    Detail: $"both frames show exactly their source's image ({leftCapture.SourceVerdict.Detail})",
+                    Name: "SOURCE-OK",
+                    Passed: true
+                )
+                : new ParityCaptureVerdict(
+                    Detail: $"left {(leftCapture.SourceVerdict?.Detail ?? "no source verdict")}; right {(rightCapture.SourceVerdict?.Detail ?? "no source verdict")}",
+                    Name: "SOURCE-FAILED",
+                    Passed: false
+                )));
+        }
+
+        if (stationContract.Reference is { } reference) {
+            verdicts.Add(item: CompareReference(
+                left: leftImage,
+                reference: reference,
+                right: rightImage,
+                tick: tick
+            ));
+        }
+
         if (
             (leftImage.Width != rightImage.Width) ||
             (leftImage.Height != rightImage.Height)
@@ -206,6 +247,57 @@ internal static class ParityComparator {
             Tick: tick,
             Verdicts: verdicts
         );
+    }
+    /// <summary>Holds both sides to the station's exact reference image: every byte of every pixel must match, so a
+    /// pass reading a wrong config value or binding fails even when both backends make the same mistake.</summary>
+    private static ParityCaptureVerdict CompareReference(PngImage left, PngImage right, ParityBindingReference reference, ulong tick) {
+        var expected = reference.Render(tick: tick);
+        var failures = new List<string>();
+
+        foreach (var (side, image) in ((ReadOnlySpan<(string, PngImage)>)[("vulkan", left), ("directx", right)])) {
+            if (
+                (image.Width != reference.Width) ||
+                (image.Height != reference.Height)
+            ) {
+                failures.Add(item: $"{side} extent {image.Width}x{image.Height} is not the reference's {reference.Width}x{reference.Height}");
+
+                continue;
+            }
+
+            var mismatches = 0;
+            var first = -1;
+
+            for (var index = 0; (index < expected.Length); index++) {
+                if (image.RgbaPixels[index] != expected[index]) {
+                    if (first < 0) {
+                        first = index;
+                    }
+
+                    mismatches++;
+                }
+            }
+
+            if (first >= 0) {
+                var pixel = (first / 4);
+
+                failures.Add(item: $"{side} differs in {mismatches} bytes, first at ({(pixel % ((int)reference.Width))},{(pixel / ((int)reference.Width))}) channel {(first % 4)}: {image.RgbaPixels[first]} vs {expected[first]}");
+            }
+        }
+
+        return ((failures.Count == 0)
+            ? new ParityCaptureVerdict(
+                Detail: $"both sides equal the reference ({reference.Width}x{reference.Height})",
+                Name: "REFERENCE-OK",
+                Passed: true
+            )
+            : new ParityCaptureVerdict(
+                Detail: string.Join(
+                    separator: "; ",
+                    values: failures
+                ),
+                Name: "REFERENCE-FAILED",
+                Passed: false
+            ));
     }
     private static ParityCaptureOutcome GateFailure(string station, ulong tick, string reason) =>
         new(

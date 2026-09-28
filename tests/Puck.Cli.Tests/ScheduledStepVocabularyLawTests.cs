@@ -74,6 +74,7 @@ public sealed class ScheduledStepVocabularyLawTests {
             "channel.ordinal.8",
             "channel.ordinal.9",
             "player.bind",
+            "player.build",
             "player.camera",
             "player.cycle",
             "player.look",
@@ -88,7 +89,15 @@ public sealed class ScheduledStepVocabularyLawTests {
             "player.orbit",
             "player.signal",
             "player.steer",
+            "source.pointer.clear",
+            "source.pointer.direction",
+            "source.pointer.origin",
             "view.override",
+        ]),
+        ("edits a placement from a seat's editor state (its aim, grid and current placement), which a step pins by writing the row with world.row.set instead", [
+            "world.nudge",
+            "world.place",
+            "world.turn",
         ]),
         ("a chat channel, whose effect is a message rather than state", [
             "chat.allow",
@@ -189,10 +198,11 @@ public sealed class ScheduledStepVocabularyLawTests {
     // The registry refuses an operator verb for every principal but the console before its handler runs
     // (Puck.Commands' CommandAudienceLawTests), so what a host must get right is which verbs carry the audience. The
     // evaluation diagnostics print values the rules computed, some of them from state a seat is not shown; every one
-    // of them, in whichever module the host composes it, answers the operator alone, and nothing else does. A read
-    // step a schedule admits is never one of them.
+    // of them, in whichever module the host composes it, answers the operator alone, and in the headless host this
+    // class boots nothing else does. A GPU shape adds the verb that arms its device's creation faults and nothing
+    // more (WorldBootCompositionLawTests). A read step a schedule admits is never an operator verb.
     [Fact]
-    public void TheLiveHostsOperatorVerbsAreExactlyTheEvaluationDiagnostics() {
+    public void TheHeadlessHostsOperatorVerbsAreExactlyTheEvaluationDiagnostics() {
         var registry = LiveRegistry.Value;
 
         Assert.All(

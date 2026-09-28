@@ -47,6 +47,13 @@ public interface IVulkanPhysicalDeviceApi {
     /// <param name="physicalDeviceHandle">The native <c>VkPhysicalDevice</c> handle.</param>
     /// <returns>The device's memory profile, which residency selection branches on.</returns>
     Puck.Abstractions.Gpu.GpuMemoryProfile GetMemoryProfile(VulkanInstanceCommands instance, nint physicalDeviceHandle);
+    /// <summary>Gets what a physical device can bind, from <c>vkGetPhysicalDeviceProperties</c>'s limits:
+    /// <c>maxBoundDescriptorSets</c>, <c>maxPushConstantsSize</c>, the <c>maxPerStageDescriptor*</c> counts and
+    /// <c>maxPerStageResources</c>.</summary>
+    /// <param name="instance">The command table of the instance.</param>
+    /// <param name="physicalDeviceHandle">The native <c>VkPhysicalDevice</c> handle.</param>
+    /// <returns>The device's capabilities, recorded beside counted work and never branched on.</returns>
+    Puck.Abstractions.Gpu.GpuDeviceCapabilities GetDeviceCapabilities(VulkanInstanceCommands instance, nint physicalDeviceHandle);
     /// <summary>Gets a physical device's adapter LUID — the identifier a Direct3D 12 device must be created on to share GPU resources with it.</summary>
     /// <param name="instance">The command table of the instance.</param>
     /// <param name="physicalDeviceHandle">The native <c>VkPhysicalDevice</c> handle.</param>

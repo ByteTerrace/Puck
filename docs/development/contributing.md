@@ -151,7 +151,10 @@ backends. A bare `puck canary` runs only the automatic set, so it never runs a
 GPU proof. Run the merge gate with no competing build or GPU work on the
 machine, from a copy of the candidate's own CLI. `puck canary --merge --plan`
 prints what the gate would run without a GPU, and a gate that outgrows its
-declared ceiling is refused before it builds.
+declared ceiling is refused before it builds. For a per-change GPU check on one
+backend, `puck canary --capability gpu --backend vulkan` (or `directx`) runs
+those proofs on that backend alone and names it in the verdict; it is not the
+merge gate, which refuses `--backend` and holds both.
 
 `puck canary`, `puck parity`, `puck test`, and `puck docs citations` share one
 Release build of `Puck.World` per source state. The build lives in
@@ -251,8 +254,8 @@ work (dispatches, barriers, uploads, created objects), its `allocation` section
 says whether reading every count allocates, and every other section is a
 registered engine counter, including the server's `state.arena`, `state.rules`
 and `state.search`, and in a rendering World the shader compiler's
-`shaders.compiler`, the shader loads under `shaders.sdf-kernels`,
-`shaders.fullscreen-pass` and `shaders.set-manifest`, and, on Vulkan,
+`shaders.compiler`, the SDF kernel loads under `shaders.sdf-kernels`, and, on
+Vulkan,
 `procedures.vulkan`. An owner whose counts need nothing more than a named set
 of kinds holds a `WorkCounterSet` rather than writing its own source.
 `world.budget` distinguishes live program size from
@@ -261,7 +264,10 @@ reserved capacity. For a repeatable reading, run
 boots the authored counters workload offscreen on each backend, writes a report
 with every count tagged by class, and fails when a deterministic count differs
 between the backends. Keep the report from before a change and compare it with
-the one after, using `puck counters compare`.
+the one after, using `puck counters compare`. `puck counters --check` also holds
+every pass's counts to the counted-cost ceilings in
+`tests/Puck.Counters/counters.ceilings.json`, and `--record` rewrites them in the
+change that explains why a count moved.
 
 Compare the same document, camera, resolution, quality settings, backend and
 build configuration before and after the change. Report these conditions with
@@ -369,7 +375,7 @@ their inputs on the command line.
 
 ## GPU support and shader builds
 
-The supported GPU floor covers RTX 2070, RTX 4070, the RDNA3 Steam Machine,
+The supported GPU floor covers RTX 2060, RTX 4070, the RDNA3 Steam Machine,
 and the RDNA2 Steam Deck. Shaders target Vulkan 1.3 / SPIR-V 1.6 and Shader
 Model 6.6. Do not raise that floor without evidence for every supported GPU.
 
@@ -383,8 +389,9 @@ developer checkout with DXC, an unedited shipped source loads its stored package
 and an edited or new source compiles live, so authoring keeps its loop. In a
 packaged runtime with no DXC, the shipped sources load their packages, nothing
 compiles, and a source with no stored package is refused by
-`SHADERPKG_ABSENT`. The Direct3D 11 camera and probe kernels and the Direct3D 12
-compositor's blit compile at build, so no device compiles them. A change to the
+`SHADERPKG_ABSENT`. The Direct3D 11 camera and probe kernels and the display
+encode the swapchain compositors draw compile at build, so no device compiles
+them. A change to the
 SDF C# ISA
 must update the HLSL decoder in the same change. The SDF VM README lists
 the exact C# and HLSL contract pairs and bytecode rebuild procedure.
@@ -408,10 +415,16 @@ framed as unverified when no device run exists.
   infrastructure is built ahead for re-hosting and has no live check.
 - RADV may select wave32 or wave64. New wave-intrinsic kernels must be
   subgroup-size-independent or explicitly request a supported size.
-- Incremental builds can retain stale committed shader bytecode or corrupted
-  reference assemblies. Confirm suspicious behavior in a fresh worktree
-  before attributing it to source changes, then clean only the affected
-  `bin`/`obj` directories.
+- The .NET host picks the SDK from the working directory's nearest
+  `global.json`, and MSBuild picks a project's SDK from the project's; with
+  neither, both roll to the newest SDK installed, preview or not. A verb or
+  test that builds a scratch project outside the checkout creates it through
+  `CliScratchDirectories.CreateProject`, which copies the checkout's
+  `global.json` in, and runs the SDK command from that directory. An SDK
+  command against a checkout project runs from the checkout.
+- Incremental builds can retain corrupted reference assemblies. Confirm
+  suspicious behavior in a fresh worktree before attributing it to source
+  changes, then clean only the affected `bin`/`obj` directories.
 - GBA co-simulation compares instruction deltas because mGBA rebases cumulative
   cycle counters each frame. Puck's exposed PC is four bytes ahead of mGBA's
   pipeline representation.
@@ -506,10 +519,9 @@ meant to establish.
   `puck scan --only comment-smells` classifies the inline comments that break
   these rules.
 - `*Options` denotes configuration-bound data.
-- Command-module conventions are documented on `ICommandModule`; screen-slot
-  claim arbitration is documented on `ScreenSlotPriority`; the split between the
-  headless core and the presentation layer that adds the GPU host is documented
-  on `WorldBootComposition`.
+- Command-module conventions are documented on `ICommandModule`; the split
+  between the headless core and the presentation layer that adds the GPU host
+  is documented on `WorldBootComposition`.
 - CA1502, CA1505, and CA1506 are suggestion-level design signals. Simplify a
   design when they identify real coupling; do not add facades solely to change
   a metric.

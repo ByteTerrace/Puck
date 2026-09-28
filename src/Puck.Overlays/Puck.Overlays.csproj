@@ -18,6 +18,7 @@
         <ProjectReference Include="..\Puck.Commands\Puck.Commands.csproj" />
         <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
         <ProjectReference Include="..\Puck.Input\Puck.Input.csproj" />
+        <ProjectReference Include="..\Puck.Shaders\Puck.Shaders.csproj" />
         <ProjectReference Include="..\Puck.Text\Puck.Text.csproj" />
     </ItemGroup>
     <ItemGroup>

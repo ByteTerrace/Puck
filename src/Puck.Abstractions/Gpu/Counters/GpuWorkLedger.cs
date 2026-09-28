@@ -5,7 +5,9 @@ namespace Puck.Abstractions.Gpu;
 /// <summary>
 /// Collects one render node's GPU work per submission and per pass, and publishes a submission's counts only once
 /// the GPU is known to have finished it. The node wraps its neutral GPU services with <see cref="GpuWorkCounting"/>
-/// over this ledger, so every counted call lands here; the node itself only says which pass it is in.
+/// over this ledger, so every counted call lands here; the node itself only says which pass it is in. The kinds a
+/// pass's kernels count on the GPU (<see cref="GpuWork.KernelKinds"/>) join a submission's pass rows when it completes,
+/// read from the readback slot the node named for it (<see cref="ReadOnCompletion"/>).
 /// <para>
 /// The ledger holds one record per frame in flight plus one, all allocated up front. A record opens at the first
 /// counted call or pass change after the previous submission and seals when the wrapped queue submitter submits,
@@ -40,6 +42,7 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
 
     private readonly GpuWorkSample[] m_snapshots = [new(), new()];
     private int m_currentPass = -1;
+    private WorkClass[] m_classes = [];
     private string[] m_labels = [];
 
     private long m_lastSealed;
@@ -86,9 +89,34 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
     /// passes.</summary>
     /// <param name="revision">The node's number for this pass configuration, reported with every sample recorded under it.</param>
     /// <param name="passLabels">The pass labels, in pass order; copied.</param>
-    /// <exception cref="ArgumentException">An element of <paramref name="passLabels"/> is <see langword="null"/>.</exception>
+    /// <param name="passClasses">What two runs of each pass may be held to agree on, in pass order and copied, or empty
+    /// when every pass is <see cref="WorkClass.Deterministic"/>. A pass whose work follows the device (the SDF engine's
+    /// region copies, which follow its residency policy) is <see cref="WorkClass.PerBackendDeterministic"/>: its counts
+    /// read that class whatever their kinds declare.</param>
+    /// <exception cref="ArgumentException">An element of <paramref name="passLabels"/> is <see langword="null"/>, or
+    /// <paramref name="passClasses"/> is neither empty nor as long as <paramref name="passLabels"/>, or holds a class other
+    /// than <see cref="WorkClass.Deterministic"/> or <see cref="WorkClass.PerBackendDeterministic"/>.</exception>
     /// <exception cref="InvalidOperationException">The work being recorded has already entered or skipped a pass.</exception>
-    public void Configure(long revision, ReadOnlySpan<string> passLabels) {
+    public void Configure(long revision, ReadOnlySpan<string> passLabels, ReadOnlySpan<WorkClass> passClasses = default) {
+        if (
+            !passClasses.IsEmpty &&
+            (passClasses.Length != passLabels.Length)
+        ) {
+            throw new ArgumentException(
+                message: $"{passClasses.Length} pass classes were given for {passLabels.Length} passes.",
+                paramName: nameof(passClasses)
+            );
+        }
+
+        foreach (var passClass in passClasses) {
+            if (passClass is not (WorkClass.Deterministic or WorkClass.PerBackendDeterministic)) {
+                throw new ArgumentException(
+                    message: $"A pass is deterministic or per-backend-deterministic, not {passClass}.",
+                    paramName: nameof(passClasses)
+                );
+            }
+        }
+
         foreach (var label in passLabels) {
             if (label is null) {
                 throw new ArgumentException(
@@ -103,12 +131,29 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         }
 
         m_labels = passLabels.ToArray();
+        m_classes = (passClasses.IsEmpty
+            ? new WorkClass[passLabels.Length]
+            : passClasses.ToArray()
+        );
         m_revision = revision;
         m_open?.Rebind(
+            classes: m_classes,
             labels: m_labels,
             revision: m_revision
         );
         Withdraw();
+    }
+    /// <summary>Drops the work counted since the last submission sealed, keeping the published sample and every sealed
+    /// submission: setup a node does between submissions, such as installing or rebuilding its graph, belongs to no
+    /// submission, whether it succeeded, failed partway, or ran after a device loss.</summary>
+    /// <exception cref="InvalidOperationException">A pass is running.</exception>
+    public void Discard() {
+        if (m_currentPass >= 0) {
+            throw new InvalidOperationException(message: $"Pass {m_currentPass} is still running; leave it before discarding the work being recorded.");
+        }
+
+        m_open?.Free();
+        m_open = null;
     }
     /// <summary>Marks a pass as running; the work counted until <see cref="LeavePass"/> is that pass's.</summary>
     /// <param name="pass">The zero-based pass index in the configured labels.</param>
@@ -167,6 +212,21 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
                 Complete(submission: record.Submission);
             }
         }
+    }
+    /// <summary>Names where the work being recorded leaves the counts its kernels write on the GPU: once the submission
+    /// completes, and before it is published, <paramref name="readback"/> adds what <paramref name="slot"/> holds to its
+    /// pass rows. The last call before the submission seals wins; a submission never named reads none.</summary>
+    /// <param name="readback">The counter buffers the submission's passes count into.</param>
+    /// <param name="slot">The readback slot the submission copies its counts into, which it must not share with another
+    /// submission in flight.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="readback"/> is <see langword="null"/>.</exception>
+    public void ReadOnCompletion(IGpuWorkReadback readback, int slot) {
+        ArgumentNullException.ThrowIfNull(readback);
+
+        var record = OpenRecord();
+
+        record.Readback = readback;
+        record.ReadbackSlot = slot;
     }
     /// <summary>Marks a pass as not run in the work being recorded, so its sample reads skipped rather than zero.</summary>
     /// <param name="pass">The zero-based pass index in the configured labels.</param>
@@ -236,6 +296,14 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         }
 
         if (submission > m_published) {
+            completed.Readback?.AddTo(
+                counts: completed.Counts.AsSpan(
+                    length: ((completed.Labels.Length + 1) * Columns),
+                    start: 0
+                ),
+                passCount: completed.Labels.Length,
+                slot: completed.ReadbackSlot
+            );
             Publish(record: completed);
             m_published = submission;
         }
@@ -295,6 +363,7 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         }
 
         chosen!.Open(
+            classes: m_classes,
             labels: m_labels,
             revision: m_revision
         );
@@ -306,6 +375,7 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         var passCount = record.Labels.Length;
 
         m_snapshots[((int)((m_version + 1L) & 1L))].Load(
+            classes: record.Classes,
             counts: record.Counts.AsSpan(
                 length: ((passCount + 1) * Columns),
                 start: 0
@@ -337,6 +407,7 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         Sealed = 2,
     }
     private sealed class Record {
+        public WorkClass[] Classes = [];
         public long[] Counts = new long[Columns];
 
         public GpuWorkCountingFence? Fence;
@@ -344,6 +415,8 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
 
         public string[] Labels = [];
 
+        public IGpuWorkReadback? Readback;
+        public int ReadbackSlot;
         public long Revision;
         public RecordState State;
 
@@ -353,10 +426,12 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
 
         public void Free() {
             Fence = null;
+            Readback = null;
             State = RecordState.Free;
         }
-        public void Open(string[] labels, long revision) {
+        public void Open(string[] labels, WorkClass[] classes, long revision) {
             Rebind(
+                classes: classes,
                 labels: labels,
                 revision: revision
             );
@@ -366,11 +441,13 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
             ).Clear();
             Fence = null;
             HasPassActivity = false;
+            Readback = null;
             State = RecordState.Open;
             Submission = 0L;
         }
         // Keeps the outside row, which does not depend on the passes; clears every pass row and state.
-        public void Rebind(string[] labels, long revision) {
+        public void Rebind(string[] labels, WorkClass[] classes, long revision) {
+            Classes = classes;
             var countLength = ((labels.Length + 1) * Columns);
 
             if (Counts.Length < countLength) {

@@ -25,6 +25,11 @@
     "pipeline-package",
     "pipeline-budget",
     "pipeline-churn",
+    "pipeline-fault",
+    "pipeline-geometry",
+    "pipeline-echo",
+    "interface-echo",
+    "no-device-compile",
     "world-counters",
     "source-conversion",
     "sdf-decode-sign-refusal"
@@ -41,7 +46,7 @@
   ],
   "workloads": [
     {
-      "name": "forcing-world",
+      "name": "flagship",
       "world": "Assets/worlds/puck.world.json",
       "warmupTicks": 300,
       "soakTicks": 1800,
@@ -68,66 +73,74 @@
   ],
   "thresholds": [
     {
-      "workload": "forcing-world",
+      "workload": "flagship",
       "backend": "vulkan",
       "width": 1280,
       "height": 800,
-      "peakOwnedPipelineBytes": null
+      "peakOwnedPipelineBytes": null,
+      "peakDeviceLocalBytes": null
     },
     {
-      "workload": "forcing-world",
+      "workload": "flagship",
       "backend": "vulkan",
       "width": 1920,
       "height": 1080,
-      "peakOwnedPipelineBytes": null
+      "peakOwnedPipelineBytes": null,
+      "peakDeviceLocalBytes": null
     },
     {
-      "workload": "forcing-world",
+      "workload": "flagship",
       "backend": "directx",
       "width": 1280,
       "height": 800,
-      "peakOwnedPipelineBytes": null
+      "peakOwnedPipelineBytes": null,
+      "peakDeviceLocalBytes": null
     },
     {
-      "workload": "forcing-world",
+      "workload": "flagship",
       "backend": "directx",
       "width": 1920,
       "height": 1080,
-      "peakOwnedPipelineBytes": null
+      "peakOwnedPipelineBytes": null,
+      "peakDeviceLocalBytes": null
     },
     {
       "workload": "ink-pipeline",
       "backend": "vulkan",
       "width": 1280,
       "height": 800,
-      "peakOwnedPipelineBytes": 155648000
+      "peakOwnedPipelineBytes": 98304000,
+      "peakDeviceLocalBytes": null
     },
     {
       "workload": "ink-pipeline",
       "backend": "vulkan",
       "width": 1920,
       "height": 1080,
-      "peakOwnedPipelineBytes": 315187200
+      "peakOwnedPipelineBytes": 199065600,
+      "peakDeviceLocalBytes": null
     },
     {
       "workload": "ink-pipeline",
       "backend": "directx",
       "width": 1280,
       "height": 800,
-      "peakOwnedPipelineBytes": 155648000
+      "peakOwnedPipelineBytes": 98304000,
+      "peakDeviceLocalBytes": null
     },
     {
       "workload": "ink-pipeline",
       "backend": "directx",
       "width": 1920,
       "height": 1080,
-      "peakOwnedPipelineBytes": 315187200
+      "peakOwnedPipelineBytes": 199065600,
+      "peakDeviceLocalBytes": null
     }
   ],
   "deferred": [
     {
       "check": "DeviceLocalPeak",
-      "reason": "No reading of the device-local bytes a World process has allocated exists: the memory profile reports what the device has, not what the World uses, and only a pipeline instance counts its own bytes. A process-wide reading needs a byte count on the neutral GPU services, which P7's device-bound services own."
+      "reason": "memory.vulkan and memory.directx count the device-local bytes a World process allocates and releases, and its peak, and each cell's peakDeviceLocalBytes judges that peak once it is set, but no cell carries a value yet: each is set from a qualification reading of the published package on the reference devices, and none has been taken."
     },
     {
       "check": "FrameTime",

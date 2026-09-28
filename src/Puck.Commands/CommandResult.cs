@@ -36,11 +36,23 @@ public readonly record struct CommandResult(string Output, bool ClearTranscript 
     /// <summary>Gets a result that produces no transcript output and leaves the transcript unchanged.</summary>
     public static CommandResult None => new("");
 
-    /// <summary>Creates a result for work whose verdict arrives later.</summary>
+    /// <summary>Creates a result for work whose verdict arrives later, or returns that verdict itself when it arrived
+    /// before the handler returned: a settled verdict is the handler's own result, so every output sink reports it
+    /// and <c>wire.errors</c> counts it like any synchronous refusal, never left on a settlement no sink reads.</summary>
     /// <param name="settlement">The pending verdict, which its creator settles on every path.</param>
-    /// <returns>A result with no output of its own and <see cref="Settlement"/> set.</returns>
-    public static CommandResult Settling(CommandSettlement settlement) {
+    /// <param name="late">The sink that reports a verdict arriving after this call, or <see langword="null"/> when the
+    /// settlement's creator reports it; it is never invoked for a verdict this call returns.</param>
+    /// <returns>The verdict when <paramref name="settlement"/> is already settled; otherwise a result with no output of
+    /// its own and <see cref="Settlement"/> set.</returns>
+    public static CommandResult Settling(CommandSettlement settlement, Action<CommandResult>? late = null) {
         ArgumentNullException.ThrowIfNull(argument: settlement);
+
+        if (settlement.TryTakeVerdict(
+            late: late,
+            verdict: out var verdict
+        )) {
+            return verdict;
+        }
 
         return new(Output: "") {
             Settlement = settlement,

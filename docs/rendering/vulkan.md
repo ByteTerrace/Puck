@@ -88,7 +88,7 @@ value types (`VulkanQueueFamilySelection`, `VulkanPushConstantBinding`, `VulkanV
 | Render pass | `IVulkanRenderPassFactory` | `IVulkanRenderPassApi` | `VulkanRenderPass` |
 | Framebuffers | `IVulkanFramebufferSetFactory` | `IVulkanFramebufferSetApi` | `VulkanFramebufferSet` |
 | Shader module | `IVulkanShaderModuleFactory` | `IVulkanShaderModuleApi` | `VulkanShaderModule` |
-| Graphics pipeline | `IVulkanGraphicsPipelineFactory` | `IVulkanGraphicsPipelineApi` | `VulkanGraphicsPipeline` |
+| Graphics pipeline | `VulkanGpuPipelineFactory` (`IGpuPipelineFactory`) | `IVulkanGraphicsPipelineApi` | `VulkanGraphicsPipeline` |
 | Command buffers | `IVulkanCommandResourcesFactory` | `IVulkanCommandResourcesApi`, `IVulkanCommandBufferRecordingApi` | `VulkanCommandResources` |
 | Frame sync | `IVulkanFrameSynchronizationFactory` | `IVulkanFrameSynchronizationApi` | `VulkanFrameSynchronization` |
 | Buffers (every usage) |—(`VulkanBuffer.Create`) | `IVulkanBufferApi` | `VulkanBuffer` |
@@ -127,10 +127,11 @@ table that every API reads:
   goes straight to the driver rather than through the loader's dispatch trampoline.
   `VulkanLogicalDevice.Commands` owns it, and destroying the device disposes it.
 
-Each table's constructor also takes the resolver itself, a `vkGetInstanceProcAddr`- or
-`vkGetDeviceProcAddr`-shaped function pointer. The native APIs pass the loader's
-(`VulkanProcResolver.LoaderInstanceProcAddr`, `LoaderDeviceProcAddr`); a law passes one
-that stands in for the driver, so its tables are built exactly as real ones are.
+Each table's constructor also takes the `VulkanProcResolver` it resolves through. The
+host registers one resolver over the loader, whose `vkGetInstanceProcAddr` and
+`vkGetDeviceProcAddr` load on its first resolution, and the native instance and device
+APIs take it through their constructors; a law builds a resolver over lookups that stand
+in for the driver, so its tables are built exactly as real ones are.
 
 The APIs take the table itself, not a raw `VkDevice` or `VkInstance`, so a call is one
 field load and one indirect call, with no lookup. Code that needs the raw handle reads
@@ -139,10 +140,9 @@ creation. An extension entry point is `null` when its extension is not enabled, 
 caller checks it. Swapchain creation, for example, checks the whole `VK_KHR_swapchain` set
 once, so acquire and present call straight through.
 
-The backend-neutral `IGpu*` interfaces carry an opaque `nint` device handle. On Vulkan
-that value is `VulkanDeviceCommands.Token`, a `GCHandle`, and the `VulkanGpu*` adapters
-turn it back into the table with `VulkanDeviceCommands.FromToken`, which dereferences the
-handle once without searching.
+The backend-neutral `IGpu*` services carry no device value. The renderer creates them
+with itself as their device context (`IGpuDeviceContext.Services`), and each `VulkanGpu*`
+adapter reads the table from that context's logical device when it makes a call.
 
 Every buffer goes through one `IVulkanBufferApi`. A caller states the buffer's usage
 (`VulkanBufferUsageFlags`), the memory it needs (`VulkanBufferMemory`), and its size;
@@ -156,20 +156,37 @@ Every image is a `VulkanGpuImage`, created with the Vulkan usage its declared
 `GpuImageUsage` maps to (`VulkanGpuFormats.ToVkImageUsage`: a color image is also a
 transfer source and destination, a depth image only a depth attachment) and viewed
 through the aspect its format needs. An image whose view cannot be created is destroyed
-with its memory before the failure propagates, and so is an exportable image, whose shared
-handle is closed too. A `VulkanGpuRenderPass` is a `VkRenderPass` over the colors and the
+with its memory before the failure propagates, and so is an imported writable image
+(`VulkanImportedWritableImage`), whose imported semaphore is destroyed too. A `VulkanGpuRenderPass` is a `VkRenderPass` over the colors and the
 optional depth attachment of a `GpuRenderPassDescription`: an attachment that loads
 begins in its attachment layout, one that clears or discards begins undefined, and a
 color attachment ends in its declared final layout. `VulkanGpuFramebuffer` binds one to
-its images' views, and the recorder begins it with one clear value per attachment.
+its images' views, and the recorder begins it with one clear value per attachment:
+opaque black for a color, the declared `GpuDepthAttachment.ClearDepth` for the depth.
 A transition into or out of the depth-attachment layout covers the image's depth aspect.
 
-`VulkanGpuPipelineFactory`, the neutral graphics path, creates opaque pipelines with one
-blend state per color attachment, a depth-stencil state that tests and writes exactly when
-the render pass has a depth attachment, and a viewport of negative height, so clip-space +y
-is the top of the attachment as on Direct3D 12. The presenter's compositor keeps its own
-alpha-over pipeline in Vulkan's convention. `BindIndexBuffer` and `DrawIndexed` record
-`vkCmdBindIndexBuffer` and `vkCmdDrawIndexed`.
+`VulkanGpuPipelineFactory` creates every graphics pipeline, the presenter's display encode included,
+from its description's groups: opaque, with one blend state per color attachment, a
+depth-stencil state that tests and writes exactly when the render pass has a depth
+attachment, and a dynamic viewport and scissor. `VulkanGpuRecorder` begins a render pass by
+setting a viewport of negative height over the area the pass draws, so clip-space +y is the
+top of the attachment as on Direct3D 12, and a scissor over the same area. The presenter's
+recorder (`VulkanCommandBufferRecorder`) sets the same viewport over the swapchain image, and
+its compositor leases the display encode from the device's `GpuPassPipelineCache` for a render pass
+in the swapchain's format (`VulkanGpuRenderPass.PresentDescription` over `VulkanSwapchain.Output`'s format);
+the swapchain's own render pass is that description's request ending in `PRESENT_SRC_KHR`
+(`VulkanGpuRenderPass.PresentRequestOf`), so the two are compatible: attachments and dependencies
+match and only a final layout differs. A swapchain is only ever created in a `DisplayOutput`, a
+`GpuPixelFormat` and a `DisplayColorSpace`: `VulkanSwapchainFactory.SelectOutput` reads the surface's
+format and color-space pairs (the instance enables `VK_EXT_swapchain_colorspace` when the loader has it,
+so a surface on an HDR display lists its HDR pairs) and chooses through `DisplayOutput.TrySelect`. A
+requested HDR color space (`PresentationOptions.ColorSpace`, which every host leaves at `Srgb`) is taken
+when the surface offers it in its format; otherwise the output is SDR, an `SRGB_NONLINEAR_KHR` pair in the
+caller's preference when offered, else the first of `DisplayOutput.SdrFormats` (8-bit unsigned
+normalized, 8-bit sRGB, 10-bit, half float) the surface offers, whatever the surface's own order. A
+surface offering none of them refuses swapchain creation with a `NotSupportedException` naming the
+`VkFormat` values it offers. `BindIndexBuffer`
+and `DrawIndexed` record `vkCmdBindIndexBuffer` and `vkCmdDrawIndexed`.
 
 | Kind | Usage | Memory |
 |---|---|---|
@@ -196,9 +213,28 @@ instance without `vkDestroySurfaceKHR`, so a surface that exists can always be d
 The neutral `TransitionBuffer` records a `VkBufferMemoryBarrier` over the whole buffer with
 the declared access and stage scopes; `MemoryBarrier` records a global `VkMemoryBarrier`.
 
-Both pipeline APIs create and destroy their layouts through `VulkanPipelineLayouts`: an
-optional descriptor set layout over the pipeline's bindings, and a pipeline layout over
-that set and an optional push-constant range. A failed creation leaves neither alive.
+Layouts are created and destroyed through `VulkanPipelineLayouts`. The compute pipeline API
+creates its own for a pipeline described by bindings: an optional descriptor set layout
+over the pipeline's bindings, and a pipeline layout over that set and an optional
+push-constant range; a failed creation leaves neither alive. A pipeline described with a
+`GpuPipelineLayoutDescription`, which every graphics pipeline is, takes the layout
+`VulkanPipelineLayouts.Create` makes from `VulkanGroupLayouts.Plan` instead: one set layout
+per planned set number, empty where no group sits, each binding with the pipeline's stage
+flags, and a pipeline layout over every set layout in set order and the planned push range.
+`VulkanGpuPipelineFactory` creates it before the pipeline and hands it to the pipeline API,
+which neither creates nor destroys a layout it is handed, and the pipeline owns it. The
+graphics pipeline API takes only a handed layout (`VulkanGraphicsPipelineCreateRequest`
+requires `PipelineLayoutHandle`), and its viewport and scissor are always dynamic state the
+drawing command buffer sets.
+
+A `VkDescriptorSet` handle cannot say which group it belongs to, so the logical device's
+`VulkanDescriptorSetGroups` (`VulkanLogicalDevice.SetGroups`) records it. A grouped pipeline
+records its set layouts under their set numbers for as long as it lives, `AllocateSet`
+records a set of one of them under that group and its pool, and `DestroyPool` forgets the
+pool's sets. `BindDescriptorSet` binds a set at its group as `firstSet` on either bind point
+and refuses, by name, a set bound at any other group; a set of any other layout belongs to
+group 0. A group's constant buffer is a uniform buffer descriptor, its separate image a
+sampled image in the shader-read-only layout, and its sampler a sampler descriptor.
 
 ---
 
@@ -319,18 +355,28 @@ device memory by a share of the device-local bytes (see
 `GpuResidency.Select` chooses where a region the host writes every
 frame lives from the profile and the region's size. A region within
 one-sixteenth (`GpuResidency.HostVisibleShare`) of the host-visible
-device-local heap is written in place on coherent unified memory and through a
-per-frame ring otherwise. Any other region, and any region on a device that
+device-local heap is written in place on coherent unified memory when no
+submission reading it is in flight while the host writes, and through a
+per-frame ring otherwise, which is every per-frame owner's case. Any other region, and any region on a device that
 reports no host-visible device-local memory, is staged and copied by a compute
 dispatch. `GpuRegion` writes a region under whichever policy was chosen, over
 the neutral buffer, descriptor and recorder interfaces, so both backends share
-it. Direct3D 12 fills the same profile from its own queries; see
+it. A shader pipeline instance owns every region its graph writes from the host,
+a package's (the overlay's buffer) and a host buffer port's (an uploaded source's),
+and records their staged copies in one command buffer ahead of its frame's passes,
+behind a memory barrier ordering earlier reads before the copies and followed by a
+buffer barrier per copied buffer (see
+[the region copy](../reference/shaders.md#the-region-copy)). Direct3D 12 fills the same profile from its own queries; see
 [its memory profile](directx.md#memory-profile). `pipeline.inspect` prints the
 profile and the policy chosen for a pipeline instance's parameter bytes.
 
-The neutral buffer factory places a ring's host-visible buffers in the first
-host-visible, host-coherent memory type, not in the device-local aperture the
-profile reports, and no engine consumer writes through a region yet.
+`GpuResidency.RingMemory` places a ring's buffers in the device-local aperture
+on a discrete adapter that exposes one: `CreateHostVisibleDeviceLocal`
+allocates a `DEVICE_LOCAL`, `HOST_VISIBLE` and `HOST_COHERENT` memory type
+(Direct3D 12 uses a `GPU_UPLOAD` heap), counted under `memory.vulkan` because
+it is the adapter's memory. On unified memory (`GpuMemoryProfile.UnifiedMemory`:
+an integrated or CPU device, or Direct3D 12's `UMA`) a ring's buffers are
+ordinary host-visible buffers in the device's one pool.
 
 ---
 
@@ -374,7 +420,10 @@ Two design points worth knowing:
 For the simpler "record, then read the results back" case (offscreen rendering, headless
 work), `VulkanQueueSubmitter.SubmitAndWait` batches command buffers into a single submit plus
 one `vkQueueWaitIdle`, and `VulkanSurfaceReadback` copies the rendered image into a
-host-coherent `VulkanBuffer` and reads it back to the CPU.
+host-coherent `VulkanBuffer` and reads it back to the CPU. Behind the copy it records a
+barrier to the host (`GpuStage.Host`, `GpuAccess.HostRead`) through `VulkanGpuRecorder`,
+since a completed submission alone makes no device write visible to the host;
+`VulkanSurfaceReadbackLawTests` holds it.
 
 ---
 
@@ -387,6 +436,38 @@ callers still re-probe before relying on a path, and fall back otherwise:
   (compiled register counts, etc.); pixel-neutral read-back via `IVulkanPipelineStatisticsApi`.
 - **Storage-image-without-format**—`shaderStorageImage{Read,Write}WithoutFormat`, needed to
   write image views whose format (commonly BGRA8) has no storage-image format qualifier.
+- **External semaphores and timeline semaphores**—`VK_KHR_external_semaphore_win32` and the
+  `timelineSemaphore` feature, which let the device wait on a Direct3D 12 shared fence.
+  `IGpuSurfaceTransferFactory.TryImportFence` imports the fence's NT handle into a timeline
+  semaphore (`VulkanSharedFence`, `VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_D3D12_FENCE_BIT`) whose value
+  is the fence's, and refuses by name on a device created without the extension.
+
+## Waiting on another device
+
+A Direct3D 11 producer (a camera, a desktop capture) writes into shared targets and signals a
+Direct3D 12 shared fence after each write; the consumer's submission waits for the value on the
+GPU, with no keyed mutex and no CPU wait on either side. The wait rides the image's lease
+(`GpuImageLease.Wait`), and the node that samples the image adds it with
+`IGpuQueueSubmitter.AddExternalWait` immediately before the submission that samples it
+(`LeaseRetireList.AddWaits`). `VulkanGpuQueueSubmitter` puts every wait added since its last
+submission into the next one's wait list: the imported
+semaphore, its value in a chained `VkTimelineSemaphoreSubmitInfo`, and
+`VK_PIPELINE_STAGE_ALL_COMMANDS_BIT`, so no stage of the batch runs early. A submission with no
+command buffers keeps the list. `VulkanQueueSubmitter`'s submits take the wait semaphores and
+values directly. The order back, from consumer to producer, is the CPU slot lease the consumer
+releases once its own fence has signalled.
+
+The other direction, a Vulkan write a Direct3D 11 device reads (a camera view exported to a probe),
+imports what a Direct3D 12 device made: `IGpuSurfaceTransferFactory.TryImportWritable` imports a
+Direct3D 12 simultaneous-access texture with the usages the writer declares and a Direct3D 12 shared
+fence as a timeline semaphore (`VulkanImportedWritableImage`). Between writes the reader owns the
+image: `CompleteWrite` submits, in one batch through `VulkanQueueSubmitter.Signal`, a barrier that
+releases the image from the graphics queue family to `VK_QUEUE_FAMILY_EXTERNAL` and the semaphore's
+next value, and `BeginWrite` submits the barrier that acquires it back ahead of the next submission
+that writes it. Both barriers keep the image in `VK_IMAGE_LAYOUT_GENERAL` and are recorded once, into
+command buffers begun for resubmission while pending. `VulkanImportedWritableImageLawTests` pins the
+two barriers. The Direct3D 11 reader opens the texture and the fence by their handles and waits for
+the value on its own device.
 
 ---
 
@@ -416,7 +497,7 @@ backends: the PCI vendor and device IDs in four hexadecimal digits and the raw
 driver version in sixteen (`10de-2786-000000008d8d8000`). A driver version the
 backend could not read is zero and still names a file. The host names the
 kernel set with a hash of the SDF kernels it ships
-(`SdfWorldKernels.ContentKey`), so a driver update or a kernel change starts a
+(`SdfKernelSet.ContentKey`), so a driver update or a kernel change starts a
 new file rather than loading one that could never hit.
 
 Each backend keeps at most eight `.bin` files (`GpuPipelineCacheFile.RetainedFiles`),
@@ -447,8 +528,9 @@ deleted beyond the eight (removed directories are not counted). Every pipeline
 created is exactly one hit or one miss, and the counts survive device loss.
 `VulkanProcResolver` counts every procedure it resolves under the
 `procedures.vulkan` source: `vulkan.procedures.device-resolved` and
-`vulkan.procedures.instance-resolved`, found or not. The counts belong to the
-process, so a device recreated after a loss adds its command table again.
+`vulkan.procedures.instance-resolved`, found or not. Each resolver counts into its
+own `Work`, and the host's resolver is registered once, so its counts cover every
+table the host builds and a device recreated after a loss adds its table again.
 
 ## Constraints and invariants
 
@@ -476,12 +558,44 @@ Beyond the factory/API/interop triads in [Capabilities](#capabilities):
 `VulkanPipelineLayouts`, and the small value types `VulkanQueueFamilySelection`,
 `VulkanPushConstantBinding`, `VulkanVertexBufferBinding`, `VulkanShaderStageFlags`.
 
+## Validation
+
+`--debug-layers` creates the instance with `VK_LAYER_KHRONOS_validation`, and
+the same flag turns on the layer's synchronization validation: the create-info
+chains a `VkValidationFeaturesEXT` enabling
+`VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT`, declared by the
+layer's `VK_EXT_validation_features`, ahead of the debug-utils messenger
+(`VulkanNativeInstanceApi.LinkCreateChain`). A missing barrier, or one whose
+stages or accesses do not cover a read-after-write, write-after-read or
+write-after-write, then prints a `[vulkan-debug] validation` line naming the
+`SYNC-HAZARD-*` it found. `VulkanInstanceCreateChainLawTests` holds the chain
+and the extension without a loader.
+
+## Debug names
+
+Every object the backend creates carries a debug name taken from its creator,
+a `GpuObjectName` passed to the creating member of `GpuDeviceServices`. The
+name joins the owner (an SDF engine, a graph instance, a package), the part of
+it the object is (a table, a pipeline, a pass), an optional detail within that
+part, and an index for one of several alike, usually a frame slot:
+`sdf.world/program[1]`, `overlay/pass`, or `sdf.world/region-copies` for a
+pool. A name holds no handle, counter or clock, so an object has the same name
+on every run.
+
+`VulkanGpuObjectNaming` applies names through `vkSetDebugUtilsObjectNameEXT`,
+and only when the device was created with validation (`--debug-layers`) and
+`VK_EXT_debug_utils`. Otherwise naming returns before it formats anything, so a
+normal run builds no strings. The validation layer prints the name in
+brackets after the handle, so a leak report reads
+`VkBuffer 0x30000000003[law/leaked]` inside the `[vulkan-debug] validation`
+line; `VulkanValidationLivenessTests` holds that.
+
 ## Verification
 
 `tests/Puck.Vulkan.Tests` checks the backend's device-free decisions: native
 marshalling under an allocator that refuses one allocation, the usage and
 memory every storage and geometry buffer is created with, the usage and view
-aspect an image's declared usages map to, that an image or exportable image
+aspect an image's declared usages map to, that an image
 whose view cannot be created is destroyed with its memory, and that every handle
 kind reaches the zero-handle guard through the API its owners call. That law
 drives command tables built over a resolver whose destroy entry points record

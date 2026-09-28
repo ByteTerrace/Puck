@@ -12,14 +12,14 @@ namespace Puck.Shaders.Tests;
 public sealed partial class ShaderPipelineRenderNodeLawTests {
     private const ulong Mebibyte = (1024UL * 1024UL);
 
-    private static CompiledShaderPipeline Compile(ShaderPipelineDefinition definition) {
+    private static CompiledShaderPipeline Compile(RenderGraphDefinition definition) {
         var plan = new ShaderPipelineCompiler().Compile(definition: definition);
 
         return new CompiledShaderPipeline(
             plan: plan,
             shaders: plan.Passes.ToDictionary(
                 elementSelector: static pass => Shader(
-                    kind: pass.Declaration.Kind,
+                    kind: pass.Declaration!.Kind,
                     name: pass.Name
                 ),
                 keySelector: static pass => pass.Name
@@ -30,25 +30,23 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
     /// Position vertex input, which gives the pass a vertex buffer.</summary>
     private static CompiledShaderPipeline PositionCopy() {
 
-        return Compile(definition: new ShaderPipelineDefinition(
+        return Compile(definition: new RenderGraphDefinition(
             name: "fill",
             outputs: ["image"],
             passes: [
                 Pass(
                     inputs: [],
-                    kind: ShaderPipelinePassKind.Compute,
+                    kind: ShaderPipelineDocumentPassKind.Compute,
                     name: "fill",
                     outputs: [new ResourceReference(
-                        Binding: 0,
                         Name: "gray"
                     )]
                 ),
                 (Pass(
                     inputs: [new ResourceReference(
-                        Binding: 0,
                         Name: "gray"
                     )],
-                    kind: ShaderPipelinePassKind.Fullscreen,
+                    kind: ShaderPipelineDocumentPassKind.Fullscreen,
                     name: "copy",
                     outputs: ["image"]
                 ) with { Vertex = ShaderPipelineVertexInput.Position }),
@@ -71,7 +69,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         ));
     }
     // What a shape installs first, what replaces it (null for a resize of the installed pipeline to half the extent),
-    // and whether it publishes the float history through the float preview.
+    // and whether it publishes the float history, which it publishes itself.
     private static (CompiledShaderPipeline Installed, CompiledShaderPipeline? Replacement, bool FloatOutput) BudgetShape(string shape) => shape switch {
         "feedback" => (Feedback(), Feedback(historyFormat: "R32G32B32A32Float"), false),
         "feedback-carrying-history" => (Feedback(), Feedback(), false),
@@ -333,14 +331,18 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
     }
     [Fact]
     public void ASelectionWhosePreviewWouldExceedTheBudgetIsRefusedBeforeItCreatesAnything() {
-        const ulong PreviewBytes = (((Extent * Extent) * 4UL) * InFlight);
+        // One RGBA8 target per frame slot and the one encode block.
+        const ulong PreviewBytes = ((((Extent * Extent) * 4UL) * InFlight) + IGpuBindings.ConstantBufferAlignment);
         var gpu = new FakePipelineGpu();
-        using var node = InstalledNode(gpu: gpu);
+        using var node = InstalledNode(
+            gpu: gpu,
+            pipeline: Feedback(backdrop: true)
+        );
         var creations = gpu.CreationCount;
 
         node.BudgetCapBytes = ((node.OwnedBytes + PreviewBytes) - 1UL);
 
-        var refusal = Assert.Throws<InvalidOperationException>(testCode: () => node.SelectOutput(name: "history"));
+        var refusal = Assert.Throws<InvalidOperationException>(testCode: () => node.SelectOutput(name: Backdrop));
 
         Assert.IsType<InvalidDataException>(@object: refusal.InnerException);
         Assert.StartsWith(
@@ -354,7 +356,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
 
         // One byte more and the preview is created beside the graph, which then owns exactly the budget.
         node.BudgetCapBytes = (node.OwnedBytes + PreviewBytes);
-        node.SelectOutputBuilt(name: "history");
+        node.SelectOutputBuilt(name: Backdrop);
         _ = node.ProduceFrame(context: default);
         Assert.Equal(
             actual: (Owned: node.OwnedBytes, Live: gpu.LiveBytes),
@@ -367,7 +369,8 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             CoherentUnifiedMemory: false,
             DeviceLocalBytes: bytes,
             HostVisibleDeviceLocalBytes: 0UL,
-            LargestDeviceLocalHeapBytes: bytes
+            LargestDeviceLocalHeapBytes: bytes,
+            UnifiedMemory: false
         );
 
         Assert.Equal(

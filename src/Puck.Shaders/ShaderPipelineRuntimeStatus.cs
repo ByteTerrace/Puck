@@ -1,3 +1,5 @@
+using Puck.Hosting;
+
 namespace Puck.Shaders;
 
 /// <summary>Read-only allocation and extent information for one live pipeline resource.</summary>

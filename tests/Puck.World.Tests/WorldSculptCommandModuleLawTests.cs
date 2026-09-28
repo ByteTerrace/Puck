@@ -71,13 +71,11 @@ public sealed class WorldSculptCommandModuleLawTests {
                 new WorldRowCommandModule(
                     authority: authority,
                     echoes: echoes,
-                    link: m_row.Instance.Link,
                     stepGuard: guard
                 ),
                 new WorldSculptCommandModule(
                     authority: authority,
                     echoes: echoes,
-                    link: m_row.Instance.Link,
                     stepGuard: guard
                 ),
             ]);

@@ -216,6 +216,10 @@ public sealed partial class WorldDocument {
     // Definition/Undo/Composition/Lever's acting principal are ALWAYS the envelope's own Principal — the one field
     // every submission kind funnels its acting identity through now, never a second copy.
     internal WorldSubmissionResult? ApplyEnvelope(SubmissionEnvelope envelope, Action<WorldSubmissionResult>? completion = null) {
+        if (TryRefuseStaleSession(envelope: in envelope, refusal: out var stale)) {
+            return stale;
+        }
+
         switch (envelope.Payload) {
             case WorldSubmissionPayload.Command command:
                 ApplyCommand(
@@ -260,6 +264,9 @@ public sealed partial class WorldDocument {
                         Code: "world.mutation.ingress_refused",
                         Detail: bindingDetail
                     );
+                }
+                if (RefuseActivationMismatch(binding: binding, envelope: in envelope, expected: mutation.ExpectedActivation) is { } mismatch) {
+                    return mismatch;
                 }
                 // The tape's one mutation ingress: fires here rather than at the loopback so a forwarded traveller's
                 // submission and an admitted peer's are captured on the same terms as a local one, each with the
@@ -365,20 +372,10 @@ public sealed partial class WorldDocument {
     // → solids rebuild → swap → journal RESET → re-mint every admitted peer connection's admission grant
     // (the document swap re-syncs group/ownership grant state but never re-mints the admitted peers' admission grants
     // on its own, and a rebuild is exactly the kind of whole-state swap a future authority change might reasonably
-    // reset around — this closes that loudly, by construction, rather than by omission). The console handler already
-    // validated a Load/Reload file (WorldDefinitionLoader.TryLoadFile); this
-    // re-check is the defensive apply-time gate every install passes through, same as the prior world.load-only path.
+    // reset around — this closes that loudly, by construction, rather than by omission). A Load/Reload candidate was
+    // drawn and admitted by WorldDefinitionLoader.TryLoadFileForAdmission; this is the apply-time gate every install passes.
     internal bool ApplyRebuild(WorldRebuildRequest request, Principal principal, int connectionId, long correlationId, string? expectedContentHash = null, string? preparationFailure = null) {
-        var verb = request.Kind switch {
-            WorldRebuildKind.Reset => "world.reset",
-            WorldRebuildKind.Load => "world.load",
-            WorldRebuildKind.Reload => "world.reload",
-            _ => throw new ArgumentOutOfRangeException(
-            paramName: nameof(request),
-            actualValue: request.Kind,
-            message: $"no {nameof(ApplyRebuild)} verb for rebuild kind '{request.Kind}'."
-        ),
-        };
+        var verb = RebuildVerb(kind: request.Kind);
 
         // THE CAS RESOLUTION, FIRST — before any refusal gate, so a rebuild the door goes on to refuse below is
         // still taped and reproduces as the identical refusal on replay (RebuildTap's own remarks).
@@ -401,17 +398,12 @@ public sealed partial class WorldDocument {
             contentHash = (request.ContentHash ?? throw new InvalidOperationException(message: $"{verb}: a Load/Reload request carrying a document must also carry its content hash."));
         } else if (request.PathHint is not { } path) {
             throw ReplayRefusal.RebuildSourceUnavailable.Raise(message: $"{verb}: a Load/Reload request with no embedded document must carry a path hint to re-read for replay.");
-        } else if (!WorldDefinitionFileSource.TryLoadLocally(
-            contentHash: out var rereadHash,
-            definition: out var reread,
-            path: path,
-            reason: out var rereadReason,
-            documents: Host.RebuildDocuments
-        )) {
-            throw ReplayRefusal.RebuildSourceUnavailable.Raise(message: $"{verb}: cannot re-read '{path}' for replay — {rereadReason}");
         } else {
-            candidate = reread!;
-            contentHash = rereadHash;
+            candidate = RereadForReplay(
+                contentHash: out contentHash,
+                path: path,
+                verb: verb
+            );
         }
 
         if (
@@ -781,6 +773,8 @@ public sealed partial class WorldDocument {
             candidate: candidate,
             preRebuildPeerRows: preRebuildPeerRows
         );
+        // A live SESSION ends: the reset wiped its rows, and a screen observing through it re-admits under the candidate.
+        Host.GrantTable.EndSessionsForRebuild();
 
         // Finish runs here, AFTER the candidate's own grants have installed, never earlier: its capability
         // disclosure narration is computed lazily against the LIVE grant table at the moment each line actually
@@ -945,7 +939,7 @@ public sealed partial class WorldDocument {
     // document-only.
     internal void Install(WorldDefinition definition, bool rebuildPopulation, WorldRuleCompilation? compilation = null, StateArena? arena = null) {
         m_pendingDefinitionDelivery = true;
-        m_definition = definition;
+        AdoptDefinition(definition: definition);
         Host.InputHold.Reconfigure(settings: definition.CompiledInputHold);
         definition = Host.RecompileRules(arena: arena, compilation: compilation, definition: definition);
         // Unconditional, like RecompileRules above: a group/member count is capacity-bounded, so a full resync costs
@@ -1028,7 +1022,7 @@ public sealed partial class WorldDocument {
     private readonly List<WorldPeerEventEntry> m_inhabitCountDisconnected = [];
 
     private void InstallRuntimeStateValue(WorldDefinition definition, WorldMutation mutation, StateArena? arena = null) {
-        m_definition = definition;
+        AdoptDefinition(definition: definition);
         // A state-value install is a fresh seed of the arena: ordinary rows enter through the import door, while a
         // pool candidate arrives as the already-validated typed replacement prepared before commit.
         if (arena is null) {
@@ -1937,7 +1931,7 @@ public sealed partial class WorldDocument {
         // during its own attach primer must not take down whoever called AttachSink, and is detached before it ever
         // reaches an ordinary tick delivery.
         try {
-            sink.DeliverDefinition(definition: m_definition);
+            sink.DeliverDefinition(definition: m_definition, version: Host.DocumentVersion);
 
             var primer = BuildPrimerSnapshot();
 

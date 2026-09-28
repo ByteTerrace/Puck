@@ -1,6 +1,8 @@
 using System.Globalization;
+using System.Text;
 using Puck.Commands;
 using Puck.Maths;
+using Puck.Shaders;
 using Puck.World.Client;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -17,6 +19,10 @@ namespace Puck.World;
 /// while headless composition still reports every authoritative cost and names the absent renderer.
 /// </summary>
 internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopulation population, WorldServer server, IServerLink link, WorldRenderProbe? renderProbe = null) : ICommandModule {
+    // The live budget's reader and its text, reused by every world.budget.
+    private readonly RenderGraphLiveBudget m_liveBudget = new();
+    private readonly StringBuilder m_liveText = new();
+
     private static string DescribeAssignment(WorldRowAssignment assignment) =>
         $"{DescribeSequence(sequence: assignment.Sequence)}[{((assignment.Rows.Count == 0)
             ? "all"
@@ -24,8 +30,66 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
                 separator: ",",
                 values: assignment.Rows
             ))}]";
+    // What the render graph runtime scheduled in its latest frame, read from that schedule and each instance's work
+    // ledger (RenderGraphLiveBudget), or why there is none.
+    private string DescribeLiveBudget() {
+        if (renderProbe?.Root?.Runtime is not { } runtime) {
+            return "live renderer not built yet";
+        }
+
+        m_liveText.Clear();
+        m_liveBudget.Describe(
+            into: m_liveText,
+            runtime: runtime
+        );
+
+        return m_liveText.ToString();
+    }
+    // The bytes the world's view allocates for its visibility records, and for the mesh pass's target and depth
+    // attachment: storages of its sdf.world passes, zero before its graph installs.
+    private (ulong Visibility, ulong MeshAttachments) WorldViewBytes() {
+        var visibility = 0UL;
+        var mesh = 0UL;
+
+        if (renderProbe?.Root?.Runtime.NodeOf(instance: WorldViewGraphs.WorldInstance) is { } node) {
+            foreach (var status in node.ResourceStatus) {
+                if (string.Equals(
+                    a: status.Name,
+                    b: Puck.Shaders.RenderGraphPackageFragment.Spliced(
+                        name: Puck.Shaders.SdfWorldPackage.Parts.Visibility,
+                        pass: Puck.Shaders.RenderGraphPackageCatalog.SdfWorld
+                    ),
+                    comparisonType: StringComparison.Ordinal
+                )) {
+                    visibility += status.AllocationBytes;
+                } else if (
+                    string.Equals(
+                        a: status.Name,
+                        b: Puck.Shaders.RenderGraphPackageFragment.Spliced(
+                            name: Puck.Shaders.SdfWorldPackage.Parts.MeshTarget,
+                            pass: Puck.Shaders.RenderGraphPackageCatalog.SdfWorld
+                        ),
+                        comparisonType: StringComparison.Ordinal
+                    ) ||
+                    string.Equals(
+                        a: status.Name,
+                        b: Puck.Shaders.RenderGraphPackageFragment.Spliced(
+                            name: Puck.Shaders.SdfWorldPackage.Parts.MeshDepth,
+                            pass: Puck.Shaders.RenderGraphPackageCatalog.SdfWorld
+                        ),
+                        comparisonType: StringComparison.Ordinal
+                    )
+                ) {
+                    mesh += status.AllocationBytes;
+                }
+            }
+        }
+
+        return (visibility, mesh);
+    }
     private string DescribeBudget() {
-        var render = ((renderProbe?.Node is { } node)
+        var (visibilityBytes, meshAttachmentBytes) = WorldViewBytes();
+        var render = ((renderProbe?.Residency is { } node)
             ? $"program {node.LiveProgramWords}/{node.ProgramWordCapacity} word(s), {node.LiveProgramInstances} instance(s), globalStepScale {node.LiveProgramStepScale.ToString(
                 format: "G6",
                 provider: CultureInfo.InvariantCulture
@@ -39,12 +103,12 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
                     format: "0.###",
                     provider: CultureInfo.InvariantCulture
                 )} at instruction {binder.InstructionIndex}, unscoped)"
-                : string.Empty)}"
+                : string.Empty)}, visibility records {visibilityBytes.ToString(provider: CultureInfo.InvariantCulture)} byte(s) at {Puck.Shaders.SdfWorldPackage.VisibilityRecordByteLength.ToString(provider: CultureInfo.InvariantCulture)} a pixel, mesh region {node.MeshRegionBytes.ToString(provider: CultureInfo.InvariantCulture)} byte(s) held for {node.MeshDrawCount.ToString(provider: CultureInfo.InvariantCulture)} draw(s), mesh attachments {meshAttachmentBytes.ToString(provider: CultureInfo.InvariantCulture)} byte(s)"
             : "renderer not built yet"
         );
 
-        if (renderProbe?.Node is { } rendered) {
-            render += $", volumes {rendered.LiveVolumes}/{Puck.SdfVm.SdfWorldEngine.MaxVolumes}";
+        if (renderProbe?.Residency is { } rendered) {
+            render += $", volumes {rendered.LiveVolumes}/{Puck.SdfVm.SdfWorldTables.MaxVolumes}";
             var clamps = rendered.LiveProgramFieldScopeClamps;
 
             render += $", scoped clamps {clamps.Count} ({clamps.Count(predicate: static clamp => (clamp.ShapeCount > 1))} shared)";
@@ -63,7 +127,7 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
         var fogDensity = (server.Definition.Render.Sky?.Layers?.OfType<WorldRenderSkyLayer.Fog>().FirstOrDefault()?.Density ?? Puck.SignedDistance.SdfEnvironment.DefaultFogDensity);
         var far = string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"far {farDistance:0.##} unit(s) (reach x{(farDistance / Puck.SdfVm.SdfFrame.DefaultFarDistance):0.##} the {Puck.SdfVm.SdfFrame.DefaultFarDistance:0}-unit default; horizon ray ~{farDistance:0} step(s) per unit of camera height of {Puck.SdfVm.SdfWorldEngine.PrimaryMarchSteps}; fog remnant at the far plane {MathF.Exp(x: (-fogDensity * farDistance)):0.###})"
+            handler: $"far {farDistance:0.##} unit(s) (reach x{(farDistance / Puck.SdfVm.SdfFrame.DefaultFarDistance):0.##} the {Puck.SdfVm.SdfFrame.DefaultFarDistance:0}-unit default; horizon ray ~{farDistance:0} step(s) per unit of camera height of {Puck.SdfVm.SdfWorldTables.PrimaryMarchSteps}; fog remnant at the far plane {MathF.Exp(x: (-fogDensity * farDistance)):0.###})"
         );
         var lattice = ((population.Fields is { } fields)
             ? fields.DescribeCost(
@@ -104,7 +168,7 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
         var ruleBudget = server.CostReport.WorkBudget;
         var rules = $"rules {ruleBudget.RuleRows}, interactions {ruleBudget.InteractionRows}/{WorldInteractionCapacity.MaxInteractions}, worst {ruleBudget.EvaluationSlots} evaluation(s), {ruleBudget.WorkUnitsPerTick}/{RuleCapacity.MaxWorkUnitsPerTick} work unit(s) / tick (including {ruleBudget.FlockAffinityWorkUnitsPerTick} flock-affinity units); decision perception {ruleBudget.DecisionImagePointsPerTick} pose(s), {ruleBudget.DecisionGridBuildsPerTick} shared grid rebuild(s)/{ruleBudget.DecisionGridPointsPerTick} point(s) sorted per tick ceiling";
 
-        return $"[world.budget: {render} | {stampPool} | {far} | {lattice} | {gravity} | {placements} | state {(server.Definition.State?.Count ?? 0)} row(s) | {rules} | {curves} | {navigation} | {population.DescribeFlockWork()} | {population.DescribeRigidWork()} | {server.DescribePatternBudget()} | {server.CostReport.Presentation.Describe()}]";
+        return $"[world.budget: {render} | {stampPool} | {far} | {lattice} | {gravity} | {placements} | state {(server.Definition.State?.Count ?? 0)} row(s) | {rules} | {curves} | {navigation} | {population.DescribeFlockWork()} | {population.DescribeRigidWork()} | {server.DescribePatternBudget()} | {server.CostReport.Presentation.Describe()} | {DescribeLiveBudget()}]";
     }
     private static string DescribeDistribution(WorldDistribution distribution) {
         var region = distribution.Region switch {
@@ -331,7 +395,7 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.budget",
-            description: "Prints the immediate compose-time cost sheet: rendering, the creation-stamp pool's per-stamp shape ceiling and worst-case instance draw, far-distance, fields, gravity, placements (static instances, rows, and the offsets every dealt template reserves), state/rules, curves, bounded navigation, local flock perception work, and every views.graphs instance with its extent ceiling, rate and planned passes against the scheduler's pass-pixel budget. Rendering reads 'not built yet' under a headless host; authoritative costs remain available.",
+            description: "Prints the immediate compose-time cost sheet: rendering, the creation-stamp pool's per-stamp shape ceiling and worst-case instance draw, far-distance, fields, gravity, placements (static instances, rows, and the offsets every dealt template reserves), state/rules, curves, bounded navigation, local flock perception work, and every views.graphs instance with its extent ceiling, rate and planned passes against the scheduler's pass-pixel budget, then the live budget: every instance the render graph runtime scheduled in its latest frame, with what it decided, its extent, frame divisor, passes and pass-pixels, and the passes, dispatches and draws its newest completed submission counted (counts, never timing). Rendering and the live budget read 'not built yet' under a headless host; authoritative costs remain available.",
             handler: (_, args) => ((CommandResult.RequireNoArguments(
                 args: args,
                 verb: "world.budget"

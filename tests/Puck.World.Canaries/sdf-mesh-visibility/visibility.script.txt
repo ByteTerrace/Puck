@@ -1,0 +1,47 @@
+# Every frame renders every pass, and the visibility view colors each pixel by the kind of its visibility record.
+world.cadence off
+# The engine builds its pipelines before the first capture is armed, so the capture lands on a rendered frame. The wait
+# releases on readiness, a cold driver cache included; the leg's own timeout bounds it.
+world.wait ready 600
+world.debug-view visibility
+world.wait 30
+world.screenshot {run}/meshes.png
+world.wait captures 30
+# Small and multiple viewports: the same camera in a half-size slot and a quarter-size one.
+view.override layout split
+world.wait 30
+world.screenshot {run}/split.png
+world.wait captures 30
+view.override layout auto
+# A reduced render scale: the view renders at a fraction of its rect and the place pass reconstructs it.
+world.render-scale half
+world.wait 30
+world.screenshot {run}/scaled.png
+world.wait captures 30
+world.render-scale native
+# An opening with a mesh behind it and nothing behind the mesh, a mesh in a block's face, and a sphere's silhouette over
+# a mesh: the first three placements leave and these arrive.
+world.row.set placements front position [-2.5,-60,0]
+world.row.set placements back position [0,-60,0]
+world.row.set placements high position [2.5,-60,0]
+world.row.set placements window position [-2.2,0,0]
+world.row.set placements tie position [0,0,0]
+world.row.set placements silhouette position [2.2,0,0]
+world.wait 30
+world.screenshot {run}/scenes.png
+world.wait captures 30
+# A mesh clipped by the near plane and a block in front of a mesh about two hundred units away, in one frame.
+world.row.set placements window position [-2.2,-60,0]
+world.row.set placements tie position [0,-60,0]
+world.row.set placements silhouette position [2.2,-60,0]
+world.row.set placements near position [0,0,0]
+world.row.set placements far position [0,0,0]
+world.wait 30
+world.screenshot {run}/depths.png
+world.wait captures 30
+# A full-size resize: the display grows from 256x144 to 1920x1080 live, and the frame, its mesh attachments and its
+# visibility records render at the new extent.
+world.resize 1920 1080
+world.wait 30
+world.screenshot {run}/full.png
+world.wait captures 30

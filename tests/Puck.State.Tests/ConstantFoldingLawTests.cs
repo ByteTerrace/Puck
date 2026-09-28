@@ -93,6 +93,11 @@ public sealed class ConstantFoldingLawTests {
     [InlineData("clamp(-5, 0, 10)", 0L)]
     [InlineData("1 ? 3 : 7", 3L)]
     [InlineData("pairX(pair(7, 3))", 7L)]
+    [InlineData("pairY(floorDivideModulo(-7, 2))", 1L)]
+    [InlineData("floorDivide(-7, 2)", -4L)]
+    [InlineData("power(3, 4)", 81L)]
+    [InlineData("modularPower(3, 200, 1000)", 1L)]
+    [InlineData("modularInverse(3, 7)", 5L)]
     [Theory]
     public void SuccessfulSubtreesBecomeOneRawConstant(string text, long expected) {
         var token = Assert.Single(collection: Compile(text));

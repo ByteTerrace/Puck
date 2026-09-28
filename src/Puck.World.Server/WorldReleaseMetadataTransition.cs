@@ -151,17 +151,21 @@ public static class WorldReleaseMetadataTransition {
         ArgumentNullException.ThrowIfNull(after);
         ArgumentNullException.ThrowIfNull(current);
         transitioned = null;
+        // Both package definitions are published undrawn; each is proved through a drawn copy, as a release read proves
+        // it, since a document whose references read a drawn cell cannot be judged undrawn.
         if (
-            !Validate(
-            definition: before,
-            machines: machines,
-            reason: out reason
-        ) ||
-            !Validate(
-            definition: after,
-            machines: machines,
-            reason: out reason
-        )
+            !WorldDefinitionLoader.TryProvePublishable(
+                catalog: machines,
+                definition: before,
+                reason: out reason,
+                sourceName: "source release definition"
+            ) ||
+            !WorldDefinitionLoader.TryProvePublishable(
+                catalog: machines,
+                definition: after,
+                reason: out reason,
+                sourceName: "target release definition"
+            )
         ) { return false; }
         if (!WorldDefinitionSerialization.Serialize(definition: before with { Metadata = null }).AsSpan()
             .SequenceEqual(other: WorldDefinitionSerialization.Serialize(definition: after with { Metadata = null }))) {

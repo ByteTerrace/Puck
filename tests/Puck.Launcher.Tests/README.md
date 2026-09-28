@@ -20,9 +20,9 @@ GPU or display is needed. They check four things. A throwing activation faults
 the window loop's task with `PresenterActivationException`. A presenter that
 never activated is not asked to drain its device. `GpuDeviceUnavailableException`
 exits 2 with the exact unsupported line. Any other loop failure is rethrown
-instead of exiting 0. `TeardownAfterFaultLawTests` build the shipped
-`UnifiedOverlayNode` against a device context that behaves like a renderer that
-never initialized. Its activation fails with `GpuDeviceUnavailableException`,
+instead of exiting 0. `TeardownAfterFaultLawTests` build the shipped overlay
+package, drawn by a graph node, against a device context that behaves like a
+renderer that never initialized. Its activation fails with `GpuDeviceUnavailableException`,
 and the laws check that the failure still exits 2 with the exact line through
 that real teardown. An overlay that never produced a frame never reads the
 device handle, and a throwing teardown step neither replaces the fault nor

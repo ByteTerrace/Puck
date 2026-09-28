@@ -3,14 +3,23 @@ namespace Puck.World;
 /// <summary>
 /// The engine's published registry of built-in context FAMILIES. Built-in families are outputs
 /// of one per-seat state machine holding exactly one value at a time: <see cref="Roster"/>, <see cref="Engagement"/>,
-/// and <see cref="Layout"/>. A <c>state:&lt;row&gt;</c> family is data-driven instead: it publishes a
+/// <see cref="Layout"/> and <see cref="Editor"/>. A <c>state:&lt;row&gt;</c> family is data-driven instead: it publishes a
 /// declared world-state row through <see cref="WorldStateBindingContext"/>, allowing ordinary gameplay-rule state
 /// writes to select a control group without adding another engine mode. A world may additionally AUTHOR its own
-/// per-seat mode families (<see cref="WorldSeatModeFamily"/>), flipped by the generic <c>player.mode</c> verb — the
-/// engine holds no built-in "editing" family; a world that wants one declares it.
+/// per-seat mode families (<see cref="WorldSeatModeFamily"/>), flipped by the generic <c>player.mode</c> verb.
+/// <see cref="Editor"/> is the one built-in family a seat flips itself, so every world can be built in without
+/// authoring anything.
 /// Context rows carry no expressions; they only compare one published value with one authored state token.
 /// </summary>
 public static class WorldContextFamilies {
+    /// <summary>The editor family: whether a seat plays or builds, flipped with <c>player.mode editor build</c> or the
+    /// bindable <c>player.build</c>.</summary>
+    public const string Editor = "editor";
+    /// <summary>The editor state while a seat builds: its movement input drives the editor rather than its body, and its
+    /// grid and snapping apply.</summary>
+    public const string EditorBuild = "build";
+    /// <summary>The editor state while a seat plays, the state every seat starts in.</summary>
+    public const string EditorPlay = "play";
     /// <summary>The engagement family: whether the seat's acting principal has composed any control application
     /// beyond its own body.</summary>
     public const string Engagement = "engagement";
@@ -41,11 +50,12 @@ public static class WorldContextFamilies {
 
     private static readonly string[] RosterStates = [RosterUnjoined, RosterClaimed, RosterPending, RosterActive];
     private static readonly string[] EngagementStates = [EngagementEngaged, EngagementNone];
+    private static readonly string[] EditorStates = [EditorPlay, EditorBuild];
 
     /// <summary>The built-in admitted family names, in the order the derivation read-back reports them — an
     /// authored <see cref="WorldSeatModeFamily"/>'s name is never one of these (the validator refuses the
     /// collision).</summary>
-    public static readonly IReadOnlyList<string> Families = [Roster, Engagement, Layout];
+    public static readonly IReadOnlyList<string> Families = [Roster, Engagement, Layout, Editor];
 
     /// <summary>Whether <paramref name="family"/> is a built-in family whose state set is open (world-authored
     /// values rather than a fixed engine list) — admitted everywhere a closed family is, with no state-token
@@ -63,6 +73,7 @@ public static class WorldContextFamilies {
         return family switch {
             Roster => RosterStates,
             Engagement => EngagementStates,
+            Editor => EditorStates,
             _ => null,
         };
     }

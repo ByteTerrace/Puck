@@ -1,0 +1,19 @@
+// The Hedges level of the rulepush package, presented offscreen: the level module stamped with the Hedges map, drawn
+// by the package's own board pass beside the room.
+
+schema: "puck.world.definition.v1"
+documentId: "rulepush-board"
+
+import "../../../worlds/rulepush/level.puck"
+
+let hedges = [
+  "I.H.....F"
+  "=.=.....="
+  "Y.S.....V"
+  ".....hhhh"
+  ".ibb.h.f."
+  ".....hhhh"
+  "B=P......"
+]
+
+use level(centre: [0m, 0m, 0m], record: "pushCleared", layout: hedges, presentation: "Offscreen")

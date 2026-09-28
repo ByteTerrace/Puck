@@ -66,6 +66,30 @@ public sealed class WorldFileOrigin : WorldDocumentOrigin {
             catalogFingerprint: m_catalogFingerprint,
             catalog: m_catalog
         );
+    /// <summary>Reads this file as a release publishes it: composed as <see cref="TryLoad"/> composes it, then read by
+    /// <see cref="WorldDefinitionLoader.TryReadPublishable"/>, which proves a drawn copy admits and returns the parsed
+    /// document undrawn, so a published definition never carries one instance's drawn cells.</summary>
+    /// <param name="definition">The undrawn definition, or <see langword="null"/> on refusal.</param>
+    /// <param name="reason">The named refusal, or empty on success.</param>
+    /// <returns>Whether the file composed and a drawn copy of it admitted.</returns>
+    public bool TryReadPublishable([System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldDefinition? definition, out string reason) {
+        definition = null;
+
+        return (WorldDefinitionFileSource.TryComposeDocumentTree(
+            catalog: m_catalog,
+            catalogFingerprint: m_catalogFingerprint,
+            path: Identity,
+            reason: out reason,
+            tree: out var tree
+        ) && WorldDefinitionLoader.TryReadPublishable(
+            catalog: m_catalog,
+            definition: out definition,
+            documentDirectory: WorldDocumentPaths.DirectoryOf(documentPath: Identity),
+            json: tree!.ToJsonString(),
+            reason: out reason,
+            sourceName: Identity
+        ));
+    }
     /// <summary>Resolves a path exactly like <c>--world</c>: rooted, or relative to the current directory, and naming
     /// a file that exists. A path a document authors never reaches here relative; it is resolved beside that document
     /// first (<see cref="WorldDocumentPaths"/>).</summary>

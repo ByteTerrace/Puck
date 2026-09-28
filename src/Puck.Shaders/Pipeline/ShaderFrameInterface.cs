@@ -1,14 +1,17 @@
 using System.Numerics;
+using Puck.Hosting;
 
 namespace Puck.Shaders;
 
 /// <summary>
-/// The pass interface a pipeline pass reads its frame data through: the frame group's members every pass shares, then
-/// the pass's config fields in ordinal name order. The engine derives it from the pass declaration, generates the
-/// declarations a source includes as <c>&lt;interface&gt;.interface.hlsli</c> (<see cref="IncludeFileName"/>), and writes
-/// the block each frame through <see cref="ShaderPipelineParameterLayout.WriteFrame"/>. The block is delivered as push
-/// constants (<see cref="ShaderInterface.PushConstants"/>), and every member is a value, so a pass reads
-/// <c>frameGroup.time</c>, <c>frameGroup.extent</c> or a config field such as <c>frameGroup.decay</c>.
+/// The pass interface a pipeline pass reads its frame data and its ports through. The engine derives it from the pass
+/// declaration, generates the declarations a source includes as <c>&lt;interface&gt;.interface.hlsli</c>
+/// (<see cref="IncludeFileName"/>), and writes the frame values each frame through
+/// <see cref="ShaderPipelineParameterLayout.WriteFrame"/>. A document pass binds two groups (<see cref="ForPass"/>): the
+/// frame group every pass of a node shares at set 0, and its own pass group at set 3, whose block holds its extent and
+/// config and whose bindings are its ports, so it reads <c>frameGroup.time</c>, <c>passGroup.extent</c> or a config
+/// field such as <c>passGroup.decay</c>. A package pass and a shader set bind the same two groups, their pass group
+/// holding the members they declare (<see cref="ShaderPipelineParameterLayout.Grouped"/>).
 /// </summary>
 public static class ShaderFrameInterface {
     /// <summary>The frame member holding the pass's output extent in pixels, width then height (<c>uint2</c>).</summary>
@@ -16,8 +19,9 @@ public static class ShaderFrameInterface {
     /// <summary>The frame member holding the pointer's position during its most recent press, in the pass's pixels with
     /// the origin at the top-left corner, or zero before the first press (<c>float2</c>).</summary>
     public const string Pointer = "pointer";
-    /// <summary>The frame member holding the deterministic engine tick the frame presents, low word then high word
-    /// (<c>uint2</c>).</summary>
+    /// <summary>The frame member holding the deterministic tick the frame presents, low word then high word
+    /// (<c>uint2</c>): the engine tick of the state the frame shows, divided by the engine rate over the graph's
+    /// <see cref="TickRate"/>, so it counts at that rate.</summary>
     public const string Tick = "tick";
     /// <summary>The frame member holding the presentation time in seconds (<c>float</c>).</summary>
     public const string Time = "time";
@@ -26,9 +30,12 @@ public static class ShaderFrameInterface {
     /// <summary>The frame member holding how many frames the pass's node has submitted before this one
     /// (<c>uint</c>).</summary>
     public const string Frame = "frame";
-    /// <summary>The frame member holding the number of engine ticks in one second, the rate <see cref="Tick"/> counts in
-    /// (<c>uint</c>).</summary>
+    /// <summary>The frame member holding the rate <see cref="Tick"/> counts in, in ticks a second: the rate the graph
+    /// requests (<see cref="RenderGraphDefinition.TickRate"/>), or <see cref="EngineTickRate"/> (<c>uint</c>).</summary>
     public const string TickRate = "tickRate";
+    /// <summary>The engine's tick rate, <c>EngineTicks.PerSecond</c> ticks a second: the rate a graph that requests none
+    /// reads its tick at.</summary>
+    public const uint EngineTickRate = ((uint)EngineTicks.PerSecond);
     /// <summary>The frame member holding one while the pointer is pressed and zero otherwise (<c>uint</c>).</summary>
     public const string PointerDown = "pointerDown";
     /// <summary>The frame member holding how many presses the pointer has made over the pass (<c>uint</c>).</summary>
@@ -43,9 +50,9 @@ public static class ShaderFrameInterface {
     /// <summary>The frame member holding the paired camera's up direction (<c>float3</c>).</summary>
     public const string CameraUp = "cameraUp";
 
-    /// <summary>Gets the frame group's members, in declaration order. A pass's config fields follow them.</summary>
-    public static IReadOnlyList<ShaderInterfaceMember> Members { get; } = [
-        Value(name: Extent, type: ShaderValueType.Uint2),
+    /// <summary>Gets the frame group's members: the values every pass of a node shares each frame, in declaration
+    /// order.</summary>
+    public static IReadOnlyList<ShaderInterfaceMember> FrameGroupMembers { get; } = [
         Value(name: Pointer, type: ShaderValueType.Float2),
         Value(name: Tick, type: ShaderValueType.Uint2),
         Value(name: Time, type: ShaderValueType.Float),
@@ -60,32 +67,101 @@ public static class ShaderFrameInterface {
         Value(name: CameraUp, type: ShaderValueType.Float3),
     ];
 
-    /// <summary>Creates the interface of a pass: the frame members, then each config field as a frame-group value in
-    /// ordinal name order, with the frame group pushed.</summary>
+    /// <summary>Creates the interface of a document pass: the frame group (<see cref="FrameGroupMembers"/>), bound at set
+    /// 0; the World group at set 1, one read-only structured buffer per array in ordinal name order, then any World-group
+    /// resource a package's <paramref name="ports"/> declare, in the order given; then the pass group
+    /// at set 3, whose block holds the pass's <see cref="Extent"/> and then every block value in ordinal name order, each
+    /// config field and each value <paramref name="ports"/> declares alike, followed by the pass's other ports in the
+    /// order given. It is the one spelling of a pass block, so a document pass, a package pass and the SDF engine's passes
+    /// lay out alike and a graph document whose config names the same values reads the same block. No block is pushed, so
+    /// a pass reads <c>frameGroup.time</c>, <c>passGroup.extent</c> or a config field such as <c>passGroup.decay</c>, its
+    /// ports by their generated names, and a pushed index, when it has one, as <c>pushedIndex.index</c>.</summary>
     /// <param name="name">The interface's name (<see cref="NameOf"/>).</param>
     /// <param name="config">The pass's config schema, or <see langword="null"/> when it has none.</param>
+    /// <param name="ports">The pass's port members, each in <see cref="ShaderInterfaceGroup.Pass"/>: resources in document
+    /// order, and any block values a package's recorder writes, which join the config in name order. A package may also
+    /// declare resources in <see cref="ShaderInterfaceGroup.World"/>, which its host binds in one set of its own.</param>
+    /// <param name="arrays">The pass's arrays, bound in the World group in ordinal name order, or <see langword="null"/>
+    /// for none.</param>
+    /// <param name="pushesIndex">Whether the pass's pipeline pushes one 4-byte index
+    /// (<see cref="ShaderInterface.PushesIndex"/>), which it reads as <c>pushedIndex.index</c>.</param>
     /// <returns>The interface.</returns>
-    /// <exception cref="InvalidDataException"><paramref name="name"/> is not an interface name, or a config field's name
-    /// is not an identifier or repeats a frame member's.</exception>
-    public static ShaderInterface For(string name, IReadOnlyDictionary<string, ShaderConfigField>? config) {
-        var members = new List<ShaderInterfaceMember>(collection: Members);
+    /// <exception cref="ArgumentNullException"><paramref name="ports"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidDataException"><paramref name="name"/> is not an interface name, a config field's or
+    /// port's name is not an identifier or repeats another member's, or a port is neither in the pass group nor a
+    /// World-group resource.</exception>
+    public static ShaderInterface ForPass(string name, IReadOnlyDictionary<string, ShaderConfigField>? config, IReadOnlyList<ShaderInterfaceMember> ports, IReadOnlyDictionary<string, ShaderArrayField>? arrays = null, bool pushesIndex = false) {
+        ArgumentNullException.ThrowIfNull(argument: ports);
+
+        var members = new List<ShaderInterfaceMember>(collection: FrameGroupMembers);
+
+        // A pass's arrays are the World group's bindings, in ordinal name order: the rows a world binds change at most once
+        // a tick, and a row every pass reads alike is one buffer the node binds to each of them.
+        foreach (var (field, array) in (arrays ?? new Dictionary<string, ShaderArrayField>()).OrderBy(
+            comparer: StringComparer.Ordinal,
+            keySelector: static pair => pair.Key
+        )) {
+            members.Add(item: ShaderInterfaceMember.Array(
+                group: ShaderInterfaceGroup.World,
+                length: array.Length,
+                name: field,
+                type: array.Type
+            ));
+        }
+
+        foreach (var port in ports) {
+            if ((port?.Group == ShaderInterfaceGroup.World) && (port.Kind != ShaderInterfaceMemberKind.Value)) {
+                members.Add(item: port);
+            }
+        }
+
+        members.AddRange(collection: [
+            ShaderInterfaceMember.Value(
+                group: ShaderInterfaceGroup.Pass,
+                name: Extent,
+                type: ShaderValueType.Uint2
+            ),
+        ]);
+
+        var values = new List<ShaderInterfaceMember>();
+        var resources = new List<ShaderInterfaceMember>();
+
+        foreach (var port in ports) {
+            if ((port?.Group == ShaderInterfaceGroup.World) && (port.Kind != ShaderInterfaceMemberKind.Value)) {
+                continue;
+            }
+            if (port?.Group != ShaderInterfaceGroup.Pass) {
+                throw new InvalidDataException(message: $"Shader interface '{name}' port '{port?.Name}' is neither in the pass group nor a World-group resource.");
+            }
+
+            (((port.Kind == ShaderInterfaceMemberKind.Value)
+                ? values
+                : resources)).Add(item: port);
+        }
 
         if (config is not null) {
-            foreach (var (field, declared) in config.OrderBy(
-                comparer: StringComparer.Ordinal,
-                keySelector: static pair => pair.Key
-            )) {
-                members.Add(item: Value(
+            foreach (var (field, declared) in config) {
+                values.Add(item: ShaderInterfaceMember.Value(
+                    group: ShaderInterfaceGroup.Pass,
+                    length: declared.Length,
                     name: field,
                     type: declared.Type
                 ));
             }
         }
 
+        // Every block value, config field or declared value, in ordinal name order after the extent; a repeated name
+        // is the interface's own refusal.
+        members.AddRange(collection: values.OrderBy(
+            comparer: StringComparer.Ordinal,
+            keySelector: static value => value.Name
+        ));
+        members.AddRange(collection: resources);
+
         return new ShaderInterface(
             members: members,
             name: name,
-            pushConstants: ShaderInterfaceGroup.Frame
+            pushesIndex: pushesIndex
         );
     }
     /// <summary>Returns the file name a pass source includes to read its interface: the interface name followed by
@@ -121,8 +197,11 @@ public static class ShaderFrameInterface {
         );
 }
 /// <summary>The frame values a host supplies to a pipeline pass each frame. The node adds the rest of the frame group
-/// itself: the pass's extent, the engine tick from the frame's <c>FrameContext</c>, the tick rate, and its own frame
-/// count.</summary>
+/// itself: the pass's extent, the tick rate, and its own frame count. A world host fills <see cref="Tick"/> and
+/// <see cref="Time"/> from its state mirror's delivered engine tick and interpolation fraction, the one presentation
+/// clock, so no pass reads a wall clock or a clock of its node's own.</summary>
+/// <param name="Tick">The deterministic engine tick the frame presents: the engine tick of the state the frame
+/// shows.</param>
 /// <param name="Time">The presentation time, in seconds.</param>
 /// <param name="TimeDelta">The presentation seconds since the previous frame.</param>
 /// <param name="Pointer">The pointer's position during its most recent press, in the pass's pixels with the origin at
@@ -134,7 +213,11 @@ public static class ShaderFrameInterface {
 /// <param name="CameraUp">The paired camera's up direction, or zero with no paired camera.</param>
 /// <param name="CameraFov">The paired camera's vertical field of view in radians, or zero with no paired camera, which
 /// a pass reads as having none.</param>
+/// <param name="StateTick">The simulation tick of the state the frame shows, or <see langword="null"/> when the host
+/// names none. No pass reads it: a node records it with each image it renders, and a capture served from that image
+/// records it, however many frames later the image is served.</param>
 public readonly record struct ShaderFrameValues(
+    ulong Tick,
     double Time,
     double TimeDelta,
     Vector2 Pointer,
@@ -143,5 +226,6 @@ public readonly record struct ShaderFrameValues(
     Vector3 CameraPosition,
     Vector3 CameraTarget,
     Vector3 CameraUp,
-    float CameraFov
+    float CameraFov,
+    ulong? StateTick = null
 );

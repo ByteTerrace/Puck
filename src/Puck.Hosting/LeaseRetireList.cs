@@ -1,3 +1,5 @@
+using Puck.Abstractions.Gpu;
+
 namespace Puck.Hosting;
 
 /// <summary>
@@ -26,11 +28,28 @@ public sealed class LeaseRetireList {
     /// <summary>Gets the number of leases held.</summary>
     public int Count => m_count;
 
-    /// <summary>Holds <paramref name="lease"/> until <see cref="RetireAll"/>. A lease that requires no retirement is not
-    /// held.</summary>
+    /// <summary>Adds the wait of every held lease that carries one (<see cref="GpuImageLease.Wait"/>) to the list the
+    /// submitter's next submission carries. The node calls it immediately before the one submission that samples the
+    /// held images, so each wait lands in that submission.</summary>
+    /// <param name="submitter">The submitter of the sampling submission.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="submitter"/> is <see langword="null"/>.</exception>
+    public void AddWaits(IGpuQueueSubmitter submitter) {
+        ArgumentNullException.ThrowIfNull(argument: submitter);
+
+        for (var index = 0; (index < m_count); index++) {
+            if (m_leases[index].HasWait) {
+                submitter.AddExternalWait(wait: m_leases[index].Wait);
+            }
+        }
+    }
+    /// <summary>Holds <paramref name="lease"/> until <see cref="RetireAll"/>. A lease that requires no retirement and
+    /// carries no wait is not held.</summary>
     /// <param name="lease">The lease a submission samples.</param>
     public void Hold(in GpuImageLease lease) {
-        if (!lease.RequiresRetirement) {
+        if (
+            !lease.RequiresRetirement &&
+            !lease.HasWait
+        ) {
             return;
         }
 

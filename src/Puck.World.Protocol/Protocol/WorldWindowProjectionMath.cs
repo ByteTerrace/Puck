@@ -58,7 +58,7 @@ public readonly record struct WorldFaceGeometry(Vector3 Origin, Vector3 Right, V
 /// unaffected (it is the shared axis both apertures rotate about); Right and Normal both flip. The mapped eye lands
 /// outside the destination room (on the side its own Normal faces away from), looking in — exactly where a window's
 /// virtual eye belongs, and exactly why <c>WorldWindowFrustumFit.TryFitWindow</c> fits its off-axis frustum against
-/// <c>-destination.Normal</c> rather than <c>+destination.Normal</c>.</para>
+/// <c>-destination.Normal</c> and <c>-destination.Right</c>: the aperture as that eye sees it.</para>
 /// </remarks>
 public static class WorldWindowProjectionMath {
     /// <summary>Maps a world-space point through the source aperture's frame into the destination aperture's frame
@@ -84,4 +84,12 @@ public static class WorldWindowProjectionMath {
 
         return (((destination.Origin - (u * destination.Right)) + (v * destination.Up)) - (n * destination.Normal));
     }
+    /// <summary>Maps a world-space direction through the same isometry as <see cref="MapPoint"/>: its rotation alone,
+    /// so a frame mapped axis by axis keeps its handedness.</summary>
+    /// <param name="vector">The direction to map, in source-world space.</param>
+    /// <param name="source">The source face's own aperture geometry.</param>
+    /// <param name="destination">The destination counterpart face's own aperture geometry.</param>
+    /// <returns>The mapped direction, in destination-world space.</returns>
+    public static Vector3 MapVector(Vector3 vector, WorldFaceGeometry source, WorldFaceGeometry destination) =>
+        (((Vector3.Dot(vector1: vector, vector2: source.Up) * destination.Up) - (Vector3.Dot(vector1: vector, vector2: source.Right) * destination.Right)) - (Vector3.Dot(vector1: vector, vector2: source.Normal) * destination.Normal));
 }

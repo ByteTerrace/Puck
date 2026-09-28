@@ -69,18 +69,40 @@ public sealed class WorldViewGraphLawTests {
         ),
         expected: "east -> west -> east"
     );
+    // A camera a screen, a HUD frame or a probe export shows renders as a view instance named by the camera, so a row may
+    // not take a camera's name.
+    [Fact]
+    public void ARowNamedLikeACameraIsRefused() {
+        var camera = new WorldCamera(
+            Anchor: null,
+            Name: "lobby",
+            RenderHeight: 72U,
+            RenderWidth: 128U,
+            Rig: new WorldCameraProgram(
+                Name: "lobby-rig",
+                Operations: [new WorldCameraProgramOp.FieldOfView(FieldOfViewRadians: new BindableScalar(literal: 0.9f))],
+                Version: WorldCameraProgram.CurrentVersion
+            )
+        );
+
+        Refuses(
+            control: (Document(Row(name: "lobby-feed")) with { CamerasRaw = [camera] }),
+            denied: (Document(Row(name: "lobby")) with { CamerasRaw = [camera] }),
+            expected: "views.graphs[0].name 'lobby' is a camera's name"
+        );
+    }
     [Fact]
     public void AnInputNamingNoRowIsRefused() => Refuses(
         control: Document(
             Row(name: "security"),
             Row(
                 inputs: [new WorldViewGraphInput(Instance: "security", Resource: "feed")],
-                name: "main"
+                name: "monitor"
             )
         ),
         denied: Document(Row(
             inputs: [new WorldViewGraphInput(Instance: "security", Resource: "feed")],
-            name: "main"
+            name: "monitor"
         )),
         expected: "views.graphs[0].inputs[0].instance 'security' names no views.graphs row."
     );
@@ -127,17 +149,89 @@ public sealed class WorldViewGraphLawTests {
                 Row(name: "security"),
                 Row(
                     inputs: [new WorldViewGraphInput(Instance: "security", Resource: "left"), new WorldViewGraphInput(Instance: "security", Resource: "right")],
-                    name: "main"
+                    name: "monitor"
                 )
             ),
             denied: Document(
                 Row(name: "security"),
                 Row(
                     inputs: [new WorldViewGraphInput(Instance: "security", Resource: "left"), new WorldViewGraphInput(Instance: "security", Resource: "left")],
-                    name: "main"
+                    name: "monitor"
                 )
             ),
             expected: "views.graphs[1].inputs[1].resource 'left' is bound more than once."
+        );
+    }
+    [Fact]
+    public void ARowNamesExactlyOneOfASourceAndAPackageAndAPackageReadsNothing() {
+        Refuses(
+            control: Document(Row(name: "security")),
+            denied: Document(Row(name: "security") with { Package = "sdf.world" }),
+            expected: "views.graphs[0] must author exactly one of source and package."
+        );
+        Refuses(
+            control: Document(Row(name: "security")),
+            denied: Document(Row(name: "security") with { Source = null }),
+            expected: "views.graphs[0] must author exactly one of source and package."
+        );
+        Refuses(
+            control: Document(
+                Row(name: "security"),
+                new WorldViewGraph(Name: "scene", Package: "sdf.world")
+            ),
+            denied: Document(
+                Row(name: "security"),
+                new WorldViewGraph(Inputs: [new WorldViewGraphInput(Instance: "security", Resource: "feed")], Name: "scene", Package: "sdf.world")
+            ),
+            expected: "views.graphs[1].inputs: package instance 'scene' renders through its producer, which reads no input."
+        );
+    }
+    [Fact]
+    public void ASynthesizedNameIsTheWorldsOnlyWhenItNamesItsRoot() {
+        var authored = Document(
+            new WorldViewGraph(Name: WorldViewGraphs.WorldInstance, Package: "sdf.world"),
+            Row(
+                inputs: [new WorldViewGraphInput(Instance: WorldViewGraphs.WorldInstance, Resource: "feed")],
+                name: WorldViewGraphs.MainInstance
+            )
+        );
+
+        Refuses(
+            control: (authored with { ViewsRaw = (authored.Views with { Root = WorldViewGraphs.MainInstance }) }),
+            denied: authored,
+            expected: "views.graphs[0].name 'world' is an instance of the render graph composition synthesizes"
+        );
+        Refuses(
+            control: (authored with { ViewsRaw = (authored.Views with { Root = WorldViewGraphs.MainInstance }) }),
+            denied: (authored with { ViewsRaw = (authored.Views with { Root = "absent" }) }),
+            expected: "views.root 'absent' names no views.graphs row."
+        );
+    }
+    // The synthesized root declares its own versions and passes in the generated form, so a row may take any name the
+    // root once used for them (frame, stage1, overlay), and no row may take the generated form itself.
+    [Fact]
+    public void ARowNameIsRefusedInTheGeneratedFormTheRootDeclaresItsOwnNamesIn() => Refuses(
+        control: Document(Row(name: "frame")),
+        denied: Document(Row(name: GeneratedName.Join("main", "frame"))),
+        expected: "views.graphs[0].name 'main$frame' carries '$' inside it"
+    );
+    [Fact]
+    public void ASlotShowsAGraphRowByItsName() {
+        var document = Document(Row(name: "security"));
+
+        WorldDefinition Slot(string instance) => (document with {
+            ViewsRaw = (document.Views with {
+                Layouts = [new WorldViewLayout(
+                    Name: "panes",
+                    Slots: [new WorldViewSlot() with { Instance = instance }]
+                )],
+            }),
+        });
+
+        Refuses(
+            control: Slot(instance: "security"),
+            denied: Slot(instance: "lobby"),
+            expected: "views.layouts[0].slots[0].instance 'lobby' names no views.graphs row."
         );
     }
     [Fact]
@@ -152,7 +246,7 @@ public sealed class WorldViewGraphLawTests {
                   "name": "view",
                   "resources": [
                     { "name": "feed", "format": "R8G8B8A8Unorm", "dimensions": { "mode": "Relative", "width": 1, "height": 1 }, "initialization": "External" },
-                    { "name": "scene", "format": "R8G8B8A8Unorm", "dimensions": { "mode": "Relative", "width": 1, "height": 1 } },
+                    { "name": "scene", "format": "R16G16B16A16Float", "dimensions": { "mode": "Relative", "width": 1, "height": 1 } },
                     { "name": "final", "format": "R8G8B8A8Unorm", "dimensions": { "mode": "Relative", "width": 1, "height": 1 } }
                   ],
                   "passes": [
@@ -174,7 +268,7 @@ public sealed class WorldViewGraphLawTests {
             ),
             Row(
                 inputs: [new WorldViewGraphInput(Instance: "security", Resource: "screen")],
-                name: "main"
+                name: "monitor"
             ),
             (Row(name: "missing") with { Source = "graphs/absent.graph.json" })
         );
@@ -183,16 +277,16 @@ public sealed class WorldViewGraphLawTests {
             passes: sources.PlanGraph
         );
 
-        Assert.Equal(expected: (((int?)2), ((string?)null)), actual: (presentation.Instances[0].Passes, presentation.Instances[0].Issue));
-        Assert.Equal(expected: 0.5, actual: presentation.Instances[0].PassDisplaysPerFrame);
-        Assert.Equal(expected: 2, actual: presentation.Instances[1].Passes);
+        Assert.Equal(expected: (((int?)11), ((string?)null)), actual: (presentation.Instances[0].Passes, presentation.Instances[0].Issue));
+        Assert.Equal(expected: 2.75, actual: presentation.Instances[0].PassDisplaysPerFrame);
+        Assert.Equal(expected: 11, actual: presentation.Instances[1].Passes);
         Assert.Contains(
             expectedSubstring: "screen name no external version",
             actualString: presentation.Instances[1].Issue
         );
         Assert.Null(@object: presentation.Instances[2].Passes);
         Assert.Contains(
-            expectedSubstring: "security (graphs/view.graph.json) extent<=display rate 1/4 frames passes 2 <= 0.5 display pass-pixels/frame",
+            expectedSubstring: "security (graphs/view.graph.json) extent<=display rate 1/4 frames passes 11 <= 2.75 display pass-pixels/frame",
             actualString: presentation.Describe()
         );
     }

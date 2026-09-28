@@ -1,4 +1,4 @@
-using Puck.Abstractions.Presentation;
+using Puck.Abstractions.Gpu;
 
 namespace Puck.Recording.Session;
 
@@ -11,7 +11,7 @@ namespace Puck.Recording.Session;
 /// </summary>
 internal sealed class FrameSlotQueue {
     internal sealed class Slot {
-        public SurfaceFormat Format { get; set; }
+        public GpuPixelFormat Format { get; set; }
         public int Height { get; set; }
         public int Length { get; set; }
         public required byte[] Pixels { get; init; }

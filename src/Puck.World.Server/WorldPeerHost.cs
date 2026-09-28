@@ -683,17 +683,24 @@ public sealed class WorldPeerHost : IDisposable {
     }
     // sourceAuthority is the namespace THIS CONNECTION authenticated as, which is what the credential table is keyed
     // by — never the traveller's origin authority carried inside its incarnation.
+    // Resolves one forwarded submission to the typed result its authority answers with: at once for most payloads, and
+    // for a buffered mutation at that authority's tick boundary, so the answer written back is the verdict the
+    // destination applied, never a refusal standing in for a result that has not happened yet.
     private async Task<(WorldSubmissionResult? Result, string Reason)> ResolveForwardedSubmissionAsync(string sourceAuthority, WorldMobilityIdentity mobility, WorldSubmissionPayload payload, Guid operationId, CancellationToken ct) {
+        var answered = new TaskCompletionSource<WorldSubmissionResult>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+
+        void Answer(WorldSubmissionResult result) => answered.TrySetResult(result: result);
+
         if (WorldLocalForwardedAuthority.TryApplySubmission(
+            completion: Answer,
             mobility: in mobility,
             operationId: operationId,
             payload: payload,
             reason: out _,
-            result: out var applied,
             server: m_server,
             sourceAuthority: sourceAuthority
         )) {
-            return (applied, string.Empty);
+            return (await answered.Task.WaitAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false), string.Empty);
         }
 
         if (m_server.TransferForwarder is not { } forwarder) {
@@ -707,14 +714,14 @@ public sealed class WorldPeerHost : IDisposable {
 
         for (var attempt = 0; (attempt < 25); attempt++) {
             if (forwarder.TryForwardSubmission(
+                completion: Answer,
                 mobility: in mobility,
                 operationId: operationId,
                 payload: payload,
                 reason: out reason,
-                result: out var forwarded,
                 source: m_server
             )) {
-                return (forwarded, reason);
+                return (await answered.Task.WaitAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false), reason);
             }
 
             if (!reason.Contains(
@@ -732,8 +739,7 @@ public sealed class WorldPeerHost : IDisposable {
         }
 
         return (null, reason);
-    }
-    // Marshals one unit of work onto the tick thread via DrainPending and awaits its result — the one hand-off point
+    }    // Marshals one unit of work onto the tick thread via DrainPending and awaits its result — the one hand-off point
     // between a connection's background read loop and the single-threaded server.
     private Task<T> RunOnTickThreadAsync<T>(Func<T> work, CancellationToken ct = default) {
         var tcs = new TaskCompletionSource<T>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
@@ -1585,7 +1591,8 @@ public sealed class WorldPeerHost : IDisposable {
     }
     // The one decode step both submission ingress paths share (the interactive frame loop and a federated peer's
     // forwarded submission, once unwrapped): a live payload, or a named WorldCodecFailure — each caller writes its
-    // own dialect's refusal frame from it.
+    // own dialect's refusal frame from it. A session principal is the admitting world's own, so a remote payload
+    // naming one anywhere is refused here, before either path reads it.
     private static bool TryDecodeSubmissionFrame(ReadOnlySpan<byte> frame, out WorldSubmissionPayload payload, out Guid operationId, out WorldCodecFailure failure) {
         if (
             !Puck.World.Protocol.WorldFrameCodec.TryDecode(
@@ -1596,6 +1603,16 @@ public sealed class WorldPeerHost : IDisposable {
         ) ||
             (decoded is null)
         ) {
+            payload = null!;
+
+            return false;
+        }
+
+        if (WorldSubmissionPrincipals.NamesSession(payload: decoded)) {
+            failure = new WorldCodecFailure(
+                Detail: "a session principal belongs to the world that admitted it; a remote submission never names one",
+                Refusal: WorldCodecRefusal.SessionPrincipalRemote
+            );
             payload = null!;
 
             return false;

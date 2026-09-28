@@ -958,42 +958,6 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path} width x depth ({width}x{depth}) worst-case exceeds the {SdfProgramBuilder.MaxInstances}-instance engine ceiling.");
         }
     }
-    // Vocabulary only — the shallow half of the shallow-then-deep split WorldScreenSource.Machine's Options string
-    // already uses: an id naming no shipped shader set (no puck.shader.manifest.v1 manifest with that stem) refuses here, at
-    // load, by name and index — not a silent no-op discovered only once the composition root tries to compose the
-    // chain. Each entry's own Config is opaque here; the manifest's declared config schema validates it at boot,
-    // refusing with the set id and reason on a malformed value.
-    private static void ValidateRenderExtensions(IReadOnlyList<WorldRenderExtensionEntry>? extensions, List<string> errors, ICollection<string>? deferred) {
-        if (extensions is null) {
-            return;
-        }
-
-        for (var index = 0; (index < extensions.Count); index++) {
-            var entry = extensions[index];
-            var path = $"render.extensions[{index}]";
-
-            if (entry is null) {
-                errors.Add(item: $"{path} is required.");
-
-                continue;
-            }
-
-            if (string.IsNullOrWhiteSpace(value: entry.Id)) {
-                errors.Add(item: $"{path}.id is required.");
-            } else {
-                switch (WorldExtensionVocabularyHook.IsRegisteredPostRenderExtension(extensionId: entry.Id)) {
-                    case false:
-                        errors.Add(item: $"{path}.id '{entry.Id}' names no registered post-render extension.");
-
-                        break;
-                    case null:
-                        deferred?.Add(item: $"{path}.id: post-render extension '{entry.Id}' registration deferred — this host carries no post-render extension catalog.");
-
-                        break;
-                }
-            }
-        }
-    }
     // The far distance is the depth every camera march ends at; the band is the representable one (see the constants'
     // remarks), refused by name so a world authoring 0, a negative, or a depth past float's epsilon reach never boots
     // into a renderer whose cone proofs would rest on rounding. Absent resolves to the engine's pinned default.

@@ -12,10 +12,11 @@ namespace Puck.Platform.Windows;
 /// The camera GPU tier's Direct3D 11 video device: created on the adapter named by LUID (so its textures share the
 /// consumer render device's GPU), with video support (the DXVA decoder/processor Media Foundation drives) and
 /// multithread protection (Media Foundation's worker threads share the device). It owns the small GPU toolbox the
-/// zero-copy path needs — opening consumer-provisioned shared textures (<see cref="OpenSharedTexture"/>) and copying a
-/// decoded frame into one with completion (<see cref="CopyToTarget"/>: copy + flush + an event-query CPU wait, issued on
-/// the camera's grabber thread at camera cadence, never the render thread). All members are single-thread affine to
-/// that grabber thread.
+/// zero-copy path needs — opening consumer-provisioned shared textures (<see cref="OpenSharedTexture"/>) and the
+/// consumer's shared fence (<see cref="OpenSignal"/>), and copying a decoded frame into a target
+/// (<see cref="CopyToTarget"/>: the copy, then the fence's next value, or an event-query CPU wait on a device that cannot
+/// open the fence), issued on the camera's grabber thread at camera cadence, never the render thread. All members are
+/// single-thread affine to that grabber thread.
 /// </summary>
 [SupportedOSPlatform("windows8.0")]
 internal sealed unsafe class Win32D3D11VideoDevice : IDisposable, IProbeKernelDevice {
@@ -24,7 +25,7 @@ internal sealed unsafe class Win32D3D11VideoDevice : IDisposable, IProbeKernelDe
     private ID3D11Device1* m_device1;
     private bool m_disposed;
     private ID3D10Multithread* m_multithread;
-    private ID3D11Query* m_query;
+    private Win32D3D11CompletionSignal? m_signal;
 
     /// <summary>Initializes a new instance of the <see cref="Win32D3D11VideoDevice"/> class on the LUID-named adapter.</summary>
     /// <param name="adapterLuid">The adapter LUID the consumer render device reported (packed <c>(HighPart &lt;&lt; 32) | LowPart</c>).</param>
@@ -72,16 +73,6 @@ internal sealed unsafe class Win32D3D11VideoDevice : IDisposable, IProbeKernelDe
                 operation: "QueryInterface(ID3D10Multithread)"
             );
             m_multithread = ((ID3D10Multithread*)multithread);
-
-            // The event query CopyToTarget spins on: signaled when everything submitted before End has completed.
-            var queryDesc = new D3D11_QUERY_DESC { Query = D3D11_QUERY.D3D11_QUERY_EVENT };
-            ID3D11Query* query;
-
-            device->CreateQuery(
-                pQueryDesc: &queryDesc,
-                ppQuery: &query
-            );
-            m_query = query;
         } finally {
             _ = adapter->Release();
         }
@@ -97,12 +88,31 @@ internal sealed unsafe class Win32D3D11VideoDevice : IDisposable, IProbeKernelDe
     /// Foundation's transforms share the device).</summary>
     public void Enter() => m_multithread->Enter();
     public void Leave() => m_multithread->Leave();
-    /// <summary>Copies a decoded frame into a shared target and blocks (on the calling grabber thread) until the copy
-    /// has completed on the GPU — so the target may be published for another device to sample.</summary>
+    /// <summary>Opens the consumer's shared fence the copies signal, once, before the first
+    /// <see cref="CopyToTarget"/>.</summary>
+    /// <param name="sharedFenceHandle">The consumer's shared fence NT handle, or zero to keep the CPU wait.</param>
+    /// <returns>How the copies are ordered before the consumer's reads.</returns>
+    /// <exception cref="InvalidOperationException">The signal is already open.</exception>
+    public SharedFenceOrder OpenSignal(nint sharedFenceHandle) {
+        if (m_signal is not null) {
+            throw new InvalidOperationException(message: "the camera video device's completion signal is already open");
+        }
+
+        m_signal = new Win32D3D11CompletionSignal(
+            context: ((nint)m_context),
+            device: ((nint)m_device),
+            sharedFenceHandle: sharedFenceHandle
+        );
+
+        return m_signal.Order;
+    }
+    /// <summary>Copies a decoded frame into a shared target and completes it for another device to sample.</summary>
     /// <param name="targetTexture">The shared target texture (an <c>ID3D11Texture2D*</c> from <see cref="OpenSharedTexture"/>).</param>
     /// <param name="sourceTexture">The frame's texture (an <c>ID3D11Texture2D*</c>, e.g. from <c>IMFDXGIBuffer</c>).</param>
     /// <param name="sourceSubresource">The source array slice (DXVA components output texture arrays).</param>
-    public void CopyToTarget(nint targetTexture, nint sourceTexture, uint sourceSubresource) {
+    /// <returns>The shared-fence value the copy signals, or zero when it finished before the call returned.</returns>
+    /// <exception cref="InvalidOperationException"><see cref="OpenSignal"/> has not run.</exception>
+    public ulong CopyToTarget(nint targetTexture, nint sourceTexture, uint sourceSubresource) {
         var context = m_context;
 
         context->CopySubresourceRegion(
@@ -115,10 +125,8 @@ internal sealed unsafe class Win32D3D11VideoDevice : IDisposable, IProbeKernelDe
             pSrcBox: null,
             pSrcResource: ((ID3D11Resource*)sourceTexture)
         );
-        Win32D3D11.WaitForCompletion(
-            context: context,
-            query: m_query
-        );
+
+        return (m_signal ?? throw new InvalidOperationException(message: "the camera video device's completion signal is not open")).Complete();
     }
     /// <summary>Opens a consumer-provisioned shared texture (an NT handle) on this device; the caller owns the returned
     /// <c>ID3D11Texture2D*</c> and must release it via <see cref="ReleaseTexture"/>.</summary>
@@ -170,10 +178,8 @@ internal sealed unsafe class Win32D3D11VideoDevice : IDisposable, IProbeKernelDe
 
         m_disposed = true;
 
-        if (m_query is not null) {
-            _ = ((IUnknown*)m_query)->Release();
-            m_query = null;
-        }
+        m_signal?.Dispose();
+        m_signal = null;
 
         if (m_multithread is not null) {
             _ = ((IUnknown*)m_multithread)->Release();

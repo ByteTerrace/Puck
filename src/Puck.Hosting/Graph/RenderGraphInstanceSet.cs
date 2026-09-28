@@ -1,12 +1,17 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
+using Puck.Abstractions.Sources;
 
 namespace Puck.Hosting;
 
 /// <summary>A validated set of render-graph instances and the order they render in: every producer an instance reads
 /// within a frame comes before it. A read of an instance's own output, or a read marked
 /// <see cref="RenderGraphRead.PreviousFrame"/>, takes the producer's previous completed frame, so it orders nothing
-/// and may close a loop; a loop of same-frame reads is refused with every instance in it named.</summary>
+/// and may close a loop; a loop of same-frame reads is refused with every instance in it named. Image and buffer reads
+/// order alike, and a read whose kind is not what its producer's output carries is refused naming both. An external
+/// producer (<see cref="RenderGraphInstanceKind.External"/>) reads only images, so its buffer read is refused by name;
+/// it may read its own output and any instance's previous frame, and any instance may read an external producer's
+/// previous frame.</summary>
 public sealed class RenderGraphInstanceSet {
     private readonly Dictionary<string, int> m_indexByName;
 
@@ -36,6 +41,25 @@ public sealed class RenderGraphInstanceSet {
         Instances: instances,
         Message: message
     );
+    // Why an instance is not a well-formed source, or carries settings without being one; null when it is either a
+    // well-formed source or no source at all. A source's cadence paces it, so it states no refresh of its own.
+    private static string? SourceRefusal(RenderGraphInstance instance) {
+        if (!instance.IsSource) {
+            return ((instance.Settings is null)
+                ? null
+                : "carries settings, but only a source instance (package 'source.<producer id>') carries settings");
+        }
+        if (!ImageSourceProducerRegistry<IImageSourceProducer>.IsValidId(id: instance.SourceProducer)) {
+            return $"is a source of package '{instance.ExternalPackage}', which names no producer id";
+        }
+        if (instance.Refresh != RenderGraphRefresh.EveryFrame) {
+            return $"is a source of package '{instance.ExternalPackage}' with refresh divisor {instance.Refresh.Divisor} and hertz {instance.Refresh.Hertz}; a source is paced by its producer's cadence and refreshes on every frame it allows";
+        }
+
+        return ((instance.Output == ShaderPipelineResourceKind.Image)
+            ? null
+            : $"is a source of package '{instance.ExternalPackage}' whose output is {instance.Output}; a source's output is an image");
+    }
     private static string[]? FindCycle(IReadOnlyList<RenderGraphInstance> instances, IReadOnlyList<IReadOnlyList<RenderGraphEdge>> reads) {
         var state = new byte[instances.Count];
         var stack = new List<int>();
@@ -204,6 +228,27 @@ public sealed class RenderGraphInstanceSet {
 
                 return false;
             }
+            if (
+                (instance.Kind == RenderGraphInstanceKind.External) &&
+                (instance.Reads ?? []).Any(predicate: static read => (read.Kind != ShaderPipelineResourceKind.Image))
+            ) {
+                refusal = Refuse(
+                    RenderGraphInstanceRefusalCode.ExternalReads,
+                    $"Render-graph instance '{instance.Name}' is the external producer '{instance.ExternalPackage}', which is handed only images, but it declares a buffer read.",
+                    instance.Name
+                );
+
+                return false;
+            }
+            if (SourceRefusal(instance: instance) is { } sourceRefusal) {
+                refusal = Refuse(
+                    RenderGraphInstanceRefusalCode.SourceDeclaration,
+                    $"Render-graph instance '{instance.Name}' {sourceRefusal}.",
+                    instance.Name
+                );
+
+                return false;
+            }
         }
 
         var reads = new IReadOnlyList<RenderGraphEdge>[instances.Count];
@@ -239,8 +284,19 @@ public sealed class RenderGraphInstanceSet {
 
                     return false;
                 }
+                if (read.Kind != instances[producer].Output) {
+                    refusal = Refuse(
+                        RenderGraphInstanceRefusalCode.KindMismatch,
+                        $"Render-graph instance '{instance.Name}' reads '{read.Producer}' as {read.Kind}, but its output is {instances[producer].Output}.",
+                        instance.Name,
+                        read.Producer!
+                    );
+
+                    return false;
+                }
 
                 edges[index] = new RenderGraphEdge(
+                    Kind: read.Kind,
                     PreviousFrame: (read.PreviousFrame || (producer == consumer)),
                     Producer: producer
                 );
@@ -296,4 +352,5 @@ public sealed class RenderGraphInstanceSet {
 /// <param name="Producer">The index of the instance read.</param>
 /// <param name="PreviousFrame">Whether the read takes the producer's previous completed frame: declared so, or a read
 /// of the reader's own output.</param>
-public readonly record struct RenderGraphEdge(int Producer, bool PreviousFrame);
+/// <param name="Kind">What the read carries, which is what the producer's output carries.</param>
+public readonly record struct RenderGraphEdge(int Producer, bool PreviousFrame, ShaderPipelineResourceKind Kind = ShaderPipelineResourceKind.Image);

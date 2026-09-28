@@ -123,7 +123,7 @@ internal sealed class MediaFoundationVideoEncoder : IVideoEncoder {
     public ReadOnlyMemory<byte> CodecPrivate => m_codecPrivate;
 
     /// <inheritdoc/>
-    public IReadOnlyList<RecordedPacket> EncodeFrame(ReadOnlySpan<byte> pixels, SurfaceFormat format, int width, int height, long timestampNanoseconds) {
+    public IReadOnlyList<RecordedPacket> EncodeFrame(ReadOnlySpan<byte> pixels, GpuPixelFormat format, int width, int height, long timestampNanoseconds) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
@@ -399,7 +399,7 @@ internal sealed class MediaFoundationVideoEncoder : IVideoEncoder {
             return null;
         }
     }
-    private IMFSample2 BuildInputSample(ReadOnlySpan<byte> pixels, SurfaceFormat format, int width, int height, long timestampNanoseconds) {
+    private IMFSample2 BuildInputSample(ReadOnlySpan<byte> pixels, GpuPixelFormat format, int width, int height, long timestampNanoseconds) {
         var nv12Size = PixelToNv12Converter.Nv12Size(
             height: height,
             width: width

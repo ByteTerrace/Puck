@@ -55,17 +55,17 @@ public static class WorldDefinitionFingerprint {
         }
         return ContentPin.Compute(content: WorldDefinitionSerialization.Serialize(definition: definition)).Hex;
     }
-    /// <summary>Hashes one <c>views.pipelines</c> row: the revision a parameter preview is based on and a commit of it
+    /// <summary>Hashes one <c>views.graphs</c> row: the revision a parameter preview is based on and a commit of it
     /// names. Any change to the row, including another commit, moves it; the row's name is part of it, so a revision
     /// taken from one instance never matches another.</summary>
-    /// <param name="pipeline">The pipeline row.</param>
+    /// <param name="graph">The graph row.</param>
     /// <returns>The <see cref="ContentPin.Hex"/> of the row's canonical bytes.</returns>
-    public static string ComputePipeline(WorldViewPipeline pipeline) {
-        ArgumentNullException.ThrowIfNull(argument: pipeline);
+    public static string ComputeGraph(WorldViewGraph graph) {
+        ArgumentNullException.ThrowIfNull(argument: graph);
 
         return ContentPin.Compute(content: JsonSerializer.SerializeToUtf8Bytes(
-            value: pipeline,
-            jsonTypeInfo: WorldJsonContext.Default.WorldViewPipeline
+            value: graph,
+            jsonTypeInfo: WorldJsonContext.Default.WorldViewGraph
         )).Hex;
     }
     /// <summary>Hashes named inputs in ordinal name order, including absent rows and the generation seed.</summary>

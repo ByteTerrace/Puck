@@ -2431,6 +2431,22 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `search.jobs[].held` | State | Names | Read | `WorldSearchRow.Held` |
 | `search.jobs[].counts` | State | Names | Read | `WorldSearchRow.Counts` |
 | `search.jobs[].score` | State | Expression | Read | `WorldSearchRow.Score` |
+| `search.jobs[].score{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `search.jobs[].score{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `search.jobs[].score{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `search.jobs[].score{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `search.jobs[].score{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `search.jobs[].score{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `search.jobs[].score{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `search.jobs[].score{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `search.jobs[].score{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `search.jobs[].score{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `search.jobs[].score{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `search.jobs[].score{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `search.jobs[].score{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `search.jobs[].score{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `search.jobs[].score{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `search.jobs[].score{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `search.jobs[].best` | State | Names | Action | `WorldSearchRow.Best` |
 | `search.jobs[].chance.row` | State | Names | Read | `WorldSearchChance.Row` |
 | `search.jobs[].scores` | State | Names | Read | `WorldSearchRow.Scores` |
@@ -2490,6 +2506,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `sets[].set[any].items[]…` | | | | re-enters `CellSetExpression` |
 | `sets[].set[both].items[]…` | | | | re-enters `CellSetExpression` |
 | `sets[].set[not].item…` | | | | re-enters `CellSetExpression` |
+| `timeline.clocks[].state` | State | Names | Read | `WorldClock.State` |
 | `exports.reads` | Any | Names | Read | `WorldExports.Reads` |
 | `exports.actions` | Any | Names | Action | `WorldExports.Actions` |
 | `exports.bindings` | Any | Names | Binding | `WorldExports.Bindings` |
@@ -2499,7 +2516,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | Path | Member | Reason |
 |---|---|---|
 | `spawnPoints[].id` | `WorldSpawnPoint.Id` | a spawn point id |
-| `render.extensions[].id` | `WorldRenderExtensionEntry.Id` | a post-render extension id |
 | `screens[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
 | `screens[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `screens[].magazine.entries[][producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
@@ -2676,9 +2692,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `views.cameraRig.operations[][selectProgram].default` | `WorldCameraProgramOp.SelectProgram.Default` | a camera program name |
 | `views.graphs[].name` | `WorldViewGraph.Name` | a view graph instance name |
 | `views.graphs[].source` | `WorldViewGraph.Source` | a view graph's source is a document path |
+| `views.post[].name` | `WorldViewPostPass.Name` | a post pass name |
 | `views.layouts[].name` | `WorldViewLayout.Name` | a view layout name |
-| `views.pipelines[].name` | `WorldViewPipeline.Name` | a view pipeline name |
-| `views.pipelines[].source` | `WorldViewPipeline.Source` | a view pipeline's source is a document path |
 | `looks.assignment.sequence.name` | `WorldSequence.Name` | a sequence name |
 | `hud.panels[].id` | `WorldHudPanel.Id` | a HUD panel id |
 | `hud.panels[].elements[].id` | `WorldHudElement.Id` | a HUD element id |
@@ -2892,8 +2907,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `probes[].inputs{*}[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
 | `probes[].inputs{*}[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `probes[].bindings[][axis].source` | `WorldProbeBinding.Axis.Source` | an input source id |
-| `probes[].bindings[][parameter].target[extension].id` | `WorldProbeParameterTarget.Extension.Id` | a post-render extension id |
-| `probes[].bindings[][parameter].target[extension].field` | `WorldProbeParameterTarget.Extension.Field` | an extension config field |
+| `probes[].bindings[][parameter].target[post].pass` | `WorldProbeParameterTarget.Post.Pass` | a post pass name |
+| `probes[].bindings[][parameter].target[post].field` | `WorldProbeParameterTarget.Post.Field` | a post pass config field |
 | `probes[].bindings[][parameter].target[probe].id` | `WorldProbeParameterTarget.Probe.Id` | a probe id |
 | `probes[].bindings[][parameter].target[probe].field` | `WorldProbeParameterTarget.Probe.Field` | a probe parameter field |
 | `captures.rows[].station` | `WorldCaptureRow.Station` | a capture station is the captures section's own namespace |
@@ -2910,3 +2925,4 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `machines[].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `ruleGroups[].trigger[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `sets[].set[family].name` | `CellSetExpression.Family.Name` | a family name is local to the document that declares the range |
+| `timeline.clocks[].name` | `WorldClock.Name` | a presentation clock name |

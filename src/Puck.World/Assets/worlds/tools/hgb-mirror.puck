@@ -18,6 +18,7 @@
 
 schema: "puck.world.definition.v1"
 documentId: "puck-hgb-mirror-v1"
+import "../quality"
 
 // ---- the picture, and what one of its pixels is worth ----------------------------
 let pictureWidth = 160

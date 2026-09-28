@@ -1284,12 +1284,8 @@ public static partial class WorldNameRegistry {
             WorldNameRole.Names,
             WorldExportFacet.Binding
         ),
-        new(
-            typeof(WorldRenderCycle),
-            nameof(WorldRenderCycle.State),
-            WorldNameKind.State,
-            WorldNameRole.Names
-        ),
+        new(typeof(WorldRenderCycle), nameof(WorldRenderCycle.State), WorldNameKind.State, WorldNameRole.Names),
+        new(typeof(WorldClock), nameof(WorldClock.State), WorldNameKind.State, WorldNameRole.Names),
         new(
             typeof(WorldLookMotion),
             nameof(WorldLookMotion.Lanes),
@@ -1607,8 +1603,6 @@ public static partial class WorldNameRegistry {
             nameof(WorldViewLayout.Name),
             "a view layout name"
         ),
-        new(typeof(WorldViewPipeline), nameof(WorldViewPipeline.Name), "a view pipeline name"),
-        new(typeof(WorldViewPipeline), nameof(WorldViewPipeline.Source), "a view pipeline's source is a document path"),
         new(typeof(WorldViewGraph), nameof(WorldViewGraph.Name), "a view graph instance name"),
         new(typeof(WorldViewGraph), nameof(WorldViewGraph.Source), "a view graph's source is a document path"),
         new(
@@ -1657,9 +1651,9 @@ public static partial class WorldNameRegistry {
             "spawn point ids"
         ),
         new(
-            typeof(WorldRenderExtensionEntry),
-            nameof(WorldRenderExtensionEntry.Id),
-            "a post-render extension id"
+            typeof(WorldViewPostPass),
+            nameof(WorldViewPostPass.Name),
+            "a post pass name"
         ),
         new(
             typeof(WorldScreenSource.Producer),
@@ -1681,6 +1675,7 @@ public static partial class WorldNameRegistry {
             nameof(WorldCamera.Name),
             "a camera name"
         ),
+        new(typeof(WorldClock), nameof(WorldClock.Name), "a presentation clock name"),
         new(
             typeof(WorldIdentitySeed),
             nameof(WorldIdentitySeed.Name),
@@ -1917,14 +1912,14 @@ public static partial class WorldNameRegistry {
             "an input source id"
         ),
         new(
-            typeof(WorldProbeParameterTarget.Extension),
-            nameof(WorldProbeParameterTarget.Extension.Id),
-            "a post-render extension id"
+            typeof(WorldProbeParameterTarget.Post),
+            nameof(WorldProbeParameterTarget.Post.Pass),
+            "a post pass name"
         ),
         new(
-            typeof(WorldProbeParameterTarget.Extension),
-            nameof(WorldProbeParameterTarget.Extension.Field),
-            "an extension config field"
+            typeof(WorldProbeParameterTarget.Post),
+            nameof(WorldProbeParameterTarget.Post.Field),
+            "a post pass config field"
         ),
         new(
             typeof(WorldProbeParameterTarget.Probe),

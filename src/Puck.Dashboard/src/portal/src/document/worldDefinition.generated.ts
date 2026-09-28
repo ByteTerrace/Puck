@@ -70,6 +70,8 @@ export type WorldDefinition = {
   machines?: (WorldMachine | null)[] | null;
   ruleGroups?: (RuleGroupDeclaration | null)[] | null;
   sets?: (CellSetRow | null)[] | null;
+  editor?: WorldEditorDefaults | null;
+  timeline?: WorldTimelineSection | null;
   /**
    * Gets the basis document this file layers over, as a file path resolved against this document's own directory — the document-composition member (see WorldDocumentBasis). A file naming a basis is a delta: it authors only what differs, inheriting every omitted member from the (recursively composed) basis chain. Unrelated to the coordinate basis the validator's geometry speaks of.
    */
@@ -1070,6 +1072,8 @@ export type CommandValue = unknown;
  */
 export type CycleOutput = "Step" | "Turns" | "Cos" | "Sin" | "Node" | "ProjectionX" | "ProjectionY" | "Ring";
 
+export type DisplayColorSpace = "Srgb" | "Hdr10" | "ScRgb";
+
 export type DocumentIdentifier = string;
 
 export type DocumentIdentifierList = DocumentIdentifier[];
@@ -1256,6 +1260,10 @@ export type GeneratorWeightedNumeric = {
    */
   multiplicity?: number | null;
 };
+
+export type GpuPixelFormat = "r8g8b8a8" | "b8g8r8a8";
+
+export type GpuSamplerFilter = "Nearest" | "Linear";
 
 export type GrantSubject = string;
 
@@ -1890,6 +1898,8 @@ export type PresentMode = "Vsync" | "Mailbox" | "Immediate" | "Adaptive";
 
 export type Principal = string;
 
+export type QualityTier = "low" | "medium" | "high";
+
 export type RuleGroupDeclaration = {
   /**
    * The group's stable name — unique within the section, and never a rule's name.
@@ -1976,7 +1986,7 @@ export type Shape = {
   name: string;
 };
 
-export type ShapeNonNullable = "Add" | "Subtract" | "Multiply" | "Divide" | "Minimum" | "Maximum" | "Clamp" | "Remainder" | "BitAnd" | "BitOr" | "BitXor" | "BitNot" | "ShiftLeft" | "ShiftRight" | "ShiftRightLogical" | "Equal" | "NotEqual" | "Less" | "LessOrEqual" | "Greater" | "GreaterOrEqual" | "Select" | "SetBitCount" | "LeadingZeroCount" | "TrailingZeroCount" | "LowestSetBit" | "ClearLowestSetBit" | "RotateLeft" | "RotateRight" | "ByteSwap" | "ReverseBits" | "Negate" | "Absolute" | "ParallelBitExtract" | "ParallelBitDeposit" | "BitField" | "BitInsert" | "Sign" | "Pair" | "PairX" | "PairY" | "PairSwap" | "PairMaximum" | "PairMinimum" | "PairSum" | "PairDifference" | "PairTranslate" | "PairScale" | "MortonIndex" | "MortonX" | "MortonY" | "HilbertIndex" | "HilbertX" | "HilbertY" | "HexIndex" | "HexQ" | "HexR" | "HexRadius" | "HexEuclideanSquared" | "HexDistance" | "HexNeighbor" | "HexRotate" | "HexMirror" | "HexSwap" | "HexAdd" | "HexSubtract" | "HexMultiply" | "HexScale" | "HexTranslate" | "Layer" | "LayerOffset" | "LayerStart" | "LayerSize" | "SquareRoot" | "Sine" | "Cosine" | "SquareIndex" | "SquareX" | "SquareY" | "SquareRadius" | "SquareLength" | "SquareEuclideanSquared" | "SquareDistance" | "SquareChebyshev" | "SquareNeighbor" | "SquareRotate" | "SquareMirror" | "SquareSwap" | "SquareAdd" | "SquareSubtract" | "SquareMultiply" | "SquareScale" | "SquareTranslate" | "GreatestCommonDivisor" | "LeastCommonMultiple" | "FloorModulo" | "CycleForward" | "CycleDistance" | "SmallestMissing" | "IsPrime" | "PrimeAt" | "BinomialCoefficient" | "Factorial" | "SubsetRank" | "SubsetAt" | "SubsetMember" | "ArrangementRank" | "ArrangementAt" | "ArrangementMember" | "Floor" | "Ceiling" | "Round" | "ReplicationMask" | "RepeatBits" | "IsAbsent" | "Coalesce" | "Member";
+export type ShapeNonNullable = "Add" | "Subtract" | "Multiply" | "Divide" | "Minimum" | "Maximum" | "Clamp" | "Remainder" | "BitAnd" | "BitOr" | "BitXor" | "BitNot" | "ShiftLeft" | "ShiftRight" | "ShiftRightLogical" | "Equal" | "NotEqual" | "Less" | "LessOrEqual" | "Greater" | "GreaterOrEqual" | "Select" | "SetBitCount" | "LeadingZeroCount" | "TrailingZeroCount" | "LowestSetBit" | "ClearLowestSetBit" | "RotateLeft" | "RotateRight" | "ByteSwap" | "ReverseBits" | "Negate" | "Absolute" | "ParallelBitExtract" | "ParallelBitDeposit" | "BitField" | "BitInsert" | "Sign" | "Pair" | "PairX" | "PairY" | "PairSwap" | "PairMaximum" | "PairMinimum" | "PairSum" | "PairDifference" | "PairTranslate" | "PairScale" | "MortonIndex" | "MortonX" | "MortonY" | "HilbertIndex" | "HilbertX" | "HilbertY" | "HexIndex" | "HexQ" | "HexR" | "HexRadius" | "HexEuclideanSquared" | "HexDistance" | "HexNeighbor" | "HexRotate" | "HexMirror" | "HexSwap" | "HexAdd" | "HexSubtract" | "HexMultiply" | "HexScale" | "HexTranslate" | "Layer" | "LayerOffset" | "LayerStart" | "LayerSize" | "SquareRoot" | "Sine" | "Cosine" | "SquareIndex" | "SquareX" | "SquareY" | "SquareRadius" | "SquareLength" | "SquareEuclideanSquared" | "SquareDistance" | "SquareChebyshev" | "SquareNeighbor" | "SquareRotate" | "SquareMirror" | "SquareSwap" | "SquareAdd" | "SquareSubtract" | "SquareMultiply" | "SquareScale" | "SquareTranslate" | "GreatestCommonDivisor" | "LeastCommonMultiple" | "FloorModulo" | "FloorDivide" | "FloorDivideModulo" | "DivideRemainder" | "Power" | "ModularPower" | "ModularInverse" | "ExtendedGreatestCommonDivisor" | "CycleForward" | "CycleDistance" | "SmallestMissing" | "IsPrime" | "PrimeAt" | "BinomialCoefficient" | "Factorial" | "SubsetRank" | "SubsetAt" | "SubsetMember" | "ArrangementRank" | "ArrangementAt" | "ArrangementMember" | "Floor" | "Ceiling" | "Round" | "ReplicationMask" | "RepeatBits" | "IsAbsent" | "Coalesce" | "Member";
 
 export type ShapeNonNullable10 = string | number | ShapeNonNullable8 | ShapeNonNullable9;
 
@@ -2937,8 +2947,6 @@ export type StateVisibility = {
 };
 
 export type StringList = (string | null)[];
-
-export type SurfaceFormat = "r8g8b8a8" | "b8g8r8a8";
 
 export type TableRow = {
   /**
@@ -4253,6 +4261,14 @@ export type WorldCaptureRow = {
    * The per-pixel census's material table — at least one entry, at most MaxPaletteEntriesPerRow, unique Material indices.
    */
   palette: (WorldCapturePaletteEntry | null)[];
+  /**
+   * The render-graph instance whose output the station captures, or null (the default) for the root, the frame the display shows. WorldInstance captures the SDF world before any views.post pass or the overlay is drawn over it.
+   */
+  instance?: string | null;
+  /**
+   * The index of the screen whose source the station captures, before any screen shows it: the source instance the screen reads, which a machine output, a producer or a probe source is. Mutually exclusive with Instance; null (the default) captures by instance.
+   */
+  screen?: number | null;
 };
 
 export type WorldCapturesSection = {
@@ -4310,6 +4326,29 @@ export type WorldChannel = {
    * What the MoveAdvance/MoveStrafe pair is relative to when a binding row folds into it (see ChannelFrame); the two roles must declare the same frame, and every other channel leaves it at World. Omitted from a saved document at that default.
    */
   frame?: ChannelFrame;
+};
+
+export type WorldClock = {
+  /**
+   * The clock's name, unique within the section.
+   */
+  name: string;
+  /**
+   * A tick clock's period, in seconds: a whole number of engine ticks (1/50400 s). Refused beside State.
+   */
+  periodSeconds?: number | null;
+  /**
+   * What one period reads as, in the units a key's time is authored in: a day that passes in twenty minutes and reads as twenty-four hours has a span of 24h. Absent reads as the period for a tick clock and as one for a state clock.
+   */
+  spanSeconds?: number | null;
+  /**
+   * How far into its span a tick clock stands at engine tick zero, in SpanSeconds' units, in [0, span). Absent is zero. Refused on a state clock.
+   */
+  startSeconds?: number | null;
+  /**
+   * A state clock's Fixed or Int row. Refused beside PeriodSeconds.
+   */
+  state?: string | null;
 };
 
 export type WorldCollider = WorldColliderSphere | WorldColliderCapsule | WorldColliderBox | WorldColliderFromCreation | null;
@@ -4712,6 +4751,100 @@ export type WorldDistributionRegionScatter = {
    * The hash seed, folded with the world seed.
    */
   seed?: number;
+};
+
+export type WorldEditorCamera = {
+  /**
+   * The orbit rate at full input, in radians per second; positive.
+   */
+  orbitRate?: number;
+  /**
+   * The pan rate at full input, in world units per second; positive.
+   */
+  panRate?: number;
+  /**
+   * The exponential dolly rate at full input, per second; positive.
+   */
+  zoomRate?: number;
+  /**
+   * The fly rate at full input, in world units per second; positive.
+   */
+  flyRate?: number;
+  /**
+   * The lowest orbit pitch, in radians; above -π/2 and below MaxPitch.
+   */
+  minPitch?: number;
+  /**
+   * The highest orbit pitch, in radians; below π/2.
+   */
+  maxPitch?: number;
+  /**
+   * The nearest orbit distance, in world units; positive and below MaxDistance.
+   */
+  minDistance?: number;
+  /**
+   * The farthest orbit distance, in world units.
+   */
+  maxDistance?: number;
+};
+
+export type WorldEditorDefaults = {
+  /**
+   * The grid; absent takes every grid default.
+   */
+  grid?: WorldEditorGrid | null;
+  /**
+   * The snapping; absent takes every snapping default.
+   */
+  snap?: WorldEditorSnap | null;
+  /**
+   * The editor camera's feel; absent takes every camera default.
+   */
+  camera?: WorldEditorCamera | null;
+};
+
+export type WorldEditorGrid = {
+  /**
+   * Whether the grid draws.
+   */
+  visible?: boolean;
+  /**
+   * Where the world grid draws.
+   */
+  mode?: WorldEditorGridMode;
+  /**
+   * The world lattice's pitch on X, Y and Z, in world units; every component positive.
+   */
+  pitch?: DocumentVector3;
+  /**
+   * The working plane's height, in world units, when the mode is Plane.
+   */
+  planeY?: number;
+  /**
+   * The drawn line's width, in pixels; positive.
+   */
+  lineWidth?: number;
+};
+
+export type WorldEditorGridMode = "Surface" | "Follow" | "Plane";
+
+export type WorldEditorSnap = {
+  /**
+   * Whether positions snap to the grid.
+   */
+  enabled?: boolean;
+  /**
+   * The angle a turn steps and a rotation snaps to, in degrees; in (0, 180].
+   */
+  angleStepDegrees?: number;
+  /**
+   * Whether a placement rests on the surface under the pointer.
+   */
+  surface?: boolean;
+  /**
+   * How far a captured reference's own grid reaches around it, in multiples of its largest half extent; positive.
+   */
+  objectPatchRadius?: number;
 };
 
 /**
@@ -5589,9 +5722,9 @@ export type WorldHostDefaults = {
    */
   height: number;
   /**
-   * The swapchain surface format (Unknown is rejected by the validator).
+   * The preferred swapchain format: R8G8B8A8Unorm or B8G8R8A8Unorm, authored as r8g8b8a8 or b8g8r8a8.
    */
-  surfaceFormat: SurfaceFormat;
+  surfaceFormat: GpuPixelFormat;
   /**
    * Whether the window enters borderless fullscreen when first shown.
    */
@@ -5640,6 +5773,14 @@ export type WorldHostDefaults = {
    * The window and taskbar icon: a .ico path resolved against the world document's own directory, or an absolute path taken as-is, so an author's icon travels beside their world file. null — and equally a path naming a file this OS cannot read as an icon — wears the host executable's own icon resource instead, which no world has to ship. Shape-only validation (null or non-whitespace); the platform window backend is what reads the file.
    */
   icon?: string | null;
+  /**
+   * The color space the swapchain asks the display for (boot-only): Srgb, the default, or an HDR one (Hdr10, ScRgb), which the swapchain takes only when the display reports it, falling back to SDR. The display encode writes the frame in the color space taken.
+   */
+  colorSpace?: DisplayColorSpace;
+  /**
+   * The luminance, in nits, SDR white shows at in an HDR output, the HUD included (boot-only), from SdrWhiteNits to MaxPaperWhiteNits, or null for SdrWhiteNits. An SDR output shows white at its own white level whatever this is.
+   */
+  paperWhiteNits?: number | null;
 };
 
 export type WorldHostPresentation = "Windowed" | "None" | "Offscreen";
@@ -6980,6 +7121,10 @@ export type WorldPlacementFace = {
    * The face's portal facet (see WorldPlacementPortal) — absent (the default) means this face is not a door. Optional and trailing deliberately: a face authored before this facet existed round-trips unchanged, and it composes freely with Source — the door and the screen it shows are independent facts about the same face.
    */
   portal?: WorldPlacementPortal | null;
+  /**
+   * How the face's screen samples its source's image, as a screen row's Filter does: Nearest, the default, keeps each source pixel crisp; Linear blends between source pixels. Omitted from the wire when Nearest.
+   */
+  filter?: GpuSamplerFilter;
 };
 
 export type WorldPlacementFaceList = (WorldPlacementFace | null)[];
@@ -7074,7 +7219,7 @@ export type WorldPlacementPolicyDefaults = {
 };
 
 /**
- * A WorldPlacementFace's portal facet — the authored decision that a face is a door: which WorldDestination row it leads to, and under what travel scope. Absent (the default) means the face is not a door — nothing here fires anything by itself; turning the decision into a diegetic step-into trigger is WorldInstanceHost.TriggerPortal's job, never this facet's. Durability, scope, and process-local instance selection live on the named WorldDestination row this facet points at, not here — a facet composes one destination selection with a travel scope, never re-authors how that destination is minted. Extensible deliberately (an optional-member record, the same widen-without-moving-existing-members shape WorldLatticeMedium's own remarks describe): a future fact-gate field (an authored predicate a traveler must satisfy to pass) adds cleanly as a new trailing member.
+ * A WorldPlacementFace's portal facet — the authored decision that a face is a door: which WorldDestination row it leads to, and under what travel scope. Absent (the default) means the face is not a door — nothing here fires anything by itself; turning the decision into a diegetic step-into trigger is WorldInstanceHost's job (its per-tick portal scan, ScanInstancePortals, then ResolveAndEnqueueCoalescedTransfers), never this facet's. Durability, scope, and process-local instance selection live on the named WorldDestination row this facet points at, not here — a facet composes one destination selection with a travel scope, never re-authors how that destination is minted. Extensible deliberately (an optional-member record, the same widen-without-moving-existing-members shape WorldLatticeMedium's own remarks describe): a future fact-gate field (an authored predicate a traveler must satisfy to pass) adds cleanly as a new trailing member.
  */
 export type WorldPlacementPortal = {
   /**
@@ -7516,16 +7661,16 @@ export type WorldProbeBindingParameter = {
   maxAgeSeconds?: number;
 };
 
-export type WorldProbeParameterTarget = WorldProbeParameterTargetExtension | WorldProbeParameterTargetProbe | null;
+export type WorldProbeParameterTarget = WorldProbeParameterTargetPost | WorldProbeParameterTargetProbe | null;
 
-export type WorldProbeParameterTargetExtension = {
-  $type?: "extension";
+export type WorldProbeParameterTargetPost = {
+  $type?: "post";
   /**
-   * The render.extensions[].id entry this targets — must name an entry the document itself composes.
+   * The views.post[].name this targets — must name a row of this document.
    */
-  id: string;
+  pass: string;
   /**
-   * The extension's config field name — checked against its manifest at boot, never here (the same shallow-then-deep precedent every kind-vocabulary field follows).
+   * The pass's package config field name — checked against the package's schema at boot, never here (the same shallow-then-deep precedent every kind-vocabulary field follows).
    */
   field: string;
 };
@@ -8228,7 +8373,7 @@ export type WorldPrototype = {
          */
         shapeId?: number | null;
         /**
-         * The feed this face shows when nothing else is wired, as a source token a consuming world resolves through a closed four-token map — none (no signal), test (the test pattern), and camera:<name> / feed:<name> (a View of the named camera, resolved against the placement's derived creation-eye feeds then the world's own camera rows). An unrecognized token (including a bare named:emotes, which named a host registry no world provides) lights the no-signal card. Null = the no-signal card until a world's face override wires a feed.
+         * The feed this face shows when nothing else is wired, as a source token a consuming world resolves through a closed four-token map — none (unbound glass), test (the test pattern), and camera:<name> / feed:<name> (a View of the named camera, resolved against the placement's derived creation-eye feeds then the world's own camera rows). An unrecognized token (including a bare named:emotes, which named a host registry no world provides) shows unbound glass. Null = unbound glass until a world's face override wires a feed.
          */
         defaultSource?: string | null;
       } | null)[] | null;
@@ -8512,6 +8657,25 @@ export type WorldPrototype = {
    * The SHA-256 hex64 of the document's canonical bytes (Hash on the canonical result the compose boundary produces). ABSENT resolves to the hash computed from Document at load — an author never writes a content hash by hand; see Hash.
    */
   hash?: string | null;
+  /**
+   * Opaque triangles every static placement of the prototype draws beside its field, or null for none.
+   */
+  mesh?: WorldPrototypeMesh | null;
+};
+
+export type WorldPrototypeMesh = {
+  /**
+   * The vertex positions, in the author frame.
+   */
+  vertices: [number, number, number][];
+  /**
+   * Three vertex indices per triangle.
+   */
+  indices: number[];
+  /**
+   * The index of the creation palette entry the triangles shade with.
+   */
+  material?: number;
 };
 
 export type WorldQualityPreset = {
@@ -8732,10 +8896,6 @@ export type WorldRenderDefaults = {
    */
   high?: WorldQualityPreset | null;
   /**
-   * The post-render extension chain, composed over the world's rendered output in list order — e.g. [{ "id": "sdf-film-grain", "config": { "intensity": 0.08 } }]. Optional; an absent or empty list is the byte-identical default path (no extension composed). Every id must name a shipped shader set — a puck.shader.manifest.v1 manifest's file stem (checked at document load); each entry's own config is validated against that manifest's declared config schema at boot and by puck schema.
-   */
-  extensions?: (WorldRenderExtensionEntry | null)[] | null;
-  /**
    * The scene's directional sun and ambient term. Optional, and every field within it is optional individually — an absent section, or an absent field within it, resolves to SdfFrame's pinned default for that field, so a world renders unchanged until it authors one.
    */
   lighting?: WorldRenderLighting | null;
@@ -8752,7 +8912,7 @@ export type WorldRenderDefaults = {
    */
   environment?: WorldRenderEnvironment | null;
   /**
-   * The tonemap applied to the frame's final color. Optional; absent is None — the stylized shaded color, unchanged.
+   * The tonemap the root graph applies to the SDF scene: each view, as its place pass reconstructs it. The letterbox color, every pane (display-referred) and the HUD are never tonemapped. Optional; absent is None — the stylized shaded color, unchanged.
    */
   tonemap?: WorldTonemap | null;
   /**
@@ -8770,17 +8930,6 @@ export type WorldRenderEnvironment = {
    * The reflection horizon gradient. Absent is black — contributes nothing.
    */
   horizon?: WorldRenderHorizon | null;
-};
-
-export type WorldRenderExtensionEntry = {
-  /**
-   * The shader set id (its puck.shader.manifest.v1 manifest's file stem) — checked against the shipped vocabulary at document load (IsRegisteredPostRenderExtension), never interpreted here.
-   */
-  id: "sdf-film-grain";
-  /**
-   * The set's config values, or null when the manifest declares none or every field has a default. Not validated at document load — the manifest's declared config schema validates it at boot (matching Machine's Options, the identical shallow-then-deep precedent), refusing boot with the set id and reason on a malformed value.
-   */
-  config?: unknown;
 };
 
 export type WorldRenderHorizon = {
@@ -8919,7 +9068,7 @@ export type WorldRenderLighting = {
 };
 
 /**
- * The SAFE, enumerated world render-scale tiers a run pins for the settled REVEALED room view — the demo/user-facing quality option layered over the engine's CONTINUOUS render-scale knob (SdfViewSnapshot.RenderScale, quantized to SdfWorldEngine.RenderScaleQ). The player picks one of these KNOWN-GOOD steps, never a free numeric value; each tier is pinned to an exact quantized numerator so the reduced render extent (worldRenderDims) is a stable integer at any window size and the bilinear upsample stays artifact-free. The continuous knob stays reachable PROGRAMMATICALLY (layout eases, dev tooling) — the enumerated policy lives only here at the user surface. Names + scales are the ONE definition (WorldRenderScaleTiers); the world document's quality presets, the console world.render-scale verb, and the boot resolution all read them there.
+ * The enumerated world render-scale tiers a player or a quality preset picks, never a free numeric value, over the continuous render scale a view carries (SdfViewSnapshot.RenderScale). A view renders its output at its rect times its render scale, rounded up on each axis to a step of the render graph's extent quantization (RenderGraphExtent.Quantize, sixteen steps per power-of-two octave), and the root's place pass reconstructs that output into the rect at world.upscale-sharpness. The continuous scale stays reachable in code (layout transitions); the enumerated set lives only at the user surface. WorldRenderScaleTiers is the one definition of the names and scales, which the world document's quality presets, the console world.render-scale verb and the boot resolution read. Each extent below is a lone whole-display view at 1280x800.
  */
 export type WorldRenderScaleTier = "Native" | "ThreeQuarter" | "Half" | "Quarter" | "Eighth";
 
@@ -9290,6 +9439,10 @@ export type WorldScreen = {
    * The screen's live byte-window bindings between its booted machine's bus and ordinary state.world Int cells (see WorldScreenMemory), or null for a screen with none. Omitted from the wire when null.
    */
   memory?: (WorldScreenMemory | null)[] | null;
+  /**
+   * How the face samples its source's image: Nearest, the default, keeps each source pixel crisp, as an emulator or a pixel-art source wants; Linear blends between source pixels, as a camera or a desktop capture wants. The screen's mapping carries it, and a hit maps to the same source pixel under either. Omitted from the wire when Nearest.
+   */
+  filter?: GpuSamplerFilter;
 };
 
 export type WorldScreenMagazine = {
@@ -9369,7 +9522,7 @@ export type WorldScreenRoute = {
    */
   kit?: string | null;
   /**
-   * Where a pointer hit on the screen's source goes: Presentation for hover and highlight, or Simulation for a pointer ray mapped in fixed point from this row, such as a light gun (WorldScreenMappings). Passthrough is refused by name: host passthrough exists only for a source the local user opened on their own machine, and a world document can never create one or send it input. null (the default) is Presentation. Omitted from the wire when null.
+   * Where a pointer hit on the screen's source goes: Presentation for hover and highlight, or Simulation for a pointer ray mapped in fixed point from this row, which a $pointer: rule read sees and which aims the screen machine's light gun for a seat applied to the screen (WorldScreenMappings). Passthrough is refused by name: host passthrough exists only for a source the local user opened on their own machine, and a world document can never create one or send it input. null (the default) is Presentation. Omitted from the wire when null.
    */
   input?: SourceDestination | null;
 };
@@ -9395,7 +9548,7 @@ export type WorldScreenSourceMachine = {
 };
 
 /**
- * No provider is bound — the engine lights the slot with its procedural no-signal fallback (an animated test-card / striped no-signal look, never black).
+ * No provider is bound — the engine shades the slot as dark glass, lit faintly by the sun.
  */
 export type WorldScreenSourceNone = {
   $type?: "none";
@@ -9445,13 +9598,13 @@ export type WorldScreenSourceSession = {
    */
   projection?: WorldScreenProjection;
   /**
-   * The offscreen target's [width, height] in pixels, or null for the engine default (Puck.SdfVm.Views.WorldSessionView.DefaultWidth x DefaultHeight — today's 160x144 panel, unchanged for an unauthored facet). Each axis is validated within 1..WorldDefinitionValidator.MaxSurfaceDimension. Omitted from the wire when null.
+   * The offscreen target's [width, height] in pixels, or null for the default 160x144 panel (Puck.World.Client.WorldViewInstances.DefaultSessionWidth x DefaultSessionHeight). Each axis is validated within 1..WorldDefinitionValidator.MaxSurfaceDimension. Omitted from the wire when null.
    */
   resolution?: WorldScreenResolution | null;
 };
 
 /**
- * Authored reading text on the screen face, rendered through the engine's glyph-decal tier (Puck.SdfVm.SdfWorldEngine.SetScreenDecal): a fixed monospace cell grid sampled from the world's packed font atlas at shade time — the dense-text sibling of a creation's textRuns, which stamp marched Glyph geometry. Signs, plaques, books, and monitors author this; short sculptural lettering stays a text run. Requires the world to declare a text font catalog (Text); the decal bypasses the CRT image pipeline, so no image source competes with it on the slot.
+ * Authored reading text on the screen face, rendered through the engine's glyph-decal tier (Puck.SdfVm.SdfWorldTables.SetScreenDecal): a fixed monospace cell grid sampled from the world's packed font atlas at shade time — the dense-text sibling of a creation's textRuns, which stamp marched Glyph geometry. Signs, plaques, books, and monitors author this; short sculptural lettering stays a text run. Requires the world to declare a text font catalog (Text); the decal bypasses the CRT image pipeline, so no image source competes with it on the slot.
  */
 export type WorldScreenSourceText = {
   $type?: "text";
@@ -9557,9 +9710,9 @@ export type WorldSearchRow = {
    */
   depth?: number;
   /**
-   * An infix expression, in the rule expression grammar, evaluated over the frame after a ply from the perspective of the side that made it; iterative-deepening negamax with alpha-beta compares it across plies — the two-sided, zero-sum reading of what a ply is worth. Exactly one of this and Scores is authored when a score is needed; required when Depth exceeds one, or Best is authored, and refused with MonteCarlo unauthored alongside it.
+   * A value expression, stored as its program like every other expression a world document holds, evaluated over the frame after a ply from the perspective of the side that made it; iterative-deepening negamax with alpha-beta compares it across plies — the two-sided, zero-sum reading of what a ply is worth. Exactly one of this and Scores is authored when a score is needed; required when Depth exceeds one, or Best is authored, and refused with MonteCarlo unauthored alongside it.
    */
-  score?: string | null;
+  score?: ExpressionProgramNonNullable2;
   /**
    * A keyed integer row receiving the deepest completed depth's answer: token (the mover's ordinal in Tokens), to (its destination cell), and score (the negamax value, or, with Scores authored, the root mover's own seat's value).
    */
@@ -10750,6 +10903,13 @@ export type WorldThemeType = {
   titleWeight: number;
 };
 
+export type WorldTimelineSection = {
+  /**
+   * The clocks, each named once.
+   */
+  clocks?: (WorldClock | null)[] | null;
+};
+
 export type WorldTonemap = "None" | "Filmic";
 
 export type WorldTransferFullPolicy = "Retry" | "Refuse";
@@ -10836,7 +10996,7 @@ export type WorldViewDefaults = {
    */
   cameraRig?: WorldCameraProgram | null;
   /**
-   * The directory holding the pipeline compiler's dxc, or null to resolve it by bare name through the ordinary executable search path — never an environment variable.
+   * The directory holding the graph compiler's dxc, or null to resolve it by bare name through the ordinary executable search path — never an environment variable.
    */
   shaderToolchain?: string | null;
   /**
@@ -10848,26 +11008,34 @@ export type WorldViewDefaults = {
    */
   graphBudget?: WorldViewGraphBudget | null;
   /**
+   * The views.graphs row the display shows and captures read, or null for the render graph composition synthesizes from the document around WorldViewGraphs.WorldInstance and WorldViewGraphs.MainInstance. A world that names its root authors its whole render graph, the sdf.world package row included.
+   */
+  root?: string | null;
+  /**
+   * The post-process passes the synthesized root graph runs over the composed frame, in order, before the overlay, or null for none. A world that names Root authors its whole graph and names none.
+   */
+  post?: (WorldViewPostPass | null)[] | null;
+  /**
    * Gets the authored named layouts. The absence-coalesce lives in the accessor for the same reason Elements's does.
    */
   layouts?: (WorldViewLayout | null)[] | null;
-  /**
-   * Gets the authored views.pipelines rows. The absence-coalesce lives in the accessor for the same reason Elements's does.
-   */
-  pipelines?: (WorldViewPipeline | null)[] | null;
 };
 
 export type WorldViewGraph = {
   /**
-   * The instance's stable name (a SafeName, unique within the section), which another row's input names.
+   * The instance's stable name (a SafeName, unique within the section), which another row's input, a layout slot and a capture name.
    */
   name: string;
   /**
-   * The graph document, resolved relative to the world document's own directory as a Source is.
+   * Where the instance's graph comes from, or null for a row that names a Package: a puck.render.graph.v1 graph document, a one-off shader source file, which reads as a one-pass graph, or a puck.shader.package.v1 package directory, which loads with its source tree gone. It resolves beside the document that authors it (WorldDocumentPaths), like every relative path a document authors.
    */
-  source: string;
+  source?: string | null;
   /**
-   * The authored camera the instance renders from, or null for a graph that reads no camera.
+   * The engine package whose producer renders the instance, such as sdf.world, or an uploaded producer's source package, source.<producer id>, opened from Settings and converted once a frame at most however many instances read it, or null for a row that names a Source. A package instance reads no input and takes no time scale, output or override.
+   */
+  package?: string | null;
+  /**
+   * The authored camera the instance renders from, feeding the frame block's cameraPosition, cameraTarget, cameraUp and cameraFov, or null, which leaves cameraFov zero so a graph keeps its own pointer orbit.
    */
   camera?: string | null;
   /**
@@ -10878,6 +11046,38 @@ export type WorldViewGraph = {
    * The external versions of its graph bound to other instances' outputs, or null for none.
    */
   inputs?: (WorldViewGraphInput | null)[] | null;
+  /**
+   * The instance clock's rate multiplier — presentation only, never simulation state. Default 1; 0 freezes the clock.
+   */
+  timeScale?: number;
+  /**
+   * The image version the instance shows, or null for the source's first declared output.
+   */
+  output?: string | null;
+  /**
+   * This instance's parameter overrides, keyed by pass name; each value is that pass's config object keyed by field. A field absent here keeps the default the shared source declares, so two instances of one source differ only in what they override. The source's config schema binds them when a boot, a world.load or world.reload, a commit, or an upsert names them (the server reads the source, and refuses a value by name), and again when a graph installs (the host binds them into its passes). null overrides nothing.
+   */
+  overrides?: {
+    [k: string]: unknown;
+  } | null;
+  /**
+   * A source package row's producer settings, which its producer opens the image with and its shape validates, as a screen's producer source's settings are, or null for the producer's defaults. Only a row naming a source package (source.<producer id>) takes settings.
+   */
+  settings?: {
+    [k: string]: unknown;
+  } | null;
+  /**
+   * This instance's bound parameters, keyed by pass name and then by config field: a number, or a state.<row>[.<key>][.$target] token naming a Fixed or Int cell whose value the pass reads through its state mirror slot, eased by default. A field a row names both here and in Overrides is refused by name, and a binding that does not resolve leaves the field at its source's default. null binds nothing.
+   */
+  parameters?: {
+    [k: string]: {
+      [k: string]: BindableScalar;
+    } | null;
+  } | null;
+  /**
+   * The quality tier the instance renders at, from the authored quality vocabulary: the variant of its source's package it loads, or the tier its source compiles for where no package holds it. A tier selects how the passes compute and never what they read, so two documents differing only in a row's tier present the same state. null loads the variant no tier names.
+   */
+  tier?: QualityTier | null;
 };
 
 export type WorldViewGraphBudget = {
@@ -10885,6 +11085,14 @@ export type WorldViewGraphBudget = {
    * The pass-pixels (passes times rendered pixels) those instances may spend in one presented frame; the stalest due instance is admitted first and the rest read their latest completed output. 0 sets no ceiling.
    */
   passPixelsPerFrame?: number;
+  /**
+   * The bytes every bound parameter together may owe its pass on a tick that moves its row, or 0 for no ceiling. A document whose bindings exceed it is refused, naming the graph and the binding that crosses it.
+   */
+  bytesPerTick?: number;
+  /**
+   * The bytes every bound parameter together may owe its pass on each presented frame between ticks, or 0 for no ceiling, refused the same way.
+   */
+  bytesPerFrame?: number;
 };
 
 export type WorldViewGraphInput = {
@@ -10936,33 +11144,19 @@ export type WorldViewLayout = {
   slots: WorldViewSlot[];
 };
 
-export type WorldViewPipeline = {
+export type WorldViewPostPass = {
   /**
-   * The pipeline's stable name (a SafeName, unique within the section) — what a Pipeline names and a pipeline.* console verb addresses.
+   * The pass's name in the root graph (a SafeName, unique within the section and distinct from every views.graphs row, whose place pass the root names after the row), which a probe parameter's post target names.
    */
   name: string;
   /**
-   * Where the pipeline comes from: a pipeline document, a one-off shader source file, or a puck.shader.package.v1 package directory, which loads with its source tree gone. It resolves beside the document that authors it (WorldDocumentPaths), like every relative path a document authors.
+   * The post-process package the pass runs, a render graph package id such as sdf.film-grain, checked against the host's catalog at document load.
    */
-  source: string;
+  package: "sdf.film-grain";
   /**
-   * The authored camera feeding the pipeline frame block's cameraPosition, cameraTarget, cameraUp and cameraFov, or null, which leaves cameraFov zero so a pipeline keeps its own pointer orbit.
+   * The package's config values, each absent field at its default, or null for every default. The graph compiler binds them against the package's schema when the root graph is composed, and a boot refuses a value that does not bind, naming the row.
    */
-  camera?: string | null;
-  /**
-   * The pipeline clock's rate multiplier — presentation only, never simulation state. Default 1; 0 freezes the clock.
-   */
-  timeScale?: number;
-  /**
-   * The image version the instance shows, or null for the source's first declared output.
-   */
-  output?: string | null;
-  /**
-   * This instance's parameter overrides, keyed by pass name; each value is that pass's config object keyed by field. A field absent here keeps the default the shared source declares, so two instances of one source differ only in what they override. The source's config schema binds them when a boot, a world.load or world.reload, a commit, or an upsert names them (the server reads the source, and refuses a value by name), and again when a graph installs (the host binds them into its passes). null overrides nothing.
-   */
-  overrides?: {
-    [k: string]: unknown;
-  } | null;
+  config?: unknown;
 };
 
 export type WorldViewSlot = {
@@ -10983,13 +11177,13 @@ export type WorldViewSlot = {
    */
   height?: number;
   /**
-   * The authored camera name filling this slot, or null for the seat that owns it (or the pipeline named by Pipeline).
+   * The authored camera name filling this slot, or null for the seat that owns it (or the instance named by Instance).
    */
   camera?: string | null;
   /**
-   * The authored views.pipelines row name filling this slot with a compiled shader pipeline, or null for an ordinary seat/camera slot. Mutually exclusive with Camera.
+   * The views.graphs row name whose output fills this slot, or null for a seat or camera slot.
    */
-  pipeline?: string | null;
+  instance?: string | null;
 };
 
 export type WorldVoiceProfile = {

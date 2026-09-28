@@ -1,0 +1,19 @@
+# Every frame renders, so each capture shows the scene as it stands.
+world.cadence off
+# The wait releases on the engine's readiness, a cold driver cache included; the leg's own timeout bounds it.
+world.wait ready 600
+world.wait 20
+# The seat stands to the side of the arch, outside its aperture, facing the same way.
+body.pose -4 0 0 0 0 0
+world.wait 10
+body.where
+world.screenshot {run}/before.png
+world.wait captures 30
+# The capture armed for a crossing never lands, since the seat never crosses.
+world.screenshot {run}/arrival.png crossing
+# The same walk passes beside the arch, so the body never crosses and stays in the lobby.
+body.fly 1 0 0 0 0 0 1.5
+world.wait 100
+body.where
+world.screenshot {run}/after.png
+world.wait captures 30

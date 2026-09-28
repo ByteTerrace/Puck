@@ -17,6 +17,8 @@ public sealed class WorldInstance : IDisposable {
     private readonly IDisposable? m_ownedAdjacencies;
     private readonly WorldPeerNetwork? m_ownedNetwork;
 
+    private readonly CancellationTokenSource m_retired = new();
+
     /// <summary>Initializes one running instance's held graph.</summary>
     /// <param name="name">The console-facing instance name, unique among running instances.</param>
     /// <param name="origin">Reads the document path this instance currently answers for. A delegate rather than a
@@ -94,6 +96,17 @@ public sealed class WorldInstance : IDisposable {
     public bool IsPaused { get; set; }
     /// <summary>This instance's own transport — see this type's constructor remarks.</summary>
     public IServerLink Link { get; }
+    /// <summary>Gets the link a console submits to this instance through: its <see cref="ConsoleLink"/>, which registers
+    /// each console line it mints for its verdict, when it keeps one, else its own <see cref="Link"/>. Whatever a console
+    /// reads from this instance it writes back through here, never through another instance's link.</summary>
+    public IServerLink SubmissionLink => (ConsoleLink ?? Link);
+    /// <summary>Cancelled when this instance is disposed (stopped or reaped): its server steps no more, and nothing
+    /// submitted to it is answered afterwards.</summary>
+    public CancellationToken Retired => m_retired.Token;
+    /// <summary>The link a console submits this row's lines through, which registers each in the console's table so its
+    /// verdict answers and counts, or <see langword="null"/> when the host keeps no console table for the row; a
+    /// console then submits through <see cref="Link"/>, registering nothing.</summary>
+    public IConsoleServerLink? ConsoleLink { get; init; }
     /// <summary>The host-approved extension runtime acting on this row — operations, connections, observations,
     /// embeddings, and participants — or <see langword="null"/> when the host configured none. Set by
     /// <see cref="WorldConfiguredExtensions.Attach"/>; the host that attached it stops and disposes it.</summary>
@@ -135,9 +148,17 @@ public sealed class WorldInstance : IDisposable {
     /// on the desktop, a no-op for a row nothing is waiting on.</summary>
     public Action<ulong> PublishTick { get; set; } = static _ => { };
 
-    /// <summary>Disposes what this instance owns. A no-op for a boot instance, whose machine host belongs to the
-    /// container and outlives any retirement of the entry.</summary>
+    /// <summary>Retires this instance: its server stops, answering every submission still pending with a refusal that
+    /// names the stop (<see cref="WorldServer.Stop"/>), <see cref="Retired"/> is cancelled, and what the instance owns
+    /// is disposed. A boot instance's machine host belongs to the container and outlives the entry.</summary>
     public void Dispose() {
+        Server.Stop(reason: $"instance '{Name}' stopped");
+
+        // Cancelled, never disposed, so a late reader of Retired still gets the cancelled token.
+        if (!m_retired.IsCancellationRequested) {
+            m_retired.Cancel();
+        }
+
         m_ownedAdjacencies?.Dispose();
         OwnedMachines?.Dispose();
         Door?.Dispose();

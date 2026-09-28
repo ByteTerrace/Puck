@@ -1,4 +1,5 @@
 using Puck.Commands;
+using System.Buffers.Binary;
 using System.Text;
 using System.Text.Json;
 using Puck.Attestation;
@@ -142,7 +143,10 @@ public static partial class WorldFederationCodec {
     /// both dialects off the first eight bytes. A dialer opens every federation connection by writing it through
     /// <see cref="HandshakeWireFormat.WriteHelloAsync"/> — that is the only hello; the challenge/authenticate exchange
     /// that follows rides ordinary frames.</summary>
-    public const ulong WireKey = 0x324445464B435550UL; // "PUCKFED2", typed identity records in traveler projections.
+    public const ulong WireKey = 0x354445464B435550UL; // "PUCKFED5", mutation payloads carry their expected activation.
+    /// <summary>The length of a document leaf's header, in bytes: the tier byte, then the document version's 16
+    /// activation bytes and 8 sequence bytes, both little-endian. The document's payload starts here.</summary>
+    public const int DocumentHeaderBytes = 25;
 
     private static bool Finish(ref WireReader reader, out WireFailure failure) => reader.TryFinish(failure: out failure);
     private static WorldTransferCommitMember ReadCommitMember(ref WireReader reader, WorldPlayerDefaults defaults, int ordinal) {
@@ -523,8 +527,11 @@ public static partial class WorldFederationCodec {
     /// <summary>Encodes what <paramref name="tier"/> authorizes a peer to receive of the authority's document: a
     /// <c>puck.world.projection.v1</c> document at <see cref="WorldDisclosureTier.Presentation"/>, the definition
     /// verbatim at <see cref="WorldDisclosureTier.Replica"/>. The leading byte is the tier, so a receiver names what
-    /// it was handed rather than inferring it from the content.</summary>
+    /// it was handed rather than inferring it from the content; the document's version follows it, 16 activation bytes
+    /// and an 8-byte sequence, both little-endian.</summary>
     /// <param name="definition">The authority's live document.</param>
+    /// <param name="version">The version of <paramref name="definition"/>, or <see langword="default"/> for a document
+    /// that is not a delivery (a reservation's preview), which a receiver holds as a placeholder.</param>
     /// <param name="tier">The tier the admission door decided for this peer.</param>
     /// <param name="authority">The composing authority's addressable namespace.</param>
     /// <param name="revision">The document revision this composition names.</param>
@@ -532,7 +539,7 @@ public static partial class WorldFederationCodec {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="tier"/> is
     /// <see cref="WorldDisclosureTier.Frames"/>, which carries no document at all.</exception>
     /// <param name="recipient">The authenticated recipient, or null for public observation.</param>
-    public static byte[] EncodeDocument(WorldDefinition definition, WorldDisclosureTier tier, string authority, int revision, Principal? recipient = null) {
+    public static byte[] EncodeDocument(WorldDefinition definition, WorldDocumentVersion version, WorldDisclosureTier tier, string authority, int revision, Principal? recipient = null) {
         // The document being encoded is whatever the caller holds — a traveller's destination world as often as
         // this authority's own — so its store is loaded here through the one import door rather than borrowed from
         // a server that may not own it.
@@ -570,13 +577,36 @@ public static partial class WorldFederationCodec {
                     message: "a frames-tier peer receives no document"
                 )
         ));
-        var bytes = new byte[(payload.Length + 1)];
+
+        return DocumentLeaf(
+            payload: payload,
+            tier: tier,
+            version: version
+        );
+    }
+    /// <summary>Frames an already serialized document payload as a document leaf: the tier byte, the version, then the
+    /// payload (<see cref="DocumentHeaderBytes"/>).</summary>
+    /// <param name="payload">The serialized document or projection.</param>
+    /// <param name="tier">The tier the payload was composed at.</param>
+    /// <param name="version">The version of the document the payload carries.</param>
+    /// <returns>The encoded leaf.</returns>
+    public static byte[] DocumentLeaf(ReadOnlySpan<byte> payload, WorldDisclosureTier tier, WorldDocumentVersion version) {
+        var bytes = new byte[(payload.Length + DocumentHeaderBytes)];
 
         bytes[0] = ((byte)tier);
-        payload.CopyTo(
-            array: bytes,
-            index: 1
+        _ = version.Activation.TryWriteBytes(
+            bigEndian: false,
+            bytesWritten: out _,
+            destination: bytes.AsSpan(
+                length: 16,
+                start: 1
+            )
         );
+        BinaryPrimitives.WriteInt64LittleEndian(
+            destination: bytes.AsSpan(start: 17),
+            value: version.Sequence
+        );
+        payload.CopyTo(destination: bytes.AsSpan(start: DocumentHeaderBytes));
 
         return bytes;
     }
@@ -694,7 +724,8 @@ public static partial class WorldFederationCodec {
                 authority: authority,
                 definition: definition,
                 revision: revision,
-                tier: tier
+                tier: tier,
+                version: default
             )
             : []));
 
@@ -727,6 +758,7 @@ public static partial class WorldFederationCodec {
         writer.WriteNullableString(value: route.PlacementId);
         writer.WriteBlock(value: EncodeDocument(
             definition: route.Definition,
+            version: route.Version,
             tier: tier,
             authority: authority,
             revision: revision,
@@ -1002,26 +1034,28 @@ public static partial class WorldFederationCodec {
     /// <summary>Decodes a tier-tagged document leaf, hydrating a projection into a locally-valid definition.</summary>
     /// <param name="body">The leaf bytes.</param>
     /// <param name="definition">The definition on success.</param>
+    /// <param name="version">The version the leaf declared for its document.</param>
     /// <param name="tier">The tier the leaf declared.</param>
     /// <param name="failure">The named refusal on failure.</param>
     /// <returns><see langword="true"/> when the leaf decoded exactly.</returns>
-    public static bool TryDecodeDocument(ReadOnlySpan<byte> body, out WorldDefinition? definition, out WorldDisclosureTier tier, out WireFailure failure) {
+    public static bool TryDecodeDocument(ReadOnlySpan<byte> body, out WorldDefinition? definition, out WorldDocumentVersion version, out WorldDisclosureTier tier, out WireFailure failure) {
         definition = null;
+        version = default;
         tier = WorldDisclosureTier.Frames;
 
-        if (body.Length < 1) {
+        if (body.Length < DocumentHeaderBytes) {
             failure = new WireFailure(
-                Detail: "a document leaf carries no disclosure tier byte",
+                Detail: "a document leaf carries no disclosure tier and version header",
                 Refusal: WireRefusal.PayloadTruncated
             );
 
             return false;
         }
 
-        if (body.Length > (WireLimits.MaxDocumentBytes + 1)) {
+        if (body.Length > (WireLimits.MaxDocumentBytes + DocumentHeaderBytes)) {
             failure = new WireFailure(
                 Refusal: WireRefusal.PayloadTooLarge,
-                Detail: $"document is {body.Length} bytes; cap is {(WireLimits.MaxDocumentBytes + 1)}"
+                Detail: $"document is {body.Length} bytes; cap is {(WireLimits.MaxDocumentBytes + DocumentHeaderBytes)}"
             );
 
             return false;
@@ -1038,7 +1072,30 @@ public static partial class WorldFederationCodec {
             return false;
         }
 
-        var payload = body[1..];
+        version = new WorldDocumentVersion(
+            Activation: new Guid(
+                b: body.Slice(
+                    length: 16,
+                    start: 1
+                ),
+                bigEndian: false
+            ),
+            Sequence: BinaryPrimitives.ReadInt64LittleEndian(source: body[17..])
+        );
+
+        // A delivered document names its activation and a non-negative install ordinal; only a document that is not a
+        // delivery (a reservation's preview) carries the empty version, whole.
+        if ((version.Sequence < 0L) || (!version.IsDelivered && (version != default))) {
+            failure = new WireFailure(
+                Detail: $"document version {version.Activation}/{version.Sequence} is malformed",
+                Refusal: WireRefusal.PayloadMalformed
+            );
+            version = default;
+
+            return false;
+        }
+
+        var payload = body[DocumentHeaderBytes..];
 
         if (tier == WorldDisclosureTier.Replica) {
             return TryDeserializeDefinition(
@@ -1225,7 +1282,7 @@ public static partial class WorldFederationCodec {
 
         var definitionBytes = reader.ReadBlock(
             field: "reservation reply document",
-            maxBytes: (WireLimits.MaxDocumentBytes + 1)
+            maxBytes: (WireLimits.MaxDocumentBytes + DocumentHeaderBytes)
         );
 
         if (reader.Failed) {
@@ -1243,7 +1300,8 @@ public static partial class WorldFederationCodec {
             body: definitionBytes,
             definition: out definition,
             failure: out failure,
-            tier: out _
+            tier: out _,
+            version: out _
         )
         ) {
             return false;
@@ -1284,7 +1342,7 @@ public static partial class WorldFederationCodec {
         var placementId = reader.ReadNullableString(field: "route placement id");
         var definitionBytes = reader.ReadBlock(
             field: "route document",
-            maxBytes: (WireLimits.MaxDocumentBytes + 1)
+            maxBytes: (WireLimits.MaxDocumentBytes + DocumentHeaderBytes)
         );
 
         if (reader.Failed) {
@@ -1299,10 +1357,20 @@ public static partial class WorldFederationCodec {
             body: definitionBytes,
             definition: out var definition,
             failure: out failure,
-            tier: out _
+            tier: out _,
+            version: out var version
         ) ||
             (definition is null)
         ) {
+            return false;
+        }
+
+        if (!version.IsDelivered) {
+            failure = new WireFailure(
+                Detail: "a route's document carries no delivered version",
+                Refusal: WireRefusal.PayloadMalformed
+            );
+
             return false;
         }
 
@@ -1339,7 +1407,8 @@ public static partial class WorldFederationCodec {
             Orientation: orientation,
             PlacementId: placementId,
             Position: position,
-            Tick: tick
+            Tick: tick,
+            Version: version
         );
 
         return Finish(

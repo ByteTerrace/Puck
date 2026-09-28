@@ -30,12 +30,7 @@ public sealed class OwedFrameTeardownLawTests {
         public void SettleOwedFrames() => log.Steps.Add(item: OwedFrameTeardownLawTests.SettleOwedFrames);
         public void Step(in FixedStepContext context, in CommandSnapshot commands) { }
     }
-    private sealed class RecordingRoot(TeardownLog log) : IRenderNode {
-        public NodeDescriptor Descriptor { get; } = new(
-            Name: "owed-frame-teardown",
-            SurfaceId: SurfaceId.New()
-        );
-
+    private sealed class RecordingRoot(TeardownLog log) : IRenderRoot {
         public void Dispose() => log.Steps.Add(item: DisposeRoot);
         public Surface ProduceFrame(in FrameContext context) => default;
     }
@@ -64,10 +59,10 @@ public sealed class OwedFrameTeardownLawTests {
             ExitAfter = TimeSpan.Zero,
         });
         builder.Services.AddSingleton(implementationInstance: new OffscreenRenderOptions(
-            Height: 32U,
-            Width: 32U
+            height: 32U,
+            width: 32U
         ));
-        builder.Services.AddSingleton<IRenderNode>(implementationInstance: new RecordingRoot(log: log));
+        builder.Services.AddSingleton<IRenderRoot>(implementationInstance: new RecordingRoot(log: log));
         AddRecordingSimulation(
             log: log,
             services: builder.Services

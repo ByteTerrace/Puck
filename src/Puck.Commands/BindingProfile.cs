@@ -443,9 +443,7 @@ public static class BindingProfile {
                 Command: ((entry.Channel is { } channel)
                 ? channelCommandName(arg: channel)
                 : entry.Command!),
-                Action: ((entry.Channel is ChannelRef.Name named)
-                ? named.Value
-                : entry.Command),
+                Action: BindingPageEntryDefinition.ActionOf(entry: entry),
                 Id: entry.Id,
                 Label: entry.Label,
                 Toggle: (entry.Mode == BindingEntryMode.Toggle),

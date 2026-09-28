@@ -127,7 +127,7 @@ separate constraint on dense populations; reusable appearances do not remove it.
   `WorldBodiesLimits.LocalSeatCount`, `WorldHudCapacity`,
   `WorldBindingBarCapacity`, `WorldMarkerCapacity`, and the
   `BindingWheelDefinition` ring/sector bounds to the
-  `Puck.Overlays.OverlayCapacity` a host constructs `UnifiedOverlayNode` with;
+  `Puck.Overlays.OverlayCapacity` a host constructs `OverlayPackage` with;
   the numbers cross the layering as constructor data, never restated.
 - `WorldSeatCameraPose.cs`—one seat's resolved listener-policy camera pose,
   the frame source's own input to the audio director's `Publish`.
@@ -157,7 +157,15 @@ separate constraint on dense populations; reusable appearances do not remove it.
   scenery use the same swings and parent chains as inhabitants.
 - `WorldSessionSceneEmitter.cs`, `WorldAdjacencySceneEmitter.cs`—the session
   projection's and adjacency neighbour's own content emission, parallel to
-  `WorldSceneEmitter`'s boot-world path.
+  `WorldSceneEmitter`'s boot-world path. A session view keeps a `WorldStampPool`
+  of its own, so its destination's animated, inhabited and attached creations
+  draw as the boot world's do.
+- `IWorldStampSource.cs`, `WorldSessionStampSource.cs`—the world a stamp pool
+  roots its stamps on: the boot world's `WorldClient`, or a session's
+  destination mirror read with its interpolated poses.
+- `WorldBodyStampCensus.cs`, `WorldSceneMeshDraws.cs`—the creation-stamp census
+  (which bodies render their creation through the pool and park their catalog
+  avatar) and the static-then-pool mesh-draw composition, one each per scene.
 - `WorldSdfDocumentEmitter.cs`—loads a decoded `puck.sdf.v1` document
   through `world.sdf.load` and composes it as its own `ISdfSceneEmitter`
   beside `WorldSceneEmitter`; static world-set geometry only (no dynamic
@@ -200,7 +208,8 @@ separate constraint on dense populations; reusable appearances do not remove it.
   text.
 - `Sources/`—the runtime half of an image producer: `IWorldImageProducer` and
   `IWorldImageFeed`, the `WorldImageProducers` registry a screen's `producer`
-  source opens through, the shipped `WorldTestPatternProducer` and
+  source opens through, `WorldSourceInstances` (the render-graph source
+  instances a world's screens read), the shipped `WorldTestPatternProducer` and
   `WorldQrProducer`, `WorldImageLight` (a frame's room glow), and
   `WorldCaptureGate`, which resolves every external image to its capture fill
   while a capture is armed. The [World guide](../Puck.World/README.md#image-producers)
@@ -209,27 +218,42 @@ separate constraint on dense populations; reusable appearances do not remove it.
 ## Bound state
 
 - `WorldClient.StateMirror` is the client's `WorldStateMirror` (in
-  `Puck.World.Protocol`), the one path presentation reads state through: the
-  HUD resolver, camera rigs, markers, render and theme colors, the binding bar,
-  the radial wheel and overlay predicates register their `StateBinding`s with
-  it. `WorldClient.DeliverState` refreshes the slots the delivery's
-  `WorldStateStamp` moved, `DeliverSnapshot` refreshes the trait-bearing slots
-  still moving, `DeliverDefinition` re-resolves every slot, and
+  `Puck.World.Protocol`), the one path presentation reads state through. Its
+  slots are registered by the installed document's presentation manifest and by
+  each seat's own reads (`WorldPresentationManifest.SeatBindings`, which
+  `WorldSeatBindings` registers on the seat's routed mirror), and an install
+  retires what only the previous document registered. The HUD resolver, camera
+  rigs, markers, render and theme colors, the render cycle, the binding bar,
+  the radial wheel and overlay predicates only look slots up
+  (`WorldStateMirror.SlotOf`), which registers and reads nothing, and look them
+  up again when `WorldStateMirror.Generation` moves. `WorldClient.DeliverState` refreshes the slots the delivery's
+  `WorldStateStamp` moved, `DeliverSnapshot` hands the snapshot's field cells to
+  the mirror's state view and refreshes the field rows they moved and the
+  trait-bearing slots still moving, `DeliverDefinition` re-resolves every slot, and
   `WorldFramePresenter.CaptureFrame` applies the frame's interpolation fraction
   (pinned to one offscreen) before anything reads it. `StateMirrorFor` answers
   the mirror of the authority a seat is routed to: this one for the authority
   the client observes, and that authority's followed session mirror otherwise.
 - `WorldStateLease.cs` is one holder's acquired slots: a stamp registration's
   lanes, drivers, gates, poses and effectors, a body's scale, a seat's
-  state-backed binding contexts. A `$body` key names the lease's body, and the
+  state-backed binding contexts. A body's holder calls `Arrive` with what the
+  body wears (its creation and look, or the document for its scale), which
+  acquires the presentation manifest's templates for them before the first
+  frame reads them. A `$body` key names the lease's body, and the
   lease releases its slots when the body leaves, its binding moves, or the
   mirror installs a document, so the mirror retires what nothing reads.
+- `WorldBakedColors.cs` is the colors a build bakes (a creation palette's, a
+  height field's, a text screen's ink), read through the mirror's color slots;
+  the scene and field emitters and the decal cache follow a bound one's move
+  with a rebuild. `WorldFieldEmitter` bakes each height field's brick from the
+  field row's slot, the same slot a pass's array bound to `state.<field>` reads.
 - `WorldWheelRings.cs` is one seat's drawn radial: each sector's label and icon
   and the hub label, read from the wheel's label and icon rows through the
-  seat's routed mirror, and rebuilt only when one of the slots it read changes.
+  seat's routed mirror, and rebuilt only when one of the slots it read changes
+  or the mirror's registered bindings do.
 - `WorldStateCells.cs` is the one keyed-cell read the rings and the binding
   bar's action icons make: a row reference parsed once, and each row and key
-  registered with the mirror once and its slot kept, so a read repeated every
+  looked up once among the slots the seat registered, so a read repeated every
   frame allocates nothing and still answers the live cell.
 - `WorldTransformOwners.cs` is the rest state of a band of dynamic-transform
   owners, which the scene, adjacency and session emitters and the stamp pool
@@ -261,7 +285,7 @@ separate constraint on dense populations; reusable appearances do not remove it.
 - `WorldSeatBindings.cs`—the per-seat compiled `IInputBindings`: engine
   default ⊕ world overlays ⊕ profile bindings ⊕ live session rebinds, and the
   context-derivation state machine that picks a seat's active group. Besides
-  the built-in roster/engagement/layout families and a world's own AUTHORED
+  the built-in roster/engagement/layout/editor families and a world's own AUTHORED
   `seatModes` families (`WorldSeatModeFamily`, flipped by `player.mode`), a
   `state:<row>` family reads the routed world's scalar value or the
   controlled body's keyed value, allowing gameplay-rule state writes to swap
@@ -269,6 +293,14 @@ separate constraint on dense populations; reusable appearances do not remove it.
   while that state condition holds; `SyncSeat` recomposes the seat the tick a
   gated overlay's own condition flips (a per-overlay signature compared
   against the routed definition, never a per-tick poll).
+- `WorldEditorBindings.cs`—the engine's build layer (the build toggle on
+  every resting page, the `build` group and page, its context row) and the
+  build bar a building seat shows when its own bar has no bank for the build
+  page. `WorldEditorSeats.cs` holds each seat's grid and snapping over the
+  document's `editor` section, its captured reference and current placement,
+  and folds seat 1's moved values back for `world.save`;
+  `WorldEditorGeometry.cs` turns them into the `GridOverlayState` a building
+  seat's view carries and the `SnapReference` the placement verbs snap to.
 - `WorldAffordances.cs`—the process command vocabulary check every binding
   document validates against.
 - `CommandVocabulary.cs`—the command-name string constants

@@ -31,6 +31,8 @@ public sealed unsafe class DirectXDevice : IDisposable {
     public DirectXFeatureLevel FeatureLevel { get; }
     /// <summary>Gets the native <c>ID3D12Device</c> pointer, or zero once disposed.</summary>
     public nint Handle => m_deviceHandle;
+    /// <summary>Gets a value indicating whether the device has been released.</summary>
+    public bool IsDisposed => (0 == m_deviceHandle);
 
     /// <summary>Releases the owned <c>ID3D12Device</c>. Safe to call more than once.</summary>
     public void Dispose() {

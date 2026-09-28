@@ -1,4 +1,4 @@
-# `render`, `dynamics`, `curves`, pipelines, flock, crowd-scale, render validation, `rigid`/`carry`/`tether`
+# `render`, `dynamics`, `curves`, graph instances, flock, crowd-scale, render validation, `rigid`/`carry`/`tether`
 
 Part of [`puck.world.definition.v1`](documents.md). Field names, defaults, and ranges
 are generated (`puck schema`, or `Assets/worlds/schema/*.schema.json`); this
@@ -29,20 +29,25 @@ first. Read back with `world.row.set render` (the section's read arm) and
 reach multiplier over the default, the horizon-ray step count per unit of
 camera height against the primary march's 128-step budget, and the fog
 remnant `exp(−fogDensity·far)` at the far plane. Renderer contract:
-`rendering` skill sync pairs, the viewport row.
+`rendering` skill sync pairs, the pass block (`farDistance`).
 
 `environment` (`WorldRenderEnvironment`, optional) and `tonemap`
 (`WorldTonemap` {`none`, `filmic`}, optional) are also read off the LIVE
-definition every frame, alongside `lighting`/`sky`/`cycle`. `environment`
+definition every frame, alongside `lighting`/`sky`/`cycle`; a `tonemap` change
+recomposes the synthesized root graph. `environment`
 carries `softboxes[]` (≤ `SdfEnvironment.MaxSoftboxes` 4 of `direction`,
 `size` [w, h], `color`?, `weight`?, `blur`?) and `horizon` ({`low`?, `high`?})
 — analytic studio reflections a GGX specular lobe catches; absent (or an
 all-default section) contributes exactly 0, byte-identical to a world that
 never authored it. `tonemap` absent is `none` — the stylized shaded color,
-unchanged; `filmic` applies an ACES-fit filmic curve (no gamma encode — the
-shading is already display-referred) to the frame's final color, hit or sky
-alike (never a debug view). Read back with `world.lighting`.
-Renderer contract: `rendering` skill sync pairs, the `SdfEnvironment` rows.
+unchanged; `filmic` puts each view through an ACES-fit filmic curve (no gamma
+encode — the shading is already display-referred) as the root graph's place pass
+reconstructs it, so the letterbox color, a pane (display-referred, its shader's
+own tonemap included) and the HUD are never tonemapped, and nothing is
+tonemapped while a debug view is on.
+Read back with `world.lighting`.
+Renderer contract: `rendering` skill sync pairs, the `SdfEnvironment` rows;
+the tonemap is the root graph's view place passes, not an environment row.
 
 `lighting` (`WorldRenderLighting`, optional) carries `lights[]` (at most
 `SdfEnvironment.MaxLights` 8, in slot order — a `render.cycle` key moves a
@@ -165,35 +170,43 @@ body-motion program's `curve` target source
 arc-length follower feeding the SAME planar target-consuming op vocabulary a
 `designated`/`sensed` target does.
 
-### `views.pipelines` — shader-pipeline instances
+### `views.graphs` — render-graph instances
 
-`WorldViewPipeline` (`WorldViews.cs`) carries `{name, source, camera,
-timeScale, output, overrides}`. `overrides` maps a pass name to that pass's
+`WorldViewGraph` (`WorldViews.cs`) carries `{name, source | package, camera,
+refresh, inputs, timeScale, output, overrides}`. A row names exactly one of
+`source` and `package`: a `package` row is an engine package's producer (such
+as `sdf.world`) and takes no input, time scale, output or override. The
+`.puck` spelling is a `graph "name" { … }` block inside `views`.
+[views.md](views.md) owns `refresh`, `inputs`, `views.root` and the graph
+budget. `overrides` maps a pass name to that pass's
 config object and `output` names the shown image version; both are bound
 through the source's config schema at the mutation door, at boot, and at
 `world.load`/`world.reload`, and the shared source keeps its defaults (see
 [mutations.md](mutations.md) and the
 [per-instance overrides contract](../../../../docs/reference/shaders.md#per-instance-overrides)).
 `pipeline.commit` is the one door that turns a session preview into these
-members. Source is a pipeline JSON document, a one-off shader, or a
-`puck.shader.package.v1` package directory (a directory is a package; there is
-no second member for it), and resolves relative to the world document. A
-package loads through `ShaderPackager.LoadSource`, and its `SHADERPKG_*` or
-`SHADERSRC_*` refusal is the instance's failed compilation, by code. The pipeline's own shader paths
-resolve relative to its document. `WorldViewSlot.pipeline` names the instance;
-a slot cannot name both a camera and a pipeline. The row's camera supplies
+members. Source is a `puck.render.graph.v1` graph document, a one-off `.hlsl`
+shader read as a one-pass graph, or a `puck.shader.package.v1` package
+directory (a directory is a package; there is no second member for it), and
+resolves relative to the world document. A source row loads through
+`ShaderPackager.LoadSource`, and its `SHADERPKG_*` or `SHADERSRC_*` refusal is
+the instance's failed compilation, by code. The graph's own shader paths
+resolve relative to its document. `WorldViewSlot.Instance` (`instance: "name"`
+in `.puck`) names the row; a slot cannot name both a camera and an instance.
+The row's camera supplies
 optional shader camera inputs, with zero FOV denoting no paired camera.
 `timeScale` seeds presentation time. `views.shaderToolchain` optionally names
 the compiler directory; otherwise executable lookup uses the process path.
 
-Rows use `world.row.set views.pipelines` and `world.row.remove views.pipelines`
+Rows use `world.row.set views.graphs` and `world.row.remove views.graphs <name>`
 through the same closed mutation vocabulary as `pipeline.load`. The host
-reconciles only accepted document state. The runtime owns resources, history,
-background compilation and frame-boundary installation; none belongs in the
-schema. Use [the pipeline world](../../../../src/Puck.World/Assets/worlds/pipeline.world.json)
+(`WorldViewGraphHost`) reconciles only accepted document state into the render
+graph runtime's instance set. The runtime owns resources, history, background
+compilation and frame-boundary installation; none belongs in the schema. Use
+[the pipeline world](../../../../src/Puck.World/Assets/worlds/pipeline.world.json)
 for the live three-pass editing workflow. The
 [shader reference](../../../../docs/reference/shaders.md#shader-pipelines-and-live-development)
-owns the GPU pipeline document contract.
+owns the `puck.render.graph.v1` document contract a row's source is written in.
 
 ### Kit producer `flock` — bounded local perception
 

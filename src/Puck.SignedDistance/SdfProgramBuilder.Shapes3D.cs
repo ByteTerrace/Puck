@@ -74,7 +74,7 @@ public sealed partial class SdfProgramBuilder {
             detail: detail,
             // Data1.y carries the HOST-BAKED 1/dot(endpoint, endpoint): shapes evaluate millions of times per frame
             // while programs build once, and the shared multiply keeps both backends' shader codegen identical where a
-            // per-eval divide contracted differently (KEEP IN SYNC with sdfCapsule in Assets/Shaders/Sdf/sdf-vm.hlsli).
+            // per-eval divide contracted differently (KEEP IN SYNC with sdfCapsule in Assets/Shaders/Sdf/field/sdf-shapes.hlsli).
             derived1: (1f / MathF.Max(
                 x: dotEndpoint,
                 y: 0.0001f
@@ -204,7 +204,7 @@ public sealed partial class SdfProgramBuilder {
         );
 
         // The degenerate-radius clamp and inverse radii are HOST-BAKED (Data1.yzw) to avoid three divides per
-        // evaluation (KEEP IN SYNC with sdfSuperellipsoid in Assets/Shaders/Sdf/sdf-vm.hlsli and
+        // evaluation (KEEP IN SYNC with sdfSuperellipsoid in Assets/Shaders/Sdf/field/sdf-shapes.hlsli and
         // SdfFieldEvaluator.SdfSuperellipsoid).
         var inverse = (Vector3.One / clamped);
 
@@ -270,7 +270,7 @@ public sealed partial class SdfProgramBuilder {
         );
 
         // The slope terms are HOST-BAKED (Data0.w = b, Data1.y = a) to avoid a divide and square root per evaluation
-        // (KEEP IN SYNC with sdfRoundCone in Assets/Shaders/Sdf/sdf-vm.hlsli).
+        // (KEEP IN SYNC with sdfRoundCone in Assets/Shaders/Sdf/field/sdf-shapes.hlsli).
         var slope = ((lowerRadius - upperRadius) / MathF.Max(
             x: height,
             y: 0.0001f
@@ -333,7 +333,7 @@ public sealed partial class SdfProgramBuilder {
     /// (= margin/λ, host-baked) is the outside-box lower-bound offset. Where the pool is not bound the shape falls back to
     /// the conservative union hull (SDF_FAR_DISTANCE — the subtraction never bites), so a brick program renders uncarved
     /// but never holes. The lane packing (Data0 = boxMin.xyz + cellSize; Data1 = smooth + packedDims + brickWordOffset +
-    /// boundaryFloor) is KEEP IN SYNC with sdfSampledRegion in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// boundaryFloor) is KEEP IN SYNC with sdfSampledRegion in Assets/Shaders/Sdf/field/sdf-shapes.hlsli.</summary>
     /// <param name="boxMin">The brick box's minimum corner in the chain's local space (voxel (0,0,0)'s cell origin).</param>
     /// <param name="cellSize">The cubic voxel edge (world units per voxel); must be finite and greater than zero.</param>
     /// <param name="dimX">Voxel count along local X, in [1, <see cref="MaxSampledRegionDim"/>].</param>
@@ -482,7 +482,7 @@ public sealed partial class SdfProgramBuilder {
         );
     }
     /// <summary>Adds a screen slab whose lit face samples a bound screen source (see
-    /// <c>Puck.SdfVm.SdfWorldEngine.SetScreenSource</c>) instead of the flat screen material, when one is bound this
+    /// <c>Puck.SdfVm.SdfWorldTables.SetScreenBound</c>) instead of the flat screen material, when one is bound this
     /// frame — a diegetic screen (an emulator's framebuffer, e.g.) on static geometry. The slab's shape/distance field
     /// is identical to the plain overload (a rounded box); only shading differs. The world-space frame maps a hit
     /// point to the slab's <c>[0,1]²</c> UV: <paramref name="worldRight"/>/<paramref name="worldUp"/> must be unit and
@@ -590,7 +590,7 @@ public sealed partial class SdfProgramBuilder {
 
         // The screen-instance sentinel: ScreenMaterialId flags "screen shading" (as the flat-material overload), the
         // +1+screenIndex offset tells the shader WHICH declared surface (and thus which screen source) a hit belongs
-        // to — decoded back by subtracting the same offset (KEEP IN SYNC with sdf-world.hlsli's screen shading).
+        // to — decoded back by subtracting the same offset (KEEP IN SYNC with shade/sdf-environment.hlsli's screen shading).
         return Shape(
             blend: blend,
             dimensions: new Vector4(
@@ -723,7 +723,7 @@ public sealed partial class SdfProgramBuilder {
     /// 2·<paramref name="halfSeparation"/> apart — revolved into a 3D lens pointed along ±Y (a disc of radius
     /// radius−halfSeparation in XZ). <paramref name="halfSeparation"/> is clamped below <paramref name="radius"/> so
     /// the tip half-height √(r²−d²) is real; it is host-baked (skips the per-eval sqrt) — KEEP IN SYNC with sdfVesica
-    /// in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// in Assets/Shaders/Sdf/field/sdf-shapes.hlsli.</summary>
     /// <param name="radius">The two generating spheres' radius.</param>
     /// <param name="halfSeparation">Half the distance between their centres (clamped below <paramref name="radius"/>).</param>
     /// <param name="material">The material index assigned to the shape.</param>

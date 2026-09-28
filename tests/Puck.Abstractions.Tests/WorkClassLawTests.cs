@@ -32,8 +32,11 @@ public sealed class WorkClassLawTests {
     public void NoKindIsOfTheAllocationClass() =>
         Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new WorkKind(name: "test.kind", unit: "count", workClass: WorkClass.AllocationZeroNonzero));
     [Fact]
-    public void GpuSubmissionCountsAreDeterministicAndCreatedObjectsPerBackend() {
-        Assert.All(collection: GpuWork.SubmissionKinds.ToArray(), action: static kind => Assert.Equal(actual: kind.Class, expected: WorkClass.Deterministic));
+    public void GpuSubmissionCountsAreDeterministicAndKernelCountsAndCreatedObjectsPerBackend() {
+        // The kernels count their own march steps and texels on the GPU: the marches run in floats and an indirect pass
+        // runs only the tiles culling leaves it, so those follow the device; every call the node makes does not.
+        Assert.All(collection: GpuWork.SubmissionKinds.ToArray().Except(second: GpuWork.KernelKinds.ToArray()), action: static kind => Assert.Equal(actual: kind.Class, expected: WorkClass.Deterministic));
+        Assert.All(collection: GpuWork.KernelKinds.ToArray(), action: static kind => Assert.Equal(actual: kind.Class, expected: WorkClass.PerBackendDeterministic));
         Assert.All(collection: GpuWork.LifetimeKinds.ToArray(), action: static kind => Assert.Equal(actual: kind.Class, expected: WorkClass.PerBackendDeterministic));
         Assert.Equal(actual: PresentationWork.Skipped.Class, expected: WorkClass.Pacing);
     }

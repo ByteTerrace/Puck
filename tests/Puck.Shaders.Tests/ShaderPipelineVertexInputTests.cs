@@ -5,36 +5,23 @@ namespace Puck.Shaders.Tests;
 /// <summary>A fullscreen pass's <c>vertex</c> member: the document spelling, the planner's refusal on a compute pass, and
 /// the render node binding the shared fullscreen-triangle vertex buffer exactly for a <c>Position</c> pass.</summary>
 public sealed class ShaderPipelineVertexInputTests {
-    private static ShaderPipelineDefinition Copy(ShaderPipelineVertexInput? vertex, ShaderPipelinePassKind secondKind = ShaderPipelinePassKind.Fullscreen) => new(
+    private static RenderGraphDefinition Copy(ShaderPipelineVertexInput? vertex, ShaderPipelineDocumentPassKind secondKind = ShaderPipelineDocumentPassKind.Fullscreen) => new(
         name: "copy",
         outputs: ["image"],
         passes: [
             new ShaderPipelinePass(
                 EntryPoint: "main",
-                Kind: ShaderPipelinePassKind.Compute,
+                Kind: ShaderPipelineDocumentPassKind.Compute,
                 Name: "fill",
-                Outputs: [new ResourceReference(
-                    Binding: 0,
-                    Name: "gray"
-                )],
+                Outputs: ["gray"],
                 Source: "fill.hlsl"
             ),
             new ShaderPipelinePass(
                 EntryPoint: "main",
-                Inputs: [new ResourceReference(
-                    Binding: ((secondKind == ShaderPipelinePassKind.Fullscreen)
-                        ? 0u
-                        : 1u),
-                    Name: "gray"
-                )],
+                Inputs: ["gray"],
                 Kind: secondKind,
                 Name: "copy",
-                Outputs: [((secondKind == ShaderPipelinePassKind.Fullscreen)
-                    ? new ResourceReference(Name: "image")
-                    : new ResourceReference(
-                        Binding: 0,
-                        Name: "image"
-                    ))],
+                Outputs: ["image"],
                 Source: "copy.hlsl",
                 Vertex: vertex
             ),
@@ -82,9 +69,8 @@ public sealed class ShaderPipelineVertexInputTests {
         var gpu = new FakePipelineGpu();
 
         using (var node = new ShaderPipelineRenderNode(
+            pipelines: new GpuPassPipelineCache(),
             deviceContext: gpu,
-            gpu: gpu,
-            graphics: gpu,
             height: 8,
             hostsOnDirectX: false,
             name: "copy",
@@ -115,7 +101,7 @@ public sealed class ShaderPipelineVertexInputTests {
     [Fact]
     public void AComputePassDeclaringVertexIsRefusedByName() {
         var refusal = Assert.Throws<ShaderPipelineCompilationException>(testCode: () => new ShaderPipelineCompiler().Compile(definition: Copy(
-            secondKind: ShaderPipelinePassKind.Compute,
+            secondKind: ShaderPipelineDocumentPassKind.Compute,
             vertex: ShaderPipelineVertexInput.Position
         )));
 
@@ -132,7 +118,7 @@ public sealed class ShaderPipelineVertexInputTests {
                 newValue: "Position",
                 oldValue: "{0}"
             ),
-            jsonTypeInfo: ShaderPipelineJsonContext.Default.ShaderPipelinePass
+            jsonTypeInfo: RenderGraphJsonContext.Default.ShaderPipelinePass
         );
 
         Assert.Equal(
@@ -144,7 +130,7 @@ public sealed class ShaderPipelineVertexInputTests {
                 newValue: "Triangle",
                 oldValue: "{0}"
             ),
-            jsonTypeInfo: ShaderPipelineJsonContext.Default.ShaderPipelinePass
+            jsonTypeInfo: RenderGraphJsonContext.Default.ShaderPipelinePass
         ));
     }
 }

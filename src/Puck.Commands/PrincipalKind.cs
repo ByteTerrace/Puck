@@ -25,4 +25,10 @@ public enum PrincipalKind : byte {
 
     /// <summary>The world's own authored program — see <see cref="Principal.World"/>.</summary>
     World = 5,
+
+    /// <summary>An unembodied joined session — a viewer observing and acting in a world through a screen, with no body.
+    /// <see cref="Principal.Index"/> is the session's ordinal on the world that admitted it and
+    /// <see cref="Principal.Generation"/> its epoch; neither is a body index. The world's admission verdict mints its
+    /// grants, and they end with the session.</summary>
+    Session = 6,
 }

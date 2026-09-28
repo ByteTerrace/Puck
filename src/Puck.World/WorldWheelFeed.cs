@@ -71,7 +71,6 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
     private readonly IInputClock m_clock;
     private readonly WorldCursorFeed m_cursor;
     private readonly WorldPointer m_pointer;
-    private readonly PlayerRoster m_roster;
     private readonly Func<InputRouter> m_router;
     private readonly WheelStore m_store;
     private readonly WorldSeatViewports m_viewports;
@@ -127,7 +126,6 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
 
     /// <summary>Initializes a new instance of the <see cref="WorldWheelFeed"/> class.</summary>
     /// <param name="pointer">The live pointer store — this type is its one registered wheel consumer.</param>
-    /// <param name="roster">The roster the pointer's seat resolves against.</param>
     /// <param name="bindings">The per-seat bindings whose active page decides which radial presents.</param>
     /// <param name="cursor">The cursor feed whose published status anchors the hub and drives pointer hover.</param>
     /// <param name="viewports">The per-seat viewport publication the pixel geometry derives from.</param>
@@ -139,11 +137,10 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
     /// <param name="clock">The engine-tick capture clock the selection-grace window is counted on — the process's
     /// one <see cref="IInputClock"/>, so the window shares the base every input timestamp already uses.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldWheelFeed(WorldPointer pointer, PlayerRoster roster, WorldSeatBindings bindings, WorldCursorFeed cursor, WorldSeatViewports viewports, WheelStore store, Func<InputRouter> router, WorldIconTable icons, IInputClock clock) {
+    public WorldWheelFeed(WorldPointer pointer, WorldSeatBindings bindings, WorldCursorFeed cursor, WorldSeatViewports viewports, WheelStore store, Func<InputRouter> router, WorldIconTable icons, IInputClock clock) {
         ArgumentNullException.ThrowIfNull(argument: clock);
         ArgumentNullException.ThrowIfNull(argument: icons);
         ArgumentNullException.ThrowIfNull(argument: pointer);
-        ArgumentNullException.ThrowIfNull(argument: roster);
         ArgumentNullException.ThrowIfNull(argument: bindings);
         ArgumentNullException.ThrowIfNull(argument: cursor);
         ArgumentNullException.ThrowIfNull(argument: viewports);
@@ -154,7 +151,6 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
         m_clock = clock;
         m_cursor = cursor;
         m_pointer = pointer;
-        m_roster = roster;
         m_router = router;
         m_store = store;
         m_viewports = viewports;
@@ -169,7 +165,7 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
 
     /// <summary>The pointer seat's last composed status — what <c>world.view.wheel</c> answers without a seat
     /// argument.</summary>
-    public WorldWheelStatus Status => StatusFor(slot: WorldPointerSlot.Resolve(roster: m_roster));
+    public WorldWheelStatus Status => StatusFor(slot: m_cursor.Status.Slot);
 
     private static void ApplyRingScroll(SeatState state, BindingWheelView wheel) {
         state.RingScroll += state.BankedNotches;
@@ -652,8 +648,8 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
     );
     /// <summary>Composes every open seat's radial once per produced frame.</summary>
     public void Tick() {
-        var pointerSlot = WorldPointerSlot.Resolve(roster: m_roster);
         var pointerStatus = m_cursor.Status;
+        var pointerSlot = pointerStatus.Slot;
         var visibleCount = 0;
 
         for (var slot = 0; (slot < m_state.Length); slot++) {

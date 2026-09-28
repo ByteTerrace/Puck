@@ -14,7 +14,10 @@ namespace Puck.Assets;
 /// is a single atomic rename on NTFS and on POSIX file systems alike. Windows refuses that rename while another
 /// process holds the old file memory-mapped, so a refused rename over an existing file falls back to
 /// <see cref="File.Replace(string, string, string?)"/>, which moves the old file aside and leaves the reader's view on
-/// the old bytes.</para>
+/// the old bytes. The old file moves to a backup named <c>&lt;file name&gt;.&lt;random&gt;.replaced.tmp</c>, never to a
+/// name ReplaceFile chooses, and is deleted once the replace is done; a replace that failed after moving it aside puts
+/// it back unless another writer's file has taken the name. A backup that cannot be deleted, an image still mapped,
+/// is the one file a write leaves, under that temporary name.</para>
 /// <para>A destination spelled in another case than an existing entry on a case-insensitive file system replaces that
 /// entry under the name it already carries.</para>
 /// <para>On Unix, the replacement keeps the destination's existing file mode unless the caller names a mode for it
@@ -58,6 +61,30 @@ public static class AtomicFile {
 
         return path;
     }
+    // A replace that moved the destination aside and then failed restores it, unless another writer has put a newer
+    // file there since; otherwise the old bytes are no one's and are deleted. A backup that cannot be deleted, an image
+    // still mapped, stays under its own temporary name, which a directory's cleanup can find.
+    private static void ReleaseBackup(string backup, string destination) {
+        try {
+            if (!File.Exists(path: destination)) {
+                File.Move(
+                    destFileName: destination,
+                    overwrite: false,
+                    sourceFileName: backup
+                );
+
+                return;
+            }
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            // Another writer's file took the name first; the backup is older than it.
+        }
+
+        try {
+            File.Delete(path: backup);
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            // An image still mapped cannot be deleted; its name ends in the temporary extension.
+        }
+    }
     private static void Replace<TState>(string path, UnixFileMode? unixCreateMode, TState state, Fill<TState> fill) where TState : allows ref struct {
         ArgumentException.ThrowIfNullOrEmpty(argument: path);
 
@@ -79,6 +106,11 @@ public static class AtomicFile {
         ) {
             options.UnixCreateMode = mode;
         }
+
+        // The name a replace moves the old destination to, chosen here rather than left to ReplaceFile: its own name for
+        // the replaced file (<name>~RF<hex>.TMP) is one nothing could find again, and a replace that fails partway, or
+        // lands over a file that cannot be deleted while it is mapped as an image, leaves the replaced file there.
+        string? backup = null;
 
         _ = Directory.CreateDirectory(path: directory);
 
@@ -113,8 +145,12 @@ public static class AtomicFile {
             } catch (Exception exception) when (((exception is IOException or UnauthorizedAccessException) && File.Exists(path: destination))) {
                 // Windows refuses to rename over a file another process holds mapped; ReplaceFile moves it aside
                 // instead, and the reader's view keeps the old bytes.
+                backup = Path.ChangeExtension(
+                    extension: "replaced.tmp",
+                    path: temporary
+                );
                 File.Replace(
-                    destinationBackupFileName: null,
+                    destinationBackupFileName: backup,
                     destinationFileName: destination,
                     sourceFileName: temporary
                 );
@@ -124,6 +160,16 @@ public static class AtomicFile {
                 File.Delete(path: temporary);
             } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
                 // The failure that brought us here is the one worth reporting; the temporary stays behind.
+            }
+
+            if (
+                (backup is not null) &&
+                File.Exists(path: backup)
+            ) {
+                ReleaseBackup(
+                    backup: backup,
+                    destination: destination
+                );
             }
         }
     }

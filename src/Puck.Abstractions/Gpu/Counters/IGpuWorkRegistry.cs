@@ -8,6 +8,9 @@ public interface IGpuWorkRegistry {
     /// <summary>Gets the identity of the device the nodes render on, or <see langword="null"/> before the device is
     /// brought up.</summary>
     GpuDeviceIdentity? DeviceIdentity { get; }
+    /// <summary>Gets what the device the nodes render on can bind, or <see langword="null"/> before the device is
+    /// brought up.</summary>
+    GpuDeviceCapabilities? DeviceCapabilities { get; }
 
     /// <summary>Appends every registered node, in the order a readout lists them. A node registered while this runs
     /// may or may not be included; one never appears twice.</summary>

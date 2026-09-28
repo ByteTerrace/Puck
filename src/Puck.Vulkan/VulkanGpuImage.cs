@@ -135,15 +135,51 @@ public sealed class VulkanGpuImage : IGpuImage {
 /// <summary>
 /// Implements <see cref="IGpuImageFactory"/> for Vulkan through <see cref="VulkanGpuImage.Create"/>.
 /// </summary>
-public sealed class VulkanGpuImageFactory(IVulkanOffscreenImageApi offscreenImageApi, IVulkanFramebufferSetApi framebufferSetApi) : IGpuImageFactory {
+/// <param name="deviceContext">The device context every image is created on.</param>
+/// <param name="offscreenImageApi">The native image API.</param>
+/// <param name="framebufferSetApi">The native image-view API.</param>
+/// <param name="naming">The naming every created object is handed to.</param>
+public sealed class VulkanGpuImageFactory(IVulkanDeviceContext deviceContext, IVulkanOffscreenImageApi offscreenImageApi, IVulkanFramebufferSetApi framebufferSetApi, GpuObjectNaming naming) : IGpuImageFactory {
     /// <inheritdoc/>
-    public IGpuImage Create(IGpuDeviceContext deviceContext, GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) {
-        ArgumentNullException.ThrowIfNull(deviceContext);
+    public IGpuImage Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, in GpuObjectName name) {
+        GpuImageUsages.ValidateCreate(
+            format: format,
+            height: height,
+            usage: usage,
+            width: width
+        );
 
-        var vkContext = ((IVulkanDeviceContext)deviceContext);
+        return Named(
+            format: format,
+            height: height,
+            name: in name,
+            usage: usage,
+            width: width
+        );
+    }
+    /// <inheritdoc/>
+    /// <remarks>Vulkan records a clear with the render pass that begins, so the image keeps no clear of its own.</remarks>
+    public IGpuImage CreateDepth(in GpuDepthAttachment attachment, uint width, uint height, in GpuObjectName name) {
+        GpuImageUsages.ValidateDepth(
+            attachment: in attachment,
+            height: height,
+            width: width
+        );
+
+        return Named(
+            format: attachment.Format,
+            height: height,
+            name: in name,
+            usage: GpuImageUsage.DepthAttachment,
+            width: width
+        );
+    }
+
+    // Creates an image and names it and its view.
+    private VulkanGpuImage Named(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, in GpuObjectName name) {
+        var vkContext = deviceContext;
         var logicalDevice = vkContext.LogicalDevice;
-
-        return VulkanGpuImage.Create(
+        var image = VulkanGpuImage.Create(
             device: logicalDevice.Commands,
             format: format,
             framebufferSetApi: framebufferSetApi,
@@ -154,5 +190,18 @@ public sealed class VulkanGpuImageFactory(IVulkanOffscreenImageApi offscreenImag
             usage: usage,
             width: width
         );
+
+        naming.Name(
+            handle: image.ImageHandle,
+            kind: GpuObjectKind.Image,
+            name: in name
+        );
+        naming.Name(
+            handle: image.ImageViewHandle,
+            kind: GpuObjectKind.ImageView,
+            name: in name
+        );
+
+        return image;
     }
 }

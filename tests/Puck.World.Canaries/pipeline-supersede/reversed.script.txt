@@ -7,9 +7,9 @@ pipeline.reset feedback
 pipeline.wait feedback submitted 1 10
 pipeline.step feedback
 pipeline.wait feedback submitted 2 10
-pipeline.load feedback halved.pipeline.json
+pipeline.load feedback halved.graph.json
 pipeline.status
-pipeline.load feedback ../pipeline-edit/corrected.pipeline.json
+pipeline.load feedback ../pipeline-edit/corrected.graph.json
 pipeline.status
 pipeline.capture feedback {run}/during.png
 pipeline.wait feedback captured 10

@@ -47,7 +47,7 @@ public sealed class PresentationReadsStateLawTests {
                 )]
         )
     );
-    private static WorldStateMirror Mirror(WorldDefinition definition) => new(view: new WorldDocumentStateView(definition: () => definition));
+    private static WorldStateMirror Mirror(WorldDefinition definition) => ClientFixtures.StateMirror(definition: definition);
     private static WorldDefinition DocumentWithGate(long awakened) => Fixtures.BuildDocument().WithWorldState(rows: [AwakenedCell(value: awakened)]) with {
         BindingOverlaysRaw = [BaseOverlay(), RevealedOverlay(when: Awakened())],
     };

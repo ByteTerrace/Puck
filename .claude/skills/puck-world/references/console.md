@@ -30,9 +30,17 @@ A module implements `Puck.Commands.ICommandModule` — one
 constructor parameters (never `IServiceProvider`), verb logic inline; when a
 module hits the analyzer complexity ceiling, carve by SUBJECT into more
 modules, never into shell+static-logic. Registration is `services.AddSingleton<ICommandModule,
-X>()` in `Program.cs`; `CommandRegistry` aggregates all modules and
+X>()` in `WorldBootComposition`; `CommandRegistry` aggregates all modules and
 observers at construction and throws on any duplicate name/alias (including
 its built-ins `help`, `wire.ack`, `wire.errors`).
+
+A shared module in `Puck.World.Console` never takes a link at construction: a verb
+that submits resolves the instance the console addresses on each call
+(`IWorldConsoleAuthority.TryResolveInstance` or `TryResolveLink`) and submits
+through that instance's `WorldInstance.SubmissionLink`, so no verb acts on boot
+while the console addresses another instance (`WorldConsoleAddressLawTests`).
+The `Puck.World`-resident desktop modules still take the boot link, which is
+safe only because the desktop's authority always resolves boot.
 
 Two definition factories, plus two `Puck.World` wrappers over them. A sweep that
 stops at the two factories MISSES most registration sites — the wrappers carry
@@ -120,8 +128,10 @@ Three echo models — do not conflate them:
    service — valid only because loopback delivers synchronously.
 3. **Mutation verbs** return `CommandResult.None` with NO synchronous echo;
    the accept/reject narration arrives at the tick boundary through
-   `WorldServer.EchoTap` (stderr + toast + mirror), and a rejection
-   increments `wire.errors` via `NoteDeferredRejection`. A mutation the World
+   `WorldServer.EchoTap` (stderr + toast + mirror), and a rejection of a
+   local console connection's line increments `wire.errors` via
+   `NoteDeferredRejection` (`WorldDeferredVerbAnswers`); a remote peer's
+   refusal and an unregistered rebuild (the silo's reload) do not. A mutation the World
    makes itself (principal `world`: a deal or response sweep's, a rule's
    document-row effect) was submitted by no session and raises no echo — it
    narrates on stderr alone. A verb that submits
@@ -131,10 +141,25 @@ Three echo models — do not conflate them:
    `[<verb>: …]` line the tick-boundary drain settles — stderr on rejection
    (beside the verb-agnostic `[world.mutation rejected: …]`), stdout on
    acceptance — so a canary can account either outcome against the
-   submitting verb rather than only a refusal. A verb that submits through
+   submitting verb rather than only a refusal. A verdict already known when
+   the handler returns (an ingress or codec refusal, a rebuild or undo whose
+   correlation cannot register) is the line's own result, because
+   `CommandResult.Settling` returns a settled settlement's verdict: it answers
+   on the line and counts in `wire.errors` like any refused line, and never
+   also reaches the per-verb echo. An entry pushed out of the full table
+   (`WorldDeferredVerbEchoes.Capacity` pending) settles its session as an
+   unknown outcome and prints and counts nothing; the table remembers its last
+   `EvictedMemory` evicted lines, so the authority's later verdict still prints
+   the per-verb line and counts by its real outcome. A line forgotten past that
+   memory answers `[<verb>: unanswered — …]` on stderr and counts once, and its
+   verdict, arriving later, answers nothing.
+   `WorldDeferredVerbAnswers` (`Puck.World.Console`) is the one host wiring
+   for all of this: `WorldPostBuildWiring` and the silo both attach it, and the
+   World echo tap passes each echo to its `Answer`. A verb that submits through
    the plain `Submit(link, mutation)` overload (`world.generate`,
-   `world.state.cell.set`, `world.state.cell.remove`) registers nothing, so
-   its only observable answer is the universal `[world.mutation: … applied]`/
+   `world.state.cell.set`, `world.state.cell.remove`) registers no verb of its
+   own: its console link registers the line, so a refusal counts, but its only
+   observable answer is the universal `[world.mutation: … applied]`/
    `[world.mutation rejected: … — …]` narration, always stderr regardless of
    outcome — `puck canary`'s runner accounts these by correlating that
    narration to the verb's own `Describe()` prefix (`WorldServer.Describe.cs`
@@ -310,16 +335,17 @@ the whole truth, and a script reading only one of them reads a half-answer:
 - stdout, at arming: `[world.screenshot: pending <path> — lands on the next
   composed frame]`. No file is promised yet. Let rendering progress with
   `world.wait`, then confirm the completion before reading it.
-- stderr, when the frame lands: `[capture] unified overlay -> <path>` (the
-  overlay decorator served it) or `[debug] captured frame N -> <path>` (the
-  engine node beneath it did). THIS is the line that says a file exists.
+- stderr, when the frame lands: `[capture] main -> <path>` (the render
+  graph's root node served it) or `[capture] world -> <path>` (the world's
+  instance did, as the root when nothing is drawn over the world). THIS is
+  the line that says a file exists.
 - stderr, at shutdown: `[world.screenshot] WARNING: a capture of <path> was
   still pending when the run ended … NO FILE WAS WRITTEN`
   (`WorldPostBuildWiring`'s `ApplicationStopped` drain).
 
 Arming a second capture while one is still pending is REFUSED by name
-(`SdfWorldRender.PendingCapturePath`) and counts in `wire.errors`: the render
-chain admits one pending request at a time. A mutation barrier orders command
+(`RenderGraphRuntimeNode.PendingCapturePath`) and counts in `wire.errors`:
+the render graph admits one pending request at a time. A mutation barrier orders command
 application, but does not itself prove the capture has completed; use the
 capture outcome before reusing a path or claiming its bytes exist.
 
@@ -344,7 +370,11 @@ loadable asset, and leaves simulation and rendering unchanged.
 A world booted from `.puck` source (`--world <x>.puck`, compiled by
 `src/Puck.World/PuckWorldLoader.cs`) reloads from that source: `world.reload`
 re-reads the current origin and recompiles it, CAS-pinning the document it
-lowers to, so an edit that lowers identically keeps the pin. `world.save` with
+lowers to, so an edit that lowers identically keeps the pin. `world.load` and
+`world.reload` read through the boot's own door,
+`WorldDefinitionLoader.TryLoadFileForAdmission`, with the host's machine
+catalog and the running instance's identity, so the document's boot draws
+refill exactly as the boot drew them before it is admitted and embedded. `world.save` with
 no argument, or to any `.puck` target, is refused by name because canonical
 JSON would overwrite the source; name a JSON path instead. The artist loop for
 a `.puck`-booted world is: edit the `.puck` file, then `world.reload`.
@@ -370,9 +400,15 @@ Same rule for per-field convenience: a BESPOKE per-section verb that reads a row
 changes one field, and submits the whole row back is a stale read against the
 same batch's own composing writes — a defect class, not a shortcut. The general
 literal field/list doors below do exactly this shape, safely, because they share
-ONE window guard (`WorldRowStepWindowGuard`) that refuses a second read-modify-
-whole-row-write against the same row inside one tick window rather than letting
-the later one silently revert the earlier; a bespoke verb reinventing the shape
+ONE window guard (`WorldRowStepWindowGuard`) and, like every door that reads the
+addressed instance before writing it, submit through that instance's own
+`WorldInstance.SubmissionLink` (resolved with `TryResolveInstance`). The guard
+refuses a second read-modify-whole-row-write against the same row inside one tick
+window of one world (a
+`WorldRowStepWindow`: one claim set per authority and activation, emptied when
+its tick moves on and dropped when that activation stops, so another world or
+activation never inherits or erases a claim) rather than letting the later one silently
+revert the earlier; a bespoke verb reinventing the shape
 without that guard is the regression this rule still targets.
 
 **`creation.sculpt(s)` is not a second door.** `creation.sculpts` lists the
@@ -570,18 +606,20 @@ Operators and limits live in the Schema README's discrete-state section rather
 than a second command vocabulary here.
 
 `pipeline.*` (`WorldPipelineCommandModule`) is core-registered in rendered and
-headless hosts. `pipeline.load <name> <source> [camera]` upserts a
-`views.pipelines` row through normal authority and validation. A rendered host
-reconciles accepted rows, creates instances, and schedules complete pipeline
-compilation in the background. A refused mutation must never create a GPU
-instance. `pipeline.reload`, `pipeline.watch`, `pipeline.time`, `pipeline.step`,
+headless hosts. The verbs keep their `pipeline.*` names and address
+`views.graphs` rows. `pipeline.load <name> <source> [camera]` upserts a
+`views.graphs` row through normal authority and validation. A rendered host
+(`WorldViewGraphHost`) reconciles the accepted `views` section into the render
+graph runtime's instance set each frame, compiles each source row in the
+background, and installs it when the compilation completes. A refused mutation
+must never create a GPU instance. `pipeline.reload`, `pipeline.watch`, `pipeline.time`, `pipeline.step`,
 `pipeline.reset`, `pipeline.sentinels`, `pipeline.output`, `pipeline.capture` and
 `pipeline.status` control presentation or report state; controls that need a renderer refuse
 when none exists. `pipeline.set` (a field-by-field merge; `null` restores the
 source default), `pipeline.output` and `pipeline.time … scale` are session
-previews on `WorldPipelineRuntime.Entry`; a move of the row's revision
+previews on `WorldViewGraphHost.Entry`; a move of the row's revision
 discards them. `pipeline.commit <name>` (Simulation-routed) submits
-`CommitViewPipeline` built by `Entry.TryPrepareCommit`, which takes only that
+`CommitViewGraph` built by `Entry.TryPrepareCommit`, which takes only that
 entry's preview. `pipeline.overrides <name>` (Immediate, headless too) prints
 `<pass>.<field> committed=… pending=…` lines, then the time scale and output,
 with the row revision and installed source identity on the first line. `pipeline.wait <name> compiled|installed|captured [seconds]`
@@ -600,13 +638,19 @@ to the last reset, like `submitted`); `pipeline.inspect` prints them, one
 <name> [<bytes>|device]` (Immediate) sets or clears `ShaderPipelineRenderNode.BudgetCapBytes`,
 which only lowers the device's budget, and prints `budget= device= cap= owned=
 steady= peak=`; a candidate whose peak does not fit fails `installed` or
-`resized` with `SHADERPIPE_BUDGET` and the installed graph keeps running. A paused
+`resized` with `SHADERPIPE_BUDGET` and the installed graph keeps running.
+`gpu.faults arm <kind> [<n>] | lose [<n>] | disarm | list` (Immediate, `CommandAudience.Operator`,
+registered in both GPU presentation shapes by `AddGpuCreationFaults`) arms the
+host's `GpuCreationFaults`; an armed creation fails `installed` with
+`GPU_CREATION_FAULT`, `lose` loses the device on its nth counted frame through the host's device-loss
+policy, and every form prints `armed=… <kind>=<seen> … frames=<seen>` for a
+canary's `response` extraction. A paused
 reset's initialization frame never consumes a pending `pipeline.step`; the step
 renders one frame beyond it. A reload, a row upsert or a resize is not a step:
 a paused (or time-scale-zero) instance installs it without rendering, so
 `installed` and `resized` never wait for `pipeline.step`, and the instance
 keeps showing its last image until a step, resume or reset.
-`WorldPipelineRuntime.PumpWatches` installs completed candidates on the frame
+`WorldViewGraphHost.PumpWatches` installs completed candidates on the frame
 thread and watches source dependencies with a 150 ms debounce. Shader errors
 retain the previous complete pipeline. Frame inputs are filled once per
 instance, even when several view slots show it. The pointer is in the slot's

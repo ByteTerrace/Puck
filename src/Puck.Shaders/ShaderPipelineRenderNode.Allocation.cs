@@ -13,7 +13,7 @@ public sealed partial class ShaderPipelineRenderNode {
             foreach (var slot in m_slots) {
                 if (
                     (slot.Fence is not null) ||
-                    (slot.Final is not null)
+                    (slot.Commands is not null)
                 ) {
                     return true;
                 }
@@ -21,6 +21,7 @@ public sealed partial class ShaderPipelineRenderNode {
 
             return (
                 (m_preview is not null) ||
+                (m_copyPools is not null) ||
                 (m_readback is not null) ||
                 (m_resources.Length != 0) ||
                 (m_retired.Count != 0) ||
@@ -29,39 +30,94 @@ public sealed partial class ShaderPipelineRenderNode {
         }
     }
 
-    // Allocates every per-slot object a built pass needs: its descriptor pool, set and sampler, and its command pools
-    // (one per slot for a compute pass; the pre-barrier and draw pools for a fullscreen pass). They are allocated on the frame
-    // thread when the built candidate installs, so an allocation failure refuses the candidate before the installed graph
-    // retires, and a steady-state frame creates nothing. Each object is stored in the pass as soon as it exists, so a failure partway
-    // leaves every created object where RuntimePass.Dispose releases it exactly once. A pass that binds no descriptor, a
-    // geometry pass with no input among them, has no descriptor set layout, so it gets no pool, set or sampler, and its
-    // set stays zero.
-    private void AllocateSlotObjects(RuntimePass pass) {
-        var device = m_device.DeviceHandle;
-        var allocator = m_gpu.DescriptorAllocator;
+    /// <summary>States the descriptor pools a node creates for an installed <paramref name="plan"/>: the graph's one
+    /// region-copy pool (<see cref="GpuRegionCopyPool.SizesOf"/>) when any of its regions stages, then one pool holding
+    /// every pass's frame group and pass group sets once per in-flight frame, then the preview's one pool
+    /// (<see cref="PreviewDescriptorPool"/>) when it has a preview. A package pass's sets are laid out by the plan as a
+    /// document pass's are, and its recorder allocates them from the same pool (<see cref="RenderGraphPackageSets"/>). The
+    /// region-copy pool reserves a copy set per frame slot for every staged region the graph reads: its package passes'
+    /// (<see cref="IRenderGraphPackageFactory.Regions"/>) in pass order, then its host buffer ports
+    /// (<see cref="ShaderPipelineInitialization.Host"/>) in declaration order, so a port a host binds at a later frame
+    /// (<see cref="BindRegion"/>) takes no descriptor range then. The node's own pool creation reads the same statement,
+    /// so an admission computed from it before anything is allocated is what the node requests.</summary>
+    /// <param name="plan">The pipeline plan the node installs.</param>
+    /// <param name="inFlight">The node's frames in flight.</param>
+    /// <param name="preview">Whether the node presents a preview.</param>
+    /// <param name="stagedRegions">The graph's regions that stage under the device's residency choice, its package
+    /// regions' and its host buffer ports'; zero for none.</param>
+    /// <returns>Each pool's sizes, in creation order.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="plan"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="inFlight"/> is zero, or
+    /// <paramref name="stagedRegions"/> is negative.</exception>
+    public static IReadOnlyList<GpuDescriptorPoolSizes> DescriptorPools(ShaderPipelinePlan plan, uint inFlight, bool preview, int stagedRegions = 0) {
+        ArgumentNullException.ThrowIfNull(argument: plan);
+        ArgumentOutOfRangeException.ThrowIfZero(value: inFlight);
+        ArgumentOutOfRangeException.ThrowIfNegative(value: stagedRegions);
 
-        for (var slot = 0; (slot < m_inFlight); slot++) {
-            if (pass.Bindings.Count != 0) {
-                pass.PoolsDescriptors![slot] = allocator.CreatePool(
-                    deviceHandle: device,
-                    sizes: GpuDescriptorPoolSizes.ForSets(pass.Bindings)
-                );
-                pass.Sets![slot] = allocator.AllocateSet(
-                    device,
-                    pass.PoolsDescriptors[slot],
-                    ((pass.Spec.Kind == ShaderPipelinePassKind.Compute)
-                    ? pass.Compute!.DescriptorSetLayoutHandle
-                    : pass.Graphics!.DescriptorSetLayoutHandle)
-                );
-                pass.Samplers![slot] = allocator.CreateSampler(deviceHandle: device);
-            }
+        var pools = new List<GpuDescriptorPoolSizes>(capacity: 2);
 
-            if (pass.Spec.Kind == ShaderPipelinePassKind.Compute) {
-                pass.Pools![slot] = m_gpu.CommandPoolFactory.Create(deviceContext: m_device);
-            } else {
-                pass.Pre![slot] = m_gpu.CommandPoolFactory.Create(deviceContext: m_device);
-                pass.Draw![slot] = m_gpu.CommandPoolFactory.Create(deviceContext: m_device);
-            }
+        if (stagedRegions > 0) {
+            pools.Add(item: GpuRegionCopyPool.SizesOf(
+                regionCount: stagedRegions,
+                slotCount: ((int)inFlight)
+            ));
+        }
+        if (GraphDescriptorPool(
+            inFlight: inFlight,
+            plan: plan
+        ) is { } graph) {
+            pools.Add(item: graph);
+        }
+        if (preview) {
+            pools.Add(item: PreviewDescriptorPool(inFlight: inFlight));
+        }
+
+        return pools;
+    }
+
+    // The graph's one descriptor pool: a frame set and a pass set per in-flight frame for each pass; none for a graph with
+    // no pass.
+    private static GpuDescriptorPoolSizes? GraphDescriptorPool(ShaderPipelinePlan plan, uint inFlight) {
+        var groups = default(GpuDescriptorPoolSizes);
+
+        foreach (var planned in plan.Passes) {
+            groups += GroupPoolSizes(
+                inFlight: inFlight,
+                planned: planned
+            );
+        }
+
+        return ((groups.MaxSets == 0)
+            ? null
+            : groups);
+    }
+    // Allocates every per-slot object a built pass needs: its pass region and its sets and sampler; a pass records into
+    // its frame slot's one command list. They are allocated on the frame thread when the built candidate installs, so an
+    // allocation failure refuses the candidate before the installed graph retires, and a steady-state frame creates
+    // nothing. The graph holds one descriptor pool, owned by the pass that binds
+    // a descriptor ahead of every other, and each pass allocates its sets from it. Each object is stored in
+    // the pass as soon as it exists, so a failure partway leaves every created object where RuntimePass.Dispose releases
+    // it exactly once. A document pass allocates its frame group and pass group sets (AllocateGroupSets); a package pass
+    // allocates its own sets through its recorder.
+    private void AllocateSlotObjects(RuntimePass pass, GpuDescriptorPoolSizes? graphPool, ref nint descriptorPool) {
+        var bindings = m_gpu.Bindings;
+
+        if (descriptorPool == 0) {
+            descriptorPool = bindings.CreatePool(
+                name: new GpuObjectName(
+                    owner: m_name,
+                    part: "descriptors"
+                ),
+                sizes: (graphPool ?? throw new InvalidOperationException(message: "The plan states no descriptor pool for a pass that binds descriptors."))
+            );
+            pass.DescriptorPool = descriptorPool;
+        }
+        CreatePassRegion(pass: pass);
+        if (pass.Grouped) {
+            AllocateGroupSets(
+                descriptorPool: descriptorPool,
+                pass: pass
+            );
         }
     }
 }

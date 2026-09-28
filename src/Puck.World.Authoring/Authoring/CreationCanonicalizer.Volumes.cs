@@ -7,7 +7,7 @@ namespace Puck.World.Authoring;
 public static partial class CreationCanonicalizer {
     // A creation's bounded volumes (VolumeDocument): a known kind, a parent that names a declared shape, a positive
     // finite box, in-range integration steps, hex colours, and non-negative finite scalars — refused here by name so
-    // a shipped creation never reaches SdfWorldEngine.PackVolumes with a value the shader would clamp silently.
+    // a shipped creation never reaches SdfWorldTables.PackVolumes with a value the shader would clamp silently.
     private static void ValidateVolumes(CreationDocument document, ShapeLookup lookup, List<DocumentValidationError> errors) {
         if (document.Volumes is not { Count: > 0 } volumes) {
             return;

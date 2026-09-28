@@ -40,7 +40,7 @@ namespace Puck.World.Client;
 public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     // The moving half of the same per-band reservation. KEEP IN SYNC: the probe branch reserves exactly this many
     // worst-case rigs per band and EmitEntities selects at most this many delivered bodies, so a live band can never
-    // outgrow the envelope SdfWorldEngine.UploadProgram freezes.
+    // outgrow the envelope SdfWorldTables.UploadProgram freezes.
     internal const int MaxEntitiesPerBand = WorldAdjacencyGeometry.MaximumEntitiesPerBand;
     // The per-face worst-case reservation: generous for the shipped quilt's own solid census (ground + two walls +
     // a corner post) with headroom for a live-edited neighbour, without letting one border's content spend the whole
@@ -51,6 +51,10 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
 
     private readonly int m_bandCount;
     private readonly Func<WorldDefinition> m_definition;
+
+    // The neighbours' static placements' palettes, reused across rebuilds (WorldPlacementStamper.EmitStatic).
+    private readonly WorldStaticPalettes m_palettes = new();
+
     // The band's own selected-body latch: which delivered entity slots THIS program's geometry was compiled for.
     // Emission and the per-frame transform pack must read the SAME set — packing a body the program never compiled
     // writes a pose into a slot no instance reads, and skipping one it did compile parks live geometry.
@@ -75,6 +79,8 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     private int m_neighbourRevision;
     private int m_selectionRevision;
 
+    // The neighbours' static placements' mesh draws the last live Emit fixed, in the source world's frame.
+    private IReadOnlyList<SdfMeshDraw> m_meshDraws = [];
     // EmitCurrent's own scratch for one band's source-mapped placements, bounded by MaxInstancesPerBand (the same
     // reservation WorldAdjacencyGeometry.Select's default `maximum` honors) and reused across bands and rebuilds —
     // EmitStatic consumes it synchronously and never retains the reference.
@@ -92,6 +98,10 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     // compares against this to decide whether a rebuild is owed, without ever emitting from inside WriteRevision
     // itself (emission belongs to Emit alone).
     private readonly Dictionary<string, (int Definition, int Snapshot)> m_polledRevisions = new(comparer: StringComparer.Ordinal);
+    // Each neighbour's bound colors, read through a state mirror over the neighbour's pinned image as the local build
+    // reads the client's (WorldBakedColors), so a state-cell write that moves a bound color rebuilds the border as it
+    // would a local placement, and only once the neighbour's pin advances to the image carrying it.
+    private readonly Dictionary<string, NeighbourColors> m_neighbourColors = new(comparer: StringComparer.Ordinal);
     // A band whose delivered body count has already crossed MaxEntitiesPerBand, so the truncation is stated once per
     // border rather than once per program rebuild.
     private readonly HashSet<string> m_truncationNarrated = new(comparer: StringComparer.Ordinal);
@@ -139,6 +149,10 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     /// revision moves for, so without it a body would enter or leave a border only when something unrelated
     /// happened to force a rebuild.</remarks>
     public int RevisionComponentCount => 2;
+    /// <inheritdoc/>
+    /// <remarks>The reachable neighbours' static placements' meshes, mapped into this world and fixed by each live
+    /// <see cref="Emit"/>, like their shapes.</remarks>
+    public IReadOnlyList<SdfMeshDraw> MeshDraws => m_meshDraws;
 
     internal static (Vector3 Position, Quaternion Orientation) MapPoseIntoSource(Vector3 position, Quaternion orientation, IReadOnlyList<WorldAdjacencyFramePair> path) {
         var mappedPosition = position;
@@ -153,6 +167,56 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
             );
         }
         return (mappedPosition, mappedOrientation);
+    }
+
+    // The bound colors a projection's neighbour bakes, read from definition, the neighbour image the caller read once
+    // and draws the border's geometry from, so geometry and colors always come from one image.
+    private WorldBakedColors ColorsOf(WorldAdjacencyProjection projection, WorldDefinition definition) {
+        if (!m_neighbourColors.TryGetValue(
+            key: projection.Name,
+            value: out var colors
+        )) {
+            colors = new NeighbourColors(definition: definition);
+            m_neighbourColors[projection.Name] = colors;
+        }
+
+        return colors.Follow(definition: definition);
+    }
+
+    // A state mirror over one neighbour image and the colors a border bakes through it. Owned by the presentation that
+    // builds the border, so nothing else writes it; it reinstalls over a new image object, which re-reads every slot
+    // and reports a move only for a baked color whose value changed (WorldBakedColors.TryTakeMove).
+    private sealed class NeighbourColors {
+        private WorldDefinition m_definition;
+
+        public NeighbourColors(WorldDefinition definition) {
+            m_definition = definition;
+            Mirror = new WorldStateMirror(view: new WorldDocumentStateView(definition: () => m_definition));
+            Mirror.Install(
+                engineTick: 0UL,
+                tick: 0UL
+            );
+            Colors = new WorldBakedColors(mirror: Mirror);
+        }
+
+        public WorldBakedColors Colors { get; }
+        public WorldStateMirror Mirror { get; }
+
+        // Follows a neighbour image: the same image object reads as it did, a new one reinstalls the mirror over it.
+        public WorldBakedColors Follow(WorldDefinition definition) {
+            if (!ReferenceEquals(
+                objA: definition,
+                objB: m_definition
+            )) {
+                m_definition = definition;
+                Mirror.Install(
+                    engineTick: 0UL,
+                    tick: 0UL
+                );
+            }
+
+            return Colors;
+        }
     }
 
     // A plain indexed copy of the first `count` entries — the ONLY place EmitCurrent allocates a fresh
@@ -232,7 +296,7 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     private bool IsSuppressed(IWorldAdjacencyNeighbour neighbour, int index) =>
         ((m_suppressEntity is { } suppress) && suppress(neighbour.EntityAddress(index: index)));
     // Maps a neighbour placement's authored transform into the SOURCE side's own coordinates through the EXACT SAME
-    // isometry Server.WorldPortalArrivalMath uses for a crossing traveler's arrival, anchored at the two faces' own
+    // isometry WorldFrameIsometry.MapArrival uses for a crossing traveler's arrival, anchored at the two faces' own
     // frames (never a crossing's swept seam — this maps arbitrary geometry, not one traveler's own crossing point).
     // Fixed point throughout except the two float<->fixed boundary conversions (the one sanctioned rendering seam),
     // so the strip a body sees is placed by the IDENTICAL math the strip it stands on already uses.
@@ -349,15 +413,24 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
             return;
         }
 
+        var meshDraws = new List<SdfMeshDraw>();
+
         EmitCurrent(
             builder: builder,
             slotBase: context.SlotBase,
-            includeEntities: true
+            includeEntities: true,
+            meshDraws: meshDraws
         );
+        m_meshDraws = meshDraws;
     }
     /// <summary>Emits the currently reachable live adjacency geometry without the capacity-probe branch. Camera
     /// clearance uses this to evaluate the same static strip the renderer composes.</summary>
-    public void EmitCurrent(SdfProgramBuilder builder, int slotBase = 0, bool includeEntities = false) {
+    /// <param name="builder">The program builder.</param>
+    /// <param name="slotBase">The emitter's first dynamic-transform slot.</param>
+    /// <param name="includeEntities">Whether each band's bodies are emitted too.</param>
+    /// <param name="meshDraws">Receives the mesh draws of the neighbours' static placements, mapped into this world, or
+    /// <see langword="null"/> to collect none.</param>
+    public void EmitCurrent(SdfProgramBuilder builder, int slotBase = 0, bool includeEntities = false, ICollection<SdfMeshDraw>? meshDraws = null) {
         ArgumentNullException.ThrowIfNull(argument: builder);
 
         // One Visuals() read, indexed rather than foreach'd — the compile-time type is the IReadOnlyList seam, and
@@ -403,8 +476,10 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
             }
 
             var neighbour = projection.Neighbour;
+            // The neighbour image is read once: the border's geometry and its bound colors both come from it.
+            var image = neighbour.Definition;
             var selection = WorldAdjacencyGeometry.Select(
-                definition: neighbour.Definition,
+                definition: image,
                 frame: projection.Path[0].Neighbour,
                 overlapDepth: projection.OverlapDepth
             );
@@ -419,18 +494,27 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
             }
 
             if (mappedCount > 0) {
+                var colors = ColorsOf(
+                    definition: image,
+                    projection: projection
+                );
+
+                colors.Begin();
                 // Adjacency delivery currently carries the neighbouring document, not its hash-pinned font asset
                 // bytes. Emit its ordinary geometry but omit creation text until federation owns asset transport and
                 // the local renderer can merge remote catalogs into its one glyph binding.
                 WorldPlacementStamper.EmitStatic(
                     builder: builder,
-                    definition: neighbour.Definition,
-                    creations: neighbour.Definition.Creations,
+                    colors: colors,
+                    definition: image,
+                    creations: image.Creations,
                     placements: new ArraySegment<WorldPlacement>(
                         array: m_mappedPlacements,
                         count: mappedCount,
                         offset: 0
-                    )
+                    ),
+                    palettes: m_palettes,
+                    meshDraws: meshDraws
                 );
             }
 
@@ -595,6 +679,14 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                 m_polledRevisions[projection.Name] = polled;
                 m_neighbourRevision++;
             }
+            // A bound color the border baked moving in the neighbour's state mirror rebuilds it, as the local scene
+            // emitter's baked-color component does for its own placements.
+            if (ColorsOf(
+                definition: projection.Neighbour.Definition,
+                projection: projection
+            ).TryTakeMove()) {
+                m_neighbourRevision++;
+            }
         }
 
         m_missingAdjacencies.Clear();
@@ -605,6 +697,8 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
             }
         }
         foreach (var missing in m_missingAdjacencies) {
+            _ = m_neighbourColors.Remove(key: missing);
+
             if (m_polledRevisions[missing] != default) {
                 m_polledRevisions[missing] = default;
                 m_neighbourRevision++;

@@ -18,10 +18,17 @@ public sealed class VulkanLogicalDevice : IDisposable {
     /// for diagnostics and naming the device's pipeline-cache file, never branched on. <see langword="null"/> for a
     /// device created without one.</summary>
     public GpuDeviceIdentity? Identity { get; init; }
+    /// <summary>Gets what the device can bind, as its physical device reported it when the device was created;
+    /// recorded, never branched on. <see langword="null"/> for a device created without one.</summary>
+    public GpuDeviceCapabilities? Capabilities { get; init; }
     /// <summary>Gets what the device's memory is, as its physical device reported it when the device was created;
     /// residency selection branches on it. The default profile, which reports nothing, for a device created without
     /// one.</summary>
     public GpuMemoryProfile MemoryProfile { get; init; }
+    /// <summary>Gets whether the device was created with <c>textureCompressionBC</c> enabled, so it samples every BC
+    /// format from an optimal-tiling image; an upload of a block-compressed format refuses a device without it.
+    /// <see langword="false"/> for a device created without the feature.</summary>
+    public bool SamplesBlockCompression { get; init; }
     /// <summary>Gets the device's command table, which carries the native <c>VkDevice</c> handle.</summary>
     public VulkanDeviceCommands Commands { get; }
     /// <summary>Gets whether the device has been disposed — a native call through <see cref="Commands"/> after that is
@@ -35,6 +42,9 @@ public sealed class VulkanLogicalDevice : IDisposable {
     /// device passes to the driver; <see langword="null"/> for a device created without one. The device owns it: it is
     /// written to disk and destroyed just before the device.</summary>
     public VulkanPipelineCache? PipelineCache { get; init; }
+    /// <summary>Gets the group each of the device's descriptor sets belongs to, which the device's bindings, recorder and
+    /// grouped pipelines share.</summary>
+    public VulkanDescriptorSetGroups SetGroups { get; } = new();
 
     /// <summary>Initializes a new instance of the <see cref="VulkanLogicalDevice"/> class, taking ownership of an existing native device.</summary>
     /// <param name="device">The command table of the native device to own.</param>
@@ -60,7 +70,10 @@ public sealed class VulkanLogicalDevice : IDisposable {
         m_logicalDeviceApi = logicalDeviceApi;
     }
 
-    /// <summary>Destroys the owned device. Safe to call more than once.</summary>
+    /// <summary>Destroys the owned device, then ends its entries in the device-local memory counts. Safe to call more
+    /// than once.</summary>
+    /// <exception cref="InvalidOperationException">An allocation the device's memory counts still hold was never
+    /// released by its owner; the device is destroyed first, and the message names each leaked allocation.</exception>
     public void Dispose() {
         if (m_disposed) {
             return;
@@ -69,6 +82,7 @@ public sealed class VulkanLogicalDevice : IDisposable {
         PipelineCache?.Dispose();
         m_logicalDeviceApi.DestroyDevice(device: Commands);
         m_disposed = true;
+        Commands.Memory?.EndDevice(device: Commands.Handle);
     }
     /// <summary>Drains the device, tolerating an already-LOST device: <c>vkDeviceWaitIdle</c> returns
     /// <c>VK_ERROR_DEVICE_LOST</c> on a lost device (surfaced as <see cref="DeviceLostException"/>), which during

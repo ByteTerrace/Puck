@@ -10,7 +10,15 @@ and allocate flags those select, and the `VulkanBuffer` owner's map and destroy
 order. Command tables built over a resolver that stands in for the driver show
 that every handle kind reaches the one zero-handle guard, and that the
 renderer's boot chain, failed at each link, destroys everything it built before
-that link exactly once in reverse order and runs no later link. It creates
+that link exactly once in reverse order and runs no later link. The group
+planner turns the gate spike's two-group layouts into the set layouts and push
+range they need, and refuses a description no backend may plan. On a command
+table whose layout entry points record what they are handed, the pipeline
+layout created from those plans holds the planned set layouts in set order,
+their stage flags and the push range, and a failed set layout leaves nothing
+alive. The swapchain format selector chooses only formats `GpuPixelFormat`
+names, in its own preference order rather than the surface's, and refuses a
+surface that offers none of them by naming the formats it does offer. It creates
 no real Vulkan instance or device, so it says nothing about driver behavior;
 cross-backend rendering is checked by `puck parity`.
 

@@ -5,6 +5,9 @@ namespace Puck.World.Protocol.Tests;
 
 /// <summary>Proves the typed mutation completion preserves its decision and persistence axes over the peer wire.</summary>
 public sealed class MutationOutcomeWireLawTests {
+    // The document version every outcome carries: the verdict's place in its world's install order.
+    private static readonly WorldDocumentVersion Delivered = new(Activation: Guid.Parse(input: "fedcba98-7654-3210-fedc-ba9876543210"), Sequence: 7L);
+
     private static byte[] WriteResultSync(WorldSubmissionResult result) {
         using var stream = new MemoryStream();
 
@@ -35,7 +38,8 @@ public sealed class MutationOutcomeWireLawTests {
                 JournalSequence: 45,
                 RootSequence: 9,
                 Tick: 99
-            )
+            ),
+            Version: Delivered
         );
 
         var frame = WriteResultSync(result: new WorldSubmissionResult.Mutation(Outcome: expected));
@@ -144,7 +148,8 @@ public sealed class MutationOutcomeWireLawTests {
             string.Empty,
             null,
             WorldMutationPersistenceStatus.Durable,
-            null
+            null,
+            Version: Delivered
         );
 
         Assert.False(condition: malformed.IsValid);
@@ -159,6 +164,29 @@ public sealed class MutationOutcomeWireLawTests {
             actual: kind,
             expected: WorldPeerWireFormat.DownstreamKind.Refusal
         );
+    }
+    [Fact]
+    public void AnOutcomeNamesTheDocumentItWasDecidedAgainst() {
+        var decided = WorldMutationOutcome.AppliedOutcome(
+            binding: new WorldMutationBinding(
+                Actor: Principal.Console,
+                OperationId: Guid.Parse(input: "01234567-89ab-cdef-0123-456789abcdef"),
+                PayloadDigest: new string(c: 'f', count: 64)
+            ),
+            code: "world.mutation.applied",
+            version: Delivered
+        );
+
+        Assert.True(condition: decided.IsValid);
+        Assert.Equal(actual: decided.Version, expected: Delivered);
+
+        // Red leg: an outcome that names no delivered document is malformed, and the factory refuses to build one.
+        Assert.False(condition: (decided with { Version = default }).IsValid);
+        _ = Assert.Throws<ArgumentException>(testCode: () => WorldMutationOutcome.AppliedOutcome(
+            binding: decided.Binding,
+            code: "world.mutation.applied",
+            version: default
+        ));
     }
     [Fact]
     public void DurableRefusalRoundTripsWithoutBecomingApplied() {
@@ -179,7 +207,8 @@ public sealed class MutationOutcomeWireLawTests {
                 JournalSequence: null,
                 RootSequence: 4,
                 Tick: 7
-            )
+            ),
+            Version: Delivered
         );
 
         var frame = WriteResultSync(result: new WorldSubmissionResult.Mutation(Outcome: expected));
@@ -279,7 +308,8 @@ public sealed class MutationOutcomeWireLawTests {
             "awaiting receipt",
             null,
             WorldMutationPersistenceStatus.Pending,
-            null
+            null,
+            Version: Delivered
         );
 
         Assert.True(condition: expected.IsValid);
@@ -318,7 +348,8 @@ public sealed class MutationOutcomeWireLawTests {
             string.Empty,
             null,
             WorldMutationPersistenceStatus.RecoveryRequired,
-            null
+            null,
+            Version: Delivered
         );
 
         var frame = WriteResultSync(result: new WorldSubmissionResult.Mutation(Outcome: expected));

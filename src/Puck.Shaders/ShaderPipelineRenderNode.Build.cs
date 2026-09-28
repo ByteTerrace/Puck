@@ -4,9 +4,10 @@ using Puck.Hosting;
 
 namespace Puck.Shaders;
 
-// A candidate graph in two halves, the way SdfWorldPipelineSource builds the SDF engine's pipelines. Its pipeline and
-// module set — every shader module, compute pipeline, graphics pipeline and the render pass it is created for, and the
-// float preview's — is built on the thread pool through BackgroundBuild, so a cold driver cache delays the install
+// A candidate graph in two halves, the way SdfWorldPipelineSource builds the SDF engine's pipelines. Its pipelines —
+// every pass's compute or graphics pipeline with its shader modules and the render pass it is created for, and the float
+// preview's — are leased from the pass-pipeline cache on the thread pool through BackgroundBuild, which a pass another
+// node or an earlier install already leases joins without creating anything, so a cold driver cache delays the install
 // instead of freezing the pump. Its resources — images and buffers, the geometry buffer, framebuffers, descriptor pools,
 // sets and samplers, command pools and fences — are allocated on the frame thread when the finished set is taken, and
 // the graph installs there. Until then every frame presents the installed graph.
@@ -18,27 +19,70 @@ namespace Puck.Shaders;
 // taken and the next build starts. A device loss or disposal waits a build out and discards it, because it creates
 // objects on the device being released. The replaced graph is never drained on the frame thread; see
 // ShaderPipelineRenderNode.Retirement.cs.
+//
+// A refused candidate is tried again only when something it was refused on changes, as SdfWorldPipelineSource retries
+// a refused build: the operator's GPU faults (GpuCreationFaults.Revision: an arm, a disarm, or a fault firing
+// elsewhere, never the one that refused it, since the revision is read after the refusal), and, for a candidate the
+// device's descriptor heap refused (GpuDescriptorHeapRefusalException), the heap's release revision
+// (IGpuBindings.HeapReleaseRevision), which moves as another owner returns its pools. A frame that changes neither tries
+// nothing, so a persistent refusal is attempted once per change, never once per frame and never on a clock. A new
+// request, a swap or a resize, replaces the refused candidate.
 public sealed partial class ShaderPipelineRenderNode {
-    private const GpuShaderStage FrameBlockStages = GpuShaderStage.Compute | GpuShaderStage.Fragment;
+    // A planned depth attachment as its render pass declares it, which its storage's images are also created for, so the
+    // depth they are cleared to has one statement.
+    internal static GpuDepthAttachment DepthAttachmentOf(ShaderPipelineAttachment attachment, GpuPixelFormat format) =>
+        new(
+            ClearDepth: attachment.ClearDepth,
+            Format: format,
+            Load: attachment.Load,
+            Store: attachment.Store
+        );
+
+    // The depth attachment a depth storage's images are created for: the planned attachment of the graphics pass that
+    // draws it, or, for one a package pass draws through its own render pass, a clear to the depth the storage declares,
+    // which that render pass clears to as well.
+    private static GpuDepthAttachment DepthOf(ShaderPipelinePlan plan, ShaderPipelinePlannedStorage storage, GpuPixelFormat format) {
+        foreach (var pass in plan.Passes) {
+            foreach (var attachment in pass.Attachments) {
+                if (attachment.Depth && (attachment.Storage == storage.Index)) {
+                    return DepthAttachmentOf(
+                        attachment: attachment,
+                        format: format
+                    );
+                }
+            }
+        }
+
+        return new GpuDepthAttachment(
+            ClearDepth: (storage.Declaration.ClearDepth ?? GpuDepthAttachment.DefaultClearDepth),
+            Format: format,
+            Load: GpuAttachmentLoad.Clear,
+            Store: GpuAttachmentStore.Discard
+        );
+    }
 
     private readonly BackgroundBuild<GraphBuild> m_build = new();
 
+    // The refused candidate: its pipeline, or null for a refused resize of the installed one, and the revisions it was
+    // refused under.
+    private bool m_hasRefusal;
+    private bool m_refusedByHeap;
+    private long m_refusedFaultsRevision;
+    private long m_refusedHeapRevision;
+    private CompiledShaderPipeline? m_refusedPending;
+    private bool m_refusedResize;
     private BuildKey m_buildKey;
+    // Each advance of the node's builds (a produced frame, or a region bind that advances them as one does) is one more,
+    // and the advance the running build started in, so a build is taken only by a later advance.
+    private long m_advances;
+
+    private long m_buildAdvance = -1;
 
     /// <summary>Gets whether a candidate's pipelines and shader modules are being built on the thread pool. Frames
     /// produced meanwhile present the installed graph; the build installs at the first frame boundary after it finishes,
-    /// paused or running.</summary>
+    /// never in the frame that started it, paused or running.</summary>
     public bool IsBuildingCandidate => (m_build.IsPending && !m_build.IsCompleted);
 
-    private static GpuPushConstantBinding? PushConstantBinding(uint sizeBytes, GpuShaderStage stages) =>
-        ((sizeBytes == 0)
-            ? null
-            : new GpuPushConstantBinding(
-                data: new byte[sizeBytes],
-                offset: 0,
-                stageFlags: stages
-            )
-        );
     // Every version name mapped to the declaration of the storage that holds it, which fixes its kind, format and extent.
     private static Dictionary<string, ShaderPipelineResource> VersionSpecs(ShaderPipelinePlan plan) {
         var specs = new Dictionary<string, ShaderPipelineResource>(comparer: StringComparer.Ordinal);
@@ -60,6 +104,7 @@ public sealed partial class ShaderPipelineRenderNode {
     // device loss is not a replacement and is never refused by the budget: nothing else is owned then, and the graph it
     // restores was accepted when it installed.
     private void EnsureBuild() {
+        RetryRefusal();
         if (
             m_disposed ||
             m_build.IsPending ||
@@ -83,9 +128,10 @@ public sealed partial class ShaderPipelineRenderNode {
             if (
                 candidate &&
                 (Account(
-                    extent: extent,
+                    counts: key.Counts,
                     plan: pipeline.Plan,
-                    preview: key.Preview
+                    preview: key.Preview,
+                    rows: key.Rows
                 ) is { Fits: false } account)
             ) {
                 throw account.Refusal();
@@ -103,8 +149,14 @@ public sealed partial class ShaderPipelineRenderNode {
     }
     // Takes a finished build and installs it, refuses it, or discards it when what should be built has changed since it
     // started. A failed rebuild of the installed pipeline after a device loss rethrows here, on the frame thread, so the
-    // loss reaches the host's recovery; the next frame starts a fresh build.
+    // loss reaches the host's recovery; the next frame starts a fresh build. A build is never taken in the advance that
+    // started it, however fast it finished (a candidate whose every pipeline the pass-pipeline cache already holds
+    // finishes at once), so the frame an install lands in never depends on the thread pool's timing.
     private void InstallPending() {
+        if (m_buildAdvance == m_advances) {
+            return;
+        }
+
         if (!m_build.TryTake(
             error: out var error,
             result: out var built
@@ -145,11 +197,11 @@ public sealed partial class ShaderPipelineRenderNode {
         );
     }
 
-    // The selection the next graph installs with: one still waiting for its own float preview, else the published one.
+    // The selection the next graph installs with: one still waiting for its own preview, else the published one.
     // A graph build carries the preview for it, and its install supersedes the waiting preview build.
     private string? DesiredSelection => (m_previewRequest?.Name ?? m_selectedOutput);
 
-    // The float preview extent the selected output of a graph planned at this extent needs, or null for an RGBA8 output.
+    // The preview extent the selected output of a graph planned at this extent needs, or null for one that publishes itself.
     private (uint Width, uint Height)? PreviewFor(ShaderPipelinePlan plan, (uint Width, uint Height) extent) {
         var desired = DesiredSelection;
         var selected = (IsDeclaredImageOutput(
@@ -172,12 +224,54 @@ public sealed partial class ShaderPipelineRenderNode {
     }
     private void Refuse(bool candidate, Exception error) {
         if (candidate) {
+            m_hasRefusal = ((m_pending is not null) || m_resizePending || m_rebindPending || m_recountPending);
+            m_refusedByHeap = (error is GpuDescriptorHeapRefusalException);
+            m_refusedFaultsRevision = FaultsRevision;
+            m_refusedHeapRevision = m_device.Services.Bindings.HeapReleaseRevision;
+            m_refusedPending = m_pending;
+            m_refusedResize = (m_resizePending || m_rebindPending || m_recountPending);
             m_pending = null;
-            // A refused resize is not retried until a different extent is requested.
             m_resizePending = false;
+            m_rebindPending = false;
+            m_recountPending = false;
         }
 
         m_lastSwapError = error;
+    }
+
+    // The operator's GPU faults' revision, or zero on a device that passes its creations through none.
+    private long FaultsRevision => (m_device.Services.Faults?.Revision ?? 0L);
+
+    // Forgets the refused candidate, which a new request replaces.
+    private void ForgetRefusal() {
+        m_hasRefusal = false;
+        m_refusedPending = null;
+        m_refusedResize = false;
+    }
+    // Queues the refused candidate again once the faults or, for a heap refusal, the heap's release revision moves,
+    // unless a newer request is queued.
+    private void RetryRefusal() {
+        if (
+            !m_hasRefusal ||
+            (m_pending is not null) ||
+            m_resizePending ||
+            m_rebindPending ||
+            m_recountPending ||
+            (
+                (FaultsRevision == m_refusedFaultsRevision) &&
+                (
+                    !m_refusedByHeap ||
+                    (m_device.Services.Bindings.HeapReleaseRevision == m_refusedHeapRevision)
+                )
+            )
+        ) {
+            return;
+        }
+
+        m_pending = m_refusedPending;
+        m_resizePending = m_refusedResize;
+        m_lastSwapError = null;
+        ForgetRefusal();
     }
     // Kept apart from EnsureBuild so the build's closure is allocated only when a build starts, never on a polled frame.
     private void StartBuild(BuildKey key) {
@@ -185,24 +279,28 @@ public sealed partial class ShaderPipelineRenderNode {
             Device: m_device,
             DirectX: m_directX,
             Gpu: m_gpu,
-            Graphics: m_graphics,
             InFlight: m_inFlight,
-            Key: key
+            Instance: m_name,
+            Key: key,
+            Packages: m_packages,
+            Pipelines: m_pipelines
         );
 
         m_buildKey = key;
+        m_buildAdvance = m_advances;
         m_build.Start(build: token => GraphBuild.Create(
             cancellationToken: token,
             request: request
         ));
     }
-    // What the node should install next: a queued candidate, or the installed pipeline again at a requested extent, both
-    // at the requested extent; or, after a device loss released the installed graph, the installed pipeline at its own.
+    // What the node should install next: a queued candidate, or the installed pipeline again at a requested extent or
+    // with its arrays bound to other rows, both at the requested extent; or, after a device loss released the installed
+    // graph, the installed pipeline at its own.
     private bool TryDesiredCandidate(out CompiledShaderPipeline pipeline, out (uint Width, uint Height) extent, out bool candidate) {
         if (m_pending is { } pending) {
             (pipeline, extent, candidate) = (pending, (m_requestedWidth, m_requestedHeight), true);
         } else if (
-            m_resizePending &&
+            (m_resizePending || m_rebindPending || m_recountPending) &&
             (m_pipeline is { } resized)
         ) {
             (pipeline, extent, candidate) = (resized, (m_requestedWidth, m_requestedHeight), true);
@@ -242,7 +340,7 @@ public sealed partial class ShaderPipelineRenderNode {
 
         return true;
     }
-    // The build of a pipeline at an extent, with the float preview its selected output needs.
+    // The build of a pipeline at an extent, with the preview its selected output needs and the rows bound now.
     private BuildKey KeyFor(CompiledShaderPipeline pipeline, (uint Width, uint Height) extent, bool candidate) =>
         new(
             Candidate: candidate,
@@ -252,12 +350,21 @@ public sealed partial class ShaderPipelineRenderNode {
                 extent: extent,
                 plan: pipeline.Plan
             ),
+            Counts: CountsAt(
+                extent: extent,
+                plan: pipeline.Plan
+            ),
+            CountRevision: (CounterOf(plan: pipeline.Plan)?.Revision ?? 0L),
+            Export: m_export,
+            Rows: m_rows,
             Width: extent.Width
         );
 
-    // What one build makes: the pipeline, the extent it is planned at, whether it is a candidate (a queued pipeline or a
-    // resize) rather than the installed pipeline rebuilt after a device loss, and the float preview it needs.
-    private readonly record struct BuildKey(CompiledShaderPipeline? Pipeline, uint Width, uint Height, bool Candidate, (uint Width, uint Height)? Preview) {
+    // What one build makes: the pipeline, the extent it is planned at, whether it is a candidate (a queued pipeline, a
+    // resize or a rebinding) rather than the installed pipeline rebuilt after a device loss, the preview it needs,
+    // the rows its arrays read, which BindRows replaces whole whenever they change, and the counts its counted buffers
+    // are allocated by, with the counter revision they were resolved at.
+    private readonly record struct BuildKey(CompiledShaderPipeline? Pipeline, uint Width, uint Height, bool Candidate, (uint Width, uint Height)? Preview, RowBindings Rows, ShaderPipelineStorageCounts Counts, long CountRevision, IShaderPipelineOutputExport? Export) {
         public bool Matches(BuildKey other) =>
             (
                 ReferenceEquals(
@@ -267,11 +374,21 @@ public sealed partial class ShaderPipelineRenderNode {
                 (Width == other.Width) &&
                 (Height == other.Height) &&
                 (Candidate == other.Candidate) &&
-                (Preview == other.Preview)
+                (Preview == other.Preview) &&
+                ReferenceEquals(
+                    objA: Rows,
+                    objB: other.Rows
+                ) &&
+                (Counts == other.Counts) &&
+                (CountRevision == other.CountRevision) &&
+                ReferenceEquals(
+                    objA: Export,
+                    objB: other.Export
+                )
             );
     }
     // Everything a build reads, captured on the frame thread when it starts; a build never touches the node.
-    private sealed record BuildRequest(BuildKey Key, IGpuComputeServices Gpu, IFullscreenPassServices? Graphics, IGpuDeviceContext Device, bool DirectX, uint InFlight);
+    private sealed record BuildRequest(BuildKey Key, GpuDeviceServices Gpu, IGpuDeviceContext Device, GpuPassPipelineCache Pipelines, bool DirectX, uint InFlight, string Instance, RenderGraphPackageRecorders Packages);
     // The pipeline and module set of one candidate, built on the thread pool. The install takes each object into the
     // runtime graph and clears it here, so disposing a build releases exactly what was never taken.
     private sealed class GraphBuild : IDisposable {
@@ -280,6 +397,12 @@ public sealed partial class ShaderPipelineRenderNode {
 
         public PassObjects?[] Passes { get; }
         public PreviewObjects? Preview { get; set; }
+        // The graph's staged regions, its package passes' in pass order, then its row regions, then its host buffer ports,
+        // whose copy sets the graph's one copy pool reserves (DescriptorPools' stagedRegions). When there is one, the build holds a lease
+        // on the device's region-copy pipeline, taken ready.
+        public int StagedRegions { get; private set; }
+        public IGpuComputePipeline? CopyPipeline { get; private set; }
+        public GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? RegionCopy { get; set; }
 
         // Builds every pass's modules and pipelines, then the preview's. Safe on any thread: it only creates objects on
         // the device, counted through the node's wrapped services. The token is checked before each pass and the preview,
@@ -298,20 +421,29 @@ public sealed partial class ShaderPipelineRenderNode {
 
                     build.Passes[planned.Index] = objects;
                     objects.Create(
-                        compiled: pipeline.Shaders[planned.Name],
+                        cancellationToken: cancellationToken,
+                        compiled: pipeline.Shaders.GetValueOrDefault(key: planned.Name),
                         planned: planned,
                         request: request,
                         specs: specs
                     );
                 }
 
+                build.StateRegions(
+                    cancellationToken: cancellationToken,
+                    plan: plan,
+                    request: request
+                );
+
                 if (request.Key.Preview is { } preview) {
                     cancellationToken.ThrowIfCancellationRequested();
                     build.Preview = PreviewObjects.Create(
+                        cancellationToken: cancellationToken,
                         device: request.Device,
+                        owner: request.Instance,
                         gpu: request.Gpu,
+                        pipelines: request.Pipelines,
                         directX: request.DirectX,
-                        graphics: (request.Graphics ?? throw new InvalidOperationException(message: "Float preview requires graphics services.")),
                         height: preview.Height,
                         inFlight: request.InFlight,
                         width: preview.Width
@@ -332,6 +464,58 @@ public sealed partial class ShaderPipelineRenderNode {
 
             Preview?.Dispose();
             Preview = null;
+            RegionCopy?.Release();
+            RegionCopy = null;
+            CopyPipeline = null;
+        }
+
+        // States the graph's staged regions under the device's residency choice, its package regions', its row regions' and
+        // its host buffer ports', and, when one stages, takes the region-copy pipeline ready, so the install on the frame
+        // thread never waits for it.
+        private void StateRegions(ShaderPipelinePlan plan, BuildRequest request, CancellationToken cancellationToken) {
+            var staged = 0;
+
+            foreach (var pass in Passes) {
+                foreach (var region in (pass?.Regions ?? [])) {
+                    if (Staged(device: request.Device, byteCount: ((ulong)region.ByteCount))) {
+                        staged++;
+                    }
+                }
+            }
+            foreach (var region in RowPlan.Of(plan: plan, rows: request.Key.Rows).Regions) {
+                if (Staged(device: request.Device, byteCount: region.ByteCount)) {
+                    staged++;
+                }
+            }
+            foreach (var port in HostBufferPorts(plan: plan)) {
+                if (Staged(device: request.Device, byteCount: port.SizeBytes!.Value)) {
+                    staged++;
+                }
+            }
+
+            StagedRegions = staged;
+
+            if (staged == 0) {
+                return;
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            RegionCopy = RegionCopyOf(
+                device: request.Device,
+                instance: request.Instance,
+                packages: request.Packages
+            ).Acquire(device: request.Device);
+            CopyPipeline = RegionCopy.Wait(cancellationToken: cancellationToken).Compute;
+        }
+
+        // Takes the build's lease: the node's own when it holds none, and otherwise released, since both share the one
+        // pipeline the device's cache keeps.
+        public GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? TakeRegionCopy() {
+            var lease = RegionCopy;
+
+            RegionCopy = null;
+
+            return lease;
         }
         public PassObjects TakePass(int index) {
             var objects = (Passes[index] ?? throw new InvalidOperationException(message: $"The build has no objects for pass {index}."));
@@ -341,42 +525,62 @@ public sealed partial class ShaderPipelineRenderNode {
             return objects;
         }
     }
-    // One pass's pipeline and modules: for a compute pass its module and pipeline; for a fullscreen pass its two modules,
-    // the render pass it draws in, and the graphics pipeline created for that render pass. The images it draws into are
-    // the graph's, allocated on the frame thread.
+    // One pass's pipeline: for a document pass its lease on the pass-pipeline cache's entry, a compute pipeline and its
+    // module or a graphics pipeline, its two modules and the render pass it is created for; for a package pass what its
+    // package's factory builds. The images it draws into are the graph's, allocated on the frame thread.
     private sealed class PassObjects : IDisposable {
-        public List<GpuComputeBinding> Bindings = [];
-        public IGpuComputePipeline? Compute;
         public (uint Width, uint Height) Extent;
-        public IGpuPipeline? Graphics;
-        public IGpuShaderModule? Primary;
-        public IGpuRenderPass? RenderPass;
-        public IGpuShaderModule? Secondary;
+        public IRenderGraphPackageFactory? PackageFactory;
+        public RenderGraphPackageRecorderContext? PackageContext;
+        public IDisposable? PackageBuilt;
+        public GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? Pipeline;
+        public RenderGraphPackageRegion[]? Regions;
 
-        public void Create(ShaderPipelinePlannedPass planned, CompiledShader compiled, BuildRequest request, IReadOnlyDictionary<string, ShaderPipelineResource> specs) {
-            var declaration = planned.Declaration;
-            var push = PushConstantBinding(
-                sizeBytes: planned.Parameters.SizeBytes,
-                stages: FrameBlockStages
-            );
-            var device = request.Device;
-            var gpu = request.Gpu;
+        public void Create(ShaderPipelinePlannedPass planned, CompiledShader? compiled, BuildRequest request, IReadOnlyDictionary<string, ShaderPipelineResource> specs, CancellationToken cancellationToken) {
+            // A package pass's objects are whatever its factory builds; its recorder binds its own descriptors.
+            if (planned.Declaration is not { } declaration) {
+                var step = planned.Package!;
+
+                Extent = planned.ResolveExtent(
+                    frameHeight: request.Key.Height,
+                    frameWidth: request.Key.Width
+                );
+                PackageFactory = request.Packages.FactoryFor(
+                    instance: request.Instance,
+                    package: step.Package,
+                    pass: planned.Name
+                );
+                PackageContext = PackageContextOf(
+                    extent: Extent,
+                    planned: planned,
+                    request: request,
+                    specs: specs
+                );
+                Regions = [.. PackageFactory.Regions(context: PackageContext)];
+                PackageBuilt = PackageFactory.Build(
+                    cancellationToken: cancellationToken,
+                    context: PackageContext
+                );
+
+                return;
+            }
+            if (compiled is null) {
+                throw new InvalidDataException(message: $"Pass '{declaration.Name}' has no compiled shader.");
+            }
+
+            // A document pass binds its frame and pass groups and pushes nothing.
+            var layout = GroupLayoutOf(planned: planned);
             var primary = (request.DirectX
                 ? compiled.DxilByStage
                 : compiled.SpirvByStage
             );
+            GpuPassPipelineKey key;
 
-            Extent = ResolveExtent(
-                frame: (request.Key.Width, request.Key.Height),
-                pass: declaration,
-                specs: specs
+            Extent = planned.ResolveExtent(
+                frameHeight: request.Key.Height,
+                frameWidth: request.Key.Width
             );
-            Bindings = Descriptors(
-                pass: declaration,
-                specs: specs
-            );
-
-            if (declaration.Kind == ShaderPipelinePassKind.Compute) {
+            if (declaration.Kind == ShaderPipelineDocumentPassKind.Compute) {
                 if (
                     !primary.TryGetValue(
                     key: ShaderStage.Compute,
@@ -387,100 +591,78 @@ public sealed partial class ShaderPipelineRenderNode {
                     throw new InvalidDataException(message: $"Pass '{declaration.Name}' has no compute bytecode.");
                 }
 
-                Primary = gpu.ShaderModuleFactory.Create(
+                key = GpuPassPipelineKey.OfCompute(
                     bytecode: bytes,
-                    deviceContext: device,
-                    stage: GpuShaderStage.Compute
-                );
-                Compute = gpu.ComputePipelineFactory.Create(
-                    device,
-                    Primary,
-                    new GpuComputePipelineDescription(
+                    description: new GpuComputePipelineDescription(
                         declaration.Name,
-                        Bindings,
-                        push
+                        [],
+                        null,
+                        Layout: layout
                     )
                 );
-
-                return;
-            }
-
-            if (
-                (request.Graphics is not { } graphics) ||
-                !primary.TryGetValue(
-                key: ShaderStage.Vertex,
-                value: out var vertex
-            ) ||
-                !primary.TryGetValue(
-                key: ShaderStage.Fragment,
-                value: out var fragment
-            )
-            ) {
-                throw new InvalidDataException(message: $"Fullscreen pass '{declaration.Name}' needs vertex and fragment bytecode plus graphics services.");
-            }
-
-            Primary = gpu.ShaderModuleFactory.Create(
-                bytecode: vertex,
-                deviceContext: device,
-                stage: GpuShaderStage.Vertex
-            );
-            Secondary = gpu.ShaderModuleFactory.Create(
-                bytecode: fragment,
-                deviceContext: device,
-                stage: GpuShaderStage.Fragment
-            );
-
-            var vertexInput = ((declaration.Geometry is { } geometry)
-                ? new GpuVertexInputLayout(
-                    Attributes: [.. geometry.Attributes.Select(selector: static attribute => new GpuVertexAttribute(
-                        Format: Enum.Parse<GpuVertexFormat>(
-                            ignoreCase: true,
-                            value: attribute.Format
-                        ),
-                        Location: attribute.Location,
-                        OffsetBytes: attribute.OffsetBytes
-                    ))],
-                    StrideBytes: geometry.StrideBytes
+            } else {
+                if (
+                    !primary.TryGetValue(
+                    key: ShaderStage.Vertex,
+                    value: out var vertex
+                ) ||
+                    !primary.TryGetValue(
+                    key: ShaderStage.Fragment,
+                    value: out var fragment
                 )
-                : ((declaration.Vertex == ShaderPipelineVertexInput.Position)
+                ) {
+                    throw new InvalidDataException(message: $"Fullscreen pass '{declaration.Name}' needs vertex and fragment bytecode.");
+                }
+
+                var vertexInput = ((declaration.Geometry is { } geometry)
                     ? new GpuVertexInputLayout(
-                        FullscreenTriangle.StrideBytes,
-                        [new GpuVertexAttribute(
-                            Format: GpuVertexFormat.R32G32Float,
-                            Location: 0,
-                            OffsetBytes: 0
-                        )]
+                        Attributes: [.. geometry.Attributes.Select(selector: static attribute => new GpuVertexAttribute(
+                            Format: Enum.Parse<GpuVertexFormat>(
+                                ignoreCase: true,
+                                value: attribute.Format
+                            ),
+                            Location: attribute.Location,
+                            OffsetBytes: attribute.OffsetBytes
+                        ))],
+                        StrideBytes: geometry.StrideBytes
                     )
-                    : new GpuVertexInputLayout(
-                        Attributes: [],
-                        StrideBytes: 0
-                    ))
-            );
-            var sampled = ((uint)Bindings.Count(predicate: static item => (item.Kind == GpuComputeBindingKind.SampledImage)));
+                    : ((declaration.Vertex == ShaderPipelineVertexInput.Position)
+                        ? new GpuVertexInputLayout(
+                            FullscreenTriangle.StrideBytes,
+                            [new GpuVertexAttribute(
+                                Format: GpuVertexFormat.R32G32Float,
+                                Location: 0,
+                                OffsetBytes: 0
+                            )]
+                        )
+                        : new GpuVertexInputLayout(
+                            Attributes: [],
+                            StrideBytes: 0
+                        ))
+                );
 
-            RenderPass = graphics.RenderPassFactory.Create(
-                deviceContext: device,
-                description: RenderPassOf(
-                    planned: planned,
-                    specs: specs
-                )
+                key = GpuPassPipelineKey.OfGraphics(
+                    description: new GpuGraphicsPipelineDescription(
+                        declaration.Name,
+                        vertexInput,
+                        layout,
+                        DepthCompareOf(pass: planned)
+                    ),
+                    fragment: fragment,
+                    renderPass: RenderPassOf(
+                        planned: planned,
+                        specs: specs
+                    ),
+                    vertex: vertex
+                );
+            }
+
+            // The lease is stored before the wait, so a build that fails or is canceled while it waits releases it.
+            Pipeline = request.Pipelines.Acquire(
+                device: request.Device,
+                key: key
             );
-            Graphics = graphics.PipelineFactory.Create(
-                device,
-                RenderPass,
-                Primary,
-                Secondary,
-                new GpuGraphicsPipelineDescription(
-                    declaration.Name,
-                    vertexInput,
-                    sampled,
-                    false,
-                    push,
-                    DepthCompareOf(pass: planned)
-                ),
-                Extent.Width,
-                Extent.Height
-            );
+            _ = Pipeline.Wait(cancellationToken: cancellationToken);
         }
 
         // A pass with a depth attachment tests by its declared comparison, less when it declares none; any other pass has
@@ -490,7 +672,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 return null;
             }
 
-            return (pass.Declaration.DepthCompare ?? ShaderPipelineDepthCompare.Less) switch {
+            return (pass.Declaration!.DepthCompare ?? ShaderPipelineDepthCompare.Less) switch {
                 ShaderPipelineDepthCompare.Less => GpuDepthCompare.Less,
                 ShaderPipelineDepthCompare.LessOrEqual => GpuDepthCompare.LessOrEqual,
                 ShaderPipelineDepthCompare.Greater => GpuDepthCompare.Greater,
@@ -510,10 +692,9 @@ public sealed partial class ShaderPipelineRenderNode {
                 var format = ParseFormat(format: specs[attachment.Version].Format);
 
                 if (attachment.Depth) {
-                    depth = new GpuDepthAttachment(
-                        Format: format,
-                        Load: attachment.Load,
-                        Store: attachment.Store
+                    depth = DepthAttachmentOf(
+                        attachment: attachment,
+                        format: format
                     );
                 } else {
                     colors.Add(item: new GpuColorAttachment(
@@ -532,16 +713,10 @@ public sealed partial class ShaderPipelineRenderNode {
         }
 
         public void Dispose() {
-            Compute?.Dispose();
-            Compute = null;
-            Graphics?.Dispose();
-            Graphics = null;
-            RenderPass?.Dispose();
-            RenderPass = null;
-            Primary?.Dispose();
-            Primary = null;
-            Secondary?.Dispose();
-            Secondary = null;
+            PackageBuilt?.Dispose();
+            PackageBuilt = null;
+            Pipeline?.Release();
+            Pipeline = null;
         }
     }
 }

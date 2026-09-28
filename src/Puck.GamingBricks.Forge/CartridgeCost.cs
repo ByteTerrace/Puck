@@ -125,23 +125,32 @@ public static class CartridgeCost {
         return total;
     }
     // A key on a read is an element index, which is the one read that carries its own inner expression.
-    private static CostBound Read(InstructionPayload.State state, CartridgeCostProfile profile) =>
-        ((CartridgeExpressions.Index(key: state.Key?.Spelling) is { } index)
-            ? CostBound.Add(
+    private static CostBound Read(InstructionPayload.State state, CartridgeCostProfile profile) {
+        if (CartridgeExpressions.Index(key: state.Key?.Spelling) is { } index) {
+            return CostBound.Add(
                 left: CostBound.Known(cycles: profile.OperandArray),
                 right: Operand(
                     expression: index,
                     profile: profile
                 )
-            )
-            : CostBound.Known(cycles: (CartridgeExpressions.TryKey(
-                name: state.Name.Spelling,
-                button: out _,
-                mode: out _
-            )
-                ? profile.ConditionKey
-                : profile.OperandVariable))
-        );
+            );
+        }
+
+        if (CartridgeExpressions.IsLight(state: state)) {
+            return ((profile.OperandLight is { } light)
+                ? CostBound.Known(cycles: light)
+                : CostBound.Unmodeled(reason: $"Profile '{profile.Name}' prices a machine with no infrared receiver for '{CartridgeExpressions.Light}' to read.")
+            );
+        }
+
+        return CostBound.Known(cycles: (CartridgeExpressions.TryKey(
+            name: state.Name.Spelling,
+            button: out _,
+            mode: out _
+        )
+            ? profile.ConditionKey
+            : profile.OperandVariable));
+    }
     // The one-token forms a guard is recognised by: a bare slot read on the left, a bare literal on the right.
     private static string? Slot(ExpressionProgram expression) =>
         ((expression.Instructions is [{ Payload: InstructionPayload.State { Key: null } state }])

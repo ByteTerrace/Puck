@@ -1,10 +1,13 @@
+using System.Runtime.Versioning;
 using Puck.Assets;
 
 namespace Puck.Shaders.Tests;
 
-/// <summary>The two-group binding spike's build-time laws: each variant pass compiles for both backends against the
-/// include its interface generates, both bytecode readers find every binding and block member exactly where the
-/// interface's layout put it, and DXC writes the same bytes on a second build.</summary>
+/// <summary>The two-group binding spike's build-time laws: each spike pass compiles for both backends against the
+/// include its interface generates, both bytecode readers find every binding, block member and buffer stride exactly
+/// where the interface's layout put it (<see cref="ShaderInterfaceLayout.Bindings"/> for SPIR-V,
+/// <see cref="ShaderInterfaceLayout.DxilBindings"/> for DXIL), a kernel declaring another buffer stride is a mismatch,
+/// and DXC writes the same bytes on a second build.</summary>
 public sealed class ShaderInterfaceSpikeTests {
     public static TheoryData<string> PassNames => new(values: ShaderInterfaceSpike.Passes.Select(selector: static pass => pass.Interface.Name).ToArray());
 
@@ -37,6 +40,49 @@ public sealed class ShaderInterfaceSpikeTests {
             expected: pass.Interface.Layout().Bindings
         );
     }
+    // Buffer<T> read through a structured copy, and RWBuffer<T> read and written in place: each is a typed buffer both
+    // bytecode forms carry (a DXIL buffer-dimension view, a SPIR-V image of Dim Buffer).
+    [InlineData("[[vk::binding(0, 0)]] Buffer<float4> texels : register(t0, space0);\n[[vk::binding(1, 0)]] RWStructuredBuffer<float4> output : register(u1, space0);\n[numthreads(1, 1, 1)] void CSMain(uint3 id : SV_DispatchThreadID) { output[id.x] = texels[id.x]; }")]
+    [InlineData("[[vk::binding(0, 0)]] RWBuffer<float4> texels : register(u0, space0);\n[numthreads(1, 1, 1)] void CSMain(uint3 id : SV_DispatchThreadID) { texels[id.x] = (texels[id.x] * 2.0); }")]
+    [Theory]
+    public async Task Both_readers_refuse_a_typed_buffer_by_name(string source) {
+        SkipWithoutDxc();
+
+        var build = await ShaderInterfaceSpike.CompileSourceAsync(
+            cancellationToken: TestContext.Current.CancellationToken,
+            entryPoint: "CSMain",
+            profile: "cs_6_6",
+            source: source
+        );
+
+        Assert.Contains(
+            actualString: Assert.Throws<InvalidDataException>(testCode: () => SpirvInterfaceReader.Read(module: build.Spirv)).Message,
+            expectedSubstring: "SPIR-V binding 'texels' is a typed buffer"
+        );
+
+        if (OperatingSystem.IsWindows()) {
+            AssertDxilRefuses(container: build.Dxil);
+        }
+
+        [SupportedOSPlatform("windows")]
+        static void AssertDxilRefuses(byte[] container) {
+            using var reader = DxilInterfaceReader.Load(toolchain: new ShaderToolchain());
+            InvalidDataException? refusal = null;
+
+            // Read directly rather than through Assert.Throws: the platform analyzer does not carry this function's
+            // Windows-only attribute into a lambda.
+            try {
+                _ = reader.Read(container: container);
+            } catch (InvalidDataException exception) {
+                refusal = exception;
+            }
+
+            Assert.Contains(
+                actualString: Assert.IsType<InvalidDataException>(@object: refusal).Message,
+                expectedSubstring: "DXIL binding 'texels' is a typed buffer"
+            );
+        }
+    }
     [MemberData(memberName: nameof(PassNames))]
     [Theory]
     public async Task The_dxil_reader_finds_every_binding_and_member_where_the_layout_put_it(string name) {
@@ -58,7 +104,7 @@ public sealed class ShaderInterfaceSpikeTests {
 
             Assert.Equal(
                 actual: reader.Read(container: build.Dxil),
-                expected: pass.Interface.Layout().Bindings
+                expected: pass.Interface.Layout().DxilBindings
             );
         }
     }
@@ -90,6 +136,84 @@ public sealed class ShaderInterfaceSpikeTests {
         );
         // The pins let two hosts running the same DXC compare their builds byte for byte (-showLiveOutput prints them).
         TestContext.Current.TestOutputHelper?.WriteLine(message: $"{name} {ShaderInterfaceSpike.Dxc}: spirv {ContentPin.Compute(content: first.Spirv)} dxil {ContentPin.Compute(content: first.Dxil)}");
+    }
+    // The interface says a structured buffer of uint; the kernel declares one of uint4 at the same register, so only the
+    // element stride disagrees.
+    [Fact]
+    public async Task A_kernel_declaring_another_element_stride_is_a_mismatch_on_both_backends() {
+        SkipWithoutDxc();
+
+        var layout = new ShaderInterface(
+            members: [
+                ShaderInterfaceMember.ReadOnlyBuffer(
+                    element: ShaderValueType.Uint,
+                    group: ShaderInterfaceGroup.Pass,
+                    name: "values"
+                ),
+                ShaderInterfaceMember.ReadWriteBuffer(
+                    group: ShaderInterfaceGroup.Pass,
+                    name: "sums"
+                ),
+            ],
+            name: "strided"
+        ).Layout();
+        var build = await ShaderInterfaceSpike.CompileSourceAsync(
+            cancellationToken: TestContext.Current.CancellationToken,
+            entryPoint: "CSMain",
+            profile: "cs_6_6",
+            source: "[[vk::binding(0, 3)]] StructuredBuffer<uint4> values : register(t0, space3);\n[[vk::binding(1, 3)]] RWByteAddressBuffer sums : register(u1, space3);\n[numthreads(1, 1, 1)] void CSMain(uint3 id : SV_DispatchThreadID) { sums.Store((id.x * 4u), values[id.x].w); }"
+        );
+
+        AssertStrideMismatch(mismatch: layout.Mismatch(reflected: SpirvInterfaceReader.Read(module: build.Spirv)));
+
+        if (OperatingSystem.IsWindows()) {
+            using var reader = DxilInterfaceReader.Load(toolchain: new ShaderToolchain());
+
+            AssertStrideMismatch(mismatch: layout.Mismatch(reflected: reader.Read(container: build.Dxil)));
+        }
+
+        static void AssertStrideMismatch(string? mismatch) {
+            Assert.NotNull(@object: mismatch);
+            Assert.StartsWith(
+                actualString: mismatch,
+                expectedStartString: "the module reads values set 3 binding 0 ReadOnlyBuffer stride 16;"
+            );
+            Assert.Contains(
+                actualString: mismatch,
+                expectedSubstring: "lays out values set 3 binding 0 ReadOnlyBuffer stride 4."
+            );
+        }
+    }
+    // A block array of four-component vectors between two scalars: both bytecodes reflect it where the layout puts it,
+    // its elements one 16-byte row apart, so a host writing row after row lands where the kernel reads.
+    [Fact]
+    public async Task A_block_array_reflects_where_the_layout_places_it_on_both_backends() {
+        SkipWithoutDxc();
+
+        var shaderInterface = new ShaderInterface(
+            members: [
+                ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: "first", type: ShaderValueType.Float),
+                ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: 3, name: "rows", type: ShaderValueType.Float4),
+                ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: "after", type: ShaderValueType.Uint),
+                ShaderInterfaceMember.ReadWriteBuffer(group: ShaderInterfaceGroup.Pass, name: "sums"),
+            ],
+            name: "block-array"
+        );
+        var layout = shaderInterface.Layout();
+        var build = await ShaderInterfaceSpike.CompileSourceAsync(
+            cancellationToken: TestContext.Current.CancellationToken,
+            entryPoint: "CSMain",
+            profile: "cs_6_6",
+            source: (ShaderInterfaceHlsl.Generate(shaderInterface: shaderInterface) + "[numthreads(1, 1, 1)] void CSMain(uint3 id : SV_DispatchThreadID) { sums.Store((id.x * 4u), (asuint((passGroup.first + passGroup.rows[id.x % 3u].w)) + passGroup.after)); }\n")
+        );
+
+        Assert.Null(@object: layout.Mismatch(reflected: SpirvInterfaceReader.Read(module: build.Spirv)));
+
+        if (OperatingSystem.IsWindows()) {
+            using var reader = DxilInterfaceReader.Load(toolchain: new ShaderToolchain());
+
+            Assert.Null(@object: layout.Mismatch(reflected: reader.Read(container: build.Dxil)));
+        }
     }
     [Fact]
     public void Both_passes_place_the_frame_group_identically() {

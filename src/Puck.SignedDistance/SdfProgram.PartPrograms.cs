@@ -17,7 +17,7 @@ public sealed partial class SdfProgram {
     // A part is one complete hard-union field scope. Its direct leaf program is shared by geometry identity;
     // poses/materials stay in a separate binding run per placement. Original instructions remain the CPU/dual
     // reference and supply canonical primitive payloads, including the packed polygon profile pointer.
-    // KEEP IN SYNC with sdfComposePartProgram and the instance-header .y pointer in sdf-vm.hlsli.
+    // KEEP IN SYNC with sdfComposePartProgram and the instance-header .y pointer in field/sdf-map.hlsli.
     private PartProgramPlan CompilePartPrograms() {
         var assets = new List<PartLeafPlan[]>();
         var instances = new PartInstancePlan?[m_instances.Length];
@@ -256,7 +256,7 @@ public sealed partial class SdfProgram {
         if (plan.CompiledCount == 0) {
             return;
         }
-        m_words[((instanceOffset * WordsPerVector) + 1)] = ((uint)offset);
+        m_words[((instanceOffset * WordsPerVector) + InstancePartProgramsLane)] = ((uint)offset);
         var header = (offset * WordsPerVector);
 
         m_words[header] = ((uint)plan.CompiledCount) | (CanTracePartsIndependently()

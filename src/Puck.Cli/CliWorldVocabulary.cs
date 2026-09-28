@@ -22,10 +22,7 @@ public static class CliWorldVocabulary {
             new HumbleGamingBrickExtension(),
         ]));
 
-        WorldSchemaVocabularyHooks.Install(
-            postRenderExtensionCheck: WorldPostRenderExtensions.IsShipped,
-            probeKindCheck: WorldProbeKinds.IsShipped
-        );
+        WorldSchemaVocabularyHooks.Install(probeKindCheck: WorldProbeKinds.IsShipped);
         return catalog;
     }
     /// <summary>Computes the stable metadata fingerprint for the selected invocation catalog.</summary>

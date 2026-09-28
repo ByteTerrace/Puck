@@ -1,3 +1,4 @@
+using Puck.Testing;
 using Puck.Commands;
 using Puck.Maths;
 using Puck.World.Protocol;
@@ -251,7 +252,7 @@ public sealed class VectorStateLawTests {
     }
     [Fact]
     public void Vector_EvictingTableReplayDeterminism() {
-        Fixtures.SkipIfReplayDirectoryUnwritable();
+        using var stateDirectory = new TemporaryDirectory(prefix: "puck-replay-");
 
         var space = SampleSpace(dimensions: 8, name: "lore");
         var eventsRow = new WorldStateRow(
@@ -266,6 +267,7 @@ public sealed class VectorStateLawTests {
         using var serverA = Fixtures.FreshServer(definition: definition);
         var transport = new LoopbackTransport(server: serverA.Server);
         var tape = new WorldReplayTape(
+            stateRoot: new WorldStateRoot(path: stateDirectory.RootPath),
             liveServer: serverA.Server,
             profiles: serverA.Server.Profiles,
             transport: transport,
@@ -300,11 +302,12 @@ public sealed class VectorStateLawTests {
         _ = tape.StopRecording();
 
         try {
-            using var stream = File.OpenRead(path: WorldReplayTape.PathFor(name: tapeName));
+            using var stream = File.OpenRead(path: tape.PathFor(name: tapeName));
             var snapshot = WorldReplaySnapshot.Read(stream: stream);
 
             using var serverB = Fixtures.FreshServer(definition: definition);
             var tapeB = new WorldReplayTape(
+                stateRoot: new WorldStateRoot(path: stateDirectory.RootPath),
                 liveServer: serverB.Server,
                 profiles: serverB.Server.Profiles,
                 transport: new LoopbackTransport(server: serverB.Server),
@@ -331,7 +334,7 @@ public sealed class VectorStateLawTests {
             Assert.Equal("e3", rowB.Cells[0].Key.Value);
             Assert.Equal("e4", rowB.Cells[1].Key.Value);
         } finally {
-            var path = WorldReplayTape.PathFor(name: tapeName);
+            var path = tape.PathFor(name: tapeName);
 
             if (File.Exists(path: path)) {
                 File.Delete(path: path);
@@ -549,8 +552,7 @@ public sealed class VectorStateLawTests {
         using var row = HostRow.Build(definition: definition, name: "boot");
         var registry = new CommandRegistry(modules: [new WorldStateCommandModule(
             authority: new FakeConsoleAuthority(instance: row.Instance),
-            echoes: new WorldDeferredVerbEchoes(),
-            link: row.Instance.Link
+            echoes: new WorldDeferredVerbEchoes()
         )]);
 
         var result = registry.Submit(line: "world.state memories m1");
@@ -593,8 +595,7 @@ public sealed class VectorStateLawTests {
         using var row = HostRow.Build(definition: definition, name: "boot");
         var registry = new CommandRegistry(modules: [new WorldStateCommandModule(
             authority: new FakeConsoleAuthority(instance: row.Instance),
-            echoes: new WorldDeferredVerbEchoes(),
-            link: row.Instance.Link
+            echoes: new WorldDeferredVerbEchoes()
         )]);
 
         // 1. Query as Console (unrestricted): both gift and secret appear
@@ -635,8 +636,7 @@ public sealed class VectorStateLawTests {
         using var rowHidden = HostRow.Build(definition: defWithHidden, name: "boot2");
         var registryHidden = new CommandRegistry(modules: [new WorldStateCommandModule(
             authority: new FakeConsoleAuthority(instance: rowHidden.Instance),
-            echoes: new WorldDeferredVerbEchoes(),
-            link: rowHidden.Instance.Link
+            echoes: new WorldDeferredVerbEchoes()
         )]);
 
         var hiddenCommandSource = new TextCommandSource(registry: registryHidden);
@@ -906,8 +906,7 @@ public sealed class VectorStateLawTests {
         using var row = HostRow.Build(definition: definition, name: "boot");
         var registry = new CommandRegistry(modules: [new WorldStateCommandModule(
             authority: new FakeConsoleAuthority(instance: row.Instance),
-            echoes: new WorldDeferredVerbEchoes(),
-            link: row.Instance.Link
+            echoes: new WorldDeferredVerbEchoes()
         )]);
 
         string? diag = null;

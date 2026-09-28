@@ -5,6 +5,7 @@
 // 'for' in it, none of which the document carries.
 
 schema: "puck.world.definition.v1"
+import "../quality"
 
 // The palette, by role. A slot number says nothing; a name says what the surface IS.
 let skin = 0 // #EED3A6
@@ -4715,7 +4716,7 @@ views {
     slots [
       {
         height: 1
-        pipeline: "moth-pipeline"
+        instance: "moth-pipeline"
         width: 0.5
         x: 0
         y: 0
@@ -4765,7 +4766,7 @@ views {
     }
   }
 
-  pipeline "moth-pipeline" {
+  graph "moth-pipeline" {
     camera: "three-quarter"
     source: "../../pipelines/moth.hlsl"
     timeScale: 1

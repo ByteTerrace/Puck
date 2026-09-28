@@ -1,0 +1,9 @@
+# The replace panel's frame element samples the camera producer; while a screenshot is armed the capture gate fills
+# The engine ready first: its pipeline set installed and its first frame produced, however long a cold driver
+# cache takes.
+world.wait ready 45
+# that external source with its placeholder, so the captured frame shows the placeholder, never a camera image.
+world.cadence off
+world.wait 30
+world.screenshot {run}/frame.png
+world.wait 10

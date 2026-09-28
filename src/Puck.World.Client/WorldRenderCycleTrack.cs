@@ -21,8 +21,8 @@ public sealed class WorldRenderCycleTrack {
 
     private int m_outputIndex;
     private string? m_stateRow;
-
-    private int m_stateSlot = -1;
+    // The cycle's position binding, whose manifest slot is found afresh each frame.
+    private StateBinding? m_state;
 
     // A point light's anchor rides the resolver's live dynamic-transform slot every call (never cached with the
     // statics/keys above, which move only once per revision) — an anchored placement's pool slot can differ from
@@ -374,21 +374,11 @@ public sealed class WorldRenderCycleTrack {
             }
         }
     }
-    // render.environment/render.tonemap are NOT part of a render.cycle key (WorldRenderCycleKey carries no
-    // environment/tonemap field), so they are written directly onto the statics once per revision rather than
-    // through Write's per-key carry — every cycle key inherits the same value via CopyFrom, so blending two
-    // identical lane values (whatever SdfEnvironment.BlendOf classifies them as) is exact.
-    private static void WriteEnvironment(WorldStateMirror mirror, WorldRenderEnvironment? environment, SdfEnvironment into, WorldTonemap? tonemap) {
-        into.Tonemap = ((tonemap ?? WorldTonemap.None) switch {
-            WorldTonemap.None => SdfTonemapMode.None,
-            WorldTonemap.Filmic => SdfTonemapMode.Filmic,
-            var other => throw new ArgumentOutOfRangeException(
-            paramName: nameof(tonemap),
-            actualValue: other,
-            message: "render.tonemap names a mode the environment lane table does not carry."
-        ),
-        });
-
+    // render.environment is NOT part of a render.cycle key (WorldRenderCycleKey carries no environment field), so it is
+    // written directly onto the statics once per revision rather than through Write's per-key carry — every cycle key
+    // inherits the same value via CopyFrom, so blending two identical lane values (whatever SdfEnvironment.BlendOf
+    // classifies them as) is exact.
+    private static void WriteEnvironment(WorldStateMirror mirror, WorldRenderEnvironment? environment, SdfEnvironment into) {
         var count = Math.Min(
             val1: (environment?.Softboxes?.Count ?? 0),
             val2: SdfEnvironment.MaxSoftboxes
@@ -447,7 +437,7 @@ public sealed class WorldRenderCycleTrack {
             (mirror.ColorRevision != m_mirrorRevision)
         ) {
             m_revision = revision;
-            m_stateSlot = -1;
+            m_state = null;
             Write(
                 carry: false,
                 into: m_statics,
@@ -458,8 +448,7 @@ public sealed class WorldRenderCycleTrack {
             WriteEnvironment(
                 environment: definition.Render.Environment,
                 into: m_statics,
-                mirror: mirror,
-                tonemap: definition.Render.Tonemap
+                mirror: mirror
             );
 
             if (cycle is { Keys.Count: >= 2 }) {
@@ -467,14 +456,11 @@ public sealed class WorldRenderCycleTrack {
                     cycle: cycle,
                     mirror: mirror
                 );
-                // The cycle's position is the row's stored truth; the slot is registered once per rebuild.
-                m_stateSlot = mirror.Register(
-                    binding: new StateBinding(
+                // The cycle's position is the row's stored truth, which the document's manifest registers.
+                m_state = new StateBinding(
                     Key: null,
                     Row: m_stateRow!,
                     Target: true
-                ),
-                    conversion: WorldStateConversion.Number
                 );
             }
 
@@ -497,9 +483,12 @@ public sealed class WorldRenderCycleTrack {
         }
 
         if (
-            (m_stateSlot < 0) ||
+            (m_state is not { } state) ||
             !mirror.TryValue(
-            slot: m_stateSlot,
+            slot: mirror.SlotOf(
+                binding: in state,
+                conversion: WorldStateConversion.Number
+            ),
             value: out var value
         )
         ) {

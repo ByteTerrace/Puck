@@ -26,14 +26,23 @@ public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceAp
     private const uint VkStructureTypePhysicalDeviceFeatures2 = 1000059000;
 
     private readonly IAllocator m_allocator;
+    private readonly GpuDeviceMemoryWork? m_memory;
+    private readonly VulkanProcResolver m_procedures;
 
     /// <summary>Initializes a new instance of the <see cref="VulkanNativeLogicalDeviceApi"/> class.</summary>
     /// <param name="allocator">The unmanaged allocator used to marshal native Vulkan structures.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="allocator"/> is <see langword="null"/>.</exception>
-    public VulkanNativeLogicalDeviceApi(IAllocator allocator) {
+    /// <param name="procedures">The resolver the device's command table is resolved and counted through.</param>
+    /// <param name="memory">The device-local memory counts each device's allocations join (<c>memory.vulkan</c>), or
+    /// <see langword="null"/> to count none.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="allocator"/> or <paramref name="procedures"/> is
+    /// <see langword="null"/>.</exception>
+    public VulkanNativeLogicalDeviceApi(IAllocator allocator, VulkanProcResolver procedures, GpuDeviceMemoryWork? memory = null) {
         ArgumentNullException.ThrowIfNull(argument: allocator);
+        ArgumentNullException.ThrowIfNull(argument: procedures);
 
         m_allocator = allocator;
+        m_memory = memory;
+        m_procedures = procedures;
     }
 
     // Every chained VkPhysicalDevice*Features struct shares the layout
@@ -183,7 +192,11 @@ public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceAp
                 (0 != deviceHandle)
             ) {
                 try {
-                    device = new VulkanDeviceCommands(deviceHandle: deviceHandle);
+                    device = new VulkanDeviceCommands(
+                        deviceHandle: deviceHandle,
+                        memory: m_memory,
+                        procedures: m_procedures
+                    );
                 } catch {
                     DestroyUnresolvedDevice(deviceHandle: deviceHandle);
 
@@ -217,7 +230,6 @@ public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceAp
             device.Handle,
             0
         );
-        device.Dispose();
     }
     /// <inheritdoc/>
     public nint GetDeviceQueue(VulkanDeviceCommands device, uint queueFamilyIndex, uint queueIndex) {
@@ -240,8 +252,8 @@ public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceAp
 
     // A device whose command table could not be built is still a live VkDevice; destroy it before the failure
     // propagates, resolving vkDestroyDevice alone because no table exists to hold it.
-    private static unsafe void DestroyUnresolvedDevice(nint deviceHandle) {
-        var destroyDevice = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveOptionalDeviceProc(
+    private unsafe void DestroyUnresolvedDevice(nint deviceHandle) {
+        var destroyDevice = ((delegate* unmanaged[Cdecl]<nint, nint, void>)m_procedures.ResolveOptionalDeviceProc(
             deviceHandle: deviceHandle,
             functionName: "vkDestroyDevice"u8
         ));

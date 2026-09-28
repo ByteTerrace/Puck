@@ -213,7 +213,7 @@ internal static class ReleaseProfileLoader {
             }
             if (workload.Pipeline is { } pipeline) {
                 if (string.IsNullOrWhiteSpace(value: pipeline.Instance)) {
-                    return $"{at}.pipeline.instance: a views.pipelines row name is required";
+                    return $"{at}.pipeline.instance: a views.graphs row name is required";
                 }
                 if (string.IsNullOrWhiteSpace(value: pipeline.Layout)) {
                     return $"{at}.pipeline.layout: a views.layouts row name is required";
@@ -282,6 +282,9 @@ internal static class ReleaseProfileLoader {
                 }
             } else if (threshold.PeakOwnedPipelineBytes is not > 0L) {
                 return $"thresholds {cell}: peakOwnedPipelineBytes must be a positive byte count, since the workload churns a pipeline";
+            }
+            if (threshold.PeakDeviceLocalBytes is <= 0L) {
+                return $"thresholds {cell}: peakDeviceLocalBytes must be a positive byte count or null";
             }
         }
 

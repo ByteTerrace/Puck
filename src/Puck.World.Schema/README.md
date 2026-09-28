@@ -7,8 +7,10 @@ two egress families, `puck.world.projection.v1` (`WorldProjection.cs`) and
 a world hands a peer instead of itself. It also carries `puck.counters.report.v1`
 (`WorldCountersReport.cs`), the report
 [`puck counters`](../../docs/reference/cli.md#puck-counterswork-counter-collector)
-writes about a World run, so the report shares the document context's strictness
-and schema generation. It contains no rendering, no input
+writes about a World run, and `puck.counters.ceilings.v1`
+(`WorldCountersCeilings.cs`), the counted-cost ceilings `puck counters --check`
+holds that run to, so both share the document context's strictness and schema
+generation. It contains no rendering, no input
 handling, and no server logic; it exists so the data the simulation runs on
 remains independent of presentation. It also carries the
 document-embedded vocabulary that a document's own rows type themselves
@@ -544,13 +546,14 @@ seam one process wires and another does not cannot exist:
   (`WorldGrant.KindMask`) by NAME (`verbs:UpsertStateCell,RemoveStateCell`)
   against `WorldMutationKindCatalog`, which lives in `Puck.World.Protocol`,
   downstream of this project.
-- `WorldExtensionVocabularyHook.cs` checks a `screens[]` engine key and a
-  `render.extensions[]` key against the catalogs in `Puck.World.Server`; those
-  two arrive as parameters to the shared installer, since `Puck.World.Client`
-  does not reference `Puck.World.Server` either.
-- `WorldProbeVocabularyHook.cs` checks a `probes[].kind` key
-  against the catalog in `Puck.World.Server`, the same required, arrives-as-a-
-  parameter shape `WorldExtensionVocabularyHook.cs` uses.
+- `WorldPostProcessVocabularyHook.cs` answers whether a `views.post[].package`
+  id names a post-process package in the host's render graph package catalog
+  (`Puck.Shaders.RenderGraphPackageCatalog.Engine`, which `Puck.World.Client`
+  reaches directly).
+- `WorldProbeVocabularyHook.cs` checks a `probes[].kind` key against the
+  catalog in `Puck.World.Server`; that catalog arrives as a parameter to the
+  shared installer, since `Puck.World.Client` does not reference
+  `Puck.World.Server`.
 
 Every validation path is covered without this project ever naming `Puck.Input`,
 `Puck.World.Client`, or `Puck.World.Protocol`.
@@ -1688,9 +1691,11 @@ optional `Text` payload beside the numeric `Value`), never a second
 mutation kind for the same per-cell write.
 
 **A color field is a `#RRGGBB` literal or a `state.<row>[.<key>]` binding to a
-text cell holding one**—the same grammar, resolved by `WorldColor.Resolve`
-against the hosting world: creation palette entries, a screen text source's
-`foreground`/`background`. `WorldDefinitionValidator` refuses a binding that
+text cell holding one**—the same grammar, read through the client's state
+mirror like every presentation read of state (`WorldBakedColors`, whose slots
+the presentation manifest registers at install): creation palette entries, a
+height field's color, a screen text source's `foreground`/`background`. A
+bound color moving rebuilds the program or rebakes the decal that baked it. `WorldDefinitionValidator` refuses a binding that
 names no declared text cell, or one whose text is not a hex color; the
 `CreationCanonicalizer` admits only the binding's syntax (a creation on its own
 has no world to resolve against—the world validator resolves it at the
@@ -1793,9 +1798,17 @@ checkpoint loads use `DeserializeForAdmission` to carry this proof into construc
 and restoration; a distinct journal base still needs its own validation.
 
 File and composed-byte loaders expose `TryLoadForAdmission` and
-`TryLoadFileForAdmission` to retain the final document's programs through boot and
-local instance construction; the asynchronous entry returns the same receipt to a
-hosted read. Bytes, files, and asynchronous loads resolve boot draws, state-backed
+`TryLoadFileForAdmission` to retain the final document's programs through boot, local
+instance construction, and `world.load`/`world.reload` with the replay drive's re-read; the asynchronous entry returns the same receipt to a
+hosted read. `TryLoadFileForAdmission` is the only door that admits a document file,
+so the owned-world catalog, its cloud-sync gate and `puck creation stats` read through
+it too (an owned world drawn for its own id); `WorldDefinitionFileSource.TryReadContentPin`
+returns a file's content pin alone, for a caller comparing bytes against a recorded pin.
+A release publishes a definition undrawn, since draws are instance state:
+`WorldDefinitionLoader.TryReadPublishable` returns the parsed, undrawn document once a copy
+drawn for the boot instance admits, and `puck world prepare`, `puck world release`, the
+official package scan and a release bootstrap read through it; `WorldDefinitionLoader.TryProvePublishable` is
+that same proof for a definition already parsed, which a release metadata transition runs on both of its packages. Bytes, files, and asynchronous loads resolve boot draws, state-backed
 document values, a caller's `overrides` rewrite of the loaded document, and state-row
 settlement before full admission, in that order. A preflight uses the existing
 generator and row validators for inputs that drawing can consume or replace; invalid
@@ -2221,11 +2234,23 @@ this is a federation seam—unrelated to machine cable linking, which is the
 exact per-tick value settled from that seat's drained `CommandSnapshot`,
 riding the channel's own native fixed-point domain unchanged, so `1` already
 means "fully pressed/1.0" with no rescale; 0 for a seat outside
-`bodies.localSeats` or one no local seat currently occupies)—
+`bodies.localSeats` or one no local seat currently occupies), and
+`$pointer:<seat>:<screenIndex>:x|y|on` (the 1-based local seat's pointer ray,
+carried in its intent, mapped in fixed point through a `Simulation` screen's
+row against a one-by-one source by `WorldScreenMappings.Normalized`: `x` and
+`y` are the source-normalized fractions in `[0, 1)`, `on` is 1 while the ray
+lands on the source, and all three read 0 otherwise; `press:<channelName>`
+reads that seat's channel while its ray lands on the source; the participant
+`any` in place of a seat reads the first participant allowed to point at the
+screen whose ray lands on it, the local seats in order and then the live
+sessions by ordinal, each holding `Control` over the screen, so a portal
+viewer's forwarded input reads through the same operand; an unknown seat,
+channel or screen, or a screen whose `route.input` is not `Simulation`, is
+refused at compile time)—
 folding time, population, occupancy, machine memory, aggregates,
 reconnect-park state, federation liveness, and a local seat's own channel
-value into the string channel `State` already carries rather than a fact enum
-or a scheduler. `Mode` is `Level`
+value and pointer into the string channel `State` already carries rather than
+a fact enum or a scheduler. `Mode` is `Level`
 (fires every tick the gate holds) or `Edge` (fires once per crossing, re-arming
 when the gate closes); a rule that writes a row almost always wants `Edge`.
 
@@ -2747,13 +2772,14 @@ kind's sockets by name, each bound to a `WorldFrameSource`) or a recorded
 (`WorldProbeBinding`—`axis`, `parameter`, or `control`, each naming one of the
 enclosing probe's channels). A kind is checked against the registered vocabulary at load
 (`WorldProbeVocabularyHook.IsRegisteredProbeKind`, a required hook installed
-the same way `WorldExtensionVocabularyHook`'s post-render check is); a channel
+the same way `WorldPostProcessVocabularyHook`'s package check is); a channel
 name is not—the manifest behind that hook is not reachable here, so a
 binding's `channel` is checked only for presence, and by name once a kind's own
 manifest is consulted at boot. An `axis` binding's `source` mints the bindable
 input source `probe.<source>` (`Puck.Input.InputSources.Probe.Axis`); a
-`parameter` binding's `target` is either an `extension` entry the document's own
-`render.extensions` composes or another declared `probe` row's config field; a
+`parameter` binding's `target` is either a `post` pass's config field, naming
+one of the document's own `views.post` rows, or another declared `probe` row's
+config field; a
 `control` binding's `control` field must name a
 `WorldCameraControls` member. Like `music`, the section is
 boot-authored only—no `WorldMutation` kind targets it and `world.row.set
@@ -2922,9 +2948,11 @@ skips a candidate whose geometry is valid—so `legal`/`reach`/`counts` are the
 same whether or not the job searches deeper.
 
 `depth` (default 1) and `score` ask what a position beyond the immediate ply is
-worth. `score` is an infix expression, in the rule expression grammar,
-compiled the same way a rule local is (`RuleCompiler.CompileExpression`
-over `ExpressionSpelling.TryParse`'s tokens) and refused at validation if it
+worth. `score` is a value expression, stored like every other expression the
+document holds as its `{ "instructions": [...] }` program (a `.puck` source
+writes it as infix text, and the reader refuses it written as text by name),
+compiled the same way a rule local is (`RuleCompiler.CompileExpression`) and
+refused at validation if it
 reads a fact only the world host answers—a scoped judge cannot evaluate one. It is
 required whenever `depth` exceeds one, or `best` is authored. `best` is a
 keyed integer row receiving the deepest completed depth's answer: `token` (the

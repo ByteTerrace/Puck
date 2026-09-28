@@ -31,7 +31,8 @@ public sealed class WorldSiloLifecycleLawTests {
                 source: () => source,
                 tagging: new SiloConsoleTagging(output: output)
             ),
-            new DirectoryObjectStorageTarget(directory)
+            new DirectoryObjectStorageTarget(directory),
+            timeProvider: new VirtualClock()
         );
     }
     private static async Task PublishAsync(WorldSiloHost host, WorldAuthorityIdentity identity, WorldDefinition definition) {
@@ -109,7 +110,8 @@ public sealed class WorldSiloLifecycleLawTests {
         var store = PuckStorageTestComposition.BuildStore();
         var backend = new WorldAuthorityBlobStore(
             store: store,
-            target: new DirectoryObjectStorageTarget(directory.RootPath)
+            target: new DirectoryObjectStorageTarget(directory.RootPath),
+            timeProvider: new VirtualClock()
         );
         var definition = Fixtures.BuildDocument() with {
             HostRaw = Fixtures.StandardHost with { Authority = "localhost:7825", Listen = endpoint, Presentation = WorldHostPresentation.None },
@@ -230,7 +232,8 @@ public sealed class WorldSiloLifecycleLawTests {
         var store = PuckStorageTestComposition.BuildStore();
         var backend = new WorldAuthorityBlobStore(
             store: store,
-            target: new DirectoryObjectStorageTarget(directory.RootPath)
+            target: new DirectoryObjectStorageTarget(directory.RootPath),
+            timeProvider: new VirtualClock()
         );
         var definition = Fixtures.BuildDocument() with {
             HostRaw = Fixtures.StandardHost with {
@@ -384,7 +387,8 @@ public sealed class WorldSiloLifecycleLawTests {
         var target = new DirectoryObjectStorageTarget(directory.RootPath);
         var backend = new WorldAuthorityBlobStore(
             store: store,
-            target: target
+            target: target,
+            timeProvider: new VirtualClock()
         );
         var definition = Fixtures.BuildDocument();
 
@@ -475,7 +479,8 @@ public sealed class WorldSiloLifecycleLawTests {
         var target = new DirectoryObjectStorageTarget(directory.RootPath);
         var backend = new WorldAuthorityBlobStore(
             store: store,
-            target: target
+            target: target,
+            timeProvider: new VirtualClock()
         );
         var definition = Fixtures.BuildDocument();
 
@@ -737,7 +742,8 @@ public sealed class WorldSiloLifecycleLawTests {
         var store = PuckStorageTestComposition.BuildStore();
         var backend = new WorldAuthorityBlobStore(
             store: store,
-            target: new DirectoryObjectStorageTarget(directory.RootPath)
+            target: new DirectoryObjectStorageTarget(directory.RootPath),
+            timeProvider: new VirtualClock()
         );
         var definition = Fixtures.BuildDocument();
 
@@ -857,7 +863,7 @@ public sealed class WorldSiloLifecycleLawTests {
             replacement.DrainAsync(ct: TestContext.Current.CancellationToken)
         );
     }
-    // Law: an activated row resolves views.pipelines rows against the executable's own directory — a hosted
+    // Law: an activated row resolves views.graphs rows against the executable's own directory — a hosted
     // world's definition arrives from cloud storage, never a local file, so it has no document directory of its
     // own — rather than refusing every override with SourcesUnattached, and the same boot check the desktop host
     // runs right after loading a document runs here too: a bad override value in the activated document is
@@ -869,14 +875,14 @@ public sealed class WorldSiloLifecycleLawTests {
         // A hosted document has no directory, so it names its pipeline by an absolute path.
         var pipelinePath = PuckPaths.Normalize(path: Path.Combine(
             path1: directory.RootPath,
-            path2: "silo.pipeline.json"
+            path2: "silo.graph.json"
         ));
 
         File.Copy(
             destFileName: pipelinePath,
             sourceFileName: Path.Combine(
                 path1: AuthoredGameFixtures.Root,
-                path2: "src/Puck.World/Assets/pipelines/ink.pipeline.json"
+                path2: "src/Puck.World/Assets/pipelines/ink.graph.json"
             )
         );
 
@@ -887,8 +893,8 @@ public sealed class WorldSiloLifecycleLawTests {
                 return (definition with {
                     HostRaw = Fixtures.StandardHost with { Authority = "localhost:7825", Presentation = WorldHostPresentation.None },
                     ViewsRaw = (definition.Views with {
-                        Pipelines = [
-                            new WorldViewPipeline(
+                        Graphs = [
+                            new WorldViewGraph(
                                 Name: "left",
                                 Source: source,
                                 Overrides: new Dictionary<string, JsonElement> {
@@ -903,7 +909,8 @@ public sealed class WorldSiloLifecycleLawTests {
             var store = PuckStorageTestComposition.BuildStore();
             var backend = new WorldAuthorityBlobStore(
                 store: store,
-                target: new DirectoryObjectStorageTarget(directory.RootPath)
+                target: new DirectoryObjectStorageTarget(directory.RootPath),
+                timeProvider: new VirtualClock()
             );
 
             async Task<(bool Activated, WorldSiloHost Host, WorldAuthorityIdentity Identity)> TryActivateAsync(string worldName, double exposure, string? source = null) {
@@ -962,7 +969,7 @@ public sealed class WorldSiloLifecycleLawTests {
             }
 
             // Denied: a relative source in a document with no directory resolves nowhere, and is refused by name.
-            var (relativeActivated, relativeHost, _) = await TryActivateAsync(exposure: 4, source: "silo.pipeline.json", worldName: "row-relative");
+            var (relativeActivated, relativeHost, _) = await TryActivateAsync(exposure: 4, source: "silo.graph.json", worldName: "row-relative");
 
             using (relativeHost.Instances) {
                 Assert.False(condition: relativeActivated);

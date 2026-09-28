@@ -178,6 +178,13 @@ public sealed class BrowserRuleReader : ArenaEffectHost, IWorldFacts {
             kind: CellKind.Fixed
         )
     );
+    RuleFact IWorldFacts.Read(PointerOperand operand) => Record(
+        operand: nameof(PointerOperand),
+        fact: RuleFact.Finite(
+            value: 0L,
+            kind: operand.ValueKind
+        )
+    );
     RuleFact IWorldFacts.Read(NearestOperand operand) => Record(
         operand: nameof(NearestOperand),
         fact: RuleFact.Finite(

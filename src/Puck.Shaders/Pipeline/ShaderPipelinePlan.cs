@@ -50,7 +50,7 @@ public sealed record ShaderPipelinePlannedResource(
 /// when a pass touches this frame's instance, <see cref="ShaderPipelinePriorKind.Host"/> for a host-owned image no pass
 /// touches, and <see cref="ShaderPipelinePriorKind.CrossFrame"/> for an initialized storage no pass touches.</param>
 /// <param name="FrameEnd">The state this frame's instance is in after the frame's last pass: where publication, the
-/// float preview and the hand-back of a host-owned image start from.</param>
+/// preview and the hand-back of a host-owned image start from.</param>
 public sealed record ShaderPipelinePlannedStorage(
     int Index,
     ShaderPipelineResource Declaration,
@@ -72,18 +72,45 @@ public sealed record ShaderPipelinePlannedStorage(
 /// <param name="Depth">Whether it is the depth attachment rather than a color attachment.</param>
 /// <param name="Load">How the render pass begins it: <see cref="GpuAttachmentLoad.Load"/> for a version that forwards
 /// its predecessor, whose contents the pass continues, and <see cref="GpuAttachmentLoad.Clear"/> for one whose writer
-/// starts from discarded contents (a color to opaque black, a depth to one).</param>
+/// starts from discarded contents (a color to opaque black, a depth to its <see cref="ClearDepth"/>).</param>
 /// <param name="Store">Whether the render pass keeps what it wrote: <see cref="GpuAttachmentStore.Store"/> for a stored
 /// version, <see cref="GpuAttachmentStore.Discard"/> for one nothing uses after its writer.</param>
+/// <param name="ClearDepth">The depth a cleared depth attachment starts at: its version's declared
+/// <see cref="ShaderPipelineResource.ClearDepth"/>, or <see cref="GpuDepthAttachment.DefaultClearDepth"/> when it declares
+/// none. A color attachment, and a loaded one, keep the default.</param>
 public sealed record ShaderPipelineAttachment(
     string Version,
     int Storage,
     bool Depth,
     GpuAttachmentLoad Load,
-    GpuAttachmentStore Store
+    GpuAttachmentStore Store,
+    float ClearDepth = GpuDepthAttachment.DefaultClearDepth
+);
+/// <summary>A package pass's step in an immutable execution plan: the package whose recorder records it and the versions
+/// bound to its ports. The package binds its own descriptors, so its ports carry no binding; the extent it runs at is
+/// its planned pass's (<see cref="ShaderPipelinePlannedPass.ResolveExtent"/>).</summary>
+/// <param name="Package">The package id, which names the recorder that records the pass.</param>
+/// <param name="Inputs">The versions bound to its input ports, in port order.</param>
+/// <param name="Outputs">The versions bound to its output ports, in port order.</param>
+/// <param name="Part">The fragment pass it runs (<see cref="RenderGraphFragmentPass.Name"/>), or <see langword="null"/>
+/// for a package that runs as one pass.</param>
+/// <param name="Dispatch">Its dispatch shape, or <see langword="null"/> for one invocation per pixel of its extent. An
+/// indirect dispatch's arguments version is planned as the pass's first access, in the indirect-argument state.</param>
+/// <param name="CountsKernelWork">Whether its kernels count their own work into the node's counter buffers
+/// (<see cref="RenderGraphFragmentPass.CountsKernelWork"/>), in the row its pass index names.</param>
+public sealed record ShaderPipelinePackageStep(
+    string Package,
+    IReadOnlyList<ResourceReference> Inputs,
+    IReadOnlyList<ResourceReference> Outputs,
+    string? Part = null,
+    ShaderPipelineDispatch? Dispatch = null,
+    bool CountsKernelWork = false
 );
 /// <summary>A pass entry in an immutable shader execution plan.</summary>
-/// <param name="Declaration">The pass declaration, with every binding resolved.</param>
+/// <param name="Name">The unique pass name.</param>
+/// <param name="Declaration">A shader pass's declaration, with every binding resolved, or <see langword="null"/> for a
+/// package's pass.</param>
+/// <param name="Package">A package pass's step, or <see langword="null"/> for a shader pass.</param>
 /// <param name="Index">The pass's position in execution order.</param>
 /// <param name="Dependencies">The indices of the passes that must run first: the writers of what it reads and forwards,
 /// and every reader of a version it overwrites.</param>
@@ -91,27 +118,48 @@ public sealed record ShaderPipelineAttachment(
 /// <param name="Accesses">Every storage instance the pass touches, in recording order, with the barrier each needs.</param>
 /// <param name="Attachments">A graphics pass's attachments, its color attachment first; empty for a compute pass. The
 /// render pass leaves every attachment in its attachment layout, and a later access's planned barrier moves it on.</param>
+/// <param name="Kind">The planner's kind: the shader pass's kind, or <see cref="ShaderPipelinePassKind.Package"/> for a
+/// package's pass, which carries its <paramref name="Package"/> step instead of a declaration.</param>
+/// <param name="Extent">The dimensions the pass runs at, whatever its kind: those of its first output whose storage
+/// declares them, else of its first input whose storage does, or <see langword="null"/> when it runs at the frame's
+/// extent. The planner computes it once for every pass; <see cref="ResolveExtent"/> resolves it against a frame.</param>
 public sealed record ShaderPipelinePlannedPass(
-    ShaderPipelinePass Declaration,
+    string Name,
+    ShaderPipelinePass? Declaration,
+    ShaderPipelinePackageStep? Package,
     int Index,
     IReadOnlyList<int> Dependencies,
     ShaderPipelineParameterLayout Parameters,
     IReadOnlyList<ShaderPipelineAccess> Accesses,
-    IReadOnlyList<ShaderPipelineAttachment> Attachments
+    IReadOnlyList<ShaderPipelineAttachment> Attachments,
+    ShaderPipelinePassKind Kind,
+    ShaderPipelineDimensions? Extent
 ) {
-    /// <summary>Gets the pass name.</summary>
-    public string Name => Declaration.Name;
+    /// <summary>Gets the versions the pass reads: its declaration's inputs, or its package step's input ports.</summary>
+    public IReadOnlyList<ResourceReference> Inputs => (Declaration?.InputReferences ?? Package!.Inputs);
+    /// <summary>Gets the versions the pass writes: its declaration's outputs, or its package step's output ports.</summary>
+    public IReadOnlyList<ResourceReference> Outputs => (Declaration?.OutputReferences ?? Package!.Outputs);
+
+    /// <summary>Resolves the extent the pass runs at against a frame's: its <see cref="Extent"/>, or the frame's own
+    /// when it has none. A resized frame resolves again through the same rule.</summary>
+    /// <param name="frameWidth">The frame width, in pixels.</param>
+    /// <param name="frameHeight">The frame height, in pixels.</param>
+    /// <returns>The pass's extent.</returns>
+    public (uint Width, uint Height) ResolveExtent(uint frameWidth, uint frameHeight) => (Extent?.Resolve(
+        frameHeight: frameHeight,
+        frameWidth: frameWidth
+    ) ?? (frameWidth, frameHeight));
 }
 /// <summary>The result of pipeline planning, with passes in deterministic execution order.</summary>
 public sealed class ShaderPipelinePlan {
     internal ShaderPipelinePlan(
-        ShaderPipelineDefinition definition,
+        RenderGraphDefinition definition,
         IReadOnlyList<ShaderPipelinePlannedResource> resources,
         IReadOnlyList<ShaderPipelinePlannedStorage> storages,
         IReadOnlyList<ShaderPipelinePlannedPass> passes
     ) {
         Definition = Snapshot(definition: definition);
-        var passesByName = Definition.Passes.ToDictionary(
+        var passesByName = Definition.ShaderPasses.ToDictionary(
             static pass => pass.Name,
             StringComparer.Ordinal
         );
@@ -130,7 +178,7 @@ public sealed class ShaderPipelinePlan {
         Passes = new ReadOnlyCollection<ShaderPipelinePlannedPass>(list: passes.Select(selector: pass => pass with {
             Accesses = new ReadOnlyCollection<ShaderPipelineAccess>(list: pass.Accesses.ToArray()),
             Attachments = new ReadOnlyCollection<ShaderPipelineAttachment>(list: pass.Attachments.ToArray()),
-            Declaration = passesByName[pass.Name],
+            Declaration = (passesByName.GetValueOrDefault(key: pass.Name) ?? pass.Declaration),
             Dependencies = new ReadOnlyCollection<int>(list: pass.Dependencies.ToArray()),
         }).ToList());
         Outputs = new ReadOnlyCollection<string>(list: Definition.Outputs.ToList());
@@ -141,15 +189,26 @@ public sealed class ShaderPipelinePlan {
         ? string.Empty
         : Outputs[0]
     );
-    /// <summary>Gets the source document copied into this plan.</summary>
-    public ShaderPipelineDefinition Definition { get; }
+    /// <summary>Gets whether a pass's kernels count their own work (<see cref="ShaderPipelinePackageStep.CountsKernelWork"/>):
+    /// the node running the plan then keeps a counter row a pass (<see cref="Abstractions.Gpu.GpuKernelCounters"/>),
+    /// clears them before the frame's first pass and copies them into the slot's readback after its last.</summary>
+    public bool CountsKernelWork => Passes.Any(predicate: static pass => (pass.Package?.CountsKernelWork == true));
+    /// <summary>Gets the graph's shader passes, package passes and versions copied into this plan, every binding
+    /// resolved, with its tick rate and tiers: a snapshot the plan owns, so a later change to the document it was
+    /// planned from never reaches it.</summary>
+    public RenderGraphDefinition Definition { get; }
     /// <summary>Gets the public versions.</summary>
     public IReadOnlyList<string> Outputs { get; }
-    /// <summary>Gets every pass's parameter block together, in bytes: each pass's frame prefix and config. It is the
-    /// pipeline instance's parameter region, the bytes whose residency <c>pipeline.inspect</c> reports.</summary>
+    /// <summary>Gets the rate, in ticks a second, the graph's passes read the deterministic tick at: the graph's requested
+    /// <see cref="RenderGraphDefinition.TickRate"/>, which divides the engine rate exactly, or
+    /// <see cref="ShaderFrameInterface.EngineTickRate"/>.</summary>
+    public uint TickRate => (Definition.TickRate ?? ShaderFrameInterface.EngineTickRate);
+    /// <summary>Gets every block the passes read together, in bytes: the frame group's block once, when the graph has a
+    /// pass, and each pass's pass block. It is the pipeline instance's parameter region, the bytes whose residency
+    /// <c>pipeline.inspect</c> reports.</summary>
     public ulong ParameterBytes => Passes.Aggregate(
         func: static (total, pass) => (total + pass.Parameters.SizeBytes),
-        seed: 0UL
+        seed: (Passes.FirstOrDefault()?.Parameters.FrameBlockSizeBytes ?? 0UL)
     );
     /// <summary>Gets the pass names in execution order.</summary>
     public IReadOnlyList<string> PassOrder => Passes.Select(selector: static pass => pass.Name).ToArray();
@@ -160,13 +219,13 @@ public sealed class ShaderPipelinePlan {
     /// <summary>Gets the physical storages, in the ordinal order of their first versions' names.</summary>
     public IReadOnlyList<ShaderPipelinePlannedStorage> Storages { get; }
 
-    private static ShaderPipelineDefinition Snapshot(ShaderPipelineDefinition definition) {
+    private static RenderGraphDefinition Snapshot(RenderGraphDefinition definition) {
         var resources = definition.Resources.Select(selector: resource => resource with {
             Dimensions = ((resource.Dimensions is null)
             ? null
             : resource.Dimensions with { }),
         }).ToArray();
-        var passes = definition.Passes.Select(selector: pass => pass with {
+        var passes = definition.ShaderPasses.Select(selector: pass => pass with {
             Inputs = new ReadOnlyCollection<ResourceReference>(list: pass.InputReferences.Select(selector: static input => input with { }).ToList()),
             Outputs = new ReadOnlyCollection<ResourceReference>(list: pass.OutputReferences.Select(selector: static output => output with { }).ToList()),
             Config = ((pass.Config is null)
@@ -180,18 +239,29 @@ public sealed class ShaderPipelinePlan {
             }
             : null),
         }).ToArray();
-        var config = ((definition.Config is null)
+        var packages = definition.Packages?.Select(selector: static package => package with {
+            Inputs = ((package.Inputs is null)
             ? null
-            : new ReadOnlyDictionary<string, ShaderConfigField>(dictionary: SnapshotConfig(config: definition.Config))
-        );
+            : new ReadOnlyCollection<ResourceReference>(list: package.Inputs.Select(selector: static input => input with { }).ToList())),
+            Outputs = ((package.Outputs is null)
+            ? null
+            : new ReadOnlyCollection<ResourceReference>(list: package.Outputs.Select(selector: static output => output with { }).ToList())),
+            Config = package.Config?.Clone(),
+        }).ToArray();
 
-        return new ShaderPipelineDefinition(
+        return new RenderGraphDefinition(
             Schema: definition.Schema,
             Name: definition.Name,
             Resources: new ReadOnlyCollection<ShaderPipelineResource>(list: resources),
-            Passes: new ReadOnlyCollection<ShaderPipelinePass>(list: passes),
             Outputs: new ReadOnlyCollection<string>(list: definition.Outputs.ToArray()),
-            Config: config
+            Passes: new ReadOnlyCollection<ShaderPipelinePass>(list: passes),
+            Packages: ((packages is null)
+                ? null
+                : new ReadOnlyCollection<RenderGraphPackagePass>(list: packages)),
+            TickRate: definition.TickRate,
+            Tiers: ((definition.Tiers is { } tiers)
+                ? new ReadOnlyCollection<Puck.Abstractions.Presentation.QualityTier>(list: tiers.ToArray())
+                : null)
         );
     }
     private static Dictionary<string, ShaderConfigField> SnapshotConfig(IReadOnlyDictionary<string, ShaderConfigField> config) =>

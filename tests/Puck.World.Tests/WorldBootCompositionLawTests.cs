@@ -1,0 +1,269 @@
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Puck.Abstractions.Gpu;
+using Puck.Commands;
+using Puck.Testing;
+using Xunit;
+
+namespace Puck.World.Tests;
+
+/// <summary>
+/// CONTRACT UNDER TEST: each presentation shape's service collection, built by the same
+/// <see cref="WorldBootComposition.AddWorldBoot"/> a boot calls and resolved with no device created, carries what a GPU
+/// run of that shape needs before its first frame: the offscreen shape answers every verb the <c>puck counters</c>
+/// workload sends, and both the offscreen and the windowed shape register the persistent pipeline-cache store and the
+/// creation faults the backend's device creation reads, the faults with their operator-only <c>gpu.faults</c> verb,
+/// which is the one operator verb the offscreen shape adds to the headless shape's. The neutral GPU services a node
+/// records through resolve to a <see cref="FakeGpuDevice"/>, and every other service that owns or brings up a device
+/// throws when resolved, so a law that reached a device fails by name instead of creating one.
+/// </summary>
+public sealed class WorldBootCompositionLawTests : IDisposable {
+    private const string WorkloadScript = "tests/Puck.Counters/counters.script.txt";
+    private const string WorkloadWorld = "tests/Puck.Counters/counters.world.json";
+    // An offscreen world declaring one screen, a machine's video output, with no view screen.
+    private const string ScreensWorld = "tests/Puck.World.Canaries/uploaded-sources/fixture.world.json";
+
+    // The collector closes the workload's script with these two lines (WorldOffscreenLeg.Launch in Puck.Cli), so the
+    // offscreen World receives them as well.
+    private static readonly string[] CollectorClosingVerbs = [
+        "wire.errors",
+        "quit",
+    ];
+
+    // Each law's boot resolves its per-run files and its device caches under a root of its own, never the per-user
+    // one.
+    private readonly TemporaryDirectory m_stateDirectory = new(prefix: "puck-boot-");
+
+    private HostApplicationBuilder ComposeBoot(WorldHostPresentation presentation) => WorldBootHarness.Compose(
+        presentation: presentation,
+        stateDirectory: m_stateDirectory,
+        world: WorkloadWorld
+    );
+    // The verbs the workload sends: the command word of every line its script runs, read from the script the collector
+    // reads (blank lines and # comments are skipped, as the console skips them), then the collector's closing pair.
+    private static IReadOnlyList<string> WorkloadVerbs() {
+        var verbs = File.ReadAllLines(path: Path.Combine(
+            path1: AuthoredGameFixtures.Root,
+            path2: WorkloadScript
+        ))
+            .Select(selector: static line => line.Trim())
+            .Where(predicate: static line => ((line.Length > 0) && !line.StartsWith(value: '#')))
+            .Select(selector: static line => line.Split(separator: ' ', count: 2)[0])
+            .Concat(second: CollectorClosingVerbs)
+            .Distinct(comparer: StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.True(
+            condition: (verbs.Length > CollectorClosingVerbs.Length),
+            userMessage: $"{WorkloadScript} names no verb of its own."
+        );
+
+        return verbs;
+    }
+    // The law: every verb the workload sends that the shape's command registry, resolved as a boot resolves it, cannot
+    // dispatch.
+    private static IReadOnlyList<string> UnansweredWorkloadVerbs(HostApplicationBuilder builder) {
+        using var host = builder.Build();
+        var registry = host.Services.GetRequiredService<CommandRegistry>();
+
+        return WorkloadVerbs().Where(predicate: verb => !registry.TryGetId(
+            id: out _,
+            name: verb
+        )).ToArray();
+    }
+    private static int Remove(IServiceCollection services, Func<ServiceDescriptor, bool> match) {
+        var removed = 0;
+
+        for (var index = (services.Count - 1); (index >= 0); --index) {
+            if (match(arg: services[index])) {
+                services.RemoveAt(index: index);
+                ++removed;
+            }
+        }
+
+        return removed;
+    }
+    // The law: the shape registers the store both backends' device creation reads (sp.GetService, so an absent
+    // registration silently keeps the pipeline cache in memory).
+    private static bool RegistersPipelineCacheStore(IServiceCollection services) => services.Any(predicate: static descriptor => (descriptor.ServiceType == typeof(GpuPipelineCacheStore)));
+
+    public void Dispose() => m_stateDirectory.Dispose();
+    [Fact]
+    public void TheOffscreenShapeAnswersEveryVerbTheCountersWorkloadSends() => Assert.Empty(collection: UnansweredWorkloadVerbs(builder: ComposeBoot(presentation: WorldHostPresentation.Offscreen)));
+    [Fact]
+    public void TheOffscreenVerbLawFailsWhenTheModuleOwningAWorkloadVerbIsMissing() {
+        var builder = ComposeBoot(presentation: WorldHostPresentation.Offscreen);
+        var removed = Remove(
+            match: static descriptor => (
+                (descriptor.ServiceType == typeof(ICommandModule)) &&
+                (descriptor.ImplementationType?.Name == "WorldRenderLeverCommandModule")
+            ),
+            services: builder.Services
+        );
+
+        Assert.Equal(
+            actual: removed,
+            expected: 1
+        );
+        Assert.Equal(
+            actual: UnansweredWorkloadVerbs(builder: builder),
+            expected: ["world.cadence", "world.quality"]
+        );
+    }
+    [InlineData(WorldHostPresentation.Offscreen)]
+    [InlineData(WorldHostPresentation.Windowed)]
+    [Theory]
+    public void EveryPresentationShapeRegistersThePipelineCacheStore(WorldHostPresentation presentation) => Assert.True(
+        condition: RegistersPipelineCacheStore(services: ComposeBoot(presentation: presentation).Services),
+        userMessage: $"the {presentation} shape registers no {nameof(GpuPipelineCacheStore)}, so its device keeps its pipeline cache in memory only."
+    );
+    [InlineData(WorldHostPresentation.Offscreen)]
+    [InlineData(WorldHostPresentation.Windowed)]
+    [Theory]
+    public void ThePipelineCacheLawFailsWhenTheStoreIsNotRegistered(WorldHostPresentation presentation) {
+        var services = ComposeBoot(presentation: presentation).Services;
+
+        Assert.True(condition: (Remove(
+            match: static descriptor => (descriptor.ServiceType == typeof(GpuPipelineCacheStore)),
+            services: services
+        ) > 0));
+        Assert.False(condition: RegistersPipelineCacheStore(services: services));
+    }
+    [Fact]
+    public void TheHeadlessShapeRegistersNoPipelineCacheStore() => Assert.False(condition: RegistersPipelineCacheStore(services: ComposeBoot(presentation: WorldHostPresentation.None).Services));
+    // Both backends read the faults with sp.GetService when they create their services, so a shape that dropped the
+    // registration would leave its device creating without them.
+    [InlineData(WorldHostPresentation.Offscreen)]
+    [InlineData(WorldHostPresentation.Windowed)]
+    [Theory]
+    public void EveryPresentationShapeRegistersItsDeviceCreationFaults(WorldHostPresentation presentation) => Assert.Contains(
+        collection: ComposeBoot(presentation: presentation).Services,
+        filter: static descriptor => (descriptor.ServiceType == typeof(GpuCreationFaults))
+    );
+    // The registry is resolvable in the offscreen shape alone without a device; the windowed shape registers the verb
+    // through the same AddGpuCreationFaults call.
+    [Fact]
+    public void TheOffscreenShapeArmsItsCreationFaultsThroughAnOperatorVerb() {
+        using var host = ComposeBoot(presentation: WorldHostPresentation.Offscreen).Build();
+
+        Assert.NotNull(@object: host.Services.GetService<GpuCreationFaults>());
+        Assert.True(condition: host.Services.GetRequiredService<CommandRegistry>().TryGetMetadata(
+            metadata: out var metadata,
+            name: "gpu.faults"
+        ));
+        Assert.Equal(
+            actual: metadata.Audience,
+            expected: CommandAudience.Operator
+        );
+    }
+    // The headless shape's operator verbs are the evaluation diagnostics, which ScheduledStepVocabularyLawTests pins
+    // against the live executable. A GPU shape answers the operator with exactly those and the verb that arms its
+    // device's creation faults, and nothing else. The windowed shape's registry is not resolvable without a device; it
+    // registers the verb through the same AddGpuCreationFaults call as the offscreen shape.
+    [Fact]
+    public void TheOffscreenShapesOperatorVerbsAreTheHeadlessShapesAndItsCreationFaults() => Assert.Equal(
+        actual: OperatorVerbs(presentation: WorldHostPresentation.Offscreen),
+        expected: [.. OperatorVerbs(presentation: WorldHostPresentation.None).Append(element: "gpu.faults").Order(comparer: StringComparer.Ordinal)]
+    );
+
+    private string[] OperatorVerbs(WorldHostPresentation presentation) {
+        using var host = ComposeBoot(presentation: presentation).Build();
+
+        return [.. host.Services.GetRequiredService<CommandRegistry>().Definitions
+            .Where(predicate: static metadata => (metadata.Audience == CommandAudience.Operator))
+            .Select(selector: static metadata => metadata.Name)
+            .Order(comparer: StringComparer.Ordinal)];
+    }
+
+    // THE LAW: an offscreen boot reads its screens back. world.screens and world.view-refresh read only the screen
+    // binder, which every shape composes, so they live in the one core module that every shape registers once, and an
+    // offscreen boot answers them through the same handler a windowed boot runs over the same binder.
+    [Fact]
+    public void AnOffscreenBootAnswersWorldScreensAndTheViewRefreshFromItsBinder() {
+        var builder = WorldBootHarness.Compose(
+            presentation: WorldHostPresentation.Offscreen,
+            stateDirectory: m_stateDirectory,
+            world: ScreensWorld
+        );
+
+        using var host = builder.Build();
+        var registry = host.Services.GetRequiredService<CommandRegistry>();
+        var screens = registry.Submit(line: "world.screens");
+        var refresh = registry.Submit(line: "world.view-refresh");
+
+        Assert.False(
+            condition: screens.IsError,
+            userMessage: screens.Output
+        );
+        Assert.StartsWith(
+            actualString: screens.Output,
+            expectedStartString: "[world.screens: 0 machine:instrument:video "
+        );
+        Assert.Contains(
+            actualString: screens.Output,
+            expectedSubstring: " fixed input:Presentation mapping "
+        );
+        Assert.Equal(
+            actual: refresh.Output,
+            expected: "[world.view-refresh: every 4 produced frame(s); 0 camera view(s) registered]"
+        );
+    }
+    // THE LAW: an offscreen boot's display resizes through world.resize, which echoes the extent its frames render at
+    // and changes nothing until its renderer is ready, and refuses an extent outside the host document's bounds. A
+    // headless boot presents nothing to resize and has no such verb.
+    [Fact]
+    public void AnOffscreenBootAnswersWorldResizeWithItsExtentAndRefusesBeforeItsRendererIsReady() {
+        using var host = WorldBootHarness.Compose(
+            presentation: WorldHostPresentation.Offscreen,
+            stateDirectory: m_stateDirectory,
+            world: ScreensWorld
+        ).Build();
+        var registry = host.Services.GetRequiredService<CommandRegistry>();
+
+        Assert.Equal(
+            actual: registry.Submit(line: "world.resize").Output,
+            expected: "[world.resize: 64x256]"
+        );
+
+        var early = registry.Submit(line: "world.resize 1920 1080");
+
+        Assert.True(condition: early.IsError);
+        Assert.Contains(
+            actualString: early.Output,
+            expectedSubstring: "renderer not ready"
+        );
+        Assert.Equal(
+            actual: registry.Submit(line: "world.resize").Output,
+            expected: "[world.resize: 64x256]"
+        );
+        Assert.True(condition: registry.Submit(line: "world.resize 0 1080").IsError);
+
+        using var headless = ComposeBoot(presentation: WorldHostPresentation.None).Build();
+
+        Assert.False(condition: headless.Services.GetRequiredService<CommandRegistry>().TryGetId(
+            id: out _,
+            name: "world.resize"
+        ));
+    }
+    [InlineData(WorldHostPresentation.None)]
+    [InlineData(WorldHostPresentation.Offscreen)]
+    [InlineData(WorldHostPresentation.Windowed)]
+    [Theory]
+    public void EveryShapeRegistersTheScreenListingOnce(WorldHostPresentation presentation) => Assert.Single(
+        collection: ComposeBoot(presentation: presentation).Services,
+        predicate: static descriptor => (
+            (descriptor.ServiceType == typeof(ICommandModule)) &&
+            (descriptor.ImplementationType?.Name == "ScreenCommandModule")
+        )
+    );
+    [Fact]
+    public void TheHeadlessShapeHasNoCreationFaults() {
+        using var host = ComposeBoot(presentation: WorldHostPresentation.None).Build();
+
+        Assert.Null(@object: host.Services.GetService<GpuCreationFaults>());
+        Assert.False(condition: host.Services.GetRequiredService<CommandRegistry>().TryGetId(
+            id: out _,
+            name: "gpu.faults"
+        ));
+    }
+}

@@ -16,7 +16,7 @@ public sealed class WorldInstanceNameLawTests {
         machineId: Guid.NewGuid(),
         resolver: new WorldSessionResolver(),
         seats: WorldEmbodiedSeats.None,
-        stateRoot: root.RootPath
+        stateRoot: new WorldStateRoot(path: root.RootPath)
     );
 
     [InlineData("dungeon~3")]

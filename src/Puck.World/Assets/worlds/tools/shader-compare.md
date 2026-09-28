@@ -20,9 +20,9 @@ dotnet src/Puck.World/bin/Release/net10.0/Puck.World.dll --world src/Puck.World/
 
 ## How It Works
 
-- The **left slot** (50% width) renders the pipeline shader (`compare-pipeline`, by default [moth.hlsl](../../pipelines/moth.hlsl)).
+- The **left slot** (50% width) shows the pipeline shader (`compare-pipeline`, by default [moth.hlsl](../../pipelines/moth.hlsl)). Each shader view is a `graph "…"` row inside `views`, and a slot shows it with `instance: "…"`; the root render graph places it over the SDF world at the slot's rect.
 - The **right slot** (50% width) renders the native SDF model from [moth.puck](../avatars/moth.puck).
-- Both viewports read the identical paired camera, maintaining synchronized perspective, framing, and field of view.
+- Both slots read the identical paired camera, maintaining synchronized perspective, framing, and field of view.
 
 ## Controls
 
@@ -55,13 +55,14 @@ In the running Puck console or via the MCP operator interface:
   ```text
   pipeline.load compare-pipeline <path-to-shader.hlsl> [camera]
   ```
-  Points the comparison slot to any other pipeline shader.
+  Replaces the `compare-pipeline` row's source, so the comparison slot shows any other pipeline shader.
 
 - **Check Status**:
   ```text
   pipeline.status
   world.view.state
   ```
+  `world.view.state` prints a shader slot as `instance:<name>`, or `instance:<name>:missing` when the renderer has no such instance.
 
 - **Switch Layouts**:
   ```text

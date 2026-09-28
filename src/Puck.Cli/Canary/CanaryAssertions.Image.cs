@@ -130,13 +130,15 @@ internal static partial class CanaryAssertions {
             Passed: (holds == assertion.Holds)
         );
     }
-    // How far one channel code lies outside its bound, in codes, after the tolerance; zero when it is inside.
+    // How far one channel code lies outside its bound, in codes, after the tolerance; zero when it is inside. A bound is
+    // written as a decimal fraction of 255, so it is read in codes rounded to a millionth: 55/255 written as 0.215686275
+    // is 55 codes, not 55.00000013, and a code a whole tolerance from it is inside.
     private static double Excess(CanaryImageRegionAssertion assertion, int channel, double code) {
         var below = ((assertion.Minimum is { } minimum)
-            ? (((minimum[channel] * 255.0) - assertion.ToleranceCodes) - code)
+            ? ((Codes(fraction: minimum[channel]) - assertion.ToleranceCodes) - code)
             : 0.0);
         var above = ((assertion.Maximum is { } maximum)
-            ? (code - ((maximum[channel] * 255.0) + assertion.ToleranceCodes))
+            ? (code - (Codes(fraction: maximum[channel]) + assertion.ToleranceCodes))
             : 0.0);
 
         return Math.Max(
@@ -147,6 +149,10 @@ internal static partial class CanaryAssertions {
             )
         );
     }
+    private static double Codes(double fraction) => Math.Round(
+        digits: 6,
+        value: (fraction * 255.0)
+    );
 
     /// <summary>Counts the pixels of a width-by-height image whose centers lie inside a normalized region.</summary>
     /// <param name="left">The region's left edge, normalized.</param>

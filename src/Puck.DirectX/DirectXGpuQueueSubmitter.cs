@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
-using Puck.DirectX.Interfaces;
+using Puck.DirectX.Apis;
+using Puck.DirectX.Interop;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Direct3D12;
@@ -14,41 +15,74 @@ namespace Puck.DirectX;
 /// a GCHandle token pointing to a <see cref="DirectXCommandBufferState"/>; the underlying command list is
 /// extracted and passed to <c>ExecuteCommandLists</c>. <see cref="SubmitAndWait"/> additionally calls
 /// <see cref="IGpuDeviceContext.WaitIdle"/> on the device context. A submission fence is an
-/// <c>ID3D12Fence</c> + event pair signaled on the queue right after the fenced execute.
+/// <c>ID3D12Fence</c> + event pair signaled on the queue right after the fenced execute. An external wait is an
+/// <c>ID3D12CommandQueue::Wait</c> issued immediately before the next submission's execute, so that submission and every
+/// later one on the queue wait for the shared fence on the GPU.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
-public sealed unsafe class DirectXGpuQueueSubmitter : IGpuQueueSubmitter {
-    /// <inheritdoc/>
-    public void Submit(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles) =>
-        Execute(
-            commandBufferHandles: commandBufferHandles,
-            deviceContext: deviceContext
-        );
-    /// <inheritdoc/>
-    public void Submit(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) {
-        var dxContext = ((IDirectXDeviceContext)deviceContext);
+public sealed unsafe class DirectXGpuQueueSubmitter(DirectXDeviceContext deviceContext) : IGpuQueueSubmitter {
+    private readonly List<GpuExternalWait> m_externalWaits = [];
 
-        Execute(
-            commandBufferHandles: commandBufferHandles,
-            deviceContext: deviceContext
-        );
-        ((DirectXGpuSubmissionFence)fence).Arm(commandQueue: ((ID3D12CommandQueue*)dxContext.CommandQueueHandle));
+    /// <inheritdoc/>
+    /// <remarks>Takes a <see cref="DirectXSharedFence"/> or a <see cref="DirectXExportableFence"/> of this
+    /// device.</remarks>
+    public void AddExternalWait(GpuExternalWait wait) {
+        ArgumentOutOfRangeException.ThrowIfZero(wait.Value);
+
+        if (wait.Fence is not (DirectXSharedFence or DirectXExportableFence)) {
+            throw new ArgumentException(
+                message: $"A Direct3D 12 submission waits only on a Direct3D 12 fence, not a {(wait.Fence?.GetType().Name ?? "null")}.",
+                paramName: nameof(wait)
+            );
+        }
+
+        m_externalWaits.Add(item: wait);
     }
     /// <inheritdoc/>
-    public void SubmitAndWait(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles) {
-        Execute(
-            commandBufferHandles: commandBufferHandles,
-            deviceContext: deviceContext
-        );
+    public void Submit(ReadOnlySpan<nint> commandBufferHandles) =>
+        Execute(commandBufferHandles: commandBufferHandles);
+    /// <inheritdoc/>
+    public void Submit(ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) {
+
+        Execute(commandBufferHandles: commandBufferHandles);
+        ((DirectXGpuSubmissionFence)fence).Arm(commandQueue: ((ID3D12CommandQueue*)deviceContext.CommandQueueHandle));
+    }
+    /// <inheritdoc/>
+    public void SubmitAndWait(ReadOnlySpan<nint> commandBufferHandles) {
+        Execute(commandBufferHandles: commandBufferHandles);
         deviceContext.WaitIdle();
     }
     /// <inheritdoc/>
-    public IGpuSubmissionFence CreateSubmissionFence(IGpuDeviceContext deviceContext) =>
-        new DirectXGpuSubmissionFence(device: ((ID3D12Device*)deviceContext.DeviceHandle));
+    public IGpuSubmissionFence CreateSubmissionFence() =>
+        new DirectXGpuSubmissionFence(device: ((ID3D12Device*)deviceContext.Device.Handle));
 
-    private static void Execute(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles) {
-        var dxContext = ((IDirectXDeviceContext)deviceContext);
-        var queue = ((ID3D12CommandQueue*)dxContext.CommandQueueHandle);
+    private void Execute(ReadOnlySpan<nint> commandBufferHandles) {
+        var queue = ((ID3D12CommandQueue*)deviceContext.CommandQueueHandle);
+
+        if (commandBufferHandles.IsEmpty) {
+            return;
+        }
+
+        if (m_externalWaits.Count != 0) {
+            var calls = DirectXDeviceCommandCalls.Of(deviceContext: deviceContext);
+
+            // The list is spent even when a wait fails, so a device loss never carries a lost device's fence onward.
+            try {
+                foreach (var wait in m_externalWaits) {
+                    DirectXCommandCalls.QueueWait(
+                        calls: calls,
+                        fence: ((ID3D12Fence*)((wait.Fence is DirectXSharedFence opened)
+                            ? opened.FenceHandle
+                            : ((DirectXExportableFence)wait.Fence).FenceHandle)),
+                        queue: queue,
+                        value: wait.Value
+                    );
+                }
+            } finally {
+                m_externalWaits.Clear();
+            }
+        }
+
         var lists = stackalloc ID3D12CommandList*[commandBufferHandles.Length];
 
         for (var i = 0; (i < commandBufferHandles.Length); i++) {
@@ -70,12 +104,16 @@ public sealed unsafe class DirectXGpuQueueSubmitter : IGpuQueueSubmitter {
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 file sealed unsafe class DirectXGpuSubmissionFence : IGpuSubmissionFence {
+    // The device the fence is on; the context owns it, and a removal is read from it.
+    private readonly nint m_device;
+
     private nint m_fence;
     private HANDLE m_fenceEvent;
     private ulong m_nextValue = 1UL;
     private ulong m_pendingValue; // 0 = no submission outstanding
 
     internal DirectXGpuSubmissionFence(ID3D12Device* device) {
+        m_device = ((nint)device);
         device->CreateFence(
             Flags: default,
             InitialValue: 0,
@@ -127,9 +165,11 @@ file sealed unsafe class DirectXGpuSubmissionFence : IGpuSubmissionFence {
         }
 
         m_pendingValue = m_nextValue++;
-        commandQueue->Signal(
-            Value: m_pendingValue,
-            pFence: ((ID3D12Fence*)m_fence)
+        DirectXCommandCalls.Signal(
+            calls: new DirectXDeviceCommandCalls(device: ((ID3D12Device*)m_device)),
+            fence: ((ID3D12Fence*)m_fence),
+            queue: commandQueue,
+            value: m_pendingValue
         );
     }
 
@@ -139,19 +179,12 @@ file sealed unsafe class DirectXGpuSubmissionFence : IGpuSubmissionFence {
             return;
         }
 
-        var fence = ((ID3D12Fence*)m_fence);
-
-        if (fence->GetCompletedValue() < m_pendingValue) {
-            fence->SetEventOnCompletion(
-                Value: m_pendingValue,
-                hEvent: m_fenceEvent
-            );
-            _ = PInvoke.WaitForSingleObject(
-                dwMilliseconds: uint.MaxValue,
-                hHandle: m_fenceEvent
-            );
-        }
-
+        DirectXCommandCalls.Wait(
+            calls: new DirectXDeviceCommandCalls(device: ((ID3D12Device*)m_device)),
+            fence: ((ID3D12Fence*)m_fence),
+            fenceEvent: m_fenceEvent,
+            value: m_pendingValue
+        );
         m_pendingValue = 0UL;
     }
     /// <inheritdoc/>

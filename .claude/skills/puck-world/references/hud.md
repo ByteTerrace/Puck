@@ -4,7 +4,7 @@ The HUD is a world-document section rendered through the banded overlay
 pipeline. Document side: `src/Puck.World.Schema/WorldHud.cs` +
 `HudValidation.cs` (schema details in [documents.md](documents.md)). Render
 side: `src/Puck.World/WorldHudFeed.cs`, `WorldHudBindingResolver.cs`,
-`src/Puck.Overlays/HudWriter.cs`, `UnifiedOverlayNode.cs`,
+`src/Puck.Overlays/HudWriter.cs`, `OverlayFrameComposer.cs`, `OverlayPackage.cs`,
 `OverlayChannels.cs`, `OverlayFrameBuilder.cs`. Verbs:
 `src/Puck.World/WorldHudCommandModule.cs`. Mutation kinds: see
 [mutations.md](mutations.md) (ordinals 39–43).
@@ -118,11 +118,18 @@ is a full `WorldDefinition`, not a separate document family, so there is no
 distinct "cannot verify existence" scope in this codebase today;
 `HudRowValidation`'s `stateRows: null` parameter default exists for a caller
 with no such document to check against, but nothing currently calls it that
-way. Render-side, `WorldHudBindingResolver` parses each token once and
-registers a `state.*` token's slot with the client's state mirror
-(`WorldClient.StateMirror`, `WorldStateMirror`), the one path every
-presentation binding reads through: a cell carrying a `dynamics` trait
-presents its eased follower, interpolated at the frame's fraction, unless the
+way. Render-side, `WorldHudBindingResolver` parses each token once and looks
+a `state.*` token's slot up (`WorldStateMirror.SlotOf`), the one path every
+presentation binding reads through. A world-scope panel's token reads the
+client's state mirror (`WorldClient.StateMirror`), where the document's
+presentation manifest registered it. A seat's player-scope panel's token reads
+the mirror of the world that seat is routed to
+(`WorldSeatBindings.GetRoutedState`), where the seat registered its panel's
+bindings with the rest of its reads (`WorldPresentationManifest.SeatBindings`),
+so a crossed seat's panel shows the world it is in, like its bar, pages,
+wheels and contexts; `HudWriter` passes the panel's seat to
+`IHudBindingResolver.TryResolve`, -1 for a world-scope panel. A cell carrying a
+`dynamics` trait presents its eased follower, interpolated at the frame's fraction, unless the
 token carries the `.$target` facet above, in which case it presents stored truth
 exactly like a cell with no trait always does. The text shows the value read at
 the delivered tick. A
@@ -261,7 +268,7 @@ top), outside the replace-band suppression — see [views.md](views.md).
 INSTANCE built from an `OverlayCapacity` — the host's declared counts
 (`Seats`, `HudPanels`, `HudElementsPerPanel`, `HudSeatPanelsPerSeat`,
 `HudElementsPerSeatPanel`). `Puck.Overlays` restates no World number: the
-composition root (`WorldBootComposition`'s one `new UnifiedOverlayNode`)
+composition root (`WorldBootComposition`'s one `new OverlayPackage`)
 supplies `Puck.World.Client.WorldOverlayCapacity.FromSchema()` — `Seats =
 WorldBodiesLimits.LocalSeatCount`, the four HUD ceilings from
 `WorldHudCapacity` (`MaxSeatPanels` is the seat-panel count). Render costs stay
@@ -298,7 +305,7 @@ beside the others.
 
 ## Bands — what `replace` replaces
 
-`UnifiedOverlayNode.ProduceFrame`, per frame: feed tick → `RefreshFrame`
+`OverlayFrameComposer.Compose`, once per frame the `overlay` package records: feed tick → `RefreshFrame`
 (snapshot the structure once) → UNDER band (its own
 `BeginChannel(Hud)` scope) → BASE slot → OVER band. The base slot is: if any
 live panel declares `Replace`, the replace panels draw IN DOCUMENT ORDER
@@ -338,7 +345,8 @@ can open a fourth. All four charge the one Hud reservation.
   `PositionNormalizerHalfRange = 50f`; seat n (1-based) maps to body index
   n−1.
 - Both `UnifiedOverlaySources.Hud` and `.HudBindings` must be wired or the
-  HUD silently draws nothing (no throw) — the wiring is in `Program.cs`.
+  HUD silently draws nothing (no throw) — the wiring is in
+  `WorldBootComposition.AddWorldPresentation`.
 
 ## Verbs
 

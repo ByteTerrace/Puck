@@ -110,10 +110,12 @@ public sealed partial class SdfProgramBuilder {
     /// always evaluated, unmasked (floors/walls/unbounded shapes).</summary>
     /// <param name="boundCenter">The instance's world-space bounding-sphere center.</param>
     /// <param name="boundRadius">The instance's world-space bounding-sphere radius.</param>
+    /// <param name="cameraHidden">Whether the camera never sees the instance, while shadows and ambient occlusion still
+    /// read it (<see cref="SdfInstanceRange.CameraHidden"/>).</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="boundCenter"/> is not finite, or
     /// <paramref name="boundRadius"/> is not finite and non-negative.</exception>
     /// <exception cref="InvalidOperationException">An instance is already open.</exception>
-    public SdfProgramBuilder BeginInstance(Vector3 boundCenter, float boundRadius) {
+    public SdfProgramBuilder BeginInstance(Vector3 boundCenter, float boundRadius, bool cameraHidden = false) {
         RequireInstanceBound(
             center: boundCenter,
             centerParamName: nameof(boundCenter),
@@ -121,6 +123,7 @@ public sealed partial class SdfProgramBuilder {
             radiusParamName: nameof(boundRadius)
         );
         BeginInstanceCore(
+            cameraHidden: cameraHidden,
             isDynamic: false,
             center: boundCenter,
             radius: boundRadius,
@@ -236,7 +239,8 @@ public sealed partial class SdfProgramBuilder {
             Center: m_openInstanceCenter,
             Radius: m_openInstanceRadius,
             Slot: m_openInstanceSlot,
-            Active: m_openInstanceActive
+            Active: m_openInstanceActive,
+            CameraHidden: m_openInstanceCameraHidden
         ));
 
         m_openInstanceFirst = -1;

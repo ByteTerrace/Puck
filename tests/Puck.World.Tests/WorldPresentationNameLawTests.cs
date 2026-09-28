@@ -1,3 +1,4 @@
+using Puck.Abstractions.Sources;
 using Puck.World.Client;
 
 using Xunit;
@@ -96,6 +97,82 @@ public sealed class WorldPresentationNameLawTests {
             expectedSubstring: "captures.rows[1].station 'lattice' differs from station 'Lattice' only in case"
         );
     }
+    // A row reads the root when it names no instance, and the world beneath the root's passes when it names it; every
+    // other name, the root's own included, is refused naming the row.
+    [Fact]
+    public void ACaptureRowNamesTheWorldInstanceOrNoneAndAnyOtherNameIsRefused() {
+        var definition = WithCaptureStation(station: "lattice");
+
+        foreach (var instance in new string?[] { null, WorldViewGraphs.WorldInstance }) {
+            Assert.Equal(
+                actual: Refusal(definition: definition with {
+                    Captures = definition.Captures! with {
+                        Rows = [definition.Captures.Rows[0] with { Instance = instance }],
+                    },
+                }),
+                expected: string.Empty
+            );
+        }
+
+        foreach (var instance in new[] { WorldViewGraphs.MainInstance, "elsewhere" }) {
+            Assert.Contains(
+                actualString: Refusal(definition: definition with {
+                    Captures = definition.Captures! with {
+                        Rows = [definition.Captures.Rows[0] with { Instance = instance }],
+                    },
+                }),
+                comparisonType: StringComparison.Ordinal,
+                expectedSubstring: $"captures.rows[0].instance '{instance}' names no render-graph instance a capture can read"
+            );
+        }
+    }
+    // A row names a screen whose source is a source instance (a machine output, a producer, a probe); a screen showing
+    // anything else, an undeclared screen, and a row naming both a screen and an instance are refused naming the row.
+    [Fact]
+    public void ACaptureRowNamesAScreenWhoseSourceIsASourceInstanceAndNoOther() {
+        var captured = WithCaptureStation(station: "lattice");
+        var screen = captured.Screens[0];
+
+        string RefusalOf(WorldScreenSource source, int index, string? instance = null) => Refusal(definition: captured with {
+            Captures = captured.Captures! with {
+                Rows = [captured.Captures.Rows[0] with { Instance = instance, Screen = index }],
+            },
+            ScreensRaw = [screen with { Source = source }],
+        });
+        var machine = new WorldScreenSource.Machine(
+            Instance: "cabinet",
+            Output: "video"
+        );
+        var pattern = WorldImageProducerSettings.SourceOf(
+            id: WorldImageProducerSettings.TestPatternId,
+            settings: new WorldTestPatternSettings(
+                Height: 4,
+                Width: 4
+            )
+        );
+
+        Assert.DoesNotContain(
+            actualString: RefusalOf(index: screen.Index, source: machine),
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "captures.rows[0]"
+        );
+        Assert.Equal(expected: string.Empty, actual: RefusalOf(index: screen.Index, source: pattern));
+        Assert.Contains(
+            actualString: RefusalOf(index: screen.Index, source: new WorldScreenSource.None()),
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: $"captures.rows[0].screen {screen.Index} shows no machine, producer or probe source"
+        );
+        Assert.Contains(
+            actualString: RefusalOf(index: (screen.Index + 7), source: pattern),
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: $"captures.rows[0].screen {(screen.Index + 7)} names no declared screen"
+        );
+        Assert.Contains(
+            actualString: RefusalOf(index: screen.Index, instance: WorldViewGraphs.WorldInstance, source: pattern),
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: $"captures.rows[0] names both instance 'world' and screen {screen.Index}"
+        );
+    }
     // The control: stations that differ in more than case are admitted together.
     [Fact]
     public void CaptureStationsThatDifferInMoreThanCaseAreAdmitted() {
@@ -135,7 +212,21 @@ public sealed class WorldPresentationNameLawTests {
             expected: [SeatCamera, WorldViewNames.SeatPart, "2"]
         );
 
-        foreach (var name in ((string[])[WorldViewNames.Session(screen: 0), seat])) {
+        var source = WorldViewNames.Source(
+            producer: "qr",
+            settings: null
+        );
+
+        Assert.Equal(
+            actual: source.Split(separator: GeneratedName.Joiner),
+            expected: [WorldViewNames.SourceHead, "qr", ImageSourceSettings.Digest(settings: null)]
+        );
+        Assert.Matches(
+            actualString: ImageSourceSettings.Digest(settings: null),
+            expectedRegexPattern: "^[0-9a-f]{16}$"
+        );
+
+        foreach (var name in ((string[])[WorldViewNames.Session(screen: 0), seat, source])) {
             Assert.True(condition: GeneratedName.IsGenerated(name: name), userMessage: name);
             Assert.False(condition: GeneratedName.TryValidateAuthored(
                 name: name,
@@ -185,7 +276,7 @@ public sealed class WorldPresentationNameLawTests {
     [InlineData("$body$body")]
     [Theory]
     public void AKeyThatOnlyContainsTheBodyTokenReadsTheCellSpelledThatWay(string key) {
-        Assert.True(condition: WorldGaitDrivers.TryResolveBodyKey(
+        Assert.True(condition: StateBinding.TryResolveBodyKey(
             bodyIndex: 3,
             key: key,
             resolved: out var resolved
@@ -200,7 +291,7 @@ public sealed class WorldPresentationNameLawTests {
         var rewritten = key.Replace(
             comparisonType: StringComparison.Ordinal,
             newValue: "3",
-            oldValue: WorldGaitDrivers.BodyKeyToken
+            oldValue: StateBinding.BodyKey
         );
         var definition = Fixtures.BuildDocument() with {
             StateRaw = new WorldStateSection(World: [new WorldStateRow(
@@ -235,18 +326,18 @@ public sealed class WorldPresentationNameLawTests {
     // The control: a key that is exactly the token names the reading body, and refuses with no body reading.
     [Fact]
     public void AKeyThatIsTheBodyTokenNamesTheReadingBody() {
-        Assert.True(condition: WorldGaitDrivers.TryResolveBodyKey(
+        Assert.True(condition: StateBinding.TryResolveBodyKey(
             bodyIndex: 3,
-            key: WorldGaitDrivers.BodyKeyToken,
+            key: StateBinding.BodyKey,
             resolved: out var resolved
         ));
         Assert.Equal(
             actual: resolved,
             expected: "3"
         );
-        Assert.False(condition: WorldGaitDrivers.TryResolveBodyKey(
+        Assert.False(condition: StateBinding.TryResolveBodyKey(
             bodyIndex: -1,
-            key: WorldGaitDrivers.BodyKeyToken,
+            key: StateBinding.BodyKey,
             resolved: out _
         ));
     }

@@ -16,7 +16,7 @@ namespace Puck.World;
 /// <c>world.assign looks ...</c>. A SEPARATE module from the mutation surface so neither class crosses its
 /// analyzer ceilings.
 /// </summary>
-public sealed class WorldLookCommandModule(IWorldConsoleAuthority authority, IServerLink link) : ICommandModule {
+public sealed class WorldLookCommandModule(IWorldConsoleAuthority authority) : ICommandModule {
     // The world.looks census: one row per look, mirroring world.population's per-kit echo. dyn= names the root
     // dynamics row when the look authors one; partDyn= is the authored part-follower count.
     private static string DescribeLooks(WorldPopulation population) {
@@ -143,10 +143,10 @@ public sealed class WorldLookCommandModule(IWorldConsoleAuthority authority, ISe
                     return CommandResult.Error(output: $"[world.population.spawn: {distributionError}]");
                 }
 
-                if (!authority.TryResolveServer(
+                if (!authority.TryResolveLink(
                     context: context,
                     error: out var error,
-                    server: out var server,
+                    link: out var link,
                     verb: "world.population.spawn"
                 )) {
                     return error;

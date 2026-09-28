@@ -33,8 +33,11 @@ internal enum ReferenceFlow {
 /// <param name="Mnemonic">The mnemonic alone.</param>
 /// <param name="Operands">The operands as the disassembler printed them.</param>
 /// <param name="Form">The instruction form service is priced by, with absolute addresses folded away.</param>
-/// <param name="Referent">The symbol the disassembler named beside a branch or call, when it named one.</param>
-internal sealed record ReferenceInstruction(long Address, string Mnemonic, string Operands, string Form, string? Referent);
+/// <param name="Referent">The symbol a branch or call reaches: the relocation's symbol when the object carries one for
+/// it, otherwise the symbol the disassembler named beside it, when it named one.</param>
+/// <param name="Relocated">Whether a relocation names the transfer's target, which then lies outside this body
+/// whatever address its unlinked displacement prints as.</param>
+internal sealed record ReferenceInstruction(long Address, string Mnemonic, string Operands, string Form, string? Referent, bool Relocated = false);
 /// <summary>One symbol's control-flow graph: its basic blocks, the edges between them, the blocks whose transfer
 /// the disassembly cannot resolve, the symbols a block tail-calls, and the symbols a block calls.</summary>
 /// <param name="Order">Every block leader, ascending.</param>
@@ -187,14 +190,19 @@ internal static class ReferenceLowering {
             var text = match.Groups[2].Value;
             var relocation = Relocation.Match(input: text.Trim());
 
-            // The relocation's symbol is what the transfer before it reaches once the object is linked; until then
-            // the disassembler can only annotate that transfer with the offset of its own next instruction.
+            // The relocation's symbol is what the transfer before it reaches once the object is linked. Until then
+            // the disassembler annotates the transfer with whatever its unlinked displacement lands on, which is an
+            // offset inside a body or, when the transfer ends one symbol, the entry of the symbol laid out next. The
+            // relocation outranks either annotation.
             if (relocation.Success) {
                 if ((rows.Count > 0) && (Classify(
                     architecture: architecture,
                     mnemonic: rows[^1].Mnemonic
-                ) is ReferenceFlow.Call or ReferenceFlow.Jump) && (Named(referent: rows[^1].Referent) is null)) {
-                    rows[^1] = (rows[^1] with { Referent = relocation.Groups[1].Value });
+                ) is ReferenceFlow.Call or ReferenceFlow.Jump)) {
+                    rows[^1] = (rows[^1] with {
+                        Referent = relocation.Groups[1].Value,
+                        Relocated = true,
+                    });
                 }
                 continue;
             }
@@ -352,10 +360,10 @@ internal static class ReferenceLowering {
                 var target = DirectTarget(operands: last.Operands);
                 var named = Named(referent: last.Referent);
 
-                // A transfer the disassembler names another symbol for leaves this body, even when its unlinked
-                // displacement happens to print as an address inside it; a body's own entry is the one name that
-                // stays a branch.
-                if ((target is { } address) && blocks.ContainsKey(key: address) && ((named is null) || (address == rows[0].Address))) {
+                // A relocated transfer, or one the disassembler names another symbol for, leaves this body even when
+                // its unlinked displacement happens to print as an address inside it; an unrelocated jump to a
+                // body's own entry is the one named transfer that stays a branch.
+                if (!last.Relocated && (target is { } address) && blocks.ContainsKey(key: address) && ((named is null) || (address == rows[0].Address))) {
                     successors.Add(item: address);
                 } else if (named is { } symbol) {
                     tails.Add(

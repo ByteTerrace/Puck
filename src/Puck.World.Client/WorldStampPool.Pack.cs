@@ -11,6 +11,21 @@ public sealed partial class WorldStampPool {
     private readonly Registration?[] m_packedRegistrations = new Registration?[WorldPlacementPolicy.MaxStampRegistrations];
     // A registration's slots as they stood before its repack, which the moved set compares the repack against.
     private readonly DynamicTransform[] m_previousSlots = new DynamicTransform[SlotsPerPlacement];
+    // Each pool entry's mesh draw as the last pack posed it (null for none), and the one list they compose, rewritten
+    // in place under a new revision only in a pack that changed an entry: a pool at rest hands the engine what it already
+    // packed, and a moving one allocates nothing once the list has grown to its stamps.
+    private readonly SdfMeshDraw?[] m_meshDraws = new SdfMeshDraw?[WorldPlacementPolicy.MaxStampRegistrations];
+    private readonly List<SdfMeshDraw> m_meshDrawList = new(capacity: WorldPlacementPolicy.MaxStampRegistrations);
+
+    private bool m_meshDrawsChanged;
+    private long m_meshDrawsRevision;
+
+    /// <summary>Gets the mesh draws the last <see cref="PackTransforms"/> posed: each live registration whose creation
+    /// carries a mesh (<see cref="WorldPrototype.Mesh"/>), at its packed root and scale, in pool order: always the same
+    /// list, rewritten in place when a draw moved, which <see cref="MeshDrawsRevision"/> then counts.</summary>
+    public IReadOnlyList<SdfMeshDraw> MeshDraws => m_meshDrawList;
+    /// <summary>Gets the revision of <see cref="MeshDraws"/>' content: one more for each pack that rewrote it.</summary>
+    public long MeshDrawsRevision => m_meshDrawsRevision;
 
     /// <summary>Packs the pool's moved transforms: each live registration's root rides its placement pose (animated),
     /// the client's interpolated body pose (body-rooted), or that pose composed with the attach facet's local offset
@@ -29,7 +44,7 @@ public sealed partial class WorldStampPool {
     /// emitter that owns the pool (see <see cref="Emit"/>).</param>
     /// <param name="parkPosition">Where an unused slot — or an attached row whose target body is not live this
     /// frame — parks, hidden below the floor (<see cref="SdfEmitContext.ParkPosition"/>).</param>
-    public void PackTransforms(Span<DynamicTransform> transforms, WorldClient client, SdfMovedTransforms moved, int slotBase, Vector3 parkPosition) {
+    public void PackTransforms(Span<DynamicTransform> transforms, IWorldStampSource client, SdfMovedTransforms moved, int slotBase, Vector3 parkPosition) {
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: moved);
 
@@ -59,6 +74,10 @@ public sealed partial class WorldStampPool {
 
             if (live is null) {
                 m_packedRegistrations[index] = null;
+                SetMeshDraw(
+                    draw: null,
+                    index: index
+                );
 
                 if (m_owners.Vacate(
                     moved: moved,
@@ -148,11 +167,46 @@ public sealed partial class WorldStampPool {
                 rootSlot: rootSlot,
                 shapeCount: shapeCount
             );
+
+            // The root slot holds the pose the shapes were packed under, followers included, whether or not this frame
+            // repacked it.
+            SetMeshDraw(
+                draw: ((live.Mesh is { } mesh)
+                    ? WorldPlacementStamper.MeshDrawOf(
+                        material: live.MeshMaterial,
+                        mesh: mesh,
+                        origin: transforms[rootSlot].Position,
+                        rotation: transforms[rootSlot].Orientation,
+                        scale: placementScale
+                    )
+                    : null),
+                index: index
+            );
+        }
+
+        if (m_meshDrawsChanged) {
+            m_meshDrawList.Clear();
+
+            foreach (var draw in m_meshDraws) {
+                if (draw is { } posed) {
+                    m_meshDrawList.Add(item: posed);
+                }
+            }
+
+            m_meshDrawsRevision++;
+            m_meshDrawsChanged = false;
         }
     }
 
+    // Records one pool entry's draw, noting whether it changed.
+    private void SetMeshDraw(int index, SdfMeshDraw? draw) {
+        if (m_meshDraws[index] != draw) {
+            m_meshDraws[index] = draw;
+            m_meshDrawsChanged = true;
+        }
+    }
     // Decides whether a live registration repacks this frame; one new to its pool entry always does.
-    private bool Wake(WorldClient client, int index, Registration live, SdfMovedTransforms moved, Vector3 rootPosition, Quaternion rootRotation) {
+    private bool Wake(IWorldStampSource client, int index, Registration live, SdfMovedTransforms moved, Vector3 rootPosition, Quaternion rootRotation) {
         var swapped = !ReferenceEquals(
             objA: m_packedRegistrations[index],
             objB: live
@@ -173,6 +227,10 @@ public sealed partial class WorldStampPool {
             bodyIndex: (live.BodyIndex ?? -1),
             mirror: client.StateMirror
         );
+        live.Reads.Arrive(
+            first: live.Creation,
+            second: live.Look
+        );
 
         return m_owners.Wake(
             castsSoftShadow: false,
@@ -190,7 +248,7 @@ public sealed partial class WorldStampPool {
     }
     // Packs one live registration's root and shape slots, stepping its followers, drivers and effectors by
     // deltaSeconds.
-    private void PackRegistration(Span<DynamicTransform> transforms, WorldClient client, Registration live, int rootSlot, int shapeCount, float deltaSeconds, Vector3 rootPosition, Quaternion rootRotation, float placementScale, Vector3 parkPosition) {
+    private void PackRegistration(Span<DynamicTransform> transforms, IWorldStampSource client, Registration live, int rootSlot, int shapeCount, float deltaSeconds, Vector3 rootPosition, Quaternion rootRotation, float placementScale, Vector3 parkPosition) {
         // The pose-continuity watch is read for every body-rooted registration, not only a follower-bearing one: a
         // teleport or a reused body slot invalidates a latched contact point the same way it invalidates a follower —
         // the world point a foot was planted at belongs to where the body was.

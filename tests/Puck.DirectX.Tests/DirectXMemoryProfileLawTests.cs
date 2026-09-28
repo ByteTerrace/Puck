@@ -34,13 +34,14 @@ public sealed class DirectXMemoryProfileLawTests {
                 CoherentUnifiedMemory: true,
                 DeviceLocalBytes: ((512UL * MiB) + (8UL * GiB)),
                 HostVisibleDeviceLocalBytes: ((512UL * MiB) + (8UL * GiB)),
-                LargestDeviceLocalHeapBytes: ((512UL * MiB) + (8UL * GiB))
+                LargestDeviceLocalHeapBytes: ((512UL * MiB) + (8UL * GiB)),
+                UnifiedMemory: true
             ),
             actual: profile
         );
         Assert.Equal(
             expected: GpuResidencyPolicy.InPlace,
-            actual: GpuResidency.Select(byteCount: TableBytes, profile: profile)
+            actual: GpuResidency.Select(byteCount: TableBytes, profile: profile, readersInFlight: false)
         );
     }
     [Fact]
@@ -56,7 +57,7 @@ public sealed class DirectXMemoryProfileLawTests {
         Assert.False(condition: profile.CoherentUnifiedMemory);
         Assert.Equal(
             expected: GpuResidencyPolicy.Ring,
-            actual: GpuResidency.Select(byteCount: TableBytes, profile: profile)
+            actual: GpuResidency.Select(byteCount: TableBytes, profile: profile, readersInFlight: false)
         );
     }
     [Fact]
@@ -81,7 +82,8 @@ public sealed class DirectXMemoryProfileLawTests {
                 CoherentUnifiedMemory: false,
                 DeviceLocalBytes: (12UL * GiB),
                 HostVisibleDeviceLocalBytes: (12UL * GiB),
-                LargestDeviceLocalHeapBytes: (12UL * GiB)
+                LargestDeviceLocalHeapBytes: (12UL * GiB),
+                UnifiedMemory: false
             ),
             actual: withUploadHeaps
         );
@@ -91,11 +93,11 @@ public sealed class DirectXMemoryProfileLawTests {
         );
         Assert.Equal(
             expected: GpuResidencyPolicy.Ring,
-            actual: GpuResidency.Select(byteCount: TableBytes, profile: withUploadHeaps)
+            actual: GpuResidency.Select(byteCount: TableBytes, profile: withUploadHeaps, readersInFlight: false)
         );
         Assert.Equal(
             expected: GpuResidencyPolicy.Staged,
-            actual: GpuResidency.Select(byteCount: TableBytes, profile: without)
+            actual: GpuResidency.Select(byteCount: TableBytes, profile: without, readersInFlight: false)
         );
     }
 

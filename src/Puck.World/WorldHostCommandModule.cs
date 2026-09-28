@@ -32,21 +32,23 @@ internal sealed class WorldHostCommandModule(WorldServer server, WorldHostSettin
             : "display"
         );
 
-        return (((((((string)$"[world.host: document {{{{{DescribeRow(host: document)}}}}} resolved {{{{presentation={PresentationToken(presentation: hostSettings.Presentation)} backend={WorldHostTokens.BackendToken(backend: (hostSettings.HostsOnDirectX
+        return ((((((((string)$"[world.host: document {{{{{DescribeRow(host: document)}}}}} resolved {{{{presentation={PresentationToken(presentation: hostSettings.Presentation)} backend={WorldHostTokens.BackendToken(backend: (hostSettings.HostsOnDirectX
             ? WorldBackendPreference.DirectX
             : WorldBackendPreference.Vulkan))} ") +
             $"width={hostSettings.Width} height={hostSettings.Height} surfaceFormat={WorldHostTokens.SurfaceFormatToken(format: hostSettings.SurfaceFormat)} ") +
             $"fullscreen={Bool(value: hostSettings.Fullscreen)} presentMode={PresentModeToken(mode: hostSettings.PresentMode)} ") +
             $"targetHertz={HertzToken(hertz: hostSettings.TargetHertz)} exitAfterSeconds={hostSettings.ExitAfterSeconds} ") +
+            $"colorSpace={hostSettings.ColorSpace} paperWhiteNits={HertzToken(hertz: hostSettings.PaperWhiteNits)} ") +
             $"genlock={Genlock(value: hostSettings.Genlock)}}} ") +
             $"live {{targetHertz={targetRate}}}]");
     }
     private static string DescribeRow(WorldHostDefaults host) =>
-        ((((string)$"presentation={PresentationToken(presentation: host.Presentation)} backend={((host.BackendRow is not null)
+        (((((string)$"presentation={PresentationToken(presentation: host.Presentation)} backend={((host.BackendRow is not null)
             ? $"<row:{host.BackendRow}>"
             : WorldHostTokens.BackendToken(backend: (host.Backend ?? WorldBackendPreference.Auto)))} width={host.Width} height={host.Height} surfaceFormat={WorldHostTokens.SurfaceFormatToken(format: host.SurfaceFormat)} fullscreen={Bool(value: host.Fullscreen)} ") +
         $"presentMode={PresentModeToken(mode: host.PresentMode)} targetHertz={HertzToken(hertz: host.TargetHertz)} ") +
-        $"exitAfterSeconds={host.ExitAfterSeconds} genlock={Genlock(value: host.Genlock)} listen={Endpoint(value: host.Listen)} authority={Endpoint(value: host.Authority)}");
+        $"exitAfterSeconds={host.ExitAfterSeconds} genlock={Genlock(value: host.Genlock)} listen={Endpoint(value: host.Listen)} authority={Endpoint(value: host.Authority)} ") +
+        $"colorSpace={host.ColorSpace} paperWhiteNits={((host.PaperWhiteNits is { } paperWhite) ? HertzToken(hertz: paperWhite) : "(sdr white)")}");
     private static string Endpoint(string? value) => (value ?? "(local)");
     private static string Genlock(string? value) => (value ?? "(none)");
     private static string HertzToken(double hertz) => hertz.ToString(provider: CultureInfo.InvariantCulture);

@@ -64,7 +64,12 @@ is refused at the creation document validator.
 Mirroring already has a spelling: the `SymmetryPlane` domain op, authored as a
 `symmetry` entry in a shape's domain list, which reflects across an arbitrary
 plane, is an exact isometry, and expands to rigid copies so contact matches
-render. A sign on a scale component would be a second spelling of the same
+render: each mirrored copy is a proper pose followed by
+`SdfProgramBuilder.MirrorX`, so a shape with no symmetry of its own, such as a
+convex prism, still mirrors exactly. `MirrorX` is the program's one mirror
+spelling, an existing scale op of (-1, 1, 1) that leaves distance unscaled, and a
+mirrored placement uses it too, reflecting the point once after the stamp's
+scale. A sign on a scale component would be a second spelling of the same
 mechanism, and a strictly weaker one—it can only mirror across the shape's
 own axis planes.
 

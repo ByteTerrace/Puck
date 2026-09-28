@@ -182,7 +182,7 @@ public class LspSugarTests {
     }
     [Fact]
     public void SchemaExportsCreationHelp() {
-        var schema = WorldSchema.Export(postRenderExtensions: []);
+        var schema = WorldSchema.Export(postProcessPackages: []);
         var descriptions = (string.Join(
             separator: "\n",
             values: schema.Sections.Select(selector: section => section.Node.ToJsonString())

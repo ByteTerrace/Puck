@@ -18,6 +18,9 @@ public sealed partial class WorldStateCommandModule {
                 var result = default(CommandResult);
 
                 void Complete(QueryAnswer answer) => result = new(Output: answer.Text) { IsError = answer.Refused };
+                if (!authority.TryResolveLink(context: context, error: out var error, link: out var link, verb: "world.state.observe")) {
+                    return error;
+                }
                 if (link is IPrincipalServerLink stamped) {
                     stamped.Query(
                         new WorldQuery.StateObservations(),
@@ -329,6 +332,9 @@ public sealed partial class WorldStateCommandModule {
 
             if (operation is null) {
                 return CommandResult.Error(output: "state transform must be an object");
+            }
+            if (!authority.TryResolveLink(context: context, error: out var error, link: out var link, verb: verb)) {
+                return error;
             }
             return link.Submit(
                 new WorldMutation.TransformState(

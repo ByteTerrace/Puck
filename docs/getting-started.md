@@ -68,7 +68,7 @@ The [three-pass ink example](../src/Puck.World/README.md#shader-pipelines)
 provides a focused editing task: launch its world, draw with the pointer, then
 change the visualization's exposure through `pipeline.set`. The guide includes
 exact commands for inspecting the result, pausing, stepping and capturing it.
-Its pipeline document and shader sources are linked beside the instructions.
+Its graph document and shader sources are linked beside the instructions.
 
 For document authoring, start with the
 [World DSL examples](../src/Puck.World.Transpiler/README.md). For native handheld

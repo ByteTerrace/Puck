@@ -99,7 +99,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     // The local seats this host embodies — the ONE seam into a desktop's client/roster/seat-router/input-router.
     // WorldEmbodiedSeats.None for a host with no local seats.
     private readonly IWorldEmbodiedSeats m_seats;
-    private readonly string m_stateRoot;
+    private readonly WorldStateRoot m_stateRoot;
 
     private readonly Dictionary<string, WorldInstance> m_instances = new(comparer: StringComparer.Ordinal);
     // Whether the instance's own document came from a composed image this process already held when the instance
@@ -248,10 +248,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     }
     // The directory every non-boot instance's store hangs under, separator-terminated so a prefix test is a containment
     // test rather than a sibling-name test ("…/instances-other" must not read as inside "…/instances").
-    private string InstancesRoot() => (Path.GetFullPath(path: Path.Combine(
-        path1: m_stateRoot,
-        path2: "instances"
-    )).TrimEnd(trimChar: Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar);
+    private string InstancesRoot() => (m_stateRoot.PathOf(name: "instances").TrimEnd(trimChar: Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar);
     // The ONE local-roster departure transaction. PlayerRoster routes both explicit leaves and device-orphan
     // dissolves here after its ordinary slot/occupancy guard. The authoritative body leaves the CURRENT routed
     // instance first; only an accepted reply clears held input, vacates the local participant, and resets the
@@ -347,6 +344,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// <summary>Disposes every instance this host owns. The boot instance's own graph belongs to the container and
     /// is untouched.</summary>
     public void Dispose() {
+        foreach (var owner in m_screenSessions.Keys.ToList()) { CloseScreenSessions(owner: owner); }
         foreach (var forwarded in m_forwardedBodies.Values) { (forwarded.Authority as IDisposable)?.Dispose(); }
         m_forwardedBodies.Clear();
         foreach (var endpoint in m_authorityEndpoints.Values) {
@@ -389,10 +387,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             b: BootInstanceName,
             comparisonType: StringComparison.Ordinal
         )
-            ? Path.Combine(
-                path1: m_stateRoot,
-                path2: "owned-worlds"
-            )
+            ? m_stateRoot.PathOf(name: "owned-worlds")
             : Path.Combine(
                 path1: InstancesRoot(),
                 path2: name,
@@ -508,6 +503,18 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             ScanInstanceBoundaries(instance: boot);
         }
     }
+    /// <summary>Settles the boot world's screen sessions right after its own step (see
+    /// <see cref="SettleScreenSessions"/>): every other instance settles inside <see cref="StepInstances"/>.</summary>
+    /// <param name="stepped">Whether the boot world stepped: false for a paused or stopped boot world, whose sessions
+    /// still follow its definition but forward nothing.</param>
+    public void SettleBootScreenSessions(bool stepped) {
+        if (Boot is { } boot) {
+            SettleScreenSessions(
+                instance: boot,
+                stepped: stepped
+            );
+        }
+    }
     /// <summary>Whether the boot instance is due to actually step this master tick — <see langword="false"/> when
     /// its own live <see cref="WorldInstance.IsPaused"/> lever holds it, its authored rate is the durable stop (0),
     /// or <paramref name="stepTicks"/> no longer matches the width its current rate demands;
@@ -594,7 +601,13 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                 continue;
             }
 
-            var instance = m_instances[name];
+            // A screen session an earlier row settled this call may have stopped this one.
+            if (!m_instances.TryGetValue(
+                key: name,
+                value: out var instance
+            )) {
+                continue;
+            }
 
             // A restored row held pending its adjacency mirrors banks no ticks and drains nothing administrative —
             // it is not yet part of the stepping engine at all, exactly like a row this host has not admitted.
@@ -614,6 +627,10 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                 instance.IsPaused
             ) {
                 _ = instance.Server.DrainAdministrative();
+                SettleScreenSessions(
+                    instance: instance,
+                    stepped: false
+                );
 
                 continue;
             }
@@ -656,6 +673,10 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
 
                 instance.ElapsedEngineTicks = elapsedTicks;
                 ScanInstanceBoundaries(instance: instance);
+                SettleScreenSessions(
+                    instance: instance,
+                    stepped: true
+                );
 
                 // Server.Step installs any pending definition swap (world.load/.reset/.reload) before
                 // advancing, so a mid-batch rate change makes the cached stepWidth stale for further
@@ -696,6 +717,51 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                 );
             }
         }
+    }
+    /// <summary>Looks up the endpoint a running local instance is observed and driven through: the one every seat routed to
+    /// it and every view presented in it shares, whose mirror follows the instance's whole replica.</summary>
+    /// <param name="name">The console-facing instance name.</param>
+    /// <param name="endpoint">The endpoint, when found.</param>
+    /// <returns>Whether a local instance runs under <paramref name="name"/>; a remote authority's endpoint is not one.</returns>
+    public bool TryEndpoint(string name, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldAuthorityEndpoint? endpoint) {
+        if (m_instances.ContainsKey(key: name)) {
+            return m_authorityEndpoints.TryGetValue(
+                key: name,
+                value: out endpoint
+            );
+        }
+
+        endpoint = null;
+
+        return false;
+    }
+    /// <summary>Looks up the endpoint a portal window may render in place of its session: the endpoint of the local
+    /// instance its session observes, while that session is delivered everything the instance holds
+    /// (<see cref="WorldSessionObservation.DisclosesEverything"/>). An instance running under the name that the session does
+    /// not observe (a replacement started under a stopped instance's name) yields none, since the session was never
+    /// admitted to it and its endpoint's mirror is that instance's whole replica.</summary>
+    /// <param name="observation">The window's session.</param>
+    /// <param name="name">The instance the window's screen resolved.</param>
+    /// <param name="endpoint">The endpoint, when this returns <see langword="true"/>.</param>
+    /// <returns>Whether the window may render the endpoint's mirror now.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="observation"/> is <see langword="null"/>.</exception>
+    public bool TryWindowEndpoint(WorldSessionObservation observation, string name, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldAuthorityEndpoint? endpoint) {
+        ArgumentNullException.ThrowIfNull(argument: observation);
+
+        endpoint = null;
+
+        return (
+            m_instances.TryGetValue(
+                key: name,
+                value: out var instance
+            ) &&
+            observation.Observes(server: instance.Server) &&
+            observation.DisclosesEverything &&
+            TryEndpoint(
+                endpoint: out endpoint,
+                name: name
+            )
+        );
     }
     /// <summary>Looks up a running instance by name.</summary>
     /// <param name="name">The console-facing instance name.</param>
@@ -1016,6 +1082,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             catalog: m_machineCatalog,
             catalogFingerprint: m_catalogFingerprint,
             admission: out admission,
+            contentHash: out _,
             instanceIdentity: name,
             neighbours: instanceNeighbours,
             path: resolvedPath,
@@ -1182,6 +1249,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         // mints a genuinely new generation rather than reusing a name nothing answers to any more. A no-op for a name
         // the resolver never minted.
         m_resolver.NotifyInstanceRetired(instanceName: name);
+        CloseScreenSessions(owner: name);
         instance.Dispose();
         reason = string.Empty;
 
@@ -1214,10 +1282,10 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <param name="catalogFingerprint">The stable fingerprint of the selected host machine catalog.</param>
     /// <param name="machineCatalog">The selected host machine catalog, or null for structural-only test hosts.</param>
-    public WorldInstanceHost(IWorldEmbodiedSeats seats, WorldSessionResolver resolver, Guid machineId, string stateRoot, CancellationToken applicationStopping, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, bool admitsSpawn = true, string catalogFingerprint = "", IMachineValidationCatalog? machineCatalog = null) {
+    public WorldInstanceHost(IWorldEmbodiedSeats seats, WorldSessionResolver resolver, Guid machineId, WorldStateRoot stateRoot, CancellationToken applicationStopping, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, bool admitsSpawn = true, string catalogFingerprint = "", IMachineValidationCatalog? machineCatalog = null) {
         ArgumentNullException.ThrowIfNull(argument: seats);
         ArgumentNullException.ThrowIfNull(argument: resolver);
-        ArgumentException.ThrowIfNullOrWhiteSpace(argument: stateRoot);
+        ArgumentNullException.ThrowIfNull(argument: stateRoot);
         ArgumentNullException.ThrowIfNull(argument: machineHostFactory);
 
         m_seats = seats;
@@ -1251,6 +1319,10 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         m_instances[row.Name] = row;
         _ = EndpointFor(instance: row);
         ResolveForwardedRecoveries();
+        SettleScreenSessions(
+            instance: row,
+            stepped: false
+        );
     }
     /// <summary>Admits <paramref name="row"/> as this host's one boot row and seeds every embodied local seat's
     /// route to it — a desktop's one-time boot admission, never called by a boot-free host.</summary>

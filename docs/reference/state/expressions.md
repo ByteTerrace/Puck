@@ -326,7 +326,8 @@ are the exact spellings the parser accepts.
 | Hilbert order | `hilbertIndex(order, x, y)`, `hilbertX(order, index)`, `hilbertY(order, index)` | Int |
 | Hex coordinates | `hexIndex(q, r)`, `hexQ`, `hexR`, `hexRadius`, `hexEuclideanSquared`, `hexDistance(a, b)`, `hexNeighbor(cell, direction)`, `hexRotate(cell, turns)`, `hexMirror`, `hexSwap`, `hexAdd`, `hexSubtract`, `hexMultiply`, `hexScale`, `hexTranslate(cell, dq, dr)` | Int |
 | Square coordinates | `squareIndex(x, y)`, `squareX`, `squareY`, `squareRadius`, `squareLength`, `squareEuclideanSquared`, `squareDistance(a, b)`, `squareChebyshev(a, b)`, `squareNeighbor(cell, direction)`, `squareRotate(cell, turns)`, `squareMirror`, `squareSwap`, `squareAdd`, `squareSubtract`, `squareMultiply`, `squareScale`, `squareTranslate(cell, dx, dy)` | Int |
-| Factors and cycles | `greatestCommonDivisor(a, b)`, `leastCommonMultiple(a, b)`, `floorModulo(a, m)`, `cycleForward(a, b, m)`, `cycleDistance(a, b, m)` | Int |
+| Factors and cycles | `greatestCommonDivisor(a, b)`, `extendedGreatestCommonDivisor(a, b)`, `leastCommonMultiple(a, b)`, `floorDivide(a, b)`, `floorModulo(a, m)`, `floorDivideModulo(a, b)`, `divideRemainder(a, b)`, `cycleForward(a, b, m)`, `cycleDistance(a, b, m)` | Int |
+| Powers and inverses | `power(base, exponent)`, `modularPower(base, exponent, modulus)`, `modularInverse(value, modulus)` | Int |
 | Sets and primes | `smallestMissing(mask)`, `isPrime(n)`, `primeAt(i)` | Int |
 | Combinations | `binomialCoefficient(n, k)`, `factorial(n)`, `subsetRank(n, mask)`, `subsetAt(n, k, rank)`, `subsetMember(n, k, rank, i)` | Int |
 | Permutations | `arrangementRank(n, packed)`, `arrangementAt(n, rank)`, `arrangementMember(n, rank, i)` | Int |
@@ -342,9 +343,30 @@ produce and take apart. They expose operations from
 
 These notes cover the details that affect results:
 
-- `%` keeps the sign of the dividend (a truncated remainder), while
-  `floorModulo(a, m)` is floored and takes the sign of `m`. `cycleForward` and
+- `/` truncates toward zero and `%` keeps the sign of the dividend (a truncated
+  remainder), while `floorDivide(a, b)` rounds toward negative infinity and
+  `floorModulo(a, m)` is floored and takes the sign of `m`. Each pair satisfies
+  its division identity for every sign: `a == b * (a / b) + a % b` and
+  `a == b * floorDivide(a, b) + floorModulo(a, b)`. `cycleForward` and
   `cycleDistance` measure steps from `a` to `b` around a cycle of `m`.
+- `floorDivideModulo(a, b)` and `divideRemainder(a, b)` return both halves of
+  one division as a pair: `pairX` reads the quotient and `pairY` the modulo or
+  remainder. Either fails when a half lies outside the pair's range.
+- `power(base, exponent)` squares and multiplies; a negative exponent fails, and
+  so does a power that doesn't fit 64 bits. `power(0, 0)` is 1.
+- `modularPower(base, exponent, modulus)` reduces the base into `[0, modulus)`
+  and forms every product in 128 bits, so it never overflows; the modulus must
+  be positive and the exponent non-negative. `modularInverse(value, modulus)`
+  answers in `[1, modulus)` by Pornin's binary extended GCD, which runs a fixed
+  number of steps; it fails when the modulus is below 2 or `value` shares a
+  factor with it.
+- `extendedGreatestCommonDivisor(a, b)` returns the Bézout coefficients as the
+  pair `(x, y)` with `a * x + b * y == greatestCommonDivisor(a, b)`, where `x`
+  is the least-magnitude choice, in `[-|b|/2g, |b|/2g]`; the tie at `|b|/g = 2`
+  takes `sign(a)` to minimize `|y|`. Read the divisor itself from
+  `greatestCommonDivisor(a, b)`: rebuilding it as `a * pairX(p) + b * pairY(p)`
+  overflows for large operands even when the divisor is small. An operand of
+  −2^63 fails, as does a coefficient outside the pair's range.
 - `floor`, `ceiling`, and `round` are the identity on Int. On Fixed, `round`
   breaks ties to even, the same rule the document language uses.
 - `squareRoot` takes the integer floor root on Int and a fixed root on Fixed; a
@@ -362,8 +384,12 @@ These notes cover the details that affect results:
   member; a five-card hand is one rank below `binomialCoefficient(52, 5)`.
   Arrangements hold n up to 16, packed four bits per position (position i in
   bits 4i through 4i+3), and rank by their lexicographic Lehmer code.
-- `pair` components must be 0 to 3,037,000,498, Morton components at most
-  2^31 − 1, and a Hilbert `order` 1 to 31.
+- A pair holds two signed components, each −1,518,500,249 to 1,518,500,249:
+  each folds onto the naturals (0, −1, 1, −2, … become 0, 1, 2, 3, …) and the
+  two folded values are paired by the alternating square-shell walk. Every
+  pair operation reads and returns signed components; codes outside
+  `0..9,223,372,030,926,249,000` fail. Morton components are at
+  most 2^31 − 1, and a Hilbert `order` is 1 to 31.
 
 An argument outside its domain, such as a negative index or a component beyond
 its range, fails the expression with the `Domain` fault. Nothing wraps.

@@ -9,13 +9,12 @@ namespace Puck.Shaders;
 /// <summary>
 /// The config-schema binder every <c>puck.*.v1</c> manifest with a name → <see cref="ShaderConfigField"/>
 /// <c>config</c> block shares: validates a document's authored configuration, resolves every absent field to its
-/// default, and emits the schema as JSON Schema. Extracted from <see cref="ShaderSetManifest"/> (whose
-/// <see cref="ShaderSetManifest.TryBindConfig"/>/<see cref="ShaderSetManifest.ConfigJsonSchema"/> delegate here) so
-/// <see cref="ProbeKindManifest"/> binds its own <c>config</c> through the identical rules rather than a second copy.
+/// default, and emits the schema as JSON Schema. A render graph package's config (<see cref="RenderGraphPackage.Config"/>),
+/// a document pass's and a <see cref="ProbeKindManifest"/>'s all bind through these rules, never a second copy.
 /// </summary>
 public static class ShaderConfigBinding {
     private static string Describe(ShaderConfigField field) {
-        var shape = ((field.Type.ComponentCount() == 1)
+        var element = ((field.Type.ComponentCount() == 1)
             ? (field.Type.ScalarKind() switch {
                 ShaderScalarKind.Float => "a number",
                 ShaderScalarKind.Uint => "a non-negative integer",
@@ -25,6 +24,9 @@ public static class ShaderConfigBinding {
                 ? "numbers"
                 : "integers")}"
         );
+        var shape = ((field.Length is { } length)
+            ? $"an array of {length} elements, each {element}"
+            : element);
 
         return (field.Min, field.Max) switch {
             ( { } min, { } max) => $"{shape} in [{Format(value: min)}, {Format(value: max)}]",
@@ -83,6 +85,14 @@ public static class ShaderConfigBinding {
             };
         }
 
+        if (field.Length is { } length) {
+            fieldSchema = new JsonObject {
+                ["type"] = "array",
+                ["items"] = fieldSchema,
+                ["minItems"] = length,
+                ["maxItems"] = length,
+            };
+        }
         if (field.Default is { } defaultValue) {
             fieldSchema["default"] = JsonNode.Parse(json: defaultValue.GetRawText());
         }
@@ -140,10 +150,50 @@ public static class ShaderConfigBinding {
         }
     }
     private static bool TryReadValue(ShaderConfigField field, JsonElement element, string name, out byte[] bytes, out string reason) {
-        var count = ((int)field.Type.ComponentCount());
-
-        bytes = new byte[field.Type.SizeBytes()];
         reason = $"'{name}' must be {Describe(field: field)}.";
+
+        if (field.Length is not { } length) {
+            bytes = new byte[field.Type.SizeBytes()];
+
+            return TryReadElement(
+                bytes: bytes,
+                element: element,
+                field: field
+            );
+        }
+
+        // A block array's elements are four-component vectors, one 16-byte row each.
+        bytes = new byte[(length * field.Type.SizeBytes())];
+
+        if (
+            (element.ValueKind != JsonValueKind.Array) ||
+            (element.GetArrayLength() != length)
+        ) {
+            return false;
+        }
+
+        var row = 0;
+
+        foreach (var item in element.EnumerateArray()) {
+            if (!TryReadElement(
+                bytes: bytes.AsSpan(
+                    length: ((int)field.Type.SizeBytes()),
+                    start: (row * ((int)field.Type.SizeBytes()))
+                ),
+                element: item,
+                field: field
+            )) {
+                return false;
+            }
+
+            row++;
+        }
+
+        return true;
+    }
+    // Reads one value of a field's type: a number for a scalar, an array of its component count for a vector.
+    private static bool TryReadElement(ShaderConfigField field, JsonElement element, Span<byte> bytes) {
+        var count = ((int)field.Type.ComponentCount());
 
         if (count == 1) {
             return (
@@ -169,7 +219,7 @@ public static class ShaderConfigBinding {
         var index = 0;
 
         foreach (var component in element.EnumerateArray()) {
-            var destination = bytes.AsSpan(
+            var destination = bytes.Slice(
                 length: ((int)ShaderValueTypes.ComponentBytes),
                 start: (index * ((int)ShaderValueTypes.ComponentBytes))
             );
@@ -330,8 +380,9 @@ public static class ShaderConfigBinding {
 
         return true;
     }
-    /// <summary>Refuses a schema whose own declaration is malformed: an empty field name, a min above a max, or a
-    /// default outside the field's own range.</summary>
+    /// <summary>Refuses a schema whose own declaration is malformed: an empty field name, a min above a max, an array
+    /// length on anything but a four-component vector or of no elements, or a default outside the field's own
+    /// range.</summary>
     /// <param name="schema">The config schema, or <see langword="null"/> for none.</param>
     /// <param name="ownerName">The owner's id, named in the refusal.</param>
     /// <exception cref="InvalidDataException">The schema is malformed.</exception>
@@ -350,6 +401,12 @@ public static class ShaderConfigBinding {
                 (min > max)
             ) {
                 throw new InvalidDataException(message: $"'{ownerName}' manifest's config field '{name}' has min {Format(value: min)} above max {Format(value: max)}.");
+            }
+            if (
+                (field.Length is { } length) &&
+                ((length == 0) || (field.Type.ComponentCount() != 4))
+            ) {
+                throw new InvalidDataException(message: $"'{ownerName}' manifest's config field '{name}' is an array of {length} {field.Type.Spelling()}; an array holds at least one four-component vector.");
             }
             if (
                 (field.Default is { } defaultValue) &&

@@ -8,6 +8,10 @@ namespace Puck.World.Protocol;
 /// runtime and delivery programme builds implements the same contract over its own transport.
 /// </summary>
 public interface IWorldStateView {
+    /// <summary>Gets the presentation manifest of the installed document: every state read its presentation sections
+    /// bind, compiled once per document.</summary>
+    Puck.World.Client.WorldPresentationManifest Manifest { get; }
+
     /// <summary>Resolves a document-lane row name to its state catalog ordinal in the installed layout.</summary>
     /// <param name="rowName">The row's name.</param>
     /// <param name="ordinal">The row's ordinal, or -1 when the installed layout declares no such row.</param>
@@ -26,6 +30,26 @@ public interface IWorldStateView {
     /// <returns><see langword="true"/> when the row resolves; the sample's value holds no case when the row declares
     /// no cell under <paramref name="key"/>.</returns>
     bool TryRead(int ordinal, string? key, bool target, ulong tick, ulong engineTick, out WorldStateSample sample);
+    /// <summary>Returns how many elements a resolved keyed row presents when it is read whole
+    /// (<c>Puck.World.WorldBoundRow</c>): cell <c>i</c> is read under the decimal key <c>i</c>.</summary>
+    /// <param name="ordinal">The row's state catalog ordinal.</param>
+    /// <returns>The element count, or zero for a slot row or an ordinal the installed layout does not hold.</returns>
+    int RowLength(int ordinal);
+    /// <summary>Reads a resolved keyed row whole, as <see cref="RowLength"/> presents it: element <c>i</c> takes cell
+    /// <c>i</c> read as a number (Bool as 0 or 1), and an absent or non-numeric cell reads zero. An element is written
+    /// only when its value differs, and a field row's elements are read from its cells by index, so the read builds no
+    /// key and allocates nothing.</summary>
+    /// <param name="ordinal">The row's state catalog ordinal.</param>
+    /// <param name="target">Whether to read the stored truth rather than the eased follower of a cell carrying an easing
+    /// trait.</param>
+    /// <param name="tick">The simulation tick the read answers as of.</param>
+    /// <param name="engineTick">The engine tick the read answers as of.</param>
+    /// <param name="elements">The elements, holding the previous read; at most <see cref="RowLength"/> of them are
+    /// read, and any past the row read zero.</param>
+    /// <param name="motion">How the row's cells move between ticks: <see cref="WorldStateMotion.Still"/> unless a cell
+    /// still moves, in which case the last moving cell's motion.</param>
+    /// <returns><see langword="true"/> when any element changed.</returns>
+    bool ReadRow(int ordinal, bool target, ulong tick, ulong engineTick, Span<double> elements, out WorldStateMotion motion);
 }
 /// <summary>How a cell's read value moves between ticks with no write to its stored value.</summary>
 public enum WorldStateMotion : byte {

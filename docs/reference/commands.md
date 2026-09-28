@@ -402,7 +402,13 @@ Two public paths reach a handler:
 1. **Fixed-step input.** `InputRouter.Capture` accepts device-style signals,
    refusing one that names no source, while `InputRouter.Activate` accepts a
    command activation produced by an authored interface for a non-negative slot.
-   `SnapshotForTick` groups both by logical slot. For each slot,
+   `InputRouter.Sustain` holds a host-produced value on a slot's lane: every
+   snapshot carries it, phase `Active`, whatever the slot's active maps, until
+   `EndSustain` ends it, a later call replaces the value, or the slot resolver
+   reports the slot vacated (`IInputSlotResolver.SlotVacated`), so a catch-up
+   burst of several ticks carries it on each and a slot's next occupant starts
+   with none. `SnapshotForTick` groups all three by
+   logical slot. For each slot,
    `IPrincipalResolver.PrincipalOf(slot)` supplies the actor that the
    host currently recognizes there; the router does not guess that a slot
    belongs to a local seat.
@@ -488,7 +494,13 @@ scripted driver depends on them:
   `| <n> observer faults` segment, named only when there have been some;
   `[wire.errors: 0 rejected]` stays the whole answer for a run that refused
   nothing. Three broken sinks watching one bound gamepad press, a line no
-  caller submitted at all, therefore add nothing to the refused count.
+  caller submitted at all, therefore add nothing to the refused count. The same
+  rule holds for a refusal a host reports a tick late through
+  `NoteDeferredRejection`: the World and the silo count only the refusals of
+  lines the console registered through its row's console link, never a remote
+  peer's refused envelope, a rule's or addon's refusal, a rebuild's grant
+  replay, or anything the host submitted through the row's bare transport,
+  such as the silo's reload. A codec refusal on a console link counts once.
 
 Read-after-write ordering across submitted lines is a `TextCommandSession`
 guarantee rather than a `Submit` one: `TextCommandSource.Collect` holds that
@@ -580,8 +592,8 @@ rather than merely asserted.
 
 A source such as an emulator, a captured window or another view can be shown on
 a screen in the world or in a pane on the display. `SourceMapping` is the one
-record of how it is shown: hits map through it, it is the data the GPU is to
-draw with, and nothing ever reads a mapping back from the GPU. It holds the
+record of how it is shown: hits map through it, the SDF screen shading draws
+every screen from it, and nothing ever reads a mapping back from the GPU. It holds the
 chain from the place it is shown to the source's pixels:
 
 - the placement: a `SourcePlacement.Surface` face frame in the world, or a
@@ -606,15 +618,60 @@ A mapped point goes to one `SourceDestination`:
 
 | Destination | What reaches it |
 |---|---|
-| `Presentation` | Hover and highlight. `ISourcePicker` is the seam, and a host may answer it by GPU picking because nothing reaches state. |
-| `Simulation` | A pointer ray that arrives as the `source.pointer.origin` and `source.pointer.direction` Axis3D commands (`SourcePointerCommands`) in a tick's snapshot, quantized by `CommandValueQuantization.QuantizeAxis3D` and mapped from document data. `TryValidate` refuses a pane here, because a pane's aspect ratio depends on the host's display. |
-| `Passthrough` | An external window on the host. `SourcePassthrough.ToClient` scales a source pixel into the window's client area in physical and logical pixels. Only a source whose `SourceOpener` is the local user may take this destination, and `TryValidate` refuses it by name for a source a document opened. |
+| `Presentation` | Hover and highlight. `ISourcePicker` is the seam, and a host may answer it by GPU picking because nothing reaches state. `SourcePanePicker` answers it on the CPU from published pane mappings: the topmost pane under the point, by `SourcePanes.Topmost`, the last in drawing order whose face holds it. |
+| `Simulation` | A pointer ray, named by the `source.pointer.origin` and `source.pointer.direction` Axis3D commands (`SourcePointerCommands`), quantized by `CommandValueQuantization.QuantizeAxis3D` and mapped from document data. A World server integrates seat intents, not command snapshots, so a seat folds the two commands into its `PlayerIntent.SourceRay`, the intent carries the ray through the wire and the replay tape, and the server maps it through the screen row in the tick for the `$pointer:` rule read. On a windowed World host, `WorldPointerRayCapture` casts the OS pointer through its seat's camera with `SourceRay.Through` each host frame and holds both commands on that seat's lane with `InputRouter.Sustain`, so every tick of the frame carries the ray. `TryValidate` refuses a pane here, because a pane's aspect ratio depends on the host's display. |
+| `Passthrough` | An external window on the host. A window capture shows the window's whole frame, so `SourcePassthrough.ToClient` scales a source pixel into the captured frame and takes off the client area's offset inside it, giving the client point in physical pixels, in the window's own coordinates (divided by its DPI scale), and whether it lies inside the client area. Only a source whose `SourceOpener` is the local user may take this destination, and `TryValidate` refuses it by name for a source a document opened. `SourcePassthroughRouter` in `Puck.Input` delivers the input ([Device input](input.md#keyboard-focus-and-passthrough-sources)). |
 
-`SourceHandle` names the source shown, a registered producer or a render-graph
-instance. Nothing publishes mappings from the live renderer yet: the renderer's
-screens and panes read them when the frame graph wires sources, and delivery of
-passthrough input to a window is Windows-specific host work. Both are open in
-[the rendering programme](../plans/rendering.md#p13--hit-to-source-mapping-and-input-destinations).
+`SourceHandle` names the source shown by its render-graph instance: a source
+instance a registered producer supplies, whose hit ends at its pixels, or a
+rendered instance, whose hit continues into its camera. It is the instance's
+identity (`RenderGraphInstance.Handle`), so two sources of one producer opened
+with different settings are two handles.
+
+A World host publishes a mapping for every pane its render graph's root draws:
+each shown view of the world and each `views.graphs` pane a layout slot places,
+in drawing order, showing the instance's whole image at the extent it last
+rendered at. The host hands them to its `SourcePanePicker`, a pipeline pane's
+pointer maps through its pane's mapping, and the hit walk starts from them.
+`world.view.panes` echoes each mapping and, given a display point, what the
+picker and the walk answer there, down to the walk's last hit.
+
+The picker answers hover, the `Presentation` destination, on the CPU. Each
+frame the drawn cursor's feed asks it which pane lies under the pointer's
+display point, whenever the pointer rests on the window, is not steering the
+camera, and the world's cursor policy shows it, whether or not the pointer
+sits inside its own seat's viewport. The overlay outlines the hovered pane's
+rect in the accent hue, the cursor's hover label names the pane when no HUD
+panel is under it, and `world.view.panes` ends with the hovered pane
+(`hovered=pane<i> <kind>:<instance> pixel <x>,<y>`, or `hovered=none`). A
+letterbox bar or a pane the layout does not show hovers nothing, and nothing
+the hover decides reaches simulation state. GPU picking is not built.
+
+Every screen in the world publishes a mapping too. The World's screen binder
+builds each row's mapping through `WorldScreenMappings.Of`, with the screen
+glass's bezel as its warp, and names it by the instance its source is: a
+producer, machine or probe source by its source instance
+(`source$<producer>$<digest>`, from `WorldSourceInstances`), a view by its
+camera's registration and a session by its screen's session view. A view's and
+a session's extent is document data, and a source instance's is the running
+image's. `WorldScreenMappingSet` holds them, republishing a steady frame's
+mappings without allocating. A live presentation source bound with
+`screen.source` over a row publishes the bound source's mapping. A screen
+showing no image or text, or an image whose extent is not known yet, publishes
+none. `world.screens` prints each screen's mapping in the line
+`world.view.panes` prints for a pane, or why it has none. Each view's world
+producer reports the screens as the placements standing in its world, so the
+walk continues from a view's pane through a screen: it ends on a producer
+source's pixel, or, for a screen showing another view, continues into that view
+through the camera it films from. The SDF screen shading draws each screen from
+the mapping it publishes (`SourceMapping.Draw`, the chain in single precision),
+and a screen that publishes none shades as unbound glass.
+
+A pane the local user opens with the World's `source.passthrough` publishes
+its mapping with the `Passthrough` destination and the local-user opener, and
+the windowed World host routes its pointer and keys to the captured window
+through `SourcePassthroughRouter`. Delivery to a window is Windows-only
+(`Win32PassthroughWindow`).
 
 ## Core types
 
@@ -628,7 +685,7 @@ member-by-member surface.
 | `CommandDefinition` | Named, typed, invokable command—the shared identity behind every way it can be driven. Its identity-bearing members (`Name`, `TextCommand`, `Description`, `Map`) are readable but settable only inside the assembly, so a `with` expression cannot split a command's dispatch identity from its text identity. Build one through `Verb` or `WithWireArgs`, which refuse a null handler, name, or description at the registration rather than at the first dispatch. |
 | `ICommandModule` | Unit of composition: contributes a set of `CommandDefinition`s. |
 | `CommandContext` | Per-invocation state handed to a handler (value, phase, logical slot, stamped principal, local device, parse result, text, registry). Internal to construct. |
-| `Principal` / `PrincipalKind` | Who is acting: the one identity a dispatch, and every world submission after it, carries — `Console`, `Seat`, `Addon`, `Peer`, or `World` (a world's own authored program). The default, `Unspecified`, is no identity, and a context refuses it. |
+| `Principal` / `PrincipalKind` | Who is acting: the one identity a dispatch, and every world submission after it, carries — `Console`, `Seat`, `Addon`, `Peer`, `Session` (an unembodied joined session), or `World` (a world's own authored program). The default, `Unspecified`, is no identity, and a context refuses it. |
 | `IPrincipalResolver` | The host's answer to *who is acting through slot N*, which the router stamps onto that slot's commands. |
 | `CommandBindability` | Whether a binding document may name a command. Required at every registration; `Unspecified` is refused by name. |
 | `CommandAudience` | Who a command answers: `Anyone` (the default) or `Operator`. The registry refuses an `Operator` command for every principal but `Console` at its dispatch boundary, before the handler runs, whichever door the line or press arrived through: `[<verb>: refused — an operator verb; seat2 is not the operator]`. |
@@ -704,7 +761,7 @@ member-by-member surface.
   pump-thread-only, called after the producers have stopped. A router owned for
   the process lifetime needs no explicit call, since the container that resolved
   it disposes it with the host. Afterward every door refuses with
-  `ObjectDisposedException`—`Capture`, `CaptureFocusExempt`, `Activate`, the
+  `ObjectDisposedException`—`Capture`, `CaptureFocusExempt`, `Activate`, `Sustain`, `EndSustain`, the
   `ConsoleTextSink`'s injection path, and `SnapshotForTick`—so a producer
   still holding a replaced router learns it is stale instead of quietly
   re-populating tables nothing will read.

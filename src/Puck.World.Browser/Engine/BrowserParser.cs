@@ -25,7 +25,7 @@ public sealed record BrowserParseResult(bool Ok, string? Document, IReadOnlyList
 public static class BrowserParser {
     // The shared parse-validate pipeline Parse/ParseFragment/Compile all ride: decode, strict-parse (draw sites
     // deferred), schema check, migrate, resolve draw sites, then validate — the same order
-    // WorldDefinitionFileSource.TryParseComposed runs for a file load, minus the file-load boundary's own basis/
+    // WorldDefinitionLoader.TryLoadFileForAdmission runs for a file load, minus the file-load boundary's own basis/
     // imports composition (the caller already composed a fragment, or is parsing a flat standalone document).
     internal static bool TryParseAndValidate(byte[] utf8Json, ICollection<string> errors, ICollection<string> deferred, out WorldDefinition? definition, IMachineValidationCatalog? machines = null) {
         if (!TryParseAndResolve(definition: out var resolved, errors: errors, utf8Json: utf8Json)) { definition = null; return false; }

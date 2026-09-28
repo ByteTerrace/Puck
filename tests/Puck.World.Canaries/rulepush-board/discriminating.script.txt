@@ -1,0 +1,12 @@
+# The same board, but the imp steps west into the open, away from the boulders it would push east.
+pipeline.wait board compiled 60
+pipeline.wait board installed 10
+world.wait 6
+pipeline.wait board submitted 1 10
+pipeline.capture board {run}/before.png
+pipeline.wait board captured 10
+body.press west
+world.wait 6
+pipeline.wait board submitted 1 10
+pipeline.capture board {run}/after.png
+pipeline.wait board captured 10

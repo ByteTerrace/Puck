@@ -454,7 +454,7 @@ public sealed partial class WorldInstanceHost {
                 if (m_narration.HasNarrationSink) {
                     m_narration.Narrate(
                         channel: "world.transfer",
-                        text: $"[world.transfer: transfer={transferId} refused ({standingPrincipal.Describe()} cannot leave '{sourceInstanceName}' seat {(slot + 1)} — {standing.Denial}); the whole transfer is held]"
+                        text: $"[world.transfer: transfer={transferId} refused ({standingPrincipal.Describe()} cannot leave '{sourceInstanceName}' {TravellerName(index: slot, localSeatCount: source.Server.Population.LocalSeatCount)} — {standing.Denial}); the whole transfer is held]"
                     );
                 }
 
@@ -553,7 +553,7 @@ public sealed partial class WorldInstanceHost {
                 admissionGrants: out var admissionGrants,
                 sourceGrants: out var sourceGrants
             )) {
-                abortReason = $"source member seat {(sourceSlot + 1)} could not detach after reservation";
+                abortReason = $"source member {TravellerName(index: sourceSlot, localSeatCount: source.Server.Population.LocalSeatCount)} could not detach after reservation";
                 break;
             }
 
@@ -587,7 +587,7 @@ public sealed partial class WorldInstanceHost {
             WorldContinuumTrajectory? continuum = null;
 
             // Overrides the destination's own fresh spawn pose with the positional-continuity mapping
-            // (WorldPortalArrivalMath.ComputeArrival), then rotates the captured velocity the same way —
+            // (WorldFrameIsometry.MapArrival), then rotates the captured velocity the same way —
             // after the ordinary join above already embodied this member under the destination's own kit. The
             // selected motion-program NAME travels beside these mapped facts and resolves against that destination's
             // own declared program table (appearance/grants/action-track state remain untouched; see
@@ -937,19 +937,18 @@ public sealed partial class WorldInstanceHost {
             border: $"adjacency/{hit.Adjacency.Name.Value}"
         );
 
-        var seat = (hit.Seat + 1);
+        var traveller = TravellerName(index: hit.Seat, localSeatCount: instance.Server.Population.LocalSeatCount);
 
         if (m_narration.HasNarrationSink) {
             m_narration.Narrate(
                 stream: WorldNarrationStream.Output,
                 channel: "world.adjacency",
-                text: $"[world.adjacency: '{label}' seat {seat} crossed -> queued transfer={transferId} generation={resolvedSession.GenerationId} instance={resolvedSession.InstanceName}]"
+                text: $"[world.adjacency: '{label}' {traveller} crossed -> queued transfer={transferId} generation={resolvedSession.GenerationId} instance={resolvedSession.InstanceName}]"
             );
         }
     }
     // One (destination, scope key) group's own single resolve+enqueue — the ONE resolver call and ONE
-    // EnqueueTransfer call the whole merged cohort shares, mirroring the pre-coalescing single-hit TriggerPortal's
-    // own body exactly except for operating over a cohort that may span more than one hit.
+    // EnqueueTransfer call the whole merged cohort shares, whether the cohort came from one hit or several.
     private void EnqueueCoalescedGroup(WorldInstance instance, CoalescedPortalGroup group) {
         var cohortSlots = group.Slots.ToArray();
         var cohort = BuildCohort(
@@ -1062,11 +1061,12 @@ public sealed partial class WorldInstanceHost {
             retain: (group.Destination.Durability == WorldDestinationDurability.Persisted)
         );
 
-        // The lowest triggering seat's own principal, mirroring world.transfer's own identity-continuity
-        // thread. The specific choice among a merged group's several triggering seats is immaterial —
-        // MemberTravelPrincipal already re-derives every other member's own Seat principal independently, so
-        // whichever seat is named here only affects itself.
-        var actingPrincipal = Principal.Seat(slot: cohortSlots[0]);
+        // The lowest triggering body's travel principal, as a seam names; MemberTravelPrincipal re-derives every other
+        // member's own, so the choice among a merged group's triggering bodies only affects that body.
+        var actingPrincipal = TravelPrincipal(
+            server: instance.Server,
+            slot: cohortSlots[0]
+        );
         var transferId = EnqueueTransfer(
             sourceInstance: instance.Name,
             scope: group.Scope,
@@ -1348,6 +1348,7 @@ public sealed partial class WorldInstanceHost {
             // participant that left.
             if (
                 !followed &&
+                (member.SourceSlot < sourceInstance!.Server.Population.LocalSeatCount) &&
                 string.Equals(
                 a: transfer.SourceInstance,
                 b: BootInstanceName,
@@ -1361,6 +1362,7 @@ public sealed partial class WorldInstanceHost {
             // The mirror fact, for a traveler landing in the instance the client mirrors.
             if (
                 !followed &&
+                (member.TargetSlot < targetAuthority.Definition.Population.LocalSeats) &&
                 string.Equals(
                 a: targetName,
                 b: BootInstanceName,
@@ -1389,7 +1391,7 @@ public sealed partial class WorldInstanceHost {
                 m_narration.Narrate(
                     stream: WorldNarrationStream.Output,
                     channel: "world.transfer",
-                    text: $"[world.transfer: transfer={arrivedTransferId} '{arrivedSource}' seat {(member.SourceSlot + 1)} departed -> '{targetName}' seat {(member.TargetSlot + 1)} arrived{((member.Profile is not null)
+                    text: $"[world.transfer: transfer={arrivedTransferId} '{arrivedSource}' {TravellerName(index: member.SourceSlot, localSeatCount: sourceInstance!.Server.Population.LocalSeatCount)} departed -> '{targetName}' {TravellerName(index: member.TargetSlot, localSeatCount: targetAuthority.Definition.Population.LocalSeats)} arrived{((member.Profile is not null)
                     ? $" as {member.Profile.Id}"
                     : " (anonymous)")} — {arrival.Text}]"
                 );
@@ -1526,15 +1528,11 @@ public sealed partial class WorldInstanceHost {
 
         return members;
     }
-    // A party member's travelling principal. A Seat-kind acting principal's own Drive claim covers only its
-    // own body everywhere, and the destination reseeds its grants from scratch (never inheriting the
-    // source's), so a `party` member other than the one that actually crossed can never be authorized under
-    // the crossing seat's identity — it travels under its own Seat identity instead. The crossing member
-    // itself, and every member under a Console-kind acting principal (whose Drive/all wildcard already
-    // covers them all), keep the original acting principal. Used for the reservation, the pre-leave standing
-    // check, and the leave+join itself, so none of the three can ever disagree on who a member travels as.
+    // A portal's frozen cohort travels under each body's own principal, including coalesced peers and census bodies.
+    // An explicit seat-driven party also derives each other member's principal; other explicit actors retain their
+    // submitted authority. Reservation, standing and detach all use this decision.
     private static Principal MemberTravelPrincipal(WorldServer server, in PendingTransfer transfer, int slot) =>
-        (((transfer.ActingPrincipal.Kind == PrincipalKind.Seat) && (transfer.ActingPrincipal.Index != slot))
+        (((transfer.ResolvedDestinationRow is not null) || ((transfer.ActingPrincipal.Kind == PrincipalKind.Seat) && (transfer.ActingPrincipal.Index != slot)))
             ? TravelPrincipal(
                 server: server,
                 slot: slot
@@ -1768,7 +1766,7 @@ public sealed partial class WorldInstanceHost {
     // so the commit-time seed there covers colocated arrivals only. The escrow's own border admission is written by
     // the destination for both topologies, which is what makes this reachable at all.
     private void SeedFederatedArrivalOccupancy(WorldInstance instance) {
-        for (var seat = 0; (seat < instance.Server.Population.LocalSeatCount); seat++) {
+        for (var seat = 0; (seat < instance.Server.Population.Capacity); seat++) {
             var key = (instance.Name, seat);
 
             if (!instance.Server.TryTransferArrivalBorder(
@@ -1889,7 +1887,7 @@ public sealed partial class WorldInstanceHost {
             if (source.Server.Output.HasNarrationSink) {
                 source.Server.Output.Narrate(
                     channel: "world.transfer",
-                    text: $"[world.transfer: refused (seat {(sourceSlot + 1)} is not active in '{sourceName}')]"
+                    text: $"[world.transfer: refused ({TravellerName(index: sourceSlot, localSeatCount: source.Server.Population.LocalSeatCount)} is not active in '{sourceName}')]"
                 );
             }
 
@@ -1903,7 +1901,7 @@ public sealed partial class WorldInstanceHost {
             if (source.Server.Output.HasNarrationSink) {
                 source.Server.Output.Narrate(
                     channel: "world.transfer",
-                    text: $"[world.transfer: refused (seat {(sourceSlot + 1)} in '{sourceName}' wears a rigid kit — cross-world transfer of a rigid body is not supported)]"
+                    text: $"[world.transfer: refused ({TravellerName(index: sourceSlot, localSeatCount: source.Server.Population.LocalSeatCount)} in '{sourceName}' wears a rigid kit — cross-world transfer of a rigid body is not supported)]"
                 );
             }
 
@@ -1918,7 +1916,7 @@ public sealed partial class WorldInstanceHost {
             if (source.Server.Output.HasNarrationSink) {
                 source.Server.Output.Narrate(
                     channel: "world.transfer",
-                    text: $"[world.transfer: refused (seat {(sourceSlot + 1)} in '{sourceName}' is carrying body:{body.Carrying} — cross-world transfer while carrying is not supported)]"
+                    text: $"[world.transfer: refused ({TravellerName(index: sourceSlot, localSeatCount: source.Server.Population.LocalSeatCount)} in '{sourceName}' is carrying body:{body.Carrying} — cross-world transfer while carrying is not supported)]"
                 );
             }
 
@@ -1934,7 +1932,7 @@ public sealed partial class WorldInstanceHost {
             if (source.Server.Output.HasNarrationSink) {
                 source.Server.Output.Narrate(
                     channel: "world.transfer",
-                    text: $"[world.transfer: refused ({actingPrincipal.Describe()} cannot leave '{sourceName}' seat {(sourceSlot + 1)} — {leaveDenial})]"
+                    text: $"[world.transfer: refused ({actingPrincipal.Describe()} cannot leave '{sourceName}' {TravellerName(index: sourceSlot, localSeatCount: source.Server.Population.LocalSeatCount)} — {leaveDenial})]"
                 );
             }
 
@@ -1968,7 +1966,7 @@ public sealed partial class WorldInstanceHost {
             if (source.Server.Output.HasNarrationSink) {
                 source.Server.Output.Narrate(
                     channel: "world.transfer",
-                    text: $"[world.transfer: refused (seat {(sourceSlot + 1)} in '{sourceName}' has no body to transfer)]"
+                    text: $"[world.transfer: refused ({TravellerName(index: sourceSlot, localSeatCount: source.Server.Population.LocalSeatCount)} in '{sourceName}' has no body to transfer)]"
                 );
             }
 

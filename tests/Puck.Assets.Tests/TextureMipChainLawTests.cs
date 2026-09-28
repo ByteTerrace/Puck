@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Sources;
 using Puck.Assets.Textures;
 using Xunit;
@@ -48,10 +49,10 @@ public sealed class TextureMipChainLawTests {
         const int Rows = 3;
 
         var (format, texelBytes) = filter switch {
-            TextureMipFilter.Srgb => (TextureFormat.Rgba8Unorm, 4),
-            TextureMipFilter.OctahedralNormal => (TextureFormat.Rg8Unorm, 2),
-            TextureMipFilter.Half => (TextureFormat.Rgba16Float, 8),
-            _ => (TextureFormat.R8Unorm, 1),
+            TextureMipFilter.Srgb => (GpuPixelFormat.R8G8B8A8Unorm, 4),
+            TextureMipFilter.OctahedralNormal => (GpuPixelFormat.R8G8Unorm, 2),
+            TextureMipFilter.Half => (GpuPixelFormat.R16G16B16A16Float, 8),
+            _ => (GpuPixelFormat.R8Unorm, 1),
         };
         Func<int, byte[]> tileTexel = filter switch {
             TextureMipFilter.Srgb => static tile => [((byte)(tile * 17)), ((byte)(255 - (tile * 13))), ((byte)(tile * 5)), ((byte)(255 - tile))],
@@ -85,7 +86,7 @@ public sealed class TextureMipChainLawTests {
     public void SrgbColorAveragesInLinearLightAndAlphaWeightsIt() {
         // Black and white in a checker average to linear one half, sRGB 188; alpha averages as a code.
         byte[] checker = [0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 255];
-        var levels = TextureMipChain.Build(filter: TextureMipFilter.Srgb, format: TextureFormat.Rgba8Unorm, height: 2, level0: checker, tileTexels: 2, width: 2);
+        var levels = TextureMipChain.Build(filter: TextureMipFilter.Srgb, format: GpuPixelFormat.R8G8B8A8Unorm, height: 2, level0: checker, tileTexels: 2, width: 2);
 
         Assert.Equal(expected: ImageSourceConversion.LinearToSrgb8(value: 0.5), actual: levels[1][0]);
         Assert.Equal(expected: ((byte)188), actual: levels[1][0]);
@@ -94,7 +95,7 @@ public sealed class TextureMipChainLawTests {
         // A transparent texel's color does not reach the average: three red opaque texels and one transparent blue.
         byte[] edge = [255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255, 0, 0, 255, 0];
 
-        levels = TextureMipChain.Build(filter: TextureMipFilter.Srgb, format: TextureFormat.Rgba8Unorm, height: 2, level0: edge, tileTexels: 2, width: 2);
+        levels = TextureMipChain.Build(filter: TextureMipFilter.Srgb, format: GpuPixelFormat.R8G8B8A8Unorm, height: 2, level0: edge, tileTexels: 2, width: 2);
         Assert.Equal(expected: [255, 0, 0, 191], actual: levels[1]);
     }
     [Fact]
@@ -103,7 +104,7 @@ public sealed class TextureMipChainLawTests {
         var (yu, yv) = OctahedralNormal.Encode(x: 0.0, y: 1.0, z: 0.0);
         var (zu, zv) = OctahedralNormal.Encode(x: 0.0, y: 0.0, z: -1.0);
         byte[] level0 = [xu, xv, yu, yv, xu, xv, yu, yv];
-        var levels = TextureMipChain.Build(filter: TextureMipFilter.OctahedralNormal, format: TextureFormat.Rg8Unorm, height: 2, level0: level0, tileTexels: 2, width: 2);
+        var levels = TextureMipChain.Build(filter: TextureMipFilter.OctahedralNormal, format: GpuPixelFormat.R8G8Unorm, height: 2, level0: level0, tileTexels: 2, width: 2);
         var average = OctahedralNormal.Decode(u: levels[1][0], v: levels[1][1]);
 
         Assert.InRange(actual: Degrees(a: average, b: (Math.Sqrt(d: 0.5), Math.Sqrt(d: 0.5), 0.0)), high: 1.0, low: 0.0);
@@ -112,21 +113,21 @@ public sealed class TextureMipChainLawTests {
         byte[] mixed = [xu, xv, zu, zv, zu, zv, xu, xv];
         byte[] coverage = [255, 0, 0, 255];
 
-        levels = TextureMipChain.Build(coverage: [coverage], filter: TextureMipFilter.OctahedralNormal, format: TextureFormat.Rg8Unorm, height: 2, level0: mixed, tileTexels: 2, width: 2);
+        levels = TextureMipChain.Build(coverage: [coverage], filter: TextureMipFilter.OctahedralNormal, format: GpuPixelFormat.R8G8Unorm, height: 2, level0: mixed, tileTexels: 2, width: 2);
         Assert.Equal(expected: [xu, xv], actual: levels[1]);
     }
     [Fact]
     public void AnIdentityKeepsItsMajorityAndTheSmallestWinsATie() {
-        Assert.Equal(expected: [7], actual: TextureMipChain.Build(filter: TextureMipFilter.Majority, format: TextureFormat.R8Unorm, height: 2, level0: [9, 7, 7, 3], tileTexels: 2, width: 2)[1]);
-        Assert.Equal(expected: [3], actual: TextureMipChain.Build(filter: TextureMipFilter.Majority, format: TextureFormat.R8Unorm, height: 2, level0: [9, 3, 9, 3], tileTexels: 2, width: 2)[1]);
-        Assert.Equal(expected: [1], actual: TextureMipChain.Build(filter: TextureMipFilter.Majority, format: TextureFormat.R8Unorm, height: 2, level0: [4, 3, 2, 1], tileTexels: 2, width: 2)[1]);
+        Assert.Equal(expected: [7], actual: TextureMipChain.Build(filter: TextureMipFilter.Majority, format: GpuPixelFormat.R8Unorm, height: 2, level0: [9, 7, 7, 3], tileTexels: 2, width: 2)[1]);
+        Assert.Equal(expected: [3], actual: TextureMipChain.Build(filter: TextureMipFilter.Majority, format: GpuPixelFormat.R8Unorm, height: 2, level0: [9, 3, 9, 3], tileTexels: 2, width: 2)[1]);
+        Assert.Equal(expected: [1], actual: TextureMipChain.Build(filter: TextureMipFilter.Majority, format: GpuPixelFormat.R8Unorm, height: 2, level0: [4, 3, 2, 1], tileTexels: 2, width: 2)[1]);
     }
     [Fact]
     public void AChainRefusesWhatItCannotTile() {
-        Assert.Throws<ArgumentException>(testCode: () => TextureMipChain.Build(filter: TextureMipFilter.Average, format: TextureFormat.R8Unorm, height: 4, level0: new byte[24], tileTexels: 4, width: 6));
-        Assert.Throws<ArgumentException>(testCode: () => TextureMipChain.Build(filter: TextureMipFilter.Srgb, format: TextureFormat.R8Unorm, height: 4, level0: new byte[16], tileTexels: 4, width: 4));
-        Assert.Throws<ArgumentOutOfRangeException>(testCode: () => TextureMipChain.Build(filter: TextureMipFilter.Average, format: TextureFormat.R8Unorm, height: 6, level0: new byte[36], tileTexels: 6, width: 6));
-        Assert.Throws<ArgumentException>(testCode: () => TextureMipChain.Build(coverage: [], filter: TextureMipFilter.Average, format: TextureFormat.R8Unorm, height: 4, level0: new byte[16], tileTexels: 4, width: 4));
+        Assert.Throws<ArgumentException>(testCode: () => TextureMipChain.Build(filter: TextureMipFilter.Average, format: GpuPixelFormat.R8Unorm, height: 4, level0: new byte[24], tileTexels: 4, width: 6));
+        Assert.Throws<ArgumentException>(testCode: () => TextureMipChain.Build(filter: TextureMipFilter.Srgb, format: GpuPixelFormat.R8Unorm, height: 4, level0: new byte[16], tileTexels: 4, width: 4));
+        Assert.Throws<ArgumentOutOfRangeException>(testCode: () => TextureMipChain.Build(filter: TextureMipFilter.Average, format: GpuPixelFormat.R8Unorm, height: 6, level0: new byte[36], tileTexels: 6, width: 6));
+        Assert.Throws<ArgumentException>(testCode: () => TextureMipChain.Build(coverage: [], filter: TextureMipFilter.Average, format: GpuPixelFormat.R8Unorm, height: 4, level0: new byte[16], tileTexels: 4, width: 4));
     }
     [Fact]
     public void TheOctahedralPairStoresEveryDirectionWithinItsAngle() {

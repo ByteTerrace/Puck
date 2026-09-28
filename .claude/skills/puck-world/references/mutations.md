@@ -164,7 +164,9 @@ table — a row added there grants nothing until relaunch.
   solid buildability — everything but the per-entry authority check, which the
   every-section hold already re-proves). ALL-OR-NOTHING: any entry failing any
   gate refuses the whole undo, names the failing entry's index and reason on
-  stderr, and installs NOTHING. There is no per-mutation inverse. Proven
+  stderr, and installs NOTHING. Either outcome echoes through `EchoTap`
+  (an acceptance as `dropped <n>, <m> remaining`), so `world.undo` answers
+  its own line like every registered verb. There is no per-mutation inverse. Proven
   in-process by `tests/Puck.World.Tests/MutationAllOrNothingLawTests.cs`
   against the shared apply gate; the replay loop's own early-return on a
   genuine mid-replay failure is unproven (see that law's own remarks).
@@ -228,7 +230,7 @@ nested records, which are the authority:
 | Authoring | SetAuthoringDefaults 28 |
 | Collision | SetCollision 29 |
 | Host | SetHostDefaults 30 |
-| Views | SetViewDefaults 31, UpsertViewLayout 32, RemoveViewLayout 33, SetViewSeatRig 70, SetViewSeatControl 71, UpsertViewPipeline 74, RemoveViewPipeline 75, CommitViewPipeline 78 |
+| Views | SetViewDefaults 31, UpsertViewLayout 32, RemoveViewLayout 33, SetViewSeatRig 70, SetViewSeatControl 71, UpsertViewGraph 74, RemoveViewGraph 75, CommitViewGraph 78, SetViewPost 79 |
 | Looks | UpsertLook 34, RemoveLook 35, SetLookAssignment 36 |
 | Grants | UpsertGrant 37, RemoveGrant 38 |
 | Hud | UpsertHudPanel 39, RemoveHudPanel 40, UpsertHudElement 41, RemoveHudElement 42, SetHudDefaults 43 |
@@ -256,13 +258,14 @@ Rules the catalog encodes:
   carried hash the pipeline did not itself compute.
 - **Pipeline overrides bind at the mutation door.** `TryPrepareMutation` runs
   `TryAdmitPipelineOverrides` after whole-document validation, for every kind:
-  a `views.pipelines` row whose source, `overrides` or `output` changed, and
-  that names overrides or an output, has its source read through
+  a `views.graphs` row that names a `source` (a `package` row is skipped)
+  whose source, `overrides` or `output` changed, and that names overrides or
+  an output, has its source read through
   `WorldServer.PipelineSources` (`WorldPipelineSources`, attached by
   `WorldPostBuildWiring` in every boot shape) and its values bound through the
   pass config schema (`ShaderPipelineSource.TryBindOverrides`). A
-  `CommitViewPipeline` composes against the row's fingerprint
-  (`WorldDefinitionFingerprint.ComputePipeline`) and also requires the source's
+  `CommitViewGraph` composes against the row's fingerprint
+  (`WorldDefinitionFingerprint.ComputeGraph`) and also requires the source's
   content and config-schema identities to equal the installed graph's.
   Refusals read `pipeline.overrides/<WorldPipelineOverrideRefusal>: …`. Undo
   replays compose only and never re-reads a source. A whole document binds

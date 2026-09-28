@@ -33,8 +33,8 @@ public readonly record struct SdfInstanceGridInput(Vector3 Center, float Radius,
 /// max binned radius holes the mask. Scattering each instance into every cell its bound covers instead of only its
 /// center's cell would duplicate entries and re-test each instance from many neighboring cells.</para>
 /// <para>The packed block is a self-contained <see cref="uint"/> array appended to the program word stream after the
-/// world-segment list. KEEP IN SYNC with the grid decode in Assets/Shaders/Sdf/sdf-vm.hlsli (<c>sdfGrid*</c>) and the
-/// cell walk in sdf-world.hlsli (<c>collectInstanceGridMask</c>). Extracted from <see cref="SdfProgram"/> as its own
+/// world-segment list. KEEP IN SYNC with the grid decode in Assets/Shaders/Sdf/field/sdf-program.hlsli (<c>sdfGrid*</c>) and the
+/// cell walk in passes/sdf-instance-cull.comp.hlsl (<c>collectInstanceGridMask</c>). Extracted from <see cref="SdfProgram"/> as its own
 /// type both to keep that class under its analyzer complexity ceilings and because the grid build is a self-contained
 /// packer.</para>
 /// <para>Block layout (all <see cref="uint"/>-granular, indices relative to the block start; the whole block is padded to
@@ -79,17 +79,19 @@ public static class SdfInstanceGrid {
     // Separate exceptional scales before deriving either the grid extent or its query padding. This affects only
     // where an instance is found: oversized instances still receive the same exact per-cone bound test once.
     private const float MaxBinnedRadiusRatio = 8.0f;
+
     /// <summary>The per-axis cell-count cap. Bounds the beam's slab-march length (the ray∩grid interval spans at most
     /// ~√3·MaxDimension cells), so a degenerate near-1-D instance layout cannot make the beam walk thousands of slabs.
-    /// Coarsening enforces it alongside <see cref="CellCapacityFactor"/>. KEEP IN SYNC with the slab-budget reasoning at
-    /// <c>SDF_GRID_MAX_SLABS</c> in sdf-vm.hlsli.</summary>
-    private const int MaxDimension = 64;
+    /// Coarsening enforces it alongside <see cref="CellCapacityFactor"/>. The kernels read it as <c>SDF_GRID_MAX_DIM</c>,
+    /// and the slab budget <c>SDF_GRID_MAX_SLABS</c> in field/sdf-program.hlsli is sized from it.</summary>
+    public const int MaxDimension = 64;
+
     /// <summary>The smallest cell edge the derivation admits, so an all-coincident binnable set (zero extent) cannot
     /// produce a zero or denormal cell size.</summary>
     private const float MinCellSize = 1.0e-4f;
 
-    /// <summary>The header length in uints (4 <c>uint4</c> rows). KEEP IN SYNC with <c>SDF_GRID_HEADER_WORDS</c> in
-    /// Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// <summary>The header length in uints (4 <c>uint4</c> rows), which the kernels read as
+    /// <c>SDF_GRID_HEADER_WORDS</c>.</summary>
     public const int HeaderWords = 16;
 
     /// <summary>Builds the packed grid block for a program's instances. Deterministic: pure integer/float host math in

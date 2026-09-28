@@ -3,7 +3,9 @@ using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Counting;
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
+using Puck.Abstractions.Sources;
 using Puck.Assets;
 using Puck.Hosting;
 using Puck.Maths;
@@ -23,29 +25,48 @@ public enum WorldCaptureRefusal : byte {
     Stale,
     /// <summary>The readback, the PNG write, or the PNG's decode failed.</summary>
     Failed,
-    /// <summary>No frame served the capture: the run ended first, or a host holding its clock for it spent its hold
-    /// budget first, and the detail names why the render chain could not serve it.</summary>
+    /// <summary>No frame served the capture: the run ended first, or a host holding its clock for it spent a hold
+    /// budget first, and the detail names why the render chain could not serve it, naming the engine's pipeline build
+    /// while the engine was not ready.</summary>
     Unserved,
+    /// <summary>The graphics device was lost while the capture was armed or being read back; the host rebuilt the
+    /// device and ran on, and the detail carries the loss's reason.</summary>
+    DeviceLost,
 }
 /// <summary>One scheduled capture's outcome, wire-shaped to the <c>puck.parity.manifest.v1</c> contract: either a
 /// frame and its census, or a refusal and its detail, never both and never neither.</summary>
 /// <param name="Station">The capture row's station name.</param>
 /// <param name="Tick">The simulation tick the capture was armed for.</param>
+/// <param name="RegionTick">The simulation tick of the state the image that served the capture was rendered from, which
+/// <c>puck parity</c> holds to <paramref name="Tick"/>, or <see langword="null"/> when refused or when the serving node
+/// names none.</param>
 /// <param name="Frame">The PNG file name inside the capture directory, or <see langword="null"/> when refused.</param>
 /// <param name="StateHash">The capture-scope state hash at <paramref name="Tick"/>, as 16 lower-case hex digits.</param>
 /// <param name="Census">The per-material pixel census of the frame, or <see langword="null"/> when refused.</param>
 /// <param name="Refusal">Why no frame was written, or <see langword="null"/> when the frame landed.</param>
 /// <param name="Detail">The refusal's prose, naming the ticks involved, or <see langword="null"/> when the frame
 /// landed.</param>
+/// <param name="SourceVerdict">The exact verdict of a landed capture of a source instance whose source states the image
+/// it shows, or <see langword="null"/> for any other capture.</param>
 public sealed record WorldCaptureManifestEntry(
     string Station,
     ulong Tick,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ulong? RegionTick,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Frame,
     [property: JsonPropertyName("stateHash")] string StateHash,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, long>? Census,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCaptureRefusal? Refusal,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Detail
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Detail,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCaptureSourceVerdict? SourceVerdict = null
 );
+/// <summary>The exact verdict a landed capture of a source instance gets against the image its source states it shows
+/// (<see cref="ImageSourceVerdict"/>): whether every pixel matched, and the verdict or the reason none could be
+/// reached.</summary>
+/// <param name="Holds">Whether the capture shows exactly the source's reference, of the tick the capture was rendered
+/// at.</param>
+/// <param name="Detail">The verdict's prose: the producer, the extent and <c>exact</c>, the count and first of the
+/// differing pixels, or why the source's reference could not be compared.</param>
+public sealed record WorldCaptureSourceVerdict(bool Holds, string Detail);
 /// <summary>The <c>manifest.json</c> document a capture run writes into its output directory.</summary>
 /// <param name="Schema">The manifest schema identifier, <see cref="SchemaId"/>.</param>
 /// <param name="Backend">The graphics backend that rendered the frames: <c>vulkan</c> or <c>directx</c>.</param>
@@ -66,12 +87,25 @@ public sealed record WorldCaptureManifest(string Schema, string Backend, string 
 /// <para>
 /// A host that holds its clock (the offscreen host) goes further: <see cref="HoldsClock"/> withholds every step while
 /// a capture armed at the last published tick is neither served nor refused, whatever keeps the render chain from
-/// serving it, so no tick past the armed one runs before the capture is decided; past <see cref="HoldBudgetSeconds"/>
-/// of holding, the capture is refused by name and the run steps on. <see cref="Drain"/> decides whatever is still
+/// serving it, so no tick past the armed one runs before the capture is decided. The capture hold counts from
+/// readiness: host time held while the engine is not ready (<see cref="IWorldEngineReadiness"/>: its pipeline set not
+/// yet installed, or no frame produced from it) is spent from <see cref="BuildHoldBudgetSeconds"/>, and only time held
+/// while it is ready from <see cref="HoldBudgetSeconds"/>. Past either budget the capture is refused by name, naming
+/// the build when the build spent it, and the run steps on. <see cref="Drain"/> decides whatever is still
 /// owed a frame as the run ends, before the render chain is disposed. The scheduler counts what it sees
 /// under <see cref="WorkSourceName"/>: <see cref="TicksWhileArmed"/>, the ticks published while a capture armed at an
 /// earlier tick was still unserved, which a holding host keeps at zero, and <see cref="HeldTicks"/>, the host time
 /// withheld.
+/// </para>
+/// <para>
+/// A capture of a source instance (a row naming a screen, or an instance that is an uploaded source) whose source states
+/// the image it shows (<see cref="IImageSourceReference"/>) gets the exact verdict too (<see cref="ImageSourceVerdict"/>):
+/// the landed frame against the source's reference, which must state the tick the frame was rendered at. The capture
+/// holds the reference its source had when it was armed, which states its last write whatever the source declares or
+/// whichever source replaces it afterwards, and is judged against the one source now running only when the held one
+/// states another tick (a source rebuilt between arming and serving). The entry
+/// records it (<see cref="WorldCaptureManifestEntry.SourceVerdict"/>), and stderr narrates it as
+/// <c>[captures] &lt;station&gt; tick &lt;tick&gt;: verdict &lt;detail&gt;</c>.
 /// </para>
 /// </summary>
 /// <remarks>
@@ -82,7 +116,7 @@ public sealed record WorldCaptureManifest(string Schema, string Backend, string 
 /// Every member runs on the host pump.
 /// </remarks>
 public sealed class WorldCaptureScheduler {
-    private readonly record struct Pending(CellName Station, ulong Tick, string Path, string FrameName, FrameCaptureRequest Request, ulong StateHash, IReadOnlyList<WorldCapturePaletteEntry> Palette);
+    private readonly record struct Pending(CellName Station, ulong Tick, string Path, string FrameName, FrameCaptureRequest Request, ulong StateHash, IReadOnlyList<WorldCapturePaletteEntry> Palette, string? Instance, IImageSourceReference? Reference);
 
     private static readonly JsonSerializerOptions ManifestSerializerOptions = new() {
         Converters = { new JsonStringEnumConverter(namingPolicy: JsonNamingPolicy.CamelCase) },
@@ -91,7 +125,7 @@ public sealed class WorldCaptureScheduler {
     };
 
     private readonly string m_backend;
-    private readonly Func<ICaptureRequestTarget?>? m_captureTarget;
+    private readonly Func<string?, ICaptureRequestTarget?>? m_captureTarget;
     private readonly string m_directory;
 
     private readonly List<WorldCaptureManifestEntry> m_landed = [];
@@ -101,7 +135,8 @@ public sealed class WorldCaptureScheduler {
     // each armed tick: the value the offscreen presentation's mirror presents at that tick with the fraction pinned.
     private readonly WorldStateMirror m_state;
     private readonly WorldServer m_server;
-    private readonly Func<string?>? m_unservedReason;
+    private readonly IWorldEngineReadiness? m_readiness;
+    private readonly IWorldCaptureSources? m_sources;
     private readonly string m_worldFile;
 
     private readonly WorkCounterSet m_work = new(
@@ -109,7 +144,9 @@ public sealed class WorldCaptureScheduler {
         name: WorkSourceName
     );
 
-    // The host time a holding host has withheld steps for, over the whole run, against HoldBudgetTicks.
+    // The host time a holding host has withheld steps for over the whole run: while the engine was not ready, against
+    // BuildHoldBudgetTicks, and while it was ready, against HoldBudgetTicks.
+    private ulong m_buildHeldTicks;
     private ulong m_heldTicks;
     private ulong? m_lastPublishedTick;
     private Pending? m_pending;
@@ -120,14 +157,19 @@ public sealed class WorldCaptureScheduler {
     /// <param name="directory">The resolved capture output directory, or the empty string when none resolved.</param>
     /// <param name="backend">The manifest's backend name: <c>vulkan</c> or <c>directx</c>.</param>
     /// <param name="worldFile">The booted world document's file name.</param>
-    /// <param name="captureTarget">Returns the render chain captures are armed on, or <see langword="null"/> while
-    /// none is composed; <see langword="null"/> itself for a boot that composes no renderer.</param>
-    /// <param name="unservedReason">Returns why the render chain would not serve a capture with the frame it produces
-    /// now, or <see langword="null"/> when it would; a capture refused for outliving the hold budget names it.
-    /// <see langword="null"/> itself when nothing can say.</param>
+    /// <param name="captureTarget">Returns the target a row's capture is armed on, given the render-graph instance the
+    /// row names (<see cref="WorldCaptureRow.Instance"/>, <see langword="null"/> for the root), or
+    /// <see langword="null"/> while no renderer is composed; it throws <see cref="ArgumentException"/> for an instance the
+    /// render graph does not have. <see langword="null"/> itself for a boot that composes no renderer.</param>
+    /// <param name="readiness">The engine readiness a hold reads: time held while it is not ready is spent from the
+    /// pipeline-build budget, and a capture refused then names its reason. <see langword="null"/> for a boot that
+    /// composes no renderer, whose holds all count as ready.</param>
+    /// <param name="sources">The source instance each screen reads, which a row naming a screen captures, and the images
+    /// deterministic sources state they show, which a capture of one is held to; <see langword="null"/> for a boot that
+    /// composes no renderer, where a row naming a screen captures nothing.</param>
     /// <exception cref="ArgumentNullException"><paramref name="server"/>, <paramref name="directory"/>,
     /// <paramref name="backend"/>, or <paramref name="worldFile"/> is <see langword="null"/>.</exception>
-    public WorldCaptureScheduler(WorldServer server, string directory, string backend, string worldFile, Func<ICaptureRequestTarget?>? captureTarget, Func<string?>? unservedReason = null) {
+    public WorldCaptureScheduler(WorldServer server, string directory, string backend, string worldFile, Func<string?, ICaptureRequestTarget?>? captureTarget, IWorldEngineReadiness? readiness = null, IWorldCaptureSources? sources = null) {
         ArgumentNullException.ThrowIfNull(argument: server);
         ArgumentNullException.ThrowIfNull(argument: directory);
         ArgumentNullException.ThrowIfNull(argument: backend);
@@ -138,7 +180,8 @@ public sealed class WorldCaptureScheduler {
         m_backend = backend;
         m_worldFile = worldFile;
         m_captureTarget = captureTarget;
-        m_unservedReason = unservedReason;
+        m_readiness = readiness;
+        m_sources = sources;
         m_state = new WorldStateMirror(view: new WorldDocumentStateView(definition: () => server.Definition));
 
         if (server.Definition.Captures is not { Rows: { } rows }) {
@@ -182,20 +225,27 @@ public sealed class WorldCaptureScheduler {
 
     /// <summary>The name a counters report heads the scheduler's section with.</summary>
     public const string WorkSourceName = "world.captures";
-    /// <summary>The host time, in seconds, a run may hold its clock for unserved captures, summed over the whole run.
-    /// It outlasts a cold driver cache building the engine's pipelines, and a parity leg's whole hold still fits inside
-    /// that leg's exit backstop with the leg's own run after it.</summary>
+    /// <summary>The host time, in seconds, a run may hold its clock for unserved captures while the engine is ready,
+    /// summed over the whole run.</summary>
     public const int HoldBudgetSeconds = 60;
     /// <summary><see cref="HoldBudgetSeconds"/> in engine ticks, the unit a holding host withholds time in.</summary>
     public const ulong HoldBudgetTicks = (HoldBudgetSeconds * EngineTicks.PerSecond);
+    /// <summary>The host time, in seconds, a run may hold its clock for unserved captures while the engine is not ready,
+    /// summed over the whole run: the engine's pipeline set building on a cold driver cache, or rebuilding after a device
+    /// loss. Both budgets together still fit inside a parity leg's exit backstop with the leg's own run after them.</summary>
+    public const int BuildHoldBudgetSeconds = 180;
+    /// <summary><see cref="BuildHoldBudgetSeconds"/> in engine ticks.</summary>
+    public const ulong BuildHoldBudgetTicks = (BuildHoldBudgetSeconds * EngineTicks.PerSecond);
 
     /// <summary>Answers a host that holds its clock: whether to withhold its next step because a capture armed at the
     /// last published tick is still neither served nor refused. The render chain may not be able to serve it yet for
     /// any reason (the engine's pipelines not yet installed, a device being rebuilt); the answer is the same. The hold is
-    /// bounded: once the run has held its clock for <see cref="HoldBudgetSeconds"/> in all, the capture is refused as
-    /// <see cref="WorldCaptureRefusal.Unserved"/>, naming why the render chain could not serve it, and withdrawn from
-    /// the chain, so the host steps on and a later capture can arm. A capture that cannot be served after the budget is
-    /// spent is refused the same way at once.</summary>
+    /// bounded, and counts from readiness: time withheld while the engine is not ready is spent from
+    /// <see cref="BuildHoldBudgetSeconds"/>, and time withheld while it is ready from <see cref="HoldBudgetSeconds"/>, each
+    /// summed over the run. Once the budget the current hold draws on is spent, the capture is refused as
+    /// <see cref="WorldCaptureRefusal.Unserved"/>, naming the engine's pipeline build when it was the build that held
+    /// it, and withdrawn from the chain, so the host steps on and a later capture can arm. A capture that cannot be
+    /// served after its budget is spent is refused the same way at once.</summary>
     /// <param name="withheldTicks">The host time withheld when the answer is <see langword="true"/>, counted under
     /// <see cref="HeldTicks"/>.</param>
     /// <returns><see langword="true"/> to withhold the step.</returns>
@@ -207,19 +257,38 @@ public sealed class WorldCaptureScheduler {
             return false;
         }
 
-        if (m_heldTicks >= HoldBudgetTicks) {
-            Withdraw(
-                detail: $"{(m_unservedReason?.Invoke() ?? "no frame served it")} (the host held its clock at tick {pending.Tick} until its {HoldBudgetSeconds}-second capture hold budget was spent)",
-                pending: pending
-            );
+        if (m_readiness is { IsReady: false } readiness) {
+            if (m_buildHeldTicks >= BuildHoldBudgetTicks) {
+                Withdraw(
+                    detail: $"{(readiness.NotReadyReason ?? "the engine was not ready")} (the host held its clock at tick {pending.Tick} while the engine's pipeline set built, until its {BuildHoldBudgetSeconds}-second pipeline-build hold budget was spent)",
+                    pending: pending
+                );
 
-            return false;
+                return false;
+            }
+
+            m_buildHeldTicks = Spend(
+                budget: BuildHoldBudgetTicks,
+                held: m_buildHeldTicks,
+                withheld: withheldTicks
+            );
+        } else {
+            if (m_heldTicks >= HoldBudgetTicks) {
+                Withdraw(
+                    detail: $"no frame served it (the host held its clock at tick {pending.Tick} until its {HoldBudgetSeconds}-second capture hold budget was spent)",
+                    pending: pending
+                );
+
+                return false;
+            }
+
+            m_heldTicks = Spend(
+                budget: HoldBudgetTicks,
+                held: m_heldTicks,
+                withheld: withheldTicks
+            );
         }
 
-        m_heldTicks = (((HoldBudgetTicks - m_heldTicks) > withheldTicks)
-            ? (m_heldTicks + withheldTicks)
-            : HoldBudgetTicks
-        );
         m_work.Add(
             amount: ((long)Math.Min(
                 val1: withheldTicks,
@@ -231,6 +300,12 @@ public sealed class WorldCaptureScheduler {
         return true;
     }
 
+    // Adds withheld host time to a hold budget's spent time, saturating at the budget.
+    private static ulong Spend(ulong budget, ulong held, ulong withheld) =>
+        (((budget - held) > withheld)
+            ? (held + withheld)
+            : budget
+        );
     private void Arm(WorldCaptureRow row, ulong tick) {
         if (string.IsNullOrEmpty(value: m_directory)) {
             Console.Error.WriteLine(value: $"[captures] {row.Station} tick {tick}: captures.directory did not resolve — skipping.");
@@ -261,7 +336,31 @@ public sealed class WorldCaptureScheduler {
             return;
         }
 
-        if (m_captureTarget?.Invoke() is not { } target) {
+        ICaptureRequestTarget? target;
+        var instance = row.Instance;
+
+        try {
+            if (
+                (m_captureTarget is not null) &&
+                (row.Screen is { } screen)
+            ) {
+                instance = (m_sources?.InstanceOf(screen: screen) ?? throw new ArgumentException(message: $"screen {screen} reads no source instance"));
+            }
+
+            target = m_captureTarget?.Invoke(arg: instance);
+        } catch (ArgumentException exception) {
+            Refuse(
+                detail: $"the render graph cannot capture {((row.Screen is { } named) ? $"screen {named}'s source" : $"instance '{row.Instance}'")} ({exception.Message})",
+                refusal: WorldCaptureRefusal.Failed,
+                stateHash: stateHash,
+                station: row.Station,
+                tick: tick
+            );
+
+            return;
+        }
+
+        if (target is null) {
             Console.Error.WriteLine(value: $"[captures] {row.Station} tick {tick}: no renderer is composed — captures need host.presentation offscreen or windowed.");
 
             return;
@@ -328,7 +427,11 @@ public sealed class WorldCaptureScheduler {
 
         m_pending = new Pending(
             FrameName: frameName,
+            Instance: instance,
             Palette: row.Palette,
+            Reference: ((instance is null)
+                ? null
+                : m_sources?.ReferenceOf(instance: instance)),
             Path: path,
             Request: request,
             StateHash: stateHash,
@@ -596,6 +699,18 @@ public sealed class WorldCaptureScheduler {
     private void Finalize(Pending pending, ulong? shownTick) {
         var result = pending.Request.Completion.GetAwaiter().GetResult();
 
+        if (result.Error is DeviceLostException deviceLost) {
+            Refuse(
+                detail: deviceLost.Message,
+                refusal: WorldCaptureRefusal.DeviceLost,
+                stateHash: pending.StateHash,
+                station: pending.Station,
+                tick: pending.Tick
+            );
+
+            return;
+        }
+
         if (result.Error is { } error) {
             Refuse(
                 detail: $"the capture failed ({error.Message})",
@@ -654,6 +769,12 @@ public sealed class WorldCaptureScheduler {
             return;
         }
 
+        var verdict = Judge(
+            image: image,
+            pending: pending,
+            regionTick: result.Tick
+        );
+
         Record(entry: new WorldCaptureManifestEntry(
             Census: ComputeCensus(
                 image: image,
@@ -661,11 +782,89 @@ public sealed class WorldCaptureScheduler {
             ),
             Detail: null,
             Frame: pending.FrameName,
+            RegionTick: result.Tick,
             Refusal: null,
+            SourceVerdict: verdict,
             StateHash: ToHex(hash: pending.StateHash),
             Station: pending.Station.Value,
             Tick: pending.Tick
         ));
+    }
+    // Holds a landed capture of a source instance to the image its source states it shows, when the source states one:
+    // the reference must state the tick the frame was rendered at, and every pixel must match it exactly.
+    private WorldCaptureSourceVerdict? Judge(Pending pending, PngImage image, ulong? regionTick) {
+        if (pending.Instance is not { } instance) {
+            return null;
+        }
+
+        var current = m_sources?.ReferenceOf(instance: instance);
+        var reference = (pending.Reference ?? current);
+
+        if (reference is null) {
+            return null;
+        }
+
+        var descriptor = reference.Descriptor;
+        var expected = new byte[checked((int)((((ulong)descriptor.Width) * descriptor.Height) * 4UL))];
+        var stated = reference.TryWriteReference(
+            rgba: expected,
+            stamp: out var stamp
+        );
+
+        // The source running now, when the one held at arming states another tick: a source rebuilt before it served.
+        if (
+            (stamp.Tick != regionTick) &&
+            (current is not null) &&
+            !ReferenceEquals(
+                objA: current,
+                objB: reference
+            )
+        ) {
+            reference = current;
+            descriptor = reference.Descriptor;
+            expected = new byte[checked((int)((((ulong)descriptor.Width) * descriptor.Height) * 4UL))];
+            stated = reference.TryWriteReference(
+                rgba: expected,
+                stamp: out stamp
+            );
+        }
+
+        WorldCaptureSourceVerdict verdict;
+
+        if (!stated) {
+            verdict = new(
+                Detail: $"source '{instance}' states no image",
+                Holds: false
+            );
+        } else if (stamp.Tick != regionTick) {
+            verdict = new(
+                Detail: $"source '{instance}' states the image of tick {stamp.Tick}, and the capture shows tick {(regionTick?.ToString(provider: CultureInfo.InvariantCulture) ?? "none")}",
+                Holds: false
+            );
+        } else if (
+            (image.Width != descriptor.Width) ||
+            (image.Height != descriptor.Height)
+        ) {
+            verdict = new(
+                Detail: $"the capture is {image.Width}x{image.Height}, and source '{instance}' is {descriptor.Width}x{descriptor.Height}",
+                Holds: false
+            );
+        } else {
+            var result = ImageSourceVerdict.Compare(
+                actual: image.RgbaPixels,
+                descriptor: descriptor,
+                expected: expected
+            );
+
+            verdict = new(
+                Detail: result.ToString(),
+                Holds: result.Holds
+            );
+        }
+
+        Console.Error.WriteLine(value: $"[captures] {pending.Station} tick {pending.Tick}: verdict {verdict.Detail}.");
+
+        return verdict;
     }
     private void Record(WorldCaptureManifestEntry entry) {
         m_landed.Add(item: entry);
@@ -679,6 +878,7 @@ public sealed class WorldCaptureScheduler {
             Census: null,
             Detail: detail,
             Frame: null,
+            RegionTick: null,
             Refusal: refusal,
             StateHash: ToHex(hash: stateHash),
             Station: station.Value,
@@ -772,7 +972,7 @@ public sealed class WorldCaptureScheduler {
         }
 
         Withdraw(
-            detail: $"the run ended before any frame served it (last completed tick {(m_lastPublishedTick?.ToString(provider: CultureInfo.InvariantCulture) ?? "none")})",
+            detail: $"the run ended before any frame served it (last completed tick {(m_lastPublishedTick?.ToString(provider: CultureInfo.InvariantCulture) ?? "none")}){((m_readiness is { IsReady: false } readiness) ? $"; {readiness.NotReadyReason}" : "")}",
             pending: pending
         );
     }

@@ -245,11 +245,8 @@
             "default": 1
           },
           "score": {
-            "description": "An infix expression, in the rule expression grammar, evaluated over the frame after a ply from the perspective of the side that made it; iterative-deepening negamax with alpha-beta compares it across plies \u2014 the two-sided, zero-sum reading of what a ply is worth. Exactly one of this and Scores is authored when a score is needed; required when Depth exceeds one, or Best is authored, and refused with MonteCarlo unauthored alongside it.",
-            "type": [
-              "string",
-              "null"
-            ],
+            "$ref": "./common.schema.json#/$defs/ExpressionProgramNonNullable2",
+            "description": "A value expression, stored as its program like every other expression a world document holds, evaluated over the frame after a ply from the perspective of the side that made it; iterative-deepening negamax with alpha-beta compares it across plies \u2014 the two-sided, zero-sum reading of what a ply is worth. Exactly one of this and Scores is authored when a score is needed; required when Depth exceeds one, or Best is authored, and refused with MonteCarlo unauthored alongside it.",
             "default": null
           },
           "best": {

@@ -276,6 +276,7 @@ public sealed class SessionLeverLawTests {
         string[] expected = [
             WorldSessionLevers.AmbientOcclusion,
             WorldSessionLevers.AmbientOcclusionQuality,
+            WorldSessionLevers.Bakes,
             WorldSessionLevers.BindingBar,
             WorldSessionLevers.CadenceGate,
             WorldSessionLevers.FarBound,
@@ -306,12 +307,12 @@ public sealed class SessionLeverLawTests {
         }
         public void DeliverComposition(WorldComposition composition) {
         }
-        public void DeliverDefinition(WorldDefinition definition) {
+        public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) {
         }
         public void DeliverSessionLever(WorldSessionLever lever) => Levers.Add(item: lever);
         public void DeliverSnapshot(in WorldSnapshot snapshot) {
         }
-        public void DeliverState(WorldDefinition definition, in WorldStateStamp stamp) {
+        public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) {
         }
     }
 }

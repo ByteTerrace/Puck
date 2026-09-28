@@ -22,8 +22,8 @@
       "type": "integer"
     },
     "surfaceFormat": {
-      "description": "The swapchain surface format (Unknown is rejected by the validator).",
-      "title": "SurfaceFormat",
+      "description": "The preferred swapchain format: R8G8B8A8Unorm or B8G8R8A8Unorm, authored as r8g8b8a8 or b8g8r8a8.",
+      "title": "GpuPixelFormat",
       "type": "string",
       "enum": [
         "r8g8b8a8",
@@ -116,6 +116,24 @@
       "description": "The window and taskbar icon: a .ico path resolved against the world document\u0027s own directory, or an absolute path taken as-is, so an author\u0027s icon travels beside their world file. null \u2014 and equally a path naming a file this OS cannot read as an icon \u2014 wears the host executable\u0027s own icon resource instead, which no world has to ship. Shape-only validation (null or non-whitespace); the platform window backend is what reads the file.",
       "type": [
         "string",
+        "null"
+      ],
+      "default": null
+    },
+    "colorSpace": {
+      "description": "The color space the swapchain asks the display for (boot-only): Srgb, the default, or an HDR one (Hdr10, ScRgb), which the swapchain takes only when the display reports it, falling back to SDR. The display encode writes the frame in the color space taken.",
+      "enum": [
+        "Srgb",
+        "Hdr10",
+        "ScRgb"
+      ],
+      "default": "Srgb",
+      "title": "DisplayColorSpace"
+    },
+    "paperWhiteNits": {
+      "description": "The luminance, in nits, SDR white shows at in an HDR output, the HUD included (boot-only), from SdrWhiteNits to MaxPaperWhiteNits, or null for SdrWhiteNits. An SDR output shows white at its own white level whatever this is.",
+      "type": [
+        "number",
         "null"
       ],
       "default": null

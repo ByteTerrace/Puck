@@ -1,0 +1,20 @@
+# The engine ready first: its pipeline set installed and its first frame produced.
+world.wait ready 60
+# A second seat joins, and the layout for two seats (the world's split row) shows both, side by side.
+player.join 2
+world.wait 10
+# Seat 2's body moves out onto the field, so its view shows the green field while seat 1 still faces the dark wall.
+body.pose 20 - 40 90 - - 1
+world.wait 90
+world.screenshot {run}/split.png
+world.wait captures 30
+# A layout with a gap between its two views, selectable only by override (no seat count reaches five): every pixel no
+# view covers shows the letterbox color, which the first view's place pass writes outside its rect.
+world.row.set views.layouts {"name":"letterbox","seatCount":5,"slots":[{"camera":null,"height":1,"instance":null,"width":0.4,"x":0,"y":0},{"camera":null,"height":1,"instance":null,"width":0.4,"x":0.6,"y":0}],"transitionRenderScale":1,"transitionSeconds":0}
+world.wait 5
+view.override layout letterbox
+world.wait 30
+world.screenshot {run}/letterbox.png
+world.wait captures 30
+# A layout the document does not author is refused by name, and nothing is submitted.
+view.override layout nowhere

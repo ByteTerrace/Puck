@@ -126,14 +126,41 @@ removal, transform, or draw-site fire—the client stores the fresh
 definition for state reads and recompiles nothing). A state delivery carries a
 `WorldStateStamp`: the tick and engine tick the values hold as of, and the
 catalog ordinals of the rows whose values moved, whose memory is the sender's
-and valid only for the call. `IWorldStateView.cs` is the state half of the
+and valid only for the call. Both deliveries carry the definition's
+`WorldDocumentVersion`: the activation the server minted when it was built and
+the install it reflects, one more at every install of a new live definition.
+A mutation verdict carries the version it applied at (or was refused against),
+so a reader orders a verdict against a delivered document exactly, whichever
+arrives first: a document at or past a verdict's version reflects that edit.
+`WorldSessionMirror` publishes a delivered definition and its version as one
+`WorldDeliveredDocument` and raises `DocumentDelivered` with that pair after each
+delivery.
+The version is delivery metadata; no hash, checkpoint or replay reads it. The
+federation decoder refuses a version with a negative sequence, or a sequence and
+no activation, and a live route or definition with no delivered version; only a
+reservation's preview carries the empty version. A mutation payload composed on
+a read of a document carries that document's activation
+(`WorldSubmissionPayload.Mutation.ExpectedActivation`); the server refuses it by
+name (`world.mutation.activation_mismatch`), before recording or applying
+anything, when that is not its own. One composed on no read carries none and is
+not checked. A disposed
+`WorldAuthorityEndpoint` refuses every submission through its `Submissions`
+(`world.endpoint.retired`) and cancels `Retired`.
+`IWorldStateView.cs` is the state half of the
 presentation view: the narrow reader, one cell by row ordinal, that the state
 mirror reads every presentation read of state through. `WorldStateMirror.cs` is
 that mirror, a flat slot table refreshed from each delivery's stamp, and
-`WorldDocumentStateView.cs` the view over a delivered definition. A
+`WorldDocumentStateView.cs` the view over a delivered definition and the field
+cells its snapshots carry, which a field row reads (`ApplyFieldCells` names the
+rows a snapshot moved, and `WorldStateMirror.RefreshRows` re-reads them). A
 `WorldSessionMirror` keeps the rows its state deliveries moved until
 `FollowState` takes them, so a session view or a seat routed to that authority
-(through `WorldAuthorityEndpoint.FollowState`) reads only moved slots; the
+(through `WorldAuthorityEndpoint.FollowState`) reads only moved slots. It applies
+each snapshot's field cells to its view as the local client does, so a followed
+field row reads what the authority simulated, and a session view's bound colors
+rebuild it when a cell moves. A border reads its neighbour's bound colors through
+a mirror over the neighbour image pinned for the tick, the same image its
+geometry comes from, so it never shows a color ahead of its geometry; the
 capture scheduler reads a camera `select` key through its own mirror at the armed
 tick.
 

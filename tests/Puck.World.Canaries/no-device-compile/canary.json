@@ -7,14 +7,14 @@
   "requirements": ["gpu"],
   "timeoutSeconds": 60,
   "fixtures": [
-    "../pipeline-package/tint.pipeline.json",
+    "../pipeline-package/tint.graph.json",
     "../pipeline-package/tint.hlsl"
   ],
   "positive": {
     "world": "tests/Puck.World.Canaries/no-device-compile/fixture.world.json",
     "script": "positive.script.txt",
     "hideShaderCompiler": true,
-    "package": { "source": "../pipeline-package/tint.pipeline.json", "output": "tint" },
+    "package": { "source": "../pipeline-package/tint.graph.json", "output": "tint" },
     "commands": [
       { "verb": "pipeline.wait", "occurrence": 1, "outcome": "accepted" },
       { "verb": "pipeline.wait", "occurrence": 2, "outcome": "accepted" },
@@ -47,7 +47,7 @@
     "world": "tests/Puck.World.Canaries/no-device-compile/discriminating.world.json",
     "script": "discriminating.script.txt",
     "hideShaderCompiler": true,
-    "package": { "source": "../pipeline-package/tint.pipeline.json", "output": "tint", "alter": "binaries/tint.default.comp.spv" },
+    "package": { "source": "../pipeline-package/tint.graph.json", "output": "tint", "alter": "binaries/tint.default.comp.spv" },
     "commands": [
       { "verb": "pipeline.wait", "occurrence": 1, "outcome": "accepted" },
       { "verb": "pipeline.wait", "occurrence": 2, "outcome": "accepted" },

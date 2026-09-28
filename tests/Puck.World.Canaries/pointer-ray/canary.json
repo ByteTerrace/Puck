@@ -1,0 +1,49 @@
+{
+  "id": "pointer-ray",
+  "title": "A seat's pointer ray reaches its intent through the typed seat verbs and maps through a Simulation screen for a $pointer: rule",
+  "binding": "The positive leg boots a headless fixture with one Simulation screen, two units square, facing +z at (0, 1, 0), and an ungated rule copying $pointer:1:0:on, :x and :y into state. The seat types source.pointer.origin -0.5 1.5 5 and source.pointer.direction 0 0 -1; the reads are held until the tick that applies them, so body.channels echoes that tick's ray and its hit on screen 0, a quarter across and a quarter down the face, which the glass bezel insets to 0.234039306640625 on both axes, and the rule writes pointerOn 1 with the same fractions. The discriminating leg types the same ray pointed away from the screen: its plane lies behind the origin, so body.channels echoes NoIntersection and the rule writes pointerOn 0 and zero fractions, and no on-screen hit ever appears.",
+  "bootShape": "headless",
+  "requirements": [],
+  "timeoutSeconds": 30,
+  "fixtures": [],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/pointer-ray/fixture.puck",
+    "script": "positive.script.txt",
+    "commands": [
+      { "verb": "world.wait", "outcome": "accepted", "occurrence": 1 },
+      { "verb": "source.pointer.origin", "outcome": "accepted", "occurrence": 1 },
+      { "verb": "source.pointer.direction", "outcome": "accepted", "occurrence": 1 },
+      { "verb": "body.channels", "outcome": "accepted", "occurrence": 1 },
+      { "verb": "world.state", "outcome": "accepted", "occurrence": 1 }
+    ],
+    "expect": [
+      { "type": "line", "name": "channels-echo-the-ray-and-its-hit", "stream": "stdout", "match": "contains", "text": "pointer=(-0.5, 1.5, 5)->(0, 0, -1)[screen:0=on(0.234039306640625, 0.234039306640625)]", "present": true },
+      { "type": "line", "name": "rule-reads-on", "stream": "stdout", "match": "contains", "text": "[world.state.row 'pointerOn' kind=Int value=1 domain=slot]", "present": true },
+      { "type": "line", "name": "rule-reads-x", "stream": "stdout", "match": "contains", "text": "[world.state.row 'pointerX' kind=Fixed value=0.234039306640625 domain=slot]", "present": true },
+      { "type": "line", "name": "rule-reads-y", "stream": "stdout", "match": "contains", "text": "[world.state.row 'pointerY' kind=Fixed value=0.234039306640625 domain=slot]", "present": true },
+      { "type": "line", "name": "no-rule-refusal", "stream": "stderr", "match": "contains", "text": "refused", "present": false },
+      { "type": "line", "name": "no-rejected-wire", "stream": "stdout", "match": "contains", "text": "[wire.errors: 0 rejected]", "present": true },
+      { "type": "line", "name": "no-unhandled-exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/pointer-ray/fixture.puck",
+    "script": "discriminating.script.txt",
+    "commands": [
+      { "verb": "world.wait", "outcome": "accepted", "occurrence": 1 },
+      { "verb": "source.pointer.origin", "outcome": "accepted", "occurrence": 1 },
+      { "verb": "source.pointer.direction", "outcome": "accepted", "occurrence": 1 },
+      { "verb": "body.channels", "outcome": "accepted", "occurrence": 1 },
+      { "verb": "world.state", "outcome": "accepted", "occurrence": 1 }
+    ],
+    "expect": [
+      { "type": "line", "name": "channels-echo-no-intersection", "stream": "stdout", "match": "contains", "text": "pointer=(-0.5, 1.5, 5)->(0, 0, 1)[screen:0=NoIntersection]", "present": true },
+      { "type": "line", "name": "no-on-screen-hit", "stream": "stdout", "match": "contains", "text": "[screen:0=on(", "present": false },
+      { "type": "line", "name": "rule-reads-off", "stream": "stdout", "match": "contains", "text": "[world.state.row 'pointerOn' kind=Int value=0 domain=slot]", "present": true },
+      { "type": "line", "name": "rule-reads-zero-x", "stream": "stdout", "match": "contains", "text": "[world.state.row 'pointerX' kind=Fixed value=0 domain=slot]", "present": true },
+      { "type": "line", "name": "rule-never-reads-on", "stream": "stdout", "match": "contains", "text": "'pointerOn' kind=Int value=1", "present": false },
+      { "type": "line", "name": "no-rejected-wire", "stream": "stdout", "match": "contains", "text": "[wire.errors: 0 rejected]", "present": true },
+      { "type": "line", "name": "no-unhandled-exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
+    ]
+  }
+}

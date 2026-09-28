@@ -50,6 +50,10 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // possession anchor swap moves the crowd bound with the seat's perceived body. The always-cast/footstep gates
     // below stay keyed on the raw body index band instead — see their own comments for why.
     private readonly WorldPerceptionAnchor m_anchor;
+
+    // The static placements' palettes, reused across rebuilds (WorldPlacementStamper.EmitStatic).
+    private readonly WorldStaticPalettes m_palettes = new();
+
     private readonly WorldStampPool m_animator;
     private readonly IWorldAudioCueSink m_audio;
     private readonly int m_authoringHeadroomPlacements;
@@ -89,6 +93,14 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // The bounded volumes the latest live build's static placements baked (WorldPlacementStamper.EmitStatic);
     // WorldFramePresenter.Dress composes them with the pool's per-frame volumes onto SdfFrame.Volumes.
     private readonly List<SdfVolume> m_staticVolumes = new(capacity: SdfProgramBuilder.MaxVolumes);
+
+    // The bakes a static rebuild draws in place of their fields (null for a presentation that bakes nothing), and the
+    // lookup the rebuild asks, made once so a rebuild allocates no delegate.
+    private readonly WorldBakeSchedule? m_bakes;
+    private readonly Func<string, SdfMesh?> m_bakedMeshFor;
+    // MeshDraws: the static draws each static rebuild replaces, then the pool's.
+    private readonly WorldSceneMeshDraws m_meshDraws;
+
     // Per-frame scratch reused to keep packing allocation-free: movement-driven gait state per avatar.
     private readonly float[] m_avatarGaitPhases = new float[WorldBodiesLimits.CapacityCeiling];
     private readonly Vector3[] m_avatarPreviousPositions = new Vector3[WorldBodiesLimits.CapacityCeiling];
@@ -100,13 +112,18 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     private readonly int[] m_emittedAvatarRigs = new int[WorldBodiesLimits.CapacityCeiling];
     private readonly float[] m_emittedAvatarScales = new float[WorldBodiesLimits.CapacityCeiling];
     private readonly float[] m_emittedAvatarGaitAmplitudes = new float[WorldBodiesLimits.CapacityCeiling];
-    // The creation-STAMP census, refreshed at each rebuild: the body-rooted stamps handed to the pool, plus the
-    // per-entity flag the pack/emit path reads to skip the catalog avatar (the body renders its creation instead).
-    private readonly List<WorldStampPool.BodyStamp> m_bodyStamps = new();
-    private readonly bool[] m_rendersAsStamp = new bool[WorldBodiesLimits.CapacityCeiling];
-    // Each active body's reads of the client's state mirror (its live scale), created on first need and released when
-    // the body leaves.
-    private readonly WorldStateLease?[] m_bodyReads = new WorldStateLease?[WorldBodiesLimits.CapacityCeiling];
+    // The creation-stamp census, refreshed at each rebuild: the body-rooted stamps handed to the pool. A body the pool
+    // registered renders its creation there, so the pack/emit path parks its catalog avatar.
+    private readonly WorldBodyStampCensus m_census = new();
+    private readonly List<WorldStampPool.BodyStamp> m_presentedStamps = [];
+
+    // The palette colors the live build baked, and a counter moved when a bound one moves in the state mirror.
+    private readonly WorldBakedColors m_bakedColors;
+
+    private int m_bakedColorRevision;
+    // A counter moved when a stamped body's live scale moves, so the stamps bake it (WorldBodyStampCensus.TryTakeMove).
+    private int m_censusRevision;
+
     // The catalog-look root follower: a NON-stamp-rendered avatar (a Catalog-sourced look, or a Creation look the
     // stamp pool had no free slot for) whose look names a root Motion.Dynamics row lags the whole avatar toward its
     // raw interpolated pose instead of drawing it directly — resolved once per rebuild (Compose, beside the rig/scale/
@@ -151,8 +168,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             avatarAccentMaterials[index] = builder.AddMaterial(material: new SdfMaterial(Albedo: (bodyColor * m_noseFactor)));
         }
 
-        // The diegetic screens: each a sampled ScreenSlab whose lit face samples its bound source (or the engine's
-        // procedural no-signal fallback when unbound). STATIC data — emitted every build (probe and live), so the
+        // The diegetic screens: each a sampled ScreenSlab whose lit face samples its bound source (or shades as dark
+        // glass when unbound). STATIC data — emitted every build (probe and live), so the
         // capacity floors cover them by construction (no probe-only branch). The sampled overload takes the explicit
         // world frame (Origin/Right/Up) baked into the surface table for UV mapping; the geometry rounded box is
         // placed by translating to its CENTER, which sits one HalfDepth behind the face along the face normal
@@ -201,6 +218,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 )
             );
         } else {
+            var meshDraws = new List<SdfMeshDraw>();
+
             m_staticVolumes.Clear();
             WorldPlacementStamper.EmitStatic(
                 builder: builder,
@@ -209,13 +228,18 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 placements: placements,
                 textCatalog: m_text.Catalog,
                 tintFor: null,
-                volumes: m_staticVolumes
+                volumes: m_staticVolumes,
+                meshDraws: meshDraws,
+                colors: m_bakedColors,
+                palettes: m_palettes,
+                bakedMeshFor: m_bakedMeshFor
             );
+            m_meshDraws.Static = meshDraws;
         }
 
         m_animator.Emit(
             builder: builder,
-            definition: client.Definition,
+            colors: m_bakedColors,
             probeWorstCase: probeWorstCase,
             maxPlacementScale: maxPlacementScale,
             slotBase: (slotBase + WorldRigCatalog.DynamicTransformCapacity),
@@ -256,7 +280,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 // (Creation looks: root + parts) — this catalog-avatar follower is the root-only twin for a Catalog
                 // look, and the pool-pressure fallback for a Creation look the stamp pool had no free slot for.
                 m_avatarFollows[index] = (
-                    !m_rendersAsStamp[index] &&
+                    !m_animator.HasBodyRegistration(bodyIndex: index) &&
                     WorldDynamicsResponse.TryResolveResponse(
                     name: look.Motion.Dynamics,
                     response: out m_avatarResponse[index],
@@ -286,6 +310,9 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // the route seed/continuum pose. Adjacency rendering suppresses that exact address, so a transfer cannot create
     // a one-frame zero-avatar gap or a two-avatar overlap.
     private bool IsAvatarPresented(int index) {
+        if (IsPresentedElsewhere(index: index)) {
+            return false;
+        }
         if (m_client.IsActive(index: index)) {
             return true;
         }
@@ -303,20 +330,6 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             position: out _
         );
     }
-    // The body's live scale through the state mirror slot its lease holds, acquired while the body is active.
-    private float LiveBodyScale(WorldDefinition definition, int index) {
-        var reads = (m_bodyReads[index] ??= new WorldStateLease());
-
-        reads.Bind(
-            bodyIndex: index,
-            mirror: m_client.StateMirror
-        );
-
-        return WorldGaitDrivers.LiveBodyScale(
-            reads: reads,
-            scaleRow: definition.Population.ScaleRow
-        );
-    }
     private static int[] NewPoseEpochs() {
         var epochs = new int[WorldBodiesLimits.CapacityCeiling];
 
@@ -327,92 +340,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
 
         return epochs;
     }
-    // Refresh the creation-stamp census: which active entities render their creation geometry through the stamp pool
-    // (inhabitants + crowd creation-looks) instead of a catalog avatar. Called at each rebuild.
-    private void RefreshBodyStamps() {
-        m_bodyStamps.Clear();
-        Array.Clear(array: m_rendersAsStamp);
-
-        var definition = m_client.Definition;
-
-        for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
-            if (!m_client.IsActive(index: index)) {
-                // A body that left stops being read: its scale slot goes back to the mirror.
-                m_bodyReads[index]?.Release();
-
-                continue;
-            }
-
-            if (
-                (ResolveStampCreation(
-                definition: definition,
-                index: index
-            ) is not { } stamp)
-            ) {
-                continue;
-            }
-
-            m_bodyStamps.Add(item: stamp);
-            m_rendersAsStamp[index] = true;
-        }
-    }
-    // The creation a body renders as a stamp, or null (it renders as a catalog avatar): an INHABITANT wears the look's
-    // creation (a Creation look) or its placement's own creation; a crowd body wears its look's creation (a Creation
-    // look). The uniform scale folds the placement scale, the look scale, and the body's own live scale (see
-    // LiveBodyScale) — the same bodies.scaleRow cell WorldPopulation.SyncBodyScale reads server-side.
-    private WorldStampPool.BodyStamp? ResolveStampCreation(int index, WorldDefinition definition) {
-        var look = m_client.Look(index: index);
-        var liveScale = LiveBodyScale(
-            definition: definition,
-            index: index
-        );
-
-        if (m_client.PlacementId(index: index) is { } placementId) {
-            if (WorldDefinitionRows.FindPlacement(
-                placements: definition.Placements,
-                id: placementId
-            ) is not { } placement) {
-                return null;
-            }
-
-            var prototypeId = ((look.Source is WorldLookSource.Creation inhabitLook)
-                ? inhabitLook.PrototypeId.Value
-                : placement.PrototypeId
-            );
-
-            return ((WorldDefinitionRows.FindCreation(
-                creations: definition.Creations,
-                id: prototypeId
-            ) is { } creation)
-                ? new WorldStampPool.BodyStamp(
-                    BodyIndex: index,
-                    Creation: creation,
-                    Scale: ((placement.Scale * look.Scale) * liveScale),
-                    Motion: look.Motion
-                )
-                : null
-            );
-        }
-
-        if (look.Source is WorldLookSource.Creation crowdLook) {
-            return ((WorldDefinitionRows.FindCreation(
-                creations: definition.Creations,
-                id: crowdLook.PrototypeId
-            ) is { } creation)
-                ? new WorldStampPool.BodyStamp(
-                    BodyIndex: index,
-                    Creation: creation,
-                    Scale: (look.Scale * liveScale),
-                    Motion: look.Motion
-                )
-                : null
-            );
-        }
-
-        return null;
-    }
     private bool TryPresentedAppearance(int index, out Vector3 bodyColor, out WorldLook look, out byte catalogRig) {
-        if (m_client.IsActive(index: index)) {
+        if (!IsPresentedElsewhere(index: index) && m_client.IsActive(index: index)) {
             bodyColor = m_client.BodyColor(index: index);
             look = m_client.Look(index: index);
             catalogRig = m_client.CatalogRig(index: index);
@@ -424,12 +353,15 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         )) {
             var entity = route.Entity;
 
+            // A travelling seat keeps its roster's color, as it has at home; its look and rig are its authority's.
             if (route.Endpoint.TryEntityAppearance(
-                bodyColor: out bodyColor,
+                bodyColor: out _,
                 catalogRig: out catalogRig,
                 entity: in entity,
                 look: out look
             )) {
+                bodyColor = m_client.BodyColor(index: index);
+
                 return true;
             }
         }
@@ -439,7 +371,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         return false;
     }
     private bool TryPresentedPose(int index, out Vector3 position, out Quaternion orientation, out WorldEntityAddress address) {
-        if (m_client.IsActive(index: index)) {
+        if (!IsPresentedElsewhere(index: index) && m_client.IsActive(index: index)) {
             position = m_client.Position(index: index);
             orientation = m_client.Orientation(index: index);
             address = m_client.EntityAddress(index: index);
@@ -465,10 +397,18 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         address = default;
         return false;
     }
+    // A seat presented elsewhere (WorldContinuum.PresentedElsewhere) is drawn by the scene of the world it is presented
+    // in, never at foreign coordinates in this one.
+    private bool IsPresentedElsewhere(int index) => (
+        (((uint)index) < WorldBodiesLimits.LocalSeatCount) &&
+        m_client.Roster.IsJoined(slot: index) &&
+        (m_continuum.PresentedElsewhere(slot: index) is not null)
+    );
     private bool TryTravelingRoute(int index, out WorldAuthorityRoute route) {
         if (
             (((uint)index) < WorldBodiesLimits.LocalSeatCount) &&
-            m_client.Roster.IsJoined(slot: index)
+            m_client.Roster.IsJoined(slot: index) &&
+            (m_continuum.PresentedElsewhere(slot: index) is null)
         ) {
             route = m_continuum.Route(slot: index);
             return true;
@@ -598,12 +538,19 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         // root on live body poses, so the set follows the active-entity/look census, not just the document.
         var definition = m_client.Definition;
 
-        RefreshBodyStamps();
+        m_bakedColors.Begin();
+        m_census.Refresh(source: m_client);
+        m_presentedStamps.Clear();
+        foreach (var stamp in m_census.Stamps) {
+            if (!IsPresentedElsewhere(index: stamp.BodyIndex)) {
+                m_presentedStamps.Add(item: stamp);
+            }
+        }
         m_animator.Reconcile(
             placements: definition.Placements,
             creations: definition.Creations,
             dynamics: definition.Dynamics,
-            bodyStamps: m_bodyStamps
+            bodyStamps: m_presentedStamps
         );
         Compose(
             builder: builder,
@@ -804,7 +751,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 moved: moved,
                 rig: m_emittedAvatarRigs[index],
                 rootOrientation: followedOrientation,
-                rootPosition: (m_rendersAsStamp[index]
+                rootPosition: (m_animator.HasBodyRegistration(bodyIndex: index)
                 ? context.ParkPosition
                 : followedPosition),
                 scale: m_emittedAvatarScales[index],
@@ -834,9 +781,12 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     }
     /// <summary>Writes the program-rebuild watch counters this scene composes over: the client's three
     /// (<see cref="WorldClient.WriteRevision"/> — roster, server snapshot, definition delivery), then the continuum
-    /// watch.
+    /// watch, then a counter that moves when a bound color the live build baked moves in the state mirror
+    /// (<see cref="WorldBakedColors.TryTakeMove"/>), then the bake schedule's revision, then a counter that moves when a
+    /// stamped body's live scale moves (<see cref="WorldBodyStampCensus.TryTakeMove"/>), and the continuum's pinned
+    /// presentation decisions (<see cref="WorldContinuum.PresentationRevision"/>).
     /// <para>
-    /// Four components, not their sum, and the client's three stay split too. One of them — the client's server
+    /// Eight components, not their sum, and the client's three stay split too. One of them — the client's server
     /// revision — is assigned from a snapshot and can move down, so any addition anywhere on this path can cancel: a
     /// server revision falling by one while the continuum counter rises by one would leave a sum unmoved and hold a
     /// stale program. Flattening every counter through to the composition host's componentwise compare is what makes
@@ -847,7 +797,37 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         m_client.WriteRevision(destination: destination[..WorldClient.RevisionComponentCount]);
 
         destination[WorldClient.RevisionComponentCount] = m_continuum.Revision;
+
+        if (m_bakedColors.TryTakeMove()) {
+            m_bakedColorRevision++;
+        }
+
+        destination[(WorldClient.RevisionComponentCount + 1)] = m_bakedColorRevision;
+        // What the static placements draw from their bakes: none while the lever is off, and otherwise the schedule's
+        // revision, which moves whenever a bake lands, so a ready bake switches its placements on the next rebuild.
+        destination[(WorldClient.RevisionComponentCount + 2)] = ((m_settings.DrawsBakes(schedule: m_bakes) && (m_bakes is not null))
+            ? unchecked((int)((m_bakes.Revision * 2L) + 1L))
+            : 0);
+
+        if (m_census.TryTakeMove()) {
+            m_censusRevision++;
+        }
+
+        destination[(WorldClient.RevisionComponentCount + 3)] = m_censusRevision;
+        destination[(WorldClient.RevisionComponentCount + 4)] = m_continuum.PresentationRevision;
     }
+
+    // A prototype's baked mesh when the presentation draws its bakes and this one is ready; the schedule counts the
+    // switch.
+    private SdfMesh? BakedMeshFor(string prototypeId) => ((
+        m_settings.DrawsBakes(schedule: m_bakes) &&
+        (m_bakes is not null) &&
+        m_bakes.TryGetMesh(
+            mesh: out var mesh,
+            prototypeId: prototypeId
+        ))
+        ? mesh
+        : null);
 
     /// <summary>Initializes a new instance of the <see cref="WorldSceneEmitter"/> class over the boot definition,
     /// freezing the authoring-headroom policy and the placement reservation the probe branch reserves against.</summary>
@@ -860,8 +840,10 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// <param name="continuum">The route-to-presentation-frame resolver used to keep locally followed travelers in
     /// their original catalog slot across authority handoffs.</param>
     /// <param name="text">The world-relative font catalog used by creation text runs.</param>
-    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldSceneEmitter(WorldClient client, WorldRenderSettings settings, WorldStampPool animator, IWorldAudioCueSink audio, WorldPerceptionAnchor anchor, WorldContinuum continuum, WorldTextCatalog text) {
+    /// <param name="bakes">The schedule whose ready bakes the static placements draw while <see cref="WorldRenderSettings.Bakes"/>
+    /// is on, or <see langword="null"/> for a presentation that bakes nothing.</param>
+    /// <exception cref="ArgumentNullException">An argument other than <paramref name="bakes"/> is <see langword="null"/>.</exception>
+    public WorldSceneEmitter(WorldClient client, WorldRenderSettings settings, WorldStampPool animator, IWorldAudioCueSink audio, WorldPerceptionAnchor anchor, WorldContinuum continuum, WorldTextCatalog text, WorldBakeSchedule? bakes = null) {
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: settings);
         ArgumentNullException.ThrowIfNull(argument: animator);
@@ -871,12 +853,16 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         ArgumentNullException.ThrowIfNull(argument: text);
 
         m_client = client;
+        m_bakedColors = new WorldBakedColors(mirror: client.StateMirror);
         m_continuum = continuum;
         m_anchor = anchor;
         m_settings = settings;
         m_animator = animator;
+        m_meshDraws = new WorldSceneMeshDraws(pool: animator);
         m_text = text;
         m_audio = audio;
+        m_bakes = bakes;
+        m_bakedMeshFor = BakedMeshFor;
 
         var definition = client.Definition;
 
@@ -897,12 +883,12 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         // A booted world may already stamp animated/attached placements or inhabited bodies — register them before the probe
         // so the worst-case build sees the same pool the first live build will (body stamps are empty until the first
         // snapshot).
-        RefreshBodyStamps();
+        m_census.Refresh(source: m_client);
         m_animator.Reconcile(
             placements: definition.Placements,
             creations: definition.Creations,
             dynamics: definition.Dynamics,
-            bodyStamps: m_bodyStamps
+            bodyStamps: m_census.Stamps
         );
         // A future stamp may use either emission class. Reserve both independent floors: a scoped creation's
         // single instance does not cover a scope-free creation's per-shape directory entries or probe words.
@@ -925,7 +911,14 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// composed words are byte-identical to the unscoped build.</summary>
     public bool OwnsMaterialScope => true;
     /// <inheritdoc/>
-    public int RevisionComponentCount => (WorldClient.RevisionComponentCount + 1);
+    public int RevisionComponentCount => (WorldClient.RevisionComponentCount + 5);
     /// <summary>Gets the bounded volumes the latest live build's static placements baked into world space.</summary>
     public IReadOnlyList<SdfVolume> StaticVolumes => m_staticVolumes;
+    /// <inheritdoc/>
+    /// <remarks>One draw per static placement instance of a prototype that carries a mesh, from the last static
+    /// rebuild, then the stamp pool's (<see cref="WorldStampPool.MeshDraws"/>): an animated, inhabited or attached
+    /// stamp's mesh at its root this frame. Recomposed only when the static list is a new one or the pool rewrote its own.</remarks>
+    public IReadOnlyList<SdfMeshDraw> MeshDraws => m_meshDraws.Draws;
+    /// <inheritdoc/>
+    public long MeshDrawsRevision => m_meshDraws.Revision;
 }

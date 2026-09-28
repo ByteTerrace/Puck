@@ -5,7 +5,7 @@ namespace Puck.Abstractions.Gpu;
 /// host uses to know a PAST frame's submission retired before rewriting that frame slot's resources (command
 /// buffer, host-visible per-frame buffers, descriptor sets). Created by
 /// <see cref="IGpuQueueSubmitter.CreateSubmissionFence"/>, armed by the fenced
-/// <see cref="IGpuQueueSubmitter.Submit(IGpuDeviceContext, ReadOnlySpan{nint}, IGpuSubmissionFence)"/> overload,
+/// <see cref="IGpuQueueSubmitter.Submit(ReadOnlySpan{nint}, IGpuSubmissionFence)"/> overload,
 /// and drained by <see cref="Wait"/>. One submission may be outstanding per fence: wait before re-arming.
 /// </summary>
 public interface IGpuSubmissionFence : IDisposable {

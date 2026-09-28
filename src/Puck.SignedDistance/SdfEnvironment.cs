@@ -37,7 +37,7 @@ public enum SdfLightKind : byte {
 /// <param name="DynamicSlot">Point only: the dynamic-transform slot its position is read from every frame, or −1 for
 /// the static authored position in <paramref name="Direction"/>. Ignored (packed as 0) for every other kind.</param>
 public readonly record struct SdfLight(SdfLightKind Kind, Vector3 Direction, Vector3 Color, float Weight, float Param, bool Shadows, int DynamicSlot = -1);
-/// <summary>One analytic studio-reflection softbox — see <c>worldStudioReflection</c> in sdf-world.hlsli.</summary>
+/// <summary>One analytic studio-reflection softbox — see <c>worldStudioReflection</c> in shade/sdf-lighting.hlsli.</summary>
 /// <param name="Direction">From a lit surface toward the softbox, any nonzero length (normalized on upload).</param>
 /// <param name="Color">The linear RGB color.</param>
 /// <param name="Weight">The strength.</param>
@@ -53,19 +53,11 @@ public enum SdfEnvironmentBlend : byte {
     /// <summary>Held from the earlier key (a count, a kind, a seed, a flag).</summary>
     Hold = 2,
 }
-/// <summary>How the frame's final color is remapped before it reaches the store — see
-/// <c>sdfFilmicTonemap</c>/<c>worldTonemapMode</c> in sdf-world.hlsli.</summary>
-public enum SdfTonemapMode : byte {
-    /// <summary>No remap: the stylized shaded color, as every world rendered before this field existed.</summary>
-    None = 0,
-    /// <summary>The Narkowicz ACES-fit filmic curve on the display-referred shaded color (no gamma encode: the
-    /// pipeline never linearizes).</summary>
-    Filmic = 1,
-}
 /// <summary>The lit path's per-frame environment — every light, the stylization gains, and the sky — as one lane
-/// table the engine uploads as float4 rows of the screen-light buffer (<c>SdfWorldEngine.PackEnvironment</c>, which
-/// also performs the host bakes noted per row). KEEP IN SYNC with sdf-world.hlsli's <c>SdfEnv*</c> rows and
-/// accessors.</summary>
+/// table every SDF pass block carries as float4 rows (<c>SdfFrameBlock.BakeEnvironment</c>, which also performs the host
+/// bakes noted per row). The kernels read the row indices generated from these constants (<c>SDF_ENV_*</c> in
+/// <c>sdf-isa.hlsli</c>) and decode each row's lanes in <c>frame/sdf-lights.hlsli</c>; KEEP IN SYNC with those
+/// decoders.</summary>
 /// <remarks>
 /// Row layout (row-relative to the environment base, four float lanes per row):
 /// <list type="table">
@@ -76,12 +68,12 @@ public enum SdfTonemapMode : byte {
 /// <item><term>27 sky control</term><description>x gradient stop count, y sun-disc light index (−1 none), z sun-disc angular radius in radians (uploaded as the baked <c>pow</c> exponent), w sun-disc intensity</description></item>
 /// <item><term>28 .. 31</term><description>gradient stop i: color.rgb, elevation in [−1, 1] (ascending)</description></item>
 /// <item><term>32 stars</term><description>density, brightness, seed, 0</description></item>
-/// <item><term>33 twinkle</term><description>share, depth, rate in hertz (uploaded as a period in engine ticks), 0</description></item>
+/// <item><term>33 twinkle</term><description>share, depth, rate in hertz (uploaded as the phase of its period at the frame's presented tick), 0</description></item>
 /// <item><term>34 clouds A</term><description>color.rgb, coverage</description></item>
 /// <item><term>35 clouds B</term><description>softness, scale, seed, 0</description></item>
 /// <item><term>36 clouds C</term><description>drift.xy, shear.xy — rates in layer units per second (uploaded as offsets integrated on the tick clock)</description></item>
 /// <item><term>37 clouds D</term><description>spin rate in radians per second (uploaded as the integrated angle), curl, 0, 0</description></item>
-/// <item><term>38 softbox control</term><description>x softbox count, y tonemap mode (0 none, 1 filmic), 0, 0</description></item>
+/// <item><term>38 softbox control</term><description>x softbox count, 0, 0, 0</description></item>
 /// <item><term>39 + 3i .. 41 + 3i, i &lt; 4</term><description>softbox i: (direction.xyz, weight) (color.rgb, size.x) (size.y, blur, 0, 0)</description></item>
 /// <item><term>51</term><description>studio reflection horizon low (ground-ward) color.rgb, 0</description></item>
 /// <item><term>52</term><description>studio reflection horizon high (sky-ward) color.rgb, 0</description></item>
@@ -141,7 +133,7 @@ public sealed class SdfEnvironment {
     public const int MaxSkyStops = 4;
     /// <summary>The most studio-reflection softboxes a frame carries.</summary>
     public const int MaxSoftboxes = 4;
-    /// <summary>The rows the environment occupies in the screen-light buffer.</summary>
+    /// <summary>The rows the environment occupies in a pass block's environment array.</summary>
     public const int RowCount = 53;
     /// <summary>Rows per light.</summary>
     public const int RowsPerLight = 3;
@@ -1092,18 +1084,6 @@ public sealed class SdfEnvironment {
         row: SkyControlRow,
         value: value
     );
-    }
-    /// <summary>Gets or sets the tonemap applied to the frame's final color.</summary>
-    public SdfTonemapMode Tonemap {
-        get => ((SdfTonemapMode)((byte)GetLane(
-            lane: 1,
-            row: SoftboxControlRow
-        )));
-        set => SetLane(
-            lane: 1,
-            row: SoftboxControlRow,
-            value: ((float)((byte)value))
-        );
     }
     /// <summary>Gets or sets the twinkle depth.</summary>
     public float TwinkleDepth {

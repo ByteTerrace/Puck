@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Documents;
+using Puck.Abstractions.Gpu;
 
 namespace Puck.World;
 
@@ -253,7 +254,8 @@ public enum WorldHostPresentation : byte {
 /// site.</para></param>
 /// <param name="Width">The window client width in pixels.</param>
 /// <param name="Height">The window client height in pixels.</param>
-/// <param name="SurfaceFormat">The swapchain surface format (<see cref="SurfaceFormat.Unknown"/> is rejected by the validator).</param>
+/// <param name="SurfaceFormat">The preferred swapchain format: <see cref="GpuPixelFormat.R8G8B8A8Unorm"/> or
+/// <see cref="GpuPixelFormat.B8G8R8A8Unorm"/>, authored as <c>r8g8b8a8</c> or <c>b8g8r8a8</c>.</param>
 /// <param name="Fullscreen">Whether the window enters borderless fullscreen when first shown.</param>
 /// <param name="PresentMode">The swapchain presentation algorithm.</param>
 /// <param name="TargetHertz">The boot present-pacing target in Hz; <c>0</c> selects automatic display pacing. The
@@ -288,11 +290,19 @@ public enum WorldHostPresentation : byte {
 /// replay <c>WorldServer.ApplyUndo</c> performs, run forward), so a checkpoint restore and a replay from the new base
 /// plus the retained tail still reproduce the live definition bit-identically. <c>world.status</c> echoes the
 /// authored value; <c>world.undo</c> names it when a requested count reaches past what the horizon has kept.</param>
+/// <param name="ColorSpace">The color space the swapchain asks the display for (boot-only):
+/// <see cref="DisplayColorSpace.Srgb"/>, the default, or an HDR one (<see cref="DisplayColorSpace.Hdr10"/>,
+/// <see cref="DisplayColorSpace.ScRgb"/>), which the swapchain takes only when the display reports it, falling back
+/// to SDR. The display encode writes the frame in the color space taken.</param>
+/// <param name="PaperWhiteNits">The luminance, in nits, SDR white shows at in an HDR output, the HUD included
+/// (boot-only), from <see cref="DisplayOutput.SdrWhiteNits"/> to <see cref="DisplayOutput.MaxPaperWhiteNits"/>, or
+/// <see langword="null"/> for <see cref="DisplayOutput.SdrWhiteNits"/>. An SDR output shows white at its own white
+/// level whatever this is.</param>
 public sealed record WorldHostDefaults(
     WorldHostPresentation Presentation,
     int Width,
     int Height,
-    SurfaceFormat SurfaceFormat,
+    GpuPixelFormat SurfaceFormat,
     bool Fullscreen,
     PresentMode PresentMode,
     double TargetHertz,
@@ -309,8 +319,14 @@ public sealed record WorldHostDefaults(
     [property: JsonPropertyName("backendRow"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? BackendRow = null,
     int JournalDepth = 0,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Title = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Icon = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Icon = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] DisplayColorSpace ColorSpace = DisplayColorSpace.Srgb,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] double? PaperWhiteNits = null
 ) {
+    /// <summary>The largest display width or height, in pixels, a host document or a live resize may name: the
+    /// largest two-dimensional texture Direct3D 12 holds.</summary>
+    public const int MaxDisplayExtent = 16384;
+
     /// <summary>Gets the inert absence — no presentation (<see cref="WorldHostPresentation.None"/>: no window, no
     /// GPU device), zero extent, no pacing, no listener. The engine holds no boot shape of its own: the standard
     /// windowed boot is AUTHORED, in <c>Assets/worlds/standard.world.json</c>, and a world inherits it by naming
@@ -320,7 +336,7 @@ public sealed record WorldHostDefaults(
         Backend: WorldBackendPreference.Auto,
         Width: 0,
         Height: 0,
-        SurfaceFormat: SurfaceFormat.R8G8B8A8Unorm,
+        SurfaceFormat: GpuPixelFormat.R8G8B8A8Unorm,
         Fullscreen: false,
         PresentMode: PresentMode.Immediate,
         TargetHertz: 0.0,

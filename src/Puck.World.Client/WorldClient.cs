@@ -20,7 +20,7 @@ namespace Puck.World.Client;
 /// </summary>
 /// <remarks>Single-threaded on the launcher's window-pump thread: snapshots arrive synchronously inside the server
 /// step, submissions run immediately before it, and the render-pose refresh runs during frame produce.</remarks>
-public sealed class WorldClient : IClientSink, ISdfAnchorSource {
+public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSource {
     /// <summary>The entity-view capacity — single-sourced from <see cref="WorldBodiesLimits.CapacityCeiling"/>
     /// so the validator's admitted population.capacity and this client's fixed
     /// per-entity arrays can never again drift apart: an over-capacity document refuses at load instead of booting
@@ -43,7 +43,11 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
     // applied mutation batch or a swap. The frame source re-reads scene/screens from this behind the revision check.
     private WorldDefinition m_definition;
     private int m_definitionRevision;
-    private WorldClientFieldLattice? m_fields;
+    private WorldDocumentVersion m_documentVersion;
+
+    // The field rows a snapshot's field-cell writes moved, handed to the state mirror.
+    private readonly int[] m_movedFields = new int[WorldFieldCapacity.MaxFields];
+
     // The accepted-lever applier (see WorldSessionLeverSink). Optional so a client composed without the presentation
     // services — a headless or test host — simply drops accepted levers rather than failing to construct.
     private WorldSessionLeverSink? m_levers;
@@ -58,6 +62,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
     private ulong m_engineTick;
 
     private readonly WorldStateMirror m_stateMirror;
+    private readonly WorldDocumentStateView m_stateView;
 
     /// <summary>The number of active non-seat entities in the latest snapshot — the client's view of the simulated
     /// census (drives the fleet-tier auto quality levers).</summary>
@@ -70,9 +75,8 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
     /// <summary>The monotonic definition-delivery counter — bumped each time the server delivers a new definition. The
     /// frame source watches it to know a scene/screen change landed (distinct from a population/roster change).</summary>
     public int DefinitionRevision => m_definitionRevision;
-    /// <summary>Gets the mirror of the authority's field lattice, or <see langword="null"/> for a world without a
-    /// <c>fields</c> section.</summary>
-    public WorldClientFieldLattice? Fields => m_fields;
+    /// <summary>The version of the latest delivered definition, or <see langword="default"/> before the first delivery.</summary>
+    public WorldDocumentVersion DocumentVersion => m_documentVersion;
     /// <summary>The client seat table.</summary>
     public PlayerRoster Roster => m_roster;
     /// <summary>Gets the static-scene query field, or <see langword="null"/> when none is resolved.</summary>
@@ -165,7 +169,8 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
         );
         m_composition = composition;
         m_levers = null;
-        m_stateMirror = new WorldStateMirror(view: new WorldDocumentStateView(definition: () => m_definition));
+        m_stateView = new WorldDocumentStateView(definition: () => m_definition);
+        m_stateMirror = new WorldStateMirror(view: m_stateView);
 
         for (var index = 0; (index < EntityCapacity); index++) {
             m_previousOrientation[index] = Quaternion.Identity;
@@ -774,18 +779,13 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
         }
     }
     /// <inheritdoc/>
-    public void DeliverDefinition(WorldDefinition definition) {
+    public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         // Store the live definition and bump the delivery revision (one component of WriteRevision), so the frame source rebuilds
         // its program and re-reads scene/screens on its next capture. Poses still flow only through snapshots.
         m_definition = definition;
-        m_fields = ((definition.Fields is { } fields)
-            ? (((m_fields is { } existing) && (existing.Document.Lattice == fields.Lattice) && (existing.FieldCount == fields.Fields.Count))
-                ? existing
-                : new WorldClientFieldLattice(document: fields))
-            : null
-        );
+        m_documentVersion = version;
         m_channels = WorldChannelTable.Compile(channels: definition.Channels);
         m_targets = WorldTargetRegisterTable.Compile(
             registers: definition.TargetRegisters,
@@ -806,10 +806,19 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
     /// <inheritdoc/>
     public void DeliverSnapshot(in WorldSnapshot snapshot) {
         Array.Clear(array: m_seen);
-        m_fields?.Apply(
+
+        // A field's cells are state the snapshot carries beside the document; the mirror re-reads the rows they moved.
+        var movedFields = m_stateView.ApplyFieldCells(
             deltas: snapshot.FieldCells.Span,
-            full: snapshot.FieldsFull
+            moved: m_movedFields
         );
+
+        if (movedFields > 0) {
+            m_stateMirror.RefreshRows(ordinals: m_movedFields.AsSpan(
+                length: movedFields,
+                start: 0
+            ));
+        }
 
         foreach (ref readonly var entry in snapshot.Entries.Span) {
             var index = entry.Index;
@@ -917,10 +926,11 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
     /// <remarks>A value-only mutation cannot have changed channels, target registers, or scene shape: the fresh
     /// definition is stored for state-value reads without bumping the frame source's rebuild-watch revision, and the
     /// state mirror refreshes the slots bound to the rows the stamp names.</remarks>
-    public void DeliverState(WorldDefinition definition, in WorldStateStamp stamp) {
+    public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         m_definition = definition;
+        m_documentVersion = version;
         m_stateMirror.Refresh(stamp: in stamp);
     }
     /// <summary>The complete durable address of the active occupant in a local slot.</summary>

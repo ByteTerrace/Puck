@@ -1,4 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Maths;
 
@@ -6,8 +8,8 @@ namespace Puck.Commands;
 
 /// <summary>The published chain from where a source is shown to the source's pixels: the placement, any warp pass the
 /// face is drawn through, the UV layout, the fit that letterboxes a crop, and the crop itself. It is data: every hit is
-/// mapped from it in fixed point, it is what the GPU is to draw with, and nothing reads a mapping back from the
-/// GPU.</summary>
+/// mapped from it in fixed point, a screen is drawn from its single-precision form (<see cref="Draw"/>), and nothing
+/// reads a mapping back from the GPU.</summary>
 /// <remarks>
 /// <para>A point on the face runs the chain from the display side: the warp's declared inverse takes it to the face point
 /// the warp sampled, <see cref="Layout"/> turns that into an image point, <see cref="Fit"/> takes the image point to a
@@ -26,7 +28,9 @@ namespace Puck.Commands;
 /// <param name="Warp">The warp pass the face is drawn through, or <see langword="null"/> for none.</param>
 /// <param name="Destination">Where a point mapped onto the source goes.</param>
 /// <param name="Opener">Who opened the source.</param>
-public sealed record SourceMapping(
+/// <param name="Filter">How the image is sampled where it is drawn from this mapping: nearest keeps each source pixel
+/// crisp, linear blends between them. A hit maps to the same pixel either way.</param>
+public sealed partial record SourceMapping(
     SourceHandle Source,
     SourcePlacement Placement,
     int SourceWidth,
@@ -36,7 +40,8 @@ public sealed record SourceMapping(
     SourceFit Fit = SourceFit.Stretch,
     SourceWarp? Warp = null,
     SourceDestination Destination = SourceDestination.Presentation,
-    SourceOpener Opener = SourceOpener.Document
+    SourceOpener Opener = SourceOpener.Document,
+    GpuSamplerFilter Filter = GpuSamplerFilter.Nearest
 ) {
     private static readonly FixedQ4816 Half = FixedQ4816.FromRawBits(value: (FixedQ4816.One.Value >> 1));
 
@@ -76,9 +81,10 @@ public sealed record SourceMapping(
             !Enum.IsDefined(value: Layout) ||
             !Enum.IsDefined(value: Fit) ||
             !Enum.IsDefined(value: Destination) ||
-            !Enum.IsDefined(value: Opener)
+            !Enum.IsDefined(value: Opener) ||
+            !Enum.IsDefined(value: Filter)
         ) {
-            return "The layout, fit, destination or opener is not a defined value.";
+            return "The layout, fit, destination, opener or filter is not a defined value.";
         }
 
         switch (Placement) {
@@ -233,6 +239,31 @@ public sealed record SourceMapping(
         );
     }
 
+    /// <summary>Describes the mapping on one line, the form a read-back verb echoes: the source by kind and name, the
+    /// placement, the source extent and crop, the layout, the fit, any warp, and the destination.</summary>
+    /// <returns>The description, formatted invariantly.</returns>
+    public string Describe() {
+        var source = ((Source.Kind == SourceHandleKind.Producer) ? "producer" : "instance");
+        var placement = Placement switch {
+            SourcePlacement.Pane pane => string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"pane {pane.Region.X:0.####},{pane.Region.Y:0.####} {pane.Region.Width:0.####}x{pane.Region.Height:0.####}"
+            ),
+            SourcePlacement.Surface surface => string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"surface origin {surface.Origin.X:0.###},{surface.Origin.Y:0.###},{surface.Origin.Z:0.###} right {surface.Right.X:0.###},{surface.Right.Y:0.###},{surface.Right.Z:0.###} up {surface.Up.X:0.###},{surface.Up.Y:0.###},{surface.Up.Z:0.###} half {surface.HalfWidth:0.###}x{surface.HalfHeight:0.###}"
+            ),
+            _ => "no placement",
+        };
+        var warp = ((Warp is { } drawn)
+            ? $" warp {drawn.Pass} {((drawn.Inverse is null) ? "no-inverse" : "inverse")}"
+            : string.Empty);
+
+        return string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"{source}:{Source.Name} {placement} source {SourceWidth}x{SourceHeight} crop {Crop.X},{Crop.Y} {Crop.Width}x{Crop.Height} layout {Layout} fit {Fit}{warp} destination {Destination}"
+        );
+    }
     /// <summary>Validates the mapping: its shape, and the destination rules. A <see cref="SourceDestination.Passthrough"/>
     /// destination needs a source the local user opened; a <see cref="SourceDestination.Simulation"/> destination needs
     /// a surface, because a pane's aspect ratio depends on the host's display rather than on document data; and an input

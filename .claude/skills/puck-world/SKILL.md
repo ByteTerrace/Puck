@@ -98,7 +98,7 @@ member there rather than at a reader.
 |---|---|---|
 | `src/Puck.State` | The state and rule engine beneath the document, with no world or presentation concept | `IStateSection`/`StateRow`/`StateCell` and the traits (`StateAdvance`/`StateDynamics`/`StateCycle`), `StateDomain`, `StatePhase`/`PhaseGuard`, `StateVisibility`, `StateCatalog`/`StateHandle`, `StateReader`, `StateArena`, `LatticeTopology`/`CompiledTopology`/`TopologyCompilation`, `Draw`/`StateGenerator`, `PatternNode`, `DynamicsRow`, `ExpressionProgram`/`Instruction`/`ExpressionSpelling`, `ExpressionOp`/`ExpressionArithmetic`, `TableRow`, the `StateTransform` union, `SafeName`/`CellName`, `CellKind`, `RuleFacts`, `ExpressionComparisons` (the comparison subset of `ExpressionOp`)/`ActionTriggerMode`, `Search/SearchPlan` (the resolved job a search runtime walks) — no `World` name; consumers reach them through a project-wide `Using`. Its siblings: `Puck.State.Generators` (`GeneratorEngine`, `CompiledTable`, `TableDocument`/`TableCanonicalizer`), `Puck.State.Topology` (`PatternRow`/`CompiledPattern`, board queries), `Puck.State.Rules` (`RuleCompiler`), `Puck.State.Search` (the walk), `Puck.State.Vectors` |
 | `src/Puck.World.Schema` | What a world IS — the document model | `WorldDefinition` + section records (`WorldStateSection`/`WorldStateRow` extend the engine's section and row with the body lanes and the `gatesDrive`/`field` traits; `WorldFieldTopology` is the physical lattice case), `WorldDefinitionValidator`, `WorldDefinitionSerialization` (`WorldJsonContext` over the generated `WorldJsonSourceContext`, `WorldJsonVocabulary` adding the document's arms to the engine's polymorphic bases); authored-to-fixed collider compilation; document-embedded wire vocabulary that keeps the `Puck.World.Protocol` namespace (`PlayerIntent`, `WorldGrant`/`Grantee`/`PrincipalTokens`, admission entries; the actor `Principal` itself lives in `Puck.Commands`) |
-| `src/Puck.World.Protocol` | What a world SAYS — the wire/tape vocabulary | `WorldCommand`, `WorldMutation`, `SubmissionEnvelope`, `SessionRequest`, `WorldSnapshot`, `IServerLink`/`IClientSink`/`IWorldServerHost`, `LoopbackTransport`, `WorldAuthorityEndpoint`/`WorldSessionMirror`, the state mirror every presentation read of state goes through (`WorldStateMirror`, over `WorldDocumentStateView`, the delivered definition's `IWorldStateView`; a session mirror and an authority endpoint follow their own with `FollowState`), and the `IWorldAdjacencySource` family (`WorldAdjacencyFramePair`/`WorldAdjacencyProjection`/`IWorldAdjacencyNeighbour`) — `WorldAuthorityEndpoint`/`WorldSessionMirror`/`WorldStateMirror` are namespaced `Puck.World.Client` and the adjacency family `Puck.World.Server` |
+| `src/Puck.World.Protocol` | What a world SAYS — the wire/tape vocabulary | `WorldCommand`, `WorldMutation`, `SubmissionEnvelope`, `SessionRequest`, `WorldSnapshot`, `IServerLink`/`IClientSink`/`IWorldServerHost`, `LoopbackTransport`, `WorldAuthorityEndpoint`/`WorldSessionMirror`, the state mirror every presentation read of state goes through (`WorldStateMirror`, over `WorldDocumentStateView`, the `IWorldStateView` of the delivered definition and the snapshot's field cells; the colors a program or decal bakes resolve through it as `WorldBakedColors`; a session mirror and an authority endpoint follow their own with `FollowState`; its slots are registered by the document's `WorldPresentationManifest` and each seat's `WorldPresentationManifest.SeatBindings`, and a consumer only looks one up with `SlotOf`, which registers and reads nothing), and the `IWorldAdjacencySource` family (`WorldAdjacencyFramePair`/`WorldAdjacencyProjection`/`IWorldAdjacencyNeighbour`) — `WorldAuthorityEndpoint`/`WorldSessionMirror`/`WorldStateMirror` are namespaced `Puck.World.Client` and the adjacency family `Puck.World.Server` |
 | `src/Puck.Networking` | The dialect-agnostic wire substrate | `FrameCodec` (the socketless frame grammar), `WireReader`/`WireWriter`, `WireRefusal`/`WireFailure` |
 | `src/Puck.World.Server` | The authoritative sim | `WorldServer` (the tick, the journal), `WorldGrants`, `WorldHandleTable`, `WorldPopulation`/`WorldBody`, World-specific contact orchestration and policy, `WorldEngagement`, `IWorldAddonHost`/`WorldAddonReceipt` (the addon seam interface), `IWorldMachineHost` (the screen-machine seam — the concrete host lives in `Puck.World.Machines`), `WorldOwnedWorlds` (the owned-world identity catalog), `WorldReplayTape`, `WorldOutputHub` |
 | `src/Puck.World.Console` | The server-only console command modules | `IWorldConsoleAuthority` (resolves the addressed `WorldInstance`), `WorldGrantCommandModule`, `WorldGroupCommandModule`, `WorldLookCommandModule`, `WorldNetworkCommandModule`, `WorldReplayCommandModule` (the `replay.*` verb surface — the tape and its read-back stay in Server), `WorldRowCommandModule`, `WorldStateCommandModule`, `WorldUpdateCommandModule`, `WorldWaitCommandModule` + `WorldConsoleWaitGate`/`IWorldWaitGateResolver` |
@@ -251,7 +251,7 @@ world.
 
 **Resolve a document's paths beside it.** Every relative path a world document
 authors (basis, imports, `references`, asset-row `source`, addon `modulePath`,
-pipeline/graph `source`, probe `track`, machine content, `host.icon`, schedule
+`views.graphs` `source`, probe `track`, machine content, `host.icon`, schedule
 instance `document`) resolves through `WorldDocumentPaths` against
 `WorldDefinition.DocumentDirectory`, the directory the loader read the document
 from; engine content the build ships (default world, fonts, shaders, probe
@@ -261,7 +261,10 @@ the one it rebuilt (`with { DocumentDirectory = … }`); a directory-less
 document (stdin, in-memory, hosted, peer-delivered) refuses a relative asset row by name at validation, and a relative addon module
 by name at mount. Composition, staging and `world.save` re-express
 a merged fragment's file paths (not its document names) to the receiving
-document (`WorldDocumentPaths.RelocateDocumentFields`). A fixture outside
+document (`WorldDocumentPaths.RelocateDocumentFields`), and a `.puck` module's
+file path, plain or `asset`, is re-expressed from the module's own directory as
+it lowers (`WorldDocumentVocabulary.RelocateFileReference`, the members
+`WorldDocumentPaths.IsFileField` names). A fixture outside
 `src/Puck.World/Assets` names shipped assets with a `../` path or keeps
 fixture-only assets beside itself. Contract:
 [the worlds manual](../../../docs/architecture/worlds.md#paths-a-document-names).
@@ -388,8 +391,16 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   section (armed only by `--schedule-dir`), verdict rows, and `.puck` `test`
   lowering are in [references/schedules-and-tests.md](references/schedules-and-tests.md).
 - `--state-dir <dir>` redirects the on-disk state root (profile catalog,
-  replays, compiled worlds) — use a temp dir for hermetic verification runs;
-  parallel runs each need their own. Stderr carries one `[world] compiled world:`
+  machine id, replays, pipeline caches) — use a temp dir for hermetic
+  verification runs; parallel runs each need their own. Compiled worlds,
+  bakes and `.puck` compiles are per-user device caches every boot shares
+  (`WorldCacheRoots`). The root is a `WorldStateRoot` and the caches a
+  `WorldCacheRoots`, both handed to the boot (`WorldBootInputs`) and taken by
+  every consumer from its host; only `Program.cs` names their per-user
+  defaults (`world`, `bakes`, `compiled-worlds`, `compilations`), and
+  `WorldStateRootIsolationLawTests` holds every assembly
+  `tests/Puck.World.Tests` links to that, so a fixture hands its own temporary
+  roots. Stderr carries one `[world] compiled world:`
   line after the `[world] definition:` line.
 - **Capture BOTH streams.** Read-back answers land on stdout; refusals,
   server narration, boot origin lines, host log lines, and `[world.mutation: …]`
@@ -419,9 +430,10 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
 - `world.screenshot <path.png>` REQUESTS the next composed frame including
   the overlay — the cheap pixel assertion. It arms; it does not capture:
   the stdout echo says `pending`, the file is announced on STDERR
-  (`[capture] unified overlay -> …`), so **fence a frame (`world.wait`)
-  before reading it**, and a second shot armed before the first composes is
-  refused by name.
+  (`[capture] main -> …` from the default render graph's root, or
+  `[capture] world -> …` when the world is the root), so **fence a
+  frame (`world.wait`) before reading it**, and a second shot armed before
+  the first composes is refused by name.
   The terminal console starts hidden; if a script opens its seat session
   (`console [on|off] <player>` from stdin), it may cover the frame — close it
   before judging pixels.
@@ -464,7 +476,9 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   selection's World boots, spawns, builds and leg budget without running;
   the automatic set and `--merge` are refused past their ceilings in
   `src/Puck.Cli/Canary/CanaryCeilings.cs`, which a deliberate growth raises
-  in the same change. The
+  in the same change. A GPU selection first warms the engine pipeline cache
+  once per backend and seeds every offscreen and windowed leg with it
+  (`CanaryCommand.Warm.cs`), so no leg builds the engine's pipelines cold. The
   acting-principal/administration and control-application authority contracts
   are proved in `tests/Puck.World.Tests` (`AuthorityAdministrationLawTests`,
   `EngageAuthorityLawTests`, `ControlApplicationLawTests`); a retired battery leaves no record directory
@@ -555,8 +569,8 @@ engaged screens; `rom-forge` for the SM83 framework and the Tune cart;
 - The per-pixel soft-shadow gather addresses ≤2048 mask words (all 65536
   instance slots); beyond that the engine falls back to coarser camera-tile
   masking.
-- `OffscreenRenderBudget.RegisteredViews = 64` (Puck.Abstractions.Presentation; the validator caps `cameras` by the same constant) — never register a rendered view per
-  population entry.
+- Every camera a screen, a HUD frame or a probe export shows is a view instance the render graph renders at its
+  refresh (`WorldViewInstances`) — never show a rendered view per population entry.
 - `WorldDynamicGeometryCeilings.MaxContributedDynamicInstances = 16000`:
   the document-global CPU/instance-grid ceiling. GPU cost is the author's
   frame budget, not an admission term.

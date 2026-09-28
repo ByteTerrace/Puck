@@ -19,7 +19,7 @@
       ]
     },
     "WorldRenderScaleTier": {
-      "description": "The SAFE, enumerated world render-scale tiers a run pins for the settled REVEALED room view \u2014 the demo/user-facing quality option layered over the engine\u0027s CONTINUOUS render-scale knob (SdfViewSnapshot.RenderScale, quantized to SdfWorldEngine.RenderScaleQ). The player picks one of these KNOWN-GOOD steps, never a free numeric value; each tier is pinned to an exact quantized numerator so the reduced render extent (worldRenderDims) is a stable integer at any window size and the bilinear upsample stays artifact-free. The continuous knob stays reachable PROGRAMMATICALLY (layout eases, dev tooling) \u2014 the enumerated policy lives only here at the user surface. Names \u002B scales are the ONE definition (WorldRenderScaleTiers); the world document\u0027s quality presets, the console world.render-scale verb, and the boot resolution all read them there.",
+      "description": "The enumerated world render-scale tiers a player or a quality preset picks, never a free numeric value, over the continuous render scale a view carries (SdfViewSnapshot.RenderScale). A view renders its output at its rect times its render scale, rounded up on each axis to a step of the render graph\u0027s extent quantization (RenderGraphExtent.Quantize, sixteen steps per power-of-two octave), and the root\u0027s place pass reconstructs that output into the rect at world.upscale-sharpness. The continuous scale stays reachable in code (layout transitions); the enumerated set lives only at the user surface. WorldRenderScaleTiers is the one definition of the names and scales, which the world document\u0027s quality presets, the console world.render-scale verb and the boot resolution read. Each extent below is a lone whole-display view at 1280x800.",
       "enum": [
         "Native",
         "ThreeQuarter",
@@ -861,7 +861,7 @@
       "title": "WorldRenderSky"
     },
     "WorldScreenSourceNone": {
-      "description": "No provider is bound \u2014 the engine lights the slot with its procedural no-signal fallback (an animated test-card / striped no-signal look, never black).",
+      "description": "No provider is bound \u2014 the engine shades the slot as dark glass, lit faintly by the sun.",
       "properties": {
         "$type": {
           "const": "none"
@@ -972,7 +972,7 @@
           "default": "Camera"
         },
         "resolution": {
-          "description": "The offscreen target\u0027s [width, height] in pixels, or null for the engine default (Puck.SdfVm.Views.WorldSessionView.DefaultWidth x DefaultHeight \u2014 today\u0027s 160x144 panel, unchanged for an unauthored facet). Each axis is validated within 1..WorldDefinitionValidator.MaxSurfaceDimension. Omitted from the wire when null.",
+          "description": "The offscreen target\u0027s [width, height] in pixels, or null for the default 160x144 panel (Puck.World.Client.WorldViewInstances.DefaultSessionWidth x DefaultSessionHeight). Each axis is validated within 1..WorldDefinitionValidator.MaxSurfaceDimension. Omitted from the wire when null.",
           "default": null,
           "title": "WorldScreenResolution"
         }
@@ -993,7 +993,7 @@
       }
     },
     "WorldScreenSourceText": {
-      "description": "Authored reading text on the screen face, rendered through the engine\u0027s glyph-decal tier (Puck.SdfVm.SdfWorldEngine.SetScreenDecal): a fixed monospace cell grid sampled from the world\u0027s packed font atlas at shade time \u2014 the dense-text sibling of a creation\u0027s textRuns, which stamp marched Glyph geometry. Signs, plaques, books, and monitors author this; short sculptural lettering stays a text run. Requires the world to declare a text font catalog (Text); the decal bypasses the CRT image pipeline, so no image source competes with it on the slot.",
+      "description": "Authored reading text on the screen face, rendered through the engine\u0027s glyph-decal tier (Puck.SdfVm.SdfWorldTables.SetScreenDecal): a fixed monospace cell grid sampled from the world\u0027s packed font atlas at shade time \u2014 the dense-text sibling of a creation\u0027s textRuns, which stamp marched Glyph geometry. Signs, plaques, books, and monitors author this; short sculptural lettering stays a text run. Requires the world to declare a text font catalog (Text); the decal bypasses the CRT image pipeline, so no image source competes with it on the slot.",
       "properties": {
         "$type": {
           "const": "text"
@@ -2833,6 +2833,13 @@
         "GreatestCommonDivisor",
         "LeastCommonMultiple",
         "FloorModulo",
+        "FloorDivide",
+        "FloorDivideModulo",
+        "DivideRemainder",
+        "Power",
+        "ModularPower",
+        "ModularInverse",
+        "ExtendedGreatestCommonDivisor",
         "CycleForward",
         "CycleDistance",
         "SmallestMissing",
@@ -5955,7 +5962,7 @@
       ]
     },
     "WorldPlacementPortal": {
-      "description": "A WorldPlacementFace\u0027s portal facet \u2014 the authored decision that a face is a door: which WorldDestination row it leads to, and under what travel scope. Absent (the default) means the face is not a door \u2014 nothing here fires anything by itself; turning the decision into a diegetic step-into trigger is WorldInstanceHost.TriggerPortal\u0027s job, never this facet\u0027s. Durability, scope, and process-local instance selection live on the named WorldDestination row this facet points at, not here \u2014 a facet composes one destination selection with a travel scope, never re-authors how that destination is minted. Extensible deliberately (an optional-member record, the same widen-without-moving-existing-members shape WorldLatticeMedium\u0027s own remarks describe): a future fact-gate field (an authored predicate a traveler must satisfy to pass) adds cleanly as a new trailing member.",
+      "description": "A WorldPlacementFace\u0027s portal facet \u2014 the authored decision that a face is a door: which WorldDestination row it leads to, and under what travel scope. Absent (the default) means the face is not a door \u2014 nothing here fires anything by itself; turning the decision into a diegetic step-into trigger is WorldInstanceHost\u0027s job (its per-tick portal scan, ScanInstancePortals, then ResolveAndEnqueueCoalescedTransfers), never this facet\u0027s. Durability, scope, and process-local instance selection live on the named WorldDestination row this facet points at, not here \u2014 a facet composes one destination selection with a travel scope, never re-authors how that destination is minted. Extensible deliberately (an optional-member record, the same widen-without-moving-existing-members shape WorldLatticeMedium\u0027s own remarks describe): a future fact-gate field (an authored predicate a traveler must satisfy to pass) adds cleanly as a new trailing member.",
       "type": [
         "object",
         "null"
@@ -6017,6 +6024,15 @@
           "$ref": "#/$defs/WorldPlacementPortal",
           "description": "The face\u0027s portal facet (see WorldPlacementPortal) \u2014 absent (the default) means this face is not a door. Optional and trailing deliberately: a face authored before this facet existed round-trips unchanged, and it composes freely with Source \u2014 the door and the screen it shows are independent facts about the same face.",
           "default": null
+        },
+        "filter": {
+          "description": "How the face\u0027s screen samples its source\u0027s image, as a screen row\u0027s Filter does: Nearest, the default, keeps each source pixel crisp; Linear blends between source pixels. Omitted from the wire when Nearest.",
+          "enum": [
+            "Nearest",
+            "Linear"
+          ],
+          "default": "Nearest",
+          "title": "GpuSamplerFilter"
         }
       },
       "required": [

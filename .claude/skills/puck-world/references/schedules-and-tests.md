@@ -14,22 +14,39 @@ hazards stay in the main [SKILL.md](../SKILL.md).
 
 A world may author a `captures` section:
 tick-scheduled capture rows that arm the `world.screenshot` path at exact
-sim ticks. Each capture stamps a per-station material census and a
-`world.state.hash`-matching state hash. The rows write a
+sim ticks. A row captures the render graph's root, the frame the display
+shows, unless it names `instance: "world"`, the SDF world beneath the root's
+`views.post` passes and overlay, a `views.graphs` row, or `screen: <index>`,
+the source instance that screen reads (a machine output, a producer or a probe;
+the validator refuses any other screen, and a row naming both). A landed capture
+of a source instance whose source states its image (a test pattern, a QR code,
+a machine output) carries `sourceVerdict`, its exact verdict against that image
+of the captured tick, narrated as `[captures] <station> tick <t>: verdict …`.
+Each capture stamps a per-station
+material census and a `world.state.hash`-matching state hash. The rows write a
 `puck.parity.manifest.v1` into `captures.directory` (resolved beside the
 document; absent: `captures/` under the run's state root, never the working
 directory; overridable by
 `--capture-dir`), rewritten as each capture ends, with exactly one entry per armed capture: the frame
 showing its tick, or a named `refusal` (`cameraInside` when
-`map(cameraPos) <= 0`, `busy`, `stale`, `failed`, `unserved`) with a
+`map(cameraPos) <= 0`, `busy`, `stale`, `failed`, `unserved`, `deviceLost`
+when the graphics device was lost while it was armed) with a
 `detail` naming the ticks.
 
 Offscreen, the host holds its clock for a capture: the pump steps no tick past
 an armed capture's tick until the capture is served or refused, whatever keeps
 the render chain from serving it (a cold-cache pipeline build, a device
-rebuild). The hold is bounded by `WorldCaptureScheduler.HoldBudgetSeconds` (60)
-summed over the run; past it the capture is refused as `unserved` with the
-chain's reason ("the engine's pipelines never installed") and the run steps on.
+rebuild). The hold counts from readiness (`IWorldEngineReadiness`): time held
+while the engine is not ready is bounded by
+`WorldCaptureScheduler.BuildHoldBudgetSeconds` (180), and time held once it is
+ready by `WorldCaptureScheduler.HoldBudgetSeconds` (60), each summed over the
+run; past either the capture is refused as `unserved`, naming the pipeline
+build and its progress when the build spent it, and the run steps on. A script
+that reads rendered work waits with `world.wait ready <seconds>`, and one that
+reads a drawn bake with `world.wait bakes <seconds>`, never a tick count. A
+script that takes several `world.screenshot` captures fences each one with
+`world.wait captures <seconds>` before arming the next, since a pending capture
+refuses the next arm and a tick count is a race under load.
 A capture still owed at the run's end is refused before the render root is
 disposed (`IFixedStepSimulation.SettleOwedFrames`). The windowed host never
 holds. `world.counters` shows the hold under `world.captures`

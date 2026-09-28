@@ -6,10 +6,9 @@ namespace Puck.World;
 /// <c>Puck.World.WorldInstanceHost.TransferLifetime</c>'s own vocabulary, but only the two cases a document can
 /// author in advance: a destination always creates-or-finds its instance by document, so it never spells
 /// <c>TransferLifetime.Existing</c> (naming an already-running instance is a live fact no author can pin ahead of
-/// time). <c>WorldInstanceHost.TriggerPortal</c> maps this one-for-one onto
-/// <c>WorldInstanceHost.TransferDestination.Fresh</c>/<c>.Persistent</c> when it actually enqueues the transfer — an
-/// interim mapping (see that method's own remarks) that a transport-neutral local resolver, not yet built,
-/// supersedes.</summary>
+/// time). A crossing (<c>WorldInstanceHost</c>'s portal scan, <c>ScanInstancePortals</c>, then
+/// <c>ResolveAndEnqueueCoalescedTransfers</c>) and a session screen both resolve it through
+/// <see cref="WorldSessionResolver"/>, so a door's display and its transfer address one generation.</summary>
 public enum WorldDestinationDurability {
     /// <summary>A target-issued generation that is not recovered after its lifecycle ends — a brand-new instance
     /// minted fresh on every use. Mirrors <c>WorldInstanceHost.TransferLifetime.Fresh</c>.</summary>
@@ -17,9 +16,8 @@ public enum WorldDestinationDurability {
 
     /// <summary>Durable simulation state that may unload, hydrate, or move between hosts — a stable instance reused
     /// across travelers, started once and retained. Mirrors <c>WorldInstanceHost.TransferLifetime.Persistent</c>.
-    /// Interim (see <c>WorldInstanceHost.TriggerPortal</c>'s own remarks): until the resolver lands, a persisted
-    /// destination's instance name is its own <see cref="WorldDestination.Name"/> — there is no separate authored
-    /// instance name any more.</summary>
+    /// <see cref="WorldSessionResolver"/> mints its instance name; there is no separately authored instance
+    /// name.</summary>
     Persisted,
 }
 /// <summary>Which scoped identity/generation a <see cref="WorldDestination"/> selects (docs/architecture/worlds.md,
@@ -107,7 +105,7 @@ public sealed record WorldDestination(
 /// <c>Puck.World.WorldInstanceCommandModule</c>'s <c>world.transfer</c> verb already speaks (<c>ephemeral &lt;site&gt;
 /// &lt;path&gt;</c> / <c>persisted &lt;name&gt; &lt;path&gt;</c> / the bare <c>party</c> token) — mirrors
 /// <c>WorldHostTokens</c>'s own role for the host section's backend/surface-format tokens, so an authored document
-/// and the console grammar its diegetic trigger (<c>WorldInstanceHost.TriggerPortal</c>, already built) drives never
+/// and the console grammar its diegetic trigger (<c>WorldInstanceHost</c>'s portal scan) drives never
 /// disagree on spelling. Supersedes the old <c>WorldPortalTokens</c>, which spelled these <c>fresh</c>/
 /// <c>persistent</c> — retired in the same change that moved lifetime/instance off the portal facet and onto this
 /// section (supergreen; no compatibility window).</summary>

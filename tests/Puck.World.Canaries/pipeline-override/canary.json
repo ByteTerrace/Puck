@@ -35,7 +35,7 @@
       ]
     },
     "expect": [
-      { "type": "line", "name": "the commit applies", "stream": "stderr", "match": "exact", "text": "[world.mutation: CommitViewPipeline 'ink' applied]", "present": true },
+      { "type": "line", "name": "the commit applies", "stream": "stderr", "match": "exact", "text": "[world.mutation: CommitViewGraph 'ink' applied]", "present": true },
       { "type": "line", "name": "the committed exposure is read back", "stream": "stdout", "match": "contains", "text": "  visualize.exposure committed=0 pending=-", "present": true },
       { "type": "imageRegion", "name": "relaunched-at-or-below-background", "capture": "relaunched.png", "extent": [256, 256], "region": [0, 0, 1, 1], "reduce": "every", "maximum": [0.018, 0.027, 0.06, 1], "toleranceCodes": 1, "holds": true },
       { "type": "imageRegion", "name": "relaunched-pen-dark", "capture": "relaunched.png", "extent": [256, 256], "region": [0.765, 0.495, 0.775, 0.505], "reduce": "every", "maximum": [0, 0, 0, 1], "toleranceCodes": 1, "holds": true }
@@ -70,7 +70,7 @@
     },
     "expect": [
       { "type": "line", "name": "the preview is shown uncommitted", "stream": "stdout", "match": "contains", "text": "  visualize.exposure committed=- pending=0", "present": true },
-      { "type": "line", "name": "nothing is committed", "stream": "stderr", "match": "contains", "text": "CommitViewPipeline", "present": false },
+      { "type": "line", "name": "nothing is committed", "stream": "stderr", "match": "contains", "text": "CommitViewGraph", "present": false },
       { "type": "imageRegion", "name": "default-exposure-exceeds-background", "capture": "relaunched.png", "extent": [256, 256], "region": [0, 0, 1, 1], "reduce": "every", "maximum": [0.018, 0.027, 0.06, 1], "toleranceCodes": 1, "holds": false },
       { "type": "imageRegion", "name": "default-exposure-pen-is-lit", "capture": "relaunched.png", "extent": [256, 256], "region": [0.765, 0.495, 0.775, 0.505], "reduce": "every", "maximum": [0, 0, 0, 1], "toleranceCodes": 1, "holds": false },
       { "type": "imageRegion", "name": "default-exposure-pigment-at-pen", "capture": "relaunched.png", "extent": [256, 256], "region": [0.765, 0.495, 0.775, 0.505], "reduce": "mean", "minimum": [0, 0.5, 0, 1], "toleranceCodes": 1, "holds": true }

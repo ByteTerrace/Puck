@@ -41,7 +41,7 @@ public static partial class WorldDefinitionSerialization {
         return definition;
     }
     private static InvalidDataException InvalidEmbedded(Exception exception) => new(
-        message: $"the embedded world definition is not a valid {WorldDefinition.SchemaVersion} document: {exception.Message.ReplaceLineEndings(replacementText: " ")}",
+        message: $"the embedded world definition is not a valid {WorldDefinition.SchemaVersion} document: {WorldJsonPayload.Reason(exception: exception)}",
         innerException: exception
     );
 }

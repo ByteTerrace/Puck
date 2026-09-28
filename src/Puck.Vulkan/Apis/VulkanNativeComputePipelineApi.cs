@@ -46,18 +46,26 @@ public unsafe sealed class VulkanNativeComputePipelineApi : IVulkanComputePipeli
 
         pipelineHandle = 0;
 
-        var layoutResult = VulkanPipelineLayouts.Create(
-            allocator: m_allocator,
-            bindings: request.DescriptorBindings,
-            descriptorSetLayoutHandle: out descriptorSetLayoutHandle,
-            device: request.Device,
-            pipelineLayoutHandle: out pipelineLayoutHandle,
-            pushConstantSize: request.PushConstantSize,
-            pushConstantStageFlags: request.PushConstantStageFlags
-        );
+        // A layout the caller created stays the caller's, so a failed creation destroys only what it made here.
+        var ownsLayout = (0 == request.PipelineLayoutHandle);
 
-        if (!layoutResult.IsSuccess()) {
-            return layoutResult;
+        if (ownsLayout) {
+            var layoutResult = VulkanPipelineLayouts.Create(
+                allocator: m_allocator,
+                bindings: request.DescriptorBindings,
+                descriptorSetLayoutHandle: out descriptorSetLayoutHandle,
+                device: request.Device,
+                pipelineLayoutHandle: out pipelineLayoutHandle,
+                pushConstantSize: request.PushConstantSize,
+                pushConstantStageFlags: request.PushConstantStageFlags
+            );
+
+            if (!layoutResult.IsSuccess()) {
+                return layoutResult;
+            }
+        } else {
+            descriptorSetLayoutHandle = 0;
+            pipelineLayoutHandle = request.PipelineLayoutHandle;
         }
 
         // Creation feedback (core in Vulkan 1.3) says whether the pipeline cache answered; the stack structs outlive
@@ -95,11 +103,14 @@ public unsafe sealed class VulkanNativeComputePipelineApi : IVulkanComputePipeli
         if (result.IsSuccess()) {
             request.PipelineCache?.Count(feedback: in feedback);
         } else {
-            VulkanPipelineLayouts.Destroy(
-                descriptorSetLayoutHandle: descriptorSetLayoutHandle,
-                device: request.Device,
-                pipelineLayoutHandle: pipelineLayoutHandle
-            );
+            if (ownsLayout) {
+                VulkanPipelineLayouts.Destroy(
+                    descriptorSetLayoutHandle: descriptorSetLayoutHandle,
+                    device: request.Device,
+                    pipelineLayoutHandle: pipelineLayoutHandle
+                );
+            }
+
             descriptorSetLayoutHandle = 0;
             pipelineLayoutHandle = 0;
             pipelineHandle = 0;

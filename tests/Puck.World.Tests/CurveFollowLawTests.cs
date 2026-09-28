@@ -1,3 +1,4 @@
+using Puck.Testing;
 using Xunit;
 
 using Puck.Assets.Documents;
@@ -426,7 +427,7 @@ public sealed class CurveFollowLawTests {
     }
     [Fact]
     public void CurveFollowProducer_ReplayRecordingReDrivesToAnIdenticalMatch() {
-        Fixtures.SkipIfReplayDirectoryUnwritable();
+        using var stateDirectory = new TemporaryDirectory(prefix: "puck-replay-");
 
         using var fixture = Fixtures.FreshServer(definition: WithFollower(rate: 2f));
 
@@ -434,6 +435,7 @@ public sealed class CurveFollowLawTests {
 
         var transport = new LoopbackTransport(server: fixture.Server);
         var tape = new WorldReplayTape(
+            stateRoot: new WorldStateRoot(path: stateDirectory.RootPath),
             liveServer: fixture.Server,
             profiles: fixture.Server.Profiles,
             transport: transport,

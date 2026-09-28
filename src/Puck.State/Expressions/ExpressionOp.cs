@@ -96,7 +96,7 @@ public enum ExpressionOp : byte {
     BoardImage,
     /// <summary>Sign as Int -1, 0, 1 (unary, either kind).</summary>
     Sign,
-    /// <summary>Szudzik's pairing of two non-negative integers into one; <c>pairX</c>/<c>pairY</c> invert it.</summary>
+    /// <summary>Two signed integers paired into one non-negative value: each component folded onto the naturals (0, −1, 1, −2, … to 0, 1, 2, 3, …) and the two folded values paired by the alternating square-shell walk; <c>pairX</c>/<c>pairY</c> invert it.</summary>
     Pair,
     /// <summary>The first component of a paired value.</summary>
     PairX,
@@ -112,9 +112,9 @@ public enum ExpressionOp : byte {
     PairSum,
     /// <summary>The absolute difference of a paired value's components.</summary>
     PairDifference,
-    /// <summary>The pair with both components moved by the second argument.</summary>
+    /// <summary>The pair with both components moved by the signed second argument.</summary>
     PairTranslate,
-    /// <summary>The pair with both components multiplied by the second argument.</summary>
+    /// <summary>The pair with both components multiplied by the signed second argument.</summary>
     PairScale,
     /// <summary>Bit-interleaves two non-negative integers below 2^31 (x on the even bits); <c>mortonX</c>/<c>mortonY</c> invert it.</summary>
     MortonIndex,
@@ -212,6 +212,20 @@ public enum ExpressionOp : byte {
     LeastCommonMultiple,
     /// <summary>The floored remainder of a by m: for a positive m the value in [0, m) congruent to a, whatever a's sign.</summary>
     FloorModulo,
+    /// <summary>The floored quotient of a by b, the partner of floorModulo: a == b·floorDivide(a, b) + floorModulo(a, b) for every sign.</summary>
+    FloorDivide,
+    /// <summary>The floored quotient and floorModulo of a by b from one division, as the pair (quotient, modulo).</summary>
+    FloorDivideModulo,
+    /// <summary>The truncated quotient and remainder of a by b from one division, as the pair (a / b, a % b).</summary>
+    DivideRemainder,
+    /// <summary>The base raised to a non-negative exponent by squaring, exact or refused.</summary>
+    Power,
+    /// <summary>The base raised to a non-negative exponent modulo a positive modulus, in [0, modulus); never overflows.</summary>
+    ModularPower,
+    /// <summary>The inverse of a value modulo a modulus of at least two, in [1, modulus); a value sharing a factor with the modulus is refused.</summary>
+    ModularInverse,
+    /// <summary>The Bézout coefficients (x, y) of a and b as a pair, with a·x + b·y == greatestCommonDivisor(a, b).</summary>
+    ExtendedGreatestCommonDivisor,
     /// <summary>The forward (clockwise) distance from a to b around an m-cycle: mod(b − a, m).</summary>
     CycleForward,
     /// <summary>The shortest distance between a and b around an m-cycle, in either direction.</summary>

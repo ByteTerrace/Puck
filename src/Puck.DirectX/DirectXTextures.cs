@@ -1,4 +1,5 @@
 using System.Runtime.Versioning;
+using Puck.DirectX.Apis;
 using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.Graphics.Dxgi.Common;
 
@@ -14,12 +15,14 @@ namespace Puck.DirectX;
 public static unsafe class DirectXTextures {
     /// <summary>Gets the resource flags and optimized clear value declared image usages need: a render target, a depth
     /// stencil, or unordered access, each only when its usage is declared. An optimized clear value is given only to a
-    /// render target (opaque black) or a depth stencil (1, the far plane), matching the clear a render pass records, so
-    /// the fast-clear path is taken and the debug layer never reports a mismatched clear.</summary>
+    /// render target (opaque black) or a depth stencil (the image's clear depth: 1 for a far plane at 1, 0 for a
+    /// reversed-Z pass), matching the clear a render pass records, so the fast-clear path is taken and the debug layer
+    /// never reports a mismatched clear.</summary>
     /// <param name="format">The texture format.</param>
     /// <param name="usage">The declared usages.</param>
+    /// <param name="clearDepth">The depth a depth attachment is cleared to (<see cref="GpuDepthAttachment.ClearDepth"/>).</param>
     /// <returns>The resource flags, and the optimized clear value or <see langword="null"/>.</returns>
-    public static (D3D12_RESOURCE_FLAGS Flags, D3D12_CLEAR_VALUE? ClearValue) OfUsage(DXGI_FORMAT format, GpuImageUsage usage) {
+    public static (D3D12_RESOURCE_FLAGS Flags, D3D12_CLEAR_VALUE? ClearValue) OfUsage(DXGI_FORMAT format, GpuImageUsage usage, float clearDepth = 1f) {
         var flags = D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE;
         D3D12_CLEAR_VALUE? clearValue = null;
 
@@ -40,7 +43,7 @@ public static unsafe class DirectXTextures {
             };
 
             depthClear.Anonymous.DepthStencil = new D3D12_DEPTH_STENCIL_VALUE {
-                Depth = 1f,
+                Depth = clearDepth,
                 Stencil = 0,
             };
             clearValue = depthClear;
@@ -71,35 +74,58 @@ public static unsafe class DirectXTextures {
     /// <param name="heapFlags">Its heap flags; <c>SHARED</c> for a texture another device opens.</param>
     /// <param name="clearValue">The optimized clear value of a render target or depth stencil, or
     /// <see langword="null"/>.</param>
+    /// <param name="memory">The device-local counts the texture joins, or <see langword="null"/>; the owner counts its
+    /// release through <see cref="DirectXDeviceMemory.CountReleased"/>.</param>
+    /// <param name="mipLevels">The number of mip levels the texture has; one for a texture without mips.</param>
     /// <returns>The texture, owned by the caller.</returns>
-    public static ID3D12Resource* CreateCommitted(ID3D12Device* device, DXGI_FORMAT format, uint width, uint height, D3D12_RESOURCE_STATES initialState, D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE, D3D12_HEAP_FLAGS heapFlags = D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE, D3D12_CLEAR_VALUE? clearValue = null) {
+    /// <exception cref="Puck.Abstractions.Gpu.DeviceLostException">The device was removed.</exception>
+    /// <exception cref="DirectXException">The creation failed for another reason.</exception>
+    public static ID3D12Resource* CreateCommitted(ID3D12Device* device, DXGI_FORMAT format, uint width, uint height, D3D12_RESOURCE_STATES initialState, D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE, D3D12_HEAP_FLAGS heapFlags = D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE, D3D12_CLEAR_VALUE? clearValue = null, GpuDeviceMemoryWork? memory = null, ushort mipLevels = 1) {
         var heapProperties = new D3D12_HEAP_PROPERTIES {
             Type = D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT,
         };
-        var description = new D3D12_RESOURCE_DESC {
-            DepthOrArraySize = 1,
-            Dimension = D3D12_RESOURCE_DIMENSION.D3D12_RESOURCE_DIMENSION_TEXTURE2D,
-            Flags = flags,
-            Format = format,
-            Height = height,
-            Layout = D3D12_TEXTURE_LAYOUT.D3D12_TEXTURE_LAYOUT_UNKNOWN,
-            MipLevels = 1,
-            SampleDesc = new DXGI_SAMPLE_DESC { Count = 1, },
-            Width = width,
-        };
-        var resourceIid = ID3D12Resource.IID_Guid;
-        void* texture;
-
-        device->CreateCommittedResource(
-            HeapFlags: heapFlags,
-            InitialResourceState: initialState,
-            pDesc: in description,
-            pHeapProperties: in heapProperties,
-            pOptimizedClearValue: clearValue,
-            ppvResource: &texture,
-            riidResource: in resourceIid
+        var description = Describe(
+            flags: flags,
+            format: format,
+            height: height,
+            mipLevels: mipLevels,
+            width: width
+        );
+        var texture = DirectXCommandCalls.CreateCommittedResource(
+            calls: new DirectXDeviceCommandCalls(device: device),
+            clearValue: clearValue,
+            description: in description,
+            heapFlags: heapFlags,
+            heapProperties: in heapProperties,
+            initialState: initialState
         );
 
-        return ((ID3D12Resource*)texture);
+        DirectXDeviceMemory.CountAllocated(
+            device: device,
+            memory: memory,
+            resource: texture,
+            role: GpuMemoryRole.DeviceLocal
+        );
+
+        return texture;
     }
+    /// <summary>Returns the description <see cref="CreateCommitted"/> creates a texture from: one array layer, one
+    /// sample, the layout the device chooses.</summary>
+    /// <param name="format">The texture format.</param>
+    /// <param name="width">The width of level 0, in texels.</param>
+    /// <param name="height">The height of level 0, in texels.</param>
+    /// <param name="mipLevels">The number of mip levels.</param>
+    /// <param name="flags">Its resource flags.</param>
+    /// <returns>The description.</returns>
+    public static D3D12_RESOURCE_DESC Describe(DXGI_FORMAT format, uint width, uint height, ushort mipLevels, D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE) => new() {
+        DepthOrArraySize = 1,
+        Dimension = D3D12_RESOURCE_DIMENSION.D3D12_RESOURCE_DIMENSION_TEXTURE2D,
+        Flags = flags,
+        Format = format,
+        Height = height,
+        Layout = D3D12_TEXTURE_LAYOUT.D3D12_TEXTURE_LAYOUT_UNKNOWN,
+        MipLevels = mipLevels,
+        SampleDesc = new DXGI_SAMPLE_DESC { Count = 1, },
+        Width = width,
+    };
 }

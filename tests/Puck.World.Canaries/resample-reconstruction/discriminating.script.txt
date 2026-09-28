@@ -1,0 +1,14 @@
+# The same frames, but the first is rendered at sharpness 1 instead of 0.
+pipeline.wait resample compiled 40
+pipeline.wait resample installed 10
+pipeline.time resample pause
+pipeline.set resample resample {"sharpness":1}
+pipeline.reset resample
+pipeline.wait resample submitted 1 10
+pipeline.capture resample {run}/bilinear.png
+pipeline.wait resample captured 10
+pipeline.set resample resample {"sharpness":1}
+pipeline.reset resample
+pipeline.wait resample submitted 1 10
+pipeline.capture resample {run}/catmull-rom.png
+pipeline.wait resample captured 10

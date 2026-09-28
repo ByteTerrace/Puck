@@ -27,7 +27,7 @@ public sealed class WorldInstanceHostTwoRowTransferLawTests {
             machineId: machineId,
             resolver: new WorldSessionResolver(),
             seats: WorldEmbodiedSeats.None,
-            stateRoot: stateRoot.RootPath
+            stateRoot: new WorldStateRoot(path: stateRoot.RootPath)
         );
 
         return (host, stateRoot);

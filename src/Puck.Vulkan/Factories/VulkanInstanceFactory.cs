@@ -7,7 +7,8 @@ namespace Puck.Vulkan.Factories;
 
 /// <summary>
 /// The default <see cref="IVulkanInstanceFactory"/>: it selects the surface extension for the display kind,
-/// enables the validation layer when requested, and creates an owning <see cref="VulkanInstance"/>.
+/// enables the validation layer, with synchronization validation, when requested, and creates an owning
+/// <see cref="VulkanInstance"/>.
 /// </summary>
 public sealed class VulkanInstanceFactory : IVulkanInstanceFactory {
     // VK_EXT_debug_utils serves TWO independent purposes: the validation messenger (surfaced only when validation is
@@ -15,17 +16,27 @@ public sealed class VulkanInstanceFactory : IVulkanInstanceFactory {
     // free without a messenger, so it is enabled whenever the loader supports it — decoupled from validation — so
     // debug groups reach a GPU capture even in a default (validation-off) run. The messenger stays validation-only.
     private const string DebugUtilsExtension = "VK_EXT_debug_utils";
+    // VK_EXT_swapchain_colorspace lets a surface report its HDR color spaces beside SRGB_NONLINEAR_KHR. Enabling it adds
+    // pairs to what a surface reports and changes nothing else, so it is enabled whenever the loader supports it; an SDR
+    // output still takes an SRGB_NONLINEAR_KHR pair.
+    private const string SwapchainColorSpaceExtension = "VK_EXT_swapchain_colorspace";
 
     private static readonly string[] CommonExtensions = [
         "VK_KHR_surface",
     ];
+    private static readonly string[] OptionalExtensions = [
+        DebugUtilsExtension,
+        SwapchainColorSpaceExtension,
+    ];
     private static readonly string[] ValidationLayers = [
-        "VK_LAYER_KHRONOS_validation",
+        VulkanInstanceCreateChain.ValidationLayer,
     ];
 
     private readonly IVulkanInstanceApi m_instanceApi;
 
-    private IReadOnlyList<string> BuildExtensionNames(NativeDisplayKind displayKind) {
+    // With validation on, the layer's own VK_EXT_validation_features declares the VkValidationFeaturesEXT the create
+    // chain carries (VulkanNativeInstanceApi.LinkCreateChain), which enables synchronization validation.
+    private IReadOnlyList<string> BuildExtensionNames(NativeDisplayKind displayKind, bool enableValidation) {
         string[] surfaceExtensions = displayKind switch {
             NativeDisplayKind.Vi => [.. CommonExtensions, "VK_NN_vi_surface",],
             NativeDisplayKind.Wayland => [.. CommonExtensions, "VK_KHR_wayland_surface",],
@@ -34,10 +45,19 @@ public sealed class VulkanInstanceFactory : IVulkanInstanceFactory {
             _ => throw new PlatformNotSupportedException(message: $"Vulkan instance creation is not implemented for display kind '{displayKind}'.")
         };
 
-        return (m_instanceApi.HasInstanceExtension(extensionName: DebugUtilsExtension)
-            ? [.. surfaceExtensions, DebugUtilsExtension]
-            : surfaceExtensions
-        );
+        return [
+            .. surfaceExtensions,
+            .. OptionalExtensions.Where(predicate: extension => m_instanceApi.HasInstanceExtension(
+                extensionName: extension,
+                layerName: null
+            )),
+            .. ((enableValidation && m_instanceApi.HasInstanceExtension(
+                extensionName: VulkanInstanceCreateChain.ValidationFeaturesExtension,
+                layerName: VulkanInstanceCreateChain.ValidationLayer
+            ))
+                ? [VulkanInstanceCreateChain.ValidationFeaturesExtension,]
+                : Array.Empty<string>()),
+        ];
     }
 
     /// <inheritdoc/>
@@ -58,7 +78,10 @@ public sealed class VulkanInstanceFactory : IVulkanInstanceFactory {
                 ApplicationName: applicationName,
                 DisplayKind: displayKind,
                 EnableValidation: enableValidation,
-                ExtensionNames: BuildExtensionNames(displayKind: displayKind),
+                ExtensionNames: BuildExtensionNames(
+                    displayKind: displayKind,
+                    enableValidation: enableValidation
+                ),
                 LayerNames: (enableValidation
                 ? ValidationLayers
                 : [])

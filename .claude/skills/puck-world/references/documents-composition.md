@@ -510,7 +510,7 @@ validator refuses it BY NAME from whatever derived rule that placeholder
 violates — `views` and `kits` refuse for any document whose
 `population.capacity` is nonzero, so a seatless document may author neither.
 
-Notable validator constants: `cameras` count ≤ `OffscreenRenderBudget.RegisteredViews` (64),
+Notable validator constants:
 `MaxSurfaceDimension = 4096`, `MaxLookScale = 16f`. Screen indices are
 validated unique, `< SdfProgramBuilder.MaxScreenSurfaces`, and outside the
 reserved derived-face band (`WorldPlacementPolicy.DerivedFaceBase` +

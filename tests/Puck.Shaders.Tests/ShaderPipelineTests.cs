@@ -1,12 +1,16 @@
 using System.Text.Json;
 using Puck.Abstractions.Gpu;
+using Puck.Hosting;
 
 
 namespace Puck.Shaders.Tests;
 
 public sealed class ShaderPipelineTests {
-    // Where the frame members end and a pass's first config field can start: cameraUp, a float3 at 80.
-    private const uint FrameMembersEnd = 92;
+    // Where a pass's first config field can start in its pass block: after the extent, a uint2 at 0.
+    private const uint ExtentEnd = 8;
+
+    // The resources a pass of these tests writes.
+    private static readonly IReadOnlyDictionary<string, ShaderPipelineResource> OutResources = new Dictionary<string, ShaderPipelineResource>(comparer: StringComparer.Ordinal) { ["out"] = Image(name: "out") };
 
     private static ShaderPipelineResource Image(
         string name,
@@ -23,7 +27,7 @@ public sealed class ShaderPipelineTests {
         string name,
         IReadOnlyList<ResourceReference> inputs,
         IReadOnlyList<ResourceReference> outputs,
-        ShaderPipelinePassKind kind = ShaderPipelinePassKind.Compute
+        ShaderPipelineDocumentPassKind kind = ShaderPipelineDocumentPassKind.Compute
     ) => new(
         name,
         $"{name}.hlsl",
@@ -35,7 +39,7 @@ public sealed class ShaderPipelineTests {
 
     [Fact]
     public void Cycle_diagnostic_names_the_path() {
-        var definition = new ShaderPipelineDefinition(
+        var definition = new RenderGraphDefinition(
             name: "cycle",
             resources: [Image("a"), Image("b")],
             passes: [Pass(
@@ -72,7 +76,7 @@ public sealed class ShaderPipelineTests {
     }
     [Fact]
     public void Direct_construction_rejects_invalid_initialization_dimension_and_format_values() {
-        var invalidInitialization = new ShaderPipelineDefinition(
+        var invalidInitialization = new RenderGraphDefinition(
             "init",
             [Image("out") with { Initialization = ((ShaderPipelineInitialization)99) }],
             [Pass(
@@ -89,7 +93,7 @@ public sealed class ShaderPipelineTests {
             filter: diagnostic => (diagnostic.Code == "SHADERPIPE_INITIALIZATION")
         );
 
-        var invalidDimensions = new ShaderPipelineDefinition(
+        var invalidDimensions = new RenderGraphDefinition(
             "dimensions",
             [Image("out") with { Dimensions = new ShaderPipelineDimensions(
                     Height: 1,
@@ -110,7 +114,7 @@ public sealed class ShaderPipelineTests {
             filter: diagnostic => (diagnostic.Code == "SHADERPIPE_DIMENSION_MODE")
         );
 
-        var invalidFormat = new ShaderPipelineDefinition(
+        var invalidFormat = new RenderGraphDefinition(
             "format",
             [new ShaderPipelineResource(
                     "out",
@@ -133,7 +137,7 @@ public sealed class ShaderPipelineTests {
     }
     [Fact]
     public void Fullscreen_draws_into_its_declared_color_format_and_an_image_never_declares_a_depth_format() {
-        ShaderPipelineDefinition Fullscreen(string format) => new(
+        RenderGraphDefinition Fullscreen(string format) => new(
             "fullscreen-format",
             [new ShaderPipelineResource(
                     "out",
@@ -142,7 +146,7 @@ public sealed class ShaderPipelineTests {
                 )],
             [Pass(
                     inputs: [],
-                    kind: ShaderPipelinePassKind.Fullscreen,
+                    kind: ShaderPipelineDocumentPassKind.Fullscreen,
                     name: "draw",
                     outputs: ["out"]
                 )],
@@ -162,32 +166,14 @@ public sealed class ShaderPipelineTests {
         );
     }
     [Fact]
-    public void Global_config_is_rejected_until_pipeline_scope_is_runtime_bound() {
-        var definition = new ShaderPipelineDefinition(
-            name: "global",
-            resources: [Image("out")],
-            passes: [Pass(
-                    "draw",
-                    [],
-                    ["out"]
-                )],
-            outputs: ["out"]
-        ) {
-            Config = new Dictionary<string, ShaderConfigField> {
-                ["gain"] = new(ShaderValueType.Float),
-            },
-        };
+    public void A_graph_document_declares_config_only_on_its_passes() {
+        var json = "{\"$schema\":\"puck.render.graph.v1\",\"name\":\"global\",\"resources\":[],\"passes\":[],\"outputs\":[],\"config\":{\"gain\":{\"type\":\"Float\"}}}";
 
-        var error = Assert.Throws<ShaderPipelineCompilationException>(testCode: () => new ShaderPipelineCompiler().Compile(definition: definition));
-
-        Assert.Contains(
-            collection: error.Diagnostics,
-            filter: diagnostic => (diagnostic.Code == "SHADERPIPE_GLOBAL_CONFIG_UNSUPPORTED")
-        );
+        Assert.Throws<JsonException>(testCode: () => RenderGraphDefinition.Parse(json: json));
     }
     [Fact]
     public void An_image_declaring_a_buffer_size_is_rejected() {
-        var definition = new ShaderPipelineDefinition(
+        var definition = new RenderGraphDefinition(
             "fields",
             [
             new ShaderPipelineResource(
@@ -212,13 +198,13 @@ public sealed class ShaderPipelineTests {
         );
     }
     [InlineData("elementType", "\"Float4\"")]
-    [InlineData("strideBytes", "16")]
+    [InlineData("elementFormat", "\"R32Uint\"")]
     [Theory]
     public void A_buffer_carrying_a_typed_layout_member_fails_as_an_unknown_member(string member, string value) {
         var json = $$"""{ "name": "buffer", "kind": "Buffer", "sizeBytes": 64, "{{member}}": {{value}} }""";
         var refusal = Assert.Throws<JsonException>(testCode: () => JsonSerializer.Deserialize(
             json: json,
-            jsonTypeInfo: ShaderPipelineJsonContext.Default.ShaderPipelineResource
+            jsonTypeInfo: RenderGraphJsonContext.Default.ShaderPipelineResource
         ));
 
         Assert.Contains(
@@ -228,12 +214,12 @@ public sealed class ShaderPipelineTests {
         );
         Assert.NotNull(@object: JsonSerializer.Deserialize(
             json: """{ "name": "buffer", "kind": "Buffer", "sizeBytes": 64 }""",
-            jsonTypeInfo: ShaderPipelineJsonContext.Default.ShaderPipelineResource
+            jsonTypeInfo: RenderGraphJsonContext.Default.ShaderPipelineResource
         ));
     }
     [Fact]
     public void Independent_passes_use_authored_order_as_the_tie_breaker() {
-        var definition = new ShaderPipelineDefinition(
+        var definition = new RenderGraphDefinition(
             name: "independent",
             resources: [Image("a"), Image("b")],
             passes: [Pass(
@@ -255,7 +241,7 @@ public sealed class ShaderPipelineTests {
     }
     [Fact]
     public void Initialized_only_graphs_are_rejected_without_live_passes() {
-        var definition = new ShaderPipelineDefinition(
+        var definition = new RenderGraphDefinition(
             "initialized",
             [Image(
                     "out",
@@ -272,62 +258,104 @@ public sealed class ShaderPipelineTests {
         );
     }
     [Fact]
-    public void Json_pipeline_documents_reject_unknown_properties_and_missing_schema() {
-        var json = "{\"$schema\":\"puck.shader.pipeline.v1\",\"name\":\"empty\",\"resources\":[],\"passes\":[],\"outputs\":[],\"unexpected\":true}";
+    public void Json_graph_documents_reject_unknown_properties_and_missing_schema() {
+        var json = "{\"$schema\":\"puck.render.graph.v1\",\"name\":\"empty\",\"resources\":[],\"passes\":[],\"outputs\":[],\"unexpected\":true}";
 
         Assert.Throws<JsonException>(testCode: () => JsonSerializer.Deserialize(
             json: json,
-            jsonTypeInfo: ShaderPipelineJsonContext.Default.ShaderPipelineDefinition
+            jsonTypeInfo: RenderGraphJsonContext.Default.RenderGraphDefinition
         ));
 
-        var definition = new ShaderPipelineDefinition(
+        var definition = new RenderGraphDefinition(
             null!,
             "empty",
             [],
             [],
             []
         );
-        var exception = Assert.Throws<ShaderPipelineCompilationException>(testCode: () => new ShaderPipelineCompiler().Compile(definition: definition));
+        var exception = Assert.Throws<ShaderPipelineCompilationException>(testCode: () => RenderGraphCompiler.ShaderPasses.Compile(definition: definition));
 
         Assert.Contains(
             collection: exception.Diagnostics,
-            filter: diagnostic => (diagnostic.Code == "SHADERPIPE_SCHEMA")
+            filter: diagnostic => (diagnostic.Code == "RENDERGRAPH_SCHEMA")
+        );
+    }
+    [Fact]
+    public void The_planner_refuses_package_passes_a_graph_compiler_has_not_checked() {
+        var definition = new RenderGraphDefinition(
+            name: "packaged",
+            outputs: ["out"],
+            packages: [new RenderGraphPackagePass(
+                Name: "world",
+                Outputs: ["out"],
+                Package: RenderGraphPackageCatalog.SdfWorld
+            )],
+            passes: [],
+            resources: [Image("out") with { Format = RenderGraphPackageCatalog.WorkingFormat.ToString() }]
+        );
+        var planner = Assert.Throws<ShaderPipelineCompilationException>(testCode: () => new ShaderPipelineCompiler().Compile(definition: definition));
+        var pipelineHost = Assert.Throws<ShaderPipelineCompilationException>(testCode: () => RenderGraphCompiler.ShaderPasses.Compile(definition: definition));
+
+        Assert.Equal(
+            expected: ["SHADERPIPE_PACKAGE_PASS"],
+            actual: planner.Diagnostics.Select(selector: static diagnostic => diagnostic.Code)
+        );
+        Assert.Equal(
+            expected: ["RENDERGRAPH_PACKAGE_UNKNOWN"],
+            actual: pipelineHost.Diagnostics.Select(selector: static diagnostic => diagnostic.Code)
+        );
+        var passes = new RenderGraphCompiler(packages: RenderGraphPackageCatalog.Engine).Compile(definition: definition).Pipeline.Passes;
+        var planned = passes[^1];
+
+        Assert.All(
+            action: static pass => Assert.Equal(
+                expected: ShaderPipelinePassKind.Package,
+                actual: pass.Kind
+            ),
+            collection: passes
+        );
+        // The planned pass carries its step, not a declaration: the package, the fragment pass it runs and its ports; its
+        // extent is the pass's own.
+        Assert.Null(@object: planned.Declaration);
+        Assert.Equal(
+            expected: (RenderGraphPackageCatalog.SdfWorld, SdfWorldPackage.Parts.Views, "out", ((uint)64), ((uint)32)),
+            actual: (planned.Package!.Package, planned.Package.Part, planned.Package.Outputs.Single().Name, planned.ResolveExtent(frameHeight: 32, frameWidth: 64).Width, planned.ResolveExtent(frameHeight: 32, frameWidth: 64).Height)
         );
     }
     [Fact]
     public void A_one_off_source_is_an_hlsl_compute_pass_unless_its_kind_is_given() {
-        var compute = ShaderPipelineDefinition.FromShaderSource(
+        var compute = RenderGraphDefinition.FromShaderSource(
             "compute",
             "effect.hlsl"
         );
 
         Assert.Equal(
-            ShaderPipelinePassKind.Compute,
-            compute.Passes[0].Kind
+            ShaderPipelineDocumentPassKind.Compute,
+            compute.ShaderPasses[0].Kind
         );
         Assert.Equal(
             "main",
-            compute.Passes[0].EntryPoint
+            compute.ShaderPasses[0].EntryPoint
         );
         Assert.Equal(
-            ShaderPipelinePassKind.Fullscreen,
-            ShaderPipelineDefinition.FromShaderSource(
-                kind: ShaderPipelinePassKind.Fullscreen,
+            ShaderPipelineDocumentPassKind.Fullscreen,
+            RenderGraphDefinition.FromShaderSource(
+                kind: ShaderPipelineDocumentPassKind.Fullscreen,
                 name: "fragment",
                 sourcePath: "effect.frag.hlsl"
-            ).Passes[0].Kind
+            ).ShaderPasses[0].Kind
         );
-        Assert.Throws<ArgumentException>(testCode: () => ShaderPipelineDefinition.FromShaderSource(
+        Assert.Throws<ArgumentException>(testCode: () => RenderGraphDefinition.FromShaderSource(
             "glsl",
             "effect.glsl"
         ));
-        Assert.Throws<ArgumentException>(testCode: () => ShaderPipelineDefinition.FromShaderSource(
+        Assert.Throws<ArgumentException>(testCode: () => RenderGraphDefinition.FromShaderSource(
             "unknown",
             "effect.shader"
         ));
     }
     [Fact]
-    public void Parameter_layout_binds_defaults_after_the_frame_members() {
+    public void Parameter_layout_binds_defaults_after_the_pass_extent() {
         var config = new Dictionary<string, ShaderConfigField> {
             ["amount"] = new ShaderConfigField(
             ShaderValueType.Float,
@@ -343,10 +371,13 @@ public sealed class ShaderPipelineTests {
             [],
             ["out"]
         ) with { Config = config };
-        var layout = ShaderPipelineParameterLayout.Resolve(pass: pass);
+        var layout = ShaderPipelineParameterLayout.Resolve(
+            pass: pass,
+            resources: OutResources
+        );
 
         Assert.Equal(
-            expected: FrameMembersEnd,
+            expected: ExtentEnd,
             actual: layout.Slots[0].Offset
         );
         Assert.True(
@@ -373,39 +404,97 @@ public sealed class ShaderPipelineTests {
         );
     }
     [Fact]
+    public void A_block_array_config_field_binds_row_by_row_and_refuses_another_count_or_element() {
+        var config = new Dictionary<string, ShaderConfigField> {
+            ["rows"] = new ShaderConfigField(
+                ShaderValueType.Float4,
+                Default: JsonDocument.Parse("[[1, 2, 3, 4], [5, 6, 7, 8]]").RootElement.Clone(),
+                Length: 2
+            ),
+        };
+        var layout = ShaderPipelineParameterLayout.Resolve(
+            pass: (Pass(
+                "configured",
+                [],
+                ["out"]
+            ) with { Config = config }),
+            resources: OutResources
+        );
+
+        // A block array starts a 16-byte row after the extent and holds one row an element.
+        Assert.Equal(
+            expected: 16u,
+            actual: layout.Slots[0].Offset
+        );
+        Assert.Equal(
+            expected: 48u,
+            actual: layout.SizeBytes
+        );
+        Assert.True(
+            condition: layout.TryBind(
+                config: null,
+                reason: out var reason,
+                values: out var values
+            ),
+            reason
+        );
+        Assert.Equal(
+            expected: [1f, 2f, 3f, 4f, 5f, 6f, 7f, 8f],
+            actual: System.Runtime.InteropServices.MemoryMarshal.Cast<byte, float>(span: values.Bytes.Span.Slice(length: 32, start: 16)).ToArray()
+        );
+        Assert.False(condition: layout.TryBind(
+            config: JsonDocument.Parse("{\"rows\": [[1, 2, 3, 4]]}").RootElement,
+            reason: out reason,
+            values: out _
+        ));
+        Assert.Equal(
+            actual: reason,
+            expected: "'rows' must be an array of 2 elements, each an array of 4 numbers."
+        );
+        _ = Assert.Throws<InvalidDataException>(testCode: () => ShaderConfigBinding.ValidateSchema(
+            ownerName: "narrow",
+            schema: new Dictionary<string, ShaderConfigField> {
+                ["rows"] = new ShaderConfigField(ShaderValueType.Float2, Length: 2),
+            }
+        ));
+    }
+    [Fact]
     public void Parameter_layout_uses_ordinal_names_for_vector_packing() {
         var config = new Dictionary<string, ShaderConfigField> {
             ["zVector"] = new ShaderConfigField(ShaderValueType.Float2),
             ["aScalar"] = new ShaderConfigField(ShaderValueType.Float),
             ["mVector"] = new ShaderConfigField(ShaderValueType.Float3),
         };
-        var layout = ShaderPipelineParameterLayout.Resolve(pass: Pass(
-            "configured",
-            [],
-            ["out"]
-        ) with { Config = config });
+        var layout = ShaderPipelineParameterLayout.Resolve(
+            pass: (Pass(
+                "configured",
+                [],
+                ["out"]
+            ) with { Config = config }),
+            resources: OutResources
+        );
 
         Assert.Equal(
             expected: ["aScalar", "mVector", "zVector"],
             actual: layout.Slots.Select(selector: slot => slot.Name)
         );
-        // A float3 starts a 16-byte row and a float2 an 8-byte boundary, whatever the frame members before them.
+        // A float3 starts a 16-byte row and a float2 an 8-byte boundary, whatever the extent before them.
         Assert.Equal(
-            expected: FrameMembersEnd,
+            expected: ExtentEnd,
             actual: layout.Slots[0].Offset
         );
         Assert.Equal(
-            expected: 96u,
+            expected: 16u,
             actual: layout.Slots[1].Offset
         );
         Assert.Equal(
-            expected: 112u,
+            expected: 32u,
             actual: layout.Slots[2].Offset
         );
     }
     [Fact]
     public void Passes_without_outputs_are_rejected() {
-        var definition = new ShaderPipelineDefinition(
+        var definition = new RenderGraphDefinition(
             "no-output",
             [Image(
                     "out",
@@ -438,7 +527,7 @@ public sealed class ShaderPipelineTests {
             inputs,
             outputs
         ) };
-        var definition = new ShaderPipelineDefinition(
+        var definition = new RenderGraphDefinition(
             name: "snapshot",
             outputs: ["out"],
             passes: passes,
@@ -451,8 +540,8 @@ public sealed class ShaderPipelineTests {
         resources.Clear();
         passes.Clear();
 
-        Assert.Single(collection: plan.Passes[0].Declaration.InputReferences);
-        Assert.Single(collection: plan.Passes[0].Declaration.OutputReferences);
+        Assert.Single(collection: plan.Passes[0].Declaration!.InputReferences);
+        Assert.Single(collection: plan.Passes[0].Declaration!.OutputReferences);
         Assert.Equal(
             expected: 2,
             actual: plan.Resources.Count
@@ -460,7 +549,7 @@ public sealed class ShaderPipelineTests {
     }
     [Fact]
     public void Planner_orders_same_frame_dependencies_deterministically() {
-        var definition = new ShaderPipelineDefinition(
+        var definition = new RenderGraphDefinition(
             name: "chain",
             resources: [
                 Image("final"),
@@ -502,7 +591,7 @@ public sealed class ShaderPipelineTests {
     }
     [Fact]
     public void Planner_refuses_misused_depth_graphics_mrt_and_graphics_buffers() {
-        var depth = new ShaderPipelineDefinition(
+        var depth = new RenderGraphDefinition(
             name: "depth",
             resources: [new ShaderPipelineResource(
                     "depth",
@@ -525,12 +614,12 @@ public sealed class ShaderPipelineTests {
             actual: depthError.Diagnostics.Select(selector: static diagnostic => diagnostic.Code).Order(comparer: StringComparer.Ordinal)
         );
 
-        var mrt = new ShaderPipelineDefinition(
+        var mrt = new RenderGraphDefinition(
             name: "mrt",
             resources: [Image("color"), Image("velocity")],
             passes: [Pass(
                     inputs: [],
-                    kind: ShaderPipelinePassKind.Fullscreen,
+                    kind: ShaderPipelineDocumentPassKind.Fullscreen,
                     name: "draw",
                     outputs: ["color", "velocity"]
                 )],
@@ -543,7 +632,7 @@ public sealed class ShaderPipelineTests {
             filter: diagnostic => (diagnostic.Code == "SHADERPIPE_UNSUPPORTED_MRT")
         );
 
-        var fullscreenBuffer = new ShaderPipelineDefinition(
+        var fullscreenBuffer = new RenderGraphDefinition(
             name: "fullscreen-buffer",
             resources: [
                 new ShaderPipelineResource(
@@ -555,7 +644,7 @@ public sealed class ShaderPipelineTests {
                 Image("out")],
             passes: [Pass(
                     inputs: ["input"],
-                    kind: ShaderPipelinePassKind.Fullscreen,
+                    kind: ShaderPipelineDocumentPassKind.Fullscreen,
                     name: "draw",
                     outputs: ["out"]
                 )],
@@ -569,20 +658,66 @@ public sealed class ShaderPipelineTests {
         );
     }
     [Fact]
-    public void Planner_rejects_config_blocks_that_exceed_portable_push_constant_budget() {
-        var definition = new ShaderPipelineDefinition(
-            "large-config",
+    public void A_package_pass_block_is_bound_so_only_the_portable_uniform_range_limits_it() {
+        ShaderPipelinePackagePass Package(IReadOnlyDictionary<string, ShaderConfigField> config) => new(
+            Config: config,
+            InputAccesses: [],
+            Inputs: [],
+            Members: [],
+            Name: "draw",
+            OutputAccesses: [RenderGraphPortAccess.ComputeWrite],
+            Outputs: ["out"],
+            Package: "test.package"
+        );
+        ShaderPipelinePlan Compile(IReadOnlyDictionary<string, ShaderConfigField> config) => new ShaderPipelineCompiler().Compile(
+            definition: new RenderGraphDefinition(
+                "package-config",
+                [Image("out")],
+                [],
+                ["out"]
+            ),
+            packages: [Package(config: config)]
+        );
+
+        // Past the 128 bytes every Vulkan device can push, which a package's block no longer is.
+        Assert.Single(collection: Compile(config: Enumerable.Range(
+            count: 16,
+            start: 0
+        ).ToDictionary(
+            elementSelector: static _ => new ShaderConfigField(ShaderValueType.Float4),
+            keySelector: static index => $"field{index}"
+        )).Passes);
+
+        var error = Assert.Throws<ShaderPipelineCompilationException>(testCode: () => Compile(config: Enumerable.Range(
+            count: 1024,
+            start: 0
+        ).ToDictionary(
+            elementSelector: static _ => new ShaderConfigField(ShaderValueType.Float4),
+            keySelector: static index => $"field{index}"
+        )));
+
+        Assert.Contains(
+            collection: error.Diagnostics,
+            filter: diagnostic => (diagnostic.Code == "SHADERPIPE_PASS_BLOCK_LIMIT")
+        );
+    }
+    [Fact]
+    public void Planner_rejects_a_pass_block_that_exceeds_the_portable_uniform_range() {
+        var definition = new RenderGraphDefinition(
+            "huge-config",
             [Image("out")],
             [Pass(
                     "draw",
                     [],
                     ["out"]
                 ) with {
-                Config = new Dictionary<string, ShaderConfigField> {
-                    ["a"] = new(ShaderValueType.Float4),
-                    ["b"] = new(ShaderValueType.Float4),
-                    ["c"] = new(ShaderValueType.Float),
-                },
+                Config = Enumerable.Range(
+                    count: 1024,
+                    start: 0
+                ).ToDictionary(
+                    elementSelector: static _ => new ShaderConfigField(ShaderValueType.Float4),
+                    keySelector: static index => $"field{index}"
+                ),
             }],
             ["out"]
         );
@@ -591,12 +726,57 @@ public sealed class ShaderPipelineTests {
 
         Assert.Contains(
             collection: error.Diagnostics,
-            filter: diagnostic => (diagnostic.Code == "SHADERPIPE_PUSH_CONSTANT_LIMIT")
+            filter: diagnostic => (diagnostic.Code == "SHADERPIPE_PASS_BLOCK_LIMIT")
+        );
+    }
+    [Fact]
+    public void Planner_rejects_two_passes_compiling_one_source_with_different_interfaces() {
+        static ShaderPipelinePass Tinted(string name, string output, ShaderValueType tint) =>
+            Pass(
+                name,
+                [],
+                [new ResourceReference(
+                    output,
+                    As: "target"
+                )]
+            ) with {
+                Config = new Dictionary<string, ShaderConfigField>(comparer: StringComparer.Ordinal) { ["tint"] = new(Type: tint) },
+                Source = "tint.hlsl",
+            };
+        RenderGraphDefinition Definition(ShaderValueType second) => new(
+            "shared-source",
+            [Image("a"), Image("b")],
+            [Tinted(
+                    name: "first",
+                    output: "a",
+                    tint: ShaderValueType.Float
+                ), Tinted(
+                    name: "second",
+                    output: "b",
+                    tint: second
+                )],
+            ["a", "b"]
+        );
+
+        var error = Assert.Throws<ShaderPipelineCompilationException>(testCode: () => new ShaderPipelineCompiler().Compile(definition: Definition(second: ShaderValueType.Float4)));
+        var conflict = Assert.Single(
+            collection: error.Diagnostics,
+            predicate: static diagnostic => (diagnostic.Code == "SHADERPIPE_INTERFACE_CONFLICT")
+        );
+
+        Assert.Contains(
+            actualString: conflict.Message,
+            expectedSubstring: "Passes 'first' and 'second' compile 'tint.hlsl' with different config"
+        );
+        // Passes whose ports and config read one interface share the source.
+        Assert.Equal(
+            actual: new ShaderPipelineCompiler().Compile(definition: Definition(second: ShaderValueType.Float)).Passes.Count,
+            expected: 2
         );
     }
     [Fact]
     public void Planner_rejects_nonportable_workgroup_dimensions_and_invocations() {
-        var oversizedDimension = new ShaderPipelineDefinition(
+        var oversizedDimension = new RenderGraphDefinition(
             "group-dimension",
             [Image("out")],
             [Pass(
@@ -613,7 +793,7 @@ public sealed class ShaderPipelineTests {
             filter: diagnostic => (diagnostic.Code == "SHADERPIPE_WORKGROUP_LIMIT")
         );
 
-        var oversizedProduct = new ShaderPipelineDefinition(
+        var oversizedProduct = new RenderGraphDefinition(
             "group-product",
             [Image("out")],
             [Pass(
@@ -632,7 +812,7 @@ public sealed class ShaderPipelineTests {
     }
     [Fact]
     public void Planner_reports_the_resource_limit() {
-        var definition = new ShaderPipelineDefinition(
+        var definition = new RenderGraphDefinition(
             name: "limits",
             resources: [
                 Image(
@@ -659,7 +839,7 @@ public sealed class ShaderPipelineTests {
     }
     [Fact]
     public void Previous_frame_feedback_requires_history_and_initialization() {
-        var missingDeclaration = new ShaderPipelineDefinition(
+        var missingDeclaration = new RenderGraphDefinition(
             name: "feedback",
             resources: [Image("state")],
             passes: [Pass(
@@ -680,7 +860,7 @@ public sealed class ShaderPipelineTests {
             filter: diagnostic => (diagnostic.Code == "SHADERPIPE_FEEDBACK_DECLARATION")
         );
 
-        var valid = new ShaderPipelineDefinition(
+        var valid = new RenderGraphDefinition(
             name: "feedback",
             resources: [Image(
                     "state",
@@ -743,7 +923,7 @@ public sealed class ShaderPipelineTests {
             ShaderPipelineInitialization.Zero,
             history: true
         );
-        var definition = new ShaderPipelineDefinition(
+        var definition = new RenderGraphDefinition(
             "dual-read",
             [state, Image("out")],
             [
@@ -762,20 +942,20 @@ public sealed class ShaderPipelineTests {
                 )],
             ["out"]
         );
-        var display = new ShaderPipelineCompiler().Compile(definition: definition).Passes.Single(predicate: pass => (pass.Name == "display")).Declaration;
+        var display = new ShaderPipelineCompiler().Compile(definition: definition).Passes.Single(predicate: pass => (pass.Name == "display")).Declaration!;
 
         Assert.Equal(
             2,
             display.InputReferences.Count
         );
-        Assert.NotEqual(
-            display.InputReferences[0].Binding,
-            display.InputReferences[1].Binding
+        Assert.Equal(
+            actual: display.InputReferences.Select(selector: ShaderPipelinePassPorts.Identifier),
+            expected: ["state", "previousState"]
         );
     }
     [Fact]
     public void Typed_external_buffer_and_compute_outputs_are_supported() {
-        var definition = new ShaderPipelineDefinition(
+        var definition = new RenderGraphDefinition(
             name: "typed",
             resources: [
                 new ShaderPipelineResource(
@@ -799,7 +979,7 @@ public sealed class ShaderPipelineTests {
 
         Assert.Equal(
             expected: 2,
-            actual: plan.Passes[0].Declaration.OutputReferences.Count
+            actual: plan.Passes[0].Declaration!.OutputReferences.Count
         );
         Assert.Equal(
             expected: 64ul,
@@ -808,7 +988,7 @@ public sealed class ShaderPipelineTests {
     }
     [Fact]
     public void Uninitialized_resources_and_multiple_writers_are_refused() {
-        var definition = new ShaderPipelineDefinition(
+        var definition = new RenderGraphDefinition(
             name: "invalid",
             resources: [Image("out"), Image("unused")],
             passes: [Pass(

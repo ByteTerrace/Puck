@@ -2,7 +2,7 @@
 
 This directory holds the work that remains to be scheduled. Current architecture lives in the owner documents under `docs/architecture/`, and the reasoning behind each choice lives in [the decision registers](../decisions/README.md); a plan here holds packages, each with what it owns, what it delivers, and the check that closes it. [Open items](open-items.md) is the checklist of those packages.
 
-The work is five programmes. Each has one forcing artifact, and the artifacts overlap: the forcing world is built by the first programme, shipped by the second, filled by the third, and played by the fourth, so one build proves several plans. Each programme is one page and opens with an implementation status that names the commit it was checked against; treat it as evidence for that commit, and recheck the code before scheduling work from it.
+The work is six programmes. Each has one forcing artifact, and the artifacts overlap: the forcing world is built by the first programme, shipped by the second, filled by the third, played by the fourth, and laid out by hand in the sixth, so one build proves several plans. Each programme is one page and opens with an implementation status; treat it as evidence about the code it was written against, and recheck the code before scheduling work from it.
 
 ## [State and language](state-and-language.md)
 
@@ -19,6 +19,8 @@ How a world is composed, compiled, packaged, released, and rolled back, and what
 
 Hosted machines under screens and the cartridges they run, as one page of packages: the cabinet module, cabinet authoring, optional distribution, firmware and content policy, the program model, asset ingestion, the content library. Forcing artifact: the arcade's cabinet module used twice, with a retail-scale cartridge in one. Its decisions are in [the register](../decisions/machines-and-cartridges.md).
 
+- [Humble Gaming Deck](humble-gaming-deck.md)—the proposed NES and Famicom emulator core, the shared-layer changes it needs, and its accuracy target.
+
 ## [Play](play.md)
 
 The reference game's remaining engineering, its creatures and scale, the finder that admits a party across authorities, and the MCP adapter, as one page of packages. Forcing artifact: the quilt played by a group the finder admitted, with an agent authoring through MCP. Its decisions are in [the register](../decisions/play.md).
@@ -26,6 +28,10 @@ The reference game's remaining engineering, its creatures and scale, the finder 
 ## [Rendering](rendering.md)
 
 Durable GPU fixtures, per-pass work counters, general graphics attachments, shared mesh-and-SDF visibility, reproducible shader authoring, how authored world data reaches the GPU, and the frame graph that replaces the SDF engine as the host of rendering: nested views, image sources, hit-to-source mapping, temporal reconstruction, HDR output, and assets derived from SDFs, as one page of packages. Its foundation packages share no code with the other programmes; the state mirror that carries bound rows to a pass reads the state substrate and the presentation view, so those packages are scheduled against both. Its decisions are in [the register](../decisions/rendering.md).
+
+## [Editor](editor.md)
+
+The running World as the editor and debugger a builder needs, as one page of packages: build mode with the grid and snapping, selection and picking, undo and redo, debug views in every view, the inspector, answers to "why is this dark or invisible", gizmos, the editor camera, per-object cost and a GPU timing readout, live reload with before-and-after, saving edits back to source, the shape gallery as a world, and carving. Forcing artifact: a district of the forcing world laid out, lit and debugged in build mode without typing a coordinate.
 
 The current world architecture is owned by [Worlds and federation](../architecture/worlds.md). The [Reference game design](../game/design.md) defines the reference game requirements; its implementation work is in [Play](play.md).
 

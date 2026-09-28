@@ -407,6 +407,19 @@ public static class CartridgeCostMeasurement {
             name: "step-maps24"
         );
         if (target == "cgb") {
+            // Only the Color machine has an infrared receiver to read.
+            Add(
+                body: [new CartridgeStatement(
+                    Kind: "if",
+                    When: CartridgeExpressions.Gate(
+                        comparison: ExpressionOp.Equal,
+                        left: CartridgeExpressions.Of(state: CartridgeExpressions.Light),
+                        right: constant
+                    ),
+                    Then: [addConstant]
+                )],
+                name: "light-condition"
+            );
             Add(
                 body: [Step],
                 load: new CartridgeCostLoad(Music: true),

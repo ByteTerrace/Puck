@@ -45,7 +45,9 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
     private readonly ID3D11Texture2D*[] m_outputTargets;
     private readonly ID3D11UnorderedAccessView* m_outputUav;
     private readonly long m_periodTicks;
-    private readonly ID3D11Query* m_query;
+    // Signals the output ring's shared fence after each cycle's writes, as every Direct3D 11 producer does; the channel
+    // readback that follows waits for the cycle on the CPU either way.
+    private readonly Win32D3D11CompletionSignal m_completion;
     private readonly int m_registerCount;
     private readonly ProbeReadingRing m_ring;
     private readonly LatestSlotPublication? m_slots;
@@ -125,7 +127,7 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
         ID3D11Buffer* channelsStaging = null;
         ID3D11ComputeShader* accumulateShader = null;
         ID3D11ComputeShader* finalizeShader = null;
-        ID3D11Query* query = null;
+        Win32D3D11CompletionSignal? completion = null;
         ID3D11Texture2D* output = null;
         ID3D11UnorderedAccessView* outputUav = null;
         var outputTargets = new ID3D11Texture2D*[0];
@@ -313,14 +315,13 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
                 entry: request.FinalizeEntry
             );
 
-            var queryDescription = new D3D11_QUERY_DESC { Query = D3D11_QUERY.D3D11_QUERY_EVENT };
-
-            device->CreateQuery(
-                pQueryDesc: &queryDescription,
-                ppQuery: &query
+            completion = new Win32D3D11CompletionSignal(
+                context: ((nint)context),
+                device: ((nint)device),
+                sharedFenceHandle: (request.Output?.SharedFenceHandle ?? 0)
             );
         } catch {
-            Release(value: query);
+            completion?.Dispose();
             Release(value: finalizeShader);
             Release(value: accumulateShader);
             Release(values: outputTargets);
@@ -348,11 +349,14 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
         m_output = output;
         m_outputTargets = outputTargets;
         m_outputUav = outputUav;
-        m_query = query;
+        m_completion = completion!;
     }
 
     public long Cycles => Interlocked.Read(location: ref m_cycles);
     public long Drops => Interlocked.Read(location: ref m_drops);
+    /// <summary>Gets how the kernel's output writes are ordered before the consumer reads them: the output ring's shared
+    /// fence, or the CPU wait and why.</summary>
+    public SharedFenceOrder Order => m_completion.Order;
 
     public void SetConstants(ReadOnlyMemory<byte> constants) {
         if (constants.Length != m_constantsLength) {
@@ -417,12 +421,16 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
         Dispatch(
             channels: out var channels,
             confidence: out var confidence,
+            fenceValue: out var fenceValue,
             inputViews: views,
             slot: slot
         );
 
         if (m_slots is { } publication) {
-            publication.Publish(slot: slot);
+            publication.Publish(
+                fenceValue: fenceValue,
+                slot: slot
+            );
         }
 
         _ = Interlocked.Increment(location: ref m_cycles);
@@ -444,7 +452,7 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
         }
 
         m_disposed = true;
-        Release(value: m_query);
+        m_completion.Dispose();
         Release(value: m_finalizeShader);
         Release(value: m_accumulateShader);
         Release(values: m_outputTargets);
@@ -459,7 +467,7 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
         Release(value: m_constantBuffer);
     }
 
-    private void Dispatch(ReadOnlySpan<nint> inputViews, int slot, out ProbeChannelValues channels, out FixedQ4816 confidence) {
+    private void Dispatch(ReadOnlySpan<nint> inputViews, int slot, out ProbeChannelValues channels, out FixedQ4816 confidence, out ulong fenceValue) {
         Span<uint> zero = [0u, 0u, 0u, 0u];
 
         m_context->ClearUnorderedAccessViewUint(
@@ -565,10 +573,10 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
             pDstResource: ((ID3D11Resource*)m_channelsStaging),
             pSrcResource: ((ID3D11Resource*)m_channelsBuffer)
         );
-        Win32D3D11.WaitForCompletion(
-            context: m_context,
-            query: m_query
-        );
+        // The output ring hands out the fence's values, so a run restarted over the same ring continues them.
+        fenceValue = ((m_slots is { } slots)
+            ? m_completion.Complete(value: slots.NextFenceValue())
+            : m_completion.Complete());
 
         var mapped = default(D3D11_MAPPED_SUBRESOURCE);
 

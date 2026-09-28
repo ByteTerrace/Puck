@@ -25,7 +25,7 @@ internal static class PeerTestSupport {
     }
     /// <summary>Connects two fresh peers over one <see cref="InMemoryPeerConnection"/> pair — A dials, B accepts —
     /// and takes the accepted link, for a law that needs a transport fact loopback QUIC never shows on cue. The
-    /// caller owns both peers; <paramref name="clockA"/> is peer A's deadline clock.</summary>
+    /// caller owns both peers; <paramref name="clockA"/> is both peers' clock.</summary>
     public static async Task<(Peer PeerA, Peer PeerB, PeerLink LinkAtoB, PeerLink LinkBtoA, InMemoryPeerConnection ConnectionAtA, InMemoryPeerConnection ConnectionAtB)> ConnectInMemoryAsync(CancellationToken ct, TimeProvider? clockA = null) {
         var identityA = PeerIdentity.Create();
         var identityB = PeerIdentity.Create();
@@ -40,8 +40,10 @@ internal static class PeerTestSupport {
             timeProvider: clockA,
             transport: new FakePeerTransport(dial: _ => connectionAtA)
         );
+        // Both peers read one clock: each signs its claims at its clock's instant and verifies the other's there.
         var peerB = new Peer(
             identity: identityB,
+            timeProvider: clockA,
             transport: transportB
         );
 

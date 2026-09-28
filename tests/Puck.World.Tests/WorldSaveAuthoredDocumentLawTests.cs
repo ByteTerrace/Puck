@@ -113,6 +113,7 @@ public sealed class WorldSaveAuthoredDocumentLawTests(WorldSaveAuthoredDocumentL
             var snapshot = WorldSessionLevers.Fold(
                 audio: new UnengagedAudioLever(),
                 bindingBar: new WorldBindingBarVisibility(),
+                editor: new WorldEditorSeats(),
                 definition: WorldSessionCapture.Capture(
                     definition: server.Definition,
                     engineTick: server.CompletedEngineTicks,
@@ -180,6 +181,8 @@ public sealed class WorldSaveAuthoredDocumentLawTests(WorldSaveAuthoredDocumentL
             "src/Puck.World/Assets",
             WorldDocumentCorpus.CanaryDirectory,
             WorldDocumentCorpus.FixtureDirectory,
+            // The verdicts' composition library, which canary sources import.
+            "tests/Puck.World.Verdicts/composition",
             "worlds",
         ];
 

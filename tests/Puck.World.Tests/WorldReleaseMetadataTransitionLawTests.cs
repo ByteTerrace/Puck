@@ -357,6 +357,55 @@ public sealed class WorldReleaseMetadataTransitionLawTests {
             title: "Release B"
         );
     }
+    // Both packages are proved through a drawn copy: a package whose census reads a row no boot can draw passes the
+    // undrawn document's own validation and is still refused, and the same package with a boot draw is admitted.
+    [Fact]
+    public void BothPackageDefinitionsAreProvedThroughADrawnCopy() {
+        using var fixture = Fixtures.FreshServer(Fixtures.BuildDocument());
+        var checkpoint = Capture(fixture: fixture);
+        var drawn = PublishableDefinitionLawTests.CensusDefinition(draw: new Draw(
+            Generator: new StateGenerator(
+                Source: GeneratorSource.WeightedNumeric,
+                Weighted: [new GeneratorWeightedNumeric(Value: 8L, Weight: 1UL)]
+            ),
+            Timing: DrawTiming.Boot
+        ));
+        var undrawable = PublishableDefinitionLawTests.CensusDefinition(draw: null);
+
+        Assert.True(
+            condition: WorldReleaseMetadataTransition.TryApply(
+                drawn,
+                (drawn with { Metadata = new(Title: "published") }),
+                checkpoint,
+                out var transitioned,
+                out var reason
+            ),
+            userMessage: reason
+        );
+        Assert.NotNull(@object: transitioned);
+        Assert.True(
+            condition: WorldDefinitionValidator.TryValidateLocally(
+                definition: undrawable,
+                reason: out reason
+            ),
+            userMessage: reason
+        );
+
+        foreach (var (before, after) in new[] { (undrawable, drawn), (drawn, undrawable) }) {
+            Assert.False(condition: WorldReleaseMetadataTransition.TryApply(
+                before,
+                after,
+                checkpoint,
+                out transitioned,
+                out reason
+            ));
+            Assert.Null(@object: transitioned);
+            Assert.Contains(
+                actualString: reason,
+                expectedSubstring: "bodies.capacityRow 'census'"
+            );
+        }
+    }
     [Fact]
     public void RuntimeChangesAndInvalidMetadataAreNotAdmittedByTheMetadataRule() {
         var a = Fixtures.BuildDocument();

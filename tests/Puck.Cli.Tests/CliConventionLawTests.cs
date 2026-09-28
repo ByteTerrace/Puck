@@ -23,8 +23,8 @@ public sealed partial class CliConventionLawTests {
     // Loaded by any verb's help, these mean a verb built something heavy while building its command: a compiler, a
     // build engine, a benchmark harness, or a GPU backend.
     private static readonly string[] HelpForbiddenAssemblies = [
-        "BenchmarkDotNet", "Microsoft.Build", "Microsoft.CodeAnalysis", "Puck.DirectX", "Puck.SdfVm", "Puck.ShaderVm",
-        "Puck.Shaders", "Puck.Vulkan",
+        "BenchmarkDotNet", "Microsoft.Build", "Microsoft.CodeAnalysis", "Puck.DirectX", "Puck.SdfVm", "Puck.Shaders",
+        "Puck.Vulkan",
     ];
 
     private static IReadOnlySet<CliViolation> Ledger() {

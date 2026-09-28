@@ -5,7 +5,6 @@ using Puck.Assets;
 using Puck.Vulkan.Bindings;
 using Puck.Vulkan.Interfaces;
 using Puck.Vulkan.Interop;
-using Puck.Vulkan.Messages;
 
 namespace Puck.Vulkan.Presentation;
 
@@ -33,18 +32,20 @@ public sealed class VulkanRenderer(
     IVulkanFrameSynchronizationFactory frameSynchronizationFactory,
     IVulkanFramePresenter framePresenter,
     IVulkanCommandBufferRecorder commandBufferRecorder,
-    IVulkanPhysicalDeviceApi physicalDeviceApi
+    IVulkanPhysicalDeviceApi physicalDeviceApi,
+    Func<IVulkanDeviceContext, GpuDeviceServices> createServices
 ) : IDisposable, IVulkanDeviceContext, IGpuDeviceContext, IGpuPipelineCache {
     /// <summary>The presentation frame-ring depth: how many presented frames may be in flight before
     /// <see cref="WaitForFrameSlot"/> blocks. Each slot owns a full <see cref="VulkanFrameSynchronization"/>
     /// (its own image-available semaphore and in-flight fence; the per-image render-finished semaphores ride
     /// along), so two presents can be pending without reusing a semaphore that still has a queued wait. Matches
-    /// the node-side <c>SdfWorldEngine.FrameRingSize</c> — the engine ring guards resource reuse, this ring
+    /// the node-side <c>SdfWorldTables.FrameRingSize</c> — the engine ring guards resource reuse, this ring
     /// bounds host latency.</summary>
     private const int PresentFrameRingSize = 2;
 
     private long? m_adapterLuid;
     private VulkanLogicalDevice? m_device;
+    private GpuDeviceServices? m_services;
     private int m_frameSlot;
     private VulkanFramebufferSet? m_framebufferSet;
     private uint m_height;
@@ -78,9 +79,9 @@ public sealed class VulkanRenderer(
         ))
         : 0L
     );
-    nint IGpuDeviceContext.DeviceHandle => LogicalDevice.Commands.Token;
     // Read from the physical device when the logical device is created; null without a device.
     GpuDeviceIdentity? IGpuDeviceContext.Identity => m_device?.Identity;
+    GpuDeviceCapabilities? IGpuDeviceContext.Capabilities => m_device?.Capabilities;
     // Read with the identity; the default profile, which reports nothing, without a device.
     GpuMemoryProfile IGpuDeviceContext.MemoryProfile => (m_device?.MemoryProfile ?? default);
 
@@ -92,6 +93,10 @@ public sealed class VulkanRenderer(
     public VulkanLogicalDevice LogicalDevice => Device;
     /// <summary>The selected physical device; valid after <see cref="Initialize"/>.</summary>
     public VkPhysicalDevice PhysicalDevice => m_physicalDevice;
+    /// <summary>Gets the neutral services bound to this renderer as its device context, created on the first read.
+    /// Reading it never brings the device up, and a device recreated after a loss is reached through the same
+    /// services.</summary>
+    public GpuDeviceServices Services => (Volatile.Read(location: ref m_services) ?? CreateServices());
     /// <summary>The current render pass; valid after the first <see cref="BeginFrame"/> and replaced on
     /// resize (see <see cref="PresentationResourcesRecreated"/>).</summary>
     public VulkanRenderPass RenderPass => (m_renderPass ?? throw new InvalidOperationException(message: "Presentation resources are not available until the first BeginFrame."));
@@ -105,8 +110,23 @@ public sealed class VulkanRenderer(
     /// <summary>The current swapchain; valid after the first <see cref="BeginFrame"/> and replaced on
     /// resize (see <see cref="PresentationResourcesRecreated"/>).</summary>
     public VulkanSwapchain Swapchain => (m_swapchain ?? throw new InvalidOperationException(message: "Presentation resources are not available until the first BeginFrame."));
+    /// <summary>Gets what the current swapchain presents, its format and color space, or <see langword="null"/> while no
+    /// swapchain exists.</summary>
+    public DisplayOutput? Output => m_swapchain?.Output;
 
     void IGpuDeviceContext.WaitIdle() => WaitForGpuIdle();
+
+    // The first reader's set is kept; another created by a racing first read binds nothing native and is dropped.
+    private GpuDeviceServices CreateServices() {
+        var created = createServices(this);
+
+        return (Interlocked.CompareExchange(
+            comparand: null,
+            location1: ref m_services,
+            value: created
+        ) ?? created);
+    }
+
     // The current device's cache; a device recreated after a loss brings its own, loaded from the same file.
     void IGpuPipelineCache.Persist() => m_device?.PipelineCache?.Persist();
 
@@ -180,9 +200,8 @@ public sealed class VulkanRenderer(
             throw new InvalidOperationException(message: "The selected Vulkan device does not support presenting to the window surface.");
         }
 
-        // Map the neutral presentation preferences to Vulkan: the present mode to a VkPresentModeKHR, and the
-        // surface format to whichever supported (format, color-space) pair matches the desired VkFormat. Both are
-        // passed as preferences — the factory falls back (mailbox/immediate/FIFO; formats[0]) when unsupported.
+        // All three are preferences: the factory falls back (mailbox/immediate/FIFO; SDR in the first swapchain format
+        // offered) when the surface does not support them.
         var preferredPresentMode = presentationOptions.PresentMode switch {
             PresentMode.Vsync => ((uint?)VulkanPresentMode.Fifo),
             PresentMode.Mailbox => VulkanPresentMode.Mailbox,
@@ -190,29 +209,14 @@ public sealed class VulkanRenderer(
             PresentMode.Adaptive => VulkanPresentMode.FifoRelaxed,
             _ => null,
         };
-        var desiredVkFormat = presentationOptions.SurfaceFormat switch {
-            SurfaceFormat.R8G8B8A8Unorm => ((uint?)VulkanFormat.R8G8B8A8Unorm),
-            SurfaceFormat.B8G8R8A8Unorm => VulkanFormat.B8G8R8A8Unorm,
-            _ => null,
-        };
-        VulkanSurfaceFormat? preferredSurfaceFormat = null;
-
-        if (desiredVkFormat is uint vkFormat) {
-            foreach (var format in supportDetails.SurfaceFormats) {
-                if (format.Format == vkFormat) {
-                    preferredSurfaceFormat = format;
-
-                    break;
-                }
-            }
-        }
 
         m_swapchain = swapchainFactory.Create(
             desiredHeight: height,
             desiredWidth: width,
             logicalDevice: device,
+            preferredFormat: presentationOptions.SurfaceFormat,
             preferredPresentMode: preferredPresentMode,
-            preferredSurfaceFormat: preferredSurfaceFormat,
+            requestedColorSpace: presentationOptions.ColorSpace,
             supportDetails: supportDetails,
             surface: m_surface!
         );
@@ -328,7 +332,7 @@ public sealed class VulkanRenderer(
     /// reference. A no-op until the first successful <see cref="BeginFrame"/>.</summary>
     public void Present(
         IReadOnlyList<VulkanDrawCommand> drawCommands,
-        IReadOnlyDictionary<AssetContentHash, VulkanGraphicsPipeline> graphicsPipelines
+        IReadOnlyDictionary<AssetContentHash, IGpuPipeline> graphicsPipelines
     ) {
         ArgumentNullException.ThrowIfNull(drawCommands);
         ArgumentNullException.ThrowIfNull(graphicsPipelines);
@@ -416,7 +420,7 @@ public sealed class VulkanRenderer(
     /// contract). The renderer is the published device-context capability and every node resource is a child of its
     /// device, so a presenter deactivation (a backend switch away from Vulkan) must not destroy the device under
     /// them — that is a use-after-free at their eventual release. Full device teardown belongs to <see cref="Dispose"/>
-    /// alone (the renderer is a container-owned singleton, disposed at host shutdown after the node tree).</summary>
+    /// alone (the renderer is a container-owned singleton, disposed at host shutdown after the render root).</summary>
     public void ReleasePresentation() {
         DisposePresentationResources();
         m_surface?.Dispose();

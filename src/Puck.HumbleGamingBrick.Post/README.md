@@ -20,7 +20,7 @@ directory and drains both output streams while it runs. Cancelling that test
 terminates and reaps the child process, so an interrupted run cannot leave an
 orphaned battery consuming CPU. The test sets no deadline of its own: a loaded
 machine only makes the run slower, and a deadlocked stage is caught by the
-battery's own [hang guard](../Puck.GamingBricks.Post/README.md#the-hang-guard),
+battery's own [hang guard](../Puck.Machines.Post/README.md#the-hang-guard),
 which exits 2 naming the stage.
 
 The queued-memory probe preserves both full-frame replay schedules and all 400

@@ -1,0 +1,8 @@
+namespace Puck.HumbleGamingDeck.Post;
+
+/// <summary>The battery's artifact destination and resolved external corpora.</summary>
+/// <param name="ArtifactsDirectory">The directory that receives stage reports.</param>
+/// <param name="SstRoot">The verified instruction corpus directory, or <see langword="null"/> when absent.</param>
+/// <param name="TestRomRoot">The reference-test corpus directory, or <see langword="null"/> when absent.</param>
+/// <param name="ResolveAccuracyCoinRoot">Resolves and verifies the AccuracyCoin corpus inside its stage, so errors reach the report.</param>
+internal sealed record PostContext(string ArtifactsDirectory, string? SstRoot, string? TestRomRoot, Func<string?> ResolveAccuracyCoinRoot);

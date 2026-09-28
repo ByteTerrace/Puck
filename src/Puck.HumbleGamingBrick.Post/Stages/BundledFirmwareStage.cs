@@ -1,5 +1,5 @@
 using Puck.Abstractions.Machines;
-using Puck.GamingBricks;
+using Puck.Machines;
 using Puck.HumbleGamingBrick.Forge;
 using Puck.HumbleGamingBrick.Interfaces;
 
@@ -151,7 +151,7 @@ internal sealed class BundledFirmwareStage : IPostStage<PostContext> {
         if (
             !fast.Step(
             deltaTicks: LinkedHostFixture.FrameTicks,
-            input: in pad
+            inputs: MachinePads.One(input: in pad)
         ) ||
             (fast.PeekByte(address: ResultAddress) != ResultValue)
         ) {
@@ -160,7 +160,7 @@ internal sealed class BundledFirmwareStage : IPostStage<PostContext> {
         for (var frame = 0; (frame < 40); ++frame) {
             if (!cold.Step(
                 deltaTicks: LinkedHostFixture.FrameTicks,
-                input: in pad
+                inputs: MachinePads.One(input: in pad)
             )) {
                 return "the cold queued host rejected a startup step";
             }

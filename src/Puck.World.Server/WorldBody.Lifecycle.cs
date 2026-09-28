@@ -620,7 +620,7 @@ public sealed partial class WorldBody {
     }
     /// <summary>Overrides just this body's own linear velocity — the mapped-arrival half of a portal transfer (see
     /// <c>Puck.World.WorldPlacementPortal.Arrival</c>): the source's captured velocity, rotated into the
-    /// destination's own frame by <c>Puck.World.Server.WorldPortalArrivalMath</c>, written after
+    /// destination's own frame by <see cref="WorldFrameIsometry.MapArrival"/>, written after
     /// <see cref="Pose(FixedVector3, FixedQ4816, FixedQ4816, FixedQ4816)"/>'s own hard-teleport commit — the same
     /// "AFTER Pose, never before" ordering <see cref="ApplyTransferState"/> follows, so the discontinuity has already
     /// reset <see cref="FixedPreviousPosition"/> before this runs. Deliberately narrower than
@@ -886,8 +886,9 @@ public sealed partial class WorldBody {
     public bool AtMediumBand => m_atMediumBand;
     /// <summary>Gets the body motion program this player currently executes.</summary>
     public string BodyMotionProgram => m_bodyMotionProgram.Name;
-    /// <summary>Gets the last intent after the admitted held overlay composed with the movement tier, retained only for
-    /// <c>body.channels</c>.</summary>
+    /// <summary>Gets the last intent after the admitted held overlay composed with the movement tier, with the pointer
+    /// ray the movement tier carried, retained for <c>body.channels</c> and the <c>$channel:</c> and <c>$pointer:</c>
+    /// rule reads.</summary>
     public PlayerIntent ChannelReadComposed => m_channelReadComposed;
     /// <summary>Gets the held-channel overlay admitted by the last <see cref="Advance"/>, retained only for
     /// <c>body.channels</c>.</summary>

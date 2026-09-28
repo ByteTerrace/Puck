@@ -13,10 +13,7 @@ namespace Puck.World;
 internal static class WorldDataHookInstaller {
     [ModuleInitializer]
     internal static void Install() {
-        WorldSchemaVocabularyHooks.Install(
-            postRenderExtensionCheck: WorldPostRenderExtensions.IsShipped,
-            probeKindCheck: WorldProbeKinds.IsShipped
-        );
+        WorldSchemaVocabularyHooks.Install(probeKindCheck: WorldProbeKinds.IsShipped);
         WorldDefinitionFileSource.UseLocalDocuments(source: PuckDocumentComposer.Instance);
     }
 }

@@ -1,38 +1,29 @@
-using Puck.Commands;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
-/// <summary>Settles a submitted line with the tick-boundary verdict of the edit it started.</summary>
+/// <summary>Answers the console's registered lines from a row's authority echoes.</summary>
 public static class WorldDeferredVerbSettlement {
-    /// <summary>Takes the verb a local submission registered for this verdict and settles its line with it.</summary>
-    /// <param name="echoes">The pending-verb table.</param>
-    /// <param name="echo">The verdict.</param>
-    /// <returns>The per-verb line the verdict settled with, <c>[&lt;verb&gt;: …]</c>, or <see langword="null"/> when
-    /// the verdict answers no locally registered submission.</returns>
-    /// <remarks>A host subscribes each table to its owning server's <see cref="WorldServer.EchoTap"/>: a
-    /// registered verb nothing settles holds a settling session until the table evicts it.</remarks>
-    public static string? Settle(this WorldDeferredVerbEchoes echoes, in WorldEditEcho echo) {
+    /// <summary>Answers one echo from <paramref name="row"/>'s authority through the console's table
+    /// (<see cref="WorldDeferredVerbEchoes.Answer"/>): a verdict for a line the console registered on that row settles
+    /// it, prints a rebuild or undo verb's own line and counts a refusal; any other echo answers nothing.</summary>
+    /// <param name="echoes">The console's table.</param>
+    /// <param name="echo">The echo.</param>
+    /// <param name="row">The row whose authority raised it, as its console link names it.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="echoes"/> or <paramref name="row"/> is
+    /// <see langword="null"/>.</exception>
+    /// <remarks>A host subscribes each row's <see cref="WorldServer.EchoTap"/>: a registered verb nothing answers holds a
+    /// settling session until the table evicts it.</remarks>
+    public static void Answer(this WorldDeferredVerbEchoes echoes, in WorldEditEcho echo, string row) {
         ArgumentNullException.ThrowIfNull(argument: echoes);
 
-        if (
-            (echo.ConnectionId != SubmissionEnvelope.LocalConnectionId) ||
-            !echoes.TryTake(
-                correlationId: echo.CorrelationId,
-                settlement: out var settlement,
-                verb: out var verb
-            )
-        ) {
-            return null;
-        }
-
-        var verdict = $"[{verb}: {echo.Message}]";
-
-        settlement!.Settle(result: (echo.Rejected
-            ? CommandResult.Error(output: verdict)
-            : new CommandResult(Output: verdict)
-        ));
-
-        return verdict;
+        echoes.Answer(
+            correlationId: echo.CorrelationId,
+            grantTable: (echo.Kind == WorldEditEchoKind.GrantTable),
+            local: (echo.ConnectionId == SubmissionEnvelope.LocalConnectionId),
+            message: echo.Message,
+            rejected: echo.Rejected,
+            row: row
+        );
     }
 }

@@ -20,11 +20,12 @@ namespace Puck.Cli.Schema;
 // model shape's in WorldModelShapeSource, whose reflective walk no engine process runs; this verb only
 // decides where the text goes and, under --check, whether every file agrees with what is on disk — the same
 // drift-detection shape `puck architecture --map` establishes for docs/project-map.md's layering block. The one input
-// the generator takes from outside the type model is the shipped post-render extension vocabulary: every
-// puck.shader.manifest.v1 manifest under src/*/Assets/Shaders, whose id and config schema splice into
-// render.extensions[] so an entry's config validates by id.
+// the generator takes from outside the type model is the post-process package vocabulary: every post-process package
+// of the engine's render graph catalog, whose id and config schema splice into views.post[] so a row's config validates
+// by package.
 // Exit 0 wrote/matched, 1 check found drift, 2 usage error or missing repository root.
 internal static class SchemaCommand {
+    private const string CountersCeilingsRelativePath = "tests/Puck.Counters/puck.counters.ceilings.v1.schema.json";
     private const string CountersReportRelativePath = "tests/Puck.Counters/puck.counters.report.v1.schema.json";
     private const string ProjectionRelativePath = "src/Puck.World/Assets/worlds/puck.world.projection.v1.schema.json";
     private const string ReleaseProfileRelativePath = "tests/Puck.Qualification/puck.release.profile.v1.schema.json";
@@ -36,44 +37,78 @@ internal static class SchemaCommand {
 
     private readonly record struct SchemaFile(string FullPath, string Text);
 
-    // Every src/<project>/Assets/Shaders tree is a shipped shader asset tree (the shared shader recipe ships its
-    // manifests beside its bytecode), so their manifests are the extension vocabulary the runtime catalog sees.
-    internal static List<WorldSchema.PostRenderExtensionSchema> LoadPostRenderExtensions(string repositoryRoot) {
-        var extensions = new List<WorldSchema.PostRenderExtensionSchema>();
-        var seen = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
+    /// <summary>Returns the types a file this generator writes is generated from: each fixed output's document type, and
+    /// for a world section's schema the type of the <see cref="WorldDefinition"/> property its JSON key names.</summary>
+    /// <param name="relativePath">The file, repository-relative with forward slashes.</param>
+    /// <returns>The source types, or an empty list when this generator does not write the file.</returns>
+    internal static IReadOnlyList<Type> SourceTypesOf(string relativePath) {
+        ArgumentNullException.ThrowIfNull(argument: relativePath);
 
-        foreach (var project in Directory.EnumerateDirectories(path: Path.Combine(
-            path1: repositoryRoot,
-            path2: "src"
-        )).Order(comparer: StringComparer.Ordinal)) {
-            var catalog = ShaderSetCatalog.Scan(rootDirectory: Path.Combine(
-                path1: project,
-                path2: "Assets",
-                path3: "Shaders"
-            ));
-
-            foreach (var id in catalog.Ids) {
-                if (!seen.TryAdd(
-                    key: id,
-                    value: project
-                )) {
-                    throw new InvalidDataException(message: $"Shader set '{id}' is shipped by both '{seen[id]}' and '{project}'.");
-                }
-
-                extensions.Add(item: new WorldSchema.PostRenderExtensionSchema(
-                    Id: id,
-                    ConfigSchema: catalog.Load(id: id).ConfigJsonSchema()
-                ));
-            }
+        switch (relativePath) {
+            case RootRelativePath:
+            case TypeScriptRelativePath:
+            case WorldModelShapeSource.RelativePath:
+            case ((SectionsRelativeDirectory + "/") + WorldSchema.CommonDefsFileName):
+                return [typeof(WorldDefinition)];
+            case ProjectionRelativePath:
+                return [typeof(WorldProjectionDocument)];
+            case SiloRelativePath:
+                return [typeof(WorldSiloDefinition)];
+            case RenderGraphRelativePath:
+                return [typeof(RenderGraphDefinition)];
+            case CountersReportRelativePath:
+                return [typeof(WorldCountersReport)];
+            case CountersCeilingsRelativePath:
+                return [typeof(WorldCountersCeilings)];
+            case ReleaseProfileRelativePath:
+                return [typeof(ReleaseProfile)];
         }
 
-        extensions.Sort(comparison: static (a, b) => string.CompareOrdinal(
-            strA: a.Id,
-            strB: b.Id
+        const string SectionSuffix = ".schema.json";
+
+        if (
+            !relativePath.StartsWith(comparisonType: StringComparison.Ordinal, value: (SectionsRelativeDirectory + "/")) ||
+            !relativePath.EndsWith(comparisonType: StringComparison.Ordinal, value: SectionSuffix)
+        ) {
+            return [];
+        }
+
+        var section = relativePath[(SectionsRelativeDirectory.Length + 1)..^SectionSuffix.Length];
+        var property = typeof(WorldDefinition).GetProperties().FirstOrDefault(predicate: candidate => string.Equals(
+            a: (candidate.GetCustomAttributes(attributeType: typeof(System.Text.Json.Serialization.JsonPropertyNameAttribute), inherit: true).OfType<System.Text.Json.Serialization.JsonPropertyNameAttribute>().FirstOrDefault()?.Name ?? System.Text.Json.JsonNamingPolicy.CamelCase.ConvertName(name: candidate.Name)),
+            b: section,
+            comparisonType: StringComparison.Ordinal
         ));
 
-        return extensions;
+        return ((property is null)
+            ? [typeof(WorldDefinition)]
+            : [ElementTypeOf(type: property.PropertyType)]
+        );
     }
+
+    // A section's own shape: a list's or a nullable's element, as the schema describes each entry.
+    private static Type ElementTypeOf(Type type) {
+        if (Nullable.GetUnderlyingType(nullableType: type) is { } underlying) {
+            return underlying;
+        }
+
+        return ((type.IsGenericType && (type.GetGenericArguments() is [var element]))
+            ? element
+            : type
+        );
+    }
+
+    // The engine catalog's post-process packages, each with its config schema, the vocabulary views.post[] validates
+    // against.
+    internal static List<WorldSchema.PostProcessPackageSchema> PostProcessPackages() => [.. RenderGraphPackageCatalog.Engine.Packages
+        .Where(predicate: static package => package.IsPostProcess)
+        .Select(selector: static package => new WorldSchema.PostProcessPackageSchema(
+            ConfigSchema: ShaderConfigBinding.JsonSchema(
+                description: package.Summary,
+                schema: package.Config
+            ),
+            Package: package.Id
+        ))];
 
     private static SchemaFile At(string repositoryRoot, string relativePath, string text) => new(
         FullPath: Path.Combine(
@@ -235,8 +270,8 @@ internal static class SchemaCommand {
             return CliExit.Refused;
         }
 
-        var postRenderExtensions = LoadPostRenderExtensions(repositoryRoot: repositoryRoot);
-        var split = WorldSchema.Export(postRenderExtensions: postRenderExtensions);
+        var postProcessPackages = PostProcessPackages();
+        var split = WorldSchema.Export(postProcessPackages: postProcessPackages);
         var bundled = WorldSchema.Bundle(split: split);
 
         if (bundle) {
@@ -259,7 +294,7 @@ internal static class SchemaCommand {
             At(
                 relativePath: ProjectionRelativePath,
                 repositoryRoot: repositoryRoot,
-                text: WorldSchema.ToCanonicalText(node: WorldSchema.ExportProjection(postRenderExtensions: postRenderExtensions))
+                text: WorldSchema.ToCanonicalText(node: WorldSchema.ExportProjection(postProcessPackages: postProcessPackages))
             ),
             At(
                 relativePath: SiloRelativePath,
@@ -280,6 +315,11 @@ internal static class SchemaCommand {
                 relativePath: CountersReportRelativePath,
                 repositoryRoot: repositoryRoot,
                 text: WorldSchema.ToCanonicalText(node: WorldSchema.ExportCountersReport())
+            ),
+            At(
+                relativePath: CountersCeilingsRelativePath,
+                repositoryRoot: repositoryRoot,
+                text: WorldSchema.ToCanonicalText(node: WorldSchema.ExportCountersCeilings())
             ),
             At(
                 relativePath: ReleaseProfileRelativePath,
@@ -400,8 +440,8 @@ internal static class SchemaCommand {
             (System.Text.Json's JsonSchemaExporter), never hand-maintained. Descriptions come from
             the model assemblies' XML documentation files; when one is missing the schema still
             writes, with no descriptions, and this verb says so on standard error.
-            render.extensions[] takes its id vocabulary and per-id config schema from the shipped
-            puck.shader.manifest.v1 manifests under src/*/Assets/Shaders.
+            views.post[] takes its package vocabulary and per-package config schema from the
+            post-process packages of the engine's render graph catalog.
 
             Written to:
               src/Puck.World/Assets/worlds/puck.world.definition.v1.schema.json (the root)
@@ -410,6 +450,7 @@ internal static class SchemaCommand {
               src/Puck.World/Assets/worlds/puck.world.projection.v1.schema.json (the egress document)
               src/Puck.World.Silo/Assets/puck.silo.configuration.v1.schema.json (the silo document)
               tests/Puck.Counters/puck.counters.report.v1.schema.json (the report puck counters writes)
+              tests/Puck.Counters/puck.counters.ceilings.v1.schema.json (the ceilings puck counters checks)
               tests/Puck.Qualification/puck.release.profile.v1.schema.json (the profile puck qualify reads)
               src/Puck.Shaders/Assets/puck.render.graph.v1.schema.json (the frame-graph document)
               src/Puck.Dashboard/src/portal/src/document/worldDefinition.generated.ts (the portal's

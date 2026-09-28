@@ -1,6 +1,6 @@
 using System.Runtime.Versioning;
 using Puck.Abstractions.Gpu;
-using Puck.DirectX.Apis;
+using Puck.Testing;
 using Puck.DirectX.Interop;
 using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.Graphics.Dxgi.Common;
@@ -20,7 +20,8 @@ public sealed class ConsoleErrorCollection {
 /// nor a depth stencil, created with an optimized clear value. The runtime refuses the creation, so no resource exists,
 /// and the debug layer stores a message that <see cref="DirectXDeviceContext.DrainDebugMessages"/> prints.
 /// <para>The live-object report at teardown is held the same way: an object still alive when the context releases the
-/// device is written as a <c>[d3d12-debug] live</c> line, which fails a debug-layer run like any other debug message,
+/// device is written as a <c>[d3d12-debug] live</c> line carrying the name it was created with
+/// (<see cref="GpuObjectName"/>), which fails a debug-layer run like any other debug message,
 /// and a teardown that leaks nothing writes no <c>[d3d12-debug]</c> line at all.</para>
 /// Each test skips when the host has no Direct3D 12 device or the debug layer is not installed.
 /// </summary>
@@ -34,9 +35,13 @@ public sealed unsafe class DirectXDebugLayerLivenessTests {
     public void ALeakedObjectIsReportedLiveWhenTheDeviceIsTornDown() {
         var output = new StringWriter();
         var context = DebugContext(output: output);
-        var leaked = new DirectXGpuStorageBufferFactory().Create(
-            deviceContext: context,
-            sizeBytes: 256
+        var leaked = new DirectXGpuBufferFactory(deviceContext: context).CreateHostVisible(
+            name: new GpuObjectName(
+                owner: "law",
+                part: "leaked"
+            ),
+            sizeBytes: 256,
+            usage: GpuBufferUsage.Storage
         );
 
         try {
@@ -47,6 +52,9 @@ public sealed unsafe class DirectXDebugLayerLivenessTests {
 
         var lines = DebugLines(output: output);
 
+        // The layer's own words, for the record of a run.
+        Console.Error.Write(value: output.ToString());
+
         Assert.Contains(
             collection: lines,
             filter: static line => (line.StartsWith(
@@ -55,6 +63,9 @@ public sealed unsafe class DirectXDebugLayerLivenessTests {
             ) && line.Contains(
                 comparisonType: StringComparison.Ordinal,
                 value: "ID3D12Resource"
+            ) && line.Contains(
+                comparisonType: StringComparison.Ordinal,
+                value: "law/leaked"
             ))
         );
         Assert.DoesNotContain(
@@ -70,9 +81,10 @@ public sealed unsafe class DirectXDebugLayerLivenessTests {
         var output = new StringWriter();
         var context = DebugContext(output: output);
 
-        new DirectXGpuStorageBufferFactory().Create(
-            deviceContext: context,
-            sizeBytes: 256
+        new DirectXGpuBufferFactory(deviceContext: context).CreateHostVisible(
+            name: default,
+            sizeBytes: 256,
+            usage: GpuBufferUsage.Storage
         ).Dispose();
         context.Dispose();
 
@@ -102,8 +114,9 @@ public sealed unsafe class DirectXDebugLayerLivenessTests {
             if (texture is not null) {
                 _ = ((IUnknown*)texture)->Release();
             }
-        } catch (Exception exception) when ((exception is ArgumentException or System.Runtime.InteropServices.COMException)) {
-            // The refusal is the expected outcome; the stored message is what the test reads.
+        } catch (DirectXException) {
+            // The refusal (E_INVALIDARG, through the checked create) is the expected outcome; the stored message is what the
+            // test reads.
         }
 
         context.DrainDebugMessages();
@@ -123,31 +136,8 @@ public sealed unsafe class DirectXDebugLayerLivenessTests {
         );
     }
 
-    // A context on the default adapter with the debug layer on, its device created; skips when either is unavailable.
-    private static DirectXDeviceContext DebugContext(StringWriter output) {
-        var context = new DirectXDeviceContext(
-            adapterLuid: 0,
-            deviceApi: new DirectXNativeDeviceApi(),
-            minimumFeatureLevel: DirectXFeatureLevel.Level110
-        ) {
-            DebugOutput = output,
-            EnableDebugLayer = true,
-        };
-
-        try {
-            _ = context.DeviceHandle;
-        } catch (GpuDeviceUnavailableException exception) {
-            context.Dispose();
-            Assert.Skip(reason: $"no Direct3D 12 device with the debug layer on this host: {exception.Message}");
-        }
-
-        if (!context.HasDebugLayer) {
-            context.Dispose();
-            Assert.Skip(reason: "the Direct3D 12 debug layer did not load on this host");
-        }
-
-        return context;
-    }
+    private static DirectXDeviceContext DebugContext(StringWriter output) =>
+        DirectXTestDevices.Debug(output: output);
     private static List<string> DebugLines(StringWriter output) {
         using var reader = new StringReader(s: output.ToString());
         var lines = new List<string>();

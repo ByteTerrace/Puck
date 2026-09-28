@@ -324,6 +324,15 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         ));
     }
     /// <inheritdoc/>
+    public RuleFact Read(PointerOperand operand) {
+        ArgumentNullException.ThrowIfNull(argument: operand);
+
+        return RuleFact.Finite(
+            kind: operand.ValueKind,
+            value: ReadPointer(operand: operand)
+        );
+    }
+    /// <inheritdoc/>
     public RuleFact Read(NearestOperand operand) {
         ArgumentNullException.ThrowIfNull(argument: operand);
 

@@ -14,14 +14,17 @@ namespace Puck.Cli.Ratchets;
 /// tracked tree instead and measures every file with the analyzer's own count. By default a verb rewrites its ledger
 /// from the tree: it removes stale entries and lowers fallen ones, and refuses (exit 2, naming the file) to raise a
 /// recorded count or record a new file. <c>--ceiling</c> lowers the ceiling and records every file over the new one
-/// at its current count, and creates a missing ledger. <c>--check</c> writes nothing, reports every stale entry,
-/// every recorded file that rose, and every unrecorded file over the ceiling, and exits 1 on any.</summary>
+/// at its current count, and creates a missing ledger. <c>--check</c> writes nothing, reports a ledger whose bytes
+/// differ from what the verb writes, every stale entry, every recorded file that rose, and every unrecorded file over
+/// the ceiling, and exits 1 on any.</summary>
 internal static class RatchetCommand {
     private static readonly Regex GeneratedName = new(
         options: RegexOptions.Compiled | RegexOptions.IgnoreCase,
         pattern: @"\.(g|generated|designer|g\.i)\.cs$"
     );
-    private static readonly Gate LengthsGate = new(
+
+    /// <summary>Gets <c>puck lengths</c>'s gate over <c>FileLengths.json</c>.</summary>
+    internal static readonly Gate LengthsGate = new(
         LedgerFileName: FileLengthAnalyzer.FileName,
         Measure: static text => FileLengthAnalyzer.CountLines(text: SourceText.From(text: text)),
         Measured: "is",
@@ -29,7 +32,8 @@ internal static class RatchetCommand {
         Unit: "line(s)",
         Verb: "lengths"
     );
-    private static readonly Gate CommentSmellsGate = new(
+    /// <summary>Gets <c>puck comment-smells</c>'s gate over <c>CommentSmells.json</c>.</summary>
+    internal static readonly Gate CommentSmellsGate = new(
         LedgerFileName: CommentSmellAnalyzer.FileName,
         Measure: static text => CommentSmellClassifier.CountSmells(root: CSharpSyntaxTree.ParseText(
             options: CSharpParseOptions.Default.WithLanguageVersion(version: LanguageVersion.Preview),
@@ -65,6 +69,40 @@ internal static class RatchetCommand {
         RatchetVerdict.Grew => $"grew: '{finding.Key}' {gate.Measured} {finding.Count} {gate.Unit}, over the {finding.Recorded} recorded; a recorded count may only fall",
         _ => $"new: '{finding.Key}' {gate.Measured} {finding.Count} {gate.Unit}, over the ceiling of {ceiling} and not recorded; {gate.Remedy} rather than recording it",
     };
+
+    /// <summary>The <c>--check</c> verdict on a ledger against the measured tree: a ledger whose text is not its
+    /// canonical form (<see cref="RatchetLedger.Render()"/>) first, then every stale, risen and unrecorded-over-ceiling
+    /// file. A ledger has one spelling, so a reordered entry or a hand-spaced line is refused as drift even when every
+    /// count holds, and the next rewrite never churns it.</summary>
+    /// <param name="gate">The ledger's gate.</param>
+    /// <param name="ledger">The ledger parsed from <paramref name="ledgerText"/>.</param>
+    /// <param name="ledgerText">The ledger file's text.</param>
+    /// <param name="measured">Every measured file's count, by ledger key.</param>
+    /// <returns>Every problem, each naming its fix; empty when the ledger holds.</returns>
+    internal static IReadOnlyList<string> Check(Gate gate, RatchetLedger ledger, string ledgerText, IReadOnlyDictionary<string, int> measured) {
+        var problems = new List<string>();
+
+        if (!string.Equals(
+            a: ledgerText,
+            b: ledger.Render(),
+            comparisonType: StringComparison.Ordinal
+        )) {
+            problems.Add(item: $"not canonical: '{gate.LedgerFileName}' differs from the form the writer produces (entries in ordinal key order, four-space indentation, one final line feed); run 'puck {gate.Verb}' without --check to rewrite it");
+        }
+
+        var reconciliation = ledger.Reconcile(measured: measured);
+
+        foreach (var finding in reconciliation.Findings) {
+            problems.Add(item: Describe(
+                ceiling: reconciliation.Ceiling,
+                finding: finding,
+                gate: gate
+            ));
+        }
+
+        return problems;
+    }
+
     // The trees the root build compiles; experimental/ is quarantined and never reaches the analyzers.
     private static Dictionary<string, int> MeasureTree(string repositoryRoot, Gate gate) {
         var result = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
@@ -126,11 +164,14 @@ internal static class RatchetCommand {
             path2: gate.LedgerFileName
         );
         RatchetLedger ledger;
+        string? ledgerText = null;
 
         if (File.Exists(path: ledgerPath)) {
+            ledgerText = File.ReadAllText(path: ledgerPath);
+
             if (!RatchetLedger.TryParse(
                 error: out var error,
-                json: File.ReadAllText(path: ledgerPath),
+                json: ledgerText,
                 ledger: out var parsed
             )) {
                 return CliExit.Refuse(
@@ -165,30 +206,35 @@ internal static class RatchetCommand {
             );
         }
 
-        var reconciliation = ledger.Reconcile(
-            ceiling: ceiling,
-            measured: MeasureTree(
-                gate: gate,
-                repositoryRoot: repositoryRoot
-            )
+        var measured = MeasureTree(
+            gate: gate,
+            repositoryRoot: repositoryRoot
         );
 
         if (check) {
-            foreach (var finding in reconciliation.Findings) {
-                Console.Error.WriteLine(value: $"{gate.Verb}: {Describe(
-                    ceiling: reconciliation.Ceiling,
-                    finding: finding,
-                    gate: gate
-                )}");
+            var problems = Check(
+                gate: gate,
+                ledger: ledger,
+                ledgerText: ledgerText!,
+                measured: measured
+            );
+
+            foreach (var problem in problems) {
+                Console.Error.WriteLine(value: $"{gate.Verb}: {problem}");
             }
 
-            Console.WriteLine(value: $"{gate.Verb}: ceiling {reconciliation.Ceiling}; {ledger.RecordedCount} recorded file(s); {reconciliation.Findings.Count} problem(s).");
+            Console.WriteLine(value: $"{gate.Verb}: ceiling {ledger.Ceiling}; {ledger.RecordedCount} recorded file(s); {problems.Count} problem(s).");
 
-            return ((reconciliation.Findings.Count == 0)
+            return ((problems.Count == 0)
                 ? CliExit.Success
                 : CliExit.Failed
             );
         }
+
+        var reconciliation = ledger.Reconcile(
+            ceiling: ceiling,
+            measured: measured
+        );
 
         if (reconciliation.Refused) {
             _ = CliExit.Refuse(
@@ -223,7 +269,7 @@ internal static class RatchetCommand {
         return CliExit.Success;
     }
     private static Command Create(Gate gate, string description, string detail) {
-        var check = CliOptions.Check(description: $"Write nothing; report every stale, risen, and unrecorded-over-ceiling file in {gate.LedgerFileName}, and exit 1 on any.");
+        var check = CliOptions.Check(description: $"Write nothing; report every stale, risen, and unrecorded-over-ceiling file in {gate.LedgerFileName}, and a ledger whose bytes differ from what the verb writes, and exit 1 on any.");
         var ceiling = new Option<int?>(name: "--ceiling") {
             Description = $"Lower the ledger's ceiling to this count, recording every file over it at its current count; creates a missing {gate.LedgerFileName}.",
         };
@@ -258,6 +304,11 @@ internal static class RatchetCommand {
             an unrecorded file over the ceiling, is refused (exit 2, naming the file) and nothing
             is written.
 
+            The ledger has one spelling, the one this verb writes: entries in ordinal key order,
+            four-space indentation, one final line feed. --check reports a ledger whose bytes
+            differ from it as drift, even when every count holds; rerun without --check to
+            rewrite it.
+
             Exit codes: 0 written, or clean under --check; 1 drift under --check; 2 a refused
             rise or new file, a raised ceiling, or an unusable ledger.
             """,
@@ -277,13 +328,18 @@ internal static class RatchetCommand {
             The line count is line breaks plus one, what the analyzer counts. Generated files
             (*.g.cs and auto-generated headers) are outside the rule, as they are for the analyzer.
 
+            The ledger has one spelling, the one this verb writes: entries in ordinal key order,
+            four-space indentation, one final line feed. --check reports a ledger whose bytes
+            differ from it as drift, even when every count holds; rerun without --check to
+            rewrite it.
+
             Exit codes: 0 written, or clean under --check; 1 drift under --check; 2 a refused
             growth or new file, a raised ceiling, or an unusable ledger.
             """,
         gate: LengthsGate
     );
 
-    // One ledger's verb: its name, ledger, the analyzer's own per-file count over a file's text, and the verb, unit
-    // and remedy its findings are reported in.
-    private sealed record Gate(string Verb, string LedgerFileName, Func<string, int> Measure, string Measured, string Unit, string Remedy);
+    /// <summary>One ledger's verb: its name, ledger, the analyzer's own per-file count over a file's text, and the
+    /// verb, unit and remedy its findings are reported in.</summary>
+    internal sealed record Gate(string Verb, string LedgerFileName, Func<string, int> Measure, string Measured, string Unit, string Remedy);
 }

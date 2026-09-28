@@ -1,8 +1,19 @@
+using Puck.World.Protocol;
+
 namespace Puck.World.Server;
 
 public sealed partial class WorldServer {
-    private bool m_authorityRetiring;
+    /// <summary>The refusal code every submission a stopped activation answers carries.</summary>
+    public const string StoppedCode = "world.authority.stopped";
 
+    // Cancelled, never disposed, by Stop: a late reader of Stopped still gets the cancelled token.
+    private readonly CancellationTokenSource m_stopped = new();
+
+    private bool m_authorityRetiring;
+    private string? m_stopReason;
+
+    /// <summary>Gets a token cancelled when this activation stops (<see cref="Stop"/>).</summary>
+    public CancellationToken Stopped => m_stopped.Token;
     /// <summary>Whether this activation has permanently closed admission and simulation for retirement.
     /// A failed final save does not reopen it; only a new server activation can accept work again.</summary>
     public bool IsRetiring { get { lock (m_authorityGate) { return m_authorityRetiring; } } }
@@ -27,6 +38,32 @@ public sealed partial class WorldServer {
             m_authorityRetiring = true;
         }
     }
+    /// <summary>Stops this activation for good: admission closes, and every submission still pending (a mutation, a
+    /// rebuild, an undo, from any submitter) is answered now with a refusal naming the stop, through the same answers a
+    /// refusal at the tick boundary gives — the typed completion and the edit echo — so no submitter waits for a tick
+    /// that never comes. A submission arriving afterwards is refused the same way. Repeated calls are harmless.</summary>
+    /// <param name="reason">Why the activation stopped, as the refusals name it.</param>
+    public void Stop(string reason) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: reason);
+
+        lock (m_authorityGate) {
+            if (m_stopReason is not null) {
+                return;
+            }
+
+            m_stopReason = reason;
+            m_authorityRetiring = true;
+            m_document.RefusePending(reason: reason);
+        }
+
+        m_stopped.Cancel();
+    }
+
+    /// <summary>Returns the refusal a submission to this activation meets once it has frozen for retirement or stopped.</summary>
+    /// <returns>The refusal.</returns>
+    internal WorldSubmissionResult.Refusal RetiredRefusal() => ((m_stopReason is { } reason)
+        ? new WorldSubmissionResult.Refusal(Code: StoppedCode, Detail: reason)
+        : new WorldSubmissionResult.Refusal(Code: "world.authority.retiring", Detail: "authority is retiring and no longer admits submissions"));
 
     private void ThrowIfAuthorityRetiring() {
         if (m_authorityRetiring) {

@@ -1,0 +1,16 @@
+# The engine ready first: its pipeline set installed and its first frame produced.
+world.wait ready 45
+# Ticks enough for the export to render, the probe's output ring to provision, and the kernel to run on the render
+# adapter's own host.
+world.wait 150
+# The probe's run and its latest reading of the exported view.
+probe.status
+# The placed screen showing the probe's output reads its source instance without a fault.
+screen.state 24
+# The screen line names the probe as its source, bound, ordered by the output ring's shared fence, at the export's extent.
+world.screens
+# The eye camera's extent edited live: its export is made again at the new extent, and the probe's output ring with it.
+world.row.set cameras {"anchor":null,"name":"eye","renderHeight":27,"renderWidth":48,"rig":{"name":"eye","operations":[{"$type":"anchor","subject":{"$type":"worldPoint","point":[0,1,-9]}},{"$type":"lookAt","subject":{"$type":"worldPoint","point":[0,1,-12]}},{"$type":"fieldOfView","fieldOfViewRadians":0.9}],"version":"puck.camera.program.v1"}}
+world.wait 150
+probe.status
+world.screens

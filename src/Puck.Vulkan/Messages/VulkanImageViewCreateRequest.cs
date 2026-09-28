@@ -9,9 +9,11 @@ namespace Puck.Vulkan.Messages;
 /// <param name="ImageHandle">The native <c>VkImage</c> handle the view is created on.</param>
 /// <param name="AspectMask">The <c>VkImageAspectFlags</c> the view covers: <see cref="VulkanGpuFormats.ColorAspect"/>
 /// for a color image, <see cref="VulkanGpuFormats.DepthAspect"/> for a depth image.</param>
+/// <param name="LevelCount">The number of mip levels the view covers, from level 0.</param>
 public readonly record struct VulkanImageViewCreateRequest(
     VulkanDeviceCommands Device,
     uint Format,
     nint ImageHandle,
-    uint AspectMask = VulkanGpuFormats.ColorAspect
+    uint AspectMask = VulkanGpuFormats.ColorAspect,
+    uint LevelCount = 1U
 );

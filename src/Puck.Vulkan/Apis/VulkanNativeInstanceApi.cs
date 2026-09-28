@@ -21,13 +21,14 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
     // Request Vulkan 1.3 as the hard floor: SPIR-V 1.6 is core in 1.3, and every Puck kernel now
     // compiles at -fspv-target-env=vulkan1.3, so a lower instance would refuse those modules at
     // vkCreateShaderModule. 1.3 also makes core vkGetPhysicalDeviceFeatures2, buffer-device-address,
-    // and subgroup-size-control available. All four supported GPUs (RTX 2070, RTX 4070, Steam Machine
+    // and subgroup-size-control available. All four supported GPUs (RTX 2060, RTX 4070, Steam Machine
     // [RDNA3], Steam Deck [RDNA2]) expose 1.3 on current drivers; pre-1.1 loaders that would reject a
     // higher requested version are effectively extinct. The device-side floor is enforced separately in
     // VulkanPhysicalDeviceSelector (a device may report a lower ApiVersion than the loader).
     private const uint VulkanApiVersion13 = (1u << 22) | (3u << 12);
 
     private readonly IAllocator m_allocator;
+    private readonly VulkanProcResolver m_procedures;
     private readonly Lock m_syncRoot = new();
 
     private unsafe delegate* unmanaged[Cdecl]<in VkInstanceCreateInfo, nint, out nint, VkResult> m_createInstance;
@@ -35,11 +36,15 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
 
     /// <summary>Initializes a new instance of the <see cref="VulkanNativeInstanceApi"/> class.</summary>
     /// <param name="allocator">The unmanaged allocator used to marshal native Vulkan structures.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="allocator"/> is <see langword="null"/>.</exception>
-    public VulkanNativeInstanceApi(IAllocator allocator) {
+    /// <param name="procedures">The resolver the instance's command table is resolved and counted through.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="allocator"/> or <paramref name="procedures"/> is
+    /// <see langword="null"/>.</exception>
+    public VulkanNativeInstanceApi(IAllocator allocator, VulkanProcResolver procedures) {
         ArgumentNullException.ThrowIfNull(argument: allocator);
+        ArgumentNullException.ThrowIfNull(argument: procedures);
 
         m_allocator = allocator;
+        m_procedures = procedures;
     }
 
     // The messenger configuration shared by the standalone messenger (vkCreateDebugUtilsMessengerEXT) and the
@@ -127,6 +132,35 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
         return VulkanApiVersion13;
     }
 
+    /// <summary>Fills a create chain and links it for <c>vkCreateInstance</c>'s <c>pNext</c> when validation is on: the
+    /// validation features, enabling synchronization validation, then a messenger create-info, so the layer's messages
+    /// raised during <c>vkCreateInstance</c> and <c>vkDestroyInstance</c>, which the standalone messenger cannot see,
+    /// also reach the console. With validation off it links nothing.</summary>
+    /// <param name="chain">The chain to fill, at an address that stays valid until the create call returns.</param>
+    /// <param name="enableValidation">Whether the validation layer is enabled.</param>
+    /// <returns>The chain's head, the validation features; zero when <paramref name="enableValidation"/> is
+    /// <see langword="false"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="chain"/> is <see langword="null"/>.</exception>
+    public static nint LinkCreateChain(VulkanInstanceCreateChain* chain, bool enableValidation) {
+        if (null == chain) {
+            throw new ArgumentNullException(paramName: nameof(chain));
+        }
+
+        if (!enableValidation) {
+            return 0;
+        }
+
+        chain->EnabledFeature = VulkanInstanceCreateChain.SynchronizationValidation;
+        chain->Messenger = BuildMessengerCreateInfo();
+        chain->ValidationFeatures = new VkValidationFeaturesExt {
+            EnabledValidationFeatureCount = 1,
+            EnabledValidationFeatures = ((nint)(&chain->EnabledFeature)),
+            Next = ((nint)(&chain->Messenger)),
+            StructureType = VulkanInstanceCreateChain.ValidationFeaturesStructureType,
+        };
+
+        return ((nint)(&chain->ValidationFeatures));
+    }
     /// <inheritdoc/>
     public nint CreateDebugMessenger(VulkanInstanceCommands instance) {
         if (instance is null) {
@@ -176,21 +210,18 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
             StructureType = VkStructureTypeApplicationInfo,
         };
 
-        // Chain a messenger create-info into pNext when validation is on, so validation messages raised DURING
-        // vkCreateInstance / vkDestroyInstance — which the standalone messenger (created only after the instance
-        // exists, and destroyed before it) cannot see — also reach the callback. VK_EXT_debug_utils is enabled
-        // alongside validation, so the chained struct is valid exactly when EnableValidation is set. The local
-        // stays in scope through the synchronous create call below, so its address is valid for the chain.
-        var messengerInfo = BuildMessengerCreateInfo();
+        // The local stays in scope through the synchronous create call below, so its address is valid for the chain.
+        VulkanInstanceCreateChain chain = default;
         var createInfo = new VkInstanceCreateInfo {
             ApplicationInfo = m_allocator.Alloc(size: Marshal.SizeOf<VkApplicationInfo>()),
             EnabledExtensionCount = checked((uint)request.ExtensionNames.Count),
             EnabledExtensionNames = extensionNames.Pointer,
             EnabledLayerCount = checked((uint)request.LayerNames.Count),
             EnabledLayerNames = layerNames.Pointer,
-            Next = (request.EnableValidation
-            ? (nint)(&messengerInfo)
-            : 0),
+            Next = LinkCreateChain(
+                chain: &chain,
+                enableValidation: request.EnableValidation
+            ),
             StructureType = VkStructureTypeInstanceCreateInfo,
         };
 
@@ -213,7 +244,10 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
                 (0 != instanceHandle)
             ) {
                 try {
-                    instance = new VulkanInstanceCommands(instanceHandle: instanceHandle);
+                    instance = new VulkanInstanceCommands(
+                        instanceHandle: instanceHandle,
+                        procedures: m_procedures
+                    );
                 } catch {
                     DestroyUnresolvedInstance(instanceHandle: instanceHandle);
 
@@ -254,7 +288,7 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
         );
     }
     /// <inheritdoc/>
-    public bool HasInstanceExtension(string extensionName) {
+    public bool HasInstanceExtension(string extensionName, string? layerName) {
         ArgumentException.ThrowIfNullOrEmpty(argument: extensionName);
 
         var enumerate = GetEnumerateInstanceExtensionProperties();
@@ -263,13 +297,15 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
             return false;
         }
 
+        using var layer = ((layerName is null)
+            ? null
+            : Utf8StringScope.Create(value: layerName));
+        var layerPointer = ((byte*)(layer?.Pointer ?? 0));
         var count = 0U;
 
-        // pLayerName == null enumerates the loader's core + implicit-layer instance extensions (which is where the
-        // debug-utils extension is advertised), independent of any explicit validation layer.
         if (
             (VkResult.Success != enumerate(
-            null,
+            layerPointer,
             &count,
             null
         )) ||
@@ -284,7 +320,7 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
             // A second enumeration can legitimately return Incomplete if the list grew between calls; the entries
             // that were written are still valid.
             var result = enumerate(
-                null,
+                layerPointer,
                 &count,
                 propertiesPointer
             );
@@ -312,8 +348,8 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
 
     // An instance whose command table could not be built is still a live VkInstance; destroy it before the failure
     // propagates, resolving vkDestroyInstance alone because no table exists to hold it.
-    private static unsafe void DestroyUnresolvedInstance(nint instanceHandle) {
-        var destroyInstance = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveOptionalInstanceProc(
+    private unsafe void DestroyUnresolvedInstance(nint instanceHandle) {
+        var destroyInstance = ((delegate* unmanaged[Cdecl]<nint, nint, void>)m_procedures.ResolveOptionalInstanceProc(
             functionName: "vkDestroyInstance"u8,
             instanceHandle: instanceHandle
         ));

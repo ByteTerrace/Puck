@@ -234,6 +234,17 @@ public sealed partial class PlayerRoster {
         ? name
         : null
     );
+    /// <summary>Returns the kind the roster classified a device as, or <see langword="null"/> for a device it has never
+    /// classified.</summary>
+    /// <param name="device">The device id.</param>
+    /// <returns>The device's kind, or <see langword="null"/>.</returns>
+    public InputDeviceKind? KindOf(InputDeviceId device) => (m_deviceKind.TryGetValue(
+        key: device,
+        value: out var kind
+    )
+        ? kind
+        : null
+    );
     /// <summary>The slot (0-based) a device currently owns, or <see langword="null"/> if it is unmapped.</summary>
     /// <param name="device">The device id.</param>
     public int? DeviceSlot(InputDeviceId device) => (m_deviceToSlot.TryGetValue(

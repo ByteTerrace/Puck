@@ -159,9 +159,9 @@ locally: `IServerLink.SubmitEnvelope` returns the minted correlation id
 registers it against its verb name in `WorldDeferredVerbEchoes` (the
 registering `Submit(link, mutation, echoes, verb)` overload), and the
 `EchoTap` subscriber (`WorldPostBuildWiring`) takes the entry back when the
-verdict fires — a LOCAL submission's rejection prints an accountable
-`[<verb>: …]` stderr line beside the verb-agnostic narration; an accepted
-verdict takes its entry silently.
+verdict fires — a LOCAL submission's verdict prints an accountable
+`[<verb>: …]` line, on stderr beside the verb-agnostic narration for a
+rejection and on stdout for an acceptance.
 
 ## The link
 
@@ -174,6 +174,10 @@ verdict takes its entry silently.
   `Submit`), so the transport never names `WorldServer`.
 - `IClientSink` — 6 deliveries: `DeliverSnapshot`, `DeliverAnswer`,
   `DeliverDefinition` (a shape change), `DeliverState` (a value-only write),
+  both carrying the definition's `WorldDocumentVersion` (activation plus install
+  ordinal, also on every `WorldMutationOutcome`; a mutation payload composed on a
+  read carries that activation as `ExpectedActivation`, refused on mismatch as
+  `world.mutation.activation_mismatch`),
   `DeliverComposition`, `DeliverSessionLever`.
 - `AttachSink` is a subscribe (multi-sink via `WorldOutputHub`, with a primer
   snapshot to the newly attached sink only).

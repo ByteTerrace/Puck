@@ -244,7 +244,7 @@ internal static class StateEvidenceCommand {
             Console.WriteLine(value: $"state-evidence: {target.Id}: {(forms.Count - targetFailures)}/{forms.Count} instruction services reproduced.");
         }
         if (failures == 0) {
-            Console.WriteLine(value: "state-evidence: instruction-service evidence reproduced; kernel formulas, unresolved helper paths, and memory profiles are outside this check.");
+            Console.WriteLine(value: "state-evidence: instruction-service evidence reproduced; the kernels' lowering, their paths and the memory profiles are outside this check, and --capture checks the lowering.");
         }
         foreach (var entry in ReferenceSchedule.Coverage) {
             Console.WriteLine(value: $"state-evidence: {entry.Vocabulary}: {entry.Priced}/{entry.Registered} operation(s) priced, {entry.Unmodeled.Count} unmodeled.");

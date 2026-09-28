@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Abstractions.Presentation;
+using Puck.Commands;
 using Puck.Overlays;
 using Puck.World.Client;
 
@@ -42,9 +43,11 @@ internal readonly record struct WorldCursorStatus(
 /// <c>FeedTick</c>, after the frame's dress resolved each seat's viewport + camera) it reads the pointer store's
 /// NON-DESTRUCTIVE state (position, held buttons — never the drained motion/wheel accumulators, which belong to
 /// <see cref="WorldSeatViewInput"/>), applies THE visibility rule (one place, below), hover-tests the authored HUD
-/// panels' published rects, and publishes one <see cref="OverlayCursorFrame"/>. Everything here is presentation/
-/// session state: nothing rides a <see cref="Puck.Commands.CommandSnapshot"/>, touches the binding vocabulary, or
-/// reaches the simulation.
+/// panels' published rects, asks the render graph host's presentation picker which display pane is under the pointer
+/// (<see cref="WorldViewGraphHost.Hover"/>, the presentation destination), and publishes one
+/// <see cref="OverlayCursorFrame"/> carrying the hovered pane's rect for the overlay to outline. Everything here is
+/// presentation/session state: nothing rides a <see cref="Puck.Commands.CommandSnapshot"/>, touches the binding
+/// vocabulary, or reaches the simulation.
 /// </summary>
 internal sealed class WorldCursorFeed {
     // The eight held-button words, indexed by the L|R|M bit mask — interned so the per-frame status never
@@ -54,6 +57,7 @@ internal sealed class WorldCursorFeed {
     private readonly WorldClient m_client;
     private readonly WorldOverlayFacts m_facts;
     private readonly IHudSource m_hud;
+    private readonly WorldViewGraphHost m_panes;
     private readonly WorldPointer m_pointer;
     private readonly PlayerRoster m_roster;
     private readonly CursorStore m_store;
@@ -61,8 +65,9 @@ internal sealed class WorldCursorFeed {
     private readonly WorldSeatViewInput m_viewInput;
     private readonly WorldSeatViewports m_viewports;
 
-    // The hover-label cache: labels re-format only when the hovered panel changes (a per-frame string would ride
-    // the frame path; the same human-cadence discipline every overlay feed here follows).
+    // The hover-label cache: labels re-format only when the hovered panel or pane changes (a per-frame string would
+    // ride the frame path; the same human-cadence discipline every overlay feed here follows). At most one is set.
+    private string? m_hoverPaneName;
     private string? m_hoverPanelId;
 
     private readonly OverlayCursorSeat[] m_seats = new OverlayCursorSeat[PlayerRoster.MaxSlots];
@@ -89,10 +94,13 @@ internal sealed class WorldCursorFeed {
     /// <param name="hud">The authored HUD structure source (panel rects, the overlay-side hover targets).</param>
     /// <param name="store">The cursor store the overlay reads.</param>
     /// <param name="facts">The overlay-visibility fact evaluator the cursor policy's <c>visible</c> reads.</param>
+    /// <param name="panes">The render graph host whose published panes the pointer hovers.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldCursorFeed(WorldPointer pointer, PlayerRoster roster, WorldClient client, WorldSeatViewInput viewInput, WorldSeatViewports viewports, IHudSource hud, CursorStore store, WorldOverlayFacts facts) {
+    public WorldCursorFeed(WorldPointer pointer, PlayerRoster roster, WorldClient client, WorldSeatViewInput viewInput, WorldSeatViewports viewports, IHudSource hud, CursorStore store, WorldOverlayFacts facts, WorldViewGraphHost panes) {
         ArgumentNullException.ThrowIfNull(facts);
+        ArgumentNullException.ThrowIfNull(argument: panes);
         m_facts = facts;
+        m_panes = panes;
         ArgumentNullException.ThrowIfNull(argument: pointer);
         ArgumentNullException.ThrowIfNull(argument: roster);
         ArgumentNullException.ThrowIfNull(argument: client);
@@ -140,61 +148,24 @@ internal sealed class WorldCursorFeed {
             return "no-position";
         }
 
-        if (!view.Present) {
-            return "no-view";
-        }
-
-        // CLIENT→FRAME — the one place the two pixel spaces meet. Pointer positions arrive in CLIENT pixels
-        // (WM_MOUSEMOVE's lParam), but everything downstream — the seat viewport rects, the drawn overlay, the
-        // pick-ray unproject — lives in the FIXED frame extent the engine was constructed with (view.Width/Height).
-        // The two diverge the moment the OS window is resized: the launcher passes the live client area to
-        // presenter.BeginFrame every frame (the swapchain chases it) and both presenters STRETCH the produced frame
-        // over the whole back buffer (the fullscreen-triangle blit in DirectXSurfaceCompositor / the Vulkan
-        // SurfaceCompositor twin), so the inverse of that presentation scale — per-axis frame/client — is the one
-        // honest mapping, and it puts the drawn cursor under the physical pointer at any window size. Before the
-        // first RenderViews publishes a client extent (or if it ever publishes zero), the spaces are taken as
-        // coincident — the boot configuration, where the swapchain extent equals the constructed frame extent.
-        var clientWidth = m_viewports.ClientWidth;
-        var clientHeight = m_viewports.ClientHeight;
-
-        if (
-            (clientWidth > 0) &&
-            (clientHeight > 0)
-        ) {
-            framePosition = new Vector2(
-                x: (position.X * (view.Width / ((float)clientWidth))),
-                y: (position.Y * (view.Height / ((float)clientHeight)))
-            );
-        }
-
-        var regionWidthPx = (view.Region.Width * view.Width);
-        var regionHeightPx = (view.Region.Height * view.Height);
-
-        if (
-            (regionWidthPx < 1f) ||
-            (regionHeightPx < 1f)
-        ) {
-            return "no-view";
-        }
-
-        localX = ((framePosition.X - (view.Region.X * view.Width)) / regionWidthPx);
-        localY = ((framePosition.Y - (view.Region.Y * view.Height)) / regionHeightPx);
-
-        if (
-            (localX < 0f) ||
-            (localX > 1f) ||
-            (localY < 0f) ||
-            (localY > 1f)
-        ) {
-            return "outside-viewport";
-        }
-
-        var steering = m_viewInput.IsSteering(slot: slot);
-
-        return (steering
-            ? "orbit-drag"
-            : null
+        var place = m_viewports.Locate(
+            framePosition: out framePosition,
+            local: out var local,
+            position: position,
+            view: in view
         );
+
+        localX = local.X;
+        localY = local.Y;
+
+        return place switch {
+            WorldSeatPointerPlace.NoView => "no-view",
+            WorldSeatPointerPlace.OutsideViewport => "outside-viewport",
+            _ => (m_viewInput.IsSteering(slot: slot)
+                ? "orbit-drag"
+                : null
+            ),
+        };
     }
     // The overlay-side hover test: the world-scope HUD panels' screen-space rects, then the seat's OWN player-scope
     // panel (its rect is local to the seat viewport). Panels are tested in reverse document order so the topmost-drawn
@@ -248,19 +219,23 @@ internal sealed class WorldCursorFeed {
 
         return null;
     }
-    // The hover resolution: the authored HUD panels' published rects (they draw over the world). Returns the
-    // hovered panel's label, or empty — there is no world-row pick program any more (the editor tool that consumed
-    // it was deleted with the editor.* verb surface).
-    private string ResolveHover(Vector2 framePosition, in WorldSeatView view) {
+    // The hover resolution: the authored HUD panels' published rects first (they draw over the world and its panes),
+    // then the display pane the picker hovers. Returns the hovered thing's label, or empty — there is no world-row
+    // pick program any more (the editor tool that consumed it was deleted with the editor.* verb surface).
+    private string ResolveHover(Vector2 framePosition, in WorldSeatView view, SourceMapping? pane) {
         if (HoveredPanelId(
             framePosition: framePosition,
             view: in view
         ) is { } panelId) {
-            if (!string.Equals(
-                a: panelId,
-                b: m_hoverPanelId,
-                comparisonType: StringComparison.Ordinal
-            )) {
+            if (
+                (m_hoverPaneName is not null) ||
+                !string.Equals(
+                    a: panelId,
+                    b: m_hoverPanelId,
+                    comparisonType: StringComparison.Ordinal
+                )
+            ) {
+                m_hoverPaneName = null;
                 m_hoverPanelId = panelId;
                 m_hoverLabel = $"panel '{panelId}'";
             }
@@ -268,12 +243,59 @@ internal sealed class WorldCursorFeed {
             return m_hoverLabel;
         }
 
-        if (m_hoverPanelId is not null) {
-            m_hoverPanelId = null;
-            m_hoverLabel = string.Empty;
+        if (pane?.Source.Name is { } paneName) {
+            if (
+                (m_hoverPanelId is not null) ||
+                !string.Equals(
+                    a: paneName,
+                    b: m_hoverPaneName,
+                    comparisonType: StringComparison.Ordinal
+                )
+            ) {
+                m_hoverPanelId = null;
+                m_hoverPaneName = paneName;
+                m_hoverLabel = $"pane '{paneName}'";
+            }
+
+            return m_hoverLabel;
         }
 
+        ClearHoverLabel();
+
         return m_hoverLabel;
+    }
+    private void ClearHoverLabel() {
+        m_hoverPaneName = null;
+        m_hoverPanelId = null;
+        m_hoverLabel = string.Empty;
+    }
+    // The presentation destination's hover: the display pane under the pointer, asked of the render graph host's
+    // picker in DISPLAY pixels (the client position scaled by display over client per axis, the same stretch Locate
+    // inverts), whenever the pointer rests on the window and the authored cursor policy shows it, whether or not it
+    // sits inside its seat's own viewport, since a pane can lie beside the seat's view. A steering drag, a hidden
+    // policy or no position hovers no pane.
+    private SourceMapping? ResolvePane(Vector2 position, bool shown) {
+        if (!shown) {
+            m_panes.ClearHover();
+
+            return null;
+        }
+
+        var clientWidth = m_viewports.ClientWidth;
+        var clientHeight = m_viewports.ClientHeight;
+        var point = position;
+
+        if (
+            (clientWidth > 0) &&
+            (clientHeight > 0)
+        ) {
+            point = new Vector2(
+                x: (position.X * (m_panes.DisplayWidth / ((float)clientWidth))),
+                y: (position.Y * (m_panes.DisplayHeight / ((float)clientHeight)))
+            );
+        }
+
+        return m_panes.Hover(point: point);
     }
     // The world-authored role token mapped onto the overlay's concrete color role (Puck.World.Schema cannot reference
     // Puck.Overlays, so the document speaks its own closed token set and this is the one mapping).
@@ -286,8 +308,9 @@ internal sealed class WorldCursorFeed {
 
     /// <summary>Recomposes and publishes this frame's cursor frame (the overlay's <c>FeedTick</c>).</summary>
     public void Tick() {
-        // The process has one pointer, so at most one cursor entry publishes per frame.
-        var slot = WorldPointerSlot.Resolve(roster: m_roster);
+        // The process has one pointer, riding the seat of the device that moved it last and none after it left the
+        // window, so at most one cursor entry publishes per frame.
+        var slot = (m_pointer.Positioned?.Slot ?? WorldPointerSlot.Resolve(roster: m_roster));
         var count = 0;
         var position = m_pointer.Position(slot: slot);
         var view = m_viewports.Seat(slot: slot);
@@ -305,6 +328,22 @@ internal sealed class WorldCursorFeed {
         // world.row.set hud.defaults edit applies on the very next composed frame. The engine draws no cursor of
         // its own: an unauthored policy is a hidden cursor, decided like any other reason.
         var cursorPolicy = m_client.Definition.Hud.Defaults?.Cursor;
+        // The pointer rests on the display, not steering, under a policy that shows it: what both the drawn cursor
+        // (inside its seat's viewport) and the pane hover (anywhere on the display) require. A null reason implies the
+        // first two, so the policy's condition decides the drawn cursor exactly as it did alone.
+        var shown = (
+            m_pointer.HasPosition(slot: slot) &&
+            !m_viewInput.IsSteering(slot: slot) &&
+            (cursorPolicy is not null) &&
+            m_facts.Evaluate(
+                predicate: cursorPolicy.Visible,
+                slot: slot
+            )
+        );
+        var pane = ResolvePane(
+            position: position,
+            shown: shown
+        );
 
         if (
             (reason is null) &&
@@ -316,10 +355,7 @@ internal sealed class WorldCursorFeed {
         // The authored cursor policy's own visibility condition hides the cursor like any other decided reason.
         if (
             (reason is null) &&
-            !m_facts.Evaluate(
-            predicate: cursorPolicy!.Visible,
-            slot: slot
-        )
+            !shown
         ) {
             reason = "visible-false";
         }
@@ -329,6 +365,7 @@ internal sealed class WorldCursorFeed {
 
             hover = ResolveHover(
                 framePosition: framePosition,
+                pane: pane,
                 view: in view
             );
             m_seats[count++] = new OverlayCursorSeat(
@@ -344,10 +381,9 @@ internal sealed class WorldCursorFeed {
                 ),
                 Role: RoleOf(role: policy.Role)
             );
-        } else if (m_hoverPanelId is not null) {
-            // A hidden cursor hovers nothing: clear the cache so re-showing over the same spot re-resolves fresh.
-            m_hoverPanelId = null;
-            m_hoverLabel = string.Empty;
+        } else {
+            // A hidden cursor carries no label: clear the cache so re-showing over the same spot re-resolves fresh.
+            ClearHoverLabel();
         }
 
         var buttonMask = (m_pointer.IsButtonDown(
@@ -385,9 +421,14 @@ internal sealed class WorldCursorFeed {
             SystemReleaseCount: m_pointer.SystemReleaseCount(slot: slot),
             Buttons: ButtonWords[buttonMask]
         );
-        m_store.Publish(frame: new OverlayCursorFrame(Seats: m_seats.AsMemory(
-            length: count,
-            start: 0
-        )));
+        m_store.Publish(frame: new OverlayCursorFrame(
+            HoveredPane: ((pane?.Placement is SourcePlacement.Pane { Region: var hoveredRegion })
+                ? hoveredRegion
+                : null),
+            Seats: m_seats.AsMemory(
+                length: count,
+                start: 0
+            )
+        ));
     }
 }

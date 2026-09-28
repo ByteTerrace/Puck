@@ -14,6 +14,11 @@
     "targetHertz": 60,
     "width": 1280
   },
+  "imports": [
+    {
+      "document": "quality"
+    }
+  ],
   "schema": "puck.world.definition.v1",
   "views": {
     "layouts": [
@@ -24,7 +29,7 @@
           {
             "camera": null,
             "height": 1,
-            "pipeline": "ink",
+            "instance": "ink",
             "width": 1,
             "x": 0,
             "y": 0
@@ -55,11 +60,11 @@
       ],
       "version": "puck.camera.program.v1"
     },
-    "pipelines": [
+    "graphs": [
       {
         "camera": null,
         "name": "ink",
-        "source": "../pipelines/ink.pipeline.json",
+        "source": "../pipelines/ink.graph.json",
         "timeScale": 1
       }
     ]

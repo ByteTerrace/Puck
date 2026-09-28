@@ -3,11 +3,12 @@ using System.Numerics;
 
 namespace Puck.Shaders.Tests;
 
-/// <summary>A pass reads its frame block only through the declarations generated from its interface, and the host
-/// writes it through <see cref="ShaderPipelineParameterLayout.WriteFrame"/>. These laws compile every shipped pass, find
-/// where DXC placed each member in both bytecodes of every pass that reads the block (DXC drops a block its
-/// configuration never reads), and hold the bytes the host writer put there to the value it was given; and they hold
-/// the checked-in declarations of the shipped film grain set to the generator.</summary>
+/// <summary>A pass reads its frame values and extent only through the declarations generated from its interface, and the
+/// host writes them through <see cref="ShaderPipelineParameterLayout.WriteFrame"/> and
+/// <see cref="ShaderPipelineParameterLayout.WriteExtent"/>. These laws compile every shipped pass, find where DXC placed
+/// each member in both bytecodes of every pass that reads a block (DXC drops a block its configuration never reads),
+/// and hold the bytes the host writer put there to the value it was given; and they hold the checked-in declarations of
+/// the shipped film grain set to the generator.</summary>
 public sealed class ShaderFrameBlockLawTests {
     private static readonly ShaderFrameValues Values = new(
         CameraFov: 0.75f,
@@ -32,6 +33,7 @@ public sealed class ShaderFrameBlockLawTests {
         ),
         PointerDown: true,
         PointerPresses: 12,
+        Tick: 0x0123456789ABCDEFUL,
         Time: 13.5,
         TimeDelta: 0.25
     );
@@ -53,26 +55,30 @@ public sealed class ShaderFrameBlockLawTests {
     };
 
     public static TheoryData<string> ShippedSources => new(values: [
-        "src/Puck.World/Assets/pipelines/ink.pipeline.json",
-        "tests/Puck.World.Canaries/pipeline-package/tint.pipeline.json",
+        "src/Puck.World/Assets/pipelines/ink.graph.json",
+        "tests/Puck.World.Canaries/pipeline-package/tint.graph.json",
         "src/Puck.World/Assets/pipelines/moth.hlsl",
         "worlds/genesis/card.hlsl",
     ]);
 
     private static uint Bits(float value) => BitConverter.SingleToUInt32Bits(value: value);
-    private static byte[] HostBlock(ShaderPipelineParameterLayout layout) {
-        var block = new byte[layout.SizeBytes];
+    // The blocks the host writes for a layout, by set: the frame group block and the pass block, which holds the extent.
+    private static Dictionary<uint, byte[]> HostBlocks(ShaderPipelineParameterLayout layout) {
+        var pass = new byte[layout.SizeBytes];
+        var frame = new byte[layout.FrameBlockSizeBytes];
 
-        layout.WriteFrame(
-            block: block,
-            frame: 77,
+        layout.WriteExtent(
+            block: pass,
             height: 360,
-            tick: 0x0123456789ABCDEFUL,
-            values: Values,
             width: 640
         );
+        layout.WriteFrame(
+            block: frame,
+            frame: 77,
+            values: Values
+        );
 
-        return block;
+        return new() { [0] = frame, [3] = pass };
     }
     // Holds every frame member the module reflects to the word the host writer put at the reflected offset.
     private static int AssertHostWords(ShaderInterfaceBinding reflected, byte[] block) {
@@ -98,23 +104,53 @@ public sealed class ShaderFrameBlockLawTests {
 
         return checkedMembers;
     }
+    // Holds every block a module reflects to the host's block of its set, and every frame member of it to its word: a
+    // frame group block holds every frame value, and a pass block the extent.
+    private static void AssertHostBlocks(IReadOnlyList<ShaderInterfaceBinding> reflected, Dictionary<uint, byte[]> blocks) {
+        foreach (var binding in reflected.Where(predicate: static binding => (binding.Members.Count != 0))) {
+            Assert.Equal(
+                actual: AssertHostWords(
+                    block: blocks[binding.Set],
+                    reflected: binding
+                ),
+                expected: ((binding.Set == 0)
+                    ? ShaderFrameInterface.FrameGroupMembers.Count
+                    : 1)
+            );
+        }
+    }
 
     [Fact]
     public void The_host_writer_puts_every_frame_member_where_the_layout_places_it() {
-        var layout = ShaderPipelineParameterLayout.For(
-            config: null,
-            interfaceName: "writer"
-        );
-        var block = HostBlock(layout: layout);
-        var group = layout.Layout.PushedGroup!;
-
-        Assert.Equal(
-            actual: AssertHostWords(
-                block: block,
-                reflected: group.Bindings[0]
+        foreach (var layout in ((ShaderPipelineParameterLayout[])[
+            ShaderPipelineParameterLayout.ForPackage(
+                config: null,
+                members: [],
+                package: "writer"
             ),
-            expected: ShaderFrameInterface.Members.Count
-        );
+            ShaderPipelineParameterLayout.Resolve(
+                pass: new ShaderPipelinePass(
+                    "writer",
+                    "writer.hlsl",
+                    "main",
+                    ShaderPipelineDocumentPassKind.Compute,
+                    [],
+                    ["image"]
+                ),
+                resources: new Dictionary<string, ShaderPipelineResource>(comparer: StringComparer.Ordinal) {
+                    ["image"] = new(
+                        "image",
+                        Format: "R8G8B8A8Unorm",
+                        Dimensions: ShaderPipelineDimensions.Relative()
+                    ),
+                }
+            ),
+        ])) {
+            AssertHostBlocks(
+                blocks: HostBlocks(layout: layout),
+                reflected: layout.Layout.Bindings
+            );
+        }
     }
     [MemberData(memberName: nameof(ShippedSources))]
     [Theory]
@@ -138,33 +174,26 @@ public sealed class ShaderFrameBlockLawTests {
                 userMessage: result.Message
             );
 
-
             foreach (var pass in result.Pipeline!.Plan.Passes) {
                 var layout = pass.Parameters;
-                var block = HostBlock(layout: layout);
+                var blocks = HostBlocks(layout: layout);
                 var shader = result.Pipeline.Shaders[pass.Name];
 
                 foreach (var (_, module) in shader.SpirvByStage) {
                     var reflected = SpirvInterfaceReader.Read(module: module.Span);
 
-                    Assert.Null(@object: layout.Layout.PushedBlockMismatch(reflected: reflected));
-
-                    if (reflected.SingleOrDefault(predicate: static binding => (binding.Kind == ShaderBindingKind.PushConstants)) is { } pushed) {
-                        Assert.Equal(
-                            actual: AssertHostWords(
-                                block: block,
-                                reflected: pushed
-                            ),
-                            expected: ShaderFrameInterface.Members.Count
-                        );
-                    }
+                    Assert.Null(@object: layout.Layout.Mismatch(reflected: reflected));
+                    AssertHostBlocks(
+                        blocks: blocks,
+                        reflected: reflected
+                    );
                 }
 
                 if (OperatingSystem.IsWindows()) {
                     using var dxil = DxilInterfaceReader.Load(toolchain: new ShaderToolchain());
 
                     foreach (var (_, container) in shader.DxilByStage) {
-                        Assert.Null(@object: layout.Layout.PushedBlockMismatch(reflected: dxil.Read(container: container.Span)));
+                        Assert.Null(@object: layout.Layout.Mismatch(reflected: dxil.Read(container: container.Span)));
                     }
                 }
             }
@@ -173,15 +202,19 @@ public sealed class ShaderFrameBlockLawTests {
         }
     }
     [Fact]
-    public void The_film_grain_set_includes_the_declarations_its_frame_layout_generates() {
-        var directory = RepositoryPaths.Resolve(relativePath: "src/Puck.SdfVm/Assets/Shaders/Sdf");
-        var manifest = ShaderSetManifest.Load(manifestPath: Path.Combine(
-            path1: AppContext.BaseDirectory,
-            path2: "Assets",
-            path3: "Shaders",
-            path4: "Sdf/sdf-film-grain.puck.shader.json"
+    public void The_film_grain_package_includes_the_declarations_its_frame_layout_generates() {
+        var directory = RepositoryPaths.Resolve(relativePath: "src/Puck.SdfVm/Assets/Shaders/Sdf/passes");
+
+        Assert.True(condition: RenderGraphPackageCatalog.Engine.TryGet(
+            id: RenderGraphPackageCatalog.SdfFilmGrain,
+            package: out var package
         ));
-        var shaderInterface = manifest.FrameLayout.Interface;
+        var layout = ShaderPipelineParameterLayout.ForPackage(
+            config: package.Config,
+            members: package.Members,
+            package: package.Id
+        );
+        var shaderInterface = layout.Interface;
 
         Assert.Equal(
             actual: File.ReadAllText(path: Path.Combine(
@@ -190,6 +223,12 @@ public sealed class ShaderFrameBlockLawTests {
             )),
             expected: ShaderInterfaceHlsl.Generate(shaderInterface: shaderInterface)
         );
-        Assert.Null(@object: manifest.FrameLayout.Layout.PushedBlockMismatch(reflected: SpirvInterfaceReader.Read(module: manifest.Bytecode["sdf-film-grain.frag.spv"].Span)));
+        // The compiled fragment stage reads every block and binding where its interface places them, the package's image
+        // and sampler among them.
+        Assert.Null(@object: layout.Layout.Mismatch(reflected: SpirvInterfaceReader.Read(module: File.ReadAllBytes(path: Path.Combine(
+            path1: AppContext.BaseDirectory,
+            path2: package.Stages!.Directory,
+            path3: (package.Stages.Fragment + ".spv")
+        )))));
     }
 }

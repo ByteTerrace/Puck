@@ -1,5 +1,5 @@
 using Puck.Abstractions.Machines;
-using Puck.GamingBricks;
+using Puck.Machines;
 using Puck.Hosting;
 using Puck.HumbleGamingBrick.Forge;
 using Puck.HumbleGamingBrick.Interfaces;
@@ -300,7 +300,7 @@ internal sealed class FirmwareReconfigureStage : IPostStage<PostContext> {
         );
         try {
             Require(
-                condition: (((HostStepTicks * core!.CyclesPerSecond) % EngineTicks.PerSecond) == 0),
+                condition: (((HostStepTicks * core!.CycleRate.Cycles) % ((ulong)RationalRateAccumulator.PhasePeriod(rate: core.CycleRate))) == 0),
                 detail: "the observation lease requires an exactly divisible host cycle budget"
             );
             return (core!.Instance.Machine.Snapshot(), core.Instance.Configuration.BootRom!.ToArray(), core.Instance.Machine.Model);
@@ -404,7 +404,7 @@ internal sealed class FirmwareReconfigureStage : IPostStage<PostContext> {
             Require(
                 condition: host.Step(
                     deltaTicks: HostStepTicks,
-                    input: in pad
+                    inputs: MachinePads.One(input: in pad)
                 ),
                 detail: "queued host rejected a cartridge segment"
             );

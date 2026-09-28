@@ -28,8 +28,10 @@ profile's publish mode, then installs a clean copy of the package in the run's
 scratch directory and qualifies that copy. It runs in two halves:
 
 1. **The functional canaries** the profile names, run on the copy's World
-   through `puck canary --world-artifact`. These are the pipeline fixtures and
-   the other offscreen GPU proofs, each checked on both backends.
+   through `puck canary --world-artifact`. These are every `pipeline-*`
+   canary, `no-device-compile`, and the other offscreen GPU proofs, each checked
+   on both backends. `ReleaseProfileLawTests` holds the profile to naming every
+   `pipeline-*` canary and only offscreen ones.
 2. **The stability matrix**: every workload at every resolution on every
    backend, offscreen. Each cell boots from a fresh state root, so its
    pipeline cache starts cold. It boots an overlay document written beside the
@@ -65,7 +67,9 @@ writes beside the worlds. Every matrix leg runs with each directory holding
 its cell. `Path` lets the World find the compiler on the search path the run
 inherits, as on a developer machine. The functional canaries always run with
 the caller's search path, because some of them build shader packages in the
-CLI before the World starts.
+CLI before the World starts. The `no-device-compile` canary still proves a
+World with no compiler: it removes every `dxc` directory from its own World's
+search path, whatever the caller's holds.
 
 **Validation layers.** The profile turns on the validation layer for both
 backends under `debugLayers`. Every World the run starts on a listed backend
@@ -79,23 +83,31 @@ is valid. Both layers also judge teardown. The Vulkan validation layer reports
 every object still alive when the device is destroyed. On Direct3D 12, the
 device context releases its own objects, asks the debug layer for every
 object the device still holds, and prints each as a `[d3d12-debug] live`
-line, which fails the cell like any other debug message. On a machine where
+line, which fails the cell like any other debug message. A Direct3D 12 device
+created with the layer prints `[d3d12] debug layer live` on standard error, or
+`[d3d12] debug layer requested but not loaded` when it has no info queue, so a
+run with no `[d3d12-debug]` message can be told from one the layer never
+watched. The Direct3D 12 recorder corrects a stated old layout from its tracked
+resource state, so a wrongly declared layout shows only on Vulkan. On a machine where
 the Direct3D 12 debug layer stops the device from being created, the
 Direct3D 12 cells are blocked and name the reason.
 
 **The matrix.** Two backends (Vulkan, then Direct3D 12), two resolutions
 (1280×800, the Steam Deck's panel and the flagship world's authored size, and
-1920×1080), and two workloads:
+1920×1080), and two workloads. Every cell's script first waits, for up to 180
+seconds, for the engine to be ready (`world.wait ready`): a clean install
+builds the engine's pipelines on a cold driver cache, so the warm-up counts
+from readiness rather than from boot.
 
 | Workload | World | What a cell does |
 |---|---|---|
-| `forcing-world` | `Assets/worlds/puck.world.json` | Warms up 300 ticks, soaks 1800, reloads the world twice with a 300-tick warm-up after each, and soaks 1800 again. |
+| `flagship` | `Assets/worlds/puck.world.json` | Warms up 300 ticks, soaks 1800, reloads the world twice with a 300-tick warm-up after each, and soaks 1800 again. |
 | `ink-pipeline` | `Assets/worlds/pipeline.world.json` | Waits for the `ink` pipeline to install, warms up 120 ticks, soaks 900, then reloads the pipeline three times, resizes its slot to half and back three times, and unloads and loads it three times, settling four counted submissions after each step. |
 
-The forcing world of the [state and language plan](../plans/state-and-language.md#the-forcing-world)
-is not authored yet, so the forcing-world workload is the flagship world the
-package ships. Every length is ticks of the world's simulation clock or frames
-the pipeline submits, never time. A workload's `timeoutSeconds` is only the
+The `flagship` workload boots the flagship world the package ships. The
+[forcing world](../plans/state-and-language.md#the-forcing-world) is not
+authored yet, so no workload boots it. Every length is ticks of the world's
+simulation clock or frames the pipeline submits, never time. A workload's `timeoutSeconds` is only the
 ceiling a hung World is killed at.
 
 ## What a cell checks
@@ -115,7 +127,15 @@ A cell reads its evidence from the World's own console:
 - **The memory threshold.** The largest `owned=` or `peak=` any inspection
   reads must not exceed the cell's `peakOwnedPipelineBytes`. `peak=` is the
   bytes a replacement of the installed graph would reach, so it bounds the
-  moment a reload or resize holds two graphs at once.
+  moment a reload or resize holds two graphs at once. When the cell sets
+  `peakDeviceLocalBytes`, the largest `gpu.memory.device-local.peak` any
+  `world.counters --json` reading reports (the `memory.vulkan` or
+  `memory.directx` source) must not exceed it, and a cell with the threshold
+  but no such reading fails.
+- **Every world reload applies.** Each `world.reload` the script sends must
+  answer that it applied. A reload refused by the World, or a submission the
+  wire codec refuses before the verb can answer, fails the cell and is quoted
+  in its findings.
 - **Every wait reached**, no pipeline candidate refused, and, with the
   validation layer on, no validation message.
 
@@ -136,20 +156,25 @@ A refused profile, package or plan also exits 2.
 
 The profile sets one threshold for the pipeline workload, peak owned pipeline
 bytes, on every cell. It is the `ink` graph's planned replacement peak at the
-cell's extent: two graphs, each holding its three storages (a 16-byte float
-simulation image and two 4-byte color images) in each of three frame slots,
-plus the two published images the node holds past a replacement. That is 152
-bytes a pixel, 155,648,000 bytes at 1280×800 and 315,187,200 at 1920×1080. The
-forcing-world workload has no pipeline, so its cells carry no threshold. The
-first run on each GPU either confirms these numbers or shows what to re-record.
+cell's extent. The installed graph's steady state holds three storages (a
+16-byte float simulation image and two 4-byte color images) in each of three
+frame slots, 72 bytes a pixel. A replacement allocates a second graph beside
+it, but the float simulation history moves into the candidate rather than
+being allocated again, so the peak is 72 + 72 − 3 × 16 = 96 bytes a pixel:
+98,304,000 bytes at 1280×800 and 199,065,600 at 1920×1080. The node counts
+these bytes from its plan rather than asking the driver, so they are the same on
+every device and backend, and the threshold is the planned peak itself: any
+byte over it fails. The `flagship` workload has no pipeline, so its cells
+carry no threshold.
 
 The profile defers three checks, and a run prints each with its reason:
 
-- **Peak device-local bytes.** No reading of the device-local bytes a World
-  process has allocated exists. The memory profile reports what the device
-  has, not what the World uses, and only a pipeline instance counts its own
-  bytes. A process-wide reading needs a byte count on the neutral GPU
-  services.
+- **Peak device-local bytes.** `memory.vulkan` and `memory.directx` count the
+  device-local bytes a World process allocates and releases at their actual
+  allocation sizes, and the peak held at once; swapchain images are never
+  counted. Every cell's `peakDeviceLocalBytes` is null, because each is set
+  from a qualification reading of the published package on the reference
+  devices and none has been taken.
 - **Frame-time median and tail**, and **reload stalls**. Both need wall-clock
   and GPU timing, which are deferred with no date. Qualification sets no
   frame-time threshold and counts that every reload installs, never how long it

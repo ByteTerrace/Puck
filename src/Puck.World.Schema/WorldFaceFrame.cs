@@ -37,7 +37,7 @@ public readonly record struct WorldFaceFrame(
     /// <remarks>The test is exact, and can be: a rotation about <c>+Y</c> leaves <c>(0,1,0)</c> bit-unchanged under
     /// <see cref="FixedQuaternion.Rotate"/> (both cross products vanish), and an authored quaternion's off-axis
     /// components below one Q48.16 unit quantize to zero at the conversion door. A frame that fails this carries
-    /// pitch or roll, which <c>Server.WorldPortalArrivalMath</c>'s yaw-only isometry cannot map.</remarks>
+    /// pitch or roll, which <see cref="WorldFrameIsometry.MapArrival"/>'s yaw-only isometry cannot map.</remarks>
     public bool IsYawOnly =>
         ((Up.X == FixedQ4816.Zero) && (Up.Y == FixedQ4816.One) && (Up.Z == FixedQ4816.Zero));
     /// <summary>Gets the frame's heading about world up, in radians — the yaw a rotation of world <c>+Z</c> onto

@@ -1,27 +1,28 @@
 using System.Buffers.Binary;
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Sources;
 
 namespace Puck.Assets.Textures;
 
 /// <summary>How a mip level's texel is filtered from the four texels of the level above it.</summary>
 public enum TextureMipFilter : byte {
-    /// <summary>Unsigned-normalized 8-bit channels (<see cref="TextureFormat.R8Unorm"/>,
-    /// <see cref="TextureFormat.Rg8Unorm"/>, <see cref="TextureFormat.Rgba8Unorm"/>), each the coverage-weighted mean of
-    /// its four codes rounded half up.</summary>
+    /// <summary>Unsigned-normalized 8-bit channels (<see cref="GpuPixelFormat.R8Unorm"/>,
+    /// <see cref="GpuPixelFormat.R8G8Unorm"/>, <see cref="GpuPixelFormat.R8G8B8A8Unorm"/>), each the coverage-weighted
+    /// mean of its four codes rounded half up.</summary>
     Average = 0,
-    /// <summary>sRGB color with linear alpha (<see cref="TextureFormat.Rgba8Unorm"/>): each color channel decoded to
+    /// <summary>sRGB color with linear alpha (<see cref="GpuPixelFormat.R8G8B8A8Unorm"/>): each color channel decoded to
     /// linear light (<c>ImageSourceConversion.Srgb8ToLinear</c>), averaged weighted by alpha, and encoded again through
     /// <c>ImageSourceConversion.LinearToSrgb8</c>; alpha is the mean of its four codes rounded half up.</summary>
     Srgb = 1,
-    /// <summary>An octahedral unit direction (<see cref="TextureFormat.Rg8Unorm"/>, see <see cref="OctahedralNormal"/>):
+    /// <summary>An octahedral unit direction (<see cref="GpuPixelFormat.R8G8Unorm"/>, see <see cref="OctahedralNormal"/>):
     /// the four directions decoded, summed weighted by coverage, and the sum encoded again, which renormalizes it. A sum of
     /// zero keeps the first texel's codes.</summary>
     OctahedralNormal = 2,
-    /// <summary>An identity (<see cref="TextureFormat.R8Unorm"/>), never blended: the value most of the four texels hold,
-    /// the smallest winning a tie.</summary>
+    /// <summary>An identity (<see cref="GpuPixelFormat.R8Unorm"/>), never blended: the value most of the four texels
+    /// hold, the smallest winning a tie.</summary>
     Majority = 3,
-    /// <summary>Linear half-precision channels (<see cref="TextureFormat.Rgba16Float"/>), each the coverage-weighted mean
-    /// of its four values in double, rounded to the nearest half.</summary>
+    /// <summary>Linear half-precision channels (<see cref="GpuPixelFormat.R16G16B16A16Float"/>), each the
+    /// coverage-weighted mean of its four values in double, rounded to the nearest half.</summary>
     Half = 4,
 }
 /// <summary>
@@ -65,22 +66,16 @@ public static class TextureMipChain {
     /// level, the filter does not suit the format, or <paramref name="coverage"/> lacks a level.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="tileTexels"/> is not a positive power of
     /// two.</exception>
-    public static byte[][] Build(byte[] level0, TextureFormat format, int width, int height, int tileTexels, TextureMipFilter filter, IReadOnlyList<byte[]>? coverage = null) {
+    public static byte[][] Build(byte[] level0, GpuPixelFormat format, int width, int height, int tileTexels, TextureMipFilter filter, IReadOnlyList<byte[]>? coverage = null) {
         ArgumentNullException.ThrowIfNull(argument: level0);
 
         var levels = new byte[LevelCount(tileTexels: tileTexels)][];
-        var texelBytes = TextureFormats.BytesPerUnit(format: format);
-
-        if ((width <= 0) || (height <= 0) || ((width % tileTexels) != 0) || ((height % tileTexels) != 0) || (level0.Length != ((width * height) * texelBytes))) {
-            throw new ArgumentException(message: $"{level0.Length} bytes of {format} are not a {width}x{height} atlas of {tileTexels}-texel tiles.", paramName: nameof(level0));
-        }
-
         var suits = filter switch {
-            TextureMipFilter.Average => (format is TextureFormat.R8Unorm or TextureFormat.Rg8Unorm or TextureFormat.Rgba8Unorm),
-            TextureMipFilter.Srgb => (format == TextureFormat.Rgba8Unorm),
-            TextureMipFilter.OctahedralNormal => (format == TextureFormat.Rg8Unorm),
-            TextureMipFilter.Majority => (format == TextureFormat.R8Unorm),
-            TextureMipFilter.Half => (format == TextureFormat.Rgba16Float),
+            TextureMipFilter.Average => (format is GpuPixelFormat.R8Unorm or GpuPixelFormat.R8G8Unorm or GpuPixelFormat.R8G8B8A8Unorm),
+            TextureMipFilter.Srgb => (format == GpuPixelFormat.R8G8B8A8Unorm),
+            TextureMipFilter.OctahedralNormal => (format == GpuPixelFormat.R8G8Unorm),
+            TextureMipFilter.Majority => (format == GpuPixelFormat.R8Unorm),
+            TextureMipFilter.Half => (format == GpuPixelFormat.R16G16B16A16Float),
             _ => false,
         };
 
@@ -88,10 +83,17 @@ public static class TextureMipChain {
             throw new ArgumentException(message: $"the {filter} filter does not read {format} texels.", paramName: nameof(filter));
         }
 
+        var texelBytes = ((int)GpuPixelFormats.UnitBytes(format: format));
+
+        if ((width <= 0) || (height <= 0) || ((width % tileTexels) != 0) || ((height % tileTexels) != 0) || (level0.Length != ((width * height) * texelBytes))) {
+            throw new ArgumentException(message: $"{level0.Length} bytes of {format} are not a {width}x{height} atlas of {tileTexels}-texel tiles.", paramName: nameof(level0));
+        }
+
         levels[0] = level0;
 
         for (var level = 1; (level < levels.Length); level++) {
-            var (sourceWidth, sourceHeight) = TextureFormats.LevelExtent(height: height, level: (level - 1), width: width);
+            var (levelWidth, levelHeight) = GpuPixelFormats.LevelExtent(height: ((uint)height), level: ((uint)(level - 1)), width: ((uint)width));
+            var (sourceWidth, sourceHeight) = (((int)levelWidth), ((int)levelHeight));
             var weights = ((coverage is null) ? null : ((level <= coverage.Count) ? coverage[(level - 1)] : null));
 
             if ((coverage is not null) && ((weights is null) || (weights.Length != (sourceWidth * sourceHeight)))) {

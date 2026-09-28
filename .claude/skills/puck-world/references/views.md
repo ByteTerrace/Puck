@@ -249,7 +249,9 @@ none of `orbit`, `offset`, or `path`, because it sits exactly at the possessed
 camera body's own pose.
 
 Named `cameras` resolve through authored anchors independently of the seat
-state. `views.layouts` maps normalized slots to joined seats or named cameras.
+state. `views.layouts` maps normalized slots to joined seats, named cameras,
+or `views.graphs` instances (`instance`; a slot names at most one of `camera`
+and `instance`).
 An empty list uses the built-in one-to-four-seat ladder. Layout transition
 duration and render scale remain authored on each layout. A layout whose
 `seatCount` no joined-seat count can reach (5+) is selectable only through
@@ -262,26 +264,75 @@ selection also publishes the `layout` context family every tick, so a world
 can flip a seat's binding group with the view (see documents.md, context
 rows).
 
-`views.graphs` rows are frame-graph instances (`WorldViewGraph`): a graph
-source, a camera, a `refresh` of exactly one positive `divisor` or `hertz`, and
-`inputs` binding a graph's external version to another row. The validator
+`views.graphs` rows are frame-graph instances (`WorldViewGraph`): a `name`, a
+`source` (a `puck.render.graph.v1` document, a one-off `.hlsl` read as a
+one-pass graph, or a `puck.shader.package.v1` directory) or an engine
+`package` producer (such as `sdf.world`), a camera, a `refresh` of exactly one
+positive `divisor` or `hertz`, `inputs` binding a graph's external version to
+another row, the per-instance `timeScale`, `output` and `overrides`
+(documents-render.md owns those three), and a `tier` (`low`, `medium`,
+`high`, `QualityTier`, written bare in `.puck`), which selects the source's
+package variant and never what it reads, so it moves no manifest, mirror or
+state hash; a package row takes none. The validator
 (`WorldDefinitionValidator.Graphs.cs`) refuses a loop of same-frame inputs
 through `RenderGraphInstanceSet.TryCreate`, naming every instance; a self-input
 and a `previousFrame` input are legal. `views.graphBudget.passPixelsPerFrame`
-is the scheduler's price ceiling. `world.budget` echoes every row with its
+is the scheduler's price ceiling, and `bytesPerTick` and `bytesPerFrame` cap
+the bytes every bound parameter together owes its pass (`WorldBindingCost`,
+priced from the document alone), refused naming the graph and the binding that
+crosses one. `world.budget` echoes every row with its
 extent ceiling, rate and planned passes (`WorldPresentationCost`, priced by
-`WorldPipelineSources.PlanGraph`). No live view renders through a row yet;
-the `rendering` skill owns the graph document and the scheduler.
+`WorldPipelineSources.PlanGraph`) and every binding with its bytes per tick and
+per frame, then the live budget: what the runtime's latest
+schedule decided for every instance, with its extent, divisor, passes,
+pass-pixels and its newest completed submission's counts (`RenderGraphLiveBudget`).
+`views.root` names the row the display
+shows; absent, the host synthesizes the root graph (`WorldRootGraph`), which
+places every instance a layout slot names over the SDF world, then runs each
+`views.post` row (`WorldViewPostPass`: `name`, `package`, `config`, a graph
+document's package pass less its ports) as a pass of its post-process package
+in order, then the overlay. A post row's `package` must be a post-process
+package the host's catalog offers (`WorldPostProcessVocabularyHook`, such as
+`sdf.film-grain`), its `name` must differ from every `views.graphs` row's, its
+`config` binds against its package's schema when the document validates
+(`WorldPostProcessVocabularyHook.PostProcessConfigCheck`, naming the row), so a
+live edit is refused as a boot is, and a world naming `views.root` authors none.
+`views.post` is edited live: `world.row.set views.post <json array>` sets the
+whole ordered list (`WorldMutation.SetViewPost`), so a pass is added, reordered
+or removed by writing the list, and the host recomposes the running root from
+the rows the document names then. A probe parameter's `post` target
+writes a row's float config field live (`WorldPostPasses`). A pane the
+active layout does not show is not scheduled, and a layout change places panes
+one frame later. The `rendering` skill owns the graph document, the scheduler
+and the host (`WorldViewGraphHost`).
 
 ## Pointer, cursor, Free Cam
+
+`WorldSourcePassthrough` is the one window input filter (`IWindowInputFilter`):
+the pump offers it every raw event before the observer, and an event it
+consumes (a key a focused passthrough source takes, a click or wheel over a
+passthrough pane) never reaches the observer or the command router. Only
+`source.passthrough open`, run as typed text from the host's own console, makes
+a pane a passthrough source; never add a document field, binding or other
+principal's door to it. A new raw-event consumer that must withhold events from
+the game joins that filter rather than adding a second one.
 
 `WorldPointerSink` is the one window observer. `WorldSeatViewInput` drains
 motion only for camera steering and asks the active preference whether the
 pointer is armed. `WorldCursorFeed` asks that same adapter whether steering is
 active, so pointer consumption and cursor visibility cannot disagree. This is
-the presentation projection only: the same relative motion, wheel, and button
-events independently enter `Puck.Commands` through `InputSources.Mouse` while
-absolute cursor position remains observer-only.
+the presentation projection: the same relative motion, wheel, and button
+events independently enter `Puck.Commands` through `InputSources.Mouse`. The
+absolute cursor position has no command source of its own; it reaches the
+simulation only as the pointer ray `WorldPointerRayCapture` casts from it
+through the seat's camera, sustained as the `source.pointer.*` commands on the
+lane of the seat that holds the mouse which moved it. The window attributes
+each position to the last physical mouse that raw input saw move (the aggregate
+cursor's default id when raw input names none), `WorldPointer` records that
+seat and device, and a seat that does not hold that mouse, a device moving
+seats (`PlayerRoster.DeviceSlotChanging`) and the pointer leaving the window
+(`WindowInputKind.PointerLeft`) all end the ray and hide the cursor until the
+next reported position.
 
 A held `player.orbit`/`player.steer` therefore turns the camera from the
 pointer store, never from a routed `mouse.motion` command — no shipped page
@@ -316,13 +367,51 @@ Free Cam do not alter the logical movement basis.
   preference, held free-look state, motion-control gate/sample, and the exact
   live yaw/pitch state used by movement/rendering.
 - `world.view.state` — reads active layout, selection reason, transition, and
-  slot occupants.
-- `world.view.pointer` — reads pointer position, viewport mapping, visibility,
-  arming reason, buttons, hover, and system-release generation.
-- `view.override camera|layout <name|auto>` — live composition override. It is
+  slot occupants; an instance slot prints as `instance:<name>`, or
+  `instance:<name>:missing` when the runtime has no such instance.
+- `world.view.pointer` — reads the seat the pointer rides (the seat of the
+  device the latest position is attributed to, `WorldPointer.Positioned`,
+  seat 1 with `reason=no-position` after the pointer left the window or a
+  device changed seats), pointer position,
+  viewport mapping (`WorldSeatViewports.Locate`, which the pointer-ray capture
+  shares), visibility, arming reason, buttons, hover (a HUD panel, else the
+  display pane the picker hovers), and system-release generation.
+- `world.view.panes [<x> <y>]` — reads the panes the root's `place` passes
+  draw, in drawing order, each as its published `SourceMapping`
+  (`WorldViewGraphHost.PublishPanes`); given a display point, it echoes the
+  presentation picker's answer (`pick=instance:<name> pixel <x>,<y>` or
+  `pick=none`) and how the hit walk through the live instance set ends
+  (`walk=<end> steps=<n> in <instance> last <kind>:<source> pixel <x>,<y>`).
+  Each view's world producer reports the screens standing in the world
+  (`WorldViewGraphHost.Screens`, the binder's `WorldScreenMappingSet`), so a
+  walk from a view's pane continues through a screen: `Producer` on a producer,
+  machine or probe source's pixel, `Unread` on a screen showing a camera view,
+  which is no live instance yet. It ends with the pane the pointer hovers
+  (`hovered=pane<i> <kind>:<name> pixel <x>,<y>` or `hovered=none`): each
+  frame `WorldCursorFeed` asks the host's picker through
+  `WorldViewGraphHost.Hover` for the pointer's display point, whenever the
+  pointer is on the window, not steering, and the cursor policy shows it,
+  inside its seat's viewport or not, and the overlay's `CursorWriter` outlines
+  the hovered pane's rect in the accent hue. Offscreen, nothing asks, so it
+  reads `none`. The drawn cursor's `hover=` names a hovered pane
+  (`pane '<name>'`) when no HUD panel is under it. It refuses by name in a
+  boot with no GPU presentation.
+- `world.screens` — lists the declared screens, then the creation faces showing
+  a source, each ending in `mapping <SourceMapping.Describe()>` (the line
+  `world.view.panes` prints for a pane) or `mapping none (<reason>)`. A boot
+  that presents nothing publishes no screen mapping (`none (not published)`).
+  It and `world.view-refresh` live in the core `ScreenCommandModule`, so
+  every boot shape answers them, offscreen and headless included.
+- `view.override camera|layout <name|auto>` — live composition override;
+  `layout toggle` and `layout next` cycle the authored layouts. It is
   bindable: a bound dispatch (wheel sector / chord row, no tokens) selects the
-  LAYOUT override by its constant Axis1D value — 0 or less clears to auto, n
-  selects the nth authored `views.layouts` row (document order, 1-based).
+  LAYOUT override by its constant Axis1D value — -1 toggles, -2 selects the
+  next, n selects the nth authored `views.layouts` row (document order,
+  1-based), and any other value clears to auto. It echoes what it submitted on
+  stdout (`[view.override: layout <name|auto>]`, `[view.override: camera
+  <name|auto>]`) and refuses by name, submitting nothing, a layout or camera
+  the live document does not author, an ordinal past its layouts, and a cycle
+  with no authored layout; a composition-grant denial prints on stderr.
 - `player.camera [seat]` — toggles Free Cam (bindable, no tokens).
 - `world.row.set views.seatRig <json>` — replace seat framing (a whole camera
   program).
@@ -343,6 +432,7 @@ Use a writable state directory when booting locally:
 world.view.camera 1
 world.view.state
 world.view.pointer
+world.view.panes 8.5 40.5
 ```
 
 The camera read-back reports pitch limits and live angles in degrees; authored

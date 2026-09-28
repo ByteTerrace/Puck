@@ -9,11 +9,15 @@ namespace Puck.Vulkan;
 /// GPU memory — without any CPU round-trip: it imports the shared NT handle into a Vulkan image bound to the
 /// same device memory, then hands back a shader-readable view. The image is imported once (the handle is stable
 /// across frames) and transitioned to the shader-read-only layout. This is the zero-copy alternative to
-/// <see cref="VulkanSurfaceUpload"/>; producer/consumer are ordered by the producer's GPU fence.
+/// <see cref="VulkanSurfaceUpload"/>. It imports no fence: a producer's writes are ordered before a Vulkan read by the
+/// shared fence the consumer imports on its own (<see cref="VulkanSharedFence"/>), whose wait rides the written slot's
+/// lease, or by the producer's CPU wait on a device that cannot share it, and a consumer holds the written slot through
+/// a CPU lease until its submission retires.
 /// </summary>
 public sealed class VulkanSurfaceImport : IDisposable {
     private readonly IVulkanCommandBufferRecordingApi m_commandBufferRecordingApi;
     private readonly IVulkanCommandResourcesFactory m_commandResourcesFactory;
+    private readonly IVulkanDeviceContext m_deviceContext;
     private readonly IVulkanExternalMemoryApi m_externalMemoryApi;
     private readonly IVulkanFramebufferSetApi m_framebufferSetApi;
     private readonly VulkanQueueSubmitter m_queueSubmitter;
@@ -33,13 +37,17 @@ public sealed class VulkanSurfaceImport : IDisposable {
     /// <see cref="Import"/>.</summary>
     public nint ImageHandle => m_imageHandle;
 
-    /// <summary>Initializes a shared-surface importer.</summary>
+    /// <summary>Initializes a shared-surface importer on a device context.</summary>
+    /// <param name="deviceContext">The device context whose device the image is imported on; it must share the
+    /// producer's adapter.</param>
     /// <param name="externalMemoryApi">The external-memory API used to import the shared allocation.</param>
     /// <param name="framebufferSetApi">The API used to create and destroy the imported image view.</param>
     /// <param name="commandResourcesFactory">The factory for transition command resources.</param>
     /// <param name="commandBufferRecordingApi">The API used to record image transitions.</param>
     /// <param name="queueSubmitter">The queue submission service.</param>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     public VulkanSurfaceImport(
+        IVulkanDeviceContext deviceContext,
         IVulkanExternalMemoryApi externalMemoryApi,
         IVulkanFramebufferSetApi framebufferSetApi,
         IVulkanCommandResourcesFactory commandResourcesFactory,
@@ -48,42 +56,47 @@ public sealed class VulkanSurfaceImport : IDisposable {
     ) {
         ArgumentNullException.ThrowIfNull(commandBufferRecordingApi);
         ArgumentNullException.ThrowIfNull(commandResourcesFactory);
+        ArgumentNullException.ThrowIfNull(deviceContext);
         ArgumentNullException.ThrowIfNull(externalMemoryApi);
         ArgumentNullException.ThrowIfNull(framebufferSetApi);
         ArgumentNullException.ThrowIfNull(queueSubmitter);
 
         m_commandBufferRecordingApi = commandBufferRecordingApi;
         m_commandResourcesFactory = commandResourcesFactory;
+        m_deviceContext = deviceContext;
         m_externalMemoryApi = externalMemoryApi;
         m_framebufferSetApi = framebufferSetApi;
         m_queueSubmitter = queueSubmitter;
     }
 
     private void DisposeResources() {
-        var device = m_device;
-
-        m_commandResources?.Dispose();
-        m_commandResources = null;
-
-        if (device is not null) {
-            m_framebufferSetApi.DestroyImageView(
-                device: device.Commands,
-                imageViewHandle: m_imageViewHandle
-            );
-            m_externalMemoryApi.DestroyImage(
-                device: device.Commands,
-                imageHandle: m_imageHandle,
-                memoryHandle: m_memoryHandle
-            );
+        if (m_device is not { } device) {
+            return;
         }
 
+        VulkanDeviceOwnership.ThrowIfDestroyed(
+            held: device,
+            holder: nameof(VulkanSurfaceImport)
+        );
+        m_commandResources?.Dispose();
+        m_commandResources = null;
+        m_framebufferSetApi.DestroyImageView(
+            device: device.Commands,
+            imageViewHandle: m_imageViewHandle
+        );
+        m_externalMemoryApi.DestroyImage(
+            device: device.Commands,
+            imageHandle: m_imageHandle,
+            memoryHandle: m_memoryHandle
+        );
         m_imageViewHandle = 0;
         m_imageHandle = 0;
         m_memoryHandle = 0;
         m_sharedHandle = 0;
     }
     // The shared image is produced by Direct3D 12 (which has no Vulkan layout). Bring it into the shader-read
-    // layout once; the producer's per-frame writes land in the same memory and are ordered by its GPU fence.
+    // layout once; the producer's per-frame writes land in the same memory, ordered only by the producer's CPU wait
+    // before it publishes a write and the consumer's CPU lease on what it samples (see the type's remarks).
     private void TransitionToShaderReadable(VulkanLogicalDevice device) {
         var commandBufferHandle = m_commandResources!.CommandBufferHandles[0];
 
@@ -120,17 +133,18 @@ public sealed class VulkanSurfaceImport : IDisposable {
     }
 
     /// <summary>Waits for device idle, then frees the image view, imported image, and imported memory. Safe to call more than once.</summary>
+    /// <exception cref="InvalidOperationException">The device was destroyed first, so these resources can no longer be
+    /// destroyed and the owner's teardown order is wrong; the import stays undisposed.</exception>
     public void Dispose() {
         if (m_disposed) {
             return;
         }
 
-        m_disposed = true;
         m_device?.TryWaitIdle();
         DisposeResources();
+        m_disposed = true;
     }
     /// <summary>Imports the shared surface (once) and returns the handle of a shader-readable image view over it.</summary>
-    /// <param name="deviceContext">The device the image is imported on; must share the producer's adapter.</param>
     /// <param name="sharedHandle">The shared NT handle of the texture to import.</param>
     /// <param name="width">The width, in pixels, of the shared texture.</param>
     /// <param name="height">The height, in pixels, of the shared texture.</param>
@@ -138,8 +152,9 @@ public sealed class VulkanSurfaceImport : IDisposable {
     /// <returns>The native <c>VkImageView</c> handle to sample the imported image through.</returns>
     /// <exception cref="ArgumentException"><paramref name="sharedHandle"/> is zero.</exception>
     /// <exception cref="ObjectDisposedException">The instance has been disposed.</exception>
-    public nint Import(IVulkanDeviceContext deviceContext, nint sharedHandle, uint width, uint height, uint vulkanFormat) {
-        ArgumentNullException.ThrowIfNull(deviceContext);
+    /// <exception cref="InvalidOperationException">The context's device is not the one an earlier import created this
+    /// instance's resources on.</exception>
+    public nint Import(nint sharedHandle, uint width, uint height, uint vulkanFormat) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
@@ -152,12 +167,16 @@ public sealed class VulkanSurfaceImport : IDisposable {
             );
         }
 
-        var device = deviceContext.LogicalDevice;
+        var device = m_deviceContext.LogicalDevice;
+
+        VulkanDeviceOwnership.ThrowIfOtherDevice(
+            held: m_device,
+            holder: nameof(VulkanSurfaceImport),
+            offered: device
+        );
 
         if (
             (0 != m_imageViewHandle) &&
-            (m_device is not null) &&
-            (m_device.Commands == device.Commands) &&
             (m_sharedHandle == sharedHandle) &&
             (m_width == width) &&
             (m_height == height) &&
@@ -168,40 +187,51 @@ public sealed class VulkanSurfaceImport : IDisposable {
 
         DisposeResources();
 
-        var instance = deviceContext.Instance;
-        var imported = m_externalMemoryApi.ImportImage(request: new VulkanExternalImageImportRequest(
-            Device: device.Commands,
-            Format: vulkanFormat,
-            Height: height,
-            Instance: instance.Commands,
-            PhysicalDeviceHandle: device.PhysicalDevice.Handle,
-            SharedHandle: sharedHandle,
-            Width: width
-        ));
+        // Everything below is made on this device, and DisposeResources releases exactly what was made, so a failure
+        // part way (a refused view after its image exists, say) leaks nothing. The cached identity is recorded only
+        // once the image is shader-readable, so a failed import is retried rather than returned.
+        m_device = device;
 
-        m_imageHandle = imported.ImageHandle;
-        m_memoryHandle = imported.MemoryHandle;
-
-        m_framebufferSetApi.CreateImageView(
-            imageViewHandle: out m_imageViewHandle,
-            request: new VulkanImageViewCreateRequest(
+        try {
+            var imported = m_externalMemoryApi.ImportImage(request: new VulkanExternalImageImportRequest(
                 Device: device.Commands,
                 Format: vulkanFormat,
-                ImageHandle: m_imageHandle
-            )
-        ).ThrowIfFailed(operation: "vkCreateImageView");
+                Height: height,
+                Instance: m_deviceContext.Instance.Commands,
+                PhysicalDeviceHandle: device.PhysicalDevice.Handle,
+                SharedHandle: sharedHandle,
+                Width: width
+            ));
 
-        m_commandResources = m_commandResourcesFactory.Create(
-            commandBufferCount: 1,
-            logicalDevice: device
-        );
-        m_device = device;
+            m_imageHandle = imported.ImageHandle;
+            m_memoryHandle = imported.MemoryHandle;
+
+            m_framebufferSetApi.CreateImageView(
+                imageViewHandle: out var imageViewHandle,
+                request: new VulkanImageViewCreateRequest(
+                    Device: device.Commands,
+                    Format: vulkanFormat,
+                    ImageHandle: m_imageHandle
+                )
+            ).ThrowIfFailed(operation: "vkCreateImageView");
+            m_imageViewHandle = imageViewHandle;
+
+            m_commandResources = m_commandResourcesFactory.Create(
+                commandBufferCount: 1,
+                logicalDevice: device
+            );
+
+            TransitionToShaderReadable(device: device);
+        } catch {
+            DisposeResources();
+
+            throw;
+        }
+
         m_format = vulkanFormat;
         m_height = height;
         m_sharedHandle = sharedHandle;
         m_width = width;
-
-        TransitionToShaderReadable(device: device);
 
         return m_imageViewHandle;
     }

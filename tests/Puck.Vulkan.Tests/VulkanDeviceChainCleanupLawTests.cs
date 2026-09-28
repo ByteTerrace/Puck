@@ -166,6 +166,7 @@ public sealed unsafe class VulkanDeviceChainCleanupLawTests {
         new(
             commandBufferRecorder: null!,
             commandResourcesFactory: null!,
+            createServices: null!,
             framebufferSetFactory: null!,
             framePresenter: null!,
             frameSynchronizationFactory: null!,
@@ -247,8 +248,11 @@ public sealed unsafe class VulkanDeviceChainCleanupLawTests {
         public VkResult CreateInstance(VulkanInstanceCreateRequest request, out VulkanInstanceCommands? instance) {
             Reach(link: "instance");
             instance = new VulkanInstanceCommands(
-                getInstanceProcAddr: &GetProcAddr,
-                instanceHandle: InstanceHandle
+                instanceHandle: InstanceHandle,
+                procedures: new VulkanProcResolver(
+                    getDeviceProcAddr: &GetProcAddr,
+                    getInstanceProcAddr: &GetProcAddr
+                )
             );
             Log(entry: "create instance");
 
@@ -258,7 +262,10 @@ public sealed unsafe class VulkanDeviceChainCleanupLawTests {
             Reach(link: "device");
             device = new VulkanDeviceCommands(
                 deviceHandle: DeviceHandle,
-                getDeviceProcAddr: &GetProcAddr
+                procedures: new VulkanProcResolver(
+                    getDeviceProcAddr: &GetProcAddr,
+                    getInstanceProcAddr: &GetProcAddr
+                )
             );
             Log(entry: "create device");
 
@@ -283,10 +290,8 @@ public sealed unsafe class VulkanDeviceChainCleanupLawTests {
                 Log(entry: "destroy debug messenger");
             }
         }
-        public void DestroyDevice(VulkanDeviceCommands device) {
+        public void DestroyDevice(VulkanDeviceCommands device) =>
             Log(entry: "destroy device");
-            device.Dispose();
-        }
         public void DestroyInstance(VulkanInstanceCommands instance) =>
             Log(entry: "destroy instance");
         public void DestroySurface(VulkanInstanceCommands instance, nint surfaceHandle) =>
@@ -313,6 +318,19 @@ public sealed unsafe class VulkanDeviceChainCleanupLawTests {
                 VendorId: 1
             );
         }
+        public GpuDeviceCapabilities GetDeviceCapabilities(VulkanInstanceCommands instance, nint physicalDeviceHandle) =>
+            new(
+                Backend: "vulkan",
+                MaxBoundDescriptorSets: 4U,
+                MaxPerStageResources: 0U,
+                MaxPerStageSampledImages: 0U,
+                MaxPerStageSamplers: 0U,
+                MaxPerStageStorageBuffers: 0U,
+                MaxPerStageStorageImages: 0U,
+                MaxPerStageUniformBuffers: 0U,
+                MaxPushConstantBytes: 128U,
+                MaxRootSignatureWords: 0U
+            );
         public long GetDeviceLuid(VulkanInstanceCommands instance, nint physicalDeviceHandle) =>
             throw new NotSupportedException();
         public string GetDeviceName(VulkanInstanceCommands instance, nint physicalDeviceHandle) =>
@@ -322,8 +340,10 @@ public sealed unsafe class VulkanDeviceChainCleanupLawTests {
 
             return (QueueHandle + ((nint)queueFamilyIndex));
         }
+        // The base features the factory requires, fragmentStoresAndAtomics (index 26) and shaderSampledImageArrayDynamicIndexing
+        // (index 34), and no other.
         public IReadOnlyList<bool> GetFeatureSupport(VulkanInstanceCommands instance, nint physicalDeviceHandle) =>
-            [];
+            [.. Enumerable.Range(count: 55, start: 0).Select(selector: static index => (index is 26 or 34))];
         public GpuMemoryProfile GetMemoryProfile(VulkanInstanceCommands instance, nint physicalDeviceHandle) =>
             default;
         public VkPhysicalDeviceType GetPhysicalDeviceType(VulkanInstanceCommands instance, nint physicalDeviceHandle) =>
@@ -352,7 +372,7 @@ public sealed unsafe class VulkanDeviceChainCleanupLawTests {
             (queueFamilyIndex == PresentFamily);
         public bool HasDeviceExtension(VulkanInstanceCommands instance, nint physicalDeviceHandle, string extensionName) =>
             false;
-        public bool HasInstanceExtension(string extensionName) =>
+        public bool HasInstanceExtension(string extensionName, string? layerName) =>
             false;
         public bool IsExtensionFeatureSupported(VulkanInstanceCommands instance, nint physicalDeviceHandle, uint structureType) =>
             false;

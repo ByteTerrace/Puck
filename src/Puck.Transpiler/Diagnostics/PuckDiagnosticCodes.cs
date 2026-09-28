@@ -12,8 +12,10 @@ public static class PuckDiagnosticCodes {
     public const string LocalInitializerMissing = "PUCK007";
     /// <summary>A <c>local</c> missing its required kind annotation.</summary>
     public const string LocalKindMissing = "PUCK006";
-    /// <summary>PUCK041: an array builtin (<c>map</c>, <c>filter</c>, <c>reduce</c>, <c>range</c>, <c>length</c>,
-    /// <c>concat</c>) called with arguments it cannot evaluate at compile time.</summary>
+    /// <summary>PUCK041: a compile-time call refused at the call: a collection builtin (<c>map</c>, <c>filter</c>,
+    /// <c>reduce</c>, <c>range</c>, <c>length</c>, <c>concat</c>, ...) or a scalar function called with arguments it
+    /// cannot evaluate at compile time, or a name that is neither a compile-time function nor an arm the vocabulary
+    /// declares (<c>min</c>, where the one spelling is <c>minimum</c>).</summary>
     public const string BuiltinRefused = "PUCK041";
     /// <summary>A chained comparison in one <c>when</c> clause.</summary>
     public const string ChainedComparison = "PUCK004";
@@ -300,7 +302,7 @@ public static class PuckDiagnosticCodes {
     public const string ModuleAliasShadowsName = "PUCK117";
     /// <summary>PUCK118: an information notice that the engine's validation of a world deferred a check to the host
     /// that runs it, because the host diagnosing the source carries no catalog for it (a machine engine, a
-    /// post-render extension, a probe kind). A deferral is no finding against the author: it never fails a
+    /// post-process package, a probe kind). A deferral is no finding against the author: it never fails a
     /// compile or a composition.</summary>
     public const string SemanticValidationDeferred = "PUCK118";
     /// <summary>PUCK119: a state row names an enum its composed world's state section does not declare — a
@@ -308,6 +310,10 @@ public static class PuckDiagnosticCodes {
     /// validation of the composed world — or a record field <c>field: Enum</c> names one its document does not declare.
     /// Declare it with <c>enum Enum { … }</c>; a cell kind is never written.</summary>
     public const string StateEnumUndeclared = "PUCK119";
+    /// <summary>PUCK120: a graph instance's bound parameter is not written as <c>parameter pass.member = value</c>
+    /// inside its <c>graph</c> block: the statement stands outside one, binds one member twice, or the block writes
+    /// the raw <c>parameters</c> member the statement lowers to.</summary>
+    public const string GraphParameter = "PUCK120";
     /// <summary>PUCK_LINT_010: a literal mix weight's share is below 1/64; consider mean over a history table.</summary>
     public const string VectorMixStall = "PUCK_LINT_010";
 }

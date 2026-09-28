@@ -3,11 +3,13 @@ using Puck.Assets;
 namespace Puck.Vulkan.Presentation;
 
 /// <summary>One recorded draw: the pipeline to bind (by content id), its per-draw bindings, and the
-/// instanced draw parameters. <see cref="SequenceKey"/> preserves painter's order across pipelines.</summary>
+/// instanced draw parameters. <see cref="SequenceKey"/> preserves painter's order across pipelines. A descriptor set is
+/// bound at <see cref="DescriptorSetGroup"/>, the frequency group whose set layout it was allocated against.</summary>
 public readonly record struct VulkanDrawCommand(
     VulkanDrawParameters DrawParameters,
     VulkanPushConstantBinding? PushConstantBinding = null,
     nint DescriptorSetHandle = 0,
+    uint DescriptorSetGroup = 0,
     VulkanVertexBufferBinding? VertexBufferBinding = null,
     AssetContentHash PipelineId = default,
     long SequenceKey = 0

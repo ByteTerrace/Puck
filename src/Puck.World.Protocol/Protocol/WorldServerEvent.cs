@@ -33,4 +33,22 @@ public abstract record WorldServerEvent {
     /// <param name="Entries">The disconnected peer identities, in point-of-effect order.</param>
     /// <param name="RevokedGrants">The rows revoked through the ordinary revoke door.</param>
     public sealed record PeerDisconnected(IReadOnlyList<WorldPeerEventEntry> Entries, IReadOnlyList<WorldGrant> RevokedGrants) : WorldServerEvent;
+    /// <summary>An unembodied session was admitted and the grants its verdict authorizes without a body were minted.</summary>
+    /// <param name="Session">The session principal admission minted.</param>
+    /// <param name="Templates">The verdict's whole template list: the rows with a subject are
+    /// <paramref name="MintedGrants"/>, the body-relative rows wait for an embodiment.</param>
+    /// <param name="MintedGrants">The grants minted through the ordinary grant door.</param>
+    public sealed record SessionAdmitted(Principal Session, IReadOnlyList<WorldAdmissionGrant> Templates, IReadOnlyList<WorldGrant> MintedGrants) : WorldServerEvent;
+    /// <summary>A session was embodied: its verdict's body-relative grants were minted over the body, beside the rows it
+    /// already holds.</summary>
+    /// <param name="Session">The session principal.</param>
+    /// <param name="BodyIndex">The population body the session now drives.</param>
+    /// <param name="BodyGeneration">The body's generation at embodiment: when a later generation takes the body, the
+    /// session's rows over it are revoked, so it never drives the next occupant.</param>
+    /// <param name="MintedGrants">The grants minted through the ordinary grant door.</param>
+    public sealed record SessionEmbodied(Principal Session, int BodyIndex, int BodyGeneration, IReadOnlyList<WorldGrant> MintedGrants) : WorldServerEvent;
+    /// <summary>A session ended and every grant it held was revoked; its epoch never names a live session again.</summary>
+    /// <param name="Session">The session principal.</param>
+    /// <param name="RevokedGrants">The rows revoked through the ordinary revoke door.</param>
+    public sealed record SessionEnded(Principal Session, IReadOnlyList<WorldGrant> RevokedGrants) : WorldServerEvent;
 }

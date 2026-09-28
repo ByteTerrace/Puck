@@ -72,7 +72,7 @@
       "default": null
     },
     "shaderToolchain": {
-      "description": "The directory holding the pipeline compiler\u0027s dxc, or null to resolve it by bare name through the ordinary executable search path \u2014 never an environment variable.",
+      "description": "The directory holding the graph compiler\u0027s dxc, or null to resolve it by bare name through the ordinary executable search path \u2014 never an environment variable.",
       "type": [
         "string",
         "null"
@@ -86,22 +86,34 @@
         "null"
       ],
       "items": {
-        "description": "One named instance of a frame graph: a view rendered by a puck.render.graph.v1 document, such as a pane, a game camera shown on a screen, or a nested world. The row carries authored intent; planning, scheduling and resources belong to the renderer.",
+        "description": "One named instance of a frame graph: a view rendered by a puck.render.graph.v1 document, such as a pane, a game camera shown on a screen, or a nested world, or an engine package\u0027s producer such as the SDF world. A Instance shows it in a layout, and the pipeline.* console verbs address it by name. The row carries authored intent; planning, scheduling, compilation and resources belong to the renderer.",
         "type": [
           "object",
           "null"
         ],
         "properties": {
           "name": {
-            "description": "The instance\u0027s stable name (a SafeName, unique within the section), which another row\u0027s input names.",
+            "description": "The instance\u0027s stable name (a SafeName, unique within the section), which another row\u0027s input, a layout slot and a capture name.",
             "type": "string"
           },
           "source": {
-            "description": "The graph document, resolved relative to the world document\u0027s own directory as a Source is.",
-            "type": "string"
+            "description": "Where the instance\u0027s graph comes from, or null for a row that names a Package: a puck.render.graph.v1 graph document, a one-off shader source file, which reads as a one-pass graph, or a puck.shader.package.v1 package directory, which loads with its source tree gone. It resolves beside the document that authors it (WorldDocumentPaths), like every relative path a document authors.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "package": {
+            "description": "The engine package whose producer renders the instance, such as sdf.world, or an uploaded producer\u0027s source package, source.\u003Cproducer id\u003E, opened from Settings and converted once a frame at most however many instances read it, or null for a row that names a Source. A package instance reads no input and takes no time scale, output or override.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
           },
           "camera": {
-            "description": "The authored camera the instance renders from, or null for a graph that reads no camera.",
+            "description": "The authored camera the instance renders from, feeding the frame block\u0027s cameraPosition, cameraTarget, cameraUp and cameraFov, or null, which leaves cameraFov zero so a graph keeps its own pointer orbit.",
             "type": [
               "string",
               "null"
@@ -171,11 +183,81 @@
               "title": "WorldViewGraphInput"
             },
             "default": null
+          },
+          "timeScale": {
+            "description": "The instance clock\u0027s rate multiplier \u2014 presentation only, never simulation state. Default 1; 0 freezes the clock.",
+            "type": "number",
+            "default": 1
+          },
+          "output": {
+            "description": "The image version the instance shows, or null for the source\u0027s first declared output.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "overrides": {
+            "description": "This instance\u0027s parameter overrides, keyed by pass name; each value is that pass\u0027s config object keyed by field. A field absent here keeps the default the shared source declares, so two instances of one source differ only in what they override. The source\u0027s config schema binds them when a boot, a world.load or world.reload, a commit, or an upsert names them (the server reads the source, and refuses a value by name), and again when a graph installs (the host binds them into its passes). null overrides nothing.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "default": null,
+            "additionalProperties": {
+              "$comment": "Open payload: this member\u0027s shape is decided by an id named elsewhere in the document, never by this generator."
+            }
+          },
+          "settings": {
+            "description": "A source package row\u0027s producer settings, which its producer opens the image with and its shape validates, as a screen\u0027s producer source\u0027s settings are, or null for the producer\u0027s defaults. Only a row naming a source package (source.\u003Cproducer id\u003E) takes settings.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "default": null,
+            "additionalProperties": {
+              "$comment": "Open payload: this member\u0027s shape is decided by an id named elsewhere in the document, never by this generator."
+            }
+          },
+          "parameters": {
+            "description": "This instance\u0027s bound parameters, keyed by pass name and then by config field: a number, or a state.\u003Crow\u003E[.\u003Ckey\u003E][.$target] token naming a Fixed or Int cell whose value the pass reads through its state mirror slot, eased by default. A field a row names both here and in Overrides is refused by name, and a binding that does not resolve leaves the field at its source\u0027s default. null binds nothing.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": {
+                "title": "BindableScalar",
+                "type": [
+                  "number",
+                  "string"
+                ]
+              }
+            },
+            "default": null
+          },
+          "tier": {
+            "description": "The quality tier the instance renders at, from the authored quality vocabulary: the variant of its source\u0027s package it loads, or the tier its source compiles for where no package holds it. A tier selects how the passes compute and never what they read, so two documents differing only in a row\u0027s tier present the same state. null loads the variant no tier names.",
+            "default": null,
+            "title": "QualityTier",
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              null
+            ]
           }
         },
         "required": [
-          "name",
-          "source"
+          "name"
         ],
         "additionalProperties": false,
         "title": "WorldViewGraph"
@@ -193,11 +275,123 @@
           "description": "The pass-pixels (passes times rendered pixels) those instances may spend in one presented frame; the stalest due instance is admitted first and the rest read their latest completed output. 0 sets no ceiling.",
           "type": "integer",
           "default": 0
+        },
+        "bytesPerTick": {
+          "description": "The bytes every bound parameter together may owe its pass on a tick that moves its row, or 0 for no ceiling. A document whose bindings exceed it is refused, naming the graph and the binding that crosses it.",
+          "type": "integer",
+          "default": 0
+        },
+        "bytesPerFrame": {
+          "description": "The bytes every bound parameter together may owe its pass on each presented frame between ticks, or 0 for no ceiling, refused the same way.",
+          "type": "integer",
+          "default": 0
         }
       },
       "additionalProperties": false,
       "default": null,
       "title": "WorldViewGraphBudget"
+    },
+    "root": {
+      "description": "The views.graphs row the display shows and captures read, or null for the render graph composition synthesizes from the document around WorldViewGraphs.WorldInstance and WorldViewGraphs.MainInstance. A world that names its root authors its whole render graph, the sdf.world package row included.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "post": {
+      "description": "The post-process passes the synthesized root graph runs over the composed frame, in order, before the overlay, or null for none. A world that names Root authors its whole graph and names none.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "One pass the render graph composition synthesizes runs over the composed frame: a post-process package pass of the root graph (WorldViewGraphs.MainInstance), written as a puck.render.graph.v1 document\u0027s packages row is, less its ports. The rows run in order after every view and pane is placed and before the overlay, each reading the frame the pass before it wrote and writing the frame the next reads, so a row names no input or output. Presentation only; nothing here reaches simulation state.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "description": "The pass\u0027s name in the root graph (a SafeName, unique within the section and distinct from every views.graphs row, whose place pass the root names after the row), which a probe parameter\u0027s post target names.",
+            "type": "string"
+          },
+          "package": {
+            "description": "The post-process package the pass runs, a render graph package id such as sdf.film-grain, checked against the host\u0027s catalog at document load.",
+            "type": "string",
+            "enum": [
+              "sdf.film-grain"
+            ]
+          },
+          "config": {
+            "description": "The package\u0027s config values, each absent field at its default, or null for every default. The graph compiler binds them against the package\u0027s schema when the root graph is composed, and a boot refuses a value that does not bind, naming the row.",
+            "default": null,
+            "$comment": "Open payload: this member\u0027s shape is decided by an id named elsewhere in the document, never by this generator."
+          }
+        },
+        "required": [
+          "name",
+          "package"
+        ],
+        "additionalProperties": false,
+        "title": "WorldViewPostPass",
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "package": {
+                  "const": "sdf.film-grain"
+                }
+              },
+              "required": [
+                "package"
+              ]
+            },
+            "then": {
+              "properties": {
+                "config": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "description": "Film grain: a per-pixel integer-hashed offset added over the input image, keyed on the engine tick.",
+                  "properties": {
+                    "intensity": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "default": 0.05,
+                      "description": "The peak per-channel offset."
+                    },
+                    "size": {
+                      "type": "number",
+                      "minimum": 1,
+                      "default": 1,
+                      "description": "The grain cell size, in pixels."
+                    },
+                    "seed": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 4294967295,
+                      "default": 0,
+                      "description": "Folded into the per-pixel hash; two worlds with different seeds grain differently."
+                    },
+                    "flickerHz": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 4294967295,
+                      "default": 24,
+                      "description": "How many times per second the grain pattern advances. The pattern is keyed on the engine tick, so a frame carries the grain of the flicker period its tick falls in; a rate that does not divide the tick rate advances every whole number of ticks nearest below its period."
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        ]
+      },
+      "default": null
     },
     "layouts": {
       "description": "Gets the authored named layouts. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
@@ -235,7 +429,7 @@
             "description": "Gets the slots, in order. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
             "type": "array",
             "items": {
-              "description": "One slot of a WorldViewLayout \u2014 a normalized rect (origin top-left, Y down) plus what fills it. A slot whose Camera and Pipeline are both null shows the seat that owns this slot (the next joined seat in slot order); a named camera renders that authored view into the rect; a named pipeline (a WorldViewPipeline row) renders its selected image output into the rect \u2014 a slot names at most one of the two (the validator refuses both authored together).",
+              "description": "One slot of a WorldViewLayout \u2014 a normalized rect (origin top-left, Y down) plus what fills it. A slot whose Camera and Instance are both null shows the seat that owns this slot (the next joined seat in slot order); a named camera renders that authored view into the rect; a named graph instance (a WorldViewGraph row) shows its selected image output in the rect, placed over the SDF world by the render graph\u0027s root \u2014 a slot names at most one of the two (the validator refuses both authored together).",
               "type": "object",
               "properties": {
                 "x": {
@@ -259,15 +453,15 @@
                   "default": 1
                 },
                 "camera": {
-                  "description": "The authored camera name filling this slot, or null for the seat that owns it (or the pipeline named by Pipeline).",
+                  "description": "The authored camera name filling this slot, or null for the seat that owns it (or the instance named by Instance).",
                   "type": [
                     "string",
                     "null"
                   ],
                   "default": null
                 },
-                "pipeline": {
-                  "description": "The authored views.pipelines row name filling this slot with a compiled shader pipeline, or null for an ordinary seat/camera slot. Mutually exclusive with Camera.",
+                "instance": {
+                  "description": "The views.graphs row name whose output fills this slot, or null for a seat or camera slot.",
                   "type": [
                     "string",
                     "null"
@@ -286,69 +480,6 @@
         ],
         "additionalProperties": false,
         "title": "WorldViewLayout"
-      },
-      "default": null
-    },
-    "pipelines": {
-      "description": "Gets the authored views.pipelines rows. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
-      "type": [
-        "array",
-        "null"
-      ],
-      "items": {
-        "description": "One named shader-pipeline instance displayed by a Pipeline slot. Its source declares connected GPU passes, or is a single shader adapted into a one-pass pipeline. The row carries authored intent; compilation, resource ownership, history, and presentation inputs belong to the shader runtime and its host.",
-        "type": [
-          "object",
-          "null"
-        ],
-        "properties": {
-          "name": {
-            "description": "The pipeline\u0027s stable name (a SafeName, unique within the section) \u2014 what a Pipeline names and a pipeline.* console verb addresses.",
-            "type": "string"
-          },
-          "source": {
-            "description": "Where the pipeline comes from: a pipeline document, a one-off shader source file, or a puck.shader.package.v1 package directory, which loads with its source tree gone. It resolves beside the document that authors it (WorldDocumentPaths), like every relative path a document authors.",
-            "type": "string"
-          },
-          "camera": {
-            "description": "The authored camera feeding the pipeline frame block\u0027s cameraPosition, cameraTarget, cameraUp and cameraFov, or null, which leaves cameraFov zero so a pipeline keeps its own pointer orbit.",
-            "type": [
-              "string",
-              "null"
-            ],
-            "default": null
-          },
-          "timeScale": {
-            "description": "The pipeline clock\u0027s rate multiplier \u2014 presentation only, never simulation state. Default 1; 0 freezes the clock.",
-            "type": "number",
-            "default": 1
-          },
-          "output": {
-            "description": "The image version the instance shows, or null for the source\u0027s first declared output.",
-            "type": [
-              "string",
-              "null"
-            ],
-            "default": null
-          },
-          "overrides": {
-            "description": "This instance\u0027s parameter overrides, keyed by pass name; each value is that pass\u0027s config object keyed by field. A field absent here keeps the default the shared source declares, so two instances of one source differ only in what they override. The source\u0027s config schema binds them when a boot, a world.load or world.reload, a commit, or an upsert names them (the server reads the source, and refuses a value by name), and again when a graph installs (the host binds them into its passes). null overrides nothing.",
-            "type": [
-              "object",
-              "null"
-            ],
-            "default": null,
-            "additionalProperties": {
-              "$comment": "Open payload: this member\u0027s shape is decided by an id named elsewhere in the document, never by this generator."
-            }
-          }
-        },
-        "required": [
-          "name",
-          "source"
-        ],
-        "additionalProperties": false,
-        "title": "WorldViewPipeline"
       },
       "default": null
     }

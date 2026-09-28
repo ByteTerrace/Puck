@@ -47,7 +47,7 @@ kind.
 | `stabilize` | the document | block | `ruleGroups[]` | A fixpoint group: its members re-fire until the board settles or the pass ceiling refuses. |
 | `state` | the document | section | `state` | The simulation state: the world's rows, its lattices, its embedding spaces, and the per-participant lanes. |
 | `test` | the document | block | `(nothing)` | Behaviour stated in the world's own language — a world's own, a module's under the arguments the test gives it, or a whole composition's; the document carries no trace of it and each test lowers to a generated test world of its own. |
-| `views` | the document | section | `views` | Camera layouts, render pipelines, frame-graph instances, and the seat rig a participant looks through. |
+| `views` | the document | section | `views` | Camera layouts, frame-graph instances, and the seat rig a participant looks through. |
 | `workflow` | the document | block | `ruleGroups[]` | A staged group: a cursor that advances one step per committed firing. |
 | `world` | the document | statement | `(nothing)` | Emits one named world document by invoking a module, declared at the top level of its source. Written `entry world`, it is the world `Puck.World --world` boots when it boots the source; a composition declares at most one. |
 | `request` | `addon` | statement | `addons[].requests[]` | One capability an addon declares it needs. |
@@ -55,6 +55,7 @@ kind.
 | `interrupt` | `decision` | statement | `rules[].decision.interrupt` | What cuts a commitment short. |
 | `onNoChoice` | `decision` | block | `rules[].decision.onNoChoice` | What fires when no option's gate admits it. |
 | `option` | `decision` | block | `rules[].decision.options[]` | One candidate of a decision. |
+| `parameter` | `graph` | statement | `views.graphs[].parameters` | One bound parameter of the enclosing graph instance, which the pass reads through its state mirror slot. |
 | `placement` | `placements` | row | `placements.rows[]` | One placed prototype. |
 | `prototype` | `prototypes` | row | `prototypes[]` | One creation document under an identity. |
 | `claim` | `rule` | block | `rules[].effects[][claim]` | Claims one available instance and binds its fields for nested effects. |
@@ -79,7 +80,7 @@ kind.
 | `onFailure` | `transaction` | block | `rules[].effects[][transaction].onFailure` | What fires after a transaction rewinds; more than one on a transaction is refused. |
 | `graph` | `views` | row | `views.graphs[]` | One named instance of a frame graph. |
 | `layout` | `views` | row | `views.layouts[]` | One viewport arrangement. |
-| `pipeline` | `views` | row | `views.pipelines[]` | One named post-render pipeline. |
+| `post` | `views` | row | `views.post[]` | One post-process pass the root graph runs over the composed frame, in order. |
 | `seatControl` | `views` | section | `views.seatControl` | How a participant's input moves the seat rig. |
 | `seatRig` | `views` | section | `views.seatRig` | The camera program a seated participant sees through. |
 | `step` | `workflow` | block | `rules[]` | One stage of a workflow; its body is a rule body, so a nested `rule` block is refused. |
@@ -437,7 +438,7 @@ Read back as `test` from the rows it generated when a generated test world is de
 ### `views`
 
 ```puck
-views { layout … pipeline … graph … seatRig … seatControl { … } }
+views { layout … graph … post … seatRig … seatControl { … } }
 ```
 
 Printed back as `views`; otherwise the generic value path. Every field of the node the description does not name prints as an ordinary property.
@@ -529,6 +530,20 @@ option "name" { [when Gate] score: <operand> [neighbors { … }] <effect>* }
 | `effects` | body | statements | — | `effects` | — | What fires when this option is the one chosen. |
 
 Printed back as `option` when the node carries `name`, `score`, and its gate has a `when` spelling; otherwise `gate: <call-form>`, an ordinary option-body property. Every field of the node the description does not name prints as an ordinary property.
+
+### `parameter`
+
+```puck
+parameter pass.member = <value>
+```
+
+| Member | Written | Kind | Admitted on | Lowers to | Default | Means |
+|---|---|---|---|---|---|---|
+| `pass` (required) | header | name | — | the key under `parameters` the pass's bindings sit on | — | The pass the parameter belongs to. |
+| `member` (required) | header | name | — | the key under the pass that holds the value | — | The pass's config field the value binds; one statement a field. |
+| `value` (required) | header | value | — | `parameters` | — | A number, or a `state.<row>` binding token naming the cell or the whole row the pass reads. |
+
+Printed back as `parameter` when the node carries `parameters`; otherwise none: a graph row's `parameters` is written only as `parameter` statements. Every field of the node the description does not name prints as an ordinary property.
 
 ### `placement`
 
@@ -819,7 +834,7 @@ graph "name" { … }
 
 | Member | Written | Kind | Admitted on | Lowers to | Default | Means |
 |---|---|---|---|---|---|---|
-| `name` (required) | header | name | — | `name` | — | The instance's name, which another instance's input names. |
+| `name` (required) | header | name | — | `name` | — | The instance's name, which a layout slot, another instance's input and the pipeline verbs name. |
 
 Printed back as `graph` when the node carries `name`; otherwise the generic value path. Every field of the node the description does not name prints as an ordinary property.
 
@@ -835,17 +850,19 @@ layout "name" { … }
 
 Printed back as `layout` when the node carries `name`; otherwise the generic value path. Every field of the node the description does not name prints as an ordinary property.
 
-### `pipeline`
+### `post`
 
 ```puck
-pipeline "name" { … }
+post "name" { package: … config { … } }
 ```
 
 | Member | Written | Kind | Admitted on | Lowers to | Default | Means |
 |---|---|---|---|---|---|---|
-| `name` (required) | header | name | — | `name` | — | The pipeline's name, which a layout slot names it by. |
+| `name` (required) | header | name | — | `name` | — | The pass's name in the root graph, which a probe's post target names. |
+| `package:` (required) | property | text | — | `package` | — | The post-process package the pass runs, such as sdf.film-grain. |
+| `config:` | property | value | — | `config` | — | The package's config values; an absent field keeps its default. |
 
-Printed back as `pipeline` when the node carries `name`; otherwise the generic value path. Every field of the node the description does not name prints as an ordinary property.
+Printed back as `post` when the node carries `name`, `package`; otherwise the generic value path. Every field of the node the description does not name prints as an ordinary property.
 
 ### `seatControl`
 

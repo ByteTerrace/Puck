@@ -585,6 +585,19 @@ public static partial class PuckPrinter {
 
                         break;
                     }
+                case GraphParameterNode parameter: {
+                        m_builder.Append(value: "parameter ")
+                            .Append(value: (parameter.PassQuoted ? Quote(text: parameter.Pass) : parameter.Pass))
+                            .Append(value: '.')
+                            .Append(value: (parameter.MemberQuoted ? Quote(text: parameter.Member) : parameter.Member))
+                            .Append(value: " = ");
+                        Expression(
+                            expression: parameter.Value,
+                            level: level
+                        );
+
+                        break;
+                    }
                 case LocalStatementNode local: {
                         m_builder.Append(value: "local ");
                         if (local.NameExpression is not null) {

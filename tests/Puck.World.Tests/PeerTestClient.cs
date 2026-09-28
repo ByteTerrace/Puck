@@ -1,5 +1,6 @@
 using System.Net;
 using Puck.Networking.Peers;
+using Puck.Testing;
 using Puck.World.Server;
 
 namespace Puck.World.Tests;
@@ -13,7 +14,13 @@ internal sealed class PeerTestClient : IDisposable {
     /// cancellation.</summary>
     public static readonly TimeSpan TransportHandshakeTimeout = TimeSpan.FromMinutes(minutes: 5);
 
-    private readonly WorldPeerNetwork m_network = new(transportHandshakeTimeout: TransportHandshakeTimeout);
+    // The client peer's own deadlines (its dial's HandshakeTimeout, a refusal's drain, a link's SendTimeout) run on a
+    // clock no law advances, so a loaded machine that slows the host's side of the handshake never expires one: the
+    // dial waits on the handshake's own outcome, and a genuine hang ends at the test's cancellation.
+    private readonly WorldPeerNetwork m_network = new(
+        timeProvider: new VirtualClock(),
+        transportHandshakeTimeout: TransportHandshakeTimeout
+    );
 
     private PeerStream? m_stream;
 

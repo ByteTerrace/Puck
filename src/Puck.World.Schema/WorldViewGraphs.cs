@@ -5,6 +5,30 @@ namespace Puck.World;
 /// <summary>Reads <c>views.graphs</c> rows as the render-graph instances the scheduler plans: one instance per row,
 /// reading the instances its inputs name.</summary>
 public static class WorldViewGraphs {
+    /// <summary>The name of the instance that renders the SDF world, the <c>sdf.world</c> producer the root reads,
+    /// before any post pass or the overlay is drawn over it. A <c>captures</c> row names it to capture the world
+    /// alone.</summary>
+    public const string WorldInstance = "world";
+    /// <summary>The name of the root graph instance composition synthesizes when the world has a pass to draw over its
+    /// SDF world: its views and panes placed, each <c>views.post</c> pass in order, then the overlay.</summary>
+    public const string MainInstance = "main";
+
+    /// <summary>Returns whether a name is one of the instances of the render graph composition synthesizes, which a
+    /// <c>views.graphs</c> row may take only in a world that names its own root.</summary>
+    /// <param name="name">The name.</param>
+    /// <returns><see langword="true"/> for <see cref="WorldInstance"/> and <see cref="MainInstance"/>.</returns>
+    public static bool IsSynthesized(string name) => (
+        string.Equals(
+            a: name,
+            b: WorldInstance,
+            comparisonType: StringComparison.Ordinal
+        ) ||
+        string.Equals(
+            a: name,
+            b: MainInstance,
+            comparisonType: StringComparison.Ordinal
+        )
+    );
     /// <summary>Returns a row's refresh as the scheduler reads it: every frame when the row authors none, and an
     /// invalid refresh when it authors both or neither rate inside its <c>refresh</c>.</summary>
     /// <param name="graph">The row.</param>
@@ -21,8 +45,9 @@ public static class WorldViewGraphs {
             : RenderGraphRefresh.EveryFrame
         );
     }
-    /// <summary>Returns the rows as render-graph instances, in row order. Several inputs bound to one producer are one
-    /// read, a previous-frame read only when every one of them is.</summary>
+    /// <summary>Returns the rows as render-graph instances, in row order: a row naming a package is that package's
+    /// external instance, carrying a source package's settings, and any other row renders its graph. Several inputs bound to one producer are one read, a
+    /// previous-frame read only when every one of them is.</summary>
     /// <param name="graphs">The rows.</param>
     /// <param name="passes">The passes one render of a row's graph records.</param>
     /// <returns>The instances.</returns>
@@ -38,6 +63,7 @@ public static class WorldViewGraphs {
             var graph = graphs[index];
 
             instances[index] = new RenderGraphInstance(
+                ExternalPackage: graph.Package,
                 Name: graph.Name,
                 Passes: passes(arg: graph),
                 Reads: [.. (graph.Inputs ?? [])
@@ -49,7 +75,8 @@ public static class WorldViewGraphs {
                         PreviousFrame: group.All(predicate: static input => input.PreviousFrame),
                         Producer: group.Key
                     ))],
-                Refresh: RefreshOf(graph: graph)
+                Refresh: RefreshOf(graph: graph),
+                Settings: graph.Settings
             );
         }
 

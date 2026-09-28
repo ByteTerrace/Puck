@@ -4,6 +4,7 @@ using Puck.Shaders;
 using Puck.World.Client;
 using Puck.World.Protocol;
 using Puck.World.Server;
+using Puck.Testing;
 
 using Xunit;
 
@@ -29,14 +30,14 @@ public sealed partial class PipelineOverrideLawTests : IDisposable {
             destFileName: SourcePath,
             sourceFileName: Path.Combine(
                 path1: AuthoredGameFixtures.Root,
-                path2: "src/Puck.World/Assets/pipelines/ink.pipeline.json"
+                path2: "src/Puck.World/Assets/pipelines/ink.graph.json"
             )
         );
     }
 
     private string SourcePath => Path.Combine(
         path1: m_directory,
-        path2: "ink.pipeline.json"
+        path2: "ink.graph.json"
     );
 
     private static WorldDefinition Document() {
@@ -44,9 +45,9 @@ public sealed partial class PipelineOverrideLawTests : IDisposable {
 
         return (definition with {
             ViewsRaw = (definition.Views with {
-                Pipelines = [
-                    new WorldViewPipeline(Name: "left", Source: "ink.pipeline.json"),
-                    new WorldViewPipeline(Name: "right", Source: "ink.pipeline.json"),
+                Graphs = [
+                    new WorldViewGraph(Name: "left", Source: "ink.graph.json"),
+                    new WorldViewGraph(Name: "right", Source: "ink.graph.json"),
                 ],
             }),
         });
@@ -56,12 +57,10 @@ public sealed partial class PipelineOverrideLawTests : IDisposable {
 
         return document.RootElement.Clone();
     }
-    private static WorldViewPipeline Row(WorldFixture fixture, string name) =>
-        WorldDefinitionRows.FindPipeline(
-            name: name,
-            pipelines: fixture.Server.Definition.Views.Pipelines
+    private static WorldViewGraph Row(WorldFixture fixture, string name) =>
+        WorldDefinitionRows.FindGraph(name: name, graphs: fixture.Server.Definition.Views.Graphs
         )!;
-    private static double Exposure(WorldViewPipeline row) => (((row.Overrides is { } overrides) && overrides.TryGetValue(key: "visualize", value: out var visualize))
+    private static double Exposure(WorldViewGraph row) => (((row.Overrides is { } overrides) && overrides.TryGetValue(key: "visualize", value: out var visualize))
         ? visualize.GetProperty(propertyName: "exposure").GetDouble()
         : double.NaN);
     private WorldFixture Server() {
@@ -84,25 +83,25 @@ public sealed partial class PipelineOverrideLawTests : IDisposable {
     }
     // The commit pipeline.commit builds for one instance previewing one visualize exposure, based on the row as the
     // server holds it now.
-    private static WorldMutation.CommitViewPipeline Preview(WorldFixture fixture, string name, ShaderPipelineSource installed, double exposure) {
+    private static WorldMutation.CommitViewGraph Preview(WorldFixture fixture, string name, ShaderPipelineSource installed, double exposure) {
         var row = Row(
             fixture: fixture,
             name: name
         );
 
-        Assert.True(condition: WorldPipelineRuntime.TryMergeOverride(
+        Assert.True(condition: WorldViewGraphHost.TryMergeOverride(
             change: Change(json: $"{{\"exposure\":{exposure.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}}}"),
             current: null,
             merged: out var visualize,
             reason: out _
         ));
 
-        return WorldPipelineRuntime.BuildCommit(
+        return WorldViewGraphHost.BuildCommit(
             installed: installed,
             output: null,
             pending: new Dictionary<string, JsonElement> { ["visualize"] = visualize },
             principal: Principal.Console,
-            revision: WorldDefinitionFingerprint.ComputePipeline(pipeline: row),
+            revision: WorldDefinitionFingerprint.ComputeGraph(graph: row),
             row: row,
             timeScale: row.TimeScale
         );
@@ -161,10 +160,10 @@ public sealed partial class PipelineOverrideLawTests : IDisposable {
         var reloaded = WorldDefinitionSerialization.Deserialize(utf8Json: File.ReadAllBytes(path: saved));
 
         Assert.Equal(
-            actual: Exposure(row: WorldDefinitionRows.FindPipeline(name: "left", pipelines: reloaded.Views.Pipelines)!),
+            actual: Exposure(row: WorldDefinitionRows.FindGraph(name: "left", graphs: reloaded.Views.Graphs)!),
             expected: 0.25
         );
-        Assert.Null(@object: WorldDefinitionRows.FindPipeline(name: "right", pipelines: reloaded.Views.Pipelines)!.Overrides);
+        Assert.Null(@object: WorldDefinitionRows.FindGraph(name: "right", graphs: reloaded.Views.Graphs)!.Overrides);
         Assert.Equal(
             actual: File.ReadAllBytes(path: SourcePath),
             expected: sourceBytes
@@ -292,13 +291,13 @@ public sealed partial class PipelineOverrideLawTests : IDisposable {
         );
         Laws.RefusalWithControl(
             lawId: "pipeline.overrides.upsert-unbound",
-            controlOutcome: () => Apply(fixture: fixture, mutation: new WorldMutation.UpsertViewPipeline(
-                Pipeline: (Row(fixture: fixture, name: "right") with { Overrides = new Dictionary<string, JsonElement> { ["visualize"] = Change(json: "{\"exposure\":1}") } }),
+            controlOutcome: () => Apply(fixture: fixture, mutation: new WorldMutation.UpsertViewGraph(
+                Graph: (Row(fixture: fixture, name: "right") with { Overrides = new Dictionary<string, JsonElement> { ["visualize"] = Change(json: "{\"exposure\":1}") } }),
                 Principal: Principal.Console
             )),
             deniedOutcome: () => {
-                var accepted = Apply(fixture: fixture, mutation: new WorldMutation.UpsertViewPipeline(
-                    Pipeline: (Row(fixture: fixture, name: "right") with { Overrides = new Dictionary<string, JsonElement> { ["visualize"] = Change(json: "{\"gain\":1}") } }),
+                var accepted = Apply(fixture: fixture, mutation: new WorldMutation.UpsertViewGraph(
+                    Graph: (Row(fixture: fixture, name: "right") with { Overrides = new Dictionary<string, JsonElement> { ["visualize"] = Change(json: "{\"gain\":1}") } }),
                     Principal: Principal.Console
                 ));
 
@@ -310,7 +309,7 @@ public sealed partial class PipelineOverrideLawTests : IDisposable {
     }
     [Fact]
     public void AMergedPreviewReplacesFieldByFieldAndNullRestoresTheDefault() {
-        Assert.True(condition: WorldPipelineRuntime.TryMergeOverride(
+        Assert.True(condition: WorldViewGraphHost.TryMergeOverride(
             change: Change(json: "{\"b\":3,\"a\":null}"),
             current: Change(json: "{\"a\":1,\"c\":[1,2]}"),
             merged: out var merged,
@@ -320,7 +319,7 @@ public sealed partial class PipelineOverrideLawTests : IDisposable {
             actual: merged.GetRawText(),
             expected: "{\"b\":3,\"c\":[1,2]}"
         );
-        Assert.False(condition: WorldPipelineRuntime.TryMergeOverride(
+        Assert.False(condition: WorldViewGraphHost.TryMergeOverride(
             change: Change(json: "[1]"),
             current: null,
             merged: out _,
@@ -335,7 +334,7 @@ public sealed partial class PipelineOverrideLawTests : IDisposable {
             m_echoes.Clear();
 
             using var fixture = Server();
-            using var runtime = new WorldPipelineRuntime(
+            using var runtime = new WorldViewGraphHost(
                 documentDirectory: m_directory,
                 packager: new ShaderPackager(compiler: new ShaderCompiler(
                     cacheDirectory: Path.Combine(
@@ -347,16 +346,18 @@ public sealed partial class PipelineOverrideLawTests : IDisposable {
                         path2: "no-tools"
                     )
                 ))
-            ) {
-                CreateNode = static name => new ShaderPipelineRenderNode(
-                    deviceContext: new AbsentPipelineDevice(),
-                    gpu: new AbsentPipelineGpu(),
+            );
+            using var instances = FakeGraphInstances.Attach(
+                create: static name => new ShaderPipelineRenderNode(
+                    pipelines: new GpuPassPipelineCache(),
+                    deviceContext: new RefusingGpuDevice(),
                     height: 4,
                     hostsOnDirectX: false,
                     name: name,
                     width: 4
                 ),
-            };
+                host: runtime
+            );
             var installed = Installed();
             var stale = Preview(exposure: 1.5, fixture: fixture, installed: installed, name: "left");
             var mutations = new Func<WorldMutation>[] {
@@ -368,7 +369,7 @@ public sealed partial class PipelineOverrideLawTests : IDisposable {
 
             foreach (var mutation in mutations) {
                 if (rendered) {
-                    runtime.Reconcile(rows: fixture.Server.Definition.Views.Pipelines);
+                    runtime.Reconcile(views: fixture.Server.Definition.Views);
                     runtime.PumpWatches();
                     foreach (var entry in runtime.Entries.Values) {
                         _ = entry.TrySetOverride(

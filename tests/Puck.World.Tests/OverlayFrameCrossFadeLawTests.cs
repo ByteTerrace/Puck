@@ -244,7 +244,7 @@ public sealed class OverlayFrameCrossFadeLawTests {
         private readonly OverlayHudFrame m_frame = frame;
     }
     private sealed class NoBindings : IHudBindingResolver {
-        public bool TryResolve(string binding, out float fraction, out string text) {
+        public bool TryResolve(string binding, int seat, out float fraction, out string text) {
             fraction = 0f;
             text = string.Empty;
 

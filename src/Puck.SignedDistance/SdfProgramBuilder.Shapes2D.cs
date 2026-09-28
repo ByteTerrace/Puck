@@ -6,7 +6,7 @@ public sealed partial class SdfProgramBuilder {
     /// <summary>Adds an ellipse (the exact ellipse 2D SDF) lifted to a 3D solid — <see cref="SdfLift.Revolve"/> at offset 0 gives
     /// an exact spheroid (which, unlike the underestimating gauge of
     /// <see cref="Superellipsoid(Vector3, float, int, SdfBlendOp, float, bool)"/>, earns a real cull bound), <see cref="SdfLift.Extrude"/> an elliptic-cylinder prism. Exact and 1-Lipschitz.
-    /// KEEP IN SYNC with sdfEllipseSolid in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// KEEP IN SYNC with sdfEllipseSolid in Assets/Shaders/Sdf/field/sdf-shapes.hlsli.</summary>
     /// <param name="semiX">The semi-axis along local X.</param>
     /// <param name="semiY">The semi-axis along local Y.</param>
     /// <param name="lift">Whether to revolve the profile around Y (offset 0 ⇒ a spheroid) or extrude it along Z.</param>
@@ -143,7 +143,7 @@ public sealed partial class SdfProgramBuilder {
     /// <summary>Adds a regular convex <paramref name="sides"/>-gon (the exact star-polygon SDF with the m = 2 regular-polygon case) lifted to
     /// a 3D solid — <see cref="SdfLift.Extrude"/> gives a prism (a nut, a column, a gem), <see cref="SdfLift.Revolve"/>
     /// a lathe of the polygon's profile. The half-sector π/n is host-baked. Exact and 1-Lipschitz. KEEP IN SYNC with
-    /// sdfPolyStar/sdfStar2D in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// sdfPolyStar/sdfStar2D in Assets/Shaders/Sdf/field/sdf-shapes.hlsli.</summary>
     /// <param name="sides">The side count n (clamped to ≥ 3).</param>
     /// <param name="radius">The circumradius (centre to a vertex).</param>
     /// <param name="lift">Whether to revolve the profile around Y or extrude it along Z.</param>
@@ -239,7 +239,7 @@ public sealed partial class SdfProgramBuilder {
     }
     /// <summary>Adds a rounded rectangle (exact rounded-box 2D SDF) lifted to a 3D solid — <see cref="SdfLift.Extrude"/> gives a
     /// rounded slab/plaque, <see cref="SdfLift.Revolve"/> a rounded disc/puck. Exact and 1-Lipschitz. KEEP IN SYNC
-    /// with sdfRoundedRect in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// with sdfRoundedRect in Assets/Shaders/Sdf/field/sdf-shapes.hlsli.</summary>
     /// <param name="halfWidth">Half-width of the rectangle (its local X half-extent).</param>
     /// <param name="halfHeight">Half-height of the rectangle (its local Y half-extent).</param>
     /// <param name="cornerRadius">Corner-rounding radius; clamped to the smaller half-extent (corners round inward).</param>
@@ -377,7 +377,7 @@ public sealed partial class SdfProgramBuilder {
     /// <summary>Adds an <paramref name="points"/>-pointed star (the exact star-polygon SDF) lifted to a 3D solid — <see cref="SdfLift.Extrude"/>
     /// gives a star prism (a badge, a gem), <see cref="SdfLift.Revolve"/> a spiked lathe. The baked constants
     /// (π/n and ecs = (cos(π/m), sin(π/m))) are host-baked. Exact and 1-Lipschitz. KEEP IN SYNC with
-    /// sdfPolyStar/sdfStar2D in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// sdfPolyStar/sdfStar2D in Assets/Shaders/Sdf/field/sdf-shapes.hlsli.</summary>
     /// <param name="points">The point count n (clamped to ≥ 2).</param>
     /// <param name="radius">The outer radius (centre to a point tip).</param>
     /// <param name="sharpness">The inner-radius control m, clamped to [2, n]: 2 is a convex n-gon, larger is sharper
@@ -457,7 +457,7 @@ public sealed partial class SdfProgramBuilder {
     }
     /// <summary>Adds an isosceles trapezoid (exact isosceles-trapezoid 2D SDF) lifted to a 3D solid — <see cref="SdfLift.Extrude"/> gives a
     /// keystone/wedge prism, <see cref="SdfLift.Revolve"/> a frustum/lampshade/cup. Exact and 1-Lipschitz. KEEP IN
-    /// SYNC with sdfTrapezoidSolid in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// SYNC with sdfTrapezoidSolid in Assets/Shaders/Sdf/field/sdf-shapes.hlsli.</summary>
     /// <param name="bottomHalfWidth">Half-width of the bottom edge (at local −Y).</param>
     /// <param name="topHalfWidth">Half-width of the top edge (at local +Y).</param>
     /// <param name="halfHeight">Half-height of the trapezoid.</param>
@@ -643,12 +643,12 @@ public sealed partial class SdfProgramBuilder {
     /// <summary>Adds a 45-degree-chamfered rectangle (the box field intersected with a diagonal bevel half-plane per
     /// corner) lifted to a 3D solid — <see cref="SdfLift.Extrude"/> gives a beveled slab/plaque (armor plating),
     /// <see cref="SdfLift.Revolve"/> a beveled disc/puck. An extrude additionally bevels the two cap rims at the same
-    /// <paramref name="chamfer"/> (see <c>sdfExtrudeChamfer2D</c> in Assets/Shaders/Sdf/sdf-vm.hlsli), so the solid
+    /// <paramref name="chamfer"/> (see <c>sdfExtrudeChamfer2D</c> in Assets/Shaders/Sdf/field/sdf-shapes.hlsli), so the solid
     /// reads chamfered on every edge, not only the four the 2D profile cuts. The field is the exact signed distance
     /// inside and on the surface and a conservative lower bound outside, in the wedge past each bevel vertex where the
     /// nearest point is the vertex rather than either plane (the same class of bound the chamfer blend carries);
     /// 1-Lipschitz throughout — like the rest of the 2D-lift family, no <c>AnalyzeLipschitz</c> step clamp is needed.
-    /// KEEP IN SYNC with <c>sdfChamferedRect</c>/<c>sdfChamferBox2D</c> in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// KEEP IN SYNC with <c>sdfChamferedRect</c>/<c>sdfChamferBox2D</c> in Assets/Shaders/Sdf/field/sdf-shapes.hlsli.</summary>
     /// <param name="halfWidth">Half-width of the rectangle (its local X half-extent).</param>
     /// <param name="halfHeight">Half-height of the rectangle (its local Y half-extent).</param>
     /// <param name="chamfer">The 45-degree bevel radius, clamped by <see cref="ClampChamfer"/> to

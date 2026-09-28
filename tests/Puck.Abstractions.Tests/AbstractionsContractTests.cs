@@ -11,15 +11,57 @@ public sealed class AbstractionsContractTests {
     [Fact]
     public void CpuSurfaceRejectsMismatchedPackedStorage() {
         _ = Assert.Throws<ArgumentException>(testCode: () => Surface.CpuPixels(
-            format: SurfaceFormat.R8G8B8A8Unorm,
+            format: GpuPixelFormat.R8G8B8A8Unorm,
             height: 1,
             pixels: new byte[3],
             width: 1
         ));
         _ = Assert.Throws<ArgumentException>(testCode: () => Surface.CpuPixels(
-            format: SurfaceFormat.R8G8B8A8Unorm,
+            format: GpuPixelFormat.R8G8B8A8Unorm,
             height: 1,
             pixels: new byte[5],
+            width: 1
+        ));
+    }
+    [Fact]
+    public void ASurfaceCarriesTheTwoEightBitOrdersAndASameDeviceImageTheFloatWorkingFormatsToo() {
+        foreach (var format in Enum.GetValues<GpuPixelFormat>()) {
+            Assert.Equal(
+                expected: (format is GpuPixelFormat.R8G8B8A8Unorm or GpuPixelFormat.B8G8R8A8Unorm),
+                actual: Surface.IsSurfaceFormat(format: format)
+            );
+            Assert.Equal(
+                expected: (format is GpuPixelFormat.R8G8B8A8Unorm or GpuPixelFormat.B8G8R8A8Unorm or GpuPixelFormat.R16G16B16A16Float or GpuPixelFormat.R32G32B32A32Float),
+                actual: Surface.IsImageFormat(format: format)
+            );
+        }
+
+        Assert.Equal(
+            actual: Surface.SameDeviceImage(
+                format: GpuPixelFormat.R16G16B16A16Float,
+                height: 1,
+                imageHandle: 7,
+                imageViewHandle: 8,
+                width: 1
+            ).Format,
+            expected: GpuPixelFormat.R16G16B16A16Float
+        );
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Surface.SharedTexture(
+            format: GpuPixelFormat.R16G16B16A16Float,
+            height: 1,
+            sharedHandle: 23,
+            width: 1
+        ));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Surface.CpuPixels(
+            format: GpuPixelFormat.R8G8B8A8Srgb,
+            height: 1,
+            pixels: new byte[4],
+            width: 1
+        ));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Surface.SharedTexture(
+            format: default,
+            height: 1,
+            sharedHandle: 23,
             width: 1
         ));
     }
@@ -29,36 +71,32 @@ public sealed class AbstractionsContractTests {
         _ = Assert.Throws<ArgumentException>(testCode: () => GpuDescriptorPoolSizes.ForSets([
             new GpuComputeBinding(
                 0,
-                GpuComputeBindingKind.StorageImage
+                GpuBindingKind.StorageImage
             ),
             new GpuComputeBinding(
                 0,
-                GpuComputeBindingKind.StorageBufferRead
+                GpuBindingKind.ReadOnlyBuffer
             )
         ]));
         _ = Assert.Throws<OverflowException>(testCode: () => GpuDescriptorPoolSizes.ForSets([
             new GpuComputeBinding(
                 Binding: 0,
                 Count: uint.MaxValue,
-                Kind: GpuComputeBindingKind.StorageImage
+                Kind: GpuBindingKind.StorageImage
             ),
             new GpuComputeBinding(
                 1,
-                GpuComputeBindingKind.StorageImage
+                GpuBindingKind.StorageImage
             )
         ]));
     }
     [Fact]
     public void DeviceLocalFactoryMethodsDoNotReturnHostWritableType() {
-        var factoryType = typeof(IGpuStorageBufferFactory);
+        var factoryType = typeof(IGpuBufferFactory);
 
         Assert.Equal(
             typeof(IGpuBuffer),
-            factoryType.GetMethod(name: nameof(IGpuStorageBufferFactory.CreateDeviceLocal))!.ReturnType
-        );
-        Assert.Equal(
-            typeof(IGpuBuffer),
-            factoryType.GetMethod(name: nameof(IGpuStorageBufferFactory.CreateDeviceLocalIndirectArgs))!.ReturnType
+            factoryType.GetMethod(name: nameof(IGpuBufferFactory.CreateDeviceLocal))!.ReturnType
         );
     }
     [Fact]
@@ -111,6 +149,22 @@ public sealed class AbstractionsContractTests {
             1,
             0
         ));
+
+        // A camera's image begins at its eye unless it sets a near plane, which must be finite and not negative.
+        var camera = CameraSnapshot.LookAt(
+            fieldOfViewRadians: 1f,
+            position: Vector3.Zero,
+            target: -Vector3.UnitZ,
+            viewportHeight: 1,
+            viewportWidth: 1
+        );
+
+        Assert.Equal(expected: 0f, actual: camera.Near);
+        Assert.Equal(expected: 2.5f, actual: (camera with { Near = 2.5f }).Near);
+
+        foreach (var near in ((float[])[-0.01f, float.NaN, float.PositiveInfinity])) {
+            _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => camera with { Near = near });
+        }
     }
     [Fact]
     public void PushConstantsRequireDefinedStagesAndWordAlignment() {
@@ -202,20 +256,20 @@ public sealed class AbstractionsContractTests {
             new byte[8],
             width: 2,
             height: 1,
-            SurfaceFormat.R8G8B8A8Unorm
+            GpuPixelFormat.R8G8B8A8Unorm
         );
         var image = Surface.SameDeviceImage(
             imageHandle: 16,
             imageViewHandle: 17,
             width: 1,
             height: 1,
-            SurfaceFormat.B8G8R8A8Unorm
+            GpuPixelFormat.B8G8R8A8Unorm
         );
         var shared = Surface.SharedTexture(
             sharedHandle: 23,
             width: 1,
             height: 1,
-            SurfaceFormat.R8G8B8A8Unorm
+            GpuPixelFormat.R8G8B8A8Unorm
         );
 
         Assert.Equal(

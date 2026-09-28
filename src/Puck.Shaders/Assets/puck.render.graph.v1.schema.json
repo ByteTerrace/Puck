@@ -6,7 +6,7 @@
     "generator": "Puck.World.WorldSchema"
   },
   "title": "Puck frame graph (puck.render.graph.v1)",
-  "description": "A frame as a document: passes connected by named image and buffer versions, planned by the one pipeline planner (ShaderPipelineCompiler). Every view renders an instance of a graph, and a version declared External is an input the host binds, such as another instance\u0027s output. Its members are the pipeline document\u0027s members, with the same shapes, plus Packages: a puck.shader.pipeline.v1 document\u0027s content is a graph with no packages, so a pipeline is a graph a world names.",
+  "description": "A frame as a document: passes connected by named image and buffer versions, planned by the one pipeline planner (ShaderPipelineCompiler). It is the one document a pass graph is written in. A pipeline is a graph a world names, whose passes are all shader passes, and a lone .hlsl source reads as the one-pass graph FromShaderSource makes. Every view renders an instance of a graph, and a version declared External is an input the host binds, such as another instance\u0027s output.",
   "type": [
     "object",
     "null"
@@ -22,10 +22,10 @@
       "type": "string"
     },
     "resources": {
-      "description": "The versions, as a pipeline declares them.",
+      "description": "The versions.",
       "type": "array",
       "items": {
-        "description": "One resource version declared by a ShaderPipelineDefinition. Each version has exactly one writer. A version that names From forwards that predecessor: its writer continues the predecessor\u0027s storage and contents, so the predecessor is consumed and every pass that samples it runs before the overwrite.",
+        "description": "One resource version declared by a RenderGraphDefinition. Each version has exactly one writer. A version that names From forwards that predecessor: its writer continues the predecessor\u0027s storage and contents, so the predecessor is consumed and every pass that samples it runs before the overwrite.",
         "type": [
           "object",
           "null"
@@ -93,13 +93,14 @@
             "enum": [
               "Undefined",
               "Zero",
-              "External"
+              "External",
+              "Host"
             ],
             "default": "Undefined",
             "title": "ShaderPipelineInitialization"
           },
           "sizeBytes": {
-            "description": "Buffer capacity in bytes, a multiple of four, or null for images. A buffer is a raw buffer of 32-bit words, read and written by byte address.",
+            "description": "A fixed buffer\u0027s capacity in bytes, a multiple of four and of StrideBytes, or null for an image or a counted buffer. A buffer without a stride is a raw buffer of 32-bit words, read and written by byte address.",
             "type": [
               "integer",
               "null"
@@ -118,6 +119,73 @@
             "description": "The sample count of an image. Only single-sampled images are executable, so any other count is refused by name.",
             "type": "integer",
             "default": 1
+          },
+          "strideBytes": {
+            "description": "A structured buffer\u0027s element stride in bytes, a positive multiple of four, or null for a raw buffer. Only a package pass reaches a structured buffer.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "count": {
+            "description": "A counted buffer\u0027s size in elements, a sum of terms that each scale with a product of counts the host resolves, in place of SizeBytes. Only a package pass reaches a counted buffer.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "description": "One term of a counted buffer\u0027s size: Elements elements per unit of the product of the bases in Per, each element ElementBytes long. A buffer\u0027s count is the sum of its terms.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "per": {
+                  "description": "The bases whose units multiply, at least one, each at most once.",
+                  "type": "array",
+                  "items": {
+                    "description": "Identifies a count a term of a counted buffer\u0027s size scales with.",
+                    "enum": [
+                      "Extent",
+                      "Instances",
+                      "ProgramWords",
+                      "Viewports",
+                      "Tiles",
+                      "DynamicTransforms",
+                      "InstanceMaskWords",
+                      "InstanceGridWords",
+                      "BrickPoolVoxels"
+                    ],
+                    "title": "ShaderPipelineCountBasis"
+                  }
+                },
+                "elements": {
+                  "description": "The elements per unit of the product, at least one.",
+                  "type": "integer",
+                  "default": 1
+                }
+              },
+              "required": [
+                "per"
+              ],
+              "additionalProperties": false,
+              "title": "ShaderPipelineCountTerm"
+            },
+            "default": null
+          },
+          "transient": {
+            "description": "Whether the storage is frame-transient: every frame writes it from discarded contents before anything reads it, and nothing reads it across frames, so it is allocated once rather than once per frame slot and successive frames\u0027 uses of the one allocation are ordered on the queue by the planned barrier of each frame\u0027s first use. Only the first version of a chain declares it; a transient storage is never history, external, zero-initialized or a public output.",
+            "type": "boolean",
+            "default": false
+          },
+          "clearDepth": {
+            "description": "The depth a depth resource\u0027s writer clears it to, in [0, 1], or null for DefaultClearDepth: its render pass\u0027s ClearDepth. A pass that keeps greater depths (Greater) tests against a depth cleared to 0. Only a depth resource that forwards nothing declares it, because a forwarded version\u0027s writer loads what its predecessor left.",
+            "type": [
+              "number",
+              "null"
+            ],
+            "default": null
           }
         },
         "required": [
@@ -128,7 +196,7 @@
       }
     },
     "outputs": {
-      "description": "The public versions; the first is what a consumer reads by default.",
+      "description": "The public versions, each named by its version name; the first is what a consumer reads by default.",
       "type": "array",
       "items": {
         "type": [
@@ -138,13 +206,13 @@
       }
     },
     "passes": {
-      "description": "The shader passes, as a pipeline declares them, or null for none.",
+      "description": "The shader passes, in any order, or null for none; the planner orders them.",
       "type": [
         "array",
         "null"
       ],
       "items": {
-        "description": "One executable pass in a shader pipeline.",
+        "description": "One shader pass of a graph.",
         "type": [
           "object",
           "null"
@@ -155,7 +223,7 @@
             "type": "string"
           },
           "source": {
-            "description": "The HLSL source\u0027s path, relative to the pipeline document.",
+            "description": "The HLSL source\u0027s path, relative to the graph document.",
             "type": "string"
           },
           "entryPoint": {
@@ -163,22 +231,22 @@
             "type": "string"
           },
           "kind": {
-            "description": "Compute, fullscreen graphics, or indexed geometry.",
+            "description": "Compute, fullscreen graphics, or indexed geometry. A shader pass names no package work, which a graph declares as a RenderGraphPackagePass.",
             "enum": [
               "Compute",
               "Fullscreen",
               "Geometry"
             ],
-            "title": "ShaderPipelinePassKind"
+            "title": "ShaderPipelineDocumentPassKind"
           },
           "inputs": {
-            "description": "Named resource bindings. Set PreviousFrame explicitly for feedback.",
+            "description": "The versions the pass reads, each a port of its interface. Set PreviousFrame explicitly for feedback.",
             "type": [
               "array",
               "null"
             ],
             "items": {
-              "description": "A pass\u0027s reference to one resource version: which version it reads or writes, which frame\u0027s instance, and its descriptor binding.",
+              "description": "A pass\u0027s reference to one resource version: which version it reads or writes, which frame\u0027s instance, and the identifier its source reads it by. Where it binds follows from the pass\u0027s interface (ShaderPipelinePassPorts), never from the document.",
               "type": [
                 "object",
                 "null"
@@ -193,10 +261,10 @@
                   "type": "boolean",
                   "default": false
                 },
-                "binding": {
-                  "description": "The descriptor binding, or null for the planner to assign one.",
+                "as": {
+                  "description": "The HLSL identifier the pass\u0027s source reads the port by, or null for the version\u0027s name in camel case (Identifier). A source that several passes bind to differently named versions names each port the same way with it.",
                   "type": [
-                    "integer",
+                    "string",
                     "null"
                   ],
                   "default": null
@@ -228,7 +296,7 @@
               "null"
             ],
             "additionalProperties": {
-              "description": "One field of a ShaderSetManifest\u0027s config schema \u2014 what a document may author for this shader set, validated by TryBindConfig and emitted as JSON Schema by ConfigJsonSchema.",
+              "description": "One field of a pass\u0027s or a package\u0027s config schema (Config) \u2014 what a document may author for it, validated by TryBind and emitted as JSON Schema by JsonSchema.",
               "type": [
                 "object",
                 "null"
@@ -277,6 +345,14 @@
                   "description": "The field\u0027s description, carried into the emitted JSON Schema.",
                   "type": [
                     "string",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "length": {
+                  "description": "The element count of a block array of four-component vectors, whose document value is an array of that many vectors, or null for a single value.",
+                  "type": [
+                    "integer",
                     "null"
                   ],
                   "default": null
@@ -429,6 +505,111 @@
               "null"
             ],
             "default": null
+          },
+          "dispatch": {
+            "description": "A compute or package pass\u0027s dispatch shape; null means Extent. A graphics pass declares none.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "kind": {
+                "description": "The dispatch shape.",
+                "enum": [
+                  "Extent",
+                  "Groups",
+                  "Indirect"
+                ],
+                "title": "ShaderPipelineDispatchKind"
+              },
+              "groupCountX": {
+                "description": "A Groups dispatch\u0027s group count in x, otherwise one.",
+                "type": "integer",
+                "default": 1
+              },
+              "groupCountY": {
+                "description": "A Groups dispatch\u0027s group count in y, otherwise one.",
+                "type": "integer",
+                "default": 1
+              },
+              "groupCountZ": {
+                "description": "A Groups dispatch\u0027s group count in z, otherwise one.",
+                "type": "integer",
+                "default": 1
+              },
+              "arguments": {
+                "description": "An Indirect dispatch\u0027s buffer version, which the pass reaches in the indirect-argument state and names in neither its inputs nor its outputs; otherwise null.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "argumentsOffsetBytes": {
+                "description": "The byte offset of the three group-count words in Arguments, a multiple of four.",
+                "type": "integer",
+                "default": 0
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "additionalProperties": false,
+            "default": null,
+            "title": "ShaderPipelineDispatch"
+          },
+          "arrays": {
+            "description": "Optional arrays in the World group, each an element type and a length, which a world binds to whole state rows (ShaderArrayField).",
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "description": "One array a pass declares in its arrays: an interface array in the World group, a read-only structured buffer of its element type, which a world binds to a whole state row with a parameters entry and the pass reads through its generated accessor, \u003Cname\u003EAt(i). An array no row binds reads zeros.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "type": {
+                  "description": "The element type: float, int or uint. A bound row must fill it: an integer element takes a row whose declared bounds fit its range.",
+                  "enum": [
+                    "float",
+                    "float2",
+                    "float3",
+                    "float4",
+                    "uint",
+                    "uint2",
+                    "uint3",
+                    "uint4",
+                    "int",
+                    "int2",
+                    "int3",
+                    "int4"
+                  ],
+                  "title": "ShaderValueType"
+                },
+                "length": {
+                  "description": "The element count, from one to MaxLength. A bound row\u0027s cell count must not exceed it; element i holds the row\u0027s cell i, and elements past the row read zero.",
+                  "type": "integer"
+                },
+                "description": {
+                  "description": "The array\u0027s description.",
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                }
+              },
+              "required": [
+                "type",
+                "length"
+              ],
+              "additionalProperties": false,
+              "title": "ShaderArrayField"
+            },
+            "default": null
           }
         },
         "required": [
@@ -443,7 +624,7 @@
       "default": null
     },
     "packages": {
-      "description": "The engine-package passes, or null for none.",
+      "description": "The engine-package passes, or null for none. Only a host that offers packages plans them (RenderGraphCompiler); a pipeline instance runs shader passes alone.",
       "type": [
         "array",
         "null"
@@ -464,7 +645,7 @@
             "type": "string"
           },
           "inputs": {
-            "description": "The versions the package reads, one per input port in port order. A reference may read a history version\u0027s previous frame. A package binds its own descriptors, so no reference declares a binding.",
+            "description": "The versions the package reads, one per input port in port order, each carrying what its port carries (RenderGraphPackagePort). A reference may read a history version\u0027s previous frame. A package compiles no source, so no reference names an as.",
             "type": [
               "array",
               "null"
@@ -475,7 +656,7 @@
             "default": null
           },
           "outputs": {
-            "description": "The image versions the package writes, one per output port in port order.",
+            "description": "The versions the package writes, one per output port in port order, each carrying what its port carries.",
             "type": [
               "array",
               "null"
@@ -484,6 +665,11 @@
               "$ref": "#/properties/passes/items/properties/inputs/items"
             },
             "default": null
+          },
+          "config": {
+            "description": "The values of the package\u0027s config schema (Config), each absent field at its default, or null for every default. They are the pass\u0027s frame block config, which the graph compiler binds against the schema and refuses by name when they do not bind.",
+            "default": null,
+            "$comment": "Open payload: this member\u0027s shape is decided by an id named elsewhere in the document, never by this generator."
           }
         },
         "required": [
@@ -494,6 +680,31 @@
         "title": "RenderGraphPackagePass"
       },
       "default": null
+    },
+    "tickRate": {
+      "description": "The rate, in ticks a second, the graph\u0027s passes read the deterministic tick at (Tick), or null for the engine\u0027s own (EngineTickRate). A pass reads the engine tick divided by the engine rate over this rate, so the rate must divide the engine rate exactly; the planner refuses any other by name (SHADERPIPE_TICK_RATE).",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "tiers": {
+      "description": "The quality tiers the graph\u0027s shader passes vary by, each a variant a package of the graph compiles beside default with Define set, or null for none, which builds default alone. A tier the graph does not declare loads default (VariantOf).",
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": null,
+      "items": {
+        "title": "QualityTier",
+        "type": "string",
+        "enum": [
+          "low",
+          "medium",
+          "high"
+        ]
+      }
     }
   },
   "required": [

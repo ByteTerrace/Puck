@@ -4,7 +4,7 @@
     "null"
   ],
   "items": {
-    "description": "One diegetic screen in the world \u2014 a screen slab emitted by SdfProgramBuilder whose lit face samples a bound source (or the procedural fallback when unbound). The frame (Origin/Right/ Up \u002B HalfWidth/HalfHeight) is the sampled surface frame and must match the slab\u0027s placement; the frame source bakes the geometry translate from it.",
+    "description": "One diegetic screen in the world \u2014 a screen slab emitted by SdfProgramBuilder whose lit face samples a bound source (or shades as dark glass when unbound). The frame (Origin/Right/ Up \u002B HalfWidth/HalfHeight) is the sampled surface frame and must match the slab\u0027s placement; the frame source bakes the geometry translate from it.",
     "type": [
       "object",
       "null"
@@ -97,7 +97,7 @@
             ]
           },
           "input": {
-            "description": "Where a pointer hit on the screen\u0027s source goes: Presentation for hover and highlight, or Simulation for a pointer ray mapped in fixed point from this row, such as a light gun (WorldScreenMappings). Passthrough is refused by name: host passthrough exists only for a source the local user opened on their own machine, and a world document can never create one or send it input. null (the default) is Presentation. Omitted from the wire when null.",
+            "description": "Where a pointer hit on the screen\u0027s source goes: Presentation for hover and highlight, or Simulation for a pointer ray mapped in fixed point from this row, which a $pointer: rule read sees and which aims the screen machine\u0027s light gun for a seat applied to the screen (WorldScreenMappings). Passthrough is refused by name: host passthrough exists only for a source the local user opened on their own machine, and a world document can never create one or send it input. null (the default) is Presentation. Omitted from the wire when null.",
             "enum": [
               "Presentation",
               "Simulation",
@@ -230,6 +230,15 @@
           "title": "WorldScreenMemory"
         },
         "default": null
+      },
+      "filter": {
+        "description": "How the face samples its source\u0027s image: Nearest, the default, keeps each source pixel crisp, as an emulator or a pixel-art source wants; Linear blends between source pixels, as a camera or a desktop capture wants. The screen\u0027s mapping carries it, and a hit maps to the same source pixel under either. Omitted from the wire when Nearest.",
+        "enum": [
+          "Nearest",
+          "Linear"
+        ],
+        "default": "Nearest",
+        "title": "GpuSamplerFilter"
       }
     },
     "required": [

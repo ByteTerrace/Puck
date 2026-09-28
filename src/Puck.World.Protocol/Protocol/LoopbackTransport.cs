@@ -85,7 +85,7 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
 
     // Mints the next envelope for the LOCAL connection (id 0, generation 0) — Sequence/CorrelationId both simple
     // monotonic counters (see their own field remarks).
-    private long Submit(Principal principal, WorldSubmissionPayload payload, Guid operationId = default, Action<WorldSubmissionResult>? completion = null) {
+    private long Submit(Principal principal, WorldSubmissionPayload payload, Guid operationId = default, Action<WorldSubmissionResult>? completion = null, WorldDeferredVerbRow? console = null) {
         if (
             (payload is WorldSubmissionPayload.Mutation) &&
             (operationId == Guid.Empty)
@@ -98,30 +98,54 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
         }
         if (TryNextEnvelope(
             envelope: out var envelope,
+            failure: out var failure,
             operationId: operationId,
             payload: payload,
             principal: principal
         )) {
-            m_server.Submit(
-                completion: completion,
-                envelope: envelope
-            );
+            console?.Minted(correlationId: envelope.CorrelationId, payload: envelope.Payload);
+            try {
+                m_server.Submit(
+                    completion: completion,
+                    envelope: envelope
+                );
+            } finally {
+                console?.Submitted(correlationId: envelope.CorrelationId, payload: envelope.Payload);
+            }
 
             return envelope.CorrelationId;
         }
 
-        completion?.Invoke(new WorldSubmissionResult.Refusal(
-            Code: "world.transport.codec_refused",
-            Detail: "the submission could not be encoded or decoded"
-        ));
+        RefuseCodec(
+            completion: completion,
+            console: console,
+            failure: failure
+        );
         return 0;
+    }
+    // Reports a payload the canonical frame refused exactly once, naming the codec's own reason: as the submission's
+    // verdict when its caller takes one, which answers the submitting line, and on stderr only when nothing else
+    // would ever report it, where a console link's submission also counts it.
+    private static void RefuseCodec(WorldCodecFailure failure, Action<WorldSubmissionResult>? completion, WorldDeferredVerbRow? console) {
+        if (completion is null) {
+            Console.Error.WriteLine(value: $"[world.codec refused: {failure}]");
+            console?.RefusedCodec();
+
+            return;
+        }
+
+        completion(new WorldSubmissionResult.Refusal(
+            Code: "world.transport.codec_refused",
+            Detail: $"the submission could not be encoded or decoded: {failure}"
+        ));
     }
     // Encodes and decodes a typed payload, taps its canonical value with the envelope's principal, then submits it.
     // The payload's concrete leaf type proves that decoding returned the expected union case.
-    private long SubmitTapped<TPayload, TValue>(TPayload payload, Principal principal, Func<TPayload, TValue> selectValue, Action<TValue, Principal>? tap, Action<WorldSubmissionResult>? completion = null) where TPayload : WorldSubmissionPayload {
+    private long SubmitTapped<TPayload, TValue>(TPayload payload, Principal principal, Func<TPayload, TValue> selectValue, Action<TValue, Principal>? tap, WorldDeferredVerbRow? console, Action<WorldSubmissionResult>? completion = null) where TPayload : WorldSubmissionPayload {
         if (
             TryNextEnvelope(
             envelope: out var envelope,
+            failure: out var failure,
             payload: payload,
             principal: principal
         ) &&
@@ -131,20 +155,29 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
                 arg1: selectValue(arg: canonical),
                 arg2: envelope.Principal
             );
-            m_server.Submit(completion: completion, envelope: envelope);
+            console?.Minted(correlationId: envelope.CorrelationId, payload: envelope.Payload);
+            try {
+                m_server.Submit(completion: completion, envelope: envelope);
+            } finally {
+                console?.Submitted(correlationId: envelope.CorrelationId, payload: envelope.Payload);
+            }
 
             return envelope.CorrelationId;
         }
 
-        completion?.Invoke(new WorldSubmissionResult.Refusal(Code: "world.transport.codec_refused", Detail: "the submission could not be encoded or decoded"));
+        RefuseCodec(
+            completion: completion,
+            console: console,
+            failure: failure
+        );
         return 0;
     }
     // The ALWAYS-BYTES rule: even the in-process link is defined by the same canonical frame a future socket carries.
     // A refusal is a transport verdict printed by name; invalid caller state never escapes as an invariant exception.
-    private bool TryNextEnvelope(Principal principal, WorldSubmissionPayload payload, out SubmissionEnvelope envelope, Guid operationId = default) {
+    private bool TryNextEnvelope(Principal principal, WorldSubmissionPayload payload, out SubmissionEnvelope envelope, out WorldCodecFailure failure, Guid operationId = default) {
         if (
             !WorldFrameCodec.TryEncode(
-            failure: out var failure,
+            failure: out failure,
             frame: out var frame,
             operationId: operationId,
             payload: payload
@@ -157,7 +190,6 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
         ) ||
             (decoded is null)
         ) {
-            Console.Error.WriteLine(value: $"[world.codec refused: {failure}]");
             envelope = default;
             return false;
         }
@@ -200,7 +232,8 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
         if (TryNextEnvelope(
             principal: principal,
             payload: new WorldSubmissionPayload.Query(Value: query),
-            envelope: out var envelope
+            envelope: out var envelope,
+            failure: out var failure
         )) {
             if (envelope.Payload is WorldSubmissionPayload.Query canonical) {
                 QueryTap?.Invoke(
@@ -216,7 +249,7 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
         } else {
             completion(new QueryAnswer(
                 Refused: true,
-                Text: "loopback codec refused the query payload"
+                Text: $"loopback codec refused the query payload: {failure}"
             ));
         }
     }
@@ -244,7 +277,28 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
         principal: principal
     );
     /// <inheritdoc/>
-    public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal, Guid operationId, Action<WorldSubmissionResult>? completion) {
+    public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal, Guid operationId, Action<WorldSubmissionResult>? completion) => SubmitEnvelope(
+        completion: completion,
+        console: null,
+        operationId: operationId,
+        payload: payload,
+        principal: principal
+    );
+    /// <summary>Returns the link a console submits this row's lines through: each submission it mints registers in
+    /// <paramref name="row"/>'s table, so its verdict answers and counts; this bare transport registers nothing.</summary>
+    /// <param name="row">The row's handle on the console's table.</param>
+    /// <returns>The console link, created once per row.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="row"/> is <see langword="null"/>.</exception>
+    public WorldConsoleServerLink ForConsole(WorldDeferredVerbRow row) {
+        ArgumentNullException.ThrowIfNull(argument: row);
+
+        return new WorldConsoleServerLink(
+            row: row,
+            transport: this
+        );
+    }
+
+    internal long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal, Guid operationId, Action<WorldSubmissionResult>? completion, WorldDeferredVerbRow? console) {
         switch (payload) {
             // CommandTap is single-arg (Action<WorldCommand>, no principal), unlike the two-arg taps below —
             // inlined rather than forced through SubmitTapped's Action<TValue, Principal> shape.
@@ -256,6 +310,7 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
                 if (
                     TryNextEnvelope(
                     envelope: out var commandEnvelope,
+                    failure: out var commandFailure,
                     operationId: operationId,
                     payload: command,
                     principal: principal
@@ -263,15 +318,26 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
                     (commandEnvelope.Payload is WorldSubmissionPayload.Command canonicalCommand)
                 ) {
                     CommandTap?.Invoke(obj: canonicalCommand.Value);
-                    m_server.Submit(envelope: commandEnvelope);
+                    console?.Minted(correlationId: commandEnvelope.CorrelationId, payload: commandEnvelope.Payload);
+                    try {
+                        m_server.Submit(envelope: commandEnvelope);
+                    } finally {
+                        console?.Submitted(correlationId: commandEnvelope.CorrelationId, payload: commandEnvelope.Payload);
+                    }
 
                     return commandEnvelope.CorrelationId;
                 }
+                RefuseCodec(
+                    completion: completion,
+                    console: console,
+                    failure: commandFailure
+                );
                 return 0;
             case WorldSubmissionPayload.Composition composition:
                 return SubmitTapped<WorldSubmissionPayload.Composition, WorldComposition>(
                     payload: composition,
                     principal: principal,
+                    console: console,
                     selectValue: static p => p.Value,
                     tap: CompositionTap
                 );
@@ -279,6 +345,7 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
                 return SubmitTapped<WorldSubmissionPayload.Designation, WorldDesignation>(
                     payload: designation,
                     principal: principal,
+                    console: console,
                     selectValue: static p => p.Value,
                     tap: DesignationTap
                 );
@@ -291,6 +358,7 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
                 return SubmitTapped<WorldSubmissionPayload.Grant, WorldGrant>(
                     payload: grant,
                     principal: principal,
+                    console: console,
                     selectValue: static p => p.Value,
                     tap: GrantTap
                 );
@@ -298,6 +366,7 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
                 return SubmitTapped<WorldSubmissionPayload.Revoke, WorldGrant>(
                     payload: revoke,
                     principal: principal,
+                    console: console,
                     selectValue: static p => p.Value,
                     tap: RevokeTap
                 );
@@ -307,17 +376,20 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
                     principal: principal,
                     selectValue: static p => p.Count,
                     completion: completion,
+                    console: console,
                     tap: UndoTap
                 );
             default:
                 return Submit(
                     completion: completion,
+                    console: console,
                     operationId: operationId,
                     payload: payload,
                     principal: principal
                 );
         }
     }
+
     /// <inheritdoc/>
     public void SubmitIntent(in IntentSubmission submission) {
         if (InputMasked) {
@@ -335,7 +407,8 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
             TryNextEnvelope(
             principal: request.Principal,
             payload: new WorldSubmissionPayload.Session(Value: request),
-            envelope: out var envelope
+            envelope: out var envelope,
+            failure: out var failure
         ) &&
             (envelope.Payload is WorldSubmissionPayload.Session canonical)
         ) {
@@ -348,7 +421,7 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
             completion(new SessionReply(
                 Accepted: false,
                 AssignedIndex: -1,
-                Reason: "loopback codec refused the session payload",
+                Reason: $"loopback codec refused the session payload: {failure}",
                 RosterEcho: string.Empty
             ));
         }

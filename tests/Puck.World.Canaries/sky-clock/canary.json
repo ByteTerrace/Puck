@@ -1,0 +1,105 @@
+{
+  "id": "sky-clock",
+  "title": "The sky's twinkle and cloud spin and a bounded medium's pulse animate on the presented engine tick, so the world's view repeats exactly one period apart",
+  "binding": "The positive leg boots an offscreen 64x64 world whose sky authors a gradient, a star field every star of which twinkles at one hertz, and a cloud layer spinning at one turn a second, and whose one placement is a creation holding a cloud volume twenty units in every half-extent around the camera, pulsing at one hertz with no drift. Every animated value therefore has a period of one second, thirty ticks at the world's thirty-hertz simulation, and each is baked on the host from the presented engine tick the capture pins (the twinkle's phase and the spin's angle in the environment rows, the pulse's gain in the volume table), never from the frames the host composed. A captures row captures the world's view at ticks 60, 69 and 90: the captures at 60 and 90, one whole period apart, agree, and the capture at 69, three tenths of a period in, where the pulse's gain and every twinkle stand elsewhere, does not. world.timeline echoes the timeline's one tick clock with its period in engine ticks. The discriminating leg pulses the volume at one and a quarter hertz, so its gain at ticks 60 and 90 (two and a half and three and three quarter cycles in, where the pulse's sine reads zero and minus one) differs and the agreement between those captures turns red, while the capture at 69 still differs and the clock still echoes.",
+  "bootShape": "offscreen",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
+  "timeoutSeconds": 60,
+  "fixtures": [],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/sky-clock/fixture.world.json",
+    "script": "sky.script.txt",
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.timeline",
+        "occurrence": 1,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "framesAgree",
+        "name": "the-view-repeats-one-period-apart",
+        "before": "state/captures/sky~60.png",
+        "after": "state/captures/sky~90.png",
+        "agree": true
+      },
+      {
+        "type": "framesAgree",
+        "name": "the-view-moves-within-a-period",
+        "before": "state/captures/sky~60.png",
+        "after": "state/captures/sky~69.png",
+        "agree": false
+      },
+      {
+        "type": "line",
+        "name": "the-timeline-echoes-its-tick-clock",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "second span=1 periodTicks=50400 startTicks=0",
+        "present": true
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/sky-clock/discriminating.world.json",
+    "script": "sky.script.txt",
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.timeline",
+        "occurrence": 1,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "framesAgree",
+        "name": "the-view-repeats-one-period-apart",
+        "before": "state/captures/sky~60.png",
+        "after": "state/captures/sky~90.png",
+        "agree": false
+      },
+      {
+        "type": "framesAgree",
+        "name": "the-view-moves-within-a-period",
+        "before": "state/captures/sky~60.png",
+        "after": "state/captures/sky~69.png",
+        "agree": false
+      },
+      {
+        "type": "line",
+        "name": "the-timeline-echoes-its-tick-clock",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "second span=1 periodTicks=50400 startTicks=0",
+        "present": true
+      }
+    ]
+  }
+}

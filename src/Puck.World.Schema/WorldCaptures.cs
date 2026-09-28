@@ -26,7 +26,15 @@ public sealed record WorldCapturePaletteEntry(int Material, string Color);
 /// <param name="Palette">The per-pixel census's material table — at least one entry, at most
 /// <see cref="WorldCapturesCapacity.MaxPaletteEntriesPerRow"/>, unique <see cref="WorldCapturePaletteEntry.Material"/>
 /// indices.</param>
-public sealed record WorldCaptureRow(CellName Station, IReadOnlyList<ulong> Ticks, IReadOnlyList<WorldCapturePaletteEntry> Palette) {
+/// <param name="Instance">The render-graph instance whose output the station captures, or <see langword="null"/> (the
+/// default) for the root, the frame the display shows. <see cref="WorldViewGraphs.WorldInstance"/> captures the SDF
+/// world before any <c>views.post</c> pass or the overlay is drawn over it.</param>
+/// <param name="Screen">The index of the screen whose source the station captures, before any screen shows it: the
+/// source instance the screen reads, which a machine output, a producer or a probe source is. Mutually exclusive with
+/// <paramref name="Instance"/>; <see langword="null"/> (the default) captures by instance.</param>
+public sealed record WorldCaptureRow(CellName Station, IReadOnlyList<ulong> Ticks, IReadOnlyList<WorldCapturePaletteEntry> Palette,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Instance = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] int? Screen = null) {
     /// <summary>The generated name of one capture: the station and the tick joined as a file name
     /// (<see cref="GeneratedName.JoinFile"/>), <c>lattice~860</c>. The capture's frame is this name with <c>.png</c>,
     /// and a parity comparison's evidence directory for it is this name. The tick is decimal digits and the station
@@ -44,7 +52,7 @@ public sealed record WorldCaptureRow(CellName Station, IReadOnlyList<ulong> Tick
 }
 /// <summary>
 /// The <c>captures</c> document section — tick-scheduled composed-frame captures, arming the same capture path
-/// <c>world.screenshot</c> uses (<c>SdfWorldRender.RequestCapture</c>/<c>SdfEngineNode.RequestCapture</c>) at exact
+/// <c>world.screenshot</c> uses (the render graph's root, or the instance a row names) at exact
 /// SIMULATION ticks rather than on a console request, so two backends stepping the identical document and input
 /// capture the identical moment by construction. OPTIONAL, like <c>rules</c>/<c>probes</c>: a document declaring
 /// none is unchanged. Boot-authored only — no mutation kind targets it and no grant subject names it, exactly like

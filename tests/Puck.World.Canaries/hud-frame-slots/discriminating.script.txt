@@ -1,0 +1,8 @@
+# The same frames of a world whose replace panel holds no frame element.
+# The engine ready first: its pipeline set installed and its first frame produced, however long a cold driver
+# cache takes.
+world.wait ready 45
+world.cadence off
+world.wait 30
+world.screenshot {run}/frame.png
+world.wait 10

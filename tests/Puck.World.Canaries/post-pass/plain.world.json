@@ -1,0 +1,214 @@
+{
+  "cameras": [
+    {
+      "anchor": null,
+      "name": "grain-cam",
+      "renderHeight": 144,
+      "renderWidth": 256,
+      "rig": {
+        "name": "grain-cam",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                2.5,
+                7
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                0.8,
+                0
+              ]
+            }
+          },
+          {
+            "$type": "fieldOfView",
+            "fieldOfViewRadians": 0.9
+          }
+        ],
+        "version": "puck.camera.program.v1"
+      }
+    }
+  ],
+  "documentId": "post-pass",
+  "host": {
+    "authority": null,
+    "backend": "auto",
+    "exitAfterSeconds": 0,
+    "fullscreen": false,
+    "genlock": null,
+    "height": 144,
+    "journalDepth": 2000,
+    "listen": null,
+    "presentMode": "Immediate",
+    "presentation": "windowed",
+    "surfaceFormat": "r8g8b8a8",
+    "targetHertz": 0,
+    "width": 256
+  },
+  "placements": {
+    "rows": [
+      {
+        "id": "anchor",
+        "position": [
+          -2.5,
+          0,
+          0
+        ],
+        "prototypeId": "block",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "mover",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "prototypeId": "block",
+        "scale": 1,
+        "yawDegrees": 0
+      }
+    ]
+  },
+  "prototypes": [
+    {
+      "document": {
+        "frames": [
+          {
+            "name": "idle",
+            "transforms": []
+          }
+        ],
+        "name": "block",
+        "palette": [
+          {
+            "color": "#8C7A5D",
+            "roughness": 0.55,
+            "sheen": 0,
+            "specular": 0.25
+          },
+          {
+            "color": "#3E8FB0",
+            "roughness": 0.35,
+            "sheen": 0.15,
+            "specular": 0.4
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "chamfer": 0.2,
+            "id": 0,
+            "material": 0,
+            "name": "base",
+            "position": [
+              0,
+              0.6,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.6,
+              0.6,
+              0.6
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 1,
+            "material": 1,
+            "name": "cap",
+            "position": [
+              0,
+              1.5,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.4,
+              0.4,
+              0.4
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          }
+        ]
+      },
+      "id": "block"
+    }
+  ],
+  "schema": "puck.world.definition.v1",
+  "simulation": {
+    "rateHz": 30
+  },
+  "views": {
+    "layouts": [
+      {
+        "name": "grain",
+        "seatCount": 0,
+        "slots": [
+          {
+            "camera": "grain-cam",
+            "height": 1,
+            "width": 1,
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "transitionRenderScale": 1,
+        "transitionSeconds": 0
+      }
+    ],
+    "seatControl": {
+      "maxPitch": 1.2,
+      "minPitch": -0.35,
+      "yawReference": "World"
+    },
+    "seatRig": {
+      "name": "grain-seat",
+      "operations": [
+        {
+          "$type": "orbit",
+          "distance": 5,
+          "pitch": 0.3,
+          "yaw": 0
+        },
+        {
+          "$type": "lookAt",
+          "subject": {
+            "$type": "reference"
+          }
+        },
+        {
+          "$type": "fieldOfView",
+          "fieldOfViewRadians": 0.9
+        }
+      ],
+      "version": "puck.camera.program.v1"
+    }
+  }
+}

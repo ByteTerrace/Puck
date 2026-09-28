@@ -8,16 +8,15 @@ namespace Puck.World;
 
 /// <summary>Named machine execution read-back and generic ordered provider operations.</summary>
 /// <param name="authority">The console session's authority resolver.</param>
-/// <param name="link">The ordered server submission link.</param>
-public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority, IServerLink link) : ICommandModule {
+public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) : ICommandModule {
     private CommandResult Operation(CommandContext context, WireArgs args) {
         if (args.Count < 4) {
             return CommandResult.Error(output: "[machine.operation: expected <instance> <generation> <operationId> <json>]");
         }
-        if (!authority.TryResolveServer(
+        if (!authority.TryResolveLink(
             context: context,
             error: out var authorityError,
-            server: out _,
+            link: out var link,
             verb: "machine.operation"
         )) {
             return authorityError;

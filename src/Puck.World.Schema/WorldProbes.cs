@@ -31,7 +31,7 @@ namespace Puck.World;
 /// null.</param>
 /// <param name="Config">The kind's config values, or <see langword="null"/> when the kind declares none or every
 /// field has a default. Not validated at document load — the kind's own manifest config schema validates it at
-/// boot, matching <see cref="WorldRenderExtensionEntry.Config"/>'s shallow-then-deep precedent.</param>
+/// boot, matching <see cref="WorldViewPostPass.Config"/>'s shallow-then-deep precedent.</param>
 /// <param name="Bindings">What this probe's channels drive, or <see langword="null"/> for a probe that is only read back.</param>
 public sealed record WorldProbe(
     string Id,
@@ -45,19 +45,18 @@ public sealed record WorldProbe(
 /// <summary>The presentation target a <see cref="WorldProbeBinding.Parameter"/> row writes. The <c>$type</c> string
 /// is the JSON discriminator; a future target (a view-rig op, an overlay layer transform) widens this union with
 /// another arm rather than adding parallel optional fields to the binding row.</summary>
-[JsonDerivedType(typeof(WorldProbeParameterTarget.Extension), typeDiscriminator: "extension")]
+[JsonDerivedType(typeof(WorldProbeParameterTarget.Post), typeDiscriminator: "post")]
 [JsonDerivedType(typeof(WorldProbeParameterTarget.Probe), typeDiscriminator: "probe")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record WorldProbeParameterTarget {
     private WorldProbeParameterTarget() {
     }
 
-    /// <summary>Writes a shader-extension config field on a composed <c>render.extensions</c> entry.</summary>
-    /// <param name="Id">The <c>render.extensions[].id</c> entry this targets — must name an entry the document
-    /// itself composes.</param>
-    /// <param name="Field">The extension's config field name — checked against its manifest at boot, never here
-    /// (the same shallow-then-deep precedent every kind-vocabulary field follows).</param>
-    public sealed record Extension(string Id, string Field) : WorldProbeParameterTarget;
+    /// <summary>Writes a config field of a <c>views.post</c> pass, live, into the root graph's pass block.</summary>
+    /// <param name="Pass">The <c>views.post[].name</c> this targets — must name a row of this document.</param>
+    /// <param name="Field">The pass's package config field name — checked against the package's schema at boot, never
+    /// here (the same shallow-then-deep precedent every kind-vocabulary field follows).</param>
+    public sealed record Post(string Pass, string Field) : WorldProbeParameterTarget;
     /// <summary>Writes a config field of another declared probe's kind, live, into its running kernel — one probe's
     /// reading steering another's computation (a tracked centroid placing a relighting kind's light).</summary>
     /// <param name="Id">The <c>probes[].id</c> this targets — a row of this document other than the binding's own.</param>
@@ -104,7 +103,7 @@ public abstract record WorldProbeBinding {
         float MaxAgeSeconds = 0.25f,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Seat = null
     ) : WorldProbeBinding;
-    /// <summary>Writes a channel into a presentation-float shader-extension config field, lerped over
+    /// <summary>Writes a channel into a presentation-float config field of a post pass or a probe kind, lerped over
     /// <paramref name="Range"/>. Presentation-only — the destination never feeds simulation state.</summary>
     /// <param name="Channel">The probe channel name — checked against the kind's manifest at boot, never here.</param>
     /// <param name="Target">The presentation destination.</param>

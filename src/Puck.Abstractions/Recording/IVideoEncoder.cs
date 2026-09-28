@@ -1,4 +1,4 @@
-using Puck.Abstractions.Presentation;
+using Puck.Abstractions.Gpu;
 
 namespace Puck.Abstractions.Recording;
 
@@ -20,12 +20,13 @@ public interface IVideoEncoder : IDisposable {
 
     /// <summary>Encodes one frame; returns zero or more packets (encoders pipeline internally).</summary>
     /// <param name="pixels">The tightly packed CPU pixels.</param>
-    /// <param name="format">The pixel format of <paramref name="pixels"/>.</param>
+    /// <param name="format">The pixel format of <paramref name="pixels"/>, a surface format
+    /// (<see cref="Presentation.Surface.IsSurfaceFormat"/>).</param>
     /// <param name="width">The frame width in pixels.</param>
     /// <param name="height">The frame height in pixels.</param>
     /// <param name="timestampNanoseconds">The presentation timestamp on the session clock.</param>
     /// <returns>The packets ready after this frame, oldest first.</returns>
-    IReadOnlyList<RecordedPacket> EncodeFrame(ReadOnlySpan<byte> pixels, SurfaceFormat format, int width, int height, long timestampNanoseconds);
+    IReadOnlyList<RecordedPacket> EncodeFrame(ReadOnlySpan<byte> pixels, GpuPixelFormat format, int width, int height, long timestampNanoseconds);
     /// <summary>Flushes the pipeline at end of session; returns every remaining packet, oldest first.</summary>
     IReadOnlyList<RecordedPacket> Drain();
 }

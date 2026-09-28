@@ -2,18 +2,18 @@ using Puck.Abstractions.Presentation;
 
 namespace Puck.SdfVm.Views;
 
-/// <summary>One view occupying one region — a single row of a <see cref="ViewLayout"/>. Pure data: which registered
-/// view (see <see cref="ViewStack.Register"/>) sits where, normalized to the frame — or, when <see cref="Child"/> is
-/// set, a named render-node child instead of a <see cref="ViewStack"/> registration (a closed union: exactly one of
-/// <see cref="View"/>'s ordinary meaning or <see cref="Child"/> applies for a given binding; <see cref="View"/> is
-/// unspecified when <see cref="Child"/> is set).</summary>
+/// <summary>The identity of the view a layout slot shows, which its owner's table names: a seat, a camera or a graph
+/// instance.</summary>
+/// <param name="Value">The raw id, unique within its owner's table.</param>
+public readonly record struct ViewId(int Value);
+/// <summary>One view occupying one region — a single row of a <see cref="ViewLayout"/>. Pure data: which view sits
+/// where, normalized to the frame; what a view id names (a seat, a camera or a graph instance) is its owner's
+/// table.</summary>
 /// <param name="View">The view's id.</param>
 /// <param name="Region">Its normalized screen region.</param>
-/// <param name="Child">The named child render node filling this region, or <see langword="null"/> for the ordinary
-/// <paramref name="View"/>-addressed occupant (an SDF camera or a <see cref="ViewStack"/> registration).</param>
-public readonly record struct ViewBinding(ViewId View, NormalizedRect Region, string? Child = null);
-/// <summary>A full frame's slot assignment at one moment — the view-stack analogue of a layout director's per-slot
-/// rect array, generalized to name any registered view (not only a room/pane camera).
+public readonly record struct ViewBinding(ViewId View, NormalizedRect Region);
+/// <summary>A full frame's slot assignment at one moment — a layout director's per-slot rect array, generalized to name
+/// any view (not only a room/pane camera).
 /// <see cref="ViewTransition"/> eases between two of these.</summary>
 /// <param name="Bindings">The layout's bindings, in slot order (index N of one layout corresponds to index N of the
 /// other layout a <see cref="ViewTransition"/> eases between/toward — see its remarks for what happens when the two
@@ -24,7 +24,7 @@ public readonly record struct ViewLayout(IReadOnlyList<ViewBinding> Bindings) {
     public static ViewLayout Empty { get; } = new(Bindings: []);
 }
 /// <summary>
-/// Eases a <see cref="ViewStack"/> composition from one <see cref="ViewLayout"/> to another. Each slot can change
+/// Eases a composition of views from one <see cref="ViewLayout"/> to another. Each slot can change
 /// both its normalized region and the identity of the view occupying it.
 /// </summary>
 /// <remarks>
@@ -108,16 +108,14 @@ public sealed class ViewTransition {
                 ? m_from.Bindings[index]
                 : new ViewBinding(
                     View: m_to.Bindings[index].View,
-                    Region: CenterOf(rect: m_to.Bindings[index].Region),
-                    Child: m_to.Bindings[index].Child
+                    Region: CenterOf(rect: m_to.Bindings[index].Region)
                 )
             );
             var toBinding = ((index < m_to.Bindings.Count)
                 ? m_to.Bindings[index]
                 : new ViewBinding(
                     View: m_from.Bindings[index].View,
-                    Region: CenterOf(rect: m_from.Bindings[index].Region),
-                    Child: m_from.Bindings[index].Child
+                    Region: CenterOf(rect: m_from.Bindings[index].Region)
                 )
             );
 
@@ -129,10 +127,7 @@ public sealed class ViewTransition {
                 ),
                 View: (cutToDestination
                 ? toBinding.View
-                : fromBinding.View),
-                Child: (cutToDestination
-                ? toBinding.Child
-                : fromBinding.Child)
+                : fromBinding.View)
             );
         }
 

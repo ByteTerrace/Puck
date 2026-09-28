@@ -18,15 +18,15 @@ public sealed partial class SdfProgramBuilder {
     /// that exists today — creator groups cannot nest and a chamfer wedge is depth 1 — enforced by a validator rule and
     /// not part of the packed word layout, so raising it never re-gates the stream. But it is not a one-line bump: the
     /// interpreter holds the parent accumulator in one non-indexed <c>(savedFieldDistance, savedFieldMaterial)</c> scalar
-    /// pair in <c>mapCore</c> (Assets/Shaders/Sdf/sdf-vm.hlsli), and the <c>SDF_MAX_FIELD_SCOPE_DEPTH</c> there is
+    /// pair in <c>mapCore</c> (Assets/Shaders/Sdf/field/sdf-map.hlsli), and the generated <c>SDF_MAX_FIELD_SCOPE_DEPTH</c> is
     /// documentation only — no shader expression reads it. Raising this depth means converting that save pair into an
-    /// indexed array and giving push/pop real push/pop-by-depth stack semantics in the shader first, then bumping the
-    /// <c>#define</c> and this constant. KEEP IN SYNC with SDF_MAX_FIELD_SCOPE_DEPTH in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// indexed array and giving push/pop real push/pop-by-depth stack semantics in the shader first, then raising this
+    /// constant and regenerating the kernels' declarations.</summary>
     public const int MaxFieldScopeDepth = 1;
     /// <summary>The floor <see cref="AxialProfile"/>'s scale profile s(t) clamps against at evaluation time — an admitted
     /// amount/bulge combination can still drive the algebraic s(t) non-positive (e.g. a large negative amount paired
-    /// with a large negative bulge), and this keeps the warp finite rather than dividing by zero or flipping sign.
-    /// KEEP IN SYNC with SDF_FLARE_MIN_SCALE in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// with a large negative bulge), and this keeps the warp finite rather than dividing by zero or flipping sign. The
+    /// kernels read it as <c>SDF_FLARE_MIN_SCALE</c>.</summary>
     public const float FlareMinScale = 0.05f;
     /// <summary>The floor <see cref="GaussianPush"/> clamps each <c>radii</c> component against, so the Gaussian
     /// exponent's divisor is never zero.</summary>
@@ -39,7 +39,7 @@ public sealed partial class SdfProgramBuilder {
     /// lane fraction before it scales the target shape's reach. Also the amplitude term
     /// <see cref="SdfProgram.NoiseDisplaceStepFactor"/> uses to bound a lane-erode candidate's Lipschitz factor
     /// (single-octave, unit gain/lacunarity) — the spatially-constant base fraction contributes no gradient, only
-    /// this noise swing does. KEEP IN SYNC with SDF_LANE_ERODE_RAGGED_AMOUNT in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// this noise swing does. The kernels read it as <c>SDF_LANE_ERODE_RAGGED_AMOUNT</c>.</summary>
     public const float LaneErodeRaggedAmount = 0.35f;
 
     // The largest |dot(unitRight, unitUp)| RequireOrthogonalBasis accepts: a cosine, so it reads as ~0.057 degrees.
@@ -52,16 +52,18 @@ public sealed partial class SdfProgramBuilder {
     /// <see cref="SdfProgram.InstanceMaskWordCountFor"/> — so a program declaring fewer instances than this cap packs
     /// byte-identically regardless of the cap's value; only the shader's <c>min(count, SDF_MAX_INSTANCES)</c> clamp
     /// constant tracks it. The ceiling's static cost is the per-tile mask buffer, and (Stage 1's per-workgroup shadow/AO
-    /// gather masks) the two groupshared <c>SDF_SHADOW_MASK_WORDS</c> arrays in sdf-vm.hlsli: 2048 words x 4 bytes x 2
+    /// gather masks) the two groupshared <c>SDF_SHADOW_MASK_WORDS</c> arrays in field/sdf-program.hlsli: 2048 words x 4 bytes x 2
     /// arrays = 16 KiB, plus ~1 KiB for the gather's other groupshared state (sdfShadowGatherPoints/Cone/LitCount) — about
     /// 17 KiB per workgroup, comfortably under the 32 KiB Direct3D 12 thread-group-shared-memory limit (a hard API cap,
-    /// not a per-GPU one) with ~15 KiB to spare. KEEP IN SYNC with SDF_MAX_INSTANCES in
-    /// Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// not a per-GPU one) with ~15 KiB to spare. The kernels read it as <c>SDF_MAX_INSTANCES</c>.</summary>
     public const int MaxInstances = 65536;
     /// <summary>The maximum voxel count per brick axis: the <see cref="SampledRegion"/> shape packs each dim in 10 bits
-    /// (see <see cref="SdfShapeType.SampledRegion"/>'s Data1.y layout), so 1023 is the hard ceiling. KEEP IN SYNC with the
-    /// 0x3FFu unpack mask in sdfSampledRegion (Assets/Shaders/Sdf/sdf-vm.hlsli).</summary>
-    public const int MaxSampledRegionDim = 1023;
+    /// (see <see cref="SdfShapeType.SampledRegion"/>'s Data1.y layout), so <see cref="SampledRegionDimMask"/> is the
+    /// hard ceiling.</summary>
+    public const int MaxSampledRegionDim = ((int)SampledRegionDimMask);
+    /// <summary>The mask that unpacks one 10-bit dim from a <see cref="SampledRegion"/> shape's packed Data1.y dims
+    /// (<c>SDF_SAMPLED_REGION_DIM_MASK</c>).</summary>
+    public const uint SampledRegionDimMask = 0x3FFu;
     /// <summary>The shortest slant vector <c>(topHalfWidth − bottomHalfWidth, 2·halfHeight)</c> a
     /// <see cref="Trapezoid"/> profile may carry: shorter than this the deterministic fixed-point evaluator divides by
     /// its own squared length and the shader returns NaN, so the shape is refused rather than evaluated.</summary>
@@ -84,16 +86,16 @@ public sealed partial class SdfProgramBuilder {
     /// <summary>The smallest exponent a <see cref="Superellipsoid"/> admits — the ellipsoid itself, the exponent every
     /// ellipsoid in the ISA is emitted at; see its own remarks for the 1-Lipschitz proof this interval is sized to.</summary>
     public const float MinSuperellipsoidExponent = 2f;
-    /// <summary>The most screen surfaces one program may declare (matches <c>Puck.SdfVm.SdfWorldEngine.MaxScreenSurfaces</c>
-    /// — the kernels' <c>screenSurfaces[]</c>/<c>screenSources[]</c> array length; a contract separate from the
-    /// viewport capacity <c>Puck.SdfVm.SdfWorldEngine.MaxViewports</c>). Capped at 32 by the single-<c>uint</c>
-    /// <c>screenMask</c> the engine pushes per frame.</summary>
+    /// <summary>The most screen surfaces one program may declare: the length of the kernels' per-screen tables and of
+    /// their <c>screenSources</c> array, which <c>Puck.SdfVm.SdfWorldTables.MaxScreenSurfaces</c> reads and the kernels read
+    /// as the generated <c>SDF_MAX_SCREEN_SURFACES</c>. A contract separate from the engine's viewport
+    /// capacity.</summary>
     public const int MaxScreenSurfaces = 32;
-    // KEEP IN SYNC with SDF_SCREEN_MATERIAL in Assets/Shaders/Sdf/sdf-vm.hlsli.
-    /// <summary>The reserved material identifier used by the plain procedural screen material.</summary>
+    /// <summary>The reserved material identifier used by the plain screen material, unbound glass, which the kernels read
+    /// as <c>SDF_SCREEN_MATERIAL</c>.</summary>
     public const int ScreenMaterialId = 65535;
     /// <summary>The most bounded emissive volumes (<see cref="SdfVolume"/>) one rendered frame may carry — matches
-    /// <c>Puck.SdfVm.SdfWorldEngine.MaxVolumes</c>, which reads this rather than hand-syncing a second literal. Sized
+    /// <c>Puck.SdfVm.SdfWorldTables.MaxVolumes</c>, which reads this rather than hand-syncing a second literal. Sized
     /// for multi-character jets and cloud banks. Rays test the live prefix; intersecting volumes require
     /// repeated selection scans and density integration. Capacity is not a frame-rate guarantee.</summary>
     public const int MaxVolumes = 64;
@@ -170,20 +172,21 @@ public sealed partial class SdfProgramBuilder {
     // AND CellJitter, whose hashed variant is not a stride and has no clamped form. Carries the writing instruction's
     // index and the largest delta ONE unit of its raw Material lane can produce (see MaxRecolorDelta, which reads the
     // raw lane back out of m_instructions so it sees any value the clamp already narrowed). Cleared by ResetPoint on
-    // both sides (SDF_OP_RESET zeroes parityMaterialDelta).
+    // both sides (SDF_OP_RESET_POINT zeroes parityMaterialDelta).
     private (int InstructionIndex, int ReachPerUnit, SdfOp Op)? m_materialRecolor;
     private bool m_openInstanceActive;
+    private bool m_openInstanceCameraHidden;
     private Vector3 m_openInstanceCenter;
     private int m_openInstanceFirst = -1;
     private bool m_openInstanceIsDynamic;
     private float m_openInstanceRadius;
     private int m_openInstanceSlot;
-    // Chain-local HOST MIRROR of the shader's parityMaterialDelta slot (Assets/Shaders/Sdf/sdf-vm.hlsli): which
+    // Chain-local HOST MIRROR of the shader's parityMaterialDelta slot (Assets/Shaders/Sdf/field/sdf-map.hlsli and field/sdf-point.hlsli): which
     // recently emitted instruction (WallpaperFold or RepeatPolar), if any, is driving a positional material recolor
     // for the shape(s) that follow in the CURRENT ResetPoint..ResetPoint chain segment — its index in m_instructions,
     // the raw stride value packed into that instruction's Material lane, and the largest additional material offset
     // ONE unit of that raw stride can produce (2 for a hex wallpaper group's 3-coloring, 1 for every other wallpaper
-    // group, sectorCount-1 for RepeatPolar). SDF_OP_RESET clears parityMaterialDelta on the GPU, so ResetPoint()
+    // group, sectorCount-1 for RepeatPolar). SDF_OP_RESET_POINT clears parityMaterialDelta on the GPU, so ResetPoint()
     // clears this mirror the same way; a zero-stride fold leaves it untouched on BOTH sides (the shader's own
     // `!= 0u` guard — see WallpaperFold/RepeatPolar below). Consumed (and, inside an open material scope, clamped) by
     // Shape() before a positional shape's material lands in the packed program — the clamp early-returns whenever
@@ -266,7 +269,7 @@ public sealed partial class SdfProgramBuilder {
         // segment) re-checks against this smaller value, so repeated shapes never re-widen a clamp a scope required.
         m_positionalFold = (fold.InstructionIndex, fold.ReachPerUnit, clampedRaw);
     }
-    private void BeginInstanceCore(bool isDynamic, Vector3 center, float radius, int slot, bool active = true) {
+    private void BeginInstanceCore(bool isDynamic, Vector3 center, float radius, int slot, bool active = true, bool cameraHidden = false) {
         if (
             isDynamic &&
             ((slot < 0) || (slot > SdfProgram.MaxDynamicTransformSlot))
@@ -288,6 +291,7 @@ public sealed partial class SdfProgramBuilder {
         m_openInstanceFirst = m_instructions.Count;
         m_openInstanceIsDynamic = isDynamic;
         m_openInstanceActive = active;
+        m_openInstanceCameraHidden = cameraHidden;
         m_openInstanceCenter = center;
         m_openInstanceRadius = radius;
         m_openInstanceSlot = slot;
@@ -318,7 +322,7 @@ public sealed partial class SdfProgramBuilder {
     }
     // The largest value the shader's parityMaterialDelta can hold for `recolor`, read from the raw Material lane of the
     // recoloring instruction itself so a lane the scope clamp already narrowed is seen at its narrowed value. KEEP IN
-    // SYNC with the three parityMaterialDelta writers in Assets/Shaders/Sdf/sdf-vm.hlsli: WallpaperFold multiplies its
+    // SYNC with the three parityMaterialDelta writers in Assets/Shaders/Sdf/field/sdf-map.hlsli and field/sdf-point.hlsli: WallpaperFold multiplies its
     // stride by a cell key in 0..2 (a hex group's 3-coloring) or 0..1 (every other group's parity), RepeatPolar by a
     // sector index in 0..count-1, and CellJitter takes a hashed row in 0..variants-1 — a COUNT, not a stride, which is
     // the whole reason it subtracts one where the folds multiply.
@@ -362,7 +366,7 @@ public sealed partial class SdfProgramBuilder {
     // palette span this shape's contributor owns; null when the builder has no scope open at all. A shape carrying a
     // screen sentinel records nothing: the
     // shader applies the delta only under `material < SDF_SCREEN_MATERIAL`, so a screen face is never recolored (KEEP IN
-    // SYNC with the SDF_OP_SHAPE parityMaterialDelta apply in Assets/Shaders/Sdf/sdf-vm.hlsli). A zero delta records
+    // SYNC with the SDF_OP_SHAPE_BLEND parityMaterialDelta apply in Assets/Shaders/Sdf/field/sdf-map.hlsli). A zero delta records
     // nothing either — the shape reaches only its own declared material, which this gate does not own.
     private void RecordPositionalMaterialWindow(int material) {
         if (
@@ -408,9 +412,9 @@ public sealed partial class SdfProgramBuilder {
             paramName: paramName,
             value: value
         );
-    private static void RequireDefined(SdfPolarAxis value, string paramName) =>
+    private static void RequireDefined(SdfAxis value, string paramName) =>
         RequireDefined(
-            maximum: SdfPolarAxis.Z,
+            maximum: SdfAxis.Z,
             paramName: paramName,
             value: value
         );
@@ -426,9 +430,9 @@ public sealed partial class SdfProgramBuilder {
             paramName: paramName,
             value: value
         );
-    private static void RequireDefined(SdfWallpaperPlane value, string paramName) =>
+    private static void RequireDefined(SdfPlane value, string paramName) =>
         RequireDefined(
-            maximum: SdfWallpaperPlane.YZ,
+            maximum: SdfPlane.YZ,
             paramName: paramName,
             value: value
         );
@@ -564,7 +568,7 @@ public sealed partial class SdfProgramBuilder {
         );
     }
 
-    // KEEP IN SYNC with SDF_SQRT_HALF in Assets/Shaders/Sdf/sdf-vm.hlsli and SdfProgram's private copy.
+    // KEEP IN SYNC with SDF_SQRT_HALF in Assets/Shaders/Sdf/field/sdf-program.hlsli and SdfProgram's private copy.
     private const float SqrtHalf = 0.70710678f;
 
     /// <summary>The edge-rounding radius an authored value actually emits at for a 2D-family shape or a cylinder:
@@ -1026,7 +1030,7 @@ public sealed partial class SdfProgramBuilder {
         EndInstance();
     }
     // Data1.x is the ISA-wide smooth-blend radius; .yzw carry per-shape HOST-BAKED derived constants (the shader's
-    // decode is per shape case — KEEP IN SYNC with sdf-vm.hlsli evaluateShape).
+    // decode is per shape case — KEEP IN SYNC with field/sdf-shapes.hlsli evaluateShape).
     private SdfProgramBuilder Shape(SdfShapeType shape, Vector4 dimensions, int material, SdfBlendOp blend, float smooth, float derived1 = 0f, float derived2 = 0f, float derived3 = 0f, bool detail = false) {
         // The two arguments EVERY public shape method shares, checked once here rather than at twenty call sites.
         // material is cast to uint on the way into the packed lane, so a negative id would arrive as a huge positive
@@ -1154,7 +1158,7 @@ public sealed partial class SdfProgramBuilder {
         // so this covers every emitted shape by construction and cannot drift from one.
         //
         // The sentinel BAND is bounded on both sides, for the same reason the palette is. sampleScreenSurface
-        // (sdf-world.hlsli) turns any id above ScreenMaterialId into a direct screenSurfaces[]/sdfDecalCells[] index
+        // (shade/sdf-environment.hlsli) turns any id above ScreenMaterialId into a direct screenSurfaces[]/sdfDecalCells[] index
         // with no search, so an id naming no declared surface reads a slot the program never packed. The band's top is
         // judged HERE for the palette's reason: the screen list is still growing while shapes are emitted.
         // (AddMaterial owns the palette's own ceiling: it refuses the row that would collide with the sentinel.)
@@ -1169,7 +1173,7 @@ public sealed partial class SdfProgramBuilder {
 
             if (shapeMaterial >= ScreenMaterialId) {
                 if (shapeMaterial == ScreenMaterialId) {
-                    continue;   // The plain sentinel: procedural screen shading, and the one screen id that reads no side table at all.
+                    continue;   // The plain sentinel: unbound glass, and the one screen id that reads no side table at all.
                 }
 
                 var screenIndex = ((shapeMaterial - ScreenMaterialId) - 1);
@@ -1178,7 +1182,7 @@ public sealed partial class SdfProgramBuilder {
                     continue;
                 }
 
-                throw new InvalidOperationException(message: $"A shape names screen material {shapeMaterial}, which decodes to screen index {screenIndex}, but the program declares no screen surface at that index (declared: {DescribeScreenIndices()}). The shader indexes the screen-surface and decal tables directly with it, so this would read a slot the program never packed. Declare the surface (ScreenSlab's screen overload emits both halves together), or use {ScreenMaterialId} for the plain procedural screen material.");
+                throw new InvalidOperationException(message: $"A shape names screen material {shapeMaterial}, which decodes to screen index {screenIndex}, but the program declares no screen surface at that index (declared: {DescribeScreenIndices()}). The shader indexes the screen-surface and decal tables directly with it, so this would read a slot the program never packed. Declare the surface (ScreenSlab's screen overload emits both halves together), or use {ScreenMaterialId} for the plain screen material.");
             }
 
             if (shapeMaterial < m_materials.Count) {

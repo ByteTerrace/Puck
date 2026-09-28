@@ -1,0 +1,23 @@
+# The engine ready first: its pipeline set installed and its first frame produced. Every frame renders.
+world.wait ready 45
+world.cadence off
+# The scene with no grid at all: the capture a hidden grid must agree with. Each capture lands before the next is armed.
+world.screenshot {run}/plain.png
+world.wait captures 30
+# The seat builds with a one-unit grid on a working plane at the platform's height. The tick fence lets the build
+# flip, which is a simulation command, apply before the capture is armed.
+player.build
+world.grid pitch 1
+world.grid plane 1
+world.grid on
+world.wait 1
+world.screenshot {run}/plane.png
+world.wait captures 30
+# The grid on every surface: the floor, the platform, the ramp and the wall.
+world.grid surface
+world.screenshot {run}/surface.png
+world.wait captures 30
+# The grid hidden again.
+world.grid off
+world.screenshot {run}/off.png
+world.wait captures 30

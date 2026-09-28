@@ -21,7 +21,7 @@ public sealed class AffectedSelectionLawTests {
     ];
     private static readonly HashSet<string> WorldClosure = new(collection: ["World", "Core"], comparer: StringComparer.OrdinalIgnoreCase);
 
-    private static AffectedPlan Select(string[] changed, Dictionary<string, IReadOnlySet<string>>? coverage = null, Func<string, IReadOnlyList<string>>? consumersOf = null) => AffectedSelection.Select(
+    private static AffectedPlan Select(string[] changed, Dictionary<string, IReadOnlySet<string>>? coverage = null, Func<string, IReadOnlyList<string>>? consumersOf = null, Func<string, IReadOnlyList<string>>? standInsFor = null, Func<string, IReadOnlySet<string>>? canariesReaching = null, IReadOnlySet<string>? deleted = null, Dictionary<string, IReadOnlySet<string>>? recorded = null) => AffectedSelection.Select(
         canaries: Canaries,
         changed: changed,
         consumersOf: (consumersOf ?? (static _ => [])),
@@ -29,7 +29,11 @@ public sealed class AffectedSelectionLawTests {
         declaresTests: static path => path.Contains(comparisonType: StringComparison.Ordinal, value: "tested"),
         catalogInputs: static (path, owner) => (path.StartsWith(comparisonType: StringComparison.Ordinal, value: "src/World/Assets/worlds/") || (owner == "Core")),
         projects: Projects,
-        worldClosure: WorldClosure
+        canariesReaching: (canariesReaching ?? (static _ => new HashSet<string>())),
+        standInsFor: (standInsFor ?? (static _ => [])),
+        worldClosure: WorldClosure,
+        deleted: deleted,
+        recorded: recorded
     );
 
     [Fact]
@@ -47,7 +51,7 @@ public sealed class AffectedSelectionLawTests {
                 changed: ["src/World/Door.cs"],
                 coverage: new() { ["src/World/Door.cs"] = new HashSet<string>(collection: ["doors"]) }
             ),
-            expected: new AffectedPlan(Canaries: ["doors"], Catalog: false, Everything: false, Parity: false, Suites: ["Cli.Tests", "World.Tests"], Unmapped: [], Worlds: []),
+            expected: new AffectedPlan(Canaries: ["doors"], Catalog: false, Deleted: [], Everything: false, Parity: false, Suites: ["Cli.Tests", "World.Tests"], Unmapped: [], Worlds: []),
             comparer: new PlanComparer()
         );
     }
@@ -70,6 +74,27 @@ public sealed class AffectedSelectionLawTests {
         Assert.True(condition: Select(changed: ["src/World/Assets/ink.hlsl"]).Parity);
         Assert.False(condition: Select(changed: ["tests/Canaries/doors/positive.script.txt"]).Parity);
     }
+    /// <summary>A file the index cannot know is placed through its indexed stand-ins: their canaries are its canaries and
+    /// it is not unmapped; a stand-in the index does not know places nothing.</summary>
+    [Fact]
+    public void AFileTheIndexCannotKnowIsPlacedThroughItsIndexedStandIns() {
+        var coverage = new Dictionary<string, IReadOnlySet<string>> { ["src/World/Door.cs"] = new HashSet<string>(collection: ["doors"]) };
+        var placed = Select(
+            changed: ["src/World/World.csproj"],
+            coverage: coverage,
+            standInsFor: static path => ((path == "src/World/World.csproj") ? ["src/World/Door.cs"] : [])
+        );
+        var unplaced = Select(
+            changed: ["src/World/World.csproj"],
+            coverage: coverage,
+            standInsFor: static _ => ["src/World/Unrecorded.cs"]
+        );
+
+        Assert.Equal(actual: placed.Canaries, expected: ["doors"]);
+        Assert.Empty(collection: placed.Unmapped);
+        Assert.Empty(collection: unplaced.Canaries);
+        Assert.Equal(actual: unplaced.Unmapped, expected: ["src/World/World.csproj"]);
+    }
     [Fact]
     public void AWorldSourceTheIndexDoesNotKnowIsReportedAndChoosesNoCanary() {
         var plan = Select(changed: ["src/World/New.cs", "src/Maths/Field.cs"]);
@@ -86,6 +111,37 @@ public sealed class AffectedSelectionLawTests {
 
         Assert.Empty(collection: plan.Canaries);
         Assert.Empty(collection: plan.Unmapped);
+    }
+    /// <summary>A file deleted since the base can never be recorded, so it is never unmapped: the index the base
+    /// recorded places it, choosing the canaries that executed it; one that index does not name either is listed as
+    /// deleted; and nothing reads a deleted file, so a deleted <c>.puck</c> source is not run by <c>puck test</c>.
+    /// Its project's suites still run.</summary>
+    [Fact]
+    public void ADeletedSourceIsPlacedByTheIndexTheBaseRecordedOrListedAsDeletedNeverUnmapped() {
+        var plan = Select(
+            changed: ["src/World/Door.cs", "src/World/Gone.cs", "src/World/Unrecorded.cs", "src/World/tested.puck", "src/World/New.cs"],
+            deleted: new HashSet<string>(collection: ["src/World/Door.cs", "src/World/Gone.cs", "src/World/Unrecorded.cs", "src/World/tested.puck"]),
+            recorded: new() {
+                ["src/World/Door.cs"] = new HashSet<string>(collection: ["doors"]),
+                ["src/World/Gone.cs"] = new HashSet<string>(collection: ["ink"]),
+            }
+        );
+
+        Assert.Equal(actual: plan.Canaries, expected: ["doors", "ink"]);
+        Assert.Equal(actual: plan.Deleted, expected: ["src/World/Unrecorded.cs", "src/World/tested.puck"]);
+        Assert.Equal(actual: plan.Unmapped, expected: ["src/World/New.cs"]);
+        Assert.Empty(collection: plan.Worlds);
+        Assert.Equal(actual: plan.Suites, expected: ["Cli.Tests", "World.Tests"]);
+
+        // Without the base's index, a deleted file the current index names is still placed by it.
+        Assert.Equal(
+            actual: Select(
+                changed: ["src/World/Door.cs"],
+                coverage: new() { ["src/World/Door.cs"] = new HashSet<string>(collection: ["doors"]) },
+                deleted: new HashSet<string>(collection: ["src/World/Door.cs"])
+            ).Canaries,
+            expected: ["doors"]
+        );
     }
     [Fact]
     public void BuildInfrastructureReachesEverySuiteAndProseReachesNothing() {
@@ -109,6 +165,24 @@ public sealed class AffectedSelectionLawTests {
 
         Assert.Equal(actual: plan.Suites, expected: ["Cli.Tests"]);
     }
+    // The printed plan names what --run does with each line: a test line is a source for puck test, and the catalog line
+    // names the compile check that runs over it, so the catalog, which holds no test worlds, never reads as a test target.
+    [Fact]
+    public void ThePrintedPlanNamesTheCatalogCheckBesideTheCatalog() {
+        var plan = Select(changed: ["src/World/Assets/worlds/tested.puck"]);
+        var text = new StringWriter();
+
+        AffectedCommand.Describe(
+            into: text,
+            plan: plan
+        );
+
+        var lines = text.ToString().Split(options: StringSplitOptions.RemoveEmptyEntries, separator: Environment.NewLine);
+
+        Assert.Contains(collection: lines, expected: "test src/World/Assets/worlds/tested.puck");
+        Assert.Contains(collection: lines, expected: $"catalog {AffectedCommand.ShippedCatalog} (puck compile --tree {AffectedCommand.ShippedTree} --check)");
+        Assert.DoesNotContain(collection: lines, filter: static line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: $"test {AffectedCommand.ShippedCatalog}"));
+    }
 
     private sealed class PlanComparer : IEqualityComparer<AffectedPlan> {
         public bool Equals(AffectedPlan? x, AffectedPlan? y) =>
@@ -119,7 +193,8 @@ public sealed class AffectedSelectionLawTests {
             (x.Parity == y.Parity) &&
             x.Suites.SequenceEqual(second: y.Suites) &&
             x.Unmapped.SequenceEqual(second: y.Unmapped) &&
-            x.Worlds.SequenceEqual(second: y.Worlds));
+            x.Worlds.SequenceEqual(second: y.Worlds) &&
+            x.Deleted.SequenceEqual(second: y.Deleted));
         public int GetHashCode(AffectedPlan obj) => obj.Suites.Count;
     }
 }

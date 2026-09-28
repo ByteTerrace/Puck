@@ -49,7 +49,7 @@ public sealed class WorldSchemaCompletenessLawTests {
         }
     }
     private static JsonObject BuildBundle() {
-        var split = Puck.World.WorldSchema.Export(postRenderExtensions: []);
+        var split = Puck.World.WorldSchema.Export(postProcessPackages: []);
 
         return Puck.World.WorldSchema.Bundle(split: split);
     }

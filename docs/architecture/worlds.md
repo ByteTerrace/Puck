@@ -47,14 +47,18 @@ to mutate another layer state.
 Every relative path a world document authors resolves beside that document,
 through one resolver (`WorldDocumentPaths`): a `basis` or `imports` entry, a
 `references` row, the music, table, tune and patch rows' `source`, an addon's
-`modulePath`, a pipeline or graph `source`, a probe's `track`, a machine's
+`modulePath`, a `views.graphs` row's `source`, a probe's `track`, a machine's
 configured content, `host.icon`, and a `schedule` instance's `document`. An
 absolute path is honored as written. A document and its files therefore move
 together: the build copies the `Assets` tree beside the executable with its
 layout intact, a staged composition or test world re-expresses its paths from
 its source directory to the staging directory, and `world.save` to another
 directory re-expresses them from the loaded document's directory to the
-target's.
+target's. `puck compile --output` to another directory re-expresses a compiled
+document's paths from its source's directory to where it lands. Inside a
+`.puck` source, a module's relative file path, written plainly or as
+`asset "…"`, resolves beside the module that writes it, whichever source uses
+the module, and the compiled document names the file from its own directory.
 
 A loaded definition carries its directory as `WorldDefinition.DocumentDirectory`:
 the file's directory for a document read from disk, the source's directory for
@@ -66,7 +70,7 @@ paths: validation refuses a relative asset row by name, and mounting refuses a
 relative addon module by name. When a basis or an import in another directory
 is merged, its file paths are re-expressed relative to the document that merges
 it, so each path still names the file its author meant; that covers asset rows,
-addon modules, pipeline and graph sources, probe tracks, text fonts, and the
+addon modules, graph sources, probe tracks, text fonts, and the
 window icon. Document names (`references`, `schedule` instances) stay as
 written: worlds staged together reach each other by name. A `captures`
 directory the document names also resolves beside it. A `schedule` names no
@@ -137,7 +141,11 @@ where it wrote one.
 **What a boot counts.** The `world.boot` work source counts
 `world.boot.compiled-hits`, one per boot whose drawn definition came from a
 `DEFN` chunk, and `world.boot.chunk-derivations`, one per chunk derived afresh.
-Both depend on what a boot finds on disk, so both are pacing-class.
+Both depend on what a boot finds on disk, so both are pacing-class. Every
+deterministic-class count reads the same whether or not a boot finds a compiled
+world: the `DEFN` load's parse belongs to the hit and is not a
+`world.boot.parses`. `puck counters` relies on that, because its two backend
+legs share one per-user cache and only the first can miss it.
 
 A boot from a compiled world still validates the definition and compiles its
 rules, and still composes, parses and serializes the authored document to
@@ -153,20 +161,35 @@ surface textures, and an octahedral impostor
 ([prototype bakes](../rendering/sdf/handbook/bricks-and-baking.md#prototype-bakes)). It is
 keyed by the creation's pin (the prototype row's hash), the baker's version, and
 the quality tier, and one key is one set of bytes. Bakes are presentation only:
-contact, queries and simulation keep reading the field, and nothing draws a bake
-yet.
+contact, queries and simulation keep reading the field. A presentation draws
+its bakes by default when the loaded world's `BAKE` chunk supplies every bake
+from its pack before the first frame. A source boot draws fields, even when
+this machine's cache or another world's pack holds the same bake keys.
+`world.bakes off` forces fields; `world.bakes on` draws ready bakes, including
+ones made locally. The default therefore keeps captures independent of local
+baking. While bakes draw, an untinted static
+placement whose prototype's bake is ready draws the baked mesh through the mesh
+pass, textured from the bake's five surface textures, and keeps its field as
+camera-hidden instances that still cast shadows and occlude; a creation with
+text or noise relief keeps drawing through its field. The engine is not ready
+until the bake schedule has reconciled and, while the presentation draws its
+bakes, settled, so a capture or a `world.wait ready` never lands between a
+placement's field and its bake.
 
 A build output ships each bake once. `puck compile --tree` writes one bake pack,
 `bakes.puckbake`, at the root of its output: a chunk container
 (`WorldBakePack`, magic `PWBK`) holding, for each key the run's compiled worlds
 name, the encoded bake or the refusal of a creation that has none. Each
 compiled world's `BAKE` chunk names only its keys and the pack's path, so a
-creation many worlds share is baked once per run and stored once. A compile
+creation many worlds share is baked once per run and stored once. A tree run
+given `--bake-cache` reads each outcome from that content-addressed cache and
+keeps there every one it bakes, so the game's build, which passes `obj/bakes`,
+bakes a prototype only when its key is new. A compile
 without `--tree` writes the pack beside the compiled world and keeps the
 outcomes an earlier compile left in it. The same tree run writes the
 [package store](../reference/shaders.md#the-builds-package-store), `packages/`,
-holding the compiled shader package of every pipeline source its worlds'
-`views.pipelines` rows name, so a released world compiles no shader on the
+holding the compiled shader package of every source its worlds'
+`views.graphs` rows name, so a released world compiles no shader on the
 player's device either.
 
 One cache, `WorldBakeStore`, is filled two ways. A boot that keeps a `BAKE` chunk
@@ -546,10 +569,31 @@ copy, deadline or persistence arithmetic.
 ## Joining, authority, and admission
 
 An unembodied joined session is the ordinary shape behind a portal display. The target chooses a full
-replica, redacted state projection or frames. Body-indexed principals cannot represent that
-participant: admission must materialize a non-body, session-scoped principal or capability handle
-before projection. Its epoch, revocation, budget and grant lifetime end with the session; embodiment
-may add concrete body authority without turning observation into a body.
+replica, redacted state projection or frames. A body-indexed principal cannot represent that
+participant, so a session has a principal of its own, written `session:<ordinal>:<epoch>`.
+`WorldServer.TryAdmitSession` asks the world's own `admission` rows what a viewer observing from a
+named authority is granted, through the same arrival verdict an authenticated authority receives. The
+session takes no population entry and no body. It holds only the verdict's rows that name a subject,
+such as `Mutate` over one placement row, and it acts through the ordinary grant door like any other
+untrusted principal: its rows are metered and it cannot hold a wildcard.
+
+A session's authority lives exactly as long as the session. `EndSession` revokes every row it holds
+and retires its epoch, so a submission still naming it is refused as `world.session.stale`, and a
+reused ordinal carries a later epoch. A rebuild ends every session. No checkpoint holds a session,
+but a checkpoint keeps each ordinal's last epoch, so a restored world never issues a retired principal
+again. Admission, embodiment and ending ride the replay tape as server events, and a tape armed while
+a session lives opens with that session as it stands, so a session's authorized mutation replays with
+the same outcome.
+
+Embodiment adds body authority without turning observation into a body. `TryEmbodySession` mints the
+verdict's body-relative rows, such as `Drive` over the body, onto the same principal. The body is one
+the population already allocated and no remote peer occupies. When a later generation takes that
+body, through a peer admission or a seat join, the session's rows over it are revoked, so it never
+drives the next occupant.
+
+A session belongs to the world that admitted it. The peer and federated wires refuse any submission
+that names a session principal (`SessionPrincipalRemote`), so a remote or federated session is not
+admitted.
 
 Crossing asks for embodiment. Successful target admission allocates a population entry and produces
 concrete `Drive/body:<allocated-id>` authority. Do not add `Enter`: the capability vocabulary is the
@@ -608,10 +652,117 @@ An observation feed provides:
 - redaction and fidelity enforcement at every projection/read door, including queries;
 - the destination presentation clock and step width.
 
+A session screen observes its destination as a session. When the screen binds,
+`WorldServer.TryObserveAsSession` admits one against the destination's own `admission` rows for
+the viewer's authority, and releasing the screen ends it. The screen's mirror starts knowing nothing
+of the destination and is delivered what the admission's tier discloses: the definition at
+`Replica`, a projection composed for the session at `Presentation`, nothing at `Frames`. Delivery
+runs only while the session holds `observe all`, the one wildcard a session may hold; revoking it
+stops the mirror, and granting it again catches the mirror up with the current disclosed definition
+first. A destination that admits no viewer binds the screen dark and says why, and a destination
+that ends the session, as a rebuild does, is asked to admit the screen again. A destination a
+session screen shows therefore authors an admission row that grants `observe all` with a budget.
+
+A portal window renders its destination from its own disclosed mirror unless its session is delivered
+everything the destination holds: a live session admitted at `Replica`, holding `observe all`,
+in a world whose observer disclosure redacts no body (`WorldSessionObservation.DisclosesEverything`).
+Only then does the window join the scene the presentation keeps for the destination's endpoint and
+render the endpoint's mirror, the destination's whole replica, since that shows it nothing its own
+delivery would not. A `Presentation` or `Frames` window, or one onto a world whose observer
+disclosure redacts, never renders the endpoint's mirror, and disclosure is never traded for the
+memory the shared residency saves. The session stays the gate: once it no longer discloses
+everything, the window leaves the scene and shows its own session again, and its input stays on the
+session either way.
+
+A world's authority owns its session screens' sessions, not the presentation that draws them.
+`WorldInstanceHost` opens one for every screen or placement face whose source is a session when the
+world's definition declares it, re-points or closes it when an edit changes the screen's destination
+or removes the screen (an edit of its camera, projection or resolution keeps the session), asks a destination that ended one to admit the screen again, and stops a destination left with
+neither a screen nor anyone in it, as it stops one whose admission it just refused. The boot world's
+screens always hold their sessions; any other world's hold them while someone stands in it, so a
+portal in a world a traveller reached works for them there. A paused or stopped world keeps its
+sessions in step with its definition and its occupants, but forwards nothing. A presentation reads
+the session (`WorldInstanceHost.ScreenSession`) and renders its mirror.
+
+A click through a portal reaches the destination's rules as the session's input. A body engages the
+portal face with `Control` over it, as it engages a machine screen, and the fold routes its
+per-tick intent, the one its seat already submits and the tape already records, through the face:
+while its pointer ray passes through the glass from the front, the ray is mapped through the door the
+portal's counterpart names, in fixed point, and its channels are carried by name into the
+destination's own. The forward travels the destination's own link, so the destination's tape
+records it like any other input, and a destination that is not taking input (paused, stopped, held,
+or driving its own tape) is sent nothing until it takes input again, a release it is owed included. The destination latches it on the session, never on a body,
+and a rule reads it through `$pointer:any:<screen>:x|y|on` and
+`$pointer:any:<screen>:press:<channel>`, which count a session only while it holds `Control` over
+that screen. A press the destination has not yet stepped over is kept for one step's rules, with the
+ray it was made along, so a press and release that both arrive between two destination steps still
+reach them once, where the press was made. When the forward stops (a disengage, a lost `Control`
+hold, a ray off the glass) one release clears what the session pointed and pressed. A tick a world
+replays from its tape forwards nothing, its drive's last tick included: its destinations are not
+replaying with it. A destination driving its own tape restores the sessions it recorded; when the
+drive ends, each one no observer holds ends, so nothing its recorded viewer pressed stays held.
+
 A joined-world projection renders the destination from the destination's own delivered snapshots and
 its own measured clock, never through the host's presentation clock—independently scheduled or
-remote worlds do not share a presentation coordinate. A nested screen inside a projected destination
-binds dark: the explicit depth-one policy.
+remote worlds do not share a presentation coordinate. It lights the destination under the
+destination's own sky and lighting, along its `render.cycle` when it authors one, and its sky clock
+(star twinkle, cloud drift) is the destination's delivered engine tick. Its view renders at a
+session screen's reduced quality (`WorldSessionSceneEmitter.ReducedQuality`: no soft shadows, no
+ambient occlusion, no far bound). A nested screen inside a projected destination binds dark: the
+explicit depth-one policy.
+
+A portal's face can show its destination as a window (`projection: window`): the face's portal facet
+maps a counterpart, and the destination renders each frame through an off-axis camera fitted, from
+the viewer's eye mapped through the door's isometry, to the face's glass mapped the same way. The
+window shows what a traveller at the eye would see through the door and parallaxes as the eye moves;
+the glass shows it edge to edge, with no bezel. The eye is the camera the frame renders its viewer with in the same frame,
+one per screen, since a screen shows one image: the first joined seat's view, chase or first
+person, which is the camera a click through that view is cast from, so the texel the glass shows at
+a point and a click at that point look along one line into the destination. With no seat resolving
+a view, the eye is the camera the frame's first view renders with: a fixed camera's, or the
+no-local-seats spectator's. A pick through the glass continues through
+the camera the window rendered into the destination and, since the destination's own screens bind
+dark, ends on its world: on the surface the pick's ray meets among the destination's static
+placements. That pick is presentation; the input a click carries reaches the destination's rules
+through the engaged body's own intent, as above.
+
+A seat that crosses into a world the boot presentation cannot map it into (another document that no
+adjacency relates to the boot world) is presented in that world. Its view draws the destination's own
+scene from the destination's delivered definition and state mirror, framed by the seat's own rig in
+the destination's coordinates, under the destination's sky and lighting on the destination's own
+sky clock (its delivered engine tick), and at the presentation's own quality. Quality is each view's
+(`SdfViewSnapshot.Quality`: ambient occlusion, soft shadows and their reach, the far bound, and the
+fast approximations), so views of one frame render at different cost. Seats presented through the
+same endpoint share one residency, with a view each. A window attached to that world
+(`WorldFramePresenter.AttachWindow`) is one more view of the same frame and residency, after the
+seats' views, at its own quality; the scene stays while a seat is presented there or a window is
+attached. The presenter latches membership each frame: attachments enter at the next latch, and
+disposal reserves the window's slot through the current frame. A portal window whose session
+discloses everything joins its destination's scene this way (`WorldSessionWindowRoute`), so every
+seat and every such window presenting one endpoint share exactly one residency, and its GPU node
+(`sdf:routed$<endpoint>`) reports that row: residencies made and released, and the bytes its
+tables hold by memory. Any other session screen renders a residency of its own from its own
+observation of the destination. Split seats in
+different worlds each show their own world. Named boot cameras and the spectator fallback keep
+showing the boot world. A local seat keeps its roster's color wherever it is presented. A seat's view
+follows the destination's residency in place when its tables are ready, its instance capacity matches
+the view's scratch, and its compute layouts, mesh layouts, and mesh render pass match. Routed
+residencies reserve the boot world's instance capacity and join its cached pipelines, so a destination
+that fits can render in the crossing frame. A capacity or layout change rebuilds the view's passes;
+the crossing holds the image of the world it left until they install. Growth of the followed residency
+also rebuilds the view's scratch.
+
+`world.screenshot <path.png> crossing [player]` waits for a later route of the selected seat
+(player 1 by default) on a frame that includes its viewport, then requests that frame's composed
+image. It captures what the crossing presents, including a held image while incompatible passes
+rebuild. An ordinary capture can run while it waits; if one is still pending at the crossing, the
+crossing capture reports a refusal. If the root cannot serve that frame, the request is withdrawn
+before the next frame instead of capturing a later route. A request still waiting when presentation
+ends also reports a refusal.
+
+Every body that can travel crosses a portal face and a seam alike: a local seat, an admitted peer's
+traveller, or a body the world's own census authors. A party door entered by a traveller that is not
+a local seat carries that traveller alone.
 
 User/group-scoped destinations make images viewer-dependent. One image per screen index cannot show
 different destinations to split-screen viewers; per-viewport bindings or distinct render passes are

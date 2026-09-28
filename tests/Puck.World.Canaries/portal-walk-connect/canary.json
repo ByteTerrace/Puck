@@ -1,0 +1,67 @@
+{
+  "id": "portal-walk-connect",
+  "title": "Over --connect, a body that walks through a door on its remote authority arrives mapped in the door's destination, and its seat's view shows the destination",
+  "binding": "The portal-walk rooms, with the lobby's authority a separate process. The runner compiles portal-walk.puck where it stands, stages both of its worlds together, and starts a companion authority on the lobby; the client boots the same source with --connect, so its seat is carried to the remote authority, whose lobby and garden each admit a federated traveller into room for network players. The positive leg walks the seat through the arch. The remote authority's own portal scan, which reads every body that can travel and so the admitted peer, mints the mapped transfer into the garden it hosts; the client's route follows the traveller, and its view then draws the garden's own scene. The client's own host mints no crossing, so the crossing is proven to be the remote authority's, not a local walk's. A capture armed before the walk lands on the first frame the client presents after the seat's route moves, and already shows the garden; the capture after the walk shows the green pillar and a lit traveller. The discriminating leg makes the same walk four metres to the left of the arch: no crossing, and the capture shows the lobby's blue pillar.",
+  "bootShape": "offscreen",
+  "backends": ["vulkan", "directx"],
+  "requirements": ["gpu"],
+  "timeoutSeconds": 60,
+  "positive": {
+    "world": "tests/Puck.World.Canaries/portal-walk/portal-walk.puck",
+    "script": "../portal-walk/cross.script.txt",
+    "authorityWorld": "tests/Puck.World.Canaries/portal-walk/portal-walk.puck",
+    "connect": true,
+    "commands": [
+      { "verb": "world.cadence", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "body.where", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "body.fly", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "body.where", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 5, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "the-seat-is-carried-by-the-remote-authority", "stream": "stdout", "match": "contains", "text": "arrived (anonymous) - remote authority", "present": true },
+      { "type": "line", "name": "the-client-host-mints-no-crossing", "stream": "stdout", "match": "contains", "text": "[world.portal:", "present": false },
+      { "type": "imageRegion", "name": "before-the-lobby-landmark-is-blue", "capture": "before.png", "extent": [256, 144], "region": [0.15, 0.08, 0.185, 0.28], "reduce": "mean", "minimum": [0, 0, 0.3, 1], "maximum": [0.25, 0.25, 1, 1], "toleranceCodes": 2, "holds": true },
+      { "type": "imageRegion", "name": "after-the-garden-landmark-is-green", "capture": "after.png", "extent": [256, 144], "region": [0.15, 0.08, 0.185, 0.28], "reduce": "mean", "minimum": [0, 0.25, 0, 1], "maximum": [0.25, 1, 0.2, 1], "toleranceCodes": 2, "holds": true },
+      { "type": "imageRegion", "name": "after-no-lobby-landmark", "capture": "after.png", "extent": [256, 144], "region": [0.15, 0.08, 0.185, 0.28], "reduce": "mean", "minimum": [0, 0, 0.3, 1], "maximum": [0.25, 0.25, 1, 1], "toleranceCodes": 2, "holds": false },
+      { "type": "imageRegion", "name": "arrival-the-first-frame-is-the-garden", "capture": "arrival.png", "extent": [256, 144], "region": [0.15, 0.15, 0.185, 0.35], "reduce": "mean", "minimum": [0, 0.25, 0, 1], "maximum": [0.25, 1, 0.2, 1], "toleranceCodes": 2, "holds": true },
+      { "type": "imageRegion", "name": "arrival-no-lobby-landmark", "capture": "arrival.png", "extent": [256, 144], "region": [0.15, 0.15, 0.185, 0.35], "reduce": "mean", "minimum": [0, 0, 0.3, 1], "maximum": [0.25, 0.25, 1, 1], "toleranceCodes": 2, "holds": false },
+      { "type": "imageRegion", "name": "after-the-traveller-is-lit", "capture": "after.png", "extent": [256, 144], "region": [0.485, 0.4, 0.515, 0.6], "reduce": "mean", "minimum": [0.3, 0.3, 0.3, 1], "toleranceCodes": 2, "holds": true }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/portal-walk/portal-walk.puck",
+    "script": "../portal-walk/beside.script.txt",
+    "authorityWorld": "tests/Puck.World.Canaries/portal-walk/portal-walk.puck",
+    "connect": true,
+    "commands": [
+      { "verb": "world.cadence", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "body.pose", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "body.where", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "body.fly", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 5, "outcome": "accepted" },
+      { "verb": "body.where", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 6, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "the-seat-is-carried-by-the-remote-authority", "stream": "stdout", "match": "contains", "text": "arrived (anonymous) - remote authority", "present": true },
+      { "type": "line", "name": "the-client-host-mints-no-crossing", "stream": "stdout", "match": "contains", "text": "[world.portal:", "present": false },
+      { "type": "imageRegion", "name": "after-the-garden-landmark-is-green", "capture": "after.png", "extent": [256, 144], "region": [0.15, 0.08, 0.185, 0.28], "reduce": "mean", "minimum": [0, 0.25, 0, 1], "maximum": [0.25, 1, 0.2, 1], "toleranceCodes": 2, "holds": false },
+      { "type": "imageRegion", "name": "after-the-lobby-landmark-is-blue", "capture": "after.png", "extent": [256, 144], "region": [0.15, 0.08, 0.185, 0.28], "reduce": "mean", "minimum": [0, 0, 0.3, 1], "maximum": [0.25, 0.25, 1, 1], "toleranceCodes": 2, "holds": true }
+    ]
+  }
+}

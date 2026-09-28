@@ -107,7 +107,7 @@ internal static class CreationFixtures {
                 BodyIndex: 0,
                 Creation: creation,
                 Scale: bodyScale,
-                Motion: WorldLookMotion.Default
+                Look: WorldLook.Implicit
             )]
         );
 
@@ -115,7 +115,7 @@ internal static class CreationFixtures {
 
         pool.Emit(
             builder: builder,
-            definition: definition,
+            colors: WorldBakedColors.Of(definition: definition),
             probeWorstCase: probeWorstCase,
             maxPlacementScale: (maxPlacementScale ?? bodyScale),
             slotBase: 0

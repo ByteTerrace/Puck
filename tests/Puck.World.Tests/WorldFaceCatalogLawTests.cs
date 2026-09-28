@@ -1,10 +1,12 @@
 using System.Numerics;
+using Puck.Abstractions.Gpu;
 
 using Xunit;
 
 using Puck.World.Authoring;
 using Puck.Maths;
 using Puck.SignedDistance;
+using Puck.World.Client;
 
 namespace Puck.World.Tests;
 
@@ -202,6 +204,72 @@ public sealed class WorldFaceCatalogLawTests {
         neighbours: null,
         reason: out _
     );
+
+    // THE LAW: a placement's face row carries its screen's filter as a screen row does. Linear reaches the face's
+    // catalog row and the screen derived from it, a face its row leaves unfiltered samples Nearest, and a filter that
+    // names no sampler filter is refused by name.
+    [Fact]
+    public void AFaceRowsFilterReachesItsDerivedScreenAndAnUndefinedOneIsRefused() {
+        var source = WorldImageProducerSettings.SourceOf(
+            id: WorldImageProducerSettings.TestPatternId,
+            settings: new WorldTestPatternSettings(
+                Height: 32,
+                Width: 32
+            )
+        );
+        var nearest = BuildDoorDocument(
+            carriesPortal: false,
+            source: source
+        );
+        var linear = WithFaceFilter(
+            definition: nearest,
+            filter: GpuSamplerFilter.Linear
+        );
+
+        Assert.Equal(
+            actual: DoorRow(definition: nearest).Filter,
+            expected: GpuSamplerFilter.Nearest
+        );
+        Assert.Equal(
+            actual: DoorRow(definition: linear).Filter,
+            expected: GpuSamplerFilter.Linear
+        );
+        Assert.True(condition: Validates(definition: linear));
+
+        var row = DoorRow(definition: linear);
+        var screen = Assert.Single(
+            collection: WorldPrototypeFacets.Derive(
+                definition: linear,
+                derivedFaceBase: WorldPlacementPolicy.DerivedFaceBase,
+                derivedFaceScreens: ((row.ScreenIndex - WorldPlacementPolicy.DerivedFaceBase) + 1)
+            ).Faces,
+            predicate: face => (face.Index == row.ScreenIndex)
+        );
+
+        Assert.Equal(
+            actual: screen.Filter,
+            expected: GpuSamplerFilter.Linear
+        );
+        Assert.False(condition: WorldDefinitionValidator.TryValidate(
+            definition: WithFaceFilter(
+                definition: nearest,
+                filter: ((GpuSamplerFilter)7)
+            ),
+            neighbours: null,
+            reason: out var reason
+        ));
+        Assert.Contains(
+            actualString: reason,
+            expectedSubstring: ".filter 7 is not a sampler filter"
+        );
+    }
+
+    // The door placement's face row with its filter replaced.
+    private static WorldDefinition WithFaceFilter(WorldDefinition definition, GpuSamplerFilter filter) => definition with {
+        PlacementRowsRaw = [.. definition.Placements.Select(selector: placement => (placement with {
+            FaceSources = [.. (placement.FaceSources ?? []).Select(selector: face => (face with { Filter = filter }))],
+        }))],
+    };
 
     [Fact]
     public void AFaceShowingNothingClaimsNoSlot() {

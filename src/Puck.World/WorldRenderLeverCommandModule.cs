@@ -1,5 +1,7 @@
 using System.Globalization;
+using Puck.Abstractions.Presentation;
 using Puck.Commands;
+using Puck.SdfVm;
 using Puck.World.Client;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -11,11 +13,12 @@ namespace Puck.World;
 /// ambient occlusion and its quality, the far field, the unchanged-frame cadence gate, the shadow mask and march, render
 /// scale, upscale sharpness, and the quality preset — each a live console verb that echoes its current value when
 /// called with no argument. Every write is a session lever submitted through the server's grant check and lands in
-/// <see cref="WorldRenderSettings"/>, which the frame source reads each captured frame; nothing here needs a window or
-/// a presenter, so both the windowed and the offscreen presentation shapes compose it, and an offscreen collector or
+/// <see cref="WorldRenderSettings"/>, which the frame source reads each captured frame, except the SDF debug view,
+/// which sets the render node's mode through <see cref="WorldRenderProbe"/>. Nothing here needs a window or a
+/// presenter, so both the windowed and the offscreen presentation shapes compose it, and an offscreen collector or
 /// canary can set the same levers a player can. Headless composes no renderer and refuses these as unknown.
 /// </summary>
-internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, WorldRenderSettings settings, WorldServer server, IServerLink link) : ICommandModule {
+internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, WorldRenderSettings settings, WorldServer server, IServerLink link, WorldRenderProbe renderProbe) : ICommandModule {
     /// <summary>Owns the automatic population threshold and readout shape shared by adaptive render-quality levers.</summary>
     private string DescribeAdaptiveQuality(string verb, int mode, string exact = "exact", string fast = "fast") {
         var (configured, isFast) = mode switch {
@@ -59,6 +62,12 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
             : "off")}]";
     }
     // The world.far-field echo.
+    private static string BakesEcho(WorldRenderSettings settings) =>
+        $"[world.bakes: {settings.Bakes switch {
+            true => "on",
+            false => "off",
+            null => "default: a world's bakes draw when it ships them",
+        }}]";
     private static string FarFieldEcho(WorldRenderSettings settings) {
         return $"[world.far-field: bound {(settings.FarBound
             ? "on"
@@ -426,6 +435,36 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
+            name: "world.bakes",
+            description: "Draws each prototype's ready bake in place of its field, or its field again: world.bakes [on|off|status]. Presentation only (the field still answers contact, casts shadows and occludes); a prototype whose bake is not ready yet draws its field and switches when it is (world.counters counts the switch as sdf.bakes.drawn). Ships off.",
+            handler: (context, args) => {
+                if (
+                    (args.Count == 0) ||
+                    args.Is(
+                    index: 0,
+                    value: "status"
+                )
+                ) {
+                    return new CommandResult(Output: BakesEcho(settings: settings));
+                }
+
+                if (ParseOnOff(token: args[0]) is not { } state) {
+                    return CommandResult.Error(output: $"[world.bakes: unknown '{args.Tail(start: 0)}' — on|off|status]");
+                }
+
+                return SubmitLever(
+                    link: link,
+                    principal: context.Principal,
+                    name: WorldSessionLevers.Bakes,
+                    a: (state
+                    ? 1.0
+                    : 0.0),
+                    formatEcho: () => new CommandResult(Output: BakesEcho(settings: settings))
+                );
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "world.far-field",
             description: "Toggles the beam-published per-tile far bound live (no rebuild): world.far-field [on|off|status]. Output-identical when on (it skips empty-sky march steps); off is the paired-run baseline. Ships ON.",
             handler: (context, args) => {
@@ -482,6 +521,40 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
                     : 0.0),
                     formatEcho: () => new CommandResult(Output: CadenceEcho(settings: settings))
                 );
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.debug-view",
+            description: $"Selects the live SDF diagnostic output for every World camera: world.debug-view [{string.Join(
+                separator: '|',
+                value: DebugViewModes.Names
+            )}]. Depth is the primary-march-only performance probe; off restores final shading.",
+            handler: (_, args) => {
+                if (renderProbe.Residency is not { } node) {
+                    return CommandResult.Error(output: "[world.debug-view: renderer not built yet]");
+                }
+
+                if (args.Count == 0) {
+                    return new CommandResult(Output: $"[world.debug-view: {DebugViewModes.Name(mode: node.DebugMode)}]");
+                }
+
+                if (
+                    (args.Count != 1) ||
+                    !DebugViewModes.TryParse(
+                    name: args[0].ToString(),
+                    mode: out var mode
+                )
+                ) {
+                    return CommandResult.Error(output: $"[world.debug-view: unknown mode '{args.Tail(start: 0)}' — {string.Join(
+                        separator: '|',
+                        value: DebugViewModes.Names
+                    )}]");
+                }
+
+                node.DebugMode = mode;
+
+                return new CommandResult(Output: $"[world.debug-view: {DebugViewModes.Name(mode: mode)}]");
             }
         );
         yield return CommandDefinition.WithWireArgs(
@@ -632,7 +705,7 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.quality",
-            description: "Applies a graphics PRESET that bundles the individual levers, live: world.quality low|medium|high — no argument echoes the current settings. low = shadows off, ao off, render-scale half; medium = shadows medium, ao on, render-scale three-quarter; high = shadows high, ao on, render-scale native. A preset just writes the individual settings (world.shadows/.ao/.render-scale still override afterward).",
+            description: "Applies one of the world's authored graphics PRESETs (render.low, render.medium, render.high), each bundling the shadow, ambient-occlusion and render-scale levers, live: world.quality low|medium|high — no argument echoes the current settings. A preset the world does not author is refused by name. A preset just writes the individual settings (world.shadows/.ao/.render-scale still override afterward).",
             handler: (context, args) => {
                 if (args.Count == 0) {
                     return new CommandResult(Output: DescribeQuality());
@@ -641,8 +714,12 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
                 // The preset table is world data (WorldDefinition.Render), read off the LIVE definition so a mutated
                 // preset table applies immediately: look the named tier up and write its three levers into the live
                 // settings.
-                if (server.Definition.Render.Preset(name: args[0].ToString()) is not { } preset) {
-                    return CommandResult.Error(output: $"[world.quality: unknown preset '{args[0]}' — low|medium|high]");
+                if (QualityTiers.Parse(name: args[0].ToString()) is not { } tier) {
+                    return CommandResult.Error(output: $"[world.quality: unknown preset '{args[0]}' — {string.Join(separator: "|", values: QualityTiers.Names)}]");
+                }
+
+                if (server.Definition.Render.Preset(tier: tier) is not { } preset) {
+                    return CommandResult.Error(output: $"[world.quality: this world authors no {QualityTiers.Name(tier: tier)} preset]");
                 }
 
                 SubmitLever(

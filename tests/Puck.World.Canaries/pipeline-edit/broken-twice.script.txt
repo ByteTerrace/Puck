@@ -8,7 +8,7 @@ pipeline.step feedback
 pipeline.wait feedback submitted 2 10
 pipeline.capture feedback {run}/pre-edit.png
 pipeline.wait feedback captured 10
-pipeline.load feedback broken.pipeline.json
+pipeline.load feedback broken.graph.json
 pipeline.reload feedback
 pipeline.wait feedback compiled 40
 pipeline.capture feedback {run}/after-broken.png
@@ -19,7 +19,7 @@ pipeline.capture feedback {run}/after-broken-step.png
 pipeline.wait feedback captured 10
 # The second edit is broken too, spelled through its parent directory so the row's source still changes: it compiles
 # to a failure, so the step renders submission 4 through the old graph.
-pipeline.load feedback ../pipeline-edit/broken.pipeline.json
+pipeline.load feedback ../pipeline-edit/broken.graph.json
 pipeline.reload feedback
 pipeline.wait feedback compiled 40
 pipeline.capture feedback {run}/held.png

@@ -1,12 +1,15 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace Puck.Shaders.Tests;
 
 /// <summary>
 /// Laws for the <c>puck.render.graph.v1</c> document: a graph of shader and package passes validates and plans through
-/// the one pipeline planner, each package refusal is named, a planner refusal passes through with its own code, a view
-/// reading its own output goes through the planner's history resource, and every checked-in pipeline document is a
-/// graph document that plans identically once its tag names the graph schema.
+/// the one pipeline planner, a fragment package's passes spliced in place of the pass naming it, each package refusal is
+/// named, a planner refusal passes through with its own code, a view
+/// reading its own output goes through the planner's history resource, a package pass, which only a graph's packages
+/// member declares, plans as its own kind over its compute shape, and every checked-in graph document plans alike through a
+/// pipeline host, which offers no package, and through the engine's catalog.
 /// </summary>
 public sealed class RenderGraphDocumentLawTests {
     private const string Graph = """
@@ -15,7 +18,7 @@ public sealed class RenderGraphDocumentLawTests {
           "name": "security-monitor",
           "resources": [
             { "name": "screen", "format": "R8G8B8A8Unorm", "dimensions": { "mode": "Relative", "width": 1, "height": 1 }, "initialization": "External" },
-            { "name": "scene", "format": "R8G8B8A8Unorm", "dimensions": { "mode": "Relative", "width": 1, "height": 1 } },
+            { "name": "scene", "format": "R16G16B16A16Float", "dimensions": { "mode": "Relative", "width": 1, "height": 1 } },
             { "name": "graded", "format": "R8G8B8A8Unorm", "dimensions": { "mode": "Relative", "width": 1, "height": 1 } },
             { "name": "final", "format": "R8G8B8A8Unorm", "dimensions": { "mode": "Relative", "width": 1, "height": 1 } }
           ],
@@ -46,22 +49,43 @@ public sealed class RenderGraphDocumentLawTests {
     [Fact]
     public void AGraphOfShaderAndPackagePassesPlansThroughThePipelinePlanner() {
         var plan = Plan(json: Graph);
+        var world = SdfWorldPackage.Fragment.Passes.Select(selector: static part => RenderGraphPackageFragment.Spliced(
+            name: part.Name,
+            pass: "world"
+        )).ToArray();
+        var grade = world.Length;
+        var hud = (grade + 1);
 
+        // The fragment package's passes are spliced in place of the pass naming it.
         Assert.Equal(
-            expected: ["world", "grade", "hud"],
+            expected: [.. world, "grade", "hud"],
             actual: plan.Steps.Select(selector: static step => step.Name)
         );
-        Assert.Equal(expected: RenderGraphPackageCatalog.SdfWorld, actual: plan.Steps[0].Package?.Id);
-        Assert.Null(@object: plan.Steps[1].Package);
-        Assert.Equal(expected: RenderGraphPackageCatalog.Overlay, actual: plan.Steps[2].Package?.Id);
+        Assert.All(
+            action: static step => Assert.Equal(expected: RenderGraphPackageCatalog.SdfWorld, actual: step.Package?.Id),
+            collection: plan.Steps.Take(count: grade)
+        );
+        Assert.Null(@object: plan.Steps[grade].Package);
+        Assert.Equal(expected: RenderGraphPackageCatalog.Overlay, actual: plan.Steps[hud].Package?.Id);
         Assert.Equal(expected: ["screen"], actual: plan.Inputs);
         Assert.Equal(expected: ["final"], actual: plan.Outputs);
         Assert.Equal(
-            expected: (RenderGraphCompiler.PackageSourcePrefix + RenderGraphPackageCatalog.Overlay),
-            actual: plan.Pipeline.Passes[2].Declaration.Source
+            expected: ShaderPipelinePassKind.Package,
+            actual: plan.Pipeline.Passes[hud].Kind
         );
-        Assert.Equal(expected: [0], actual: plan.Pipeline.Passes[1].Dependencies);
-        Assert.Equal(expected: [1], actual: plan.Pipeline.Passes[2].Dependencies);
+        Assert.Equal(expected: RenderGraphPackageCatalog.Overlay, actual: plan.Pipeline.Passes[hud].Package?.Package);
+        Assert.Null(@object: plan.Pipeline.Passes[hud].Declaration);
+        Assert.Equal(
+            expected: ShaderPipelinePassKind.Compute,
+            actual: plan.Pipeline.Passes[grade].Kind
+        );
+        Assert.Equal(expected: "grade", actual: plan.Pipeline.Passes[grade].Declaration?.Name);
+        Assert.Equal(
+            expected: ["grade"],
+            actual: plan.Pipeline.Definition.ShaderPasses.Select(selector: static pass => pass.Name)
+        );
+        Assert.Equal(expected: [(grade - 1)], actual: plan.Pipeline.Passes[grade].Dependencies);
+        Assert.Equal(expected: [grade], actual: plan.Pipeline.Passes[hud].Dependencies);
         Assert.All(
             action: static step => Assert.NotEmpty(collection: step.Planned.Accesses),
             collection: plan.Steps
@@ -78,16 +102,12 @@ public sealed class RenderGraphDocumentLawTests {
             actual: Codes(json: Edit(change: static document => Package(document: document, name: "hud")["inputs"] = Refs("graded", "scene")))
         );
         Assert.Equal(
-            expected: ["RENDERGRAPH_PACKAGE_BINDING"],
-            actual: Codes(json: Edit(change: static document => Package(document: document, name: "hud")["inputs"] = new JsonArray(new JsonObject { ["binding"] = 3, ["name"] = "graded" })))
+            expected: ["RENDERGRAPH_PACKAGE_AS"],
+            actual: Codes(json: Edit(change: static document => Package(document: document, name: "hud")["inputs"] = new JsonArray(new JsonObject { ["as"] = "graded", ["name"] = "graded" })))
         );
         Assert.Equal(
             expected: ["RENDERGRAPH_SCHEMA"],
-            actual: Codes(json: Edit(change: static document => document["$schema"] = "puck.shader.pipeline.v1"))
-        );
-        Assert.Equal(
-            expected: ["RENDERGRAPH_SOURCE_RESERVED"],
-            actual: Codes(json: Edit(change: static document => document["passes"]![0]!["source"] = "package:overlay"))
+            actual: Codes(json: Edit(change: static document => document["$schema"] = "puck.render.graph.v2"))
         );
         Assert.Equal(
             expected: ["RENDERGRAPH_PACKAGE_OUTPUT"],
@@ -109,6 +129,34 @@ public sealed class RenderGraphDocumentLawTests {
         );
     }
     [Fact]
+    public void ADocumentCannotNameThePackageKind() {
+        // A shader pass's kind has no Package member, so the graph reader and the pipeline loader that reads through it
+        // refuse the name at the member that spells it, before any planner sees the document.
+        var graph = Assert.Throws<JsonException>(testCode: static () => RenderGraphDefinition.Parse(json: Edit(change: static document => document["passes"]![0]!["kind"] = "Package")));
+        var pipeline = Assert.Throws<JsonException>(testCode: static () => ShaderPipelineLoader.ParseDefinition(
+            name: "stray",
+            path: "stray.graph.json",
+            text: """
+                {
+                  "$schema": "puck.render.graph.v1",
+                  "name": "stray",
+                  "resources": [],
+                  "passes": [{ "name": "stray", "source": "stray.hlsl", "entryPoint": "main", "kind": "Package" }],
+                  "outputs": []
+                }
+                """
+        ));
+
+        Assert.Contains(
+            actualString: graph.Message,
+            expectedSubstring: "$.passes[0].kind"
+        );
+        Assert.Contains(
+            actualString: pipeline.Message,
+            expectedSubstring: "$.passes[0].kind"
+        );
+    }
+    [Fact]
     public void AViewReadingItsOwnOutputGoesThroughTheHistoryResource() {
         var mirror = Edit(change: static document => {
             var final = document["resources"]!.AsArray().Select(selector: static node => node!.AsObject()).Single(predicate: static node => (((string?)node["name"]) == "final"));
@@ -122,7 +170,7 @@ public sealed class RenderGraphDocumentLawTests {
 
         Assert.True(condition: storage.History);
         Assert.Contains(
-            collection: plan.Pipeline.Passes[1].Accesses,
+            collection: plan.Pipeline.Passes.Single(predicate: static pass => (pass.Name == "grade")).Accesses,
             filter: static access => ((access.Version == "final") && access.PreviousFrame)
         );
         Assert.Contains(
@@ -131,7 +179,7 @@ public sealed class RenderGraphDocumentLawTests {
         );
     }
     [Fact]
-    public void EveryPipelineDocumentIsAGraphDocumentThatPlansIdentically() {
+    public void EveryCheckedInGraphDocumentPlansAlikeInAPipelineAndInTheEngine() {
         var root = RepositoryPaths.RequireRoot();
         var documents = new[] { "src", "tests" }
             .SelectMany(selector: directory => Directory.EnumerateFiles(
@@ -140,7 +188,7 @@ public sealed class RenderGraphDocumentLawTests {
                     path2: directory
                 ),
                 searchOption: SearchOption.AllDirectories,
-                searchPattern: "*.pipeline.json"
+                searchPattern: "*.graph.json"
             ))
             .Where(predicate: static path => !path.Replace(newChar: '/', oldChar: '\\').Split(separator: '/').Any(predicate: static segment => (segment is "bin" or "obj")))
             .Order(comparer: StringComparer.Ordinal)
@@ -155,12 +203,8 @@ public sealed class RenderGraphDocumentLawTests {
                 path: path,
                 text: text
             );
-            var node = JsonNode.Parse(json: text)!.AsObject();
-
-            node["$schema"] = RenderGraphSchemas.Graph;
-
-            var graph = RenderGraphDefinition.Parse(json: node.ToJsonString());
-            var pipelinePlanned = new ShaderPipelineCompiler().TryCompile(
+            var graph = RenderGraphDefinition.Parse(json: text);
+            var pipelinePlanned = RenderGraphCompiler.ShaderPasses.TryCompile(
                 definition: pipeline,
                 diagnostics: out var pipelineDiagnostics,
                 plan: out var pipelinePlan
@@ -184,35 +228,111 @@ public sealed class RenderGraphDocumentLawTests {
                 continue;
             }
 
-            Assert.Equal(expected: pipelinePlan!.PassOrder, actual: graphPlan!.Pipeline.PassOrder);
-            Assert.Equal(expected: pipelinePlan.Outputs, actual: graphPlan.Outputs);
+            var planned = pipelinePlan!.Pipeline;
+
+            Assert.Equal(expected: planned.PassOrder, actual: graphPlan!.Pipeline.PassOrder);
+            Assert.Equal(expected: planned.Outputs, actual: graphPlan.Outputs);
             Assert.Equal(
-                expected: pipelinePlan.Storages.Select(selector: static storage => (storage.Name, storage.History, storage.Clear, string.Join(separator: ",", values: storage.Versions))),
+                expected: planned.Storages.Select(selector: static storage => (storage.Name, storage.History, storage.Clear, string.Join(separator: ",", values: storage.Versions))),
                 actual: graphPlan.Pipeline.Storages.Select(selector: static storage => (storage.Name, storage.History, storage.Clear, string.Join(separator: ",", values: storage.Versions)))
             );
 
-            for (var index = 0; (index < pipelinePlan.Passes.Count); index++) {
+            for (var index = 0; (index < planned.Passes.Count); index++) {
                 Assert.Equal(
-                    expected: pipelinePlan.Passes[index].Accesses,
+                    expected: planned.Passes[index].Accesses,
                     actual: graphPlan.Pipeline.Passes[index].Accesses
                 );
                 Assert.Null(@object: graphPlan.Steps[index].Package);
             }
         }
     }
+    // A checked-in document may run a shipped package's kernel as a shader pass of its own, compiled from the kernel's
+    // source through the interface the pass's config generates. That config restates the package's, so it must restate
+    // all of it: a field the package has and the document lacks leaves the kernel reading a member the pass block does
+    // not declare, and the pass fails to compile. Every such pass, its kernel's file named for its package, declares
+    // exactly the package's config.
     [Fact]
-    public void TheShippedCatalogOffersEveryShippedPostProcessSetAsAPackage() {
-        var catalog = RenderGraphPackageCatalog.WithPostProcess(postProcess: ShaderSetCatalog.Scan(rootDirectory: Path.Combine(
-            path1: AppContext.BaseDirectory,
-            path2: "Assets",
-            path3: "Shaders"
-        )));
+    public void EveryCheckedInPassCompilingAShippedPackageKernelDeclaresThatPackagesConfig() {
+        var root = RepositoryPaths.RequireRoot();
+        var kernels = Path.Combine(
+            path1: root,
+            path2: "src"
+        );
+        var matched = 0;
+
+        foreach (var path in Directory.EnumerateFiles(
+            path: Path.Combine(
+                path1: root,
+                path2: "tests"
+            ),
+            searchOption: SearchOption.AllDirectories,
+            searchPattern: "*.graph.json"
+        ).Order(comparer: StringComparer.Ordinal)) {
+            var definition = ShaderPipelineLoader.ParseDefinition(
+                name: Path.GetFileNameWithoutExtension(path: path),
+                path: path,
+                text: File.ReadAllText(path: path)
+            );
+
+            foreach (var pass in (definition.Passes ?? [])) {
+                var source = Path.GetFullPath(path: Path.Combine(
+                    path1: Path.GetDirectoryName(path: path)!,
+                    path2: pass.Source
+                ));
+                var stem = Path.GetFileName(path: source).Split(separator: '.')[0];
+
+                if (
+                    !source.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: kernels) ||
+                    !RenderGraphPackageCatalog.Engine.TryGet(
+                        id: stem,
+                        package: out var package
+                    )
+                ) {
+                    continue;
+                }
+
+                matched++;
+
+                var expected = (package.Config ?? new Dictionary<string, ShaderConfigField>());
+                var actual = (pass.Config ?? new Dictionary<string, ShaderConfigField>());
+                var where = $"{Path.GetRelativePath(path: path, relativeTo: root)} pass '{pass.Name}' ({package.Id})";
+
+                Assert.True(
+                    condition: expected.Keys.Order(comparer: StringComparer.Ordinal).SequenceEqual(second: actual.Keys.Order(comparer: StringComparer.Ordinal)),
+                    userMessage: $"{where} declares [{string.Join(separator: ", ", values: actual.Keys.Order(comparer: StringComparer.Ordinal))}] where the package declares [{string.Join(separator: ", ", values: expected.Keys.Order(comparer: StringComparer.Ordinal))}]"
+                );
+
+                foreach (var (name, field) in expected) {
+                    var declared = actual[name];
+
+                    Assert.True(
+                        condition: (
+                            (declared.Type == field.Type) &&
+                            (declared.Length == field.Length) &&
+                            (declared.Min == field.Min) &&
+                            (declared.Max == field.Max) &&
+                            (declared.Default.HasValue == field.Default.HasValue) &&
+                            (!field.Default.HasValue || JsonElement.DeepEquals(element1: declared.Default!.Value, element2: field.Default.Value))
+                        ),
+                        userMessage: $"{where} field '{name}' differs from the package's"
+                    );
+                }
+            }
+        }
+
+        Assert.True(condition: (matched > 0), userMessage: "no checked-in document runs a shipped package kernel");
+    }
+    [Fact]
+    public void TheEngineCatalogOffersTheFilmGrainPostProcessPackage() {
+        var catalog = RenderGraphPackageCatalog.Engine;
 
         Assert.True(condition: catalog.TryGet(
-            id: "post.sdf-film-grain",
+            id: RenderGraphPackageCatalog.SdfFilmGrain,
             package: out var grain
         ));
-        Assert.Equal(expected: (1, 1), actual: (grain.Inputs, grain.Outputs));
+        Assert.True(condition: grain.IsPostProcess);
+        Assert.Equal(expected: RenderGraphPackagePort.Image(access: RenderGraphPortAccess.FragmentSampled), actual: Assert.Single(collection: grain.Inputs));
+        Assert.Equal(expected: RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ColorAttachmentWrite), actual: Assert.Single(collection: grain.Outputs));
         Assert.True(condition: catalog.TryGet(
             id: RenderGraphPackageCatalog.SdfWorld,
             package: out _

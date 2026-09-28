@@ -29,14 +29,15 @@ public sealed class VulkanGpuRenderPass : IGpuRenderPass {
             red: 0f
         )).ToList();
 
-        if (description.Depth is not null) {
-            clearValues.Add(item: VkClearValue.OfDepth(depth: 1f));
+        if (description.Depth is { } depth) {
+            clearValues.Add(item: VkClearValue.OfDepth(depth: depth.ClearDepth));
         }
 
         ClearValues = clearValues;
     }
 
-    /// <summary>Gets one clear value per attachment, in attachment order: opaque black for a color, 1 for the depth.</summary>
+    /// <summary>Gets one clear value per attachment, in attachment order: opaque black for a color, the declared
+    /// <see cref="GpuDepthAttachment.ClearDepth"/> for the depth.</summary>
     public IReadOnlyList<VkClearValue> ClearValues { get; }
     /// <inheritdoc/>
     public GpuRenderPassDescription Description { get; }
@@ -123,6 +124,36 @@ public sealed class VulkanGpuRenderPass : IGpuRenderPass {
             Device: device
         );
     }
+    /// <summary>Returns the description of a swapchain's render pass as a pipeline created for it reads it: one color
+    /// attachment of the swapchain's format, cleared and stored, and no depth.</summary>
+    /// <param name="format">The swapchain's image format.</param>
+    /// <returns>The description.</returns>
+    public static GpuRenderPassDescription PresentDescription(GpuPixelFormat format) => new(Colors: [new GpuColorAttachment(
+        FinalLayout: GpuImageLayout.RenderTarget,
+        Format: format,
+        Load: GpuAttachmentLoad.Clear,
+        Store: GpuAttachmentStore.Store
+    )]);
+    /// <summary>Builds the native request for a swapchain's render pass: <see cref="RequestOf"/> over
+    /// <see cref="PresentDescription"/> in the swapchain's format, ending in <c>PRESENT_SRC_KHR</c>. Its attachments and
+    /// dependencies are a described render pass's, so a pipeline created for <see cref="PresentDescription"/> in the
+    /// swapchain's format is compatible with it: only a final layout differs.</summary>
+    /// <param name="device">The device's command table.</param>
+    /// <param name="format">The swapchain's image format.</param>
+    /// <returns>The request.</returns>
+    public static VulkanRenderPassCreateRequest PresentRequestOf(VulkanDeviceCommands device, GpuPixelFormat format) {
+        var request = RequestOf(
+            description: PresentDescription(format: format),
+            device: device
+        );
+        var color = request.ColorAttachments[0];
+
+        color.FinalLayout = VulkanImageLayout.PresentSourceKhr;
+
+        return (request with {
+            ColorAttachments = [color],
+        });
+    }
     /// <summary>Creates a render pass.</summary>
     /// <param name="renderPassApi">The API that creates and destroys the native render pass.</param>
     /// <param name="device">The device's command table.</param>
@@ -148,7 +179,7 @@ public sealed class VulkanGpuRenderPass : IGpuRenderPass {
             )
         );
     }
-    /// <inheritdoc/>
+    /// <summary>Destroys the render pass.</summary>
     public void Dispose() => RenderPass.Dispose();
 }
 /// <summary>
@@ -236,16 +267,25 @@ public sealed class VulkanGpuFramebuffer : IGpuFramebuffer {
 /// Implements <see cref="IGpuRenderPassFactory"/> for Vulkan through <see cref="VulkanGpuRenderPass"/> and
 /// <see cref="VulkanGpuFramebuffer"/>.
 /// </summary>
-public sealed class VulkanGpuRenderPassFactory(IVulkanRenderPassApi renderPassApi, IVulkanFramebufferSetApi framebufferSetApi) : IGpuRenderPassFactory {
+public sealed class VulkanGpuRenderPassFactory(IVulkanDeviceContext deviceContext, IVulkanRenderPassApi renderPassApi, IVulkanFramebufferSetApi framebufferSetApi, GpuObjectNaming naming) : IGpuRenderPassFactory {
     /// <inheritdoc/>
-    public IGpuRenderPass Create(IGpuDeviceContext deviceContext, GpuRenderPassDescription description) =>
-        VulkanGpuRenderPass.Create(
+    public IGpuRenderPass Create(GpuRenderPassDescription description, in GpuObjectName name) {
+        var renderPass = VulkanGpuRenderPass.Create(
             description: description,
-            device: ((IVulkanDeviceContext)deviceContext).LogicalDevice.Commands,
+            device: deviceContext.LogicalDevice.Commands,
             renderPassApi: renderPassApi
         );
+
+        naming.Name(
+            handle: renderPass.RenderPass.Handle,
+            kind: GpuObjectKind.RenderPass,
+            name: in name
+        );
+
+        return renderPass;
+    }
     /// <inheritdoc/>
-    public IGpuFramebuffer CreateFramebuffer(IGpuDeviceContext deviceContext, IGpuRenderPass renderPass, IReadOnlyList<IGpuImage> colors, IGpuImage? depth) =>
+    public IGpuFramebuffer CreateFramebuffer(IGpuRenderPass renderPass, IReadOnlyList<IGpuImage> colors, IGpuImage? depth) =>
         VulkanGpuFramebuffer.Create(
             colors: colors,
             depth: depth,

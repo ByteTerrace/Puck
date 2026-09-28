@@ -8,4 +8,4 @@ ARM7TDMI core, synchronous embedding, and queued hosting.
 - [Embedding the Advanced Gaming Brick](https://github.com/ByteTerrace/Puck/blob/main/docs/emulation/agb/embedding.md) — usage and host contracts.
 - [Machine emulation manual](https://github.com/ByteTerrace/Puck/blob/main/docs/emulation/README.md) — architecture and related topics.
 - [Development and verification](https://github.com/ByteTerrace/Puck/blob/main/src/Puck.AdvancedGamingBrick.Post/README.md).
-- [GamingBricks license](https://github.com/ByteTerrace/Puck/blob/main/src/Puck.GamingBricks/LICENSE.md) — Apache-2.0 or MIT.
+- [GamingBricks license](https://github.com/ByteTerrace/Puck/blob/main/src/Puck.Machines/LICENSE.md) — Apache-2.0 or MIT.

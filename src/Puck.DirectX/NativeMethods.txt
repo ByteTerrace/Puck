@@ -4,6 +4,11 @@ IDXGIFactory4
 IDXGIFactory5
 IDXGIAdapter1
 IDXGISwapChain3
+// The display output a swap chain presents on, whose color space says whether HDR is on (IDXGIOutput6::GetDesc1),
+// and the swap chain color spaces an HDR output selects (IDXGISwapChain3::CheckColorSpaceSupport, SetColorSpace1).
+IDXGIOutput6
+DXGI_COLOR_SPACE_TYPE
+DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG
 DXGI_SWAP_CHAIN_DESC1
 DXGI_FEATURE
 DXGI_ERROR_NOT_FOUND
@@ -28,6 +33,8 @@ D3D12_RESOURCE_BARRIER
 // Direct3D 12: root signatures, pipeline state, and geometry rendering.
 ID3DBlob
 D3D12SerializeRootSignature
+D3D12CreateRootSignatureDeserializer
+ID3D12RootSignatureDeserializer
 ID3D12RootSignature
 ID3D12PipelineState
 D3D12_GRAPHICS_PIPELINE_STATE_DESC
@@ -105,6 +112,16 @@ D3D12_FEATURE_DATA_FEATURE_LEVELS
 D3D12_FEATURE_DATA_ARCHITECTURE
 D3D12_FEATURE_DATA_D3D12_OPTIONS16
 
+// Direct3D 12: the device's capabilities (GpuDeviceCapabilities), recorded and never branched on — options' resource
+// binding tier, the highest root signature version, and options 19's shader-visible heap sizes.
+D3D12_FEATURE_DATA_D3D12_OPTIONS
+D3D12_FEATURE_DATA_ROOT_SIGNATURE
+D3D12_FEATURE_DATA_D3D12_OPTIONS19
+
+// Direct3D 12: whether the device samples a format from a two-dimensional texture, which an image upload refuses by
+// name when it does not (the block-compressed formats a bake stores).
+D3D12_FEATURE_DATA_FORMAT_SUPPORT
+
 // Direct3D 12: debug layer + info queue (validation message surfacing), and the live-object report at teardown.
 D3D12GetDebugInterface
 ID3D12Debug
@@ -118,39 +135,10 @@ CreateEventW
 WaitForSingleObject
 CloseHandle
 
-// Direct3D 11 + DXGI Desktop Duplication: zero-copy live screen capture. A D3D11 device duplicates the primary
-// output, copies each desktop frame into a shared (NT-handle) texture, and the D3D12 host imports that handle via
-// OpenSharedHandle — no CPU round trip. A D3D11 EVENT query CPU-orders the copy before the D3D12 read.
-D3D11CreateDevice
-ID3D11Device
-ID3D11Device1
-ID3D11DeviceContext
-ID3D11Texture2D
-ID3D11Resource
-ID3D11Query
-ID3D11Asynchronous
-D3D11_TEXTURE2D_DESC
-D3D11_QUERY_DESC
-D3D11_QUERY
-D3D11_USAGE
-D3D11_BIND_FLAG
-D3D11_RESOURCE_MISC_FLAG
-D3D11_CPU_ACCESS_FLAG
-D3D11_CREATE_DEVICE_FLAG
-D3D11_SDK_VERSION
-D3D_DRIVER_TYPE
+// DXGI device and adapter reads: the device identity's CheckInterfaceSupport(IDXGIDevice) probe.
 IDXGIDevice
 IDXGIAdapter
-IDXGIOutput
-IDXGIOutput1
-IDXGIOutputDuplication
-DXGI_OUTDUPL_DESC
-DXGI_OUTDUPL_FRAME_INFO
 DXGI_ADAPTER_DESC
-IDXGIResource
-IDXGIResource1
-D3D11_MAPPED_SUBRESOURCE
-D3D11_MAP
 
 // Direct3D 12: the persistent pipeline library (ID3D12Device1::CreatePipelineLibrary, Load*Pipeline, StorePipeline,
 // Serialize) and the adapter identity its file is keyed by (vendor and device IDs, the user-mode driver version).

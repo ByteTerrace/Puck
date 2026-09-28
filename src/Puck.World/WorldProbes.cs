@@ -24,8 +24,8 @@ namespace Puck.World;
 /// panel already applies. Instances follow the roster's occupancy every serviced frame: a seat joining creates its
 /// row's instances on the next pass, a seat leaving retires them (ending the run, releasing the output ring, and
 /// releasing every binding's held router state) with no reboot. Every deep check the document's shallow validator
-/// deferred (channel names, extension config fields, control names, cross-probe references) runs once per row, in
-/// the constructor, and fails the boot loudly by name — the same precedent an invalid <c>render.extensions</c>
+/// deferred (channel names, post pass config fields, control names, cross-probe references) runs once per row, in
+/// the constructor, and fails the boot loudly by name — the same precedent an invalid <c>views.post</c>
 /// config follows; only the per-seat live state (rings, runs, binding state) is built lazily, as seats come and go.
 /// </summary>
 /// <remarks>
@@ -42,7 +42,8 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
     private readonly ProbeRowInfo[] m_rows;
     private readonly IInputClock m_clock;
     private readonly IInputFocus m_focus;
-    private readonly WorldPostRenderExtensionPasses m_passes;
+    private readonly WorldPostPasses m_passes;
+    private readonly IReadOnlyList<WorldViewPostPass> m_post;
     private readonly InputRouter m_router;
     private readonly PlayerRoster m_roster;
     private readonly WorldScreenBinder m_screens;
@@ -52,14 +53,14 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
 
     /// <summary>Builds every declared probe row's static shape, resolving and deep-validating everything the
     /// document's shallow validator left to boot: a kind's manifest and config, a track document, a binding's
-    /// probe/channel reference, an extension's config field, and a control name. Live per-instance state (rings,
+    /// probe/channel reference, a post pass's config field, and a control name. Live per-instance state (rings,
     /// kernel runs, binding state) is built afterward, by the first <see cref="CaptureFrame"/>'s instance
     /// reconciliation.</summary>
     /// <param name="clock">The shared input capture clock an axis binding's captured signal is stamped with.</param>
     /// <param name="definitionSource">The booted document and its source path, for the <c>probes</c> section and
     /// resolving a track binding's path against the document's own directory.</param>
     /// <param name="focus">The terminal input focus an axis binding's capture is gated through.</param>
-    /// <param name="passes">The composed <c>render.extensions</c> passes a parameter binding writes into.</param>
+    /// <param name="passes">The composed <c>views.post</c> passes a parameter binding writes into.</param>
     /// <param name="roster">The seat roster a seat-relative row's instances follow — occupancy drives creation and
     /// retirement.</param>
     /// <param name="router">The command router an axis binding's conditioned sample is captured into.</param>
@@ -69,9 +70,9 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
     /// <exception cref="InvalidOperationException">A <c>probes</c> row fails a deep check: an unloadable or
     /// model-class kind, a camera sensor other than the kind's trigger, an invalid config, an unreadable or
     /// channel-count-mismatched track document, an unresolved channel name, an unresolved or range-incompatible
-    /// extension or probe config field, an unresolved control name, or a screen showing a probe whose kind writes no
+    /// post pass or probe config field, an unresolved control name, or a screen showing a probe whose kind writes no
     /// texture.</exception>
-    public WorldProbes(IInputClock clock, WorldDefinitionSource definitionSource, IInputFocus focus, WorldPostRenderExtensionPasses passes, PlayerRoster roster, InputRouter router, WorldScreenBinder screens) {
+    public WorldProbes(IInputClock clock, WorldDefinitionSource definitionSource, IInputFocus focus, WorldPostPasses passes, PlayerRoster roster, InputRouter router, WorldScreenBinder screens) {
         ArgumentNullException.ThrowIfNull(argument: clock);
         ArgumentNullException.ThrowIfNull(argument: definitionSource);
         ArgumentNullException.ThrowIfNull(argument: focus);
@@ -83,6 +84,7 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
         m_clock = clock;
         m_focus = focus;
         m_passes = passes;
+        m_post = (definitionSource.Definition.Views.Post ?? []);
         m_roster = roster;
         m_router = router;
         m_screens = screens;
@@ -484,7 +486,7 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
         if (parameter.TargetRowInfo is { } targetRow) {
             builder.Append(value: " -> probe ").Append(value: targetRow.Row.Id).Append(value: '.').Append(value: ((WorldProbeParameterTarget.Probe)parameter.Row.Target).Field);
         } else {
-            builder.Append(value: " -> extension ").Append(value: parameter.ExtensionId).Append(value: '.').Append(value: parameter.ExtensionField);
+            builder.Append(value: " -> post ").Append(value: parameter.PostPass).Append(value: '.').Append(value: parameter.PostField);
         }
 
         if (parameter.Writes == 0L) {
@@ -819,9 +821,9 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
     private sealed class ParameterBindingTemplate {
         public required int Channel { get; init; }
         public int ConstantOffset { get; init; }
-        public string? ExtensionField { get; init; }
-        public string? ExtensionId { get; init; }
         public required long MaxAgeTicks { get; init; }
+        public string? PostField { get; init; }
+        public string? PostPass { get; init; }
         public required WorldProbeBinding.Parameter Row { get; init; }
         public ProbeRowInfo? TargetRowInfo { get; init; }
     }
@@ -861,10 +863,10 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
     private sealed class ParameterState {
         public required int Channel { get; init; }
         public int ConstantOffset { get; init; }
-        public string? ExtensionField { get; init; }
-        public string? ExtensionId { get; init; }
         public required ProbeInstance Instance { get; init; }
         public required long MaxAgeTicks { get; init; }
+        public string? PostField { get; init; }
+        public string? PostPass { get; init; }
         public required WorldProbeBinding.Parameter Row { get; init; }
         public ProbeRowInfo? TargetRowInfo { get; init; }
 

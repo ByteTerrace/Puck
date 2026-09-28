@@ -6,9 +6,11 @@ namespace Puck.Abstractions.Sources;
 /// <summary>
 /// The conversion passes that turn an uploaded source's region (<see cref="ImageSourceUploadLayout"/>) into an image a
 /// consumer samples, and the CPU reference each pass is held to. Each pass is a shipped HLSL compute kernel in
-/// <c>Puck.Shaders</c> (<c>Assets/Shaders/Sources</c>) reading the region as a byte-address buffer at binding 0 and writing its
-/// image at binding 1, eight by eight threads a group, one thread a pixel; the CPU reference here computes the same
-/// arithmetic in double precision, so a kernel's output agrees with it to within one 8-bit code.
+/// <c>Puck.Shaders</c> (<c>Assets/Shaders/Sources</c>) reading the region as a byte-address buffer named <c>region</c> and
+/// writing a storage image named <c>image</c>, both in set 3 where a document pass's interface places its ports (the pass
+/// block at binding 0, the region at binding 1, the image at binding 2), eight by eight threads a group, one thread a
+/// pixel; the CPU reference here computes the same arithmetic in double precision, so a kernel's output agrees with it
+/// to within one 8-bit code.
 /// <para>
 /// A planar source's chroma is sampled at the co-sited pixel of its half-resolution plane with no filtering, the Y'CbCr
 /// matrix and code range are the ones its header names, and the resulting R'G'B' is clamped to 0–1 and not linearized.

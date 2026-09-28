@@ -14,7 +14,7 @@ namespace Puck.World.Tests;
 public sealed class DocumentBasisLawTests {
     // Loads the document at a path, asserting it refuses, and returns the one-line reason.
     private static string RefusalOf(string path) {
-        Assert.False(condition: WorldDefinitionFileSource.TryLoad(
+        Assert.False(condition: Fixtures.TryLoadDrawn(
             path: path,
             definition: out _,
             contentHash: out _,
@@ -80,7 +80,7 @@ public sealed class DocumentBasisLawTests {
         );
 
         Assert.True(
-            condition: WorldDefinitionFileSource.TryLoad(
+            condition: Fixtures.TryLoadDrawn(
                 path: deltaPath,
                 definition: out _,
                 contentHash: out var before,
@@ -97,7 +97,7 @@ public sealed class DocumentBasisLawTests {
         );
 
         Assert.True(
-            condition: WorldDefinitionFileSource.TryLoad(
+            condition: Fixtures.TryLoadDrawn(
                 path: deltaPath,
                 definition: out _,
                 contentHash: out var after,
@@ -140,7 +140,7 @@ public sealed class DocumentBasisLawTests {
         var basisPath = files.WriteBytes(bytes: Fixtures.DefaultWorldBytes(), name: "basis.world.json");
 
         Assert.True(
-            condition: WorldDefinitionFileSource.TryLoad(
+            condition: Fixtures.TryLoadDrawn(
                 path: basisPath,
                 definition: out var flat,
                 contentHash: out var flatHash,
@@ -161,7 +161,7 @@ public sealed class DocumentBasisLawTests {
         );
 
         Assert.True(
-            condition: WorldDefinitionFileSource.TryLoad(
+            condition: Fixtures.TryLoadDrawn(
                 path: deltaPath,
                 definition: out var composed,
                 contentHash: out var composedHash,
@@ -387,7 +387,7 @@ public sealed class DocumentBasisLawTests {
         );
 
         Assert.True(
-            condition: WorldDefinitionFileSource.TryLoad(
+            condition: Fixtures.TryLoadDrawn(
                 path: rootPath,
                 definition: out var loaded,
                 contentHash: out _,
@@ -441,7 +441,7 @@ public sealed class DocumentBasisLawTests {
         );
 
         Assert.True(
-            condition: WorldDefinitionFileSource.TryLoad(
+            condition: Fixtures.TryLoadDrawn(
                 path: rootPath,
                 definition: out var composed,
                 contentHash: out _,
@@ -505,7 +505,7 @@ public sealed class DocumentBasisLawTests {
         );
 
         Assert.True(
-            condition: WorldDefinitionFileSource.TryLoad(
+            condition: Fixtures.TryLoadDrawn(
                 path: restatedPath,
                 definition: out var resolved,
                 contentHash: out _,
@@ -525,7 +525,7 @@ public sealed class DocumentBasisLawTests {
         var basisPath = files.WriteBytes(bytes: Fixtures.DefaultWorldBytes(), name: "basis.world.json");
 
         Assert.True(
-            condition: WorldDefinitionFileSource.TryLoad(
+            condition: Fixtures.TryLoadDrawn(
                 path: basisPath,
                 definition: out var flat,
                 contentHash: out _,
@@ -545,7 +545,7 @@ public sealed class DocumentBasisLawTests {
         );
 
         Assert.True(
-            condition: WorldDefinitionFileSource.TryLoad(
+            condition: Fixtures.TryLoadDrawn(
                 path: rootPath,
                 definition: out var loaded,
                 contentHash: out _,
@@ -578,7 +578,7 @@ public sealed class DocumentBasisLawTests {
         Assert.False(condition: written.ContainsKey(propertyName: "kits"));
 
         Assert.True(
-            condition: WorldDefinitionFileSource.TryLoad(
+            condition: Fixtures.TryLoadDrawn(
                 path: rootPath,
                 definition: out var reloaded,
                 contentHash: out _,
@@ -619,7 +619,7 @@ public sealed class DocumentBasisLawTests {
         );
 
         Assert.True(
-            condition: WorldDefinitionFileSource.TryLoad(
+            condition: Fixtures.TryLoadDrawn(
                 path: refinedPath,
                 definition: out var refined,
                 contentHash: out _,
@@ -657,7 +657,7 @@ public sealed class DocumentBasisLawTests {
         );
 
         Assert.True(
-            condition: WorldDefinitionFileSource.TryLoad(
+            condition: Fixtures.TryLoadDrawn(
                 path: replacedPath,
                 definition: out var replaced,
                 contentHash: out _,
@@ -697,7 +697,7 @@ public sealed class DocumentBasisLawTests {
         );
 
         Assert.True(
-            condition: WorldDefinitionFileSource.TryLoad(
+            condition: Fixtures.TryLoadDrawn(
                 path: appendPath,
                 definition: out var appended,
                 contentHash: out _,
@@ -726,7 +726,7 @@ public sealed class DocumentBasisLawTests {
         );
 
         Assert.True(
-            condition: WorldDefinitionFileSource.TryLoad(
+            condition: Fixtures.TryLoadDrawn(
                 path: dropPath,
                 definition: out var dropped,
                 contentHash: out _,
@@ -816,7 +816,7 @@ public sealed class DocumentBasisLawTests {
         );
 
         Assert.True(
-            condition: WorldDefinitionFileSource.TryLoad(
+            condition: Fixtures.TryLoadDrawn(
                 path: deltaPath,
                 definition: out var loaded,
                 contentHash: out _,
@@ -843,7 +843,7 @@ public sealed class DocumentBasisLawTests {
 
         // The degraded write is a self-contained flat document that loads on its own.
         Assert.True(
-            condition: WorldDefinitionFileSource.TryLoad(
+            condition: Fixtures.TryLoadDrawn(
                 path: deltaPath,
                 definition: out _,
                 contentHash: out _,
@@ -866,7 +866,7 @@ public sealed class DocumentBasisLawTests {
         );
 
         Assert.True(
-            condition: WorldDefinitionFileSource.TryLoad(
+            condition: Fixtures.TryLoadDrawn(
                 path: deltaPath,
                 definition: out var loaded,
                 contentHash: out _,
@@ -901,7 +901,7 @@ public sealed class DocumentBasisLawTests {
         Assert.False(condition: written.ContainsKey(propertyName: "kits"));
 
         Assert.True(
-            condition: WorldDefinitionFileSource.TryLoad(
+            condition: Fixtures.TryLoadDrawn(
                 path: deltaPath,
                 definition: out var reloaded,
                 contentHash: out _,
@@ -966,7 +966,7 @@ public sealed class DocumentBasisLawTests {
         );
 
         Assert.True(
-            condition: WorldDefinitionFileSource.TryLoad(
+            condition: Fixtures.TryLoadDrawn(
                 path: deltaPath,
                 definition: out var composed,
                 contentHash: out var before,
@@ -994,7 +994,7 @@ public sealed class DocumentBasisLawTests {
         );
 
         Assert.True(
-            condition: WorldDefinitionFileSource.TryLoad(
+            condition: Fixtures.TryLoadDrawn(
                 path: deltaPath,
                 definition: out _,
                 contentHash: out var after,

@@ -3,7 +3,7 @@
          to one tree-mode run of the CLI's compile verb, which writes the documents the game ships, beside each that
          draws as a world its compiled world (<name>.puckb), and at the root the one bake pack (bakes.puckbake) holding
          the creation bakes those compiled worlds name and the package store (packages/) holding one compiled shader
-         package per pipeline source their views.pipelines rows name, so no device compiles a shipped pipeline and the
+         package per graph source their views.graphs rows name, so no device compiles a shipped pipeline and the
          run needs dxc as the shader build does, into this project's intermediate directory; the output's
          Assets/worlds carries exactly those. Nothing is written into the source tree, and neither the sources nor the
          tree's own documents are shipped from it: a document name resolves to its .puck source where one emits a
@@ -18,24 +18,44 @@
         <PuckWorldSource Include="$(PuckWorldSourceDirectory)**\*.puck;$(PuckWorldSourceDirectory)**\*.world.json" />
         <!-- The pipeline sources the shipped worlds' rows can name, so an edited shader re-runs the tree run that packages
              it. They ship as content too: a World keys a row's package by the closure it reads beside the document. -->
-        <PuckWorldPipelineSource Include="Assets\**\*.hlsl;Assets\**\*.hlsli;Assets\**\*.pipeline.json" Exclude="Assets\worlds\**" />
+        <PuckWorldPipelineSource Include="Assets\**\*.hlsl;Assets\**\*.hlsli;Assets\**\*.graph.json" Exclude="Assets\worlds\**" />
         <!-- Every world document, compiled world and bake pack under Assets/worlds ships from the tree run's report instead. -->
         <Content Include="Assets\**" Exclude="Assets\worlds\**\*.puck;Assets\worlds\**\*.world.json;Assets\worlds\**\*.puckb;Assets\worlds\**\*.puckbake" CopyToOutputDirectory="PreserveNewest" />
         <ProjectReference Include="$(MSBuildThisFileDirectory)..\src\Puck.Cli\Puck.Cli.csproj" ReferenceOutputAssembly="false" Private="false" />
     </ItemGroup>
+    <UsingTask
+        AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll"
+        TaskFactory="RoslynCodeTaskFactory"
+        TaskName="PuckRemoveStaleWorldPackages"
+    >
+        <ParameterGroup>
+            <OutputDirectory ParameterType="System.String" Required="true" />
+            <PackageDirectory ParameterType="System.String" Required="true" />
+            <Deployed ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
+        </ParameterGroup>
+        <Task>
+            <Code Language="cs" Source="$(MSBuildThisFileDirectory)PuckRemoveStaleWorldPackages.cs" Type="Class" />
+        </Task>
+    </UsingTask>
     <!-- The intermediate directory is set by the SDK's targets, after this file is read, so the report is named here.
-         The files the last run reported are outputs of the next one, so a run is repeated when one of them is gone. -->
+         A run is repeated when a file the last run reported is gone: the report is removed, and it is the run's one
+         output. The report alone is the output because a run keeps a stored package it finds already built, so the
+         package's time says nothing about when the run last succeeded; the report is written last, by every run.
+         The bake cache sits beside the configuration directories, so every configuration shares it. -->
     <Target Name="PuckNameWorldReport">
         <PropertyGroup>
             <PuckWorldDocumentDirectory>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\$(IntermediateOutputPath)worlds\'))</PuckWorldDocumentDirectory>
             <PuckWorldReport>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\$(IntermediateOutputPath)worlds.written'))</PuckWorldReport>
+            <PuckWorldBakeCache>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\$(BaseIntermediateOutputPath)bakes'))</PuckWorldBakeCache>
         </PropertyGroup>
         <ReadLinesFromFile File="$(PuckWorldReport)" Condition="Exists('$(PuckWorldReport)')">
             <Output TaskParameter="Lines" ItemName="PuckWorldReportedLine" />
         </ReadLinesFromFile>
         <ItemGroup>
             <PuckWorldReported Include="@(PuckWorldReportedLine->'$(PuckWorldDocumentDirectory)%(Identity)')" />
+            <PuckWorldReportedGone Include="@(PuckWorldReported)" Condition="!Exists('%(FullPath)')" />
         </ItemGroup>
+        <Delete Files="$(PuckWorldReport)" Condition="'@(PuckWorldReportedGone)' != ''" />
     </Target>
     <Target Name="PuckResolveWorldCompiler" DependsOnTargets="ResolveProjectReferences" Condition="'$(DesignTimeBuild)' != 'true'">
         <!-- The project instance the reference built, so the path is the CLI that build produced. -->
@@ -57,10 +77,12 @@
     <Target Name="PuckGenerateWorlds" DependsOnTargets="PuckNameWorldReport;PuckResolveWorldCompiler" AfterTargets="ResolveProjectReferences"
             Condition="'$(DesignTimeBuild)' != 'true'"
             Inputs="@(PuckWorldSource);@(PuckWorldPipelineSource);$(PuckWorldCompilerPath);@(PuckWorldCompilerAssembly);$(MSBuildThisFileFullPath)"
-            Outputs="$(PuckWorldReport);@(PuckWorldReported)">
+            Outputs="$(PuckWorldReport)">
         <!-- One process for the whole tree pays compiler, JIT and schema initialization once. The tree run also
-             removes any document or compiled world under the directory that no source writes any more. -->
-        <Exec Command="dotnet &quot;$(PuckWorldCompilerPath)&quot; compile --tree &quot;$(PuckWorldSourceDirectory.TrimEnd('\'))&quot; --output &quot;$(PuckWorldDocumentDirectory.TrimEnd('\'))&quot; --written &quot;$(PuckWorldReport)&quot; @(PuckWorldSource -> '&quot;%(FullPath)&quot;', ' ')" />
+             removes any document or compiled world under the directory that no source writes any more. A run bakes
+             only the creations whose keys the bake cache lacks, so an engine change reruns the compile without
+             rebaking an unchanged prototype. -->
+        <Exec Command="dotnet &quot;$(PuckWorldCompilerPath)&quot; compile --tree &quot;$(PuckWorldSourceDirectory.TrimEnd('\'))&quot; --output &quot;$(PuckWorldDocumentDirectory.TrimEnd('\'))&quot; --written &quot;$(PuckWorldReport)&quot; --bake-cache &quot;$(PuckWorldBakeCache)&quot; @(PuckWorldSource -> '&quot;%(FullPath)&quot;', ' ')" />
     </Target>
     <!-- The files to ship are known only once a tree run has written them, so they are read from its report, whether it
          ran in this build or an earlier one. -->
@@ -73,5 +95,10 @@
             <ContentWithTargetPath Include="@(PuckWorldWritten->'%(FullPath)')" TargetPath="Assets\worlds\$([MSBuild]::MakeRelative('$(PuckWorldDocumentDirectory)', '%(FullPath)'))" CopyToOutputDirectory="PreserveNewest" />
             <FileWrites Include="$(PuckWorldReport);@(PuckWorldWritten->'%(FullPath)')" />
         </ItemGroup>
+    </Target>
+    <!-- A copy never deletes, so a package no shipped row names any more would stay in the output's package store and a
+         World would still find it. After the copy, the store keeps exactly the files this build deploys. -->
+    <Target Name="PuckRemoveStaleWorldPackages" AfterTargets="CopyFilesToOutputDirectory" Condition="'$(DesignTimeBuild)' != 'true'">
+        <PuckRemoveStaleWorldPackages Deployed="@(ContentWithTargetPath);@(AllItemsFullPathWithTargetPath)" OutputDirectory="$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '$(OutDir)'))" PackageDirectory="Assets\worlds\packages" />
     </Target>
 </Project>

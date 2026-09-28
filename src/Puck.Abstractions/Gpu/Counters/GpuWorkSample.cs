@@ -1,3 +1,5 @@
+using Puck.Abstractions.Counting;
+
 namespace Puck.Abstractions.Gpu;
 
 /// <summary>
@@ -11,6 +13,7 @@ namespace Puck.Abstractions.Gpu;
 /// </para>
 /// </summary>
 public sealed class GpuWorkSample {
+    private WorkClass[] m_classes = [];
     private long[] m_counts = new long[GpuWork.SubmissionColumnCount];
     private string[] m_labels = [];
     private GpuPassState[] m_states = [];
@@ -30,6 +33,20 @@ public sealed class GpuWorkSample {
     /// submission and never reused, even across a reset. Zero when the sample holds no submission.</summary>
     public long Submission { get; private set; }
 
+    /// <summary>Reads what two runs of one pass may be held to agree on, as the node configured it: a pass whose work
+    /// follows the device is <see cref="WorkClass.PerBackendDeterministic"/>, every other
+    /// <see cref="WorkClass.Deterministic"/>.</summary>
+    /// <param name="pass">The zero-based pass index, in <see cref="PassLabels"/> order.</param>
+    /// <returns>The pass's class.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="pass"/> is negative or not less than <see cref="PassCount"/>.</exception>
+    public WorkClass GetPassClass(int pass) {
+        ValidatePass(pass: pass);
+
+        return ((pass < m_classes.Length)
+            ? m_classes[pass]
+            : WorkClass.Deterministic
+        );
+    }
     /// <summary>Reads what the submission did with one pass.</summary>
     /// <param name="pass">The zero-based pass index, in <see cref="PassLabels"/> order.</param>
     /// <returns>The pass's state.</returns>
@@ -73,6 +90,7 @@ public sealed class GpuWorkSample {
 
     internal void Clear() {
         Load(
+            classes: [],
             counts: [],
             labels: [],
             revision: 0L,
@@ -83,6 +101,7 @@ public sealed class GpuWorkSample {
     // The source may be republished while this runs on another thread. Each field is read once and the lengths are
     // clamped to the arrays actually read, so a torn copy stays in bounds; the caller discards it by its version.
     internal void CopyFrom(GpuWorkSample source) {
+        var classes = source.m_classes;
         var counts = source.m_counts;
         var labels = source.m_labels;
         var states = source.m_states;
@@ -98,6 +117,7 @@ public sealed class GpuWorkSample {
         );
 
         Load(
+            classes: classes,
             counts: counts.AsSpan(
                 length: ((passCount + 1) * GpuWork.SubmissionColumnCount),
                 start: 0
@@ -111,9 +131,9 @@ public sealed class GpuWorkSample {
             submission: source.Submission
         );
     }
-    // counts holds the outside row, then one row per pass, or is empty for no submission. labels is immutable and held
-    // by reference.
-    internal void Load(ReadOnlySpan<long> counts, string[] labels, long revision, ReadOnlySpan<GpuPassState> states, long submission) {
+    // counts holds the outside row, then one row per pass, or is empty for no submission. labels and classes are
+    // immutable and held by reference.
+    internal void Load(ReadOnlySpan<long> counts, string[] labels, WorkClass[] classes, long revision, ReadOnlySpan<GpuPassState> states, long submission) {
         var passCount = states.Length;
         var countLength = ((passCount + 1) * GpuWork.SubmissionColumnCount);
 
@@ -138,6 +158,7 @@ public sealed class GpuWorkSample {
             counts.CopyTo(destination: destination);
         }
 
+        m_classes = classes;
         m_labels = labels;
         PassCount = passCount;
         Revision = revision;

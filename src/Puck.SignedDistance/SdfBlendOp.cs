@@ -11,7 +11,6 @@ namespace Puck.SignedDistance;
 /// accumulator; emitting an intersection after unrelated geometry silently deletes that geometry.</para>
 /// <para>The same asymmetry is why an instance carrying an intersection-family blend is unmaskable: its influence region
 /// is unbounded, so no cull bound can contain it (see <c>SdfProgram.UnmaskableBoundRadius</c>).</para></summary>
-// Values must match Shaders/Sdf/sdf-vm.hlsli (SDF_BLEND_*).
 public enum SdfBlendOp : uint {
     Union = 0,
     SmoothUnion = 1, // blend radius = instruction Data1.x

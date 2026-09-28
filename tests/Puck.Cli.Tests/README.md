@@ -27,7 +27,8 @@ of batch requests with a shared output path or watch mode.
 named world documents, that a refused member publishes none of them, and that
 `--output` names their directory. It also covers explicit asset-lock updates,
 the semantic-validation gate on an update, stale-byte refusal without output
-replacement, and the current refusal to relocate an asset-bearing document.
+replacement, and a document written away from its source naming its asset and
+graph files from where it lands.
 
 `WorldArtifactBuildLawTests` count builds of the stored `Puck.World` artifact
 over small git checkouts of their own, with a counting builder in place of

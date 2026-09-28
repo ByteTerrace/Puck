@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using Puck.Abstractions.Presentation;
 using Puck.Assets;
 
 namespace Puck.Shaders;
@@ -9,6 +10,7 @@ public sealed partial class ShaderPackager {
     /// shipped world names, which a <see cref="ShaderPackager"/> given the directory as its <see cref="Store"/> loads in
     /// place of compiling the source.</summary>
     public const string StoreDirectoryName = "packages";
+
     // The leading hexadecimal digits of a key that name its package's directory in a store. The directory name only
     // finds a candidate: a load holds the candidate's whole key to the source's before using it.
     private const int StoreNameLength = 16;
@@ -22,14 +24,14 @@ public sealed partial class ShaderPackager {
     /// and generated declarations' pin, in execution order. It is the key of exactly the package
     /// <see cref="BuildAsync"/> writes from the source with the same name and the default root, so a store holds one
     /// package per source and name. Nothing compiles: the closure is collected the way a build collects it.</summary>
-    /// <param name="source">The pipeline document or one-off shader source.</param>
+    /// <param name="source">The graph document or one-off shader source.</param>
     /// <param name="name">The instance name, which names a one-off shader's pipeline and its one pass. A pipeline
     /// document names itself.</param>
     /// <returns>The key, 64 lowercase hexadecimal digits.</returns>
     /// <exception cref="ShaderClosureRefusedException">The closure reaches outside the source's directory or exceeds a
     /// limit.</exception>
     /// <exception cref="IOException">A file of the closure cannot be read.</exception>
-    /// <exception cref="JsonException">A pipeline document is malformed.</exception>
+    /// <exception cref="JsonException">A graph document is malformed.</exception>
     /// <exception cref="ShaderPipelineCompilationException">The document does not plan.</exception>
     public string KeyOf(string source, string name) => SurveyKey(
         name: name,
@@ -70,7 +72,7 @@ public sealed partial class ShaderPackager {
     }
     /// <summary>Writes a source's package into the <see cref="Store"/> under its key, compiling it with this packager's
     /// compiler, unless the store already holds a package with that key, which is verified and kept.</summary>
-    /// <param name="source">The pipeline document or one-off shader source.</param>
+    /// <param name="source">The graph document or one-off shader source.</param>
     /// <param name="name">The instance name, which names a one-off shader's pipeline and its one pass.</param>
     /// <param name="cancellationToken">The token that cancels the build.</param>
     /// <returns>The outcome and the package's directory. A source whose closure does not fit a package, or that does
@@ -153,12 +155,13 @@ public sealed partial class ShaderPackager {
     // A source file's load: its store package when the store holds one keyed by it, which compiles nothing, and the
     // loader's compile otherwise. A store package that fails its load is the load's outcome; nothing compiles in its
     // place. A source that does not survey is left to the loader, which reports the same fault by name.
-    private ShaderPipelineLoadResult LoadSourceFile(string name, string path, CancellationToken cancellationToken) {
+    private ShaderPipelineLoadResult LoadSourceFile(string name, string path, CancellationToken cancellationToken, QualityTier? tier) {
         if (Store is not { } store) {
             return m_loader.Load(
                 cancellationToken: cancellationToken,
                 name: name,
-                path: path
+                path: path,
+                tier: tier
             );
         }
 
@@ -179,7 +182,8 @@ public sealed partial class ShaderPackager {
             if (IsPackage(path: package)) {
                 var loaded = LoadAsync(
                     cancellationToken: cancellationToken,
-                    package: package
+                    package: package,
+                    tier: tier
                 ).GetAwaiter().GetResult();
 
                 if (
@@ -207,7 +211,8 @@ public sealed partial class ShaderPackager {
         var compiled = m_loader.Load(
             cancellationToken: cancellationToken,
             name: name,
-            path: path
+            path: path,
+            tier: tier
         );
 
         return ((compiled.Status == ShaderPipelineLoadStatus.Unsupported)

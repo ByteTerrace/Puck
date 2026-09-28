@@ -8,7 +8,7 @@ namespace Puck.SignedDistance.Tests;
 
 /// <summary>Laws over <see cref="SdfInstruction.Secondary"/>: the packed-word flag bit, its opposite exclusion set
 /// from <see cref="SdfInstruction.Detail"/> (a non-secondary shape is ordinary CONTACT geometry — only the GPU
-/// soft-shadow/AO field walks in sdf-world.hlsli drop it, unverified by machine here), and the builder's
+/// soft-shadow/AO field walks in shade/sdf-light-stage.hlsli and surface/sdf-surface.hlsli drop it, unverified by machine here), and the builder's
 /// <see cref="SdfProgramBuilder.MarkSecondary"/> chain contract.</summary>
 public sealed class SdfSecondaryShapeLawTests {
     private static readonly SdfMaterial[] OneMaterial = [new SdfMaterial(Albedo: Vector3.One)];
@@ -85,7 +85,7 @@ public sealed class SdfSecondaryShapeLawTests {
             expected: 0x40000000u
         );
         Assert.Equal(
-            actual: packedShape & 0x3FFFFFFFu,
+            actual: packedShape & SdfProgram.ShapeTypeMask,
             expected: ((uint)SdfShapeType.Box)
         );
     }
@@ -214,7 +214,7 @@ public sealed class SdfSecondaryShapeLawTests {
             expected: 0u
         );
         Assert.Equal(
-            actual: packedShape & 0x3FFFFFFFu,
+            actual: packedShape & SdfProgram.ShapeTypeMask,
             expected: ((uint)SdfShapeType.Box)
         );
 

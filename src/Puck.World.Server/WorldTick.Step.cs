@@ -157,15 +157,19 @@ public sealed partial class WorldTick {
             }
 
             if (op is WorldPendingOp.Mutate { Binding: { } binding, Completion: { } completion }) {
+                // The live document's version right after this op: the install it produced, or the document it was
+                // refused against. A later op of this drain installs past it, never below it.
                 var outcome = (ok
                     ? WorldMutationOutcome.AppliedOutcome(
-                        binding,
-                        "world.mutation.applied"
+                        binding: binding,
+                        code: "world.mutation.applied",
+                        version: Host.DocumentVersion
                     )
                     : WorldMutationOutcome.RefusedOutcome(
-                        binding,
-                        "world.mutation.refused",
-                        (Host.Document.LastMutationFailureDetail ?? "mutation was refused")
+                        binding: binding,
+                        code: "world.mutation.refused",
+                        detail: (Host.Document.LastMutationFailureDetail ?? "mutation was refused"),
+                        version: Host.DocumentVersion
                     )
                 );
 
@@ -220,10 +224,7 @@ public sealed partial class WorldTick {
                 (entry is WorldOrderedEntry.Submission retiringSubmission) &&
                 Host.AuthorityRetiring
             ) {
-                retiringSubmission.Completion?.Invoke(new WorldSubmissionResult.Refusal(
-                    Code: "world.authority.retiring",
-                    Detail: "authority is retiring and no longer admits submissions"
-                ));
+                retiringSubmission.Completion?.Invoke(Host.RetiredRefusal());
                 return;
             }
             m_ordered.Enqueue(item: entry);
@@ -269,6 +270,7 @@ public sealed partial class WorldTick {
         // addon seam's pre-flight (TickAddons, immediately below) and the drain that applies what it — and every peer
         // submission buffered since the last step — enqueued.
         Host.MutationBudget.BeginTick();
+        Host.EndFaultedSessions();
         Host.Extensions.Drain();
         Host.Addons?.TickAddons(tick: (context.Tick + 1UL));
         _ = DrainPendingOps(tick: context.Tick);
@@ -278,6 +280,17 @@ public sealed partial class WorldTick {
         m_tickWrittenCount = 0;
 
         while (m_intents.TryDequeue(result: out var submission)) {
+            // A session's screen input names no body: it latches on the session itself, for the rules to read. A
+            // session's submission naming a body drives that body like any other principal's, under its grants.
+            if (
+                (submission.Principal.Kind == PrincipalKind.Session) &&
+                (submission.EntityIndex < 0)
+            ) {
+                _ = Host.GrantTable.TryLatchSessionInput(submission: in submission);
+
+                continue;
+            }
+
             if (Host.Body(index: submission.EntityIndex) is not { } body) {
                 continue;
             }
@@ -483,6 +496,7 @@ public sealed partial class WorldTick {
             tick: tick,
             stepTicks: context.StepTicks
         );
+        Host.GrantTable.SettleSessionPresses();
         StepBoardEnforcement(tick: tick);
         Host.StepSearch(tick: tick);
         StepFields(tick: tick);
@@ -497,7 +511,8 @@ public sealed partial class WorldTick {
         SweepPlacementDeals(tick: tick);
         Host.Addons?.ResolveReads(tick: (context.Tick + 1UL));
         // Fold this tick's routed intents into their targets BEFORE the snapshot is built.
-        Host.Engagement.FoldTick();
+        Host.Engagement.FoldTick(replaysInput: Host.ReplaysInput);
+        Host.ReplaysInput = false;
 
         // screens[].memory bindings poke a moved cell into its machine and mirror a machine's moved byte into its
         // cell — see WorldServer.MachineMemory.cs. Runs right before the machine steps so a Write binding's poke
@@ -679,6 +694,8 @@ public sealed partial class WorldTick {
                             );
                         }
                     }
+
+                    Host.GrantTable.RevokeStaleEmbodiments(index: peer.BodyIndex);
                 }
 
                 var installedGrants = new List<WorldGrant>();
@@ -732,6 +749,18 @@ public sealed partial class WorldTick {
                 }
 
                 break;
+            case WorldServerEvent.SessionAdmitted admitted:
+                Host.GrantTable.ApplySessionAdmitted(admitted: admitted);
+
+                break;
+            case WorldServerEvent.SessionEmbodied embodied:
+                Host.GrantTable.ApplySessionEmbodied(embodied: embodied);
+
+                break;
+            case WorldServerEvent.SessionEnded ended:
+                Host.GrantTable.ApplySessionEnded(ended: ended);
+
+                break;
             default:
                 if (Host.Output.HasNarrationSink) {
                     Host.Output.Narrate(
@@ -768,6 +797,8 @@ public sealed partial class WorldTick {
         lock (Host.AuthorityGate) {
             if (Host.AuthorityRetiring) { return false; }
             Host.MutationBudget.BeginTick();
+            // A paused or stopped world still ends a session whose observer faulted.
+            Host.EndFaultedSessions();
             Host.Extensions.Drain();
             return DrainPendingOps(tick: m_lastCompletedTick);
         }

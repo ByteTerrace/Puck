@@ -8,6 +8,10 @@ public enum VulkanBufferMemory {
     /// <summary>A type that is both <c>HOST_VISIBLE</c> and <c>HOST_COHERENT</c>, or the creation fails. The host writes
     /// and reads it through a mapping without a flush or an invalidate.</summary>
     HostCoherent,
+    /// <summary>A type that is <c>DEVICE_LOCAL</c>, <c>HOST_VISIBLE</c> and <c>HOST_COHERENT</c>, or the creation fails:
+    /// the aperture a discrete adapter exposes onto its own memory. The host writes it through a mapping like
+    /// <see cref="HostCoherent"/>, and the device reads it at device-local speed.</summary>
+    HostCoherentDeviceLocal,
     /// <summary>A <c>DEVICE_LOCAL</c> type, or the creation fails. The host never maps it.</summary>
     DeviceLocal,
     /// <summary>A <c>DEVICE_LOCAL</c> type when one is permitted, otherwise the first type the buffer's requirements

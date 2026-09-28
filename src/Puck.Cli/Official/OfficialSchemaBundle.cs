@@ -12,8 +12,7 @@ namespace Puck.Cli.Official;
 // stays in the bundle; build.commit names the worlds tree instead (OfficialBuildCommand.TryReadTree).
 internal static class OfficialSchemaBundle {
     public static (JsonObject Bundle, string Generator, string WorldSchemaId) Build(string repositoryRoot) {
-        var extensions = SchemaCommand.LoadPostRenderExtensions(repositoryRoot: repositoryRoot);
-        var split = WorldSchema.Export(postRenderExtensions: extensions);
+        var split = WorldSchema.Export(postProcessPackages: SchemaCommand.PostProcessPackages());
         var bundle = WorldSchema.Bundle(split: split);
         var identity = (bundle["x-puck"] as JsonObject)!;
         var generator = (identity["generator"]?.GetValue<string>() ?? WorldSchema.SchemaId);

@@ -12,7 +12,9 @@ namespace Puck.Cli.Counters;
 /// backend through the shared leg machinery, reads the one <c>world.counters --json</c> response the script asks for,
 /// and writes a <c>puck.counters.report.v1</c> report: per backend the device identity, the offscreen resolution, the
 /// shader toolchain, the GC mode, and every count tagged with its class. The deterministic counts and the passes'
-/// states must agree across the two backends. <c>puck counters compare</c> holds two reports to each other.</summary>
+/// states must agree across the two backends; <c>--check</c> holds the counts to the counted-cost ceilings and
+/// <c>--record</c> writes them (<see cref="CountersCeilings"/>). <c>puck counters compare</c> holds two reports to each
+/// other.</summary>
 internal static class CountersCommand {
     /// <summary>The workload's console script, repository-relative.</summary>
     public const string ScriptPath = "tests/Puck.Counters/counters.script.txt";
@@ -126,9 +128,33 @@ internal static class CountersCommand {
             : CliExit.Failed
         );
     }
-    private static int Run(string? output) {
+    private static int Run(string? output, bool check, bool record, string? ceilingsPath) {
+        if (check && record) {
+            return CliExit.Refuse(verb: Verb, what: "--check and --record", why: "a run either holds the report to the ceilings or records them, not both");
+        }
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return CliExit.Refused;
+        }
+
+        var ceilingsFile = ((ceilingsPath is null)
+            ? Path.Combine(
+                path1: repositoryRoot,
+                path2: CountersCeilings.CeilingsPath
+            )
+            : Path.GetFullPath(path: ceilingsPath)
+        );
+        WorldCountersCeilings? ceilings = null;
+
+        // The ceilings are read before the workload runs, so a missing or damaged file refuses before any GPU work.
+        if (
+            check &&
+            !CountersCeilings.TryRead(
+                ceilings: out ceilings,
+                path: ceilingsFile,
+                reason: out var ceilingsReason
+            )
+        ) {
+            return CliExit.Refuse(verb: Verb, what: CliPaths.ToDisplay(fullPath: ceilingsFile), why: ceilingsReason);
         }
 
         var worldPath = Path.Combine(
@@ -197,7 +223,9 @@ internal static class CountersCommand {
                 artifact: artifact.Path,
                 backend: backend,
                 budget: SuiteBudget,
-                exitAfterSeconds: 150,
+                // A safety net, not the leg length: it outlasts the script's 180-second world.wait ready deadline and
+                // the ticks after it, so a build that never finishes is named by that wait rather than cut off.
+                exitAfterSeconds: 240,
                 process: out var process,
                 runDirectory: runDirectory,
                 script: script,
@@ -247,18 +275,48 @@ internal static class CountersCommand {
         );
         Console.Out.WriteLine(value: $"{Verb}: report {CliPaths.ToDisplay(fullPath: reportPath)}");
 
-        return Report(differences: CountersComparison.AcrossBackends(
+        var differences = new List<string>(collection: CountersComparison.AcrossBackends(
             left: runs[0],
             right: runs[1]
         ));
+
+        if (record) {
+            CountersCeilings.Write(
+                ceilings: CountersCeilings.Record(report: report),
+                path: ceilingsFile
+            );
+            Console.Out.WriteLine(value: $"{Verb}: ceilings {CliPaths.ToDisplay(fullPath: ceilingsFile)}");
+        }
+        if (ceilings is not null) {
+            var verdict = CountersCeilings.Check(
+                ceilings: ceilings,
+                report: report
+            );
+
+            foreach (var note in verdict.Notes) {
+                Console.Out.WriteLine(value: $"{Verb}: {note}");
+            }
+
+            differences.AddRange(collection: verdict.Failures);
+            Console.Out.WriteLine(value: $"{Verb}: ceilings {CliPaths.ToDisplay(fullPath: ceilingsFile)} {((verdict.Failures.Count == 0) ? "hold" : $"fail {verdict.Failures.Count}")}");
+        }
+
+        return Report(differences: differences);
     }
 
     public static Command Create() {
         var outputOption = CliOptions.Output(description: "Where the report is written; the run's scratch directory when omitted.");
+        var checkOption = CliOptions.Check(description: $"Also hold the report to the counted-cost ceilings ({CountersCeilings.CeilingsPath}) and fail naming each count over its ceiling or breaking its required zero.");
+        var recordOption = new Option<bool>(name: "--record") {
+            Description = $"Also record the report's counts as the counted-cost ceilings ({CountersCeilings.CeilingsPath}).",
+        };
+        var ceilingsOption = new Option<string>(name: "--ceilings") {
+            Description = $"The ceilings file --check reads and --record writes; {CountersCeilings.CeilingsPath} when omitted.",
+        };
         var command = new Command(
-            description: "Collect the counters workload's work counts offscreen once per backend and check the two agree.",
+            description: "Collect the counters workload's work counts offscreen once per backend, check the two agree, and hold them to their ceilings.",
             name: Verb
-        ) { outputOption };
+        ) { outputOption, checkOption, recordOption, ceilingsOption };
 
         command.Detail(detail: $"""
             Boots {WorldPath} offscreen once per backend (vulkan, then directx; no window
@@ -271,13 +329,31 @@ internal static class CountersCommand {
             one line per deterministic count or pass state the two backends disagree on, naming its kind, pass
             and node. Standard error carries progress; transcripts stay in the run's scratch directory.
 
+            --check holds the report to the counted-cost ceilings, a {WorldCountersCeilings.SchemaVersion}
+            document (schema: tests/Puck.Counters/{WorldCountersCeilings.SchemaVersion}.schema.json). They state,
+            per backend, every render node's GPU submission counts that are deterministic or
+            per-backend-deterministic, pass by pass and outside every pass, the march steps and texels written the
+            SDF kernels count among them: each reads at most its ceiling, and a ceiling of zero is a required zero.
+            A per-backend-deterministic count is judged only on the device the backend's ceilings were recorded on,
+            and a line says how many were not judged elsewhere. Every ceiling must have been measured, of the class
+            it was recorded as, or its pass reported and not executed. One line names each count over its ceiling,
+            each required zero broken, each ceiling not measured or measured as another class, and each count no
+            ceiling was recorded for. --record writes the report's counts as the ceilings instead, each reading its
+            own ceiling, and every kind of a pass that did not execute as a required zero.
+
             Performance is judged by these counts, never by time; 'puck bench' is the only wall-clock tool.
 
-            Exit codes: 0 the backends agree, 1 a deterministic count or pass state differs, 2 a build, leg or
-            reading refusal (a missing device or shader tool included).
+            Exit codes: 0 the backends agree and every judged count holds its ceiling, 1 a deterministic count or
+            pass state differs or a ceiling fails, 2 a build, leg or reading refusal (a missing device or shader
+            tool, or a ceilings file that is missing or not a ceilings document, included).
             """);
         command.Subcommands.Add(item: CreateCompare());
-        command.SetAction(action: parseResult => Run(output: parseResult.GetValue(option: outputOption)));
+        command.SetAction(action: parseResult => Run(
+            ceilingsPath: parseResult.GetValue(option: ceilingsOption),
+            check: parseResult.GetValue(option: checkOption),
+            output: parseResult.GetValue(option: outputOption),
+            record: parseResult.GetValue(option: recordOption)
+        ));
 
         return command;
     }

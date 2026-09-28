@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
+using Puck.Abstractions;
+using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 
 namespace Puck.Shaders.Tests;
@@ -86,14 +88,16 @@ public sealed partial class ShaderPackageLawTests {
         using var fixture = new Fixture(name: "transitive");
         var present = fixture.PathOf(logicalPath: "present.hlsl");
         var closure = ShaderSourceClosure.Collect(
+            generated: fixture.Generated(logicalPath: "present.hlsl"),
             limits: ShaderSourceLimits.Default,
             sources: [(present, File.ReadAllText(path: present))]
         );
 
-        // tone.hlsli is named only on the fourth line, and math.hlsli only by common.hlsli.
+        // tone.hlsli is named only on the fourth line, math.hlsli only by common.hlsli, and the generated interface is
+        // read from the text handed in.
         Assert.Equal(
             actual: closure.Includes.Select(selector: include => fixture.LogicalPathOf(path: include.Path)),
-            expected: ["lib/common.hlsli", "lib/math.hlsli", "lib/tone.hlsli"]
+            expected: ["lib/common.hlsli", "lib/math.hlsli", "lib/tone.hlsli", "present.interface.hlsli"]
         );
         Assert.Equal(
             actual: closure.Depth,
@@ -151,7 +155,7 @@ public sealed partial class ShaderPackageLawTests {
         var package = await new ShaderPackager(reflectDxil: false, compiler: fixture.Compiler(runner: runner)).BuildAsync(
             cancellationToken: Token,
             output: fixture.Output(name: "package"),
-            source: fixture.PathOf(logicalPath: "missing.pipeline.json")
+            source: fixture.PathOf(logicalPath: "missing.graph.json")
         );
 
         AssertRefused(
@@ -193,7 +197,7 @@ public sealed partial class ShaderPackageLawTests {
         var output = fixture.Output(name: "package");
 
         Assert.Equal(
-            actual: (await packager.BuildAsync(cancellationToken: Token, output: output, source: fixture.PathOf(logicalPath: "graph.pipeline.json"))).Status,
+            actual: (await packager.BuildAsync(cancellationToken: Token, output: output, source: fixture.PathOf(logicalPath: "transitive.graph.json"))).Status,
             expected: ShaderPipelineLoadStatus.Compiled
         );
         Assert.Equal(
@@ -237,7 +241,7 @@ public sealed partial class ShaderPackageLawTests {
 
         Assert.True(condition: (await compiler.CompileAsync(cancellationToken: Token, descriptor: request)).IsSuccess);
         Assert.Equal(
-            actual: (await packager.BuildAsync(cancellationToken: Token, output: output, source: fixture.PathOf(logicalPath: "graph.pipeline.json"))).Status,
+            actual: (await packager.BuildAsync(cancellationToken: Token, output: output, source: fixture.PathOf(logicalPath: "transitive.graph.json"))).Status,
             expected: ShaderPipelineLoadStatus.Compiled
         );
         File.Delete(path: Path.Combine(path1: toolchain, path2: "dxc"));
@@ -273,7 +277,7 @@ public sealed partial class ShaderPackageLawTests {
     public async Task An_include_outside_the_closure_is_refused_and_a_wider_root_admits_it() {
         using var fixture = new Fixture(name: "outside");
         var packager = new ShaderPackager(reflectDxil: false, compiler: fixture.Compiler(runner: new PackageRunner()));
-        var source = fixture.PathOf(logicalPath: "pipeline/outside.pipeline.json");
+        var source = fixture.PathOf(logicalPath: "pipeline/outside.graph.json");
 
         AssertRefused(
             code: ShaderClosureRefusedException.OutsideClosure,
@@ -293,11 +297,11 @@ public sealed partial class ShaderPackageLawTests {
         );
         Assert.Equal(
             actual: wide.Manifest!.Document,
-            expected: "pipeline/outside.pipeline.json"
+            expected: "pipeline/outside.graph.json"
         );
         Assert.Equal(
             actual: wide.Manifest.Files.Select(selector: static file => file.Path),
-            expected: ["pipeline/fill.hlsl", "pipeline/outside.pipeline.json", "shared/outside.hlsli"]
+            expected: ["pipeline/fill.hlsl", "pipeline/outside.graph.json", "shared/outside.hlsli"]
         );
         Assert.Equal(
             actual: (await packager.LoadAsync(cancellationToken: Token, package: fixture.Output(name: "wide"))).Status,
@@ -316,7 +320,7 @@ public sealed partial class ShaderPackageLawTests {
             MaxIncludeDepth: depth
         );
         var runner = new PackageRunner();
-        var source = fixture.PathOf(logicalPath: "graph.pipeline.json");
+        var source = fixture.PathOf(logicalPath: "transitive.graph.json");
 
         AssertRefused(
             code: code,
@@ -355,7 +359,7 @@ public sealed partial class ShaderPackageLawTests {
         var output = fixture.Output(name: "package");
 
         Assert.Equal(
-            actual: (await packager.BuildAsync(cancellationToken: Token, output: output, source: fixture.PathOf(logicalPath: "graph.pipeline.json"))).Status,
+            actual: (await packager.BuildAsync(cancellationToken: Token, output: output, source: fixture.PathOf(logicalPath: "transitive.graph.json"))).Status,
             expected: ShaderPipelineLoadStatus.Compiled
         );
         File.Copy(
@@ -397,7 +401,7 @@ public sealed partial class ShaderPackageLawTests {
         using var fixture = new Fixture(name: "transitive");
         var runner = new PackageRunner();
         var packager = new ShaderPackager(reflectDxil: false, compiler: fixture.Compiler(runner: runner));
-        var source = fixture.PathOf(logicalPath: "graph.pipeline.json");
+        var source = fixture.PathOf(logicalPath: "transitive.graph.json");
         var output = fixture.Output(name: "package");
 
         async Task Rebuild() => Assert.Equal(
@@ -446,6 +450,176 @@ public sealed partial class ShaderPackageLawTests {
             result: await packager.LoadAsync(cancellationToken: Token, package: output)
         );
     }
+
+    // Declares tiers on the fixture's graph document, as an author writes them.
+    private static void DeclareTiers(Fixture fixture, params string[] tiers) {
+        var path = fixture.PathOf(logicalPath: "transitive.graph.json");
+        var document = System.Text.Json.Nodes.JsonNode.Parse(json: File.ReadAllText(path: path))!;
+
+        document["tiers"] = new System.Text.Json.Nodes.JsonArray(items: [.. tiers.Select(selector: static tier => ((System.Text.Json.Nodes.JsonNode?)tier))]);
+        File.WriteAllText(contents: document.ToJsonString(), path: path);
+    }
+    // The native tool runs a package build needs: every variant's recorded steps, then two for each interface's echo
+    // pass, one compute stage compiled to SPIR-V and to DXIL.
+    private static int BuildRuns(ShaderPackageManifest manifest) =>
+        (manifest.Passes.Sum(selector: static pass => pass.Variants.Sum(selector: static variant => variant.Stages.Sum(selector: static stage => stage.Steps.Count))) +
+        (2 * manifest.Passes.Select(selector: static pass => pass.Declarations.Path).Distinct().Count()));
+
+    [Fact]
+    public async Task A_package_whose_graph_declares_no_tier_compiles_one_variant_per_pass() {
+        using var untiered = new Fixture(name: "transitive");
+        var untieredRunner = new PackageRunner();
+        var built = await new ShaderPackager(reflectDxil: false, compiler: untiered.Compiler(runner: untieredRunner)).BuildAsync(
+            cancellationToken: Token,
+            output: untiered.Output(name: "package"),
+            source: untiered.PathOf(logicalPath: "transitive.graph.json")
+        );
+
+        Assert.Equal(expected: ShaderPipelineLoadStatus.Compiled, actual: built.Status);
+        Assert.All(
+            action: static pass => Assert.Equal(expected: [ShaderPackageVariant.DefaultName], actual: pass.Variants.Select(selector: static variant => variant.Name)),
+            collection: built.Manifest!.Passes
+        );
+        Assert.Equal(expected: BuildRuns(manifest: built.Manifest), actual: untieredRunner.CompileRuns);
+
+        // Declaring one tier costs exactly one more variant's steps, counted by the tool runs.
+        using var tiered = new Fixture(name: "transitive");
+        var tieredRunner = new PackageRunner();
+
+        DeclareTiers(fixture: tiered, tiers: "high");
+
+        var tieredBuilt = await new ShaderPackager(reflectDxil: false, compiler: tiered.Compiler(runner: tieredRunner)).BuildAsync(
+            cancellationToken: Token,
+            output: tiered.Output(name: "package"),
+            source: tiered.PathOf(logicalPath: "transitive.graph.json")
+        );
+
+        Assert.Equal(expected: ShaderPipelineLoadStatus.Compiled, actual: tieredBuilt.Status);
+        Assert.Equal(expected: BuildRuns(manifest: tieredBuilt.Manifest!), actual: tieredRunner.CompileRuns);
+        Assert.Equal(
+            actual: (tieredRunner.CompileRuns - untieredRunner.CompileRuns),
+            expected: built.Manifest.Passes.Sum(selector: static pass => pass.Variants[0].Stages.Sum(selector: static stage => stage.Steps.Count))
+        );
+
+        // A tier declared twice names no second variant, and is refused before anything compiles.
+        using var repeated = new Fixture(name: "transitive");
+        var repeatedRunner = new PackageRunner();
+
+        DeclareTiers(fixture: repeated, tiers: ["high", "high"]);
+
+        var refused = await new ShaderPackager(reflectDxil: false, compiler: repeated.Compiler(runner: repeatedRunner)).BuildAsync(
+            cancellationToken: Token,
+            output: repeated.Output(name: "package"),
+            source: repeated.PathOf(logicalPath: "transitive.graph.json")
+        );
+
+        Assert.Equal(expected: ShaderPipelineLoadStatus.Failed, actual: refused.Status);
+        Assert.Contains(actualString: refused.Message, expectedSubstring: "RENDERGRAPH_TIERS");
+        Assert.Equal(expected: 0, actual: repeatedRunner.CompileRuns);
+    }
+    [Fact]
+    public async Task A_package_builds_the_variants_its_graph_declares_and_an_undeclared_tier_loads_the_default() {
+        using var fixture = new Fixture(name: "transitive");
+        var runner = new PackageRunner();
+        var packager = new ShaderPackager(reflectDxil: false, compiler: fixture.Compiler(runner: runner));
+        var output = fixture.Output(name: "package");
+
+        DeclareTiers(fixture: fixture, tiers: ["high", "low"]);
+
+        var built = await packager.BuildAsync(
+            cancellationToken: Token,
+            output: output,
+            source: fixture.PathOf(logicalPath: "transitive.graph.json")
+        );
+
+        Assert.Equal(expected: ShaderPipelineLoadStatus.Compiled, actual: built.Status);
+
+        // Every pass carries the default variant and one per declared tier, cheapest first, each tier's compiled with it
+        // defined in both steps, over the one interface.
+        foreach (var pass in built.Manifest!.Passes) {
+            Assert.Equal(
+                actual: pass.Variants.Select(selector: static variant => variant.Name),
+                expected: ["default", "low", "high"]
+            );
+
+            foreach (var variant in pass.Variants) {
+                var define = ((QualityTiers.Parse(name: variant.Name) is { } named)
+                    ? $"{QualityTiers.Define}={QualityTiers.DefineValue(tier: named)}"
+                    : null);
+
+                Assert.All(
+                    action: step => Assert.Equal(
+                        actual: step.Options.Count(predicate: static option => option.StartsWith(comparisonType: StringComparison.Ordinal, value: QualityTiers.Define)),
+                        expected: ((define is null) ? 0 : 1)
+                    ),
+                    collection: variant.Stages.SelectMany(selector: static stage => stage.Steps)
+                );
+                Assert.All(
+                    action: step => Assert.True(condition: ((define is null) || step.Options.Contains(value: define))),
+                    collection: variant.Stages.SelectMany(selector: static stage => stage.Steps)
+                );
+            }
+
+            Assert.Equal(
+                actual: pass.Variants.SelectMany(selector: static variant => variant.Binaries).Select(selector: static binary => binary.Pin).Distinct().Count(),
+                expected: pass.Variants.Sum(selector: static variant => variant.Binaries.Count)
+            );
+        }
+
+        // A load compiles nothing and reads the binaries of the variant its tier names; the undeclared medium tier, and
+        // no tier, read the default variant's, and the load says so.
+        var runs = runner.CompileRuns;
+
+        foreach (var (tier, variantName) in (((QualityTier?, string)[])[(null, "default"), (QualityTier.Low, "low"), (QualityTier.Medium, "default"), (QualityTier.High, "high")])) {
+            var loaded = await packager.LoadAsync(cancellationToken: Token, package: output, tier: tier);
+
+            Assert.Equal(expected: ShaderPipelineLoadStatus.Compiled, actual: loaded.Status);
+            Assert.Equal(expected: variantName, actual: ShaderPackageVariant.NameOf(tier: loaded.Pipeline!.Tier));
+
+            foreach (var pass in built.Manifest.Passes) {
+                foreach (var binary in pass.Variants.Single(predicate: candidate => (candidate.Name == variantName)).Binaries) {
+                    var bytes = ((binary.Target == ShaderPackageBinary.SpirvTarget)
+                        ? loaded.Pipeline.Shaders[pass.Name].SpirvByStage[binary.Stage]
+                        : loaded.Pipeline.Shaders[pass.Name].DxilByStage[binary.Stage]);
+
+                    Assert.Equal(
+                        actual: bytes.ToArray(),
+                        expected: File.ReadAllBytes(path: Path.Combine(path1: output, path2: binary.Path))
+                    );
+                }
+            }
+        }
+
+        Assert.Contains(
+            actualString: (await packager.LoadAsync(cancellationToken: Token, package: output, tier: QualityTier.Medium)).Message,
+            expectedSubstring: "at tier medium->default (the graph declares no medium variant)"
+        );
+        Assert.Equal(expected: runs, actual: runner.CompileRuns);
+
+        // Variants out of order are malformed, and variants other than the document declares are not its closure.
+        var manifestPath = Path.Combine(path1: output, path2: ShaderPackageManifest.FileName);
+
+        File.WriteAllBytes(
+            bytes: ShaderPackager.Write(manifest: built.Manifest with {
+                Passes = [.. built.Manifest.Passes.Select(selector: static pass => pass with { Variants = [pass.Variants[0], pass.Variants[2], pass.Variants[1]] })],
+            }),
+            path: manifestPath
+        );
+        AssertRefused(
+            code: ShaderClosureRefusedException.PackageMalformed,
+            result: await packager.LoadAsync(cancellationToken: Token, package: output, tier: QualityTier.High)
+        );
+        File.WriteAllBytes(
+            bytes: ShaderPackager.Write(manifest: built.Manifest with {
+                Passes = [.. built.Manifest.Passes.Select(selector: static pass => pass with { Variants = [.. pass.Variants.Take(count: 2)] })],
+            }),
+            path: manifestPath
+        );
+        AssertRefused(
+            code: ShaderClosureRefusedException.PackageClosure,
+            result: await packager.LoadAsync(cancellationToken: Token, package: output, tier: QualityTier.High)
+        );
+    }
     [Fact]
     public async Task A_package_loads_only_under_the_capabilities_and_interfaces_it_records() {
         using var fixture = new Fixture(name: "transitive");
@@ -455,7 +629,7 @@ public sealed partial class ShaderPackageLawTests {
         var built = await packager.BuildAsync(
             cancellationToken: Token,
             output: output,
-            source: fixture.PathOf(logicalPath: "graph.pipeline.json")
+            source: fixture.PathOf(logicalPath: "transitive.graph.json")
         );
         var manifestPath = Path.Combine(
             path1: output,
@@ -469,7 +643,7 @@ public sealed partial class ShaderPackageLawTests {
             var planned = built.Pipeline!.Plan.Passes.Single(predicate: candidate => (candidate.Name == pass.Name));
 
             Assert.Same(
-                actual: pass.Stages,
+                actual: pass.Variants[0].Stages,
                 expected: built.Pipeline.Shaders[pass.Name].Identity!.Stages
             );
             Assert.Equal(
@@ -507,9 +681,10 @@ public sealed partial class ShaderPackageLawTests {
         // Binaries built for another interface: the pin is well formed and the file matches it, but the document's pass
         // now reads a different interface.
         var blur = manifest.Passes[0];
-        var other = ShaderFrameInterface.For(
+        var other = ShaderFrameInterface.ForPass(
             config: new Dictionary<string, ShaderConfigField>(comparer: StringComparer.Ordinal) { ["radius"] = new(Type: ShaderValueType.Float) },
-            name: blur.Interface.Path[..blur.Interface.Path.IndexOf(value: '.')]
+            name: blur.Interface.Path[..blur.Interface.Path.IndexOf(value: '.')],
+            ports: []
         ).ToJson();
 
         File.WriteAllText(
@@ -534,7 +709,7 @@ public sealed partial class ShaderPackageLawTests {
         var built = await new ShaderPackager(reflectDxil: false, compiler: fixture.Compiler(runner: runner)).BuildAsync(
             cancellationToken: Token,
             output: fixture.Output(name: "package"),
-            source: fixture.PathOf(logicalPath: "graph.pipeline.json")
+            source: fixture.PathOf(logicalPath: "transitive.graph.json")
         );
 
         Assert.Equal(
@@ -587,7 +762,7 @@ public sealed partial class ShaderPackageLawTests {
         var built = await packager.BuildAsync(
             cancellationToken: Token,
             output: fixture.Output(name: "package"),
-            source: fixture.PathOf(logicalPath: "graph.pipeline.json")
+            source: fixture.PathOf(logicalPath: "transitive.graph.json")
         );
 
         Assert.Equal(
@@ -676,7 +851,7 @@ public sealed partial class ShaderPackageLawTests {
         var built = await new ShaderPackager(reflectDxil: false, compiler: fixture.Compiler(runner: new PackageRunner())).BuildAsync(
             cancellationToken: Token,
             output: fixture.Output(name: "package"),
-            source: fixture.PathOf(logicalPath: "graph.pipeline.json")
+            source: fixture.PathOf(logicalPath: "transitive.graph.json")
         );
 
         Assert.Equal(
@@ -686,13 +861,13 @@ public sealed partial class ShaderPackageLawTests {
 
         foreach (var planned in built.Pipeline!.Plan.Passes) {
             var stages = ShaderPipelineLoader.StagesOf(
-                pass: planned.Declaration,
+                pass: planned.Declaration!,
                 source: string.Empty,
-                sourcePath: fixture.PathOf(logicalPath: planned.Declaration.Source)
+                sourcePath: fixture.PathOf(logicalPath: planned.Declaration!.Source)
             );
 
             Assert.Equal(
-                actual: built.Manifest!.Passes.Single(predicate: pass => (pass.Name == planned.Name)).Stages.Select(selector: static stage => (stage.Stage, stage.EntryPoint)),
+                actual: built.Manifest!.Passes.Single(predicate: pass => (pass.Name == planned.Name)).Variants[0].Stages.Select(selector: static stage => (stage.Stage, stage.EntryPoint)),
                 expected: stages.Select(selector: static stage => (stage.Stage, stage.EntryPoint))
             );
         }
@@ -700,7 +875,7 @@ public sealed partial class ShaderPackageLawTests {
         // The fullscreen pass compiles the loader's HLSL vertex stage before its own fragment stage.
         Assert.Equal(
             actual: ShaderPipelineLoader.StagesOf(
-                pass: built.Pipeline.Plan.Passes.Single(predicate: static pass => (pass.Name == "present")).Declaration,
+                pass: built.Pipeline.Plan.Passes.Single(predicate: static pass => (pass.Name == "present")).Declaration!,
                 source: string.Empty,
                 sourcePath: fixture.PathOf(logicalPath: "present.hlsl")
             ).Select(selector: static stage => (stage.Stage, stage.EntryPoint)),
@@ -712,7 +887,7 @@ public sealed partial class ShaderPackageLawTests {
         using var fixture = new Fixture(name: "transitive");
         var runner = new PackageRunner();
         var compiler = fixture.Compiler(runner: runner);
-        var source = fixture.PathOf(logicalPath: "graph.pipeline.json");
+        var source = fixture.PathOf(logicalPath: "transitive.graph.json");
         var cold = await new ShaderPackager(compiler: compiler, reflectDxil: false).BuildAsync(cancellationToken: Token, output: fixture.Output(name: "cold"), source: source);
         var runs = runner.CompileRuns;
         var warm = await new ShaderPackager(compiler: compiler, reflectDxil: false).BuildAsync(cancellationToken: Token, output: fixture.Output(name: "warm"), source: source);
@@ -808,7 +983,7 @@ public sealed partial class ShaderPackageLawTests {
         using var fixture = new Fixture(name: "transitive");
         var packager = new ShaderPackager(reflectDxil: false, compiler: fixture.Compiler(runner: new PackageRunner()));
         var output = fixture.Output(name: "package");
-        var source = fixture.PathOf(logicalPath: "graph.pipeline.json");
+        var source = fixture.PathOf(logicalPath: "transitive.graph.json");
 
         Assert.Equal(
             actual: (await packager.BuildAsync(cancellationToken: Token, output: output, source: source)).Status,
@@ -865,7 +1040,7 @@ public sealed partial class ShaderPackageLawTests {
         var built = await new ShaderPackager(compiler: new ShaderCompiler(cacheDirectory: fixture.Output(name: "cache"))).BuildAsync(
             cancellationToken: Token,
             output: fixture.Output(name: "package"),
-            source: fixture.PathOf(logicalPath: "graph.pipeline.json")
+            source: fixture.PathOf(logicalPath: "transitive.graph.json")
         );
 
         Assert.True(
@@ -952,6 +1127,7 @@ public sealed partial class ShaderPackageLawTests {
             toolchainDirectory: toolchain
         );
         public ShaderCompilationRequest Compute(string logicalPath) => new(
+            generatedIncludes: Generated(logicalPath: logicalPath),
             name: System.IO.Path.GetFileNameWithoutExtension(path: logicalPath),
             stages: [new ShaderStageSource(
                 ShaderStage.Compute,
@@ -964,7 +1140,35 @@ public sealed partial class ShaderPackageLawTests {
             recursive: true
         );
         public void Dispose() => m_scratch.Dispose();
+        // The interface declarations a load generates for the pass of the fixture's graph that compiles a source, by path; none
+        // when no graph pass compiles it.
+        public Dictionary<string, string> Generated(string logicalPath) {
+            var generated = new Dictionary<string, string>(comparer: PuckPaths.Comparer);
+
+            foreach (var document in Directory.EnumerateFiles(path: Root, searchOption: SearchOption.AllDirectories, searchPattern: "*.graph.json")) {
+                IReadOnlyList<ShaderPipelinePlannedPass> passes;
+
+                try {
+                    passes = new ShaderPipelineCompiler().Compile(definition: ShaderPipelineLoader.ReadDefinition(name: "fixture", path: document)).Passes;
+                } catch (Exception exception) when ((exception is InvalidDataException or ShaderPipelineCompilationException or System.Text.Json.JsonException)) {
+                    continue;
+                }
+
+                foreach (var pass in passes) {
+                    var source = System.IO.Path.GetFullPath(path: pass.Declaration!.Source, basePath: System.IO.Path.GetDirectoryName(path: document)!);
+
+                    if (PuckPaths.Comparer.Equals(x: source, y: PathOf(logicalPath: logicalPath))) {
+                        var (path, text) = ShaderPipelineLoader.GeneratedIncludeOf(pass: pass, sourcePath: source);
+
+                        generated[path] = text;
+                    }
+                }
+            }
+
+            return generated;
+        }
         public ShaderCompilationRequest Fragment(string logicalPath) => new(
+            generatedIncludes: Generated(logicalPath: logicalPath),
             name: System.IO.Path.GetFileNameWithoutExtension(path: logicalPath),
             stages: [new ShaderStageSource(
                 ShaderStage.Fragment,

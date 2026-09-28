@@ -50,6 +50,26 @@ public sealed partial class WorldDocument {
             Request: request
         ));
     }
+
+    // A replay drive's Load/Reload carries no document, so the pinned path is re-read through the door the live verb
+    // read it through: drawn for this instance and admitted on its own facts, since the tick path reaches no transport.
+    private WorldDefinition RereadForReplay(string verb, string path, out string contentHash) {
+        if (!WorldDefinitionLoader.TryLoadFileForAdmission(
+            admission: out var reread,
+            catalog: Host.Machines.ValidationCatalog,
+            contentHash: out contentHash,
+            documents: Host.RebuildDocuments,
+            instanceIdentity: Host.InstanceIdentity,
+            path: path,
+            proveNeighbours: false,
+            reason: out var reason
+        )) {
+            throw ReplayRefusal.RebuildSourceUnavailable.Raise(message: $"{verb}: cannot re-read '{path}' for replay — {reason}");
+        }
+
+        return reread!.Definition;
+    }
+
     /// <summary>Resolves the proof transport appropriate to one replacement document path.</summary>
     internal IWorldNeighbourResolver? ResolveRebuildNeighbours(string path) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: path);

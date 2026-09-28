@@ -36,6 +36,10 @@ jobs:
         run: dotnet build src/Puck.Azure.Resources/bootstrap.cs -c Release
       - name: Compile the solution once
         run: dotnet build Puck.slnx -c Release --no-restore -p:PuckCaptureTestArtifacts=true -bl:artifacts/build.binlog
+      # The shaders the build just compiled with the pinned DXC, at their repository paths, for the Linux job that holds
+      # its own DXC build of this commit to them byte for byte (verify.yml, shader-bytecode).
+      - name: Collect the compiled shader bytecode
+        run: dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll shaders collect artifacts/shader-bytecode
       - name: Package the compiled assemblies without rebuilding
         run: dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll nuget pack --output artifacts/packages --no-build
       - name: Publish the compiled application payloads
@@ -67,6 +71,12 @@ jobs:
           if-no-files-found: error
           name: compiler-analyzers
           path: src/Puck.Analyzers/bin/Release/netstandard2.0
+      - name: Upload the compiled shader bytecode
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          if-no-files-found: error
+          name: shader-bytecode-windows
+          path: artifacts/shader-bytecode
       - name: Upload Functions and browser payloads
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

@@ -23,8 +23,9 @@ namespace Puck.Cli.Format;
 // `AssemblyName` is the name of the project's own output. A compilation carrying it is the one its references
 // grant internals to, so a call into a member made visible by `InternalsVisibleTo` binds as the build binds it.
 //
-// `EvaluateAll` asks the same question of several projects in one MSBuild process, so a project closure they
-// share is evaluated once rather than once per project that references it.
+// `EvaluateAll` asks the same question of several projects in one MSBuild process per SDK context, so a project
+// closure they share is evaluated once rather than once per project that references it. Both evaluations pass
+// `--disable-build-servers`, so an evaluation leaves no MSBuild node or server running once it exits.
 internal sealed record CompileClosure(string? AssemblyName, IReadOnlyList<string> References, IReadOnlyList<string> Sources, string? Refusal) {
     // The item `EvaluateAll` collects: every reference, compile item and target path, each tagged with its kind.
     private const string ClosureItem = "PuckFormatClosure";
@@ -79,11 +80,38 @@ internal sealed record CompileClosure(string? AssemblyName, IReadOnlyList<string
                 oldValue: "?"
             ));
 
-    // Evaluates every project in `projects` (full paths) for `configuration` in one MSBuild process: a generated
-    // traversal builds each project's closure target with the global properties `Evaluate` passes, and MSBuild
-    // evaluates each project configuration of their shared reference graph once. Returns the closures the traversal
-    // reported, keyed by full project path; a project it reported nothing for — one that failed to evaluate, or an
-    // outer multi-targeting build — is absent, and `Evaluate` answers for it with its own diagnostics.
+    // Groups `projects` (full paths) by SDK context: the nearest global.json above each project's directory, or none.
+    // The .NET host and MSBuild's SDK resolver both select the SDK from that file, and one MSBuild process resolves an
+    // SDK once for every project it evaluates, so only projects sharing a context can share a traversal. Partitions
+    // are ordered by their context and projects within one by path, both ordinally.
+    internal static IReadOnlyList<IReadOnlyList<string>> PartitionBySdkContext(IReadOnlyCollection<string> projects) =>
+        [.. projects
+            .GroupBy(
+                comparer: StringComparer.OrdinalIgnoreCase,
+                keySelector: static project => (RepositoryPaths.Ascend(
+                    probe: static directory => {
+                        var pin = Path.Combine(
+                            path1: directory.FullName,
+                            path2: "global.json"
+                        );
+
+                        return (File.Exists(path: pin) ? pin : null);
+                    },
+                    start: Path.GetDirectoryName(path: project)!
+                ) ?? string.Empty)
+            )
+            .OrderBy(
+                comparer: StringComparer.OrdinalIgnoreCase,
+                keySelector: static partition => partition.Key
+            )
+            .Select(selector: static partition => ((IReadOnlyList<string>)[.. partition.Order(comparer: StringComparer.OrdinalIgnoreCase)]))];
+    // Evaluates every project in `projects` (full paths) for `configuration`, one MSBuild process per SDK context
+    // `PartitionBySdkContext` finds: a generated traversal builds each project's closure target with the global
+    // properties `Evaluate` passes, and MSBuild evaluates each project configuration of a partition's shared reference
+    // graph once. Each traversal runs from its partition's first project directory, so its SDK is the one those
+    // projects select, as `Evaluate` runs from its own project's. Returns the closures the traversals reported, keyed
+    // by full project path; a project one reported nothing for — one that failed to evaluate, or an outer
+    // multi-targeting build — is absent, and `Evaluate` answers for it with its own diagnostics.
     internal static Dictionary<string, CompileClosure> EvaluateAll(IReadOnlyCollection<string> projects, string configuration) {
         var closures = new Dictionary<string, CompileClosure>(comparer: StringComparer.OrdinalIgnoreCase);
 
@@ -91,14 +119,11 @@ internal sealed record CompileClosure(string? AssemblyName, IReadOnlyList<string
             return closures;
         }
 
+        // The traversals name no SDK, so the scratch directory only holds them.
         var scratch = Directory.CreateTempSubdirectory(prefix: "puck-format-closures-").FullName;
         var targets = Path.Combine(
             path1: scratch,
             path2: "closure.targets"
-        );
-        var traversal = Path.Combine(
-            path1: scratch,
-            path2: "closures.proj"
         );
 
         try {
@@ -106,31 +131,43 @@ internal sealed record CompileClosure(string? AssemblyName, IReadOnlyList<string
                 contents: ClosureTargets,
                 path: targets
             );
-            File.WriteAllText(
-                contents: $"""
-                    <Project>
-                      <ItemGroup>
-                    {string.Concat(values: projects.Select(selector: static project => $"    <ClosureProject Include=\"{Escape(path: project)}\" />\n"))}  </ItemGroup>
-                      <Target Name="Closures">
-                        <MSBuild Projects="@(ClosureProject)" Targets="{ClosureItem}" BuildInParallel="true" ContinueOnError="true" SkipNonexistentTargets="true" Properties="Configuration={Escape(path: configuration)};BuildProjectReferences=false;DesignTimeBuild=true;CustomAfterMicrosoftCommonTargets={Escape(path: targets)}">
-                          <Output TaskParameter="TargetOutputs" ItemName="{ClosureItem}" />
-                        </MSBuild>
-                      </Target>
-                    </Project>
-                    """,
-                path: traversal
-            );
 
-            var result = CliProcess.RunAsync(
-                arguments: ["msbuild", traversal, "-nologo", "-t:Closures", $"-getItem:{ClosureItem}"],
-                fileName: "dotnet"
-            ).GetAwaiter().GetResult();
+            var partitions = PartitionBySdkContext(projects: projects);
 
-            foreach (var (project, closure) in ReadAll(
-                configuration: configuration,
-                json: result.Stdout
-            )) {
-                closures[project] = closure;
+            for (var index = 0; (index < partitions.Count); index++) {
+                var partition = partitions[index];
+                var traversal = Path.Combine(
+                    path1: scratch,
+                    path2: $"closures-{index}.proj"
+                );
+
+                File.WriteAllText(
+                    contents: $"""
+                        <Project>
+                          <ItemGroup>
+                        {string.Concat(values: partition.Select(selector: static project => $"    <ClosureProject Include=\"{Escape(path: project)}\" />\n"))}  </ItemGroup>
+                          <Target Name="Closures">
+                            <MSBuild Projects="@(ClosureProject)" Targets="{ClosureItem}" BuildInParallel="true" ContinueOnError="true" SkipNonexistentTargets="true" Properties="Configuration={Escape(path: configuration)};BuildProjectReferences=false;DesignTimeBuild=true;CustomAfterMicrosoftCommonTargets={Escape(path: targets)}">
+                              <Output TaskParameter="TargetOutputs" ItemName="{ClosureItem}" />
+                            </MSBuild>
+                          </Target>
+                        </Project>
+                        """,
+                    path: traversal
+                );
+
+                var result = CliProcess.RunAsync(
+                    workingDirectory: Path.GetDirectoryName(path: partition[0]),
+                    arguments: ["msbuild", traversal, "-nologo", "--disable-build-servers", "-t:Closures", $"-getItem:{ClosureItem}"],
+                    fileName: "dotnet"
+                ).GetAwaiter().GetResult();
+
+                foreach (var (project, closure) in ReadAll(
+                    configuration: configuration,
+                    json: result.Stdout
+                )) {
+                    closures[project] = closure;
+                }
             }
         } finally {
             Directory.Delete(
@@ -233,6 +270,7 @@ internal sealed record CompileClosure(string? AssemblyName, IReadOnlyList<string
                 "msbuild",
                 project,
                 "-nologo",
+                "--disable-build-servers",
                 "-t:FindReferenceAssembliesForReferences",
                 "-getItem:ReferencePathWithRefAssemblies",
                 "-getItem:Compile",
@@ -241,7 +279,8 @@ internal sealed record CompileClosure(string? AssemblyName, IReadOnlyList<string
                 "-p:BuildProjectReferences=false",
                 "-p:DesignTimeBuild=true",
             ],
-            fileName: "dotnet"
+            fileName: "dotnet",
+            workingDirectory: Path.GetDirectoryName(path: project)
         ).GetAwaiter().GetResult();
 
         return ((result.ExitCode == 0)

@@ -260,12 +260,12 @@ public static class WorldDefinitionRows {
         name: name,
         selector: static kit => kit.Name
     );
-    /// <summary>Finds a <c>views.pipelines</c> row by stable name.</summary>
-    /// <param name="pipelines">The section's pipeline rows.</param>
-    /// <param name="name">The pipeline row name to find.</param>
+    /// <summary>Finds a <c>views.graphs</c> row by stable name.</summary>
+    /// <param name="graphs">The section's graph rows.</param>
+    /// <param name="name">The graph row name to find.</param>
     /// <returns>The row, or <see langword="null"/> when the section declares none by that name.</returns>
-    public static WorldViewPipeline? FindPipeline(IReadOnlyList<WorldViewPipeline>? pipelines, string name) => Find(
-        rows: pipelines,
+    public static WorldViewGraph? FindGraph(IReadOnlyList<WorldViewGraph>? graphs, string name) => Find(
+        rows: graphs,
         name: name,
         selector: static row => row.Name
     );

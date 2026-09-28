@@ -1,0 +1,37 @@
+{
+  "id": "hud-frame-slots",
+  "title": "A HUD frame element sourced from the camera producer shows the capture gate's placeholder in a captured frame",
+  "binding": "The positive leg boots a windowed 256x144 world whose one HUD panel takes the replace layer over the middle half of the screen and holds a frame element covering the panel, sourced from the camera producer's colour sensor. It captures a frame. A camera is an external source, so while the capture is armed the capture gate fills it with the placeholder 0xFF202020 and the frame element draws that: the panel's centre reads #202020 on every pixel, whether or not the machine has a camera. The discriminating leg boots the same world with the panel's frame element removed, so nothing draws the placeholder there and the observation turns red.",
+  "bootShape": "windowed",
+  "backends": ["vulkan", "directx"],
+  "requirements": ["gpu"],
+  "timeoutSeconds": 60,
+  "positive": {
+    "world": "tests/Puck.World.Canaries/hud-frame-slots/fixture.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.cadence", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "imageRegion", "name": "the-frame-shows-the-placeholder", "capture": "frame.png", "extent": [256, 144], "region": [0.4, 0.4, 0.6, 0.6], "reduce": "every", "minimum": [0.1255, 0.1255, 0.1255, 1], "maximum": [0.1255, 0.1255, 0.1255, 1], "toleranceCodes": 2, "holds": true }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/hud-frame-slots/empty.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.cadence", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "imageRegion", "name": "no-frame-shows-no-placeholder", "capture": "frame.png", "extent": [256, 144], "region": [0.4, 0.4, 0.6, 0.6], "reduce": "every", "minimum": [0.1255, 0.1255, 0.1255, 1], "maximum": [0.1255, 0.1255, 0.1255, 1], "toleranceCodes": 2, "holds": false }
+    ]
+  }
+}

@@ -6,20 +6,20 @@ namespace Puck.SignedDistance;
 
 public sealed partial class SdfProgramBuilder {
     /// <summary>Rotates a coordinate plane by a rate driven by one coordinate.</summary>
-    /// <param name="plane">XY = 0, YZ = 1, XZ = 2.</param>
-    /// <param name="driver">The driving coordinate: X = 0, Y = 1, Z = 2.</param>
+    /// <param name="plane">The plane that rotates.</param>
+    /// <param name="driver">The driving coordinate.</param>
     /// <param name="rate">Radians per unit; positive follows the VM's inverse-domain rotation.</param>
     /// <param name="origin">The driver coordinate at zero angle.</param>
-    public SdfProgramBuilder RotatePlane(int plane, int driver, float rate, float origin = 0f) {
-        ArgumentOutOfRangeException.ThrowIfNegative(plane);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            plane,
-            2
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="plane"/> or <paramref name="driver"/> is not a
+    /// defined member, or <paramref name="rate"/> or <paramref name="origin"/> is not finite.</exception>
+    public SdfProgramBuilder RotatePlane(SdfPlane plane, SdfAxis driver, float rate, float origin = 0f) {
+        RequireDefined(
+            paramName: nameof(plane),
+            value: plane
         );
-        ArgumentOutOfRangeException.ThrowIfNegative(driver);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            driver,
-            2
+        RequireDefined(
+            paramName: nameof(driver),
+            value: driver
         );
         RequireFinite(
             rate,
@@ -45,21 +45,21 @@ public sealed partial class SdfProgramBuilder {
     }
     /// <summary>Rotates XY driven by X.</summary>
     public SdfProgramBuilder BendX(float rate) => RotatePlane(
-        0,
-        0,
-        rate
+        driver: SdfAxis.X,
+        plane: SdfPlane.XY,
+        rate: rate
     );
     /// <summary>Rotates XY driven by Y.</summary>
     public SdfProgramBuilder BendY(float rate) => RotatePlane(
-        0,
-        1,
-        rate
+        driver: SdfAxis.Y,
+        plane: SdfPlane.XY,
+        rate: rate
     );
     /// <summary>Rotates YZ driven by Y.</summary>
     public SdfProgramBuilder BendZ(float rate) => RotatePlane(
-        1,
-        1,
-        rate
+        driver: SdfAxis.Y,
+        plane: SdfPlane.YZ,
+        rate: rate
     );
     /// <summary>Stochastic domain-repeat fold: tiles space into cells of <paramref name="spacing"/> like
     /// <see cref="Repeat"/>, then per cell displaces the point by a hashed offset, optionally tumbles (a hashed
@@ -77,7 +77,7 @@ public sealed partial class SdfProgramBuilder {
     /// the field overestimates at cell boundaries (visible seams, grazing-angle hole risk). The in-cell rule keeps the
     /// surface watertight inside each cell; the boundary field stays merely conservative-looking-but-overestimating, so
     /// keep jitter conservative relative to spacing. KEEP IN SYNC with SDF_OP_CELL_JITTER in
-    /// Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// Assets/Shaders/Sdf/field/sdf-map.hlsli and field/sdf-map-grad.hlsli.</summary>
     /// <param name="spacing">The per-axis cell spacing in world units (clamped to ≥ 0.001 per axis).</param>
     /// <param name="jitter">The peak-to-peak per-cell position displacement in world units (0 = no displacement).</param>
     /// <param name="seed">The hash seed — different seeds give independent jitter/tumble/variant fields.</param>
@@ -89,7 +89,7 @@ public sealed partial class SdfProgramBuilder {
     /// <see cref="SdfNoiseFlavor.White"/> (default, byte-identical to pre-flavor programs), <see cref="SdfNoiseFlavor.Blue"/>,
     /// or <see cref="SdfNoiseFlavor.Gaussian"/>. Reshapes only the displacement — tumble and material variant are
     /// unaffected, and every flavor shares White's <c>±jitter/2</c> offset bound (no Lipschitz change). KEEP IN SYNC with
-    /// SDF_NOISE_* and the SDF_OP_CELL_JITTER flavor branch in Assets/Shaders/Sdf/sdf-vm.hlsli.</param>
+    /// SDF_NOISE_* and the SDF_OP_CELL_JITTER flavor branch in Assets/Shaders/Sdf/field/sdf-map.hlsli and field/sdf-map-grad.hlsli.</param>
     /// <exception cref="ArgumentException"><paramref name="materialVariants"/> is negative, or half of
     /// <paramref name="jitter"/> is not strictly less than half the smallest <paramref name="spacing"/> component (the
     /// displaced content would cross a cell boundary and hole the march).</exception>
@@ -183,7 +183,7 @@ public sealed partial class SdfProgramBuilder {
     /// backends. Not an isometry — the metric stretches by up to <c>1 + amplitude·‖frequency‖</c>, so
     /// <c>AnalyzeLipschitz</c> bakes a conservative step clamp (and folds the point's max travel into a downstream
     /// twist/bend's reach); keep <c>amplitude·‖frequency‖</c> moderate. KEEP IN SYNC with SDF_OP_DOMAIN_WARP in
-    /// Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// Assets/Shaders/Sdf/field/sdf-map.hlsli and field/sdf-map-grad.hlsli.</summary>
     /// <param name="frequency">Per-axis angular frequency of the warp (radians per world unit).</param>
     /// <param name="amplitude">Peak point displacement (world units; 0 = an exact identity).</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="frequency"/> or <paramref name="amplitude"/> is
@@ -212,7 +212,7 @@ public sealed partial class SdfProgramBuilder {
     /// <summary>Scales the cross-section perpendicular to axis by
     /// s(t) = startScale + amount*t + bulge*sin(pi*t), where t = clamp((top - p[axis])/span, 0, 1).
     /// The shader floors s at FlareMinScale. The packed size correction and program's Lipschitz bound jointly
-    /// keep marching conservative. Paired with SDF_OP_AXIAL_PROFILE in sdf-vm.hlsli.</summary>
+    /// keep marching conservative. Paired with SDF_OP_AXIAL_PROFILE in field/sdf-map.hlsli and field/sdf-map-grad.hlsli.</summary>
     /// <param name="amount">The linear flare rate at t = 1 (s(1) = startScale + amount).</param>
     /// <param name="bulge">The mid-span sinusoidal bulge amplitude (peaks at t = 0.5).</param>
     /// <param name="top">The selected coordinate where the profile begins (t = 0).</param>
@@ -220,13 +220,12 @@ public sealed partial class SdfProgramBuilder {
     /// <paramref name="top"/>); must be finite and strictly positive.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="amount"/>, <paramref name="bulge"/> or
     /// <paramref name="top"/> is not finite, or <paramref name="span"/> is not finite and greater than zero.</exception>
-    /// <param name="axis">The profile coordinate: X=0, Y=1, Z=2.</param>
+    /// <param name="axis">The profile coordinate.</param>
     /// <param name="startScale">The positive cross-section scale at t=0.</param>
-    public SdfProgramBuilder AxialProfile(float amount, float bulge, float top, float span, int axis = 1, float startScale = 1f) {
-        ArgumentOutOfRangeException.ThrowIfNegative(axis);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            axis,
-            2
+    public SdfProgramBuilder AxialProfile(float amount, float bulge, float top, float span, SdfAxis axis = SdfAxis.Y, float startScale = 1f) {
+        RequireDefined(
+            paramName: nameof(axis),
+            value: axis
         );
         RequireFinite(
             startScale,
@@ -281,24 +280,22 @@ public sealed partial class SdfProgramBuilder {
     }
     /// <summary>Adds linear*t + quadratic*t² + cubic*t³ to the target coordinate, with t = p[driver].
     /// Target and driver must differ. The program derives a reach-dependent marching bound; deterministic
-    /// world queries refuse this presentation warp. Paired with SDF_OP_SHEAR in sdf-vm.hlsli.</summary>
+    /// world queries refuse this presentation warp. Paired with SDF_OP_SHEAR in field/sdf-map.hlsli and field/sdf-map-grad.hlsli.</summary>
     /// <param name="linear">The linear shear coefficient.</param>
     /// <param name="quadratic">The quadratic shear coefficient.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="linear"/> or <paramref name="quadratic"/> is not
     /// finite.</exception>
     /// <param name="cubic">The cubic coefficient.</param>
-    /// <param name="target">The displaced coordinate, 0..2.</param>
-    /// <param name="driver">The distinct driving coordinate, 0..2.</param>
-    public SdfProgramBuilder Shear(float linear, float quadratic, float cubic = 0f, int target = 0, int driver = 1) {
-        ArgumentOutOfRangeException.ThrowIfNegative(target);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            target,
-            2
+    /// <param name="target">The displaced coordinate.</param>
+    /// <param name="driver">The driving coordinate, distinct from <paramref name="target"/>.</param>
+    public SdfProgramBuilder Shear(float linear, float quadratic, float cubic = 0f, SdfAxis target = SdfAxis.X, SdfAxis driver = SdfAxis.Y) {
+        RequireDefined(
+            paramName: nameof(target),
+            value: target
         );
-        ArgumentOutOfRangeException.ThrowIfNegative(driver);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            driver,
-            2
+        RequireDefined(
+            paramName: nameof(driver),
+            value: driver
         );
         if (target == driver) { throw new ArgumentException(message: "A shear's target and driver must differ."); }
         RequireFinite(
@@ -392,7 +389,7 @@ public sealed partial class SdfProgramBuilder {
     /// the other way: the shape grows IN as the lane rises (a torn-fabric use). Order immediately before the shape
     /// method it targets — whatever ordinary point ops (Translate/Rotate/Scale/warps) that shape's own chain still
     /// applies in between are honored normally; a shape under no dynamic slot reads zero. KEEP IN SYNC with
-    /// SDF_OP_LANE_ERODE in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// SDF_OP_LANE_ERODE in Assets/Shaders/Sdf/field/sdf-map.hlsli and field/sdf-map-grad.hlsli.</summary>
     /// <param name="lane">Which <see cref="DynamicTransform.Lanes"/> component to read.</param>
     /// <param name="from">The lane value where erosion begins (t = 0).</param>
     /// <param name="to">The lane value where the shape is fully eroded (t = 1); may be less than
@@ -504,7 +501,7 @@ public sealed partial class SdfProgramBuilder {
         );
 
         // w = ln(ratio) and its reciprocal are HOST-BAKED (the shader avoids a per-eval log-of-constant and a divide,
-        // matching Repeat's baked-reciprocal pattern; KEEP IN SYNC with SDF_OP_LOG_SPHERE in sdf-vm.hlsli).
+        // matching Repeat's baked-reciprocal pattern; KEEP IN SYNC with SDF_OP_LOG_SPHERE in field/sdf-map.hlsli and field/sdf-map-grad.hlsli).
         var ratio = MathF.Max(
             x: shellRatio,
             y: 1.0001f
@@ -531,7 +528,7 @@ public sealed partial class SdfProgramBuilder {
     /// cannot validate this (the prototype is emitted later and its post-fold translation matters as much as its
     /// radius) — the caller owns the rule, exactly like <see cref="CellJitter"/>'s in-cell rule. A 3^k neighbour-cell
     /// check would remove the constraint but is judged not worth the interpreter cost at current usage. KEEP IN SYNC
-    /// with SDF_OP_REPEAT in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// with SDF_OP_REPEAT in Assets/Shaders/Sdf/field/sdf-map.hlsli and field/sdf-map-grad.hlsli.</summary>
     /// <param name="spacing">The per-axis cell spacing in world units (clamped to ≥ 0.001 per axis).</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="spacing"/> is not finite.</exception>
     public SdfProgramBuilder Repeat(Vector3 spacing) {
@@ -544,7 +541,7 @@ public sealed partial class SdfProgramBuilder {
         );
 
         // The degenerate-spacing clamp and the reciprocal are HOST-BAKED (Data1.xyz): shapes evaluate millions of
-        // times per frame, programs build once (KEEP IN SYNC with SDF_OP_REPEAT in Assets/Shaders/Sdf/sdf-vm.hlsli).
+        // times per frame, programs build once (KEEP IN SYNC with SDF_OP_REPEAT in Assets/Shaders/Sdf/field/sdf-map.hlsli and field/sdf-map-grad.hlsli).
         var clamped = ClampSpacing(spacing: spacing);
 
         return Transform(
@@ -584,7 +581,7 @@ public sealed partial class SdfProgramBuilder {
         );
 
         // The degenerate-spacing clamp is HOST-BAKED, exactly as <see cref="Repeat"/> bakes it (KEEP IN SYNC with
-        // SDF_OP_REPEAT_LIMITED in Assets/Shaders/Sdf/sdf-vm.hlsli). Clamped WITHOUT Abs, matching the shader's old
+        // SDF_OP_REPEAT_LIMITED in Assets/Shaders/Sdf/field/sdf-map.hlsli and field/sdf-map-grad.hlsli). Clamped WITHOUT Abs, matching the shader's old
         // max(data0.xyz, 0.001) — a negative spacing must keep behaving as it did. Unlike Repeat there is no free lane
         // for the reciprocal (Data1.xyz carries the limit), so the shader keeps its divide.
         var clamped = ClampSpacing(spacing: spacing);
@@ -610,10 +607,10 @@ public sealed partial class SdfProgramBuilder {
     /// <see cref="Repeat"/>) and no cull bound changes. Like <see cref="Repeat"/>, keep the prototype clear of the
     /// sector walls (the two radial half-planes through the axis) — content that overspills a wall is clipped by the
     /// neighbouring sector. The sector angle and its reciprocals are host-baked. KEEP IN SYNC with SDF_OP_REPEAT_POLAR
-    /// in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// in Assets/Shaders/Sdf/field/sdf-map.hlsli and field/sdf-map-grad.hlsli.</summary>
     /// <param name="count">The number of sectors around the axis (clamped to ≥ 1; 1 = a single full-circle no-op).</param>
     /// <param name="axis">The rotation axis — the fold acts in the plane perpendicular to it (default
-    /// <see cref="SdfPolarAxis.Y"/>, the XZ ground plane).</param>
+    /// <see cref="SdfAxis.Y"/>, the XZ ground plane).</param>
     /// <param name="mirror">When <see langword="true"/>, reflects each sector across its bisector so adjacent sectors
     /// mirror — the kaleidoscope fold (still an isometry).</param>
     /// <param name="materialStride">The per-sector palette stride: the sector index (0..count-1) times this strides the
@@ -621,8 +618,8 @@ public sealed partial class SdfProgramBuilder {
     /// purely geometric.</param>
     /// <exception cref="ArgumentException"><paramref name="materialStride"/> is negative, or <paramref name="count"/>
     /// (after clamping to ≥ 1) exceeds <see cref="MaxExactFloatSectorCount"/>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="axis"/> is not a defined <see cref="SdfPolarAxis"/>.</exception>
-    public SdfProgramBuilder RepeatPolar(int count, SdfPolarAxis axis = SdfPolarAxis.Y, bool mirror = false, int materialStride = 0) {
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="axis"/> is not a defined <see cref="SdfAxis"/>.</exception>
+    public SdfProgramBuilder RepeatPolar(int count, SdfAxis axis = SdfAxis.Y, bool mirror = false, int materialStride = 0) {
         if (materialStride < 0) {
             throw new ArgumentException(
                 message: "RepeatPolar materialStride must be >= 0 (0 = geometric only).",
@@ -636,7 +633,7 @@ public sealed partial class SdfProgramBuilder {
         );
 
         // count and the sector angle's reciprocals are HOST-BAKED (Data0.yzw): shapes evaluate millions of times per
-        // frame, programs build once (KEEP IN SYNC with SDF_OP_REPEAT_POLAR in Assets/Shaders/Sdf/sdf-vm.hlsli).
+        // frame, programs build once (KEEP IN SYNC with SDF_OP_REPEAT_POLAR in Assets/Shaders/Sdf/field/sdf-map.hlsli and field/sdf-map-grad.hlsli).
         var sectors = Math.Max(
             val1: 1,
             val2: count
@@ -684,7 +681,7 @@ public sealed partial class SdfProgramBuilder {
     /// <summary>Resets the local evaluation point for the next instruction chain without clearing the accumulated field.</summary>
     /// <returns>This builder.</returns>
     public SdfProgramBuilder ResetPoint() {
-        // Mirrors the shader's SDF_OP_RESET clearing parityMaterialDelta — see m_positionalFold's remarks. Both mirrors
+        // Mirrors the shader's SDF_OP_RESET_POINT clearing parityMaterialDelta — see m_positionalFold's remarks. Both mirrors
         // of that slot clear together; they differ in what they track, never in when the GPU forgets it.
         m_positionalFold = null;
         m_materialRecolor = null;
@@ -737,6 +734,20 @@ public sealed partial class SdfProgramBuilder {
             op: SdfOp.Rotate
         );
     }
+    /// <summary>Mirrors subsequent point evaluation across the chain's local plane x = 0. The mirror is an isometry, so
+    /// the field stays exact and its distance is not rescaled: it is a <see cref="SdfOp.Scale"/> whose X component
+    /// carries the sign and whose distance correction is one. <see cref="Scale"/> takes magnitudes, so this is the
+    /// one way a chain mirrors.</summary>
+    /// <returns>This builder.</returns>
+    public SdfProgramBuilder MirrorX() => Transform(
+        data0: new Vector4(
+            w: 1f,
+            x: -1f,
+            y: 1f,
+            z: 1f
+        ),
+        op: SdfOp.Scale
+    );
     /// <summary>Scales subsequent point evaluation and applies the conservative minimum-axis distance correction.</summary>
     /// <param name="scale">The local-space scale. Components are converted to positive nonzero magnitudes.</param>
     /// <returns>This builder.</returns>
@@ -756,7 +767,7 @@ public sealed partial class SdfProgramBuilder {
         // correction for a non-uniform scale — f(S⁻¹p)·min(s) is 1-Lipschitz, so it can only underestimate true
         // distance, never overstep. HLSL's abs/max/min agree with MathF's bit-for-bit on every non-NaN input, and
         // 0.0001f is the shader's clamp value (KEEP IN SYNC with SDF_OP_SCALE in
-        // Assets/Shaders/Sdf/sdf-vm.hlsli).
+        // Assets/Shaders/Sdf/field/sdf-map.hlsli and field/sdf-map-grad.hlsli).
         var clamped = Vector3.Max(
             value1: Vector3.Abs(value: scale),
             value2: new Vector3(value: 0.0001f)
@@ -782,7 +793,7 @@ public sealed partial class SdfProgramBuilder {
     /// leaf, a bilateral body, the reflect atom of a KIFS fold). A reflection is an isometry, so the field stays
     /// 1-Lipschitz (factor 1, no step clamp) and no cull bound changes. Like the axis symmetries, keep authored content
     /// on the plane's positive (kept) side. The normal is normalized host-side. KEEP IN SYNC with SDF_OP_SYMMETRY_PLANE
-    /// in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// in Assets/Shaders/Sdf/field/sdf-map.hlsli and field/sdf-map-grad.hlsli.</summary>
     /// <param name="normal">The plane normal (normalized here; the positive side, toward the normal, is the kept half).</param>
     /// <param name="offset">The plane's constant term: the mirror plane is <c>dot(p, normal) + offset = 0</c>, so it
     /// sits at signed distance <c>-offset</c> along the normal. A positive offset therefore moves the plane against the
@@ -876,9 +887,9 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="rate">Radians of rotation per unit of local Y.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="rate"/> is not finite.</exception>
     public SdfProgramBuilder TwistY(float rate) => RotatePlane(
-        2,
-        1,
-        rate
+        driver: SdfAxis.Y,
+        plane: SdfPlane.XZ,
+        rate: rate
     );
     /// <summary>Folds the point's in-plane coordinates onto the fundamental cell of a wallpaper symmetry group — the
     /// shapes that follow repeat under the group's mirrors/rotations across the lattice. Every fold branch is an
@@ -898,8 +909,8 @@ public sealed partial class SdfProgramBuilder {
     /// <exception cref="ArgumentOutOfRangeException">A <paramref name="cell"/> extent the group reads is not finite and
     /// positive, <paramref name="limit"/> is not finite and non-negative, <paramref name="lodDistance"/> is not
     /// finite and non-negative, <paramref name="group"/> is not a defined <see cref="SdfWallpaperGroup"/>, or
-    /// <paramref name="plane"/> is not a defined <see cref="SdfWallpaperPlane"/>.</exception>
-    public SdfProgramBuilder WallpaperFold(SdfWallpaperGroup group, Vector2 cell, Vector2 limit, SdfWallpaperPlane plane = SdfWallpaperPlane.XZ, int materialStride = 0, float lodDistance = 0f) {
+    /// <paramref name="plane"/> is not a defined <see cref="SdfPlane"/>.</exception>
+    public SdfProgramBuilder WallpaperFold(SdfWallpaperGroup group, Vector2 cell, Vector2 limit, SdfPlane plane = SdfPlane.XZ, int materialStride = 0, float lodDistance = 0f) {
         // Mirrors RepeatPolar's stride check — the same Material lane, the same uint cast, and the shader reads it back
         // as `(int)instructionHeader.w`, so a negative stride would recolor shapes DOWNWARD out of the palette.
         if (materialStride < 0) {
@@ -921,7 +932,7 @@ public sealed partial class SdfProgramBuilder {
 
         // The reciprocal cell extents are HOST-BAKED (Data0.zw): square lattices read them as 1/cell for the lattice
         // round; hex lattices (pitch = cell.x) read z = 1/pitch and w = 2/(√3·pitch) — the two divides in the axial
-        // decompose (KEEP IN SYNC with the fold functions in Assets/Shaders/Sdf/sdf-vm.hlsli).
+        // decompose (KEEP IN SYNC with the fold functions in Assets/Shaders/Sdf/field/sdf-point.hlsli).
         var isHex = (group >= SdfWallpaperGroup.P3);
 
         // cell.x is the lattice pitch for EVERY group, so it must be positive. cell.y is the second lattice extent for

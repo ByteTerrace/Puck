@@ -13,7 +13,7 @@ internal sealed partial class WorldScreenBinder {
     // attached to the probe's sdf.transforms forwarder until the view is released.
     private readonly Dictionary<string, SdfMovedTransforms> m_workTransforms = new(comparer: StringComparer.Ordinal);
 
-    // Registers (or re-registers) a view's GPU work with the render probe under the view's stack name. A view that
+    // Registers (or re-registers) a view's GPU work with the render probe under the view's instance name. A view that
     // composes its own frame source passes that source's moved set, which world.counters then sums into
     // sdf.transforms beside the presenter's.
     private void RegisterViewWork(string name, IGpuWorkSource work, IWorkCounterSource lifetime, SdfMovedTransforms? transforms = null) {
@@ -34,10 +34,8 @@ internal sealed partial class WorldScreenBinder {
             m_workTransforms[name] = transforms;
         }
     }
-    // Releases a view from the stack (which disposes it) and withdraws its GPU work from the render probe.
-    private void ReleaseView(string name) {
-        m_viewStack?.Release(name: name);
-
+    // Withdraws a view's GPU work from the render probe, when its producer is disposed.
+    private void UnregisterViewWork(string name) {
         if (m_workViews.Remove(item: name)) {
             m_renderProbe?.UnregisterView(name: name);
         }

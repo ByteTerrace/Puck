@@ -32,8 +32,11 @@ internal sealed record ParityContract(
 /// material absent from a side's census reads as zero.</param>
 /// <param name="TileMeanDelta">The largest admissible per-tile mean absolute channel delta, in LSB units.</param>
 /// <param name="TileMaxDelta">The largest admissible per-tile single-channel delta, in LSB units.</param>
+/// <param name="Reference">The exact image the station captures at each tick, which both sides must match pixel for
+/// pixel, or <see langword="null"/> for a station whose frames have no CPU reference.</param>
 internal sealed record ParityStationContract(
     IReadOnlyDictionary<string, long> CensusFloor,
     double TileMeanDelta,
-    int TileMaxDelta
+    int TileMaxDelta,
+    ParityBindingReference? Reference = null
 );

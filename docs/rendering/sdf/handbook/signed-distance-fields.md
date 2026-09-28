@@ -158,17 +158,18 @@ Four layers, each one built from the layer below it:
                               │ UploadProgram
  ┌───────────────────────────▼───────────────────────────────────┐
  │  ENGINE                                                        │
- │  SdfWorldEngine — owns the GPU buffers, uploads the program    │
- │  and this frame's camera/lighting/dynamic transforms, and      │
- │  dispatches the fixed pipeline of compute passes below         │
+ │  SdfWorldResidency — holds the GPU tables (SdfWorldTables),    │
+ │  uploads the program and this frame's camera/lighting/dynamic  │
+ │  transforms; each view is an sdf.world render-graph instance   │
+ │  that runs the fixed pipeline of compute passes below          │
  └───────────────────────────┬───────────────────────────────────┘
                               │ per frame
  ┌───────────────────────────▼───────────────────────────────────┐
  │  PASSES                                                        │
- │  mask → beam → cull-args → views → composite                  │
+ │  mask → beam → cull-args → views, once per view                │
  │  (which tiles touch which objects → coarse cone march per      │
  │  tile → pack the fine-march workload → per-pixel sphere trace  │
- │  + shade → combine viewports into the final frame)             │
+ │  + shade into that view's own image)                           │
  └───────────────────────────┬───────────────────────────────────┘
                               │
                          ┌────▼────┐

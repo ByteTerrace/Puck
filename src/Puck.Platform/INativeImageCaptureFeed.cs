@@ -1,3 +1,5 @@
+using Puck.Input;
+
 namespace Puck.Platform;
 
 /// <summary>
@@ -18,9 +20,13 @@ public interface INativeImageCaptureFeed : IFrameCaptureSource, IDisposable {
     /// against the value it last sampled to skip unchanged frames (the newest-frame-wins drop policy). Never resets
     /// across the feed's lifetime.</summary>
     long GpuRevision { get; }
-    /// <summary>Gets the index (into <see cref="NativeImageGpuCaptureTargets.SharedTargetHandles"/>) of the most
-    /// recently completed GPU copy, or <c>-1</c> until the first copy into the currently attached targets.</summary>
-    int LatestGpuSlot { get; }
+    /// <summary>Gets how the feed orders its GPU copies before the consumer's reads: through the consumer's shared fence
+    /// (<see cref="NativeImageGpuCaptureTargets.SharedFenceHandle"/>), or by a CPU wait and why; pending while no
+    /// targets are attached.</summary>
+    SharedFenceOrder GpuFenceOrder { get; }
+    /// <summary>Gets the window this feed captures, as a passthrough input target, or <see langword="null"/> for a monitor
+    /// capture. Only a source the local user opened may send it input (<c>SourcePassthrough.IsPermitted</c>).</summary>
+    ISourcePassthroughWindow? Window { get; }
     /// <summary>Gets the live capture source height in pixels; it updates on window resize or monitor mode change and is
     /// the height the consumer should size its GPU targets to.</summary>
     int SourceHeight { get; }
@@ -28,9 +34,11 @@ public interface INativeImageCaptureFeed : IFrameCaptureSource, IDisposable {
     /// the width the consumer should size its GPU targets to.</summary>
     int SourceWidth { get; }
 
-    /// <summary>Enables or replaces GPU publishing into the given consumer-provisioned shared targets. The feed opens
-    /// each handle once on its capture device; a subsequent call replaces the set and safely releases the previously
-    /// opened targets. Thread-safe against the capture callback.</summary>
+    /// <summary>Enables or replaces GPU publishing into the given consumer-provisioned shared targets, whose slots the
+    /// feed reserves and publishes through <see cref="NativeImageGpuCaptureTargets.Slots"/>. The feed opens each handle
+    /// once on its capture device; a subsequent call replaces the set and releases the feed's own references to the
+    /// previously opened targets, whose images the consumer keeps until its last acquisition of them is released.
+    /// Thread-safe against the capture callback.</summary>
     /// <param name="targets">The shared targets, sized to the live source extent (<see cref="SourceWidth"/> ×
     /// <see cref="SourceHeight"/>).</param>
     void AttachGpuTargets(NativeImageGpuCaptureTargets targets);

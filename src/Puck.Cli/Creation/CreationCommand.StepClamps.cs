@@ -46,14 +46,14 @@ internal static partial class CreationCommand {
                     0,
                     prototype,
                     1f,
-                    WorldLookMotion.Default
+                    WorldLook.Implicit
                 )]
         );
         var pooled = new SdfProgramBuilder();
 
         pool.Emit(
             pooled,
-            definition,
+            WorldBakedColors.Of(definition: definition),
             probeWorstCase: false,
             maxPlacementScale: 1f,
             slotBase: 0

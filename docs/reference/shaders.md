@@ -3,85 +3,85 @@
 Puck.Shaders compiles shader sources and runs document-authored GPU pipelines.
 A single shader and a connected graph share the same execution model; see
 [shader pipelines and live development](#shader-pipelines-and-live-development).
-The shader-set manifest describes reusable stages and their configuration.
-
-A shader set is data: one HLSL source (or a vertex+fragment pair) and one
-`puck.shader.manifest.v1` manifest beside it. The manifest declares everything the
-engine needs to run the set—its stages, its descriptor bindings, and the
-configuration a document may author for it, which reaches the set's stages
-through its [frame block](#the-frame-block). The engine loads that manifest
-beside the compiled bytecode, so a document selects a set by id without a C#
-node, config parser, or registration for each shader.
+A post-process package is a reusable fullscreen pass that a world runs over its
+composed frame.
 
 ## What a user writes
 
-A post-process pass over the rendered world is two files in a project's
-`Assets/Shaders/` tree:
-
-```text
-Assets/Shaders/Sdf/sdf-film-grain.frag.hlsl
-Assets/Shaders/Sdf/sdf-film-grain.puck.shader.json
-```
+A world names its post passes in its `views.post` section. Each row is written
+the way a `puck.render.graph.v1` document's `packages` row is, less its ports:
 
 ```json
-{
-  "$schema": "puck.shader.manifest.v1",
-  "name": "sdf-film-grain",
-  "description": "Film grain: a per-pixel integer-hashed offset added over the rendered output.",
-  "stages": { "vertex": "fullscreen.vert", "fragment": "sdf-film-grain.frag" },
-  "bindings": [
-    { "kind": "sampledImage", "vulkanBinding": 0, "directXRegister": "t0" }
-  ],
-  "targetFloor": { "vulkan": "1.3", "shaderModel": "6.6" },
-  "config": {
-    "intensity": { "type": "float", "default": 0.05, "min": 0, "max": 1, "description": "The peak per-channel offset." },
-    "size":      { "type": "float", "default": 1, "min": 1, "description": "The grain cell size, in pixels." },
-    "seed":      { "type": "uint",  "default": 0 },
-    "flickerHz": { "type": "uint",  "default": 24, "min": 1 }
-  }
+"views": {
+  "post": [
+    { "name": "grain", "package": "sdf.film-grain", "config": { "intensity": 0.08, "seed": 7 } }
+  ]
 }
 ```
 
-The fragment stage includes `sdf-film-grain.interface.hlsli`, the declarations
-generated from the set's [frame block](#the-frame-block), and reads
-`frameGroup.intensity`, `frameGroup.tick` and the rest through it. The build
-compiles the HLSL to SPIR-V and DXIL, writes a `.hash` sidecar per bytecode
-file, and ships the manifest beside the bytecode. A world document then
-authors:
+The rows are passes of the root graph the engine synthesizes for the world
+([the default root graph](#the-default-root-graph)): `main` runs them in
+document order after every view and pane `place` pass and before the overlay,
+and each reads the frame the pass before it wrote. `name` is a safe name,
+unique within the section and distinct from every `views.graphs` row's name,
+because the root names a pane's `place` pass after its row; it is the pass's
+name in the root graph and the name a probe's `post` parameter target uses.
+`package` names a post-process package, which the document load checks against
+the host's catalog. `config` binds against the package's schema in the graph
+compiler: an unknown field, a value out of range, or a missing required field
+is `RENDERGRAPH_PACKAGE_CONFIG`, which the boot reports as a refused definition
+naming the row (`views.post[<i>] '<name>': RENDERGRAPH_PACKAGE_CONFIG: ...`).
+A world that names `views.root` authors its whole render graph, so it may
+author no `views.post`. `puck schema` emits `views.post[].package` as an enum
+over the post-process packages with each package's config schema, so a row's
+`config` also validates by package in an editor.
 
-```json
-"render": { "extensions": [ { "id": "sdf-film-grain", "config": { "intensity": 0.08, "seed": 7 } } ] }
-```
+## Post-process packages
 
-The id is the manifest's file stem. The engine finds the manifest under the
-deploy's `Assets/Shaders` tree (`ShaderSetCatalog`), validates the config
-against the manifest's schema—an unknown field, a value out of range, or a
-missing required field refuses by field name—and runs the set as one
-fullscreen pass over
-the world's output (`FullscreenPassNode`). `puck schema` emits every shipped
-manifest's config schema into the world-document JSON Schema, so
-`render.extensions[].config` also validates by id in an editor.
+A post-process package is a render graph package
+(`RenderGraphPackage`, in `RenderGraphPackageCatalog.Engine`) that declares
+`Stages`: the directory its bytecode ships in, relative to the executable, and
+its vertex and fragment stems. That one declaration also holds the package's
+pass-group members, its config schema, and so its interface, the same way
+`place` and `overlay` are declared. The catalog refuses a post-process package
+that does not sample one image and draw one. Film grain is the engine's
+post-process package:
 
-## The manifest
-
-| Key | Meaning |
+| Part | `sdf.film-grain` |
 |-----|---------|
-| `$schema` | `puck.shader.manifest.v1`. |
-| `name` | The set's id; the manifest filename is `<name>.puck.shader.json`. |
-| `description` | Carried into the emitted config JSON Schema. |
-| `stages` | `{ "vertex", "fragment" }` (a graphics set) or `{ "compute" }`; each a sibling `<stem>.hlsl` compiled to `<stem>.spv` and `<stem>.dxil`. |
-| `bindings[]` | `{ kind, vulkanBinding, directXRegister, count }`; `kind` is `storageBuffer`, `sampledImage`, or `storageImage`. Authored by hand and cross-checked against the pipeline description built for the set. A fullscreen pass declares exactly one `sampledImage` (the inner surface). |
-| `targetFloor` | `{ vulkan, shaderModel }` the bytecode was compiled against. |
-| `config` | Name → `{ type, default, min, max, description }`. `type` is an HLSL spelling: `float`, `float2..4`, `uint`, `uint2..4`, `int`, `int2..4`; a vector's document value is an array of that many numbers. A field without `default` is required. `min`/`max` are inclusive, per component. A field's name must not repeat a [frame member's](#the-frame-block). |
+| Id | `sdf.film-grain` (`RenderGraphPackageCatalog.SdfFilmGrain`). |
+| Stages | `Assets/Shaders/Sdf/passes`: `fullscreen.vert` and `sdf-film-grain.frag`, compiled at build to `.spv` and `.dxil`. |
+| Members | `source`, its sampled input image, and `sourceSampler`, the sampler it is read through, after the config in its pass group. |
+| Config | `SdfFilmGrainConfig`: `intensity` (float, default 0.05, 0 to 1, the peak per-channel offset), `size` (float, default 1, at least 1, the grain cell size in pixels), `seed` (uint, default 0), and `flickerHz` (uint, default 24, at least 1). |
+| Interface | `sdf-film-grain`, whose declarations are checked in as `sdf-film-grain.interface.hlsli`. |
 
-A set's config reaches its stages through the set's frame block, the frame
-interface named for the set (`ShaderSetManifest.FrameLayout`). A set compiles
-at build, so its generated declarations are checked in beside its source:
-`puck shaders interface <manifest> --write` writes
-`<name>.interface.hlsli`, and `ShaderFrameBlockLawTests` holds the checked-in
-text to the generator. Film grain quantizes `frameGroup.tick` to its flicker
-period itself, so every frame inside one period hashes the same grain on every
-run, machine and backend.
+A config field's `type` is an HLSL spelling: `float`, `float2..4`, `uint`,
+`uint2..4`, `int`, `int2..4`; a vector's document value is an array of that
+many numbers. A field with a `length` is a block array of that many
+four-component vectors (`float4`, `uint4` or `int4`), one 16-byte row each,
+whose document value is an array of that many vectors. A field without a
+default is required, `min`/`max` are inclusive per component, and a field's
+name must not repeat a [frame member's](#frame-values-extent-and-ports).
+
+The fragment stage includes `sdf-film-grain.interface.hlsli`, the declarations
+generated from the package's [interface](#frame-values-extent-and-ports), and
+reads `passGroup.intensity`, `frameGroup.tick` and the rest through it,
+sampling `source` with `sourceSampler`. The build compiles the HLSL to SPIR-V
+and DXIL and writes a `.hash` sidecar per bytecode file. A package compiles at
+build, so its generated declarations are checked in beside its source:
+`puck shaders generate` writes them, as does
+`puck shaders interface <directory> --package sdf.film-grain --write`, and
+`ShaderFrameBlockLawTests` holds the checked-in text to the generator. Film
+grain quantizes `frameGroup.tick` to its flicker period itself, so every frame
+inside one period hashes the same grain on every run, machine and backend.
+
+`PostProcessPackage` serves every post-process package, and the World registers
+one per package a `views.post` row runs. Its build reads each stage's deployed
+`.spv` or `.dxil` and validates its format (`ShaderBytecode.ValidateFormat`)
+off the frame thread, then leases the graphics pipeline from the
+[pass-pipeline cache](#the-pass-pipeline-cache) under the package id, so every
+pass of one package into one format shares it. Adding a post-process package is
+a catalog entry and its HLSL stages; there is no per-pass C#.
 
 ### Freshness
 
@@ -89,90 +89,169 @@ Shader bytecode and its hash sidecars are ignored build outputs. DXC is required
 for compilation; CI packages the generated bytecode for players. Missing bytecode
 or sidecars cause the build to regenerate them. Keep HLSL sources in Git.
 
+Deleting a source leaves its bytecode behind in any checkout that built it. The
+build removes that bytecode and its sidecar and prints one line naming each
+file. It removes only a file whose sidecar records its current bytes, which is
+what makes it a build output. Bytecode with no same-stem `.hlsl` and no such
+sidecar fails the build and stays in place.
 
-The manifest carries no hashes. The build writes a `<bytecode>.hash` sidecar
-(source-plus-includes hash and bytecode hash) on every recompile and, on every
-build, recomputes both from what is on disk and refuses a stale pair
-(`build/Shaders.targets`, `PuckValidateShaderBytecodeFresh`). `Load` therefore
-checks only that each stage's `.spv` exists and that every present bytecode
-file is well-formed (`ShaderBytecode.ValidateFormat`); the sidecars do not
-ship, and a runtime re-check would duplicate the build's gate.
+
+A package declaration carries no hashes. The build writes a `<bytecode>.hash`
+sidecar (source-plus-includes hash and bytecode hash) on every recompile and,
+on every build, recomputes both from what is on disk and refuses a stale pair
+(`build/Shaders.targets`, `PuckValidateShaderBytecodeFresh`). A post-process
+package's build therefore checks only that each stage's bytecode for the
+backend exists and is well-formed (`ShaderBytecode.ValidateFormat`); the
+sidecars do not ship, and a runtime re-check would duplicate the build's gate.
 
 ## Multi-pass shader pipelines
 
-`ShaderPipelineDefinition` describes a connected graph of compute, fullscreen
-and geometry passes. Each pass names its HLSL source and declares its entry point, workgroup, resource
-inputs and outputs, and optional per-pass config. `ShaderPipelineCompiler` validates the
-immutable graph before `ShaderPipelineLoader` snapshots sources/includes and
-compiles every live pass to both SPIR-V and DXIL. A failed pass refuses the
-whole candidate so a running renderer can keep its last installed graph.
+A pipeline is a [frame graph](#frame-graphs) of shader passes that a world
+names: a `puck.render.graph.v1` document (`RenderGraphDefinition`) whose
+compute, fullscreen and geometry passes each name an HLSL source and declare
+an entry point, workgroup, resource inputs and outputs, and optional per-pass
+config. `RenderGraphCompiler` checks the document and plans it with
+`ShaderPipelineCompiler` before `ShaderPipelineLoader` snapshots
+sources/includes and compiles every live pass to both SPIR-V and DXIL. A
+pipeline's host offers no package (`RenderGraphCompiler.ShaderPasses`), so a
+graph naming one is refused as `RENDERGRAPH_PACKAGE_UNKNOWN`. A failed pass
+refuses the whole candidate so a running renderer can keep its last installed
+graph.
 
-HLSL is the one source language. A one-off `.hlsl` source loads as a compute
-pass with entry point `main`; any other extension requires a JSON pipeline.
-Pipeline-level `config` is currently rejected; declare fields on each pass so
-the packed parameter block has one unambiguous ABI.
+HLSL is the one source language. A one-off `.hlsl` source loads as a one-pass
+graph (`RenderGraphDefinition.FromShaderSource`): a compute pass with entry
+point `main` writing one image; any other extension requires a graph document.
+Config is declared on each pass, so the packed parameter block has one
+unambiguous ABI; the document has no top-level `config`, and the reader refuses
+one as an unknown member.
 
-### The frame block
+### Frame values, extent and ports
 
-A pass reads its frame data only through its frame block, whose declarations
-the engine generates from the pass's [interface](#pass-interfaces)
-(`ShaderFrameInterface`). The interface is named for the pass's source file,
-up to its first period, so `ink-simulation.hlsl` reads `ink-simulation` and
-`sdf-film-grain.frag.hlsl` reads `sdf-film-grain`; the name must be lowercase
-ASCII words joined by hyphens (`SHADERPIPE_INTERFACE` otherwise). Its members
-are the frame members every pass shares, then the pass's config fields in
-ordinal name order:
+A pass reads its frame values, its extent, its config and its resources only
+through the declarations the engine generates from its
+[interface](#pass-interfaces) (`ShaderFrameInterface`). The interface is named
+for the pass's source file, up to its first period, so `ink-simulation.hlsl`
+reads `ink-simulation` and `sdf-film-grain.frag.hlsl` reads `sdf-film-grain`;
+the name must be lowercase ASCII words joined by hyphens
+(`SHADERPIPE_INTERFACE` otherwise). A document pass's interface has two groups,
+or three when the pass declares `arrays`, and the node binds each as its own
+descriptor set every frame:
+
+- The frame group, set 0, whose block `frameGroup` holds the frame values
+  every pass of a node shares. The node writes it once a frame into one
+  per-node region, and every pass binds the same constant buffer.
+- The World group, set 1, present only when the pass declares
+  [arrays](#per-instance-overrides), whose block holds them in ordinal name
+  order, or when an engine package declares World-group resources, which
+  follow the arrays and which the package's host binds as a set of its own
+  (the SDF engine's tables, one set per upload ring slot).
+- The pass group, set 3, whose block `passGroup` holds the pass's `extent` and
+  then its config fields in ordinal name order, followed by its ports. Every
+  pass block takes this one spelling (`ShaderFrameInterface.ForPass`): an
+  engine package's declared values, such as the overlay's or the SDF engine's
+  world values, sit among its config fields in ordinal name order.
 
 | Member | Type | Value |
 |--------|------|-------|
-| `extent` | `uint2` | The pass's output width and height in pixels. |
+| `extent` | `uint2` | The pass's width and height in pixels: its first output's, else its first input's, else the frame's. In the pass block. |
 | `pointer` | `float2` | The pointer's position during its most recent press over the instance, in the pass's pixels with the origin at the top-left corner; zero before the first press. |
-| `tick` | `uint2` | The deterministic engine tick the frame presents, low word then high word. |
-| `time` | `float` | The instance's presentation clock, in seconds. |
-| `timeDelta` | `float` | Presentation seconds since the previous frame. |
+| `tick` | `uint2` | The deterministic tick the frame presents, low word then high word: the state mirror's delivered engine tick divided by the engine rate over `tickRate`. |
+| `time` | `float` | The instance's time, in seconds: the presentation clock through the instance's time scale, pauses, steps and resets. |
+| `timeDelta` | `float` | The seconds the instance's time moved since its previous frame. |
 | `frame` | `uint` | The frames the pass's node submitted before this one—pacing-dependent, presentation only. |
-| `tickRate` | `uint` | Engine ticks per second, the rate `tick` counts in. |
+| `tickRate` | `uint` | The rate `tick` counts in, ticks a second: the graph's requested `tickRate`, or the engine's 50,400. |
 | `pointerDown` | `uint` | One while the pointer is pressed. |
 | `pointerPresses` | `uint` | How many presses the pointer has made over the instance. |
 | `cameraPosition`, `cameraTarget`, `cameraUp` | `float3` | The paired camera. |
 | `cameraFov` | `float` | The paired camera's vertical field of view in radians; zero when none is paired. |
 
-A source includes `<interface>.interface.hlsli` and reads each member as
-`frameGroup.<member>`:
+A World has one presentation clock, its state mirror
+(`WorldStateMirror.PresentedEngineTick`): the engine tick between the last two
+delivered ticks at the frame's interpolation fraction, the moment every eased
+state read presents at. An offscreen World pins the fraction to one, so its
+frames present exactly the delivered tick. The host hands every instance that
+clock in seconds and the delivered tick (`WorldViewGraphHost.PresentedFrame`),
+so no pass reads a wall clock. A pane's own time follows the clock at its
+row's `timeScale`: `pipeline.time` pauses it, sets it or changes the scale, a
+`pipeline.step` advances it by one sixtieth of a second, and a reset starts it
+from zero, each from the frame last presented, so the time a pane showed never
+jumps. An instance no layout slot shows reads the clock itself.
+
+A graph may request the rate its passes read `tick` at with a top-level
+`tickRate`. With `"tickRate": 30`, `tick` counts thirtieths of a second: the
+delivered engine tick divided, in whole numbers, by 50,400 / 30 = 1,680. Every
+frame presenting one delivered tick writes the same `tick` words, whatever the
+display rate or the frame's interpolation fraction, since presentation time is
+`time`'s alone. A rate that does not divide 50,400 exactly is refused by name
+as `SHADERPIPE_TICK_RATE`; a graph that requests none reads the engine rate.
+
+A pass's ports follow its block in the pass group, in document order: each
+input, then a compute pass's outputs. A graphics pass's outputs are
+attachments and bind nothing. An image input is a `Texture2D<float4>` and a
+`SamplerState` named for it with `Sampler` appended; a buffer input is a
+`ByteAddressBuffer`; a compute output is a `RWTexture2D` of its resource's
+format or a `RWByteAddressBuffer`. A port reads as its resource's name in camel
+case, each hyphen, underscore or period removed and the letter after it
+capitalized, and a previous-frame input reads as `previous` followed by that
+name capitalized, so `palette-region` reads `paletteRegion` and the previous
+frame of `history` reads `previousHistory`. A port that names `"as"` reads as
+that identifier instead, which is how one source serves passes whose resources
+are named differently:
+
+```json
+"inputs": [ { "name": "nv12-region", "as": "region" } ],
+"outputs": [ { "name": "nv12", "as": "image" } ]
+```
+
+A source includes `<interface>.interface.hlsli` and reads each member through
+it:
 
 ```hlsl
 #include "ink-visualize.interface.hlsli"
 
 // ...
-color[id.xy] = float4(lerp(background, (pigment * frameGroup.exposure), smoothstep(0.015, 0.8, ink)), 1.0);
+float ink = simulation.SampleLevel(simulationSampler, uv, 0.0).r;
+color[id.xy] = float4(lerp(background, (pigment * passGroup.exposure), smoothstep(0.015, 0.8, ink)), 1.0);
 ```
 
 The loader generates that include for each pass in memory and compiles against
 it (`ShaderPipelineLoader.GeneratedIncludeOf`); it is never a file beside a
-pipeline's sources. `puck shaders interface <source>` prints it. The block
-lives in the frame group, laid out by the interface's rule, and reaches the
-pass as push constants—Vulkan push constants, and Direct3D 12 root constants at
-register `b0`, space 0—until the grouped binding binds the frame group as a
-descriptor set. The host writes it every frame through
-`ShaderPipelineParameterLayout.WriteFrame`, which places each member at the
-offset the layout gives it. Two passes compiling one source must declare the
-same config (`SHADERPIPE_INTERFACE_CONFLICT`), because the source reads one
-interface. `ShaderFrameBlockLawTests` compiles every shipped pass, reads where
-DXC placed each member in both bytecodes, and holds the bytes the host writer
-put there to the values it was given.
+pipeline's sources. `puck shaders interface <source>` prints it. A pass whose
+source and its includes never name one of its ports is refused before it
+compiles, as `SHADERPIPE_INTERFACE` naming the pass, the port, the identifier it
+reads as, and `"as"` as the fix; renaming a resource renames its port, so this
+is where a rename that breaks a source surfaces. Two ports of one pass that
+read as one identifier, and an `"as"` that is not an HLSL identifier, are
+refused by name the same way, and a graphics attachment naming `"as"` is
+`SHADERPIPE_GRAPHICS_ATTACHMENT_AS`. After compiling, the load reads every
+SPIR-V module's bindings and refuses, as `SHADERPIPE_INTERFACE`, a module that
+declares a binding, a member or an offset anywhere its interface does not lay
+it out. Two passes compiling one source must declare the same config
+(`SHADERPIPE_INTERFACE_CONFLICT`), because the source reads one interface.
 
-A pass that reads nothing from the block may leave the include out; DXC then
-drops the block.
+The host writes the frame group's block through
+`ShaderPipelineParameterLayout.WriteFrame` and the pass block's extent through
+`WriteExtent`, each at the offset the layout gives it.
+`ShaderFrameBlockLawTests` compiles every shipped pass, reads where DXC placed
+each member in both bytecodes, and holds the bytes the host writer put there
+to the values it was given. A pass that reads nothing from a block leaves DXC
+free to drop it.
 
-Image formats are validated against `GpuPixelFormat`, and an image declares a
-color format. A graphics pass draws into its color output at that output's
+An engine package's pass, a post-process package's included, binds the same two
+groups. Its pass group holds the extent, the config, and then the members it
+declares instead of ports: its catalog entry (`RenderGraphPackage.Members`) lists
+the values its recorder writes into the pass block each frame and the resources
+it binds. Nothing is pushed.
+
+Image formats are validated against `GpuPixelFormat`, and an image declares an
+uncompressed color format; the block-compressed formats are only ever sampled. A graphics pass draws into its color output at that output's
 declared format. A compute pass writes its
 storage images through `[[vk::image_format(...)]]` declarations matching each
-image's format. Planner defaults admit the Vulkan portable minimums: a frame
-block of at most 128 bytes, the frame members and config together
-(`SHADERPIPE_PUSH_CONSTANT_LIMIT`), and workgroups of at most 128x128x64 with
-128 invocations; hosts with larger limits may supply an explicitly verified
-`ShaderPipelineLimits` policy.
+image's format. Planner defaults admit the Vulkan portable minimums: a pass
+block of at most 16384 bytes, the extent, config and declared values together
+(`SHADERPIPE_PASS_BLOCK_LIMIT`), and workgroups of
+at most 128x128x64 with 128 invocations; hosts with larger limits may supply an
+explicitly verified `ShaderPipelineLimits` policy.
 
 A `Depth` resource is a `D32Float` depth attachment. Only a
 [geometry pass](#geometry-passes) writes one, and nothing samples, publishes or
@@ -182,7 +261,14 @@ another format (`SHADERPIPE_DEPTH_FORMAT`), a pass input
 (`SHADERPIPE_DEPTH_SAMPLED`), a pipeline output (`SHADERPIPE_DEPTH_PUBLIC`),
 `history` (`SHADERPIPE_DEPTH_HISTORY`), an initialization
 (`SHADERPIPE_DEPTH_INITIALIZATION`), and a compute or fullscreen writer
-(`SHADERPIPE_DEPTH_WRITER`). Multiple compute outputs are supported
+(`SHADERPIPE_DEPTH_WRITER`). A depth resource that forwards nothing may state
+`clearDepth`, the depth its writer clears it to in [0, 1], which is its render
+pass's `GpuDepthAttachment.ClearDepth` and 1 when omitted; a pass that keeps
+greater depths (`"depthCompare": "Greater"`, reversed Z) states 0. The planner
+refuses by name (`SHADERPIPE_DEPTH_CLEAR`) a clear depth outside [0, 1], one on
+a forwarded version or a non-depth resource, and a strict test that no fragment
+can pass against its cleared depth: `Greater` against 1, `Less` against 0.
+Multiple compute outputs are supported
 (`MaxOutputsPerPass`, 8 by default); a graphics pass writes exactly one color
 image (`SHADERPIPE_UNSUPPORTED_MRT`) and a geometry pass at most one depth
 version (`SHADERPIPE_DEPTH_OUTPUTS`), every attachment of one pass at one
@@ -191,12 +277,12 @@ declared extent (`SHADERPIPE_ATTACHMENT_EXTENT`).
 ## Frame graphs
 
 A `puck.render.graph.v1` document describes a frame as passes connected by
-named image and buffer versions. It has the pipeline document's members with
-the same shapes, `name`, `resources`, `passes` and `outputs`, plus `packages`:
-passes of engine work named by package instead of by shader source. A
-pipeline document's content is therefore a graph with no packages, and a
-pipeline is a graph a world names. `puck schema` writes the document's schema
-to `src/Puck.Shaders/Assets/puck.render.graph.v1.schema.json`.
+named image and buffer versions. It is the one pass-graph document: its members
+are `name`, `resources`, `passes` and `outputs`, plus `packages`, passes of
+engine work named by package instead of by shader source. A pipeline is a
+graph of shader passes alone that a world names. A graph document's file name
+ends in `.graph.json`. `puck schema` writes the document's schema to
+`src/Puck.Shaders/Assets/puck.render.graph.v1.schema.json`.
 
 ```json
 {
@@ -220,35 +306,97 @@ to `src/Puck.Shaders/Assets/puck.render.graph.v1.schema.json`.
 ```
 
 A package pass names a package id and binds one version to each of the
-package's ports, inputs then outputs, in port order. Every port carries an
-image, and a package binds its own descriptors, so a package reference
-declares no binding. `RenderGraphPackageCatalog` is what a host offers:
+package's ports, inputs then outputs, in port order. A port
+(`RenderGraphPackagePort`) carries an image or a buffer, and a buffer port
+states its `strideBytes` and `count` as a buffer resource does. The version a
+pass binds must carry what its port carries: its kind, and for a buffer port
+the same stride and count. A port also declares the stage and access its
+package reaches it by (`RenderGraphPortAccess`): an input is a compute read or
+a fragment-sampled read, and an output a compute write or a color-attachment
+write, which only an image port takes. A package compiles no source, so a
+package reference names no `"as"`. `RenderGraphPackageCatalog` is what a host
+offers:
 
 | Package | Ports | Renders |
 |---|---|---|
-| `sdf.world` | no input, one output | The SDF world as the instance's camera sees it. The screens it shows are the instance's reads, not ports. |
-| `overlay` | one input, one output | The console, HUD, toasts and cursor drawn over the input. |
-| `post.<set id>` | one input, one output | A shipped post-process shader set (`ShaderSetCatalog.Shipped`) over the input. |
+| `sdf.world` | no input, one image output written by compute | The SDF world as the instance's camera sees it, run as a fragment (`SdfWorldPackage.Fragment`): sky, mask, beam, cull arguments, mesh, then primary, surface, ambient, shadow and views dispatched indirectly from the cull arguments, over transient counted scratch. Those five are stages over the per-pixel visibility record: primary alone reads the mesh target and writes the record, surface, ambient and shadow add to it, and views shades it, every light answering through one interface and the stage adding each light's summed rim and specular totals once. The ambient and shadow passes skip a frame whose levers turn ambient occlusion or soft shadows off. The screens it shows are the instance's reads, not ports. |
+| `sdf.bricks` | no input, one buffer output written by compute | The world's SDF brick pool, written by brick uploads and carve bakes: one float per voxel, stride 4, counted `[{ "per": ["BrickPoolVoxels"] }]`. It is world-scoped, and the views read it across buffer edges. |
+| `overlay` | one fragment-sampled image input, one color-attachment image output | The console, HUD, toasts and cursor drawn over the input. |
+| `place` | two image inputs, a base and a source, read by compute, one image output written by compute | The base with the source reconstructed into a destination rect over it: an exact copy where the rect has the source's extent, otherwise bilinear at sharpness 0 blending to clamped Catmull-Rom at sharpness 1. Its config is `letterbox` (1 writes the letterbox color outside the rect instead of the base, 0 by default), `rect` (left, top, width and height as fractions of the output, the whole output by default, which resamples the whole source), `sharpness` and `tonemap` (1 puts the reconstructed source through the filmic curve inside the rect, never the base or the letterbox color, 0 by default); a host that places panes per frame (`IRenderGraphPlacements`) overrides the rect and sharpness, and a source it shows nowhere draws nothing, so the base stands for the output, or, when the pass may not stand in, copies the base everywhere, letterbox or not. Its kernel, `src/Puck.Shaders/Assets/Shaders/Graph/place.comp.hlsl`, compiles at build, and `PlacePackage` records it. |
+| `sdf.film-grain` | one fragment-sampled image input, one color-attachment image output | Film grain over the input: the engine's [post-process package](#post-process-packages), a per-pixel integer-hashed offset keyed on the engine tick. Its stages, `fullscreen.vert` and `sdf-film-grain.frag` in `Assets/Shaders/Sdf/passes`, compile at build, and `PostProcessPackage` records it. |
+| `source-palette`, `source-nv12`, `source-rgba`, `source-transfer` | one raw buffer input read by compute, one image output written by compute | An uploaded source's region (`ImageSourceUploadLayout`) converted by the shipped kernel of that name in `src/Puck.Shaders/Assets/Shaders/Sources` into RGBA8, or half-float linear light for `source-transfer`. `SourceConversionPackage` records them; the runtime runs one in the graph it makes for each uploaded source instance, its region bound as a host buffer port (`ShaderPipelineRenderNode.BindRegion`). |
 
-`RenderGraphCompiler` checks the package passes against the catalog, then plans
-the whole graph with `ShaderPipelineCompiler`. The planner sees a package pass
-as a compute pass whose source is `package:<id>`, so one planner orders every
-pass, versions and barriers every access, and keeps history. A version
-declared `External` is an input the host binds, such as another instance's
-output, and `RenderGraphPlan.Inputs` lists them. A graph that reads its own
-output reads a `history` version's previous frame, exactly as a pipeline does.
-The refusals are `RENDERGRAPH_SCHEMA`, `RENDERGRAPH_DOCUMENT_SHAPE`,
-`RENDERGRAPH_PACKAGE_UNKNOWN`, `RENDERGRAPH_PACKAGE_PORTS`,
-`RENDERGRAPH_PACKAGE_BINDING`, `RENDERGRAPH_PACKAGE_INPUT`,
-`RENDERGRAPH_PACKAGE_OUTPUT`, and `RENDERGRAPH_SOURCE_RESERVED` for a shader
-pass whose source starts with `package:`. A planner refusal keeps its
-`SHADERPIPE_` code.
+A package may run as a fragment (`RenderGraphPackageFragment`): passes and
+versions of its own, which the graph compiler splices into the graph in place
+of each pass naming the package. A fragment pass becomes a package pass named
+`<pass>$<fragment pass>`, recorded by the package's recorder for that part
+(`ShaderPipelinePackageStep.Part`, `RenderGraphPackageRecorderContext.Part`),
+and a fragment version becomes `<pass>$<version>`. A name the fragment stands
+for an input port reads the version the pass binds there, and the version the
+pass binds to an output port takes the fragment's version's place, forwarding
+what that version forwards, so a bound output that forwards anything itself
+is refused (`RENDERGRAPH_PACKAGE_OUTPUT`). A package pass may draw a depth
+version through its own render pass, which clears it to the version's
+`clearDepth`, the value the node creates its images for.
 
-A world names graph instances in `views.graphs`. Each row names a graph
-`source`, relative to the world document as a `views.pipelines` source is, an
-optional `camera`, a `refresh` of either a frame `divisor` or a rate in
-`hertz`, and `inputs` that bind one of the graph's external versions to
-another row's output:
+`RenderGraphCompiler` checks the schema tag and the package passes against the
+catalog, then plans the whole graph with `ShaderPipelineCompiler`, the one
+planner. Package work enters the planner only through the graph compiler; the
+planner's own document entry refuses a graph naming package passes
+(`SHADERPIPE_PACKAGE_PASS`). The planner sees a package pass as its own kind,
+`Package`, ordered by the versions it reads and writes, and plans each port's
+barrier and layout from the port's access exactly as it plans a shader
+pass's: a fragment-sampled input as a graphics pass's input and a
+color-attachment output as a graphics pass's output. Its planned pass has no
+declaration; it carries a `ShaderPipelinePackageStep`
+instead, naming the package, the versions bound to its ports and the extent it
+runs at, which is what the render node reads. It binds no descriptors and
+compiles nothing. A pipeline host
+offers no package, so the packager and the loader see shader passes alone; a
+pipeline candidate (`CompiledShaderPipeline`) holds a package pass without a
+compiled shader, and the render node records it through its package's recorder
+(see the graph runtime below). One planner orders
+every pass, versions and barriers every access, and
+keeps history. A version declared `External` is an input the host binds, such
+as another instance's output, and `RenderGraphPlan.Inputs` lists them. A graph
+that reads its own output reads a `history` version's previous frame, exactly
+as a pipeline does.
+
+A buffer edge is an external buffer version bound to another instance's buffer
+output, such as a view reading the brick pool `sdf.bricks` publishes. The
+planner treats it as it treats an external image: the first read in a frame
+starts from the host's state and records a buffer barrier into the read state,
+and a read after a pass of the same graph wrote the buffer records a buffer
+barrier from that write. `RenderGraphPlan.KindOf` names what a version carries,
+which is the kind of the instance edge bound to it. Only the package that
+writes a structured or counted buffer publishes it; any other structured or
+counted output is refused with `SHADERPIPE_PACKAGE_STORAGE`.
+
+A graph declares the quality tiers its shader passes vary by as `tiers`, a list
+of `low`, `medium` and `high`; see [packaging a pipeline](#packaging-a-pipeline).
+A tier declared twice is `RENDERGRAPH_TIERS`.
+
+The refusals are `RENDERGRAPH_SCHEMA`, `RENDERGRAPH_TIERS`,
+`RENDERGRAPH_DOCUMENT_SHAPE`, `RENDERGRAPH_PACKAGE_UNKNOWN`,
+`RENDERGRAPH_PACKAGE_PORTS`, `RENDERGRAPH_PACKAGE_AS`, and
+`RENDERGRAPH_PACKAGE_INPUT` and `RENDERGRAPH_PACKAGE_OUTPUT` for a version that
+does not carry what its port carries, which name the pass, the version and the
+port. A planner refusal keeps its `SHADERPIPE_` code. A pass `kind` is
+`Compute`, `Fullscreen` or `Geometry`: only the `packages` member declares
+package work, so the reader refuses a pass that names `Package` at its `kind`.
+
+A world names graph instances in `views.graphs` (`WorldViewGraph`). Each row
+has a `name` and exactly one of two things to render. A `source` is a
+`puck.render.graph.v1` graph document, a one-off `.hlsl` shader read as a
+one-pass graph, or a [package](#packaging-a-pipeline) directory, resolved
+relative to the world document. A `package` names an engine package's
+producer, such as `sdf.world`. A row also takes an optional `camera`, a
+`refresh` of either a frame `divisor` or a rate in `hertz`, `inputs` that bind
+one of the graph's external versions to another row's output, and the
+per-instance `timeScale`, `output` and [`overrides`](#per-instance-overrides).
+A layout slot shows a row by naming it as its `instance`. In `.puck` a row is
+a `graph "name" { … }` block inside `views`, and a slot says
+`instance: "name"`:
 
 ```json
 "views": {
@@ -263,7 +411,10 @@ another row's output:
 An input that names its own row reads that row's previous frame. An input
 marked `previousFrame` takes its producer's last completed frame, which lets
 two rows show each other. The validator refuses any other loop of inputs
-through the scheduler's own rule, naming every instance in the loop.
+through the scheduler's own rule, naming every instance in the loop. A row's
+instance reads every producer as an image and publishes an image: the rows do
+not yet take their edges' kinds from their graphs' plans, so no world row
+declares a buffer edge.
 `graphBudget` is the scheduler's price ceiling on the instances the display
 does not show directly. How the rows are scheduled is in
 [hosting](hosting.md#render-lifecycle-and-publication). Each row appears in
@@ -272,25 +423,312 @@ ceiling (one display), its rate, and the passes its graph plans to. The server
 plans each row's source for that price. A document analysed without its
 sources reports why the passes are unplanned.
 
-The live renderer does not run graphs yet. `views.pipelines`, the SDF engine's
-child composition and `ViewStack` still render every view, and moving them onto
-graph instances is P11b in
-[the rendering programme](../plans/rendering.md#p11--the-frame-graph-document-and-nested-views).
+The same dimension prices every bound
+[parameter](#per-instance-overrides) in bytes, separately from the
+simulation's cycle bound and from the document alone, so a native host and the
+WebAssembly engine report it alike (`WorldBindingCost`). A literal is written
+once when its graph installs and owes nothing afterwards. A state binding owes
+its bytes on every tick that moves its row: 4 for a scalar field, and 16 an
+element for an array bound to a whole row, one World-block row per element the
+row presents. A scalar binding whose cell advances, or eases and is read
+without `.$target`, is presented interpolated between ticks, so it owes its 4
+bytes on every presented frame as well. `graphBudget.bytesPerTick` and
+`graphBudget.bytesPerFrame` cap the totals (0 sets no ceiling), and a document
+whose bindings exceed one is refused, naming the graph and the binding that
+crosses it.
+
+`RenderGraphRuntime` runs a set of instances. Each frame it schedules the set,
+then renders each scheduled instance through its own `ShaderPipelineRenderNode`
+at the scheduled extent. One submission per instance records the graph's
+shader passes and, through the recorder `RenderGraphPackageRecorders` holds
+for each package id, its package passes, all in the planner's order, into one
+command list per frame slot, with the preview, the export copy and the
+presentation after them; only the copies of the regions the passes wrote record
+in a list of their own, submitted first. A
+`RenderGraphRuntimeGraph` binds each external version to a producer instance;
+the runtime binds it to the frame of that producer's output the schedule
+names, and to a transparent-black stand-in while the producer has none. A
+bound image may have any extent, but its format must be the one its producer
+publishes, and a bound buffer may be no larger than its producer's; the
+runtime refuses a mismatch by name when it installs. A package recorder's
+resolved images carry the layout their planned access left them in.
+
+A package id is served by an `IRenderGraphPackageFactory`. Its `Build` creates
+the pass's shader modules, pipelines and render passes on the thread pool with
+the candidate graph's shader passes, and its `Create` takes them when the graph
+installs, with the pass's groups (`RenderGraphPackageGroups`): the instance's one
+descriptor pool, which holds a frame set and a pass set per frame slot for every
+pass, and each slot's frame and pass block buffers. The recorder allocates its
+sets from that pool against its own pipeline's group layouts
+(`RenderGraphPackageSets`); a set of any other group its package binds, such as
+the SDF tables' World set, is the package's own. A recorder records into the command buffer it is
+handed and never submits, waits or creates a pipeline. Each recording carries the pass block, which the node has filled
+with the extent and config and into which the recorder writes the values its
+package declares (`RenderGraphPackageRecording.PassBlock`, placed by
+`ShaderPipelineParameterLayout.BlockOffsetOf`); the node uploads it once the
+recorder returns. A recording also carries the frame's lease list, which
+retires a lease after that frame slot's fence. A package pass may carry
+`config` values, which the graph compiler binds against the package's schema
+and refuses by name as `RENDERGRAPH_PACKAGE_CONFIG`. A recorder records no
+barrier: the instance records the pass's planned barriers first, so a
+fragment-sampled input arrives shader-readable and a color-attachment output in
+render-target layout, which the package's render pass leaves it in for the
+next planned barrier to move on.
+
+A recorder may skip a frame (`IRenderGraphPackageRecorder.Skips`), which the
+instance asks before it records the pass's barriers: it then records neither
+the pass's work nor its planned barriers, and each storage the pass would have
+accessed stays in the state its last recorded access left it in, a planned
+override from which the next access records only the barrier the planned
+states call for. A pass skips only on frames no later pass reads the contents
+of its outputs on; the SDF mesh pass skips every frame that draws no mesh.
+
+A recording that draws nothing returns `RenderGraphPackageOutcome.DrewNothing`,
+and each output then stands for the input at its position: the instance
+publishes that input's image with no copy, in its own layout
+(`ShaderPipelineRenderNode.PublishedLayout`), and a root capture reads it. A
+later package pass that reads such an output is handed the input it stands for,
+so a chain of passes that draw nothing resolves to the first input it stands
+for: a root whose place passes all show nothing publishes the world's image
+itself. An output another kind of pass reads, that is history, that would stand
+for a previous frame's input or for an input a later pass overwrites, or that
+is not an RGBA8 image beside an input image of its format is refused by name
+when its pass draws nothing: a previous frame's instance rests in the layout
+its own role left it in. So is an output standing, directly or through such a
+chain, for a host's image bound in another layout
+than the instance publishes in: the instance publishes every image in its output
+layout, the one its consumer's descriptor is written with (the display samples
+the root shader-readable), and hands a host's image back in the host's own. The
+recording is told so beforehand (`RenderGraphPackageRecording.MayStandIn`), and
+draws instead: the overlay draws its empty frame, which reproduces its input.
+An external image is bound in the layout its producer declares for its lease,
+which is the layout the producer's own submissions leave it in, and the planner
+plans its barriers from it. `PostProcessPackage` serves every post-process
+package and `OverlayPackage` serves `overlay`.
+
+An instance whose `ExternalPackage` names a package no external producer or
+upload serves, but a recorder does, is a package instance: when the package
+runs as a fragment with no input port and one image output, the runtime makes
+its graph, one pass named after the package id running it, whose output is the
+instance's, declared as the fragment declares its output version, and renders
+it on a node like any graph instance. Any other package is refused by name.
+Before it schedules each frame the runtime asks the package of every instance
+whose graph binds no input and runs only package passes whether anything it
+renders from changed since its latest render
+(`IRenderGraphPackageFactory.IsUnchanged`), and declares the instances none of
+whose packages saw a change unchanged (`RenderGraphFrame.Unchanged`), except one
+a pending capture reads, which only a render serves. A device loss reaches every
+package's factory (`IRenderGraphPackageFactory.OnDeviceLost`).
+
+A node given an export (`ShaderPipelineRenderNode.Export`, an
+`IShaderPipelineOutputExport`) renders at the export's extent whatever extent it
+is asked for, into its default output's own images, one per frame slot, which
+it publishes in its output layout and its readers sample like any output. At the
+end of each frame's submission it copies that frame's output into the one image
+the export creates, which another device reads, in a pass of its own
+(`ShaderPipelineRenderNode.ExportCopyPass`, one `gpu.copies` and three image
+barriers a frame). It takes the image back from its reader before that
+submission (`IGpuExportableImage.BeginWrite`), leaves it in `External` layout,
+and completes it after (`CompleteWrite`), handing the export the shared fence
+value the copy signals. On a frame the reader still holds the image the node
+renders and publishes as usual and copies nothing. Nothing on the node's device
+samples the exported image, so a view reading itself binds an earlier frame's
+output, never the image its submission writes or copies into.
+
+An instance can instead be an external producer: a `RenderGraphInstance` whose
+`ExternalPackage` names the `IRenderGraphExternalProducer` registered for that
+package (`RenderGraphPackageRecorders.RegisterProducer`). It has no graph. The
+runtime produces it at the scheduled extent before its consumers, through the
+producer's own submissions, and each consumer that renders binds the
+producer's latest completed output, whether or not the producer rendered this
+frame, under a `GpuImageLease`. The consumer's node holds the lease in its
+frame slot's `LeaseRetireList` until that slot's fence proves the sampling
+submission finished, or until a device loss or disposal. An external producer
+reads images, never a buffer: its own output and any instance's previous frame
+among them, and any instance may read an external producer's previous frame.
+Before it produces, the runtime binds each read to the latest completed output
+of the instance read (an external producer's under the lease its acquisition
+returns, a graph instance's unleased), so a read of its own output binds the
+output it completed before this frame, in a
+`RenderGraphExternalReads` it hands to `Produce`. The producer takes the leases
+its submission samples (`Take`) and retires them after that submission's
+fence, and the runtime retires the rest once `Produce` returns. A graph
+instance's reads that its graph binds to no version are bound the same way,
+after its graph's inputs, when its graph runs a package whose factory samples
+them (`IRenderGraphPackageFactory.SamplesReads`): each package recording of the
+frame is handed them (`RenderGraphPackageRecording.Reads`), takes the lease of
+what it samples into the frame's lease list, and their taint is the
+instance's. A frame may declare instances unchanged since their latest render
+(`RenderGraphFrame.Unchanged`): such an instance is not due by its refresh, so
+its latest output stands, and it renders only when it never has, when the frame
+names it to render again, or when it is demanded at another extent.
+
+Every SDF view is a package instance of `sdf.world`. Its factory,
+`SdfWorldPasses` in `Puck.SdfVm`, resolves each instance to a view of a
+residency (`SdfWorldResidency`): the tables one frame source's views share, its
+program, transforms, screens, lights, volumes and mesh draws. The frame's first
+pass to record submits the residency's one upload ahead of the view's
+submission, and every pass of the view reads the tables that upload wrote. At
+the start of each frame the factory starts and prepares every residency it
+holds (`IRenderGraphPackageFactory.BeginFrame`); it answers `IsUnchanged` from
+the residency's record of what each view last rendered, and sizes a view's
+counted scratch through `CounterOf` from the view's extent and the residency's
+instance capacity. A pass installs only once its residency has built its
+tables, so a view renders nothing before then.
+
+A capture armed on the runtime reads the root instance's output, and one armed
+through `RenderGraphRuntime.CaptureTarget` reads the instance it names. A graph
+instance's node serves it on a frame the instance renders with every image
+input it shows bound to a completed output, never a stand-in, and an external
+producer serves it from the next frame it produces. Until then
+`UnservedCaptureReasonOf` names why. The root may be the world's own instance,
+when nothing is drawn over its output. Each instance counts its own passes.
+
+### The default root graph
+
+The main view runs through the runtime. A world that authors no `views.root`
+gets the default graph `WorldRootGraph` (in `Puck.World.Client`) synthesizes
+from its document, a graph document value planned by `RenderGraphCompiler` like
+any other:
+
+- `world`: the `sdf.world` instance rendering the first view of the world's
+  residency.
+- `world$2` onward: one instance per further split-screen view of the same
+  residency, when the world's layouts or player roster can compose more than
+  one view.
+- `main`: the root graph reading `world`'s output over the whole display and
+  every pane's output. With more than one view, or with a tonemap, it first
+  runs one `place` pass per view. Then it runs one `place` package pass per
+  `views.graphs` instance any layout slot names, each pass named after its
+  instance, then one pass per `views.post` row in document order, named by the
+  row and running its [post-process package](#post-process-packages), each
+  reading the frame the pass before it wrote, then the `overlay` pass in a
+  windowed World that loaded its glyph atlas.
+
+When `render.tonemap` is `Filmic`, each view's `place` pass sets the `place`
+config's `tonemap`, which puts the view it reconstructs, and nothing else,
+through the filmic curve. The scene is tonemapped once, where it enters the
+frame. The letterbox color the first view's pass writes beside it is display
+framing, not scene light, so it reaches the display exact under every tonemap.
+A pane is display-referred, a pane shader's own tonemap included, so the root
+never tonemaps it, and the HUD composes over the finished frame at SDR white,
+which the display encode shows at the paper-white level.
+
+`main` is the root whenever anything is drawn over the world, panes and the
+tonemap included, and whenever the world has more than one view. When none
+holds, as in an offscreen World with no panes, no `views.post` rows and no
+tonemap, `world` is the root and the display shows the world's first view
+directly. The host composes the root again whenever the document's panes, views,
+`views.post` rows or `render.tonemap` move, and runs no tonemap while a debug
+view (`world.debug-view`) is on, so a debug view shows its own colors. A world that sets `views.root` authors its whole render graph,
+the `sdf.world` package row included, and the runtime runs its rows alone; such
+a world authors no `views.post`.
+`RenderGraphRuntimeNode` is the host's render root, the one `IRenderRoot` the
+launcher drives: each frame it shows the root over a display of the World's
+configured extent. Nothing wraps it; the screen binder and the world's
+residency, whose GPU holdings must go while the device is alive, are released
+by the root's teardown (`RenderGraphRuntimeNode.Holdings`). A `captures` row reads
+the root, or names `world` to capture the SDF world before its tonemap, panes,
+post passes and overlay: its working image through the SDR display encode,
+untonemapped. `world.counters gpu` counts every graph instance under its
+instance name: `world` is the first view's node, whose passes are
+`sdf.world$sky` through `sdf.world$views`, `main` the root's node, whose passes
+are the place, post and overlay passes, and each pane its own node. It counts
+each residency's upload beside them: the world's as `sdf:world`, and each
+session or routed scene's as `sdf:<name>`. Camera instances share the world's
+upload and tables; their passes and scratch count under their instance names.
+
+### Graph instances in a World
+
+`WorldViewGraphHost` (`src/Puck.World.Client`) runs a world's `views.graphs`
+rows on the runtime through `IRenderGraphInstances`, which `RenderGraphRuntime`
+implements. Each frame, before the runtime schedules, the host reconciles the
+accepted `views` section into the runtime's instance set with `TryReconfigure`:
+an instance that survives keeps its node, its graph and its history, and a
+removed one retires. A surviving instance whose replacement graph is still
+building keeps presenting its installed graph, so a removed instance that graph
+reads stays alive until the replacement installs, the name is bound again, or
+the survivor is released; a survivor that never rendered bound nothing of it,
+so nothing holds it. A reconfiguration prepares everything that can fail
+before it changes the running set, so a failure leaves that set running as it
+was and releases what the attempt created. The host compiles each source row in the background
+through `ShaderPackager.LoadSource` and installs the result with `TryInstall`,
+its inputs taken from the row's `inputs`. The `pipeline.*` console verbs
+address these rows by name.
+
+The `place` package (`PlacePackage`) draws a pane into `main`. Its placements
+come from `IRenderGraphPlacements`, which the host implements. Each frame
+`WorldFramePresenter.PrepareGraph`, installed as
+`RenderGraphRuntimeNode.Prepare`, walks the slots of the last composed layout.
+For every instance a slot shows it places the pane at the slot's rect, with
+the sharpness `world.upscale-sharpness` sets, adds a footprint (consumer
+`main`, producer the pane, at the slot's width and height) so the scheduler
+renders the pane at that extent, advances the pane's clock, and feeds its
+camera, pointer and time. A pane the active layout does not show is not shown:
+its place pass draws nothing and its instance is not scheduled. Once every
+slot is placed, the host publishes the mapping of each view and pane the
+`place` passes draw (`WorldViewGraphHost.PublishPanes`): the instance's whole
+image over its rect, at the extent the runtime's latest schedule
+(`IRenderGraphInstances.Latest`) renders it at. A pane's pointer maps through
+that mapping, which a steady frame publishes without allocating;
+[pointing at a displayed source](commands.md#pointing-at-a-displayed-source)
+covers what reads it.
+
+The layout composer runs inside the world producer's frame, so a layout change
+places panes one frame later. A
+layout transition's render-scale dip does not apply to panes, and a pane slot
+adds no view to the SDF engine.
+
+Split-screen seats are placed the same way. The SDF engine renders each view
+of a layout into its own output image, and each view is a producer of its own:
+`world` for the first, then `world$2`, `world$3` and so on, up to the most
+views any layout or the player roster can compose. When a world has more than
+one, `main` is the root and runs one `place` pass per view ahead of the pane
+passes. `PrepareGraph` places each view at its rect and adds a footprint of
+that rect at the view's render scale, so the scheduler renders the view at the
+reduced extent and `place` reconstructs it with the same sharpness. A view is
+shown only once the engine has rendered it, and a single view covering the
+whole display at native scale with no tonemap is not placed, so `main` passes
+`world` through unchanged; with a tonemap it is placed like any other, since its
+place pass applies the tonemap. A layout change places its views one frame later, like its panes.
+The first view's place pass sets the `place` config's `letterbox`, so outside
+its rect it writes the letterbox color, `(0.015, 0.016, 0.02)`, which the
+kernel states, rather than its base; every later place pass keeps its base
+there. Pixels no view or pane covers show that color, and a layout that covers
+the whole display pays no pass for it. The letterbox does not wait for the
+first view: while it is not shown and part of the display lies outside every
+rect the root shows (`RenderGraphPlacement.Uncovered`), its pass writes the
+letterbox color everywhere, and the later passes place what is shown over it.
+The display counts as covered only when one shown rect covers it whole, a lone
+full-display view or a full-display pane, and then the unshown pass stands for
+the world and dispatches nothing.
+
+Every screen reads a graph instance: a source instance, or a camera or session
+view, each an `sdf.world` instance the scheduler feeds like any other
+([motion and views](../rendering/sdf/handbook/motion-and-views.md#views-are-render-graph-instances)).
 
 ## Pass interfaces
 
 A pass interface is the grouped binding contract as data. It is the model the
 [rendering plan's](../plans/rendering.md#p7--the-binding-contract-and-the-adapter-memory-profile)
-two-group binding spike built. Every pipeline pass and shader set reads its
-[frame block](#the-frame-block) through one; no shipped pass binds a group as a
-descriptor set yet. The code lives in `src/Puck.Shaders/Interface/`; the
-spike's two variant passes and their laws live in `tests/Puck.Shaders.Tests`.
+two-group binding spike built. Every pipeline pass and package pass reads its
+blocks through one. A document pass binds its frame group at set 0 and its pass
+group at set 3 as descriptor sets
+([frame values, extent and ports](#frame-values-extent-and-ports)), and so does
+a package's pass. The SDF engine's kernels bind their groups the same way,
+through the interfaces `SdfWorldInterfaces` declares, and the display encode
+(both swapchain compositors, a node's preview and a capture's encode) binds its
+one group, `DisplayEncodeLayout`, at set 3. The code
+lives in
+`src/Puck.Shaders/Interface/`; the spike's two variant passes and their laws
+live in `tests/Puck.Shaders.Tests`.
 
 `ShaderInterface` names its members in declaration order. Each member has a
 name, a frequency group and a kind: a `Value` (a `ShaderValueType` scalar or
 vector), an `Array` of values with a fixed length, a `SampledImage` or
 `StorageImage` with its texel type (a storage image also names its
-`GpuPixelFormat`), or a `Sampler`. The groups are `Frame`, `World`,
+`GpuPixelFormat`), a `ReadOnlyBuffer` or `ReadWriteBuffer` with an optional
+element type, or a `Sampler`. The groups are `Frame`, `World`,
 `Instance` and `Pass`, and a group's ordinal is its Vulkan descriptor set and
 its Direct3D 12 register space on both backends, so the frame group is set 0
 and space 0 in every pass. The interface reads and writes strict JSON through
@@ -303,8 +741,15 @@ so it has no generated schema yet.
 binding allocator is consulted:
 
 - A group with values or arrays owns one constant block at binding 0. Its
-  images and samplers follow at bindings 1, 2, and so on in declaration order.
+  images, buffers and samplers follow at bindings 1, 2, and so on in
+  declaration order.
   A group with no block numbers them from 0.
+- A sampled image or a sampler may be an array a pass indexes (a member's
+  `length`). An array of `n` takes `n` bindings' worth of registers from its
+  binding on, so the member after it starts `n` later, and the pipeline
+  layout binds `n` descriptors there. A pass indexes it only by a value
+  uniform across the wave; the SDF screen shading loops over the distinct
+  screens in a wave to keep it so.
 - A binding's Direct3D 12 register number equals its Vulkan binding number, in
   the register class its kind takes: `b`, `t`, `u` or `s`.
 - A block places its members in declaration order. A scalar sits on a 4-byte
@@ -313,111 +758,251 @@ binding allocator is consulted:
 - An array element is stored as one whole 16-byte row, so an array's stride is
   16 on both backends.
 - Every gap is filled with a `uint` padding member named `_pad<offset>`.
-- An interface may push its frame group's block (`ShaderInterface.PushConstants`):
-  the block is then a `PushConstants` binding at set 0, binding 0, laid out by
-  the same rule and declared `[[vk::push_constant]]` with `register(b0, space0)`,
-  where both backends' root constants live. A pushed group holds values and
-  arrays only.
+- An interface may push one 4-byte index (`ShaderInterface.PushesIndex`),
+  described under [the pushed index](#the-pushed-index). It is the one value a
+  pipeline pushes; every group's block is bound as a constant buffer.
 
 `ShaderInterfaceHlsl.Generate` writes the include a pass reads, named
 `<interface>.interface.hlsli`. It declares one struct per group, named for the
 interface and the group, such as `PixelatePass`, and one constant buffer
 variable per group, such as `passGroup`. Every block member carries
 `[[vk::offset(n)]]`, and every binding pairs `[[vk::binding(b, set)]]` with
-`register(xb, spaceS)`. An array is read through an accessor such as
+`register(xb, spaceS)`; an image or sampler array declares its length. An
+array is read through an accessor such as
 `channelLevelsAt(i)`, which hides the 16-byte row an element is stored in.
 The padding is what makes Direct3D 12's sequential constant-buffer packing
 land each member on the offset Vulkan is told explicitly. The text is a pure
 function of the interface, with LF line endings.
 
 Two readers return the same `ShaderInterfaceBinding` records, so one
-comparison holds both kinds of bytecode to the same layout (a pushed block
-reflects in DXIL as the constant buffer at `b0`, space 0, which
-`ShaderInterfaceLayout.DxilBindings` states):
+comparison holds both kinds of bytecode to the same layout. A record's kind is
+a `GpuBindingKind` (`src/Puck.Abstractions/Gpu/Bindings`), the one closed set
+of binding kinds: constant buffer, read-only buffer, read-write buffer,
+sampled image, storage image and sampler. Push constants are not a kind. A
+pushed block, the pushed index, is a constant buffer marked `Pushed`, which
+only SPIR-V can tell apart; DXIL reflects it as the constant buffer at `b0` in
+space 4, which `ShaderInterfaceLayout.DxilBindings` states. A buffer record
+carries its `ElementStride` ([buffer elements](#buffer-elements)), and every
+record its `Count` of descriptors: an image or sampler array's length, read
+from SPIR-V's array type and DXIL's bind count, and one otherwise.
 
-- `SpirvInterfaceReader` parses a SPIR-V module's `DescriptorSet`, `Binding`
-  and `Offset` decorations, its push-constant variable and its debug names. It
-  is pure C#.
+- `SpirvInterfaceReader` parses a SPIR-V module's `DescriptorSet`, `Binding`,
+  `Offset` and `ArrayStride` decorations, its push-constant variable and its
+  debug names. A buffer's stride is the `ArrayStride` of the runtime array its
+  block ends in. It is pure C#.
 - `DxilInterfaceReader` asks DXC's documented reflection interface
   (`IDxcUtils::CreateReflection` returning `ID3D12ShaderReflection`), loaded
-  from the `dxcompiler.dll` beside the `dxc` a `ShaderToolchain` resolves. It
-  parses no container part itself. It is Windows-only, because DXC's
-  non-Windows `IUnknown` carries a virtual destructor that moves every vtable
-  slot.
+  from the `dxcompiler.dll` beside the `dxc` a `ShaderToolchain` resolves. A
+  structured or byte-address buffer's stride is its bind description's
+  `NumSamples`. It parses no container part itself. It is Windows-only, because
+  DXC's non-Windows `IUnknown` carries a virtual destructor that moves every
+  vtable slot.
 
-The spike interfaces two existing passes, film grain and pixelate. Each one
-uses the frame group (set 0) and the pass group (set 3). Each variant compiles
-with the shared recipe's DXC flags. Both readers find every binding and block
-member where the layout put it. DXC writes identical SPIR-V and DXIL on a
-second build in another directory. A hand-edited `vk::offset` fails the SPIR-V
-reader, and a removed padding member fails the DXIL reader. The GPU half of
-the spike has not run: executing the two-group layout on both backends inside
-the parity contract's tolerances.
+Both readers, and both of a layout's views, order records by set, then binding,
+then a bound block before a pushed one at the same place
+(`ShaderInterfaceLayout.Ordered`). `ShaderInterfaceLayout.Mismatch` holds each
+reflected binding to the one the layout places at its set and binding: the same
+kind, stride, count and block members, and the same name, since two resources of
+one shape exchanged between their bindings differ in nothing else. DXIL names
+every binding from its bind description and SPIR-V from the debug name DXC
+emits; a SPIR-V binding with no debug name is refused, since which resource it
+binds cannot be told. `ShaderBytecodeReflector` picks the reader by
+the bytes, SPIR-V by its magic number and DXIL by its container's, loading the
+DXIL reader once, on the first container it reads.
 
-`ShaderInterfaceLayout.PushedBlockMismatch` names how a compiled module reads a
-pushed block other than as laid out. `ShaderInterfaceEcho.Generate` writes a
-pushed-block interface's echo pass: a compute pass that reads every word of
-every block member through the generated declarations, compares it with the
+An interface can carry a stamp (`ShaderInterface.Stamp`): a token naming what
+its owner built it against. The generated pass block's variable carries it in
+its name, such as `passGroupIsa1234ABCD`, and the include defines `passGroup` as
+that name, so a pass reads its block as `passGroup` either way while its
+bytecode reflects the stamp. `ShaderInterfaceLayout.Mismatch` holds a module
+to a stamped layout's stamp before anything else: a module whose pass block
+carries another name, or that reads no pass block, is refused. The SDF kernels'
+interfaces carry the instruction set's stamp (`SdfIsaHlsl.Stamp`), which is
+how a kernel reload refuses kernels compiled against another instruction set.
+
+The spike interfaces three passes: film grain, a pixelate compute pass, and a
+compute pass reading structured buffers of a 4-byte and a 16-byte element, a
+raw buffer and a pushed index; the last two exist only as the spike's
+fixtures. Each one uses the frame group (set 0) and the pass group (set 3).
+Each variant compiles with the shared recipe's DXC flags. The SPIR-V reader
+finds every binding, block member and stride where `Bindings` put it, and the
+DXIL reader where `DxilBindings` put it. DXC writes identical SPIR-V and DXIL
+on a second build in another directory. A hand-edited `vk::offset` fails the SPIR-V
+reader, and a removed padding member fails the DXIL reader. Every document pass
+runs the grouped layout on both backends; running it inside the parity
+contract's tolerances is open.
+
+`ShaderInterfaceLayout.PipelineLayout` turns an interface's groups into a
+`GpuPipelineLayoutDescription`, the backend-neutral statement of what a
+pipeline binds, and each backend plans its own layout from that with no device
+call.
+
+- `DirectXRootLayout.Plan` makes dense root parameters. For each group, in
+  ordinal order, it adds a table of constant buffers, shader resource views
+  and unordered access views. A group that holds a sampler also gets a second
+  table for its samplers. Each binding is one range, at register space equal
+  to the group's ordinal and base register equal to the binding number. A
+  pushed index comes last, as one root constant at `b0` in space 4.
+- `VulkanGroupLayouts.Plan` makes one set layout for every set number up to
+  the highest group. A set number with no group gets an empty layout, and a
+  pushed index is a 4-byte push range.
+
+A compute or graphics pipeline description whose `Layout` holds such a
+description is created from these plans: Direct3D 12 creates the planned root
+signature, with its samplers in sampler tables rather than static samplers,
+and Vulkan creates the planned set layouts and a pipeline layout over them. The
+pipeline's `GroupLayoutHandles` give one handle per group, which a set of that
+group is allocated against, and `GpuDescriptorPoolSizes.ForGroups` sizes a
+pool for one set of each group. On Direct3D 12 a group's samplers take a range
+of the device's sampler heap. Every shipped pass is created this way: each
+document pass, each package pass, the SDF engine's kernels and the display
+encode. All but one take their layout from a pass interface; the display encode
+(`display-encode`, which the swapchain compositors, a node's preview and a
+capture's encode draw) declares its one group by hand (`DisplayEncodeLayout`: a
+sampled image, a sampler and the encode block in the pass group, set 3), which
+its shader's registers must match. The one
+pipeline created from a positional binding list instead is
+[the region copy](#the-region-copy) (`GpuRegion.CopyPipeline`), which binds its
+two buffers as one set at group 0; such a list holds only buffers and storage
+images (`GpuComputeBinding`), so a sampled image or a sampler always belongs to
+a group.
+
+An interface that pushes an index gives its pipeline layout that push
+([the pushed index](#the-pushed-index)).
+
+`ShaderInterfaceLayout.Mismatch` names how a compiled module reads a binding, a
+block member, an offset or a buffer stride other than as laid out; a load runs
+it over every document pass's SPIR-V and a package build over both bytecodes.
+It holds the module's records to one backend's view at a time, `Bindings` or
+`DxilBindings`, and accepts them when every record fits the same view, so a
+bound frame block and a pushed index, which SPIR-V reports at the same place,
+are told apart.
+`ShaderInterfaceEcho.Generate` writes an interface's echo pass: a compute pass
+that reads every word of every block member, in set order, through the
+generated declarations, compares it with the
 sentinel `ShaderInterfaceEcho.WriteSentinels` writes at that word, and writes
 pixel *i* of a one-row image green when member *i* reads back exactly. A
 package build compiles each interface's echo and holds its reflection to the
 layout; the `pipeline-echo` canary runs one on both backends with
-`pipeline.sentinels` on, and a hand-perturbed copy of the declarations fails it.
+`pipeline.sentinels` on, and an echo expecting two members' sentinels swapped
+fails it. The `interface-echo` canary runs one echo per shipped interface
+family the same way: the ink simulation, visualize and finish passes (finish's
+blocks, the extent alone, are also the Moth's, the `source-*` conversion
+packages' and the SDF brick baker's, `sdf.bricks`), the package canary's tint,
+the `sdf.film-grain` post-process package, the `place` and `overlay` packages,
+and the SDF engine's per-view pass, `sdf.world`. Each echo document declares
+its target's blocks, a package's declared values as config fields, and
+its perturbed twin expects its last member's first word to hold the next
+word's sentinel.
+
+### Buffer elements
+
+A buffer member is raw by default: the include declares a `ReadOnlyBuffer` as
+a `ByteAddressBuffer` and a `ReadWriteBuffer` as an `RWByteAddressBuffer`, read
+and written by byte address. Given an element type
+(`ShaderInterfaceMember.ReadOnlyBuffer(name, group, element)` or
+`ReadWriteBuffer(name, group, element)`, which lands in the member's `Type`), it
+is a `StructuredBuffer<T>` or `RWStructuredBuffer<T>`, where `T` is the type's
+HLSL spelling. An element is a scalar, a two-component vector or a
+four-component vector. The interface refuses a three-component element by name:
+DXIL's structured stride for one is its 12 bytes, while SPIR-V's buffer layout
+may pad it to 16, so the two backends would disagree on where each element
+starts.
+
+Each buffer binding carries the element stride its bytecode reflects
+(`ShaderInterfaceBinding.ElementStride`; every other binding carries 0). A
+structured buffer's stride is its element's size on both backends: 4, 8 or 16
+bytes. A raw buffer's stride is what each backend reports for a byte-address
+buffer: SPIR-V declares one as a runtime array of `uint` whose `ArrayStride` is
+4 (`ShaderInterfaceLayout.SpirvRawBufferStride`), and DXIL's reflection reports
+a `NumSamples` of 0 (`ShaderInterfaceLayout.DxilRawBufferStride`), the zero
+stride a raw Direct3D 12 view is written with. So in SPIR-V a raw buffer and a
+structured buffer of a 4-byte element reflect alike, and only the DXIL
+reflection tells them apart. A kernel that declares another element than its
+interface, such as `StructuredBuffer<uint4>` where the interface says `uint`, is
+a `Mismatch` on both backends that names both strides.
+
+### The pushed index
+
+An interface constructed with `pushesIndex: true` declares that its pipeline
+pushes one 4-byte index, the one value a grouped pipeline can push. The SDF
+engine's brick baker (`SdfWorldInterfaces.BrickBake`, the
+interface `sdf-bricks` of the `sdf.bricks` package) is the one shipped
+interface that declares it: it pushes each dispatch's slice ordinal. After the
+groups its include declares:
+
+```hlsl
+// The pushed index: Vulkan push constants at offset 0, Direct3D 12 root constants at register b0, space 4.
+struct SdfBricksPushedIndex {
+    [[vk::offset(0)]] uint index;
+};
+[[vk::push_constant]] ConstantBuffer<SdfBrickBakePushedIndex> pushedIndex : register(b0, space4);
+```
+
+The struct is named for the interface (`ShaderInterface.PushedIndexTypeName`),
+and the space is `GpuPipelineLayoutDescription.PushIndexSpace`, outside every
+group's space. A kernel reads `pushedIndex.index`. On Vulkan it is a 4-byte
+push-constant range at offset 0; on Direct3D 12 it is one root constant at
+`b0` in space 4. `ShaderInterfaceLayout.PipelineLayout` takes the push from the
+interface, and the layout's reflected views include it: `Bindings` as a pushed
+constant block at set 0, binding 0, which is how SPIR-V reports every push
+constant, and `DxilBindings` as the constant buffer at `b0` in space 4. The
+canonical JSON writes `pushesIndex` only when it is set, so an interface that
+pushes nothing carries no trace of it in its JSON, hash or include. A graph
+package declares the push with `RenderGraphPackage.PushesIndex`, which
+`ShaderPipelineParameterLayout.ForPackage`, the planner and
+`puck shaders generate` carry into the package's interface.
 
 ## API
 
 ```csharp
 using Puck.Shaders;
 
-var catalog = ShaderSetCatalog.Scan(rootDirectory: Path.Combine(AppContext.BaseDirectory, "Assets", "Shaders"));
-ShaderSetManifest manifest = catalog.Load(id: "sdf-film-grain");   // throws on an unshipped id
-ShaderConfigValues config = manifest.BindConfig(config: entry.Config); // throws naming the field
+var catalog = RenderGraphPackageCatalog.Engine;
+var packages = new RenderGraphPackageRecorders();
 
-IRenderNode pass = new FullscreenPassNode(
-    inner: worldNode, manifest: manifest, config: config,
-    services: fullscreenPassServices, hostsOnDirectX: false, width: 1920, height: 1080);
+foreach (var package in catalog.Packages.Where(package => package.IsPostProcess)) {
+    // Its build reads the stages' bytecode beside the executable.
+    packages.Register(package: package.Id, factory: new PostProcessPackage(package: package));
+}
 ```
 
-`IFullscreenPassServices` is the GPU seam a composition root resolves from
-its one registered backend (command recorder, descriptor allocator, device
-context, geometry-buffer factory, graphics pipeline factory, queue submitter,
-render-pass factory, shader-module factory, surface-transfer factory, and
-cohesive compute services, whose image factory creates the images a pass
-draws into). The adapter delegates GPU recording, resource allocation, and synchronization to `ShaderPipelineRenderNode`. The pass is an `ICaptureRequestTarget`: an armed capture reads
-back the pass's own render target—the composed result—and prints
-`[capture] <set name> -> <path>` on stderr; a frame the pass passes through
-untouched forwards the same request to its inner node instead. The request
-reports write completion or failure and is failed if disposed before service;
-see [capture completion](../../src/Puck.SdfVm/README.md#capture-completion).
-`ShaderSetManifest.ConfigJsonSchema()` emits the config schema as a JSON
-Schema object; `manifest.TryBindConfig(config, out values, out reason)` is
-the non-throwing bind. `IShaderModuleLoader`/`ShaderModuleLoader` load and
+A graph runs a post-process package as a package pass, recorded by the one
+`PostProcessPackage` registered for its id inside the instance's
+`ShaderPipelineRenderNode` submission. The graph compiler binds the pass's
+config against the package's schema (`RENDERGRAPH_PACKAGE_CONFIG`). The node is an `ICaptureRequestTarget`:
+an armed capture reads back the node's published output, the composed
+result. The request reports write completion or failure and is failed if
+disposed before service; see
+[capture completion](../../src/Puck.SdfVm/README.md#capture-completion).
+`ShaderConfigBinding.JsonSchema(package.Config, package.Summary)` emits a
+package's config schema as a JSON Schema object, and
+`ShaderConfigBinding.TryBind` is the non-throwing bind. `IShaderModuleLoader`/`ShaderModuleLoader` load and
 validate one shader stage's bytes from an `IAssetSource`, cached by content
-hash, for a caller building its own pipelines. `pass.TrySetConfig(field,
-value)` overwrites one scalar-`float` config field's live value, which the
-pass's frame block carries from the next frame its executor renders—the
-write a presentation binding drives per frame; it refuses an unknown field or
-any non-`float` type by return value. `pass.Config` reads the live values back.
+hash, for a caller building its own pipelines.
+`ShaderPipelineRenderNode.TrySetConfig(passName, config, out reason)` rebinds a
+pass's whole config, which its pass block carries from the next frame the node
+renders; the World's parameter bindings write one scalar-`float` field of one
+`views.post` pass, named by its row, through it (`WorldPostPasses`), over the
+pass's own config, so the row's other fields keep their values.
 
 | Type | Role |
 |------|------|
-| `ShaderSetManifest` | A parsed, validated `puck.shader.manifest.v1` document with its `FrameLayout`, load `Directory`, and the validated `Bytecode` of every stage it read, keyed by `"<stem><extension>"` — a consumer building an executor from it reads a stage's bytes there instead of reading the file again. |
-| `ShaderSetCatalog` | The shipped sets under a directory tree, by id; `Shipped` is the deploy's own `Assets/Shaders` tree. |
 | `RenderGraphDefinition` / `RenderGraphPackagePass` | A [frame graph](#frame-graphs) document and one package pass. |
-| `RenderGraphPackageCatalog` / `RenderGraphPackage` | The packages a host offers graphs, by id, and one package's ports. |
+| `RenderGraphPackageCatalog` / `RenderGraphPackage` / `RenderGraphPackagePort` / `RenderGraphPackageStages` | The packages a host offers graphs, by id (`Engine` is the engine's own); one package's declaration of its ports, members, config and, for a [post-process package](#post-process-packages), its deployed stages; one typed port; those stages. |
 | `RenderGraphCompiler` / `RenderGraphPlan` / `RenderGraphStep` / `RenderGraphSource` | Validation and planning through the pipeline planner; the plan; one planned pass; reading and planning a graph file. |
 | `ShaderConfigField` / `ShaderConfigValues` | One config schema field; a document's bound values. |
-| `ShaderConfigBinding` | The config-schema binder every manifest with a `config` block shares—`TryBind`, `JsonSchema`, `ValidateSchema`. |
-| `ShaderFrameInterface` / `ShaderFrameValues` / `ShaderPipelineParameterLayout` | The [frame block's](#the-frame-block) members and interface; the values a host supplies each frame; a pass's laid-out block, its config binder and its host writer (`WriteFrame`). |
+| `ShaderConfigBinding` | The config-schema binder every package, pass and probe kind with a config shares—`TryBind`, `JsonSchema`, `ValidateSchema`. |
+| `ShaderFrameInterface` / `ShaderFrameValues` / `ShaderPipelineParameterLayout` | A pass's [interface](#frame-values-extent-and-ports), its frame values and ports; the values a host supplies each frame; a pass's laid-out blocks, its config binder and its host writers (`WriteFrame`, `WriteExtent`). |
+| `ShaderPipelinePassPorts` | A document pass's ports as pass-group members, the identifier each reads as (`Identifier`), and the load's refusal of a source that never names one (`UnnamedPort`). |
 | `ShaderValueType` | `float`…`int4`, with component count and kind. |
-| `FullscreenPassNode` / `IFullscreenPassServices` | The node that runs a graphics set as one pass over an inner `IRenderNode`; its GPU seam. |
+| `PostProcessPackage` | The recorder factory that runs any post-process package as one fullscreen pass of a graph from its stages' deployed bytecode, recording through its instance's services. |
 | `IShaderModuleLoader` / `ShaderModuleLoader` / `ShaderStageInfo` / `ShaderStage` | Per-stage bytecode loading with content-hash caching. |
 | `ProbeKindManifest` / `ProbeKindCatalog` | A `puck.probe.manifest.v1` probe kind and the shipped kinds under a directory tree, by id. |
-| `ManifestCatalog<TManifest>` | The suffix-scanning, id-indexed discovery both catalogs derive from. |
 | `ShaderInterface` / `ShaderInterfaceMember` / `ShaderInterfaceGroup` | A [pass interface](#pass-interfaces), one member, and its frequency group. |
 | `ShaderInterfaceLayout` / `ShaderInterfaceHlsl` | The engine-assigned sets, bindings and offsets; the generated include. |
 | `SpirvInterfaceReader` / `DxilInterfaceReader` / `ShaderInterfaceBinding` | The two bytecode readers and the record both return. |
-| `ShaderInterfaceEcho` | A pushed-block interface's generated echo pass and the sentinels it expects. |
+| `ShaderInterfaceEcho` | An interface's generated echo pass and the sentinels it expects. |
 
 ## Image-source conversion passes
 
@@ -425,8 +1010,11 @@ any non-`float` type by return value. `pass.Config` reads the live values back.
 source's region into the image a consumer samples. A region is
 `ImageSourceUploadLayout`'s eight-word header and its planes
 (`Puck.Abstractions.Sources`). `image-source.hlsli` reads the header and decodes
-pixels, and each kernel reads the region at binding 0 as a `ByteAddressBuffer`
-and writes its image at binding 1, one thread a pixel in 8×8 groups:
+pixels. Each kernel reads the region as a `ByteAddressBuffer` named `region` and
+writes a storage image named `image`, in set 3 where a document pass's interface
+places its ports (the pass block at binding 0, the region at binding 1, the image
+at binding 2), one thread a pixel in 8×8 groups. A graph names its ports
+`"as": "region"` and `"as": "image"`:
 
 | Kernel | Reads | Writes |
 |---|---|---|
@@ -436,23 +1024,119 @@ and writes its image at binding 1, one thread a pixel in 8×8 groups:
 | `source-transfer.comp.hlsl` | RGBA8 or R10G10B10A2 under an sRGB, linear or PQ transfer function | half-float linear light, 1 at the 203 cd/m² reference white |
 
 `ImageSourceConversion` is their CPU reference and names the kernel a format
-needs (`PassOf`). The build compiles all four for both backends. No host
-dispatches them yet; the frame graph's source nodes will. The
+needs (`PassOf`). The build compiles all four for both backends. The graph
+runtime dispatches them as catalog packages (`SourceConversionPackage`, which
+the World registers) when it renders an uploaded source instance. The
 `source-conversion` canary runs the palette and NV12 kernels as passes of an
 offscreen pipeline on both backends and holds their output to the CPU
 reference.
 
+## The region copy
+
+`Assets/Shaders/Residency/region-copy.comp.hlsl` is the staged residency
+policy's copy: one dispatch moves the owed word ranges of a host-written block
+from its staging buffer (binding 0) into the buffer its readers bind
+(binding 1), one thread a word, with each register at its binding number. It
+takes no push constants: the staging buffer leads with a header (the word
+count, the run count, where the block starts and the destination word the
+block's word 0 lands at) and a run table.
+`GpuRegion` (`Puck.Abstractions`) owns its ABI and pipeline description
+(`GpuRegion.CopyPipeline`). `GpuRegionCopyPass` makes it one entry a device of
+the [pass-pipeline cache](#the-pass-pipeline-cache), built on the thread pool,
+and every owner leases that pipeline rather than creating its own: the SDF
+engine records every region's copy with it, its brick staging into the brick
+pool included. It is counted under `gpu.pass-pipelines` with every other pass
+pipeline.
+
+A shader pipeline instance owns every host-written region its graph reads. A
+package states the regions its recorder writes
+(`IRenderGraphPackageFactory.Regions`; the overlay's one storage buffer), and the
+instance creates them at install under the policy `GpuResidency.Select` picks
+with a reader in flight, hands them to the recorder in
+`RenderGraphPackageGroups.Regions`. A graph declares its host buffer ports as
+resources whose `initialization` is `Host`: a buffer of a fixed `sizeBytes` that
+keeps no history (`SHADERPIPE_INITIALIZATION` refuses any other), which only an
+uploaded source's upload binds. When any package region or port stages, the
+instance states and admits one copy pool for the graph
+(`ShaderPipelineRenderNode.DescriptorPools`' `stagedRegions`), reserving a copy
+set per frame slot for each staged package region in pass order and then each
+staged port in declaration order, and takes the device's copy pipeline in the
+candidate's build, off the frame thread (`GpuBuildLease.Wait` on its
+`GpuRegionCopyPass` entry). The pool belongs to the graph's first pass and
+retires with the graph. A port's region is created by
+`ShaderPipelineRenderNode.BindRegion` at the port's declared size under the same
+choice; a staged one takes the installed graph's reserved share, so binding takes
+no descriptor range, and moves to each later graph's share
+(`GpuRegion.MoveCopySets`). A candidate that drops a bound port or changes its
+size is refused, and `BindBuffer` refuses a port. Every region counts in the
+instance's memory account at `GpuRegion.BytesOf` for its policy, a port's
+whether or not it is bound yet (`ShaderPipelineRenderNode.RegionBytes`), and
+`world.budget`'s live row for each graph instance prints its `regions` bytes.
+After a frame's passes have recorded, the instance flushes every region's share
+of the slot and records each owed copy in one command buffer submitted ahead of
+the frame's passes: a memory barrier ordering earlier submissions' reads before
+the copies' writes, the copies, then a buffer barrier per copied buffer to the
+compute and fragment stages. A recorder only writes a region's contents and binds
+its slot's `GpuRegion.Buffer`; it records no copy and no barrier.
+
+## The display encode
+
+The engine's working images are float (`RenderGraphPackageCatalog.WorkingFormat`,
+`R16G16B16A16Float`): every SDF view's color, and every version of a world's root
+graph that the views are placed into and the post passes and the overlay draw
+over. A working value is the shading's display-referred value, one at SDR white,
+with headroom above it. Nothing quantizes it until the display encode
+(`Assets/Runtime/display-encode.frag.hlsl`, drawn over the fullscreen triangle of
+`display.vert.hlsl`), which samples a working image 1:1 by fragment coordinate
+and writes it in the color space its target shows:
+
+- **SDR** (`DisplayColorSpace.Srgb`): the value plus the dither, clamped. A
+  target that encodes sRGB on write takes that value decoded to linear light,
+  which its write encodes back.
+- **HDR10**: the value decoded from the sRGB transfer to linear light, moved from
+  BT.709 to BT.2020 primaries, scaled by `DisplayOutput.WhiteScale` at the
+  paper-white level, and encoded by the ST 2084 perceptual quantizer, plus the
+  dither.
+- **scRGB**: the value decoded to linear light and scaled by the white scale.
+
+The dither is the R2 sequence at the output pixel, half a code of the target's
+format either side of the value its write quantizes: a code of an 8-bit format,
+sRGB or not, a code of a 10-bit one, and none on a float target, which does not
+quantize, SDR's float fallback included. It breaks gradients into noise rather
+than bands.
+
+Its one group, `DisplayEncodeLayout`, is the pass group: the image at binding 0,
+its sampler at 1 and the encode block at 2, the block holding the color space,
+the white scale, the dither step and whether the target encodes sRGB, all read
+from the `DisplayOutput` it writes (`DisplayEncodeLayout.WriteBlock`).
+`SurfaceEncoder` states the pipeline once (`SurfaceEncoder.Key`), an entry of the
+[pass-pipeline cache](#the-pass-pipeline-cache), and it has three writers. Each
+swapchain compositor draws it into its back buffer in the swapchain's
+`DisplayOutput` at the host's `PresentationOptions.PaperWhiteNits`, so the
+compositor is the encode's writer rather than a blit after it; a World asks for
+an HDR output and its paper white through its host section's `colorSpace` and
+`paperWhiteNits`, and SDR is the default and the fallback. A node's preview
+of an external output draws it in SDR into RGBA8. And a capture of an image no
+surface carries, a float output of any instance, draws it in SDR into an RGBA8
+target of its own and reads that back (`SurfaceEncoder.ReadSdr`), moving an image
+published in another layout into the one it samples in and back; a presenter's
+frame capture of a float root surface does the same. A capture of an instance
+is therefore its working output through the SDR encode, and a capture of the
+root is what an SDR display shows.
+
 ## Probe kinds (`puck.probe.manifest.v1`)
 
-An probe kind is data the same way a shader set is: one `<id>.puck.probe.json`
-manifest, found by `ProbeKindCatalog.Scan` under a deploy's `Assets/Probes`
+A probe kind is data: one `<id>.puck.probe.json` manifest, found by `ProbeKindCatalog.Scan` under a deploy's `Assets/Probes`
 tree. A KERNEL-class kind also ships an HLSL source beside it. The build
 compiles each entry point the kernel block names to Direct3D 11 compute
 bytecode (`cs_5_0`), written beside the source as `<stem>.<entry>.dxbc`
 (`ProbeKindManifest.KernelBytecodePath`) by the shared recipe's
 `CompileDirect3D11Kernels` target for every `Direct3D11KernelSource` item, and a kernel
-host creates the kernel from that bytecode on the camera's own device, so
-nothing compiles there. The camera frame converter's YUY2, NV12 and L8
+host creates the kernel from that bytecode on its own Direct3D 11 device, so
+nothing compiles there. The host is the camera graph a camera trigger names, or,
+for a kernel whose trigger socket reads a view or another probe and that binds
+no camera, the render adapter's own host, which cycles the kernel whenever its
+trigger publishes a frame. The camera frame converter's YUY2, NV12 and L8
 conversion kernels (`camera-conversion.hlsl` in `Puck.Platform.Windows`) are
 `Direct3D11KernelSource` items too, and read the stream's colorimetry from a
 constant buffer rather than from generated source. Direct3D 11 exists only on
@@ -484,13 +1168,13 @@ runs, only the kind's own `class`.
 |-----|---------|
 | `$schema` | `puck.probe.manifest.v1`. |
 | `name` | The kind's id; the manifest filename is `<name>.puck.probe.json`. |
-| `class` | `kernel` (handwritten GPU compute on the camera graph's own device and worker) or `model` (an out-of-process host; no host runs a `model` kind yet). |
+| `class` | `kernel` (handwritten GPU compute on its host's own device and worker) or `model` (an out-of-process host; no host runs a `model` kind yet). |
 | `inputs[]` | `{ name, class: "frame"\|"strobePair", optional?: bool }`, `1..8` sockets bound at `t0, t1, …` in this order (a `strobePair` socket takes two consecutive registers, lit then unlit). `name` is unique within the manifest: letters, digits, or `-`, starting with a letter. A document row plugs one `WorldFrameSource` into each socket by name; `optional` lets a row leave it unbound. |
-| `trigger` | The socket name whose new frame starts a cycle; defaults to `inputs[0].name`, must name a declared socket. |
+| `trigger` | The socket name whose new frame starts a cycle; defaults to `inputs[0].name`, must name a declared socket. A document row binds it to a camera (the camera graph hosts the kernel) or to a view or a probe with no camera socket anywhere (the render adapter's own host runs it). |
 | `output` | `{ of: <socket name>, format?: "rgba8" }`—a texture the kind writes each cycle at the named socket's bound source extent, published like a camera frame; a screen shows it as a `probe` source. `of` must name a declared socket. Absent for a channels-only kind. |
 | `kernel` | `{ source, accumulate, finalize }`, required for a `kernel`-class kind; `source` is an HLSL file beside the manifest. |
 | `channels[]` | `{ name, min, max, neutral, description }`, `1..8` entries (a `ProbeReading` carries at most 8 channels); `neutral` must lie in `[min, max]`. |
-| `config` | Same shape as a shader set's `config`—bound through the same `ShaderConfigBinding`. |
+| `config` | Name → `{ type, default, min, max, description }`, the same field shape a [package's config](#post-process-packages) declares, bound through the same `ShaderConfigBinding`. |
 
 ### Kernel ABI
 
@@ -506,9 +1190,25 @@ reflection:
 | `RWStructuredBuffer<float> Channels : register(u1)` | `channels.Count + 1` floats, written once by `finalize`: the kind's channels in declaration order, then confidence. |
 | `RWTexture2D<float4> Output : register(u2)` | The declared `output`, when the kind has one; written by `accumulate`, copied to the published ring slot after `finalize`. |
 
+`average.hlsl` (the shipped `average` kind) is the smallest texture-writing
+kind: its one `frame` socket is its trigger and its output's extent, it writes
+each color channel clamped to `[0, 1]` times `tintR`/`tintG`/`tintB` to `Output`,
+and its channels are the means of those clamped input values. Bound to a view,
+it measures what a camera in the world sees, on the render adapter's own host.
+
+A view export carries half-float working color: display-referred values with
+headroom, as defined by [the display encode](#the-display-encode). Sampling it
+as `float4` preserves those values without a transfer conversion. Camera color
+frames and probe outputs carry 8-bit sRGB values sampled through UNORM views;
+the probe's texture output remains RGBA8 sRGB. The float format does not imply
+linear light. `average` measures display values, and `faerie` uses the same
+display values for its color and painting inputs. The float-input kernel laws
+pin midtones and the RGBA8 output; the `probe-sources` canary checks red/blue
+relations and export resizing, without pinning an exact color transfer.
+
 `ir-blob.hlsl` (the shipped `ir-blob` kind) is the reference: an 8×8
-`accumulate` pass weighs each pixel by how far its luminance clears
-`threshold`, group-reduces, and atomically adds fixed-point sums into
+`accumulate` pass clamps each pixel's luminance to `[0, 1]` and weighs it by how
+far it clears `threshold`, group-reduces, and atomically adds fixed-point sums into
 `Accumulate` (the scale is derived from the frame's pixel count so no
 resolution overflows a `uint` slot); a single-thread `finalize` divides out
 the weighted centroid (`x` right-positive, `y` up-positive like a stick),
@@ -563,10 +1263,10 @@ pipeline is never called one. This runtime's
 former “study” name was accidental; neither the runtime, the document
 vocabulary, nor a compatibility alias restores it.
 
-`puck.shader.pipeline.v1` documents declare resources, passes and outputs.
-JSON is the authoritative pipeline model; any future `.puck` pipeline
+A pipeline's `puck.render.graph.v1` document declares resources, passes and
+outputs. JSON is the authoritative graph model; any future `.puck` graph
 vocabulary must lower into it and reuse its validation rather than introduce a
-second graph compiler. A world names a pipeline document, a one-off shader or a
+second graph compiler. A world names a graph document, a one-off shader or a
 [package](#packaging-a-pipeline) by path, and that path loads the JSON model: no
 `.puck` vocabulary for authoring one exists yet.
 
@@ -595,7 +1295,7 @@ writing its successor, or reads it from the previous frame, samples discarded
 contents (`SHADERPIPE_DISCARDED_READ`). A graphics pass may write either end of
 a forward. The version it writes is an attachment of its render pass, loaded
 when the version forwards a predecessor and cleared (a color to opaque black, a
-depth to one) when its writer starts from discarded contents, and stored
+depth to its `clearDepth`) when its writer starts from discarded contents, and stored
 exactly when anything uses the version afterwards: a reader, a successor,
 publication, or the next frame. The render pass leaves every attachment in its
 attachment layout, and the next access's planned barrier moves it on, a
@@ -615,28 +1315,73 @@ writes. `outputs` lists the public versions by name, and the first is
 published by default. A public output can be an intermediate result as well as
 the final image. `pipeline.output` selects any live image version the frame
 does not consume.
-The planner reserves explicit descriptor bindings, then assigns omitted
-compute outputs before inputs using the lowest free binding numbers.
-Graphics outputs are attachments; only their inputs consume descriptors.
-Graphics input bindings must be consecutive in input order, starting at zero
-(`SHADERPIPE_GRAPHICS_BINDING`), and outputs have no descriptor binding
-(`SHADERPIPE_GRAPHICS_ATTACHMENT_BINDING`). Compute bindings may be sparse.
-The planned references carry the resolved numbers for both the
-compiler and executor. Direct3D 12 has no binding numbers: it assigns a pass's
-registers per type in the order its inputs and then its outputs are declared,
-so sampled images and read-only buffers take `t0`, `t1`, … and written images
-and buffers take `u0`, `u1`, … whatever their binding numbers are.
+A document names no binding: where each port binds follows from its pass's
+interface ([frame values, extent and ports](#frame-values-extent-and-ports)),
+and graphics outputs are attachments that bind nothing. A binding's Direct3D 12
+register number equals its Vulkan binding number in the register space of its
+set: a pass group's sampled image at binding 1 is `t1, space3` with its sampler
+at `s2, space3`.
 
-A buffer resource is a raw buffer of 32-bit words. A pass reads it as a
-`ByteAddressBuffer` and writes it as an `RWByteAddressBuffer`, and both
-backends bind it as a raw view, so a shader addresses it in bytes. A buffer
-declares only its `sizeBytes`; there is no element type or stride to declare.
+A buffer resource a shader pass binds is a raw buffer of 32-bit words. A pass
+reads it as a `ByteAddressBuffer` and writes it as an `RWByteAddressBuffer`,
+and both backends bind it as a raw view, so a shader addresses it in bytes.
+Such a buffer declares only its `sizeBytes`.
+
+The planner also describes engine work that records itself, a frame graph's
+package passes, which the pipeline node never runs. For those it has three
+more pieces of vocabulary:
+
+- A pass's `dispatch` is `Extent` (enough workgroups to cover the frame, the
+  default and the only shape a shader pass records), `Groups` with fixed
+  `groupCountX`, `groupCountY` and `groupCountZ`, or `Indirect`, which reads
+  the three group counts from buffer version `arguments` at
+  `argumentsOffsetBytes`. The pass reaches that version in the
+  indirect-argument state, listed before its inputs, so the planner orders the
+  version's writer first and records a barrier into that state even after
+  shader reads: a read of another kind is another read state.
+- A buffer's `strideBytes` makes it a structured buffer of elements that size.
+- A buffer's `count` sizes it in place of `sizeBytes`, as a sum of terms. Each
+  term is `elements` per unit of the product of the bases in `per`, counts the
+  host resolves: `Extent` pixels, program `Instances`, `ProgramWords`,
+  `Viewports`, `Tiles` of one viewport, `DynamicTransforms`, and the
+  `InstanceMaskWords` of one tile and `InstanceGridWords` the host derives from
+  its instances, and the `BrickPoolVoxels` of the world's SDF brick pool. The
+  SDF engine's cull buffer, for one, is
+  `[{ "per": ["Viewports", "Tiles"], "elements": 4 }, { "per": ["Viewports", "Instances"], "elements": 12 }]`
+  floats. A term names at least one basis and each basis once, and no two terms
+  name the same bases, so a count has one spelling and a size that scales with
+  nothing stays `sizeBytes`. `ShaderPipelineResource.ResolveSizeBytes` computes
+  the bytes. A term whose bases the host resolves to zero units adds nothing,
+  and a buffer whose terms all resolve to zero bytes is refused, naming the
+  buffer and its terms. The render node resolves a graph's counts through the
+  counter its package passes' factories state for its instance
+  (`IRenderGraphPackageFactory.CounterOf`, an `IShaderPipelineStorageCounter`)
+  at the extent it builds the graph for, and rebuilds the installed graph
+  beside it, as a resize does, when the counter's revision moves. A graph whose
+  packages state no counter resolves the extent alone.
+- A resource's `transient` makes its storage frame-transient: one allocation
+  every frame slot shares, instead of one per slot. Each frame writes it from
+  discarded contents before anything reads it, and nothing reads it across
+  frames, so the planner's barrier before its first use of a frame, from the
+  state the frame before left, orders the two frames' use of the one
+  allocation on the queue. Only a chain's first version declares it, and a
+  transient storage that is history, published, host- or zero-initialized,
+  read as the previous frame, or first reached by anything but its first
+  version's write is refused (`SHADERPIPE_TRANSIENT`).
+
+A shader pass declaring a `Groups` or `Indirect` dispatch is refused
+(`SHADERPIPE_DISPATCH_PACKAGE`), and so is a shader pass binding a buffer with
+a stride or a count, or a document publishing one no package pass writes
+(`SHADERPIPE_PACKAGE_STORAGE`).
+Malformed shapes and layouts are refused as `SHADERPIPE_DISPATCH_SHAPE`,
+`SHADERPIPE_DISPATCH_ARGUMENTS`, `SHADERPIPE_BUFFER_STRIDE` and
+`SHADERPIPE_BUFFER_COUNT`.
 
 A fullscreen pass draws one triangle that covers the target. By default its
 vertex stage derives the corners from `SV_VertexID` and no vertex buffer is
 bound. `"vertex": "Position"` instead reads each corner's clip-space `float2`
 from a `POSITION` attribute fed by the shared fullscreen-triangle vertex
-buffer, which is how a `render.extensions` shader set runs. Either way the
+buffer, which is how a post-process package runs. Either way the
 fragment stage receives the same `uv`, with (0, 0) at the top left. The planner
 refuses `vertex` on a compute or geometry pass.
 
@@ -681,9 +1426,8 @@ The pass's source holds both stages: the vertex stage at `vertexEntryPoint` and
 the fragment stage at `entryPoint`. Attribute *n* is at location *n*, and the
 vertex stage reads it as `POSITIONn`, its *n*th declared input; a format is
 `R32G32Float`, `R32G32B32Float` or `R32G32B32A32Float`, at a four-byte-aligned
-offset inside the stride (`SHADERPIPE_VERTEX_LAYOUT`). The vertex stage
-receives no parameters, since the push-constant block reaches only the fragment
-stage, so positions are authored in clip space. `vertices` are 32-bit floats
+offset inside the stride (`SHADERPIPE_VERTEX_LAYOUT`). Positions are authored
+in clip space. `vertices` are 32-bit floats
 making whole, finite vertices (`SHADERPIPE_GEOMETRY_VERTICES`). `indices` are a
 triangle list, three per triangle (`SHADERPIPE_INDEX_COUNT`), each naming a
 declared vertex (`SHADERPIPE_INDEX_RANGE`), 16-bit by default or `UInt32`
@@ -702,10 +1446,10 @@ indices, binds both ranges and draws the indices.
 
 ### Loading and installing
 
-See the [three-pass ink pipeline](../../src/Puck.World/Assets/pipelines/ink.pipeline.json)
+See the [three-pass ink pipeline](../../src/Puck.World/Assets/pipelines/ink.graph.json)
 for a complete example: a floating-point feedback simulation feeds a color
 pass, followed by a fullscreen HLSL finish. Each source file lives beside its
-pipeline document. Source paths in the pipeline resolve relative to that
+graph document. Source paths in the pipeline resolve relative to that
 document; the world's path to the pipeline resolves relative to the world.
 
 The loader compiles the whole candidate before the host installs it, and
@@ -714,7 +1458,7 @@ reports one `ShaderPipelineLoadStatus`. `Compiled` carries the candidate.
 changed during compilation, and the host schedules the whole pipeline again.
 `Unsupported` means a required shader tool is absent from this environment.
 A failed pass leaves the last successful pipeline running. Watched editing includes
-the pipeline document, shader files and includes. A candidate captures each
+the graph document, shader files and includes. A candidate captures each
 source revision, and a source edit during compilation triggers a debounced
 whole-pipeline retry. Superseded compiler tasks are canceled and retired after
 their native processes finish. Retiring the replaced graph accounts for its
@@ -740,13 +1484,23 @@ rebuilds the graph at that extent beside the installed one at the next frame
 boundary. History whose resolved extent is unchanged keeps its contents.
 History whose extent changes starts again from its declared initialization: the
 first frame at the new extent reads it as the previous frame's. If the rebuilt graph cannot be
-allocated, the installed graph keeps running at its old extent and the resize
-is not retried until the host asks for a different one.
+allocated, the installed graph keeps running at its old extent.
+
+A refused candidate, a reload or a resize, is not retried on a clock or per
+frame: it is tried again when the host asks for something different, when the
+operator's GPU faults change (`GpuCreationFaults.Revision`: `gpu.faults` arming
+or disarming a fault, or a fault firing elsewhere), and, for one the device's
+descriptor heap refused (`GpuDescriptorHeapRefusalException`,
+`GPU_DESCRIPTOR_HEAP`), when another owner returns heap space
+(`IGpuBindings.HeapReleaseRevision`). This is the rule the SDF engine's pipeline
+source follows. A package pass creates its framebuffers and every other object
+when its graph installs, so a creation fault refuses the install by name and
+never escapes a produced frame.
 
 A paused instance (`pipeline.time pause`, or a time scale of zero) treats each
 host request as either a replacement or a step:
 
-- A reload, an edit of the `views.pipelines` row and a resize replace the graph.
+- A reload, an edit of the `views.graphs` row and a resize replace the graph.
   They are not steps. The paused instance builds and installs the new graph as
   a running one does, and the install renders nothing, consumes no step and
   leaves the submitted-frame count where it was. The instance keeps presenting
@@ -803,7 +1557,37 @@ it takes. The node wraps every GPU service it holds once, so each dispatch,
 draw, barrier, bind, descriptor write, push-constant byte and clear it records
 is counted where it is made, into the pass being recorded. The zero clears that
 start the first frame after an install or a reset count in the first pass. The
-float preview and the output transitions count outside every pass. A
+preview and the output transitions count outside every pass. A package pass
+that skips a frame (`IRenderGraphPackageRecorder.Skips`) records nothing and
+counts as skipped, never as a pass that ran and did no work. A graph a package
+pass of which counts its shaders' own work (`RenderGraphFragmentPass.CountsKernelWork`,
+or `RenderGraphPackage.CountsKernelWork` for a package whose members declare
+the work counters: every pass of `sdf.world`, `place`, `overlay`, the source
+conversions and every post-process package, which must) declares the work
+counters in its interface (`ShaderWorkCounters`), whose generated include
+carries the functions its shaders count through, and keeps a counter buffer and
+a readback buffer per frame slot, one row a pass (`GpuKernelCounters`). A
+compute kernel counts through `puckCountWork`, one wave sum added by the wave's
+first active lane, and a fragment stage through `puckCountFragmentWork`, the
+same over the wave's lanes that are not helper lanes. Every generated include
+declares both functions, and one whose interface declares no work counters
+declares them empty. A kernel therefore counts unguarded: a package's kernel
+that a document pass compiles by naming its source, such as `place` or a source
+conversion, reads the declarations the loader generates for the document's
+interface, and there it counts nothing. `DocumentPassPackageKernelLawTests`
+compiles every package kernel that way. The node clears the slot's counters
+ahead of the first pass and copies them to its readback behind the last, which
+counts one clear, one copy and three buffer barriers outside every pass: the
+clear before the compute and fragment stages that add, those stages before the
+copy, and the copy before the host's read. The ledger adds each row's
+`gpu.march.steps` and `gpu.texels.written` to its pass once the submission
+completes. What the
+node does between submissions to install or rebuild a graph, the sets it
+writes and the pass blocks it sends to every frame slot, counts in no
+submission, whether the install succeeds, fails partway or follows a device
+loss. An install and a reset both leave every slot holding each pass's current
+block, so the first frame after either uploads only what changed since, however
+many frames ran before it. A
 submission's counts become readable (`IGpuWorkSource.TryReadCompleted`) only
 once its fence has signaled. The node checks at the start of every produced
 frame, paused frames included. Each submission has an identity that starts at
@@ -819,9 +1603,11 @@ waits until the nth submission since the last reset (or since boot, if it was
 never reset) has completed. The record ends with two lines the node does not
 write: `memory:`, the device's memory profile, and `residency:`, the policy
 `GpuResidency.Select` chooses for the instance's parameter bytes
-(`ShaderPipelinePlan.ParameterBytes`, each pass's frame prefix and config
-together). The parameters still reach a pass as push constants, so the policy
-reports what the device would choose rather than how the bytes travel; see
+(`ShaderPipelinePlan.ParameterBytes`: the frame group's block once and each
+pass's block). A document pass's blocks travel in constant buffers the node
+writes each frame, one per frame slot, which a device never stages, so the
+policy reports what the selector would choose for those bytes rather than how
+they travel; see
 [the memory profile](../rendering/vulkan.md#memory-profile).
 Both active and paused capture complete against the selected output.
 `ShaderPipelineLoader` resolves source and invokes
@@ -858,16 +1644,63 @@ fence and its output command pool across replacements. The install copies each
 pass's planned accesses, so recording a frame's barriers only reads them. A
 graphics pass records its barriers in one command buffer before its render
 pass; the render pass leaves its attachments in their attachment layouts, and publication moves
-the selected output into the node's output layout. A float or external output
-is published through a float preview, which draws it into an RGBA8 target. The
-preview belongs to the graph: the candidate build creates its modules, targets
-and pipelines for the selected output, and the install allocates its
-descriptors and command pools. Selecting a different output of an installed
-graph builds the new preview on the thread pool; the previous selection stays
-published until the frame that takes the finished build, and the old preview
-then retires. A steady-state frame therefore creates no GPU objects and allocates no
+the selected output into the node's output layout. An image output publishes
+itself in its own format, a float one included, so a consumer on the device
+samples the working image as it is. An external output, a host's image the
+node does not own, is published through a preview, which draws it through the
+[display encode](#the-display-encode) into an RGBA8 target. The preview belongs
+to the graph: the candidate build leases its pipeline from the
+[pass-pipeline cache](#the-pass-pipeline-cache) and creates its targets for the
+selected output, and the install allocates its descriptors, its encode block and
+its command pools. Selecting an external output of an installed graph builds the
+new preview on the thread pool; the previous selection stays published until the
+frame that takes the finished build, and the old preview then retires. Any
+other selection takes effect at once. A steady-state frame therefore creates no GPU objects and allocates no
 managed memory. World supplies inputs and routes
 named instances to layout slots; it does not compile individual passes itself.
+
+### The pass-pipeline cache
+
+A node never creates a pass pipeline of its own. Every pipeline a graph
+installs comes from the composition's `GpuPassPipelineCache`, which holds one
+entry per device and `GpuPassPipelineKey`: a document pass's compute pipeline
+and its shader module, or its graphics pipeline, its two shader modules and the
+render pass it is created for; the display encode's, for a preview, a capture or
+a swapchain; and each package pass's
+(`place`, every post-process package, `overlay` and each uploaded source's
+conversion),
+which the package leases through
+`RenderGraphPackageRecorderContext.Pipelines`. The staged residency policy's
+[region copy](#the-region-copy) is an entry too.
+
+A key's content key hashes the stages' bytecode together with a canonical
+encoding of everything the pipeline is created from: the description's name,
+its bindings or frequency groups, vertex input and depth test, and, for a
+graphics pass, each render-pass attachment's format, load, store and final
+layout. Two passes with equal keys are one pipeline; a changed kernel, layout,
+attachment format or depth test is another. The objects an entry creates are
+named `gpu.pass-pipelines/<name>/<content key>`, from the key alone, whichever
+holder built them.
+
+The candidate build takes a lease on each pass's entry on the thread pool and
+waits for it there. The first lease on a key builds the entry through
+`BackgroundBuild`, and every later lease joins it, so a second instance of a
+graph, a reinstall of the same graph, and the root's place passes create
+nothing. The installed pass holds its lease and releases it last when its graph
+retires, after its framebuffers and sets, so a reload of a changed shader makes
+a new entry while the replaced graph keeps the old one until its submissions
+complete; the last release disposes the entry. The last release of an entry
+whose build is still in the driver cancels it and waits only for that
+creation. Every holder releases on device loss, which empties that device's
+entries, so the rebuild after a loss creates afresh.
+
+The cache counts the shader modules, render passes and pipelines it creates
+under its own `gpu.pass-pipelines` source in `world.counters`, and a node's
+`work lifetime` line counts none of them. The SDF engine's kernel pipelines are
+entries of the same cache, one a kernel variant (`SdfWorldPipelines`). At most
+`GpuPassPipelineCache.BuildConcurrency` of the cache's builds create at once, so
+a cold driver cache translating many pipelines keeps a processor for the thread
+that pumps frames. The mechanism is `Puck.Hosting.GpuBuildCache<TKey, T>`.
 
 ### Memory budget
 
@@ -880,12 +1713,13 @@ counts two numbers from the plan it would install:
   history, the images a graphics pass draws into and depth attachments included,
   each geometry pass's vertex and index buffer, the fullscreen triangle's vertex
   buffer for each pass that reads the
-  `Position` input, and the float preview its selected output needs.
+  `Position` input, and the preview an external selected output needs.
 - **Replacement peak**: everything the node owns at that moment plus the
   candidate's steady-state bytes. What the node owns is the installed graph and
   its preview, replaced objects still waiting for the GPU, published images
-  held from them, and the staging buffer the capture readback creates on the
-  first capture, sized to the published RGBA8 surface. All of it exists
+  held from them, and what the first capture creates: the readback's staging
+  buffer, sized to the published surface, and for a float output the display
+  encode's RGBA8 target beside it. All of it exists
   together while the candidate allocates.
   History the candidate carries over is moved into it, never allocated fresh,
   so the peak counts those instances once and is lower by exactly their bytes.
@@ -898,8 +1732,8 @@ or allocated, by the code `SHADERPIPE_BUDGET`. The refusal names the peak, the
 steady state and the budget, and reaches the host as `LastSwapError`: the
 `GPU candidate refused:` report, `pipeline.status`, and a failed
 `pipeline.wait <name> installed` or `resized`. The installed graph keeps
-running. It is never freed to make room. A float preview that a selection
-creates is held to the same budget and refused the same way. The installed
+running. It is never freed to make room. A preview that a selection creates is
+held to the same budget and refused the same way. The installed
 pipeline rebuilt after a device loss is not a replacement and is never refused:
 nothing else is owned then, and the graph it restores already fit.
 
@@ -915,18 +1749,29 @@ the budget beside `owned` and the installed graph's `steady` and `peak`, where
 `peak` is what a reload of the installed graph would reach from what the node
 owns now.
 
+A candidate that fits can still fail while it allocates, when the device
+refuses a creation. The node disposes exactly what the candidate created,
+keeps the installed graph running, and reports the failure as `LastSwapError`
+the same way. `gpu.faults` makes that happen on a real device: `gpu.faults arm
+<kind> [<n>]` fails the nth creation of a kind counted from the arming, or the
+next one, with `GPU_CREATION_FAULT` before the call reaches the device. The
+kinds are `pipeline`, `buffer`, `image`, `render-pass`, `framebuffer`,
+`shader-module`, `command-pool` and `bindings-pool`. `gpu.faults disarm`
+clears every fault and count, and `gpu.faults list` prints them. The verb
+answers the operator alone, so no world document reaches it.
+
 ### Per-instance overrides
 
-A world's `views.pipelines` row can override its source's parameters for that
-one instance. `overrides` is keyed by pass name, and each value is that pass's
+A world's `views.graphs` row that names a `source` can override that source's
+parameters for its one instance; a `package` row takes no override. `overrides` is keyed by pass name, and each value is that pass's
 config object, keyed by field. A field the row does not name keeps the default
 the source declares, and the source file itself is never written, so two rows
 that name one source share its defaults and keep their own overrides. `output`
-names the image version the instance shows, and `timeScale` sets its clock
-rate:
+names the image version the instance shows, and `timeScale` sets the rate its
+time follows the presentation clock at:
 
 ```json
-{ "name": "ink", "source": "../pipelines/ink.pipeline.json", "timeScale": 0,
+{ "name": "ink", "source": "../pipelines/ink.graph.json", "timeScale": 0,
   "output": "image", "overrides": { "visualize": { "exposure": 0.5 } } }
 ```
 
@@ -945,7 +1790,7 @@ binds nothing again.
 Changing a value live is a preview. A preview is session state, like pause,
 pending steps, elapsed time, capture requests and feedback history, none of
 which a document records. `pipeline.commit` turns the preview into the
-authored row through the `CommitViewPipeline` mutation. The mutation carries
+authored row through the `CommitViewGraph` mutation. The mutation carries
 the revision of the row the preview was based on, which is the row's
 fingerprint, and the content identity and config-schema identity of the source
 the installed graph was compiled from. When the commit applies, the server
@@ -964,10 +1809,66 @@ graph that failed to compile is never the installed one, so its values are
 never committed. `world.save` writes only committed values, through the atomic
 file writer, so a failed write leaves the previous document complete.
 
-For a pipeline document or a one-off shader, the source identity covers only
+For a graph document or a one-off shader, the source identity covers only
 the file the row names; its pass sources and includes are outside it. For a
 package, it is the content pin of the canonical manifest, which pins every file
 of the source closure, so an edit anywhere in a package is a changed source.
+
+A row can also bind a pass's scalar config fields to state. `parameters` is
+keyed by pass name and then by field, like `overrides`, and each value is a
+number or a `state.<row>[.<key>][.$target]` token naming a Fixed or Int cell,
+the grammar a HUD gauge and a camera operand read:
+
+```json
+{ "name": "cistern", "source": "../pipelines/water.graph.json",
+  "parameters": { "water": { "level": "state.cisternLevel" } } }
+```
+
+The token joins the presentation manifest, so the state mirror registers its
+slot when the document installs, and the host reads it through that slot each
+frame, eased by default and as stored truth with `.$target`, and writes it into
+the pass's parameter block at the field's offset only when it moved
+(`ShaderPipelineRenderNode.TryWriteParameter`). A float field takes the value as
+it presents; an int or uint field takes it rounded to the nearest integer, so an
+integer cell arrives exactly. A binding that does not resolve draws the field's
+source default. A field a row names in both `parameters` and `overrides` is
+refused at validation naming the row, the pass and the field, and a live
+`pipeline.set` of a bound field is refused the same way. When the server binds
+the row, a parameter naming a pass or field the source does not declare, or a
+vector field, is refused as `pipeline.overrides/ParameterUnbound`.
+
+A pass can also declare `arrays`, each a scalar element type and a length of
+at most 4,096, which a parameter binds to a whole keyed state row:
+
+```json
+"arrays": { "tiles": { "type": "int", "length": 64 } }
+```
+
+```json
+"parameters": { "board": { "tiles": "state.tiles" } }
+```
+
+Each array is a read-only structured buffer of its element type in the World
+group, set 1, bound in ordinal name order, and a pass reads element `i` through
+its generated accessor, `tilesAt(i)`, which reads zero past the array's
+length. Element `i` holds the row's cell keyed `i`: a lattice row presents one
+element per cell of its topology, any other keyed row its cell ceiling, and an
+absent cell and every element past the row read zero, as an unbound array does.
+
+The buffer an array reads is a region the instance's node keeps per row and
+element type, so every pass of the instance that reads one row as one element
+type reads one copy of it, as long as the longest array reading it. A row read
+eased and the same row read with `.$target` are two rows. The region takes the
+residency policy the device selects for its size; a staged region reaches its
+device-local buffer through the node's region copies. The state mirror reads
+the row whole through one row slot when a tick moves it, and the host writes
+the slot's elements into the row's regions only when the slot changed. A change
+to which row an installed graph's array reads rebuilds the graph beside the
+installed one, as a resize does. The load gate refuses a row that is not
+keyed, one longer than the array, and one whose values the element type cannot
+hold exactly: an integer element takes only an Int or Bool row whose declared
+bounds lie in its range, and a Fixed row fills only a float element. A scalar
+field bound to a keyed row with no key is refused the same way.
 
 A replay tape records the directory the server's source reader resolves rows
 against, and `replay.verify` gives its shadow server a reader over the same
@@ -978,9 +1879,10 @@ instead of adding a case to World or to the SDF engine.
 
 ### One-off shaders
 
-A one-off shader is one HLSL compute pass writing the `output` image at binding
-0 (`u0` on Direct3D 12), with entry point `main`. It reads resolution from that
-image and time, pointer and paired camera from the [frame block](#the-frame-block);
+A one-off shader is one HLSL compute pass writing the image `output`, with entry
+point `main`. It includes its generated interface and reads its extent, time,
+pointer and paired camera through it
+([frame values, extent and ports](#frame-values-extent-and-ports));
 a zero `cameraFov` means no camera is paired.
 [The Moth shader](../../src/Puck.World/Assets/pipelines/moth.hlsl) and
 [the genesis card](../../worlds/genesis/card.hlsl) are worked examples.
@@ -1049,11 +1951,22 @@ precompiled SPIR-V and DXIL per stage and variant
 and runs no tool, so a World whose row names a package, or names a source the
 [build's package store](#the-builds-package-store) holds, needs no compiler; the
 `no-device-compile` canary runs both with DXC hidden from the World's search
-path. Only the `default` variant is built today; every variant of a pass reads
-the same interface, so a quality tier cannot change what a pass reads.
+path. Every pass carries the `default` variant, compiled with no tier
+defined, then one variant for each tier its graph declares in `tiers`, cheapest
+first, each compiled with `PUCK_QUALITY_TIER` defined to 0, 1 or 2 for `low`,
+`medium` or `high` (`QualityTiers`, `ShaderCompiler.StepsOf`,
+`RenderGraphDefinition.Variants`). A graph that declares no tier, and every
+one-off shader, builds `default` alone, so each declared tier costs one more
+compile of every pass. A source that varies by tier tests the symbol with
+`#if defined(PUCK_QUALITY_TIER)`. Every variant of a pass reads the same
+interface, so a quality tier cannot change what a pass reads.
+
+```json
+{ "$schema": "puck.render.graph.v1", "name": "tint", "tiers": ["high"], … }
+```
 
 ```sh
-puck shaders package src/Puck.World/Assets/pipelines/ink.pipeline.json --output artifacts/ink
+puck shaders package src/Puck.World/Assets/pipelines/ink.graph.json --output artifacts/ink
 puck shaders pipeline artifacts/ink
 ```
 
@@ -1087,14 +2000,14 @@ manifest's own name is refused.
 |-----|---------|
 | `$schema` | `puck.shader.package.v1`. |
 | `name` | The pipeline's name. |
-| `document` | The logical path loading starts from: the pipeline document or the one-off shader. |
+| `document` | The logical path loading starts from: the graph document or the one-off shader. |
 | `compiler` | `{ version, tools: [ { name, version } ] }`: the compiler revision every pass compiled under, and the first line each native tool's `--version` query printed. |
 | `capabilities` | `{ targetFloor: { vulkan, shaderModel }, imageFormats, buffers, workgroupInvocations, parameterBytes }`, derived from the plan: the target every stage compiles to, every image format a storage declares, whether a raw buffer is bound, the largest compute workgroup, and the largest pass parameter block. |
 | `files[]` | `{ path, pin, bytes }` for every authored file of the closure, ordered by path. `pin` is the `sha256/<hex64>` content pin of the file's UTF-8 text, the same hash the cache key records; `bytes` is its length on disk. |
-| `passes[]` | `{ name, stages: [ { stage, entryPoint, profile, steps: [ { tool, options } ] } ], interface, declarations, variants: [ { name, binaries: [ { stage, target, path, pin, bytes } ] } ] }` in execution order. The stages are `ShaderPipelineLoader.StagesOf`, the loader's one statement of what a pass compiles: a fullscreen pass lists the loader's HLSL vertex stage before its fragment stage, and a geometry pass its own vertex stage before its fragment stage. `interface` and `declarations` are `{ path, pin, bytes }`; the interface's pin is its hash (`ShaderInterface.Hash`), which versions the declarations and every binary. A binary's `target` is `spirv` or `dxil`, and its pin covers its bytes. |
+| `passes[]` | `{ name, interface, declarations, variants: [ { name, stages: [ { stage, entryPoint, profile, steps: [ { tool, options } ] } ], binaries: [ { stage, target, path, pin, bytes } ] } ] }` in execution order, the variants `default` and then each declared tier. Each variant's stages carry the steps it compiled with, a tier's defining `PUCK_QUALITY_TIER`; every variant compiles the same stages, which are `ShaderPipelineLoader.StagesOf`, the loader's one statement of what a pass compiles: a fullscreen pass lists the loader's HLSL vertex stage before its fragment stage, and a geometry pass its own vertex stage before its fragment stage. `interface` and `declarations` are `{ path, pin, bytes }`; the interface's pin is its hash (`ShaderInterface.Hash`), which versions the declarations and every binary. A binary's `target` is `spirv` or `dxil`, and its pin covers its bytes. |
 
 The compile facts are not assembled beside the compiler.
-`compiler.version` and each pass's `stages` are the
+`compiler.version` and each variant's `stages` are the
 `ShaderCompileIdentity` the compiler hashed into that pass's cache key, and
 every pin is that key's content hash. The manifest is canonical JSON, so
 packaging the same sources with a clean cache and with a warm one writes the
@@ -1106,12 +2019,14 @@ reads no tool to check them.
 Loading refuses by name, in this order. It reads the manifest strictly: a path
 that is not a directory holding the manifest, an unknown or missing member, a
 malformed path or pin, a duplicate path, a document that is not a listed file,
-or a pass without a `default` variant carrying one SPIR-V and one DXIL binary
-per stage is `SHADERPKG_MALFORMED`. It reads every listed file, interface,
+or a pass whose variants are not `default` followed by distinct tiers cheapest
+first, each compiling the same stages and carrying one SPIR-V and one DXIL
+binary per stage, is `SHADERPKG_MALFORMED`. It reads every listed file, interface,
 declaration and binary: a missing one is `SHADERPKG_FILE_MISSING`, and one whose
 length or pin differs is `SHADERPKG_FILE_PIN`. It plans the document and
 collects the closure again inside the package. A closure that is not exactly
-the listed files, or passes other than the recorded ones, is
+the listed files, passes other than the recorded ones, or variants other than
+the document's declared tiers, is
 `SHADERPKG_CLOSURE`, and capabilities other than the recorded ones are
 `SHADERPKG_CAPABILITIES`. A pass whose interface, or the declarations this
 engine generates from it, differs from the one its binaries were built for is
@@ -1127,7 +2042,7 @@ holds files but no manifest is refused as `SHADERPKG_OUTPUT` rather than
 replaced.
 
 A package is not a sandbox. Loading one runs its GPU code with the same trust
-as a pipeline document on disk.
+as a graph document on disk.
 
 ### Limits
 
@@ -1142,7 +2057,7 @@ only tighten the defaults.
 | `MaxFileBytes`: any one file | 4 MiB | `SHADERSRC_FILE_BYTES` |
 | `MaxDependencies`: includes reached | 256 | `SHADERSRC_DEPENDENCY_COUNT` |
 | `MaxIncludeDepth`: nesting, a stage's own include being depth one | 32 | `SHADERSRC_INCLUDE_DEPTH` |
-| `MaxCompileSteps`: native tool runs across a package's passes | 512 | `SHADERSRC_COMPILE_STEPS` |
+| `MaxCompileSteps`: native tool runs across a package's passes and variants | 512 | `SHADERSRC_COMPILE_STEPS` |
 
 An include outside the closure's root is `SHADERSRC_OUTSIDE_CLOSURE`.
 
@@ -1152,9 +2067,9 @@ instance may hold is bounded separately by its
 
 ### Naming a package from a World
 
-A `views.pipelines` row's `source` names a package the way it names any other
+A `views.graphs` row's `source` names a package the way it names any other
 source: by path, relative to the world document. A path that is a directory is
-a package; any other path is a pipeline document or a one-off shader.
+a package; any other path is a graph document or a one-off shader.
 
 ```json
 { "name": "ink", "source": "../packages/ink", "overrides": { "visualize": { "exposure": 0.5 } } }
@@ -1172,11 +2087,26 @@ other source, and the server's source read verifies the package's files, so a
 row naming a damaged package with overrides is refused as `SourceUnreadable`
 with the package's code.
 
+A row names its quality tier from `low`, `medium` and `high`, written bare in
+`.puck` (`tier: high`) and as that string in JSON; any other word, in any other
+case, is refused naming it. The host loads the package's variant of that name,
+or compiles the source with the tier defined where no package holds it, and a
+row naming no tier loads `default`. A row naming a tier its graph does not
+declare falls back to `default` rather than being refused, since a document
+names its tier without knowing which graphs vary by it, and says so: the load's
+report reads `at tier low->default (the graph declares no low variant)` and
+`pipeline.status` prints `tier=low->default`, where a declared tier prints
+`tier=high`. A tier change recompiles the row. A tier selects how the passes
+compute and never what they read: two documents differing only in a row's tier
+compile the same presentation manifest, fill the same state mirror and hash the
+same state (`WorldViewGraphTierLawTests`). A package row names no tier.
+
 ### The build's package store
 
 A shipped world names its pipelines by source, and the game's build compiles
 them. The tree run of `puck compile` that writes the shipped worlds
-(`build/WorldAssets.targets`) reads every `views.pipelines` row of every world
+(`build/WorldAssets.targets`) reads every `views.graphs` row that names a
+`source` in every world
 it compiled, resolves each row's source from the document's place in the tree,
 and writes that source's package into the store at the output's root, shipped as
 `Assets/worlds/packages`. `ShaderPackager.StoreAsync` writes it under the
@@ -1186,7 +2116,8 @@ pin, and each pass's name, interface hash and generated declarations' pin. A
 one-off shader plans under its instance's name, so two rows naming one shader
 under two names store two packages. A missing source, a closure that does not
 fit a package, or a pass that does not compile fails the build, and a package
-no row names any more is removed.
+no row names any more is removed, both from the store and, after the copy,
+from the output's `Assets/worlds/packages`.
 
 The World's packager is given the store, so `LoadSource` computes a source row's
 key the same way, without compiling, and loads the stored package with that
@@ -1215,7 +2146,12 @@ factory seams with a device-free fake. A failure injected at every allocation
 of a replacement is refused, with each created object disposed once and the
 installed graph still producing; the same holds for a replacement that
 publishes a float output, whose preview is part of the count, for a selection
-whose preview cannot be allocated, and for a resize. The budget laws count the
+whose preview cannot be allocated, and for a resize. The same law runs through
+`GpuCreationFaults`, the decorator `gpu.faults` arms on a real device: every
+creation of every kind a replacement makes fails in turn, the refusal names
+its kind and number, disposal is exact, and the same replacement tried again
+installs. `GpuCreationFaultsLawTests` hold the decorator itself: an armed fault
+fires once, at the nth creation of its kind, and never reaches the device. The budget laws count the
 bytes the fake creates independently of the node. For each graph shape (the
 feedback graph with and without carried history, a float output, a buffer
 handoff, a `Position` vertex input and a resize), the planned steady state is
@@ -1235,10 +2171,10 @@ node's latest submission, never while the queue holds it and never through a
 device drain. Only the images behind the two most recently published surfaces
 outlive it, each until the second submission after it was displaced. Eight
 replacements on a paused node leave the owned bytes at one graph plus those two
-images. A float-output replacement creates every object before the first one
+images. A replacement with a preview creates every object before the first one
 retires. No install creates a shader module or a
 pipeline on the frame thread: the law counts every creation by its thread
-across a first install, a reload with a float preview, a resize and a rebuild
+across a first install, a reload with a preview, a resize and a rebuild
 after a device loss. While a build is held inside the driver, every frame keeps
 presenting the installed graph, a step waits for its candidate, and a device
 loss waits the build out and releases what it created. A reload on a paused
@@ -1249,7 +2185,8 @@ paused waits for that graph's first frame. A swap followed by a
 resize before the next frame is built once. A resize rebuilds beside the installed
 graph and clears the slot of history whose extent changed that the next frame
 reads, carries history whose extent did not, installs on a paused instance
-without rendering, and is not retried after a refusal.
+without rendering, and is retried after a refusal only on a change it was
+refused on.
 `ShaderPipelineVersionLawTests` plan a forwarding chain declared out of order:
 a reader of a forwarded version runs before the overwrite, a reader that must
 also follow it is refused as a cycle naming both passes, each forward that
@@ -1269,8 +2206,8 @@ match its render pass and a pipeline whose depth test disagrees with it.
 `ShaderPipelineVertexInputTests` cover the
 `vertex` member. `puck canary pipeline-feedback pipeline-ink pipeline-edit
 pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override
-pipeline-package pipeline-budget pipeline-churn pipeline-geometry pipeline-echo
-no-device-compile` runs the real World
+pipeline-package pipeline-budget pipeline-churn pipeline-fault pipeline-geometry pipeline-echo
+interface-echo no-device-compile` runs the real World
 offscreen on Vulkan and on Direct3D 12. It checks a float
 history against an arithmetic oracle across pause, reset, step and paused
 capture, and checks the shipped ink pipeline's exposure parameter in the
@@ -1286,9 +2223,9 @@ a paused instance: captures still show the last rendered frame, and the next
 step renders through the latest edit alone; its discriminating leg reverses the
 order. It asserts no `superseded:` line, because the first edit may equally
 install before the second arrives and be replaced without one. The shapes canary runs compute, compute and fullscreen
-passes over half-float intermediates, sparse bindings, a raw buffer read at a
+passes over half-float intermediates, a raw buffer read at a
 byte offset and the `Position` vertex input, and checks each stage's value
-through output selection and the float preview, paused and running. The
+through output selection and the capture's display encode, paused and running. The
 geometry canary draws two indexed geometry passes, 16-bit then 32-bit indices
 listed out of order, into one color and one depth chain, and samples the result
 by UV into the published image. Its regions follow from the geometry: the second
@@ -1319,7 +2256,7 @@ captures read the override's arithmetic. Its discriminating leg commits
 nothing, so the source row reads the default, and alters a package file, so the
 package row fails with `SHADERPKG_FILE_PIN`. The budget canary caps a paused
 feedback instance at 256 KiB with `pipeline.budget` and loads an edit whose
-256x256 history peaks at 1650688 bytes, the capture readback's staging buffer
+256x256 history peaks at 1656832 bytes, the capture readback's staging buffer
 included. The edit is refused by
 `SHADERPIPE_BUDGET` with those exact counts, the paused capture is unchanged,
 a step still renders through the installed graph, and an in-budget edit then
@@ -1333,19 +2270,26 @@ the next capture of the same extent.
 Run with `puck canary --debug-layers`, any validation message fails it. The Direct3D 12 drain does not report the layer's pipeline-library miss
 (`LOADPIPELINE_NAMENOTFOUND`), which the cache counts as `gpu.pipeline-cache.misses`. The echo canary runs
 a generated echo pass with `pipeline.sentinels` on and reads every frame-block
-member back as its sentinel; its discriminating leg's hand-perturbed
-declarations turn its pixels red. The no-device-compile canary hides DXC from the World's
+member back as its sentinel; its discriminating leg's echo expects time and
+timeDelta to hold each other's sentinel, which turns those two pixels red. The no-device-compile canary hides DXC from the World's
 search path: the shipped ink pipeline, named by source, renders from the build's
 stored package, the tint source is refused by `SHADERPKG_ABSENT`, and the tint
 package renders from its binaries; its discriminating leg names the Moth shader
 under a name no shipped world gives it and alters a package binary, so both are
-refused. Neither the budget nor the churn canary injects an allocation failure on a real device: the
-device factories have no fault seam, so partial-allocation failure is covered
-only by the fake. The suite also compiles every canary
+refused. The fault canary injects an allocation failure on a real device
+through `gpu.faults`: it arms the second image created after a paused feedback
+instance loads the corrected edit, so the edit creates one image and fails at
+the next. `pipeline.wait installed` fails with `GPU_CREATION_FAULT` naming
+image creation 2, `gpu.faults list` reads nothing armed after exactly two image
+creations, `pipeline.inspect` reads the installed graph's 52224 bytes again,
+the installed graph still steps, and the same edit reloaded with nothing armed
+creates its six images and installs. Run with `puck canary --debug-layers`, any
+validation message fails it. Its discriminating leg arms the seventh image,
+which the edit never reaches. The suite also compiles every canary
 document; the broken edit fails in its middle pass. A missing GPU or compiler
 is reported as unsupported, not passed. CPU tests alone do not establish GPU
 correctness. `puck parity` checks its authored
-rendering cases; it is not blanket coverage of arbitrary pipeline documents.
+rendering cases; it is not blanket coverage of arbitrary graph documents.
 
 `ShaderPackageLawTests` hold the source closure and packages over the fixtures
 in `tests/Puck.Shaders.Tests/Assets/ShaderPackages`. They check that a
@@ -1383,13 +2327,16 @@ without the recording's source reader refuses it.
 ## The NuGet package
 
 `ByteTerrace.Puck.Shaders` depends on `Puck.Abstractions`, `Puck.Assets`, and
-`Puck.Hosting` (`IRenderNode`, `FrameContext`, `EngineTicks`). It carries no
+`Puck.Hosting` (`IRenderRoot`, `FrameContext`, `EngineTicks`). It carries no
 GPU, windowing, or shader-compiler dependency of its own; `DxilInterfaceReader`
 loads the `dxcompiler.dll` of an installed DXC at run time. The package also
 ships `build/Shaders.targets` under
 `buildTransitive/ByteTerrace.Puck.Shaders.targets`—the shared HLSL-to-
 SPIR-V/DXIL compile recipe every in-repo shader project imports, which also
-ships each project's manifests beside its bytecode. A consumer that authors
+ships each project's bytecode beside its executable—with `ShaderRecipe.props`
+beside it, the DXC options of every stage, which `puck shaders generate`
+writes from `ShaderCompiler.StepsOf`, so the build and the runtime compiler
+run one recipe. A consumer that authors
 its own shaders needs the DirectX Shader Compiler (`dxc`, from the Vulkan
 SDK or Windows SDK) on `PATH`, or must pass `/p:DxcCommand="path\to\dxc"`;
 a consumer with no shader items of its own never invokes `dxc` at all.

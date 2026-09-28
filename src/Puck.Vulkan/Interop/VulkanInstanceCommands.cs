@@ -53,23 +53,16 @@ public sealed unsafe class VulkanInstanceCommands {
     /// <summary>The <c>vkGetPhysicalDeviceSurfaceSupportKHR</c> entry point; <see langword="null"/> unless <c>VK_KHR_surface</c> is enabled.</summary>
     public readonly delegate* unmanaged[Cdecl]<nint, uint, nint, out uint, VkResult> GetPhysicalDeviceSurfaceSupportKhr;
 
-    /// <summary>Resolves every entry point of the instance identified by <paramref name="instanceHandle"/> through the
-    /// loader.</summary>
-    /// <param name="instanceHandle">The native <c>VkInstance</c> handle; must be non-zero and must outlive the table.</param>
-    /// <exception cref="ArgumentException"><paramref name="instanceHandle"/> is zero.</exception>
-    /// <exception cref="InvalidOperationException">The instance does not expose a required core entry point.</exception>
-    public VulkanInstanceCommands(nint instanceHandle) : this(
-        getInstanceProcAddr: VulkanProcResolver.LoaderInstanceProcAddr,
-        instanceHandle: instanceHandle
-    ) { }
     /// <summary>Resolves every entry point of the instance identified by <paramref name="instanceHandle"/> through
-    /// <paramref name="getInstanceProcAddr"/>.</summary>
+    /// <paramref name="procedures"/>.</summary>
     /// <param name="instanceHandle">The native <c>VkInstance</c> handle; must be non-zero and must outlive the table.</param>
-    /// <param name="getInstanceProcAddr">A <c>vkGetInstanceProcAddr</c>-shaped resolver:
-    /// <see cref="VulkanProcResolver.LoaderInstanceProcAddr"/>, or one standing in for the driver.</param>
+    /// <param name="procedures">The resolver the entry points are resolved and counted through: the host's, or one
+    /// standing in for the driver.</param>
     /// <exception cref="ArgumentException"><paramref name="instanceHandle"/> is zero.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="procedures"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">The instance does not expose a required core entry point.</exception>
-    public VulkanInstanceCommands(nint instanceHandle, delegate* unmanaged[Cdecl]<nint, byte*, nint> getInstanceProcAddr) {
+    public VulkanInstanceCommands(nint instanceHandle, VulkanProcResolver procedures) {
+        ArgumentNullException.ThrowIfNull(argument: procedures);
         VulkanArgument.RequireHandle(
             handle: instanceHandle,
             handleDescription: "instance",
@@ -77,109 +70,88 @@ public sealed unsafe class VulkanInstanceCommands {
         );
 
         Handle = instanceHandle;
-        CreateDebugUtilsMessengerExt = ((delegate* unmanaged[Cdecl]<nint, in VkDebugUtilsMessengerCreateInfoExt, nint, out nint, VkResult>)VulkanProcResolver.ResolveOptionalInstanceProc(
+        CreateDebugUtilsMessengerExt = ((delegate* unmanaged[Cdecl]<nint, in VkDebugUtilsMessengerCreateInfoExt, nint, out nint, VkResult>)procedures.ResolveOptionalInstanceProc(
             functionName: "vkCreateDebugUtilsMessengerEXT"u8,
-            getInstanceProcAddr: getInstanceProcAddr,
             instanceHandle: instanceHandle
         ));
-        CreateDevice = ((delegate* unmanaged[Cdecl]<nint, in VkDeviceCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveInstanceProc(
+        CreateDevice = ((delegate* unmanaged[Cdecl]<nint, in VkDeviceCreateInfo, nint, out nint, VkResult>)procedures.ResolveInstanceProc(
             functionName: "vkCreateDevice"u8,
-            getInstanceProcAddr: getInstanceProcAddr,
             instanceHandle: instanceHandle
         ));
-        CreateViSurfaceNn = ((delegate* unmanaged[Cdecl]<nint, in VkViSurfaceCreateInfoNn, nint, out nint, VkResult>)VulkanProcResolver.ResolveOptionalInstanceProc(
+        CreateViSurfaceNn = ((delegate* unmanaged[Cdecl]<nint, in VkViSurfaceCreateInfoNn, nint, out nint, VkResult>)procedures.ResolveOptionalInstanceProc(
             functionName: "vkCreateViSurfaceNN"u8,
-            getInstanceProcAddr: getInstanceProcAddr,
             instanceHandle: instanceHandle
         ));
-        CreateWaylandSurfaceKhr = ((delegate* unmanaged[Cdecl]<nint, in VkWaylandSurfaceCreateInfoKhr, nint, out nint, VkResult>)VulkanProcResolver.ResolveOptionalInstanceProc(
+        CreateWaylandSurfaceKhr = ((delegate* unmanaged[Cdecl]<nint, in VkWaylandSurfaceCreateInfoKhr, nint, out nint, VkResult>)procedures.ResolveOptionalInstanceProc(
             functionName: "vkCreateWaylandSurfaceKHR"u8,
-            getInstanceProcAddr: getInstanceProcAddr,
             instanceHandle: instanceHandle
         ));
-        CreateWin32SurfaceKhr = ((delegate* unmanaged[Cdecl]<nint, in VkWin32SurfaceCreateInfoKhr, nint, out nint, VkResult>)VulkanProcResolver.ResolveOptionalInstanceProc(
+        CreateWin32SurfaceKhr = ((delegate* unmanaged[Cdecl]<nint, in VkWin32SurfaceCreateInfoKhr, nint, out nint, VkResult>)procedures.ResolveOptionalInstanceProc(
             functionName: "vkCreateWin32SurfaceKHR"u8,
-            getInstanceProcAddr: getInstanceProcAddr,
             instanceHandle: instanceHandle
         ));
-        CreateXcbSurfaceKhr = ((delegate* unmanaged[Cdecl]<nint, in VkXcbSurfaceCreateInfoKhr, nint, out nint, VkResult>)VulkanProcResolver.ResolveOptionalInstanceProc(
+        CreateXcbSurfaceKhr = ((delegate* unmanaged[Cdecl]<nint, in VkXcbSurfaceCreateInfoKhr, nint, out nint, VkResult>)procedures.ResolveOptionalInstanceProc(
             functionName: "vkCreateXcbSurfaceKHR"u8,
-            getInstanceProcAddr: getInstanceProcAddr,
             instanceHandle: instanceHandle
         ));
-        DestroyDebugUtilsMessengerExt = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveOptionalInstanceProc(
+        DestroyDebugUtilsMessengerExt = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)procedures.ResolveOptionalInstanceProc(
             functionName: "vkDestroyDebugUtilsMessengerEXT"u8,
-            getInstanceProcAddr: getInstanceProcAddr,
             instanceHandle: instanceHandle
         ));
-        DestroyInstance = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveInstanceProc(
+        DestroyInstance = ((delegate* unmanaged[Cdecl]<nint, nint, void>)procedures.ResolveInstanceProc(
             functionName: "vkDestroyInstance"u8,
-            getInstanceProcAddr: getInstanceProcAddr,
             instanceHandle: instanceHandle
         ));
-        DestroySurfaceKhr = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveOptionalInstanceProc(
+        DestroySurfaceKhr = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)procedures.ResolveOptionalInstanceProc(
             functionName: "vkDestroySurfaceKHR"u8,
-            getInstanceProcAddr: getInstanceProcAddr,
             instanceHandle: instanceHandle
         ));
-        EnumerateDeviceExtensionProperties = ((delegate* unmanaged[Cdecl]<nint, nint, nint, nint, VkResult>)VulkanProcResolver.ResolveInstanceProc(
+        EnumerateDeviceExtensionProperties = ((delegate* unmanaged[Cdecl]<nint, nint, nint, nint, VkResult>)procedures.ResolveInstanceProc(
             functionName: "vkEnumerateDeviceExtensionProperties"u8,
-            getInstanceProcAddr: getInstanceProcAddr,
             instanceHandle: instanceHandle
         ));
-        EnumeratePhysicalDevices = ((delegate* unmanaged[Cdecl]<nint, ref uint, nint, VkResult>)VulkanProcResolver.ResolveInstanceProc(
+        EnumeratePhysicalDevices = ((delegate* unmanaged[Cdecl]<nint, ref uint, nint, VkResult>)procedures.ResolveInstanceProc(
             functionName: "vkEnumeratePhysicalDevices"u8,
-            getInstanceProcAddr: getInstanceProcAddr,
             instanceHandle: instanceHandle
         ));
-        GetPhysicalDeviceFeatures = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveInstanceProc(
+        GetPhysicalDeviceFeatures = ((delegate* unmanaged[Cdecl]<nint, nint, void>)procedures.ResolveInstanceProc(
             functionName: "vkGetPhysicalDeviceFeatures"u8,
-            getInstanceProcAddr: getInstanceProcAddr,
             instanceHandle: instanceHandle
         ));
-        GetPhysicalDeviceFeatures2 = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveOptionalInstanceProc(
+        GetPhysicalDeviceFeatures2 = ((delegate* unmanaged[Cdecl]<nint, nint, void>)procedures.ResolveOptionalInstanceProc(
             functionName: "vkGetPhysicalDeviceFeatures2"u8,
-            getInstanceProcAddr: getInstanceProcAddr,
             instanceHandle: instanceHandle
         ));
-        GetPhysicalDeviceMemoryProperties = ((delegate* unmanaged[Cdecl]<nint, out VkPhysicalDeviceMemoryProperties, void>)VulkanProcResolver.ResolveInstanceProc(
+        GetPhysicalDeviceMemoryProperties = ((delegate* unmanaged[Cdecl]<nint, out VkPhysicalDeviceMemoryProperties, void>)procedures.ResolveInstanceProc(
             functionName: "vkGetPhysicalDeviceMemoryProperties"u8,
-            getInstanceProcAddr: getInstanceProcAddr,
             instanceHandle: instanceHandle
         ));
-        GetPhysicalDeviceProperties = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveInstanceProc(
+        GetPhysicalDeviceProperties = ((delegate* unmanaged[Cdecl]<nint, nint, void>)procedures.ResolveInstanceProc(
             functionName: "vkGetPhysicalDeviceProperties"u8,
-            getInstanceProcAddr: getInstanceProcAddr,
             instanceHandle: instanceHandle
         ));
-        GetPhysicalDeviceProperties2 = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveOptionalInstanceProc(
+        GetPhysicalDeviceProperties2 = ((delegate* unmanaged[Cdecl]<nint, nint, void>)procedures.ResolveOptionalInstanceProc(
             functionName: "vkGetPhysicalDeviceProperties2"u8,
-            getInstanceProcAddr: getInstanceProcAddr,
             instanceHandle: instanceHandle
         ));
-        GetPhysicalDeviceQueueFamilyProperties = ((delegate* unmanaged[Cdecl]<nint, ref uint, nint, void>)VulkanProcResolver.ResolveInstanceProc(
+        GetPhysicalDeviceQueueFamilyProperties = ((delegate* unmanaged[Cdecl]<nint, ref uint, nint, void>)procedures.ResolveInstanceProc(
             functionName: "vkGetPhysicalDeviceQueueFamilyProperties"u8,
-            getInstanceProcAddr: getInstanceProcAddr,
             instanceHandle: instanceHandle
         ));
-        GetPhysicalDeviceSurfaceCapabilitiesKhr = ((delegate* unmanaged[Cdecl]<nint, nint, out VkSurfaceCapabilitiesKhr, VkResult>)VulkanProcResolver.ResolveOptionalInstanceProc(
+        GetPhysicalDeviceSurfaceCapabilitiesKhr = ((delegate* unmanaged[Cdecl]<nint, nint, out VkSurfaceCapabilitiesKhr, VkResult>)procedures.ResolveOptionalInstanceProc(
             functionName: "vkGetPhysicalDeviceSurfaceCapabilitiesKHR"u8,
-            getInstanceProcAddr: getInstanceProcAddr,
             instanceHandle: instanceHandle
         ));
-        GetPhysicalDeviceSurfaceFormatsKhr = ((delegate* unmanaged[Cdecl]<nint, nint, ref uint, nint, VkResult>)VulkanProcResolver.ResolveOptionalInstanceProc(
+        GetPhysicalDeviceSurfaceFormatsKhr = ((delegate* unmanaged[Cdecl]<nint, nint, ref uint, nint, VkResult>)procedures.ResolveOptionalInstanceProc(
             functionName: "vkGetPhysicalDeviceSurfaceFormatsKHR"u8,
-            getInstanceProcAddr: getInstanceProcAddr,
             instanceHandle: instanceHandle
         ));
-        GetPhysicalDeviceSurfacePresentModesKhr = ((delegate* unmanaged[Cdecl]<nint, nint, ref uint, nint, VkResult>)VulkanProcResolver.ResolveOptionalInstanceProc(
+        GetPhysicalDeviceSurfacePresentModesKhr = ((delegate* unmanaged[Cdecl]<nint, nint, ref uint, nint, VkResult>)procedures.ResolveOptionalInstanceProc(
             functionName: "vkGetPhysicalDeviceSurfacePresentModesKHR"u8,
-            getInstanceProcAddr: getInstanceProcAddr,
             instanceHandle: instanceHandle
         ));
-        GetPhysicalDeviceSurfaceSupportKhr = ((delegate* unmanaged[Cdecl]<nint, uint, nint, out uint, VkResult>)VulkanProcResolver.ResolveOptionalInstanceProc(
+        GetPhysicalDeviceSurfaceSupportKhr = ((delegate* unmanaged[Cdecl]<nint, uint, nint, out uint, VkResult>)procedures.ResolveOptionalInstanceProc(
             functionName: "vkGetPhysicalDeviceSurfaceSupportKHR"u8,
-            getInstanceProcAddr: getInstanceProcAddr,
             instanceHandle: instanceHandle
         ));
     }

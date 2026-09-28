@@ -2,6 +2,8 @@ using Puck.Assets.Documents;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
+using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Sources;
 
 namespace Puck.World;
 
@@ -26,8 +28,7 @@ public abstract record WorldScreenSource {
     private protected WorldScreenSource() {
     }
 
-    /// <summary>No provider is bound — the engine lights the slot with its procedural no-signal fallback (an animated
-    /// test-card / striped no-signal look, never black).</summary>
+    /// <summary>No provider is bound — the engine shades the slot as dark glass, lit faintly by the sun.</summary>
     public sealed record None() : WorldScreenSource;
     /// <summary>A named machine output. The source is a consumer reference only: the named machine is prepared,
     /// advanced, and retired by the world's machine host independently of every display that samples it.</summary>
@@ -60,45 +61,22 @@ public abstract record WorldScreenSource {
                 return true;
             }
 
-            if (!string.Equals(
-                a: Id,
-                b: other.Id,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return false;
-            }
-
-            var count = (Settings?.Count ?? 0);
-
-            if (count != (other.Settings?.Count ?? 0)) {
-                return false;
-            }
-
-            if (count == 0) {
-                return true;
-            }
-
-            foreach (var (key, value) in Settings!) {
-                if (
-                    !other.Settings!.TryGetValue(
-                        key: key,
-                        value: out var theirs
-                    ) ||
-                    !JsonElement.DeepEquals(
-                        element1: value,
-                        element2: theirs
-                    )
-                ) {
-                    return false;
-                }
-            }
-
-            return true;
+            return (
+                string.Equals(
+                    a: Id,
+                    b: other.Id,
+                    comparisonType: StringComparison.Ordinal
+                ) &&
+                ImageSourceSettings.Equal(
+                    left: Settings,
+                    right: other.Settings
+                )
+            );
         }
         /// <inheritdoc/>
         public override int GetHashCode() => HashCode.Combine(
             value1: StringComparer.Ordinal.GetHashCode(obj: Id),
-            value2: (Settings?.Count ?? 0)
+            value2: ImageSourceSettings.HashOf(settings: Settings)
         );
     }
     /// <summary>A named view from the presentation view stack, such as a monitor showing another camera's output.</summary>
@@ -149,8 +127,8 @@ public abstract record WorldScreenSource {
     /// a top-level <c>screens</c> row or magazine entry carries no face to pair with, so <c>window</c> is refused there
     /// unconditionally.</param>
     /// <param name="Resolution">The offscreen target's <c>[width, height]</c> in pixels, or <see langword="null"/> for
-    /// the engine default (<c>Puck.SdfVm.Views.WorldSessionView.DefaultWidth</c> x <c>DefaultHeight</c> — today's
-    /// 160x144 panel, unchanged for an unauthored facet). Each axis is validated within
+    /// the default 160x144 panel (<c>Puck.World.Client.WorldViewInstances.DefaultSessionWidth</c> x
+    /// <c>DefaultSessionHeight</c>). Each axis is validated within
     /// <c>1..WorldDefinitionValidator.MaxSurfaceDimension</c>. Omitted from the wire when null.</param>
     public sealed record Session(
         string Destination,
@@ -159,7 +137,7 @@ public abstract record WorldScreenSource {
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenResolution? Resolution = null
     ) : WorldScreenSource;
     /// <summary>Authored reading text on the screen face, rendered through the engine's glyph-decal tier
-    /// (<c>Puck.SdfVm.SdfWorldEngine.SetScreenDecal</c>): a fixed monospace cell grid sampled from the world's packed
+    /// (<c>Puck.SdfVm.SdfWorldTables.SetScreenDecal</c>): a fixed monospace cell grid sampled from the world's packed
     /// font atlas at shade time — the dense-text sibling of a creation's <c>textRuns</c>, which stamp marched
     /// <c>Glyph</c> geometry. Signs, plaques, books, and monitors author this; short sculptural lettering stays a
     /// text run. Requires the world to declare a text font catalog (<see cref="WorldDefinition.Text"/>); the decal
@@ -365,7 +343,8 @@ public enum WorldPadElement : byte {
 /// screen wears, or <see langword="null"/> for the engine's default pad map. The named kit must carry a pad map —
 /// refused by name otherwise. Omitted from the wire when null.</param>
 /// <param name="Input">Where a pointer hit on the screen's source goes: <c>Presentation</c> for hover and highlight, or
-/// <c>Simulation</c> for a pointer ray mapped in fixed point from this row, such as a light gun
+/// <c>Simulation</c> for a pointer ray mapped in fixed point from this row, which a <c>$pointer:</c> rule read sees and
+/// which aims the screen machine's light gun for a seat applied to the screen
 /// (<see cref="WorldScreenMappings"/>). <c>Passthrough</c> is refused by name: host passthrough exists only for a source
 /// the local user opened on their own machine, and a world document can never create one or send it input.
 /// <see langword="null"/> (the default) is <c>Presentation</c>. Omitted from the wire when null.</param>
@@ -383,7 +362,7 @@ public readonly record struct WorldScreenRoute(bool Engageable, float EngageRadi
 }
 /// <summary>One diegetic screen in the world — a screen slab emitted by
 /// <see cref="Puck.SignedDistance.SdfProgramBuilder"/> whose lit face
-/// samples a bound source (or the procedural fallback when unbound). The frame (<see cref="Origin"/>/<see cref="Right"/>/
+/// samples a bound source (or shades as dark glass when unbound). The frame (<see cref="Origin"/>/<see cref="Right"/>/
 /// <see cref="Up"/> + <see cref="HalfWidth"/>/<see cref="HalfHeight"/>) is the sampled surface frame and must match the
 /// slab's placement; the frame source bakes the geometry translate from it.</summary>
 /// <param name="Index">The engine screen-surface index (0..<see cref="Puck.SignedDistance.SdfProgramBuilder.MaxScreenSurfaces"/>−1)
@@ -411,6 +390,10 @@ public readonly record struct WorldScreenRoute(bool Engageable, float EngageRadi
 /// <param name="Memory">The screen's live byte-window bindings between its booted machine's bus and ordinary
 /// <c>state.world</c> Int cells (see <see cref="WorldScreenMemory"/>), or <see langword="null"/> for a screen with
 /// none. Omitted from the wire when null.</param>
+/// <param name="Filter">How the face samples its source's image: <c>Nearest</c>, the default, keeps each source pixel
+/// crisp, as an emulator or a pixel-art source wants; <c>Linear</c> blends between source pixels, as a camera or a
+/// desktop capture wants. The screen's mapping carries it, and a hit maps to the same source pixel under either. Omitted
+/// from the wire when <c>Nearest</c>.</param>
 public sealed record WorldScreen(
     int Index,
     DocumentVector3 Origin,
@@ -424,5 +407,6 @@ public sealed record WorldScreen(
     WorldScreenRoute Route,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSolid? Solid = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenMagazine? Magazine = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldScreenMemory>? Memory = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldScreenMemory>? Memory = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] GpuSamplerFilter Filter = GpuSamplerFilter.Nearest
 );

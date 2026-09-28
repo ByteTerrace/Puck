@@ -284,6 +284,7 @@ public abstract partial class PuckSyntaxRewriter {
         ExpressionStatementNode expression => (expression with { Expression = this.Rewritten(node: expression.Expression) }),
         FlagStatementNode leaf => leaf,
         ForStatementNode loop => (loop with { Body = this.DescendStatements(statements: loop.Body), Sequence = this.Rewritten(node: loop.Sequence) }),
+        GraphParameterNode parameter => (parameter with { Value = this.Rewritten(node: parameter.Value) }),
         ImportNode leaf => leaf,
         InterruptStatementNode interrupt => (interrupt with { Predicate = this.Rewritten(node: interrupt.Predicate) }),
         LetNode declaration => (declaration with { Value = this.Rewritten(node: declaration.Value) }),

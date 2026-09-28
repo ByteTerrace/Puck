@@ -7,8 +7,8 @@
   "requirements": ["gpu"],
   "timeoutSeconds": 60,
   "fixtures": [
-    "broken.pipeline.json",
-    "corrected.pipeline.json",
+    "broken.graph.json",
+    "corrected.graph.json",
     "convert-broken.hlsl",
     "convert-inverted.hlsl"
   ],

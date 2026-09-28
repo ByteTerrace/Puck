@@ -1,5 +1,5 @@
 using System.Globalization;
-using Puck.Abstractions.Presentation;
+using Puck.Abstractions.Gpu;
 using Puck.Recording.Document;
 
 namespace Puck.Recording.Overlay;
@@ -34,7 +34,7 @@ public sealed class OverlayCompositor {
             _ => origin,
         };
     }
-    private static void Blend(Span<byte> pixels, SurfaceFormat format, int width, int height, int x, int y, Rgba32 color) {
+    private static void Blend(Span<byte> pixels, GpuPixelFormat format, int width, int height, int x, int y, Rgba32 color) {
         if (
             (x < 0) ||
             (y < 0) ||
@@ -51,7 +51,7 @@ public sealed class OverlayCompositor {
         int redIndex;
         int blueIndex;
 
-        if (format == SurfaceFormat.B8G8R8A8Unorm) {
+        if (format == GpuPixelFormat.B8G8R8A8Unorm) {
             blueIndex = offset;
             redIndex = (offset + 2);
         } else {
@@ -63,7 +63,7 @@ public sealed class OverlayCompositor {
         pixels[(offset + 1)] = ((byte)((((color.G * alpha) + (pixels[(offset + 1)] * inverse)) + 127) / 255));
         pixels[blueIndex] = ((byte)((((color.B * alpha) + (pixels[blueIndex] * inverse)) + 127) / 255));
     }
-    private static void DrawRect(Span<byte> pixels, SurfaceFormat format, int width, int height, OverlayRow row) {
+    private static void DrawRect(Span<byte> pixels, GpuPixelFormat format, int width, int height, OverlayRow row) {
         if (!Rgba32.TryParse(
             value: row.Color,
             color: out var fill
@@ -158,7 +158,7 @@ public sealed class OverlayCompositor {
             }
         }
     }
-    private static void DrawText(Span<byte> pixels, SurfaceFormat format, int width, int height, OverlayRow row, string text) {
+    private static void DrawText(Span<byte> pixels, GpuPixelFormat format, int width, int height, OverlayRow row, string text) {
         if (
             !Rgba32.TryParse(
             value: row.Color,
@@ -214,7 +214,7 @@ public sealed class OverlayCompositor {
             }
         }
     }
-    private static void FillBlock(Span<byte> pixels, SurfaceFormat format, int width, int height, int x, int y, int size, Rgba32 color) {
+    private static void FillBlock(Span<byte> pixels, GpuPixelFormat format, int width, int height, int x, int y, int size, Rgba32 color) {
         for (var dy = 0; (dy < size); dy++) {
             for (var dx = 0; (dx < size); dx++) {
                 Blend(
@@ -253,7 +253,7 @@ public sealed class OverlayCompositor {
     /// <param name="height">The frame height in pixels.</param>
     /// <param name="sessionTimeNanoseconds">The wall-clock session time for a session timecode.</param>
     /// <param name="simTimeNanoseconds">The simulation time for a sim timecode.</param>
-    public void Composite(Span<byte> pixels, SurfaceFormat format, int width, int height, long sessionTimeNanoseconds, long simTimeNanoseconds) {
+    public void Composite(Span<byte> pixels, GpuPixelFormat format, int width, int height, long sessionTimeNanoseconds, long simTimeNanoseconds) {
         foreach (var row in m_overlays) {
             switch (row.Kind) {
                 case OverlayKind.Rect:

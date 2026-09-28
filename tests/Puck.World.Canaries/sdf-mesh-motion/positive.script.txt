@@ -1,0 +1,19 @@
+# Every frame renders every pass, and the visibility view colors each pixel by the kind of its visibility record.
+world.cadence off
+# The engine builds its pipelines before the first capture is armed, so the capture lands on a rendered frame. The wait
+# releases on readiness, a cold driver cache included; the leg's own timeout bounds it.
+world.wait ready 600
+world.debug-view visibility
+world.wait 30
+world.screenshot {run}/before.png
+world.wait captures 30
+# The slab crosses several of the beam's tiles to the right.
+world.row.set placements slab position [1.5,0,0]
+world.wait 30
+world.screenshot {run}/after.png
+world.wait captures 30
+# The camera pans to the left: the scene, the slab included, crosses the beam's tiles the other way.
+world.row.set cameras {"anchor":null,"name":"mesh-cam","renderHeight":144,"renderWidth":256,"rig":{"name":"mesh-cam","operations":[{"$type":"anchor","subject":{"$type":"worldPoint","point":[-1.5,2.5,7]}},{"$type":"lookAt","subject":{"$type":"worldPoint","point":[-1.5,0.8,0]}},{"$type":"fieldOfView","fieldOfViewRadians":0.9}],"version":"puck.camera.program.v1"}}
+world.wait 30
+world.screenshot {run}/panned.png
+world.wait captures 30

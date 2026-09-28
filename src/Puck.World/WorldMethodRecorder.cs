@@ -31,15 +31,20 @@ internal sealed class WorldMethodRecorder : EventListener {
     ));
 
     /// <summary>Starts recording when this build carries the recorder, writing the record when the process exits.</summary>
-    /// <param name="stateRoot">Resolves the run's state root at exit, after the command line has overridden it.</param>
-    public static void StartIfBuiltIn(Func<string> stateRoot) {
+    /// <param name="stateRoot">Resolves the run's state root at exit, once the command line has named it; a run that
+    /// ended before the command line resolved one records nothing.</param>
+    public static void StartIfBuiltIn(Func<Server.WorldStateRoot?> stateRoot) {
         if (!IsBuiltIn) {
             return;
         }
 
         var recorder = new WorldMethodRecorder();
 
-        AppDomain.CurrentDomain.ProcessExit += (_, _) => recorder.Write(directory: stateRoot());
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => {
+            if (stateRoot() is { } root) {
+                recorder.Write(directory: root.FullPath);
+            }
+        };
     }
 
     private void Write(string directory) {

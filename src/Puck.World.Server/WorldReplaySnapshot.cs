@@ -89,6 +89,9 @@ public abstract record WorldReplayEntry {
     /// <summary>A server-authored peer disconnect, emitted at the point of effect.</summary>
     /// <param name="Value">The ordered disconnect event.</param>
     internal sealed record PeerDisconnected(WorldServerEvent.PeerDisconnected Value) : WorldReplayEntry;
+    /// <summary>A server-authored session lifecycle event (admitted, embodied or ended), emitted at the point of effect.</summary>
+    /// <param name="Value">The <see cref="WorldServerEvent.SessionAdmitted"/>, <see cref="WorldServerEvent.SessionEmbodied"/> or <see cref="WorldServerEvent.SessionEnded"/> event.</param>
+    internal sealed record SessionEvent(WorldServerEvent Value) : WorldReplayEntry;
     /// <summary>A whole-document rebuild-and-swap (<c>world.reset</c>/<c>world.load</c>/<c>world.reload</c>) —
     /// CAS-pinned: <see cref="ContentHash"/> is the canonical <c>sha256-64/{hex}</c> pin of the exact bytes the live
     /// session consumed (Load/Reload, off disk) or of the base's canonical bytes at the moment the rebuild applied
@@ -234,7 +237,7 @@ public readonly record struct WorldReplayHashTraces(ulong[] Pose, ulong[] Author
 /// mid-session capture also matches) is the identified next lever.</para>
 /// <para>Determinism. The hashed state is fixed-point or an exact integer tick — no wall-clock, no float in the hashed
 /// pose. The recorded intent currency is likewise fixed-point: a
-/// <see cref="PlayerIntent"/> crosses as six raw <see cref="FixedQ4816"/> lanes, so the replay currency is the
+/// <see cref="PlayerIntent"/> crosses as sixteen raw <see cref="FixedQ4816"/> lanes and an optional pointer ray of six more, so the replay currency is the
 /// simulation's own numeric type rather than a conversion of it. (The serialized command stream carries the authored
 /// float fields of the recorded <see cref="WorldCommand"/>s verbatim; those are authored values — the numbers an
 /// operator typed — which round-trip bit-exactly through the shared command leaf and quantize deterministically at
@@ -267,12 +270,12 @@ public readonly record struct WorldReplayHashTraces(ulong[] Pose, ulong[] Author
 /// <c>tests/Puck.World.Tests</c> — which reads this surface directly per its own documented no-IVT/no-reflection
 /// convention — can exercise <see cref="ResolveStepWidth"/> without a grant.</para>
 /// </remarks>
-public sealed class WorldReplaySnapshot {
+public sealed partial class WorldReplaySnapshot {
     private const uint Magic = 0x5052_4C57u; // "WLRP" in little-endian wire order.
     // A shape-identity token, not a compatibility sequence: this build writes and reads exactly one tape contract.
-    // The retained-name fingerprint and compiler-symbol budget separation changed authoritative hashes. Refuse
-    // earlier tapes at intake instead of reporting their old hash contract as a simulation divergence.
-    private const uint ShapeToken = 3u;
+    // Shape 4 carries each recorded intent's optional pointer ray. Refuse earlier tapes at intake instead of reporting
+    // their old shape as a simulation divergence.
+    private const uint ShapeToken = 4u;
 
     /// <summary>Gets the record-start world definition as its canonical UTF-8 JSON — the rehydrated starting state.</summary>
     public required byte[] DefinitionJson { get; init; }
@@ -284,10 +287,10 @@ public sealed class WorldReplaySnapshot {
     /// content hash, fuel, lane) the re-drive re-establishes before it runs a tick. Empty when the recorded session
     /// mounted nothing, which is itself pinned: a re-drive that mounts a guest against an empty set is refused.</summary>
     public required IReadOnlyList<WorldAddonReceipt> MountedAddons { get; init; }
-    /// <summary>Gets the directory the recording server's pipeline source reader resolved <c>views.pipelines</c> rows
+    /// <summary>Gets the directory the recording server's pipeline source reader resolved <c>views.graphs</c> rows
     /// against (<see cref="WorldPipelineSources.DocumentDirectory"/>), or <see langword="null"/> when it attached none.
     /// <see cref="Drive"/> attaches a reader over the same directory to the shadow server, so a recorded
-    /// <c>CommitViewPipeline</c>, or a row upsert naming overrides, binds against the sources it bound against live.
+    /// <c>CommitViewGraph</c>, or a row upsert naming overrides, binds against the sources it bound against live.
     /// It is the recorded document's own directory, so the re-drive's definition resolves every relative path it
     /// authors (<see cref="WorldDefinition.DocumentDirectory"/>) where the live one did.</summary>
     public string? PipelineSourceDirectory { get; init; }
@@ -389,6 +392,10 @@ public sealed class WorldReplaySnapshot {
                     break;
                 case WorldReplayEntry.PeerDisconnected disconnected:
                     server.ApplyServerEvent(serverEvent: disconnected.Value);
+
+                    break;
+                case WorldReplayEntry.SessionEvent session:
+                    server.ApplyServerEvent(serverEvent: session.Value);
 
                     break;
                 case WorldReplayEntry.Rebuild rebuild:
@@ -807,6 +814,11 @@ public sealed class WorldReplaySnapshot {
                 }
             case 15:
                 return new WorldReplayEntry.LinkDelivery(Adjacency: reader.ReadString(field: "link delivery adjacency"));
+            case 16 or 17 or 18:
+                return ReadSessionEntry(
+                    kind: kind,
+                    reader: ref reader
+                );
             default:
                 if (!reader.Failed) {
                     throw new InvalidDataException(message: $"unknown .puckreplay authority entry discriminant {kind}.");
@@ -1230,6 +1242,13 @@ public sealed class WorldReplaySnapshot {
             case WorldReplayEntry.LinkDelivery linkDelivery:
                 writer.WriteByte(value: 15);
                 writer.WriteString(value: linkDelivery.Adjacency);
+
+                break;
+            case WorldReplayEntry.SessionEvent session:
+                WriteSessionEntry(
+                    serverEvent: session.Value,
+                    writer: writer
+                );
 
                 break;
             default:

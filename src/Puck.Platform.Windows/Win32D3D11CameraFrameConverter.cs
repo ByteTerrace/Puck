@@ -17,7 +17,8 @@ namespace Puck.Platform.Windows;
 /// color are unpacked and color-converted by a compute shader each; L8 is expanded to grayscale by a third. The source
 /// is first copied into a shader-readable texture because camera-driver surfaces are not required to carry
 /// <c>D3D11_BIND_SHADER_RESOURCE</c>; the shader writes a private UAV, then one GPU copy transfers the completed RGBA
-/// image into the cross-device shared ring. All work and completion waits stay on the dual-camera poll thread.</summary>
+/// image into the cross-device shared ring, and signals the consumer's shared fence (or, on a device that cannot open
+/// it, waits on the CPU). All work stays on the dual-camera poll thread.</summary>
 [SupportedOSPlatform("windows10.0.19041")]
 public sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable, IProbeKernelDevice {
     // The conversion kernels' file stem: Assets/Shaders/camera-conversion.hlsl compiles to one cs_5_0 DXBC file per
@@ -44,9 +45,9 @@ public sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable, IProbeK
     private readonly ID3D11Texture2D* m_previous;
     private readonly ID3D11ShaderResourceView* m_previousSrv;
     private readonly ID3D11UnorderedAccessView* m_previousView;
-    private readonly ID3D11Query* m_query;
     private readonly ID3D11ComputeShader* m_shader;
 
+    private Win32D3D11CompletionSignal? m_signal;
     private ID3D11Texture2D*[] m_targets = [];
 
     public Win32D3D11CameraFrameConverter(nint sourceTexture, long adapterLuid, int width, int height, string subtype, Win32CameraColorimetry colorimetry) {
@@ -86,7 +87,6 @@ public sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable, IProbeK
         ID3D11UnorderedAccessView* previousView = null;
         ID3D11ComputeShader* shader = null;
         ID3D11Buffer* conversion = null;
-        ID3D11Query* query = null;
 
         source->GetDevice(ppDevice: &device);
 
@@ -203,15 +203,7 @@ public sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable, IProbeK
                     device: device
                 );
             }
-
-            var queryDescription = new D3D11_QUERY_DESC { Query = D3D11_QUERY.D3D11_QUERY_EVENT };
-
-            device->CreateQuery(
-                pQueryDesc: &queryDescription,
-                ppQuery: &query
-            );
         } catch {
-            Release(value: query);
             Release(value: conversion);
             Release(value: shader);
             Release(value: previousView);
@@ -229,7 +221,6 @@ public sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable, IProbeK
             throw;
         }
 
-        m_query = query;
         m_conversion = conversion;
         m_shader = shader;
         m_outputView = outputView;
@@ -273,7 +264,14 @@ public sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable, IProbeK
     /// <summary>Holds the device's critical section across a multi-call sequence on its immediate context.</summary>
     public void Enter() => m_multithread->Enter();
     public void Leave() => m_multithread->Leave();
-    public void AttachTargets(IReadOnlyList<nint> sharedTargetHandles) {
+    /// <summary>Opens the consumer's shared targets and its shared fence; each <see cref="Convert"/> writes one target
+    /// and signals the fence's next value.</summary>
+    /// <param name="sharedTargetHandles">The consumer's RGBA8 shared textures, two or more.</param>
+    /// <param name="sharedFenceHandle">The consumer's shared fence NT handle, or zero to keep the CPU wait.</param>
+    /// <returns>How the conversions are ordered before the consumer's reads.</returns>
+    /// <exception cref="InvalidOperationException">The targets are already attached, or a target is not an RGBA8
+    /// texture of the converter's extent.</exception>
+    public SharedFenceOrder AttachTargets(IReadOnlyList<nint> sharedTargetHandles, nint sharedFenceHandle) {
         if (IsStarted) {
             throw new InvalidOperationException(message: "camera converter targets are already attached");
         }
@@ -307,19 +305,31 @@ public sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable, IProbeK
                 }
             }
 
+            m_signal = new Win32D3D11CompletionSignal(
+                context: ((nint)m_context),
+                device: ((nint)m_device),
+                sharedFenceHandle: sharedFenceHandle
+            );
             m_targets = targets;
         } catch {
             Release(values: targets);
             throw;
         }
+
+        return m_signal.Order;
     }
-    public void Convert(nint sourceTexture, int targetSlot) {
+    /// <summary>Converts a frame into a shared target and completes it for the consumer.</summary>
+    /// <param name="sourceTexture">The native frame's <c>ID3D11Texture2D*</c>.</param>
+    /// <param name="targetSlot">The target written.</param>
+    /// <returns>The shared-fence value the write signals, or zero when it finished before the call returned.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="targetSlot"/> names no attached target.</exception>
+    public ulong Convert(nint sourceTexture, int targetSlot) {
         if (((uint)targetSlot) >= ((uint)m_targets.Length)) {
             throw new ArgumentOutOfRangeException(paramName: nameof(targetSlot));
         }
 
         // The context is the frame server's own immediate context; multithread protection serializes single calls
-        // only, so the device critical section is held across the whole bind/dispatch/copy/wait sequence.
+        // only, so the device critical section is held across the whole bind/dispatch/copy/signal sequence.
         m_multithread->Enter();
 
         try {
@@ -337,10 +347,8 @@ public sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable, IProbeK
                 pSrcBox: null,
                 pSrcResource: ((ID3D11Resource*)m_output)
             );
-            Win32D3D11.WaitForCompletion(
-                context: m_context,
-                query: m_query
-            );
+
+            return m_signal!.Complete();
         } finally {
             m_multithread->Leave();
         }
@@ -453,7 +461,8 @@ public sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable, IProbeK
 
         m_disposed = true;
         Release(values: m_targets);
-        Release(value: m_query);
+        m_signal?.Dispose();
+        m_signal = null;
         Release(value: m_conversion);
         Release(value: m_shader);
         Release(value: m_previousView);
@@ -470,7 +479,6 @@ public sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable, IProbeK
         Release(value: m_device);
         m_targets = [];
     }
-
     /// <summary>Returns the path of the build-compiled conversion kernel for a native subtype: the cs_5_0 DXBC a
     /// converter creates its shader from.</summary>
     /// <param name="subtype">The native transport subtype FOURCC: <c>YUY2</c>, <c>NV12</c> or <c>L8</c>.</param>
@@ -548,7 +556,8 @@ public sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable, IProbeK
         return ((shader is null)
             ? throw new InvalidOperationException(message: $"D3D11 camera conversion kernel '{entry}' creation returned no shader")
             : shader);
-    }    private static string KernelPathOf(string entry) => Path.Combine(
+    }
+    private static string KernelPathOf(string entry) => Path.Combine(
         path1: AppContext.BaseDirectory,
         path2: "Assets",
         path3: "Shaders",

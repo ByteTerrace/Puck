@@ -16,8 +16,10 @@ captured at the accepting sample, and the accepted distance. It has **no
 normal, no shadow, no occlusion yet**—those belong to the later passes: the
 surface pass computes the normal and curvature (`sdfResolveSurface` in
 `sdf-surface.hlsli`), the ambient pass computes occlusion (`sdfResolveAmbient`),
-and the views pass computes shadows, materials, and lighting (`renderView` in
-`sdf-world.hlsli`).
+the shadow pass marches the key light's soft shadow (`sdfShadowStage` in
+`surface/sdf-shadow.hlsli`), and the views pass computes materials and
+lighting from the record, read once as a surface sample (`sdfLightStage` in
+`shade/sdf-light-stage.hlsli`).
 
 Every technique here re-queries the same field function the march used, `map()`
 (and its tile-masked twin `mapMasked()`). So there is one discipline that
@@ -136,8 +138,8 @@ The gather cone matters. It is **not** a bare ray: it is the *penumbra cone*,
 wider than the ray itself, because the closest-approach estimate must include
 occluders just beside the ray. A wider cone is always safe (a superset can't
 drop a needed occluder); too narrow leaks light. The chord is three penumbra
-half-slopes, `worldShadowPenumbraChord() = 3 * worldShadowPenumbraSlope()` in
-`sdf-world.hlsli`: every occluder that can lower the estimate lies inside that
+half-slopes, `worldShadowPenumbraChord()` (`march/sdf-march-constants.hlsli`) `= 3 * worldShadowPenumbraSlope()`
+(`frame/sdf-lights.hlsli`): every occluder that can lower the estimate lies inside that
 cone with margin. `SdfEnvironment.MaxPenumbraSlope` keeps the chord below one.
 
 **When the gather wins and when it doesn't** is a clean story about density:
@@ -176,6 +178,19 @@ deterministic across backends. The three-tap ladder and its one-sample fast
 path are the whole AO story: the cheapest technique with the largest perceptual
 gain, and zero architectural disturbance.
 
+## Every light answers through one interface
+
+The views pass lights a surface by walking one list of lights: the
+environment's (directional, hemisphere, point, rim and occluder, in authored
+order), then every bound screen. Each is one `SdfLight`, and one function,
+`sdfLightResponse` in `shade/sdf-light.hlsli`, answers what it adds at the
+surface: a diffuse term that joins the radiance the material shade lights by, a
+specular lobe (a point light's own), a rim brighten, and a factor on reflected
+light (an occluder's dimming). The stage sums each kind of term over the walk
+and adds each total once, so the order the terms combine in is the walk's. No other kernel source branches on a light's
+kind, which `SdfLightInterfaceLawTests` holds, so a new kind is one branch of
+that function.
+
 ## Screen lights and the CRT treatment
 
 The reference scene's diegetic screens—the console cabinets' CRTs—are the most
@@ -184,14 +199,15 @@ and a light*.
 
 As a **picture**, a bound screen is emissive: it is its own light source, like a
 real display, so no scene lighting dims or tints it. Its pixels are the
-emulator's framebuffer, sampled through a CRT glass-face model—a subtle bezel
-mask, soft cosine scanlines, an aperture-grille phosphor-stripe tint, optional
-bloom on the bright regions, and (all off by default) pincushion curvature,
-vignette, and a fresnel rim glint. The tuned look is a flat square tube: a hint
+emulator's framebuffer, drawn from the screen's published mapping (the glass's
+bezel inset, the layout, any letterbox and the crop) through a CRT glass-face
+model—a soft bezel edge, soft cosine scanlines, an aperture-grille
+phosphor-stripe tint, optional bloom on the bright regions, and (both off by
+default) a vignette and a fresnel rim glint. The tuned look is a flat square tube: a hint
 of CRT, not a heavy filter.
 
 As a **light**, every bound screen is a colored area light illuminating the
-room. Its position and orientation come from the screen-surface table; its
+room, one of the lights the views pass walks. Its position and orientation come from the screen-surface table; its
 color is the per-frame average of what it's displaying—so a screen showing a
 green field spills green onto the wall beside it. A `dot(screenNormal, −L)` gate
 enforces "light through the glass": a screen only lights what sits in front of
@@ -242,8 +258,8 @@ and ink lines where curvature spikes. The authored `render.lighting.curvature`
 gains enable it at runtime; all three at zero disable it. It uses four nearby
 field samples and a center distance to estimate a discrete Laplacian, since
 the analytic normal alone provides no second derivative. Programs without
-shading-only detail reuse the primary hit's center distance. See the
-[renderer README](../../../../src/Puck.SdfVm/README.md) for hit-data reuse.
+shading-only detail reuse the center distance the visibility record holds. See
+the [renderer README](../../../../src/Puck.SdfVm/README.md) for that reuse.
 
 ---
 

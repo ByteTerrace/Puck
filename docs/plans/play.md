@@ -102,10 +102,11 @@ derivation and the per-tick neighbour tape, ghost records.
      that no world references), and
      `music-conditional-layer-and-embellishment` proves the mechanism only on
      a minimal fixture's seat-join edge.
-   - A frame capture shows that moving a body, crossing a portal, or crossing
-     a seam changes the composed frame, locally and over `--connect`.
-     `seamless-adjacency` proves the seam crossing and `front-door` the
-     studio-arrival gate, both at the console level without a capture.
+   - A frame capture shows that moving a body or crossing a seam changes the
+     composed frame, locally and over `--connect`. `seamless-adjacency` proves
+     the seam crossing and `front-door` the studio-arrival gate, both at the
+     console level without a capture. `portal-walk` and `portal-walk-connect`
+     capture a portal crossing's frame, locally and over `--connect`.
 2. **Frames, as the envelope ratification:** one document shape (root frame,
    sibling frames, body-parented frames on demand) whose envelope takes an
    angular-speed bound, a minimum feature size or aspect-ratio bound, and a
@@ -226,8 +227,15 @@ arrival is not taped today, and `replay.verify` reports a remote or
 unavailable target as not verified, never as passing); bounded queues,
 backpressure, and query redaction on the observation feed; derived-band
 read-back with a long-run remainder-drift demonstration; destination and
-session resolution on the wire, an unembodied session authority, then optional
-body reservation and allocation; issuer-qualified group and document claims,
+session resolution on the wire, an unembodied session authority carried across
+the wire (a session is admitted, embodied and ended in-process, and both remote
+doors refuse one), then optional body reservation and allocation; portal input
+beyond the window: a camera-projection portal's click (a deterministic
+destination camera pose on the authority's side), one session per viewer for
+split screen, a click on arbitrary destination geometry rather than a
+destination `Simulation` screen, a rule addressing one session rather than
+`any`, and hover feedback; destination tapes, since only the source world's
+tape records the input a portal forwards, and a replay forwards nothing; issuer-qualified group and document claims,
 entry reservations and idempotent handoff tokens fenced by epochs, leases, and
 durable commit records, hydrate, suspend, and migrate for persisted worlds,
 and durable recovery when an authority dies mid-transaction; retry-safe
@@ -262,7 +270,7 @@ elsewhere.
 
 **Owns:** durable operation identity through ingress, application, the
 serialized persistence queue, receipt lookup, and typed completion; a
-bodyless session principal and session table at the authenticated doors;
+session table at the authenticated doors, over the in-process session principal;
 row-scoped group authority and the invite, revoke, accept, decline, set-role,
 transfer-leadership, and administrative-removal transitions; one effective
 roster surviving policy reload; the Group wire tag and mutation ordinals,

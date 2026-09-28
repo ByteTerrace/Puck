@@ -190,7 +190,7 @@ public sealed class CanaryOffscreenLawTests : IDisposable {
         );
         Assert.Equal(
             expected: ["pipeline-feedback on vulkan", "pipeline-feedback on directx"],
-            actual: CanaryCommand.ExpandProofs(manifests: [.. offscreen.Where(predicate: static manifest => (manifest.Id == "pipeline-feedback"))]).Select(selector: static proof => proof.Label)
+            actual: CanaryCommand.ExpandProofs(backends: WorldOffscreenLeg.Backends, manifests: [.. offscreen.Where(predicate: static manifest => (manifest.Id == "pipeline-feedback"))]).Select(selector: static proof => proof.Label)
         );
     }
     [InlineData("pipeline-feedback/fixture.world.json", "feedback", 1f)]
@@ -220,7 +220,7 @@ public sealed class CanaryOffscreenLawTests : IDisposable {
             expected: Puck.World.WorldHostPresentation.Offscreen,
             actual: definition!.Host.Presentation
         );
-        var row = Assert.Single(collection: definition.Views.Pipelines);
+        var row = Assert.Single(collection: (definition.Views.Graphs ?? []));
 
         Assert.Equal(
             expected: pipeline,
@@ -235,7 +235,9 @@ public sealed class CanaryOffscreenLawTests : IDisposable {
     [InlineData("offscreen", "\"backends\": [\"vulkan\"],", "[\"gpu\"]", "cannot pass the two-backend gate")]
     [InlineData("offscreen", "\"backends\": [\"vulkan\", \"vulkan\"],", "[\"gpu\"]", "exactly once")]
     [InlineData("offscreen", "\"backends\": [\"vulkan\", \"directx\"],", "[]", "'gpu' requirement")]
-    [InlineData("headless", "\"backends\": [\"vulkan\", \"directx\"],", "[]", "only bootShape 'offscreen'")]
+    [InlineData("headless", "\"backends\": [\"vulkan\", \"directx\"],", "[]", "only bootShape 'offscreen' and 'windowed'")]
+    [InlineData("windowed", "\"backends\": [\"directx\"],", "[\"gpu\"]", "cannot pass the two-backend gate")]
+    [InlineData("windowed", "\"backends\": [\"vulkan\", \"directx\"],", "[]", "'gpu' requirement")]
     [Theory]
     public void AnOffscreenManifestThatCouldSkipABackendIsRefused(string bootShape, string backends, string requirements, string reason) {
         WriteManifestTree(
@@ -256,22 +258,63 @@ public sealed class CanaryOffscreenLawTests : IDisposable {
             expectedSubstring: reason
         );
     }
-    [Fact]
-    public void AnOffscreenManifestNamingBothBackendsLoads() {
+    [InlineData("offscreen")]
+    [InlineData("windowed")]
+    [Theory]
+    public void AManifestNamingBothBackendsLoadsAndRunsOnEach(string bootShape) {
         WriteManifestTree(
             id: "synthetic",
             manifestBody: Manifest(
                 backends: "\"backends\": [\"directx\", \"vulkan\"],",
-                bootShape: "offscreen",
+                bootShape: bootShape,
                 id: "synthetic",
                 requirements: "[\"gpu\"]"
             )
         );
-        var (loaded, error) = Load();
+        var loaded = CanaryManifestLoader.TryLoadAll(
+            error: out var error,
+            manifests: out var manifests,
+            refused: out _,
+            repositoryRoot: m_root,
+            strict: true
+        );
 
         Assert.True(
             condition: loaded,
             userMessage: error
+        );
+        Assert.Equal(
+            expected: ["synthetic on directx", "synthetic on vulkan"],
+            actual: CanaryCommand.ExpandProofs(backends: WorldOffscreenLeg.Backends, manifests: manifests).Select(selector: static proof => proof.Label)
+        );
+    }
+    /// <summary>A windowed manifest without backends keeps its one boot per leg, naming no backend.</summary>
+    [Fact]
+    public void AWindowedManifestWithoutBackendsRunsOnce() {
+        WriteManifestTree(
+            id: "synthetic",
+            manifestBody: Manifest(
+                backends: "",
+                bootShape: "windowed",
+                id: "synthetic",
+                requirements: "[\"gpu\"]"
+            )
+        );
+        var loaded = CanaryManifestLoader.TryLoadAll(
+            error: out var error,
+            manifests: out var manifests,
+            refused: out _,
+            repositoryRoot: m_root,
+            strict: true
+        );
+
+        Assert.True(
+            condition: loaded,
+            userMessage: error
+        );
+        Assert.Equal(
+            expected: ["synthetic"],
+            actual: CanaryCommand.ExpandProofs(backends: WorldOffscreenLeg.Backends, manifests: manifests).Select(selector: static proof => proof.Label)
         );
     }
     [Fact]
@@ -341,6 +384,26 @@ public sealed class CanaryOffscreenLawTests : IDisposable {
         );
 
         Assert.False(condition: inverted.Passed);
+    }
+    [Fact]
+    public void ABoundWrittenAsADecimalFractionIsReadAsItsCodeSoAWholeToleranceAwayIsInside() {
+        // 55/255 written to nine places, 0.215686275, is 55.00000013 codes as a product; read as 55 codes, a pixel at 54
+        // or 56 is a whole code of tolerance away and inside, and one at 53 or 57 is outside.
+        foreach (var (code, inside) in ((ReadOnlySpan<(byte, bool)>)[(54, true), (56, true), (53, false), (57, false)])) {
+            Gray(
+                code: code,
+                fileName: $"decimal-{code}.png"
+            );
+
+            Assert.True(condition: CanaryAssertions.Evaluate(
+                leg: Leg(Region(
+                    capture: $"decimal-{code}.png",
+                    holds: inside,
+                    value: 0.215686275
+                )),
+                primaryTranscript: Transcript(runDirectory: m_root)
+            ).Passed);
+        }
     }
     [Fact]
     public void AMissingCaptureOrAWrongExtentFailsEitherDirection() {

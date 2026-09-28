@@ -1,5 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Puck.Abstractions.Presentation;
+using Puck.Hosting;
 
 namespace Puck.Shaders;
 
@@ -13,14 +15,20 @@ public static class RenderGraphSchemas {
 /// reads and writes, and the planner orders it among the shader passes by those versions.</summary>
 /// <param name="Name">The pass's unique name, shared with the shader passes.</param>
 /// <param name="Package">The package id, which the host's <see cref="RenderGraphPackageCatalog"/> declares.</param>
-/// <param name="Inputs">The versions the package reads, one per input port in port order. A reference may read a
-/// history version's previous frame. A package binds its own descriptors, so no reference declares a binding.</param>
-/// <param name="Outputs">The image versions the package writes, one per output port in port order.</param>
+/// <param name="Inputs">The versions the package reads, one per input port in port order, each carrying what its port
+/// carries (<see cref="RenderGraphPackagePort"/>). A reference may read a history version's previous frame. A package
+/// compiles no source, so no reference names an <c>as</c>.</param>
+/// <param name="Outputs">The versions the package writes, one per output port in port order, each carrying what its
+/// port carries.</param>
+/// <param name="Config">The values of the package's config schema (<see cref="RenderGraphPackage.Config"/>), each
+/// absent field at its default, or <see langword="null"/> for every default. They are the pass's frame block config,
+/// which the graph compiler binds against the schema and refuses by name when they do not bind.</param>
 public sealed record RenderGraphPackagePass(
     string Name,
     string Package,
     IReadOnlyList<ResourceReference>? Inputs = null,
-    IReadOnlyList<ResourceReference>? Outputs = null
+    IReadOnlyList<ResourceReference>? Outputs = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] JsonElement? Config = null
 ) {
     /// <summary>Gets an empty list when the pass reads nothing.</summary>
     [JsonIgnore]
@@ -30,20 +38,29 @@ public sealed record RenderGraphPackagePass(
     public IReadOnlyList<ResourceReference> OutputReferences => (Outputs ?? []);
 }
 /// <summary>A frame as a document: passes connected by named image and buffer versions, planned by the one pipeline
-/// planner (<see cref="ShaderPipelineCompiler"/>). Every view renders an instance of a graph, and a version declared
-/// <see cref="ShaderPipelineInitialization.External"/> is an input the host binds, such as another instance's output.
-/// <para>
-/// Its members are the pipeline document's members, with the same shapes, plus <see cref="Packages"/>: a
-/// <c>puck.shader.pipeline.v1</c> document's content is a graph with no packages, so a pipeline is a graph a world
-/// names.
-/// </para>
-/// </summary>
+/// planner (<see cref="ShaderPipelineCompiler"/>). It is the one document a pass graph is written in. A pipeline is a
+/// graph a world names, whose passes are all shader passes, and a lone <c>.hlsl</c> source reads as the one-pass graph
+/// <see cref="FromShaderSource"/> makes. Every view renders an instance of a graph, and a version declared
+/// <see cref="ShaderPipelineInitialization.External"/> is an input the host binds, such as another instance's
+/// output.</summary>
 /// <param name="Schema">The schema tag, <c>puck.render.graph.v1</c>.</param>
 /// <param name="Name">The graph name.</param>
-/// <param name="Resources">The versions, as a pipeline declares them.</param>
-/// <param name="Outputs">The public versions; the first is what a consumer reads by default.</param>
-/// <param name="Passes">The shader passes, as a pipeline declares them, or <see langword="null"/> for none.</param>
-/// <param name="Packages">The engine-package passes, or <see langword="null"/> for none.</param>
+/// <param name="Resources">The versions.</param>
+/// <param name="Outputs">The public versions, each named by its version name; the first is what a consumer reads by
+/// default.</param>
+/// <param name="Passes">The shader passes, in any order, or <see langword="null"/> for none; the planner orders
+/// them.</param>
+/// <param name="Packages">The engine-package passes, or <see langword="null"/> for none. Only a host that offers packages
+/// plans them (<see cref="RenderGraphCompiler"/>); a pipeline instance runs shader passes alone.</param>
+/// <param name="TickRate">The rate, in ticks a second, the graph's passes read the deterministic tick at
+/// (<see cref="ShaderFrameInterface.Tick"/>), or <see langword="null"/> for the engine's own
+/// (<see cref="ShaderFrameInterface.EngineTickRate"/>). A pass reads the engine tick divided by the engine rate over this
+/// rate, so the rate must divide the engine rate exactly; the planner refuses any other by name
+/// (<c>SHADERPIPE_TICK_RATE</c>).</param>
+/// <param name="Tiers">The quality tiers the graph's shader passes vary by, each a variant a package of the graph
+/// compiles beside <c>default</c> with <see cref="QualityTiers.Define"/> set, or <see langword="null"/> for none, which
+/// builds <c>default</c> alone. A tier the graph does not declare loads <c>default</c>
+/// (<see cref="VariantOf"/>).</param>
 [method: JsonConstructor]
 public sealed record RenderGraphDefinition(
     [property: JsonPropertyName("$schema")] string Schema,
@@ -51,8 +68,45 @@ public sealed record RenderGraphDefinition(
     IReadOnlyList<ShaderPipelineResource> Resources,
     IReadOnlyList<string> Outputs,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ShaderPipelinePass>? Passes = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<RenderGraphPackagePass>? Packages = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<RenderGraphPackagePass>? Packages = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] uint? TickRate = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<QualityTier>? Tiers = null
 ) {
+    /// <summary>Gets the variant tier of every variant a package of the graph compiles, cheapest first: no tier, then
+    /// each declared tier in <see cref="QualityTiers.All"/> order.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<QualityTier?> Variants => [null, .. QualityTiers.All.Where(predicate: tier => (Tiers ?? []).Contains(value: tier)).Select(selector: static tier => ((QualityTier?)tier))];
+
+    /// <summary>Returns the tier a row naming <paramref name="tier"/> compiles or loads at: the tier when the graph
+    /// declares it, and otherwise none, the <c>default</c> variant.</summary>
+    /// <param name="tier">The tier a row names, or <see langword="null"/> for none.</param>
+    /// <returns>The variant's tier, or <see langword="null"/> for <c>default</c>.</returns>
+    public QualityTier? VariantOf(QualityTier? tier) => (((tier is { } named) && (Tiers ?? []).Contains(value: named))
+        ? named
+        : null);
+
+    /// <summary>Initializes a graph using <see cref="RenderGraphSchemas.Graph"/>.</summary>
+    /// <param name="name">The graph name.</param>
+    /// <param name="resources">The resource versions.</param>
+    /// <param name="passes">The shader passes, in any order; the planner orders them.</param>
+    /// <param name="outputs">The public versions, each named by its version name; the first is published by
+    /// default.</param>
+    /// <param name="packages">The engine-package passes, or <see langword="null"/> for none.</param>
+    public RenderGraphDefinition(
+        string name,
+        IReadOnlyList<ShaderPipelineResource> resources,
+        IReadOnlyList<ShaderPipelinePass> passes,
+        IReadOnlyList<string> outputs,
+        IReadOnlyList<RenderGraphPackagePass>? packages = null
+    ) : this(
+        Name: name,
+        Outputs: outputs,
+        Packages: packages,
+        Passes: passes,
+        Resources: resources,
+        Schema: RenderGraphSchemas.Graph
+    ) { }
+
     /// <summary>Gets an empty list when the graph declares no shader passes.</summary>
     [JsonIgnore]
     public IReadOnlyList<ShaderPipelinePass> ShaderPasses => (Passes ?? []);
@@ -60,6 +114,55 @@ public sealed record RenderGraphDefinition(
     [JsonIgnore]
     public IReadOnlyList<RenderGraphPackagePass> PackagePasses => (Packages ?? []);
 
+    /// <summary>Creates the one-pass graph a lone shader source reads as: one pass writing one frame-relative
+    /// <c>R8G8B8A8Unorm</c> image named <c>output</c>, its one public version.</summary>
+    /// <param name="name">The graph name, which also names its pass.</param>
+    /// <param name="sourcePath">The shader source path.</param>
+    /// <param name="kind">The pass kind; when omitted, the pass is a compute pass.</param>
+    /// <param name="entryPoint">The compiler entry point.</param>
+    /// <returns>The graph.</returns>
+    /// <exception cref="ArgumentException"><paramref name="name"/> or <paramref name="sourcePath"/> is empty, or the source
+    /// is not an <c>.hlsl</c> file.</exception>
+    public static RenderGraphDefinition FromShaderSource(
+        string name,
+        string sourcePath,
+        ShaderPipelineDocumentPassKind? kind = null,
+        string entryPoint = "main"
+    ) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: name);
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: sourcePath);
+        var extension = Path.GetExtension(path: sourcePath);
+
+        if (!extension.Equals(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            value: ".hlsl"
+        )) {
+            throw new ArgumentException(
+                message: $"Shader source extension '{extension}' is unsupported; a one-off shader is an .hlsl file.",
+                paramName: nameof(sourcePath)
+            );
+        }
+        var output = new ShaderPipelineResource(
+            Name: "output",
+            Kind: ShaderPipelineResourceKind.Image,
+            Format: "R8G8B8A8Unorm",
+            Dimensions: ShaderPipelineDimensions.Relative()
+        );
+        var pass = new ShaderPipelinePass(
+            Name: name,
+            Source: Path.GetFullPath(path: sourcePath),
+            EntryPoint: entryPoint,
+            Kind: (kind ?? ShaderPipelineDocumentPassKind.Compute),
+            Outputs: [new ResourceReference(Name: output.Name)]
+        );
+
+        return new RenderGraphDefinition(
+            name: name,
+            outputs: [output.Name],
+            passes: [pass],
+            resources: [output]
+        );
+    }
     /// <summary>Parses a graph document.</summary>
     /// <param name="json">The document text.</param>
     /// <returns>The definition.</returns>
@@ -75,9 +178,16 @@ public sealed record RenderGraphDefinition(
         ) ?? throw new InvalidDataException(message: "The graph document is null."));
     }
 }
-/// <summary>Source-generated metadata for <see cref="RenderGraphDefinition"/>, configured as
-/// <see cref="ShaderPipelineJsonContext"/> is, so a pipeline document's members read the same in both.</summary>
+/// <summary>Source-generated metadata for <see cref="RenderGraphDefinition"/> and the members it is made of. A member the
+/// document does not declare is refused.</summary>
 [JsonSerializable(typeof(RenderGraphDefinition))]
+[JsonSerializable(typeof(ShaderPipelineResource))]
+[JsonSerializable(typeof(ShaderPipelinePass))]
+[JsonSerializable(typeof(ResourceReference))]
+[JsonSerializable(typeof(ShaderPipelineGeometry))]
+[JsonSerializable(typeof(ShaderPipelineVertexAttribute))]
+[JsonSerializable(typeof(ShaderPipelineDispatch))]
+[JsonSerializable(typeof(ShaderPipelineCountTerm))]
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow)]
 public partial class RenderGraphJsonContext : JsonSerializerContext {
 }

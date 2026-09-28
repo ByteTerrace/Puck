@@ -1,3 +1,5 @@
+using Puck.World.Server;
+using Puck.Testing;
 using Puck.Commands;
 using Puck.World.Protocol;
 using Xunit;
@@ -7,7 +9,7 @@ namespace Puck.World.Tests;
 public sealed partial class PlacementDealLawTests {
     [Fact]
     public void ReflowBatchReplaysFromTheBootImageWithIdenticalLayoutAndPayment() {
-        Fixtures.SkipIfReplayDirectoryUnwritable();
+        using var stateDirectory = new TemporaryDirectory(prefix: "puck-replay-");
         using var fixture = Fixtures.FreshServer(ReflowDocument());
         var transport = new LoopbackTransport(server: fixture.Server);
         var tape = new WorldReplayTape(
@@ -16,7 +18,8 @@ public sealed partial class PlacementDealLawTests {
             transport,
             [],
             Fixtures.MachineHostFactory,
-            static (_, _) => new NullAddonHost()
+            static (_, _) => new NullAddonHost(),
+            stateRoot: new WorldStateRoot(path: stateDirectory.RootPath)
         );
         var name = $"reflow-{Guid.NewGuid():N}";
 

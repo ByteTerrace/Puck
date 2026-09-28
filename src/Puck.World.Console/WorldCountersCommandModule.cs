@@ -14,7 +14,7 @@ namespace Puck.World;
 /// discovered by being registered; the verb knows none of them by name. The text form prints one section per source,
 /// sorted by name with the <c>allocation</c> and <c>gpu</c> sections: the source's name, then one
 /// <c>&lt;kind&gt; &lt;value&gt;</c> line per kind (<see cref="WorkCounterReport"/>). The GPU nodes form the
-/// <c>gpu</c> section: its header carries the device's identity (<see cref="GpuDeviceIdentity.AppendFields"/>), then
+/// <c>gpu</c> section: its header carries the device's identity (<see cref="GpuDeviceIdentity.AppendFields"/>) and, once the device is up, a <c>capabilities</c> line (<see cref="GpuDeviceCapabilities.AppendFields"/>), then
 /// each node's <c>node &lt;name&gt; work …</c> lines (<see cref="GpuWorkReport"/>). A host with no renderer has no
 /// <c>gpu</c> section. The <c>allocation</c> section measures the <see cref="ReadWindow"/> window — one read of every
 /// registered count and every node's newest completed submission, into storage the verb keeps — with
@@ -142,6 +142,10 @@ public sealed class WorldCountersCommandModule(IEnumerable<IWorkCounterSource> s
     private string WriteJson(IWorkCounterSource[] selected, bool includeGpu, long? allocated) {
         var buffer = new ArrayBufferWriter<byte>();
 
+        var nodes = (includeGpu
+            ? GpuNodes()
+            : []);
+
         using (var writer = new Utf8JsonWriter(bufferWriter: buffer)) {
             writer.WriteStartObject();
             writer.WriteStartArray(propertyName: "sources");
@@ -167,9 +171,17 @@ public sealed class WorldCountersCommandModule(IEnumerable<IWorkCounterSource> s
                     writer.WriteNullValue();
                 }
 
+                writer.WritePropertyName(propertyName: GpuDeviceCapabilities.Section);
+
+                if (gpu?.DeviceCapabilities is { } capabilities) {
+                    capabilities.WriteJson(writer: writer);
+                } else {
+                    writer.WriteNullValue();
+                }
+
                 writer.WriteStartArray(propertyName: "nodes");
 
-                foreach (var node in GpuNodes()) {
+                foreach (var node in nodes) {
                     GpuWorkReport.WriteNode(
                         node: node,
                         sample: sample,
@@ -198,6 +210,7 @@ public sealed class WorldCountersCommandModule(IEnumerable<IWorkCounterSource> s
 
             WriteLegend(
                 includeGpu: includeGpu,
+                nodes: nodes,
                 selected: selected,
                 writer: writer
             );
@@ -207,8 +220,9 @@ public sealed class WorldCountersCommandModule(IEnumerable<IWorkCounterSource> s
         return $"[{Verb}: {Encoding.UTF8.GetString(bytes: buffer.WrittenSpan)}]";
     }
     // Every kind the object reports, once, with its unit and class: the sources' kinds in report order, then the GPU
-    // submission and lifetime kinds when the gpu section is present.
-    private static void WriteLegend(Utf8JsonWriter writer, IWorkCounterSource[] selected, bool includeGpu) {
+    // submission and lifetime kinds when the gpu section is present, and any other kind a node's lifetime counters
+    // report (a routed residency's endpoint row, say).
+    private static void WriteLegend(Utf8JsonWriter writer, IWorkCounterSource[] selected, bool includeGpu, IReadOnlyList<GpuWorkNode> nodes) {
         var written = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         writer.WriteStartObject(propertyName: "kinds");
@@ -231,6 +245,12 @@ public sealed class WorldCountersCommandModule(IEnumerable<IWorkCounterSource> s
         if (includeGpu) {
             Write(kinds: GpuWork.SubmissionKinds);
             Write(kinds: GpuWork.LifetimeKinds);
+
+            foreach (var node in nodes) {
+                if (node.Lifetime is { } lifetime) {
+                    Write(kinds: lifetime.WorkKinds);
+                }
+            }
         }
 
         writer.WriteEndObject();
@@ -276,6 +296,10 @@ public sealed class WorldCountersCommandModule(IEnumerable<IWorkCounterSource> s
             : builder.Append(value: " device unavailable")
         ).Append(value: '\n');
 
+        if (gpu?.DeviceCapabilities is { } capabilities) {
+            _ = capabilities.AppendFields(builder: builder.Append(value: GpuDeviceCapabilities.Section)).Append(value: '\n');
+        }
+
         var nodes = GpuNodes();
 
         if (nodes.Count == 0) {
@@ -306,7 +330,7 @@ public sealed class WorldCountersCommandModule(IEnumerable<IWorkCounterSource> s
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
-            description: $"Echoes every registered work counter: world.counters [<source-or-prefix>] [--json]. One section per counter source, sorted by name — the source's dotted name, then a `<kind> <value>` line per kind it counts (counts only go up; a reader diffs two reads). The `{GpuSection}` section's header names the device (backend, adapter, vendor and device ids, driver version, API version), then it holds each render node's GPU work for its newest completed submission: per node (world first, then its hosted pipelines, overlay, view:<name>) a `node <name> work submission=S revision=R` line, one `work <pass> executed|skipped|not-reached` line per pass with its counts, `work outside` for work between passes, and `work lifetime` for created objects; `work unavailable` until a submission completes. The `{AllocationSection}` section names the GC mode and the fewest managed bytes one read of every count allocated ({ReadWindow}, the least of up to {AllocationWindow.MaximumWindows} reads; only zero or not zero means anything). A filter selects the sections named by it or under it by whole dotted segments (world.counters {GpuSection}, world.counters state). --json prints one line of JSON: {{\"sources\":[{{\"name\":…,\"counts\":{{\"<kind>\":<value>}}}}],\"{GpuSection}\":{{\"device\":{{…}},\"nodes\":[…]}},\"{AllocationSection}\":{{\"gcMode\":…,\"windows\":{{\"{ReadWindow}\":<bytes>}}}},\"kinds\":{{\"<kind>\":{{\"unit\":…,\"class\":\"deterministic|per-backend-deterministic|pacing\"}}}}}}. Counts run always.",
+            description: $"Echoes every registered work counter: world.counters [<source-or-prefix>] [--json]. One section per counter source, sorted by name — the source's dotted name, then a `<kind> <value>` line per kind it counts (counts only go up; a reader diffs two reads). The `{GpuSection}` section's header names the device (backend, adapter, vendor and device ids, driver version, API version), then a `capabilities` line names what it can bind (descriptor sets or root-signature words, push-constant bytes, per-stage descriptor limits, and on Direct3D 12 the binding tier, root signature version, shader model and heap sizes), then it holds each render node's GPU work for its newest completed submission: per node (world first, then its hosted pipelines, overlay, view:<name>) a `node <name> work submission=S revision=R` line, one `work <pass> executed|skipped|not-reached` line per pass with its counts, `work outside` for work between passes, and `work lifetime` for created objects; `work unavailable` until a submission completes. The `{AllocationSection}` section names the GC mode and the fewest managed bytes one read of every count allocated ({ReadWindow}, the least of up to {AllocationWindow.MaximumWindows} reads; only zero or not zero means anything). A filter selects the sections named by it or under it by whole dotted segments (world.counters {GpuSection}, world.counters state). --json prints one line of JSON: {{\"sources\":[{{\"name\":…,\"counts\":{{\"<kind>\":<value>}}}}],\"{GpuSection}\":{{\"device\":{{…}},\"capabilities\":{{…}},\"nodes\":[…]}},\"{AllocationSection}\":{{\"gcMode\":…,\"windows\":{{\"{ReadWindow}\":<bytes>}}}},\"kinds\":{{\"<kind>\":{{\"unit\":…,\"class\":\"deterministic|per-backend-deterministic|pacing\"}}}}}}. Counts run always.",
             handler: (_, args) => Describe(args: args),
             name: Verb
         );

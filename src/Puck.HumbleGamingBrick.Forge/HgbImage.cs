@@ -2,7 +2,7 @@ namespace Puck.HumbleGamingBrick.Forge;
 
 /// <summary>
 /// The pure-C# image half of the ROM forge: it turns an RGBA8 buffer (as produced by
-/// <c>Puck.SdfVm.SdfWorldEngine.RenderFrame</c>) into the Humble GamingBrick's brutal indexed-tile world — a
+/// an <c>sdf.world</c> view's render) into the Humble GamingBrick's brutal indexed-tile world — a
 /// derived 4-colour palette, per-pixel colour indices, and deduplicated 8×8 2bpp tiles + a tilemap. Every byte layout
 /// here is the INVERSE of the emulator's own decode (<c>src/Puck.HumbleGamingBrick/Ppu.cs</c>): a tile is 16
 /// bytes (per row a low byte then a high byte, bit 7 = leftmost pixel, pixel = <c>(high&lt;&lt;1)|low</c>); a CGB colour

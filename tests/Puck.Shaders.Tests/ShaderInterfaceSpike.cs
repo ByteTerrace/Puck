@@ -3,9 +3,10 @@ using Puck.Hosting;
 
 namespace Puck.Shaders.Tests;
 
-/// <summary>The two-group binding spike's package: an interface for each of two existing passes, the generated include
-/// beside a variant of each pass, and a DXC build of both for both backends. The variants live under
-/// <c>Assets/Interfaces/&lt;interface&gt;/</c>; the passes they copy keep their own sources and bindings.</summary>
+/// <summary>The two-group binding spike's package: an interface for each of two existing passes and for a pass reading
+/// typed and raw buffers and a pushed index, the generated include beside each pass's source, and a DXC build of each
+/// for both backends. The sources live under <c>Assets/Interfaces/&lt;interface&gt;/</c>; the existing passes they copy
+/// keep their own sources and bindings.</summary>
 internal static class ShaderInterfaceSpike {
     /// <summary>One variant pass: its interface, its source file, and the stage it compiles as.</summary>
     internal sealed record Pass(ShaderInterface Interface, string SourceFileName, string Profile, string EntryPoint);
@@ -78,11 +79,10 @@ internal static class ShaderInterfaceSpike {
                 name: "cellSize",
                 type: ShaderValueType.Uint
             ),
-            ShaderInterfaceMember.Array(
+            ShaderInterfaceMember.Value(
                 group: ShaderInterfaceGroup.Pass,
-                length: 3,
                 name: "channelLevels",
-                type: ShaderValueType.Uint
+                type: ShaderValueType.Uint4
             ),
             ShaderInterfaceMember.StorageImage(
                 format: GpuPixelFormat.R8G8B8A8Unorm,
@@ -99,6 +99,54 @@ internal static class ShaderInterfaceSpike {
         ],
         name: "pixelate"
     );
+    // Structured buffers of a 4-byte and a 16-byte element and a raw buffer it reads, a structured and a raw buffer it
+    // writes, an array it reads through its accessor, and a pushed index beside its bound frame group, which SPIR-V
+    // reports at the same set and binding.
+    internal static ShaderInterface TypedBuffers { get; } = new(
+        members: [
+            ShaderInterfaceMember.Value(
+                group: ShaderInterfaceGroup.Frame,
+                name: "tick",
+                type: ShaderValueType.Uint
+            ),
+            ShaderInterfaceMember.Value(
+                group: ShaderInterfaceGroup.Frame,
+                name: "extent",
+                type: ShaderValueType.Uint2
+            ),
+            ShaderInterfaceMember.ReadOnlyBuffer(
+                element: ShaderValueType.Uint,
+                group: ShaderInterfaceGroup.Pass,
+                name: "narrow"
+            ),
+            ShaderInterfaceMember.ReadOnlyBuffer(
+                element: ShaderValueType.Float4,
+                group: ShaderInterfaceGroup.Pass,
+                name: "wide"
+            ),
+            ShaderInterfaceMember.ReadOnlyBuffer(
+                group: ShaderInterfaceGroup.Pass,
+                name: "raw"
+            ),
+            ShaderInterfaceMember.ReadWriteBuffer(
+                element: ShaderValueType.Uint2,
+                group: ShaderInterfaceGroup.Pass,
+                name: "output"
+            ),
+            ShaderInterfaceMember.ReadWriteBuffer(
+                group: ShaderInterfaceGroup.Pass,
+                name: "rawOutput"
+            ),
+            ShaderInterfaceMember.Array(
+                group: ShaderInterfaceGroup.Pass,
+                length: 4,
+                name: "offsets",
+                type: ShaderValueType.Uint
+            ),
+        ],
+        name: "typed-buffers",
+        pushesIndex: true
+    );
     internal static IReadOnlyList<Pass> Passes { get; } = [
         new Pass(
             EntryPoint: "PSMain",
@@ -112,6 +160,12 @@ internal static class ShaderInterfaceSpike {
             Profile: "cs_6_6",
             SourceFileName: "pixelate.comp.hlsl"
         ),
+        new Pass(
+            EntryPoint: "CSMain",
+            Interface: TypedBuffers,
+            Profile: "cs_6_6",
+            SourceFileName: "typed-buffers.comp.hlsl"
+        ),
     ];
 
     /// <summary>Gets the <c>dxc</c> the default toolchain resolves on the search path, or <see langword="null"/>.</summary>
@@ -119,7 +173,51 @@ internal static class ShaderInterfaceSpike {
 
     /// <summary>Generates the pass's include into a fresh directory beside a copy of its variant source, then compiles it
     /// to SPIR-V and DXIL with the flags the shared shader recipe (<c>build/Shaders.targets</c>) passes.</summary>
-    internal static async Task<Build> CompileAsync(Pass pass, string generatedInclude, CancellationToken cancellationToken) {
+    internal static Task<Build> CompileAsync(Pass pass, string generatedInclude, CancellationToken cancellationToken) =>
+        CompileInAsync(
+            cancellationToken: cancellationToken,
+            entryPoint: pass.EntryPoint,
+            profile: pass.Profile,
+            sourceFileName: pass.SourceFileName,
+            stage: async (root, token) => {
+                File.Copy(
+                    destFileName: Path.Combine(
+                        path1: root,
+                        path2: pass.SourceFileName
+                    ),
+                    sourceFileName: Path.Combine(paths: [AppContext.BaseDirectory, "Assets", "Interfaces", pass.Interface.Name, pass.SourceFileName])
+                );
+                await File.WriteAllTextAsync(
+                    cancellationToken: token,
+                    contents: generatedInclude,
+                    path: Path.Combine(
+                        path1: root,
+                        path2: ShaderInterfaceHlsl.FileName(shaderInterface: pass.Interface)
+                    )
+                );
+            }
+        );
+    /// <summary>Compiles one source written out as text to SPIR-V and DXIL with the same flags as
+    /// <see cref="CompileAsync(Pass, string, CancellationToken)"/>.</summary>
+    internal static Task<Build> CompileSourceAsync(string source, string profile, string entryPoint, CancellationToken cancellationToken) =>
+        CompileInAsync(
+            cancellationToken: cancellationToken,
+            entryPoint: entryPoint,
+            profile: profile,
+            sourceFileName: "source.hlsl",
+            stage: (root, token) => File.WriteAllTextAsync(
+                cancellationToken: token,
+                contents: source,
+                path: Path.Combine(
+                    path1: root,
+                    path2: "source.hlsl"
+                )
+            )
+        );
+
+    // Stages the sources into a fresh directory, then compiles the named one with the one shader recipe
+    // (ShaderCompiler.StepsOf, which the build runs through build/ShaderRecipe.props).
+    private static async Task<Build> CompileInAsync(string sourceFileName, string profile, string entryPoint, Func<string, CancellationToken, Task> stage, CancellationToken cancellationToken) {
         var dxc = (Dxc ?? throw new ShaderToolMissingException(
             directory: null,
             tool: "dxc"
@@ -134,27 +232,19 @@ internal static class ShaderInterfaceSpike {
         try {
             var source = Path.Combine(
                 path1: root,
-                path2: pass.SourceFileName
+                path2: sourceFileName
             );
 
-            File.Copy(
-                destFileName: source,
-                sourceFileName: Path.Combine(paths: [AppContext.BaseDirectory, "Assets", "Interfaces", pass.Interface.Name, pass.SourceFileName])
-            );
-            await File.WriteAllTextAsync(
-                cancellationToken: cancellationToken,
-                contents: generatedInclude,
-                path: Path.Combine(
-                    path1: root,
-                    path2: ShaderInterfaceHlsl.FileName(shaderInterface: pass.Interface)
-                )
+            await stage(
+                arg1: root,
+                arg2: cancellationToken
             );
 
             var include = ("-I" + Path.Combine(
                 path1: AppContext.BaseDirectory,
                 path2: "Assets",
                 path3: "Shaders",
-                path4: "Sdf"
+                path4: "Sdf/field"
             ));
             var spirvPath = Path.Combine(
                 path1: root,
@@ -165,13 +255,22 @@ internal static class ShaderInterfaceSpike {
                 path2: "out.dxil"
             );
 
+            var steps = ShaderCompiler.StepsOf(
+                entryPoint: entryPoint,
+                stage: profile[..2] switch {
+                    "vs" => ShaderStage.Vertex,
+                    "ps" => ShaderStage.Fragment,
+                    _ => ShaderStage.Compute,
+                }
+            );
+
             await RunAsync(
-                arguments: ["-spirv", "-fspv-target-env=vulkan1.3", "-fspv-entrypoint-name=main", "-enable-16bit-types", "-O3", "-T", pass.Profile, "-E", pass.EntryPoint, include, "-Fo", spirvPath, source],
+                arguments: [.. steps[0].Options, include, "-Fo", spirvPath, source],
                 cancellationToken: cancellationToken,
                 dxc: dxc
             );
             await RunAsync(
-                arguments: ["-Wno-ignored-attributes", "-enable-16bit-types", "-O3", "-T", pass.Profile, "-E", pass.EntryPoint, include, "-Fo", dxilPath, source],
+                arguments: [.. steps[1].Options, include, "-Fo", dxilPath, source],
                 cancellationToken: cancellationToken,
                 dxc: dxc
             );
@@ -193,7 +292,6 @@ internal static class ShaderInterfaceSpike {
             );
         }
     }
-
     private static async Task RunAsync(string dxc, IReadOnlyList<string> arguments, CancellationToken cancellationToken) {
         var result = await ChildProcess.RunAsync(
             arguments: arguments,

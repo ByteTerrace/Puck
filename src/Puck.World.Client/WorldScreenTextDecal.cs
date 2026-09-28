@@ -8,7 +8,7 @@ namespace Puck.World.Client;
 /// <summary>Bakes an authored decal-text screen source (<see cref="WorldScreenSource.Text"/>) into the engine's
 /// per-cell decal frame (<see cref="SdfScreenDecalFrame"/>): a row-major monospace cell lattice over the packed font
 /// atlas, one Unicode scalar per cell.</summary>
-/// <remarks>Cell layout (KEEP IN SYNC with <c>sdfSampleGlyphDecal</c> in Assets/Shaders/Sdf/sdf-world.hlsli):
+/// <remarks>Cell layout (KEEP IN SYNC with <c>sdfSampleGlyphDecal</c> in Assets/Shaders/Sdf/shade/sdf-environment.hlsli):
 /// four uints per cell — packed unorm2x16 atlas UV top-left, UV bottom-right (decal V runs top-down, the OPPOSITE
 /// corner pairing from <c>SdfProgramBuilder.Text</c>'s y-up glyph quads), foreground rgba8, background rgba8 (R in
 /// the low byte). Equal packed UV words mark a blank cell (background only) — whitespace, unmapped scalars, and
@@ -38,7 +38,7 @@ public static class WorldScreenTextDecal {
         return r | (g << 8) | (b << 16) | 0xFF000000;
     }
     // Host-side unorm2x16 pack, u in the low half — the same encoding SdfProgramBuilder.PackUv and the console decal
-    // bake use (KEEP IN SYNC with sdfGlyphUnpackUv in Assets/Shaders/Sdf/sdf-vm.hlsli).
+    // bake use (KEEP IN SYNC with sdfGlyphUnpackUv in Assets/Shaders/Sdf/field/sdf-shapes.hlsli).
     private static uint PackUv(float u, float v) {
         var packedU = ((uint)Math.Clamp(
             value: ((int)MathF.Round(x: (MathF.Max(
@@ -61,12 +61,12 @@ public static class WorldScreenTextDecal {
     }
 
     /// <summary>Bakes the authored lines into a decal frame against the resolved catalog font.</summary>
-    /// <param name="definition">The live definition a state-bound foreground/background resolves against.</param>
+    /// <param name="colors">The colors the bake resolves a state-bound foreground or background through.</param>
     /// <param name="text">The authored decal-text source (validated: the grid fits the engine budget).</param>
     /// <param name="catalog">The world's packed font catalog.</param>
-    /// <returns>The baked frame, ready for <c>SdfWorldEngine.SetScreenDecal</c>.</returns>
-    public static SdfScreenDecalFrame Bake(WorldDefinition definition, WorldScreenSource.Text text, PackedFontAtlasCatalog catalog) {
-        ArgumentNullException.ThrowIfNull(definition);
+    /// <returns>The baked frame, ready for <c>SdfWorldTables.SetScreenDecal</c>.</returns>
+    public static SdfScreenDecalFrame Bake(WorldBakedColors colors, WorldScreenSource.Text text, PackedFontAtlasCatalog catalog) {
+        ArgumentNullException.ThrowIfNull(colors);
         ArgumentNullException.ThrowIfNull(text);
         ArgumentNullException.ThrowIfNull(catalog);
 
@@ -106,13 +106,11 @@ public static class WorldScreenTextDecal {
             );
         }
 
-        var foreground = PackColor(rgb: WorldColor.Resolve(
-            definition: definition,
+        var foreground = PackColor(rgb: colors.Resolve(
             fallback: DefaultForeground,
             value: text.Foreground
         ));
-        var background = PackColor(rgb: WorldColor.Resolve(
-            definition: definition,
+        var background = PackColor(rgb: colors.Resolve(
             fallback: DefaultBackground,
             value: text.Background
         ));

@@ -275,7 +275,7 @@ public sealed class MirroredSolidFieldDeterminismLawTests {
         );
     }
     [Fact]
-    public void FixedStampEmissionReflectsPositionAndProperFrameBeforeFloatEncoding() {
+    public void FixedStampEmissionReflectsThePointOnceAfterTheStampScale() {
         var shape = new ShapeDocument(
             Id: 0,
             Name: null,
@@ -319,35 +319,61 @@ public sealed class MirroredSolidFieldDeterminismLawTests {
         );
 
         var program = builder.Build(buildInstanceGrid: false);
-        var translations = program.Instructions.Where(predicate: candidate => (candidate.Op == SdfOp.Translate)).ToArray();
-        var rotations = program.Instructions.Where(predicate: candidate => (candidate.Op == SdfOp.Rotate)).ToArray();
+        // The stamp's prefix, then its reflection as the fixed alignment carrying X onto +Y, a mirror of X and the
+        // alignment back, then the shape's own authored pose, unreflected, and the
+        // primitive's own unit scale.
+        var alignment = new FixedQuaternion(
+            W: FixedQ4816.One,
+            X: FixedQ4816.Zero,
+            Y: FixedQ4816.Zero,
+            Z: FixedQ4816.One
+        ).Normalize().ToQuaternion();
+        var chain = program.Instructions.TakeWhile(predicate: candidate => (candidate.Op != SdfOp.ShapeBlend)).Select(selector: candidate => (candidate.Op, candidate.Data0)).ToArray();
 
         Assert.Equal(
-            expected: 2,
-            actual: translations.Length
-        );
-        Assert.Equal(
-            expected: new Vector4(
-                w: 0f,
-                x: 1f,
-                y: -2f,
-                z: 3f
-            ),
-            actual: translations[1].Data0
-        );
-        Assert.Equal(
-            expected: 2,
-            actual: rotations.Length
-        );
-        // Reflection in Y followed by the legacy X-axis handedness repair is a half turn around Z.
-        Assert.Equal(
-            expected: new Vector4(
-                w: 0f,
-                x: 0f,
-                y: 0f,
-                z: 1f
-            ),
-            actual: rotations[1].Data0
+            expected: [
+                (SdfOp.ResetPoint, Vector4.Zero),
+                (SdfOp.Translate, Vector4.Zero),
+                (SdfOp.Rotate, new Vector4(
+                    w: 1f,
+                    x: 0f,
+                    y: 0f,
+                    z: 0f
+                )),
+                (SdfOp.Scale, Vector4.One),
+                (SdfOp.Rotate, new Vector4(
+                    w: alignment.W,
+                    x: alignment.X,
+                    y: alignment.Y,
+                    z: alignment.Z
+                )),
+                (SdfOp.Scale, new Vector4(
+                    w: 1f,
+                    x: -1f,
+                    y: 1f,
+                    z: 1f
+                )),
+                (SdfOp.Rotate, new Vector4(
+                    w: alignment.W,
+                    x: -alignment.X,
+                    y: -alignment.Y,
+                    z: -alignment.Z
+                )),
+                (SdfOp.Translate, new Vector4(
+                    w: 0f,
+                    x: 1f,
+                    y: 2f,
+                    z: 3f
+                )),
+                (SdfOp.Rotate, new Vector4(
+                    w: 1f,
+                    x: 0f,
+                    y: 0f,
+                    z: 0f
+                )),
+                (SdfOp.Scale, Vector4.One),
+            ],
+            actual: chain
         );
     }
     [Fact]

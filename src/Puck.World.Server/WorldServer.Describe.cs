@@ -158,13 +158,14 @@ public sealed partial class WorldServer {
         WorldMutation.SetViewDefaults => "SetViewDefaults",
         WorldMutation.SetViewSeatRig => "SetViewSeatRig",
         WorldMutation.SetViewSeatControl => "SetViewSeatControl",
+        WorldMutation.SetViewPost m => $"SetViewPost {m.Post.Count}",
         WorldMutation.SetPlayerDefaults => "SetPlayerDefaults",
         WorldMutation.SetPlayerSeatLook => "SetPlayerSeatLook",
         WorldMutation.UpsertViewLayout m => $"UpsertViewLayout '{m.Layout.Name}'",
         WorldMutation.RemoveViewLayout m => $"RemoveViewLayout '{m.Name}'",
-        WorldMutation.UpsertViewPipeline m => $"UpsertViewPipeline '{m.Pipeline.Name}'",
-        WorldMutation.RemoveViewPipeline m => $"RemoveViewPipeline '{m.Name}'",
-        WorldMutation.CommitViewPipeline m => $"CommitViewPipeline '{m.Name}'",
+        WorldMutation.UpsertViewGraph m => $"UpsertViewGraph '{m.Graph.Name}'",
+        WorldMutation.RemoveViewGraph m => $"RemoveViewGraph '{m.Name}'",
+        WorldMutation.CommitViewGraph m => $"CommitViewGraph '{m.Name}'",
         WorldMutation.UpsertLook m => $"UpsertLook '{m.Look.Name}'",
         WorldMutation.RemoveLook m => $"RemoveLook '{m.Name}'",
         WorldMutation.UpsertDynamics m => $"UpsertDynamics '{m.Row.Name}'",
@@ -229,7 +230,8 @@ public sealed partial class WorldServer {
 
         // The application-set summary: every target this seat's channels reach, each with its kit and reach mask, so
         // the same read-back that already shows the fold shows the whole engagement truth beside it (CLAUDE.md's
-        // read-back rule: no decision surface without an echoing verb). The own-body member is listed like any
+        // read-back rule: no decision surface without an echoing verb). A screen member shows its screen's live
+        // policy, the one the fold applies (WorldEngagement.Live), not the one it recorded at compose. The own-body member is listed like any
         // other, so its ABSENCE — capture — is legible rather than inferred.
         var applyPrincipal = Principal.Seat(slot: bodyIndex);
         var applications = m_grants.Applications(principal: applyPrincipal);
@@ -237,7 +239,7 @@ public sealed partial class WorldServer {
             ? "none"
             : string.Join(
                 separator: ",",
-                values: applications.Select(selector: static application => application.Describe())
+                values: applications.Select(selector: application => m_engagement.Live(application: application).Describe())
             ))}";
 
         var channels = m_population.Channels;
@@ -286,12 +288,49 @@ public sealed partial class WorldServer {
                 : "no")}");
         }
 
-        return $"[body.channels: body:{bodyIndex} {routeText} {string.Join(
+        return $"[body.channels: body:{bodyIndex} {routeText} pointer={DescribePointer(ray: composed.SourceRay)} {string.Join(
             separator: " | ",
             values: segments
         )}]";
     }
 
+    // body.channels' pointer read-back: the ray the body integrated this tick and where it maps on every Simulation
+    // screen, through the same source-normalized mapping the $pointer: rule read runs.
+    private string DescribePointer(SourceRay? ray) {
+        if (ray is not { } pointer) {
+            return "none";
+        }
+
+        static string Vector(FixedVector3 value) => $"({value.X}, {value.Y}, {value.Z})";
+
+        var hits = new List<string>();
+
+        foreach (var screen in Definition.Screens) {
+            if (screen.Route.Input != SourceDestination.Simulation) {
+                continue;
+            }
+
+            var mapping = WorldScreenMappings.Normalized(screen: screen);
+
+            if (!mapping.TryValidate(refusal: out var refusal)) {
+                hits.Add(item: $"screen:{screen.Index}=unmappable({refusal})");
+
+                continue;
+            }
+
+            var hit = mapping.MapRay(ray: pointer);
+
+            hits.Add(item: (hit.IsOnSource
+                ? $"screen:{screen.Index}=on({hit.Coordinate.X}, {hit.Coordinate.Y})"
+                : $"screen:{screen.Index}={hit.Outcome}"
+            ));
+        }
+
+        return $"{Vector(value: pointer.Origin)}->{Vector(value: pointer.Direction)}[{string.Join(
+            separator: ",",
+            values: hits
+        )}]";
+    }
     // Shared by DescribeRules/DescribeInteractions: an `all` gate prints ITS PREDICATES, never a List type name — the
     // whole reason a compiled conjunct carries its authored spelling beside its resolved form.
     //

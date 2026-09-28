@@ -1,6 +1,10 @@
-# Sixty completed ticks, then a read: the newest completed submission is a still frame the cadence gate re-composited.
+# The engine ready first: the world's residency built and the root rendered over its first output, however many
+# ticks a cold driver cache takes, within the leg's 60-second ceiling; a build still running at the deadline is
+# named on stderr.
+world.wait ready 45
+# Sixty completed ticks, then a read: the world's view rendered once, and its render stands for the still frame.
 world.wait 60
 world.counters gpu
-# Thirty more ticks: a later submission has completed, under the same pass configuration.
+# Thirty more ticks: the root has submitted again, and the view's one render still stands.
 world.wait 30
 world.counters gpu

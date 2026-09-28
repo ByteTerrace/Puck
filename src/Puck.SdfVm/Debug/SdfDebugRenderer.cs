@@ -385,7 +385,7 @@ public sealed class SdfDebugRenderer {
         ),
             SdfDebugOpKind.Polar => builder.RepeatPolar(
             count: op.I0,
-            axis: ((SdfPolarAxis)op.I1),
+            axis: ((SdfAxis)op.I1),
             mirror: op.Flag
         ),
             SdfDebugOpKind.Symmetry => builder.SymmetryPlane(
@@ -660,7 +660,7 @@ public sealed class SdfDebugRenderer {
         switch (exhibit) {
             case SdfGalleryExhibit.LiarSpiral:
                 // A thin blade twisted HARD (rate 3): the field over-estimates distance where the twist shears space, so
-                // it breaks 1-Lipschitz — the Lipschitz clamp's whole reason. Pairs with debug.view.overshoot.
+                // it breaks 1-Lipschitz — the Lipschitz clamp's whole reason. Pairs with world.debug-view overshoot.
                 _ = builder.ResetPoint().TwistY(rate: 3f).Box(
                     halfExtents: new Vector3(
                         x: 0.18f,
@@ -749,7 +749,7 @@ public sealed class SdfDebugRenderer {
                         x: 3f,
                         y: 3f
                     ),
-                    plane: SdfWallpaperPlane.XZ
+                    plane: SdfPlane.XZ
                 ).Box(
                     halfExtents: new Vector3(
                         x: 0.55f,
@@ -763,7 +763,7 @@ public sealed class SdfDebugRenderer {
                 break;
             case SdfGalleryExhibit.CarveCeiling:
                 // ~256 clustered hard carves on a subject sphere + floor — the honest destruction budget made visible.
-                // Watch with debug.view.mask.
+                // Watch with world.debug-view mask.
                 EmitCarveCeiling(
                     builder: builder,
                     material: material

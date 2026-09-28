@@ -1,6 +1,6 @@
 using System.Numerics;
 using Puck.Abstractions.Machines;
-using Puck.GamingBricks;
+using Puck.Machines;
 
 namespace Puck.HumbleGamingBrick.Post;
 
@@ -64,14 +64,14 @@ internal sealed class LinkedHostCableStage : IPostStage<PostContext> {
 
         if (first.Step(
             deltaTicks: LinkedHostFixture.FrameTicks,
-            input: in firstPad
+            inputs: MachinePads.One(input: in firstPad)
         )) {
             return "the first member's own Step advanced it while it was linked";
         }
 
         if (second.Submit(
             deltaTicks: LinkedHostFixture.FrameTicks,
-            input: in secondPad
+            inputs: MachinePads.One(input: in secondPad)
         ) != QueuedMachineSubmission.Rejected) {
             return "the second member accepted a direct submission while it was linked";
         }
@@ -159,14 +159,14 @@ internal sealed class LinkedHostCableStage : IPostStage<PostContext> {
         for (var step = 0; (step < SeveredSteps); ++step) {
             if (!first.Step(
                 deltaTicks: LinkedHostFixture.FrameTicks,
-                input: in firstPad
+                inputs: MachinePads.One(input: in firstPad)
             )) {
                 return PostStageOutcome.Fail(detail: "the first member did not step independently after the link was disposed");
             }
 
             if (!second.Step(
                 deltaTicks: LinkedHostFixture.FrameTicks,
-                input: in secondPad
+                inputs: MachinePads.One(input: in secondPad)
             )) {
                 return PostStageOutcome.Fail(detail: "the second member did not step independently after the link was disposed");
             }

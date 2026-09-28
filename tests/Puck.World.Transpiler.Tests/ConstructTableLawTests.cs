@@ -43,6 +43,7 @@ public class ConstructTableLawTests {
         ["ExpressionStatementNode"] = new(Keyword: "", Verdict: Verdict.Core),
         ["FlagStatementNode"] = new(Keyword: "placement", Member: "solid", Verdict: Verdict.Member),
         ["ForStatementNode"] = new(Keyword: "for", Verdict: Verdict.Core),
+        ["GraphParameterNode"] = new(Keyword: "parameter", Verdict: Verdict.Construct),
         ["IfStatementNode"] = new(Keyword: "if", Verdict: Verdict.Construct),
         ["ImportNode"] = new(Keyword: "import", Verdict: Verdict.Core),
         ["InterruptStatementNode"] = new(Keyword: "interrupt", Verdict: Verdict.Construct),

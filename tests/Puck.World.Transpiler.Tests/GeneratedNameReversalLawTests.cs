@@ -50,7 +50,7 @@ public sealed class GeneratedNameReversalLawTests {
         new(Calls: 1, File: Sessions, Mints: "a freshly started instance's name"),
         new(Calls: 1, File: Extensions, Mints: "an extension runtime's directory"),
         new(Calls: 1, File: Captures, Mints: "a capture's frame file"),
-        new(Calls: 2, File: Views, Mints: "a session screen's and a camera seat's view name, which exist only at run time"),
+        new(Calls: 5, File: Views, Mints: "a session screen's and a camera seat's view name, a screen source's instance name from its producer and settings digest, a later view's world producer, and the synthesized root graph's own versions and passes, which exist only at run time"),
         new(Calls: 1, File: Probes, Mints: "a seat-relative probe's instance key, which exists only at run time"),
     ];
     private static readonly Regex MintingCall = new(
@@ -428,6 +428,8 @@ public sealed class GeneratedNameReversalLawTests {
         new(Label: "extension directory", Site: Extensions, Check: static () => FileBacked(site: Extensions)),
         new(Label: "capture frame file", Site: Captures, Check: static () => FileBacked(site: Captures)),
         new(Label: "view name a hand document spells", Site: Views, Check: static () => RefusedDocument(document: HandDocument(row: GeneratedName.Join("session", "0")), name: GeneratedName.Join("session", "0"))),
+        new(Label: "views.graphs name a hand document spells", Site: Views, Check: static () => RefusedDocument(document: HandGraphDocument(name: GeneratedName.Join("main", "frame")), name: GeneratedName.Join("main", "frame"))),
+        new(Label: "source instance name a hand document spells", Site: Views, Check: static () => RefusedDocument(document: HandDocument(row: GeneratedName.Join("source", "qr", "0123456789abcdef")), name: GeneratedName.Join("source", "qr", "0123456789abcdef"))),
         new(Label: "probe instance key a hand document spells", Site: Probes, Check: static () => RefusedDocument(document: HandDocument(row: GeneratedName.Join("head", "2")), name: GeneratedName.Join("head", "2"))),
     ];
 
@@ -574,6 +576,15 @@ public sealed class GeneratedNameReversalLawTests {
         ["documentId"] = "hand",
         ["state"] = new JsonObject {
             ["world"] = new JsonArray(new JsonObject { ["kind"] = "Int", ["name"] = row, ["value"] = 0 }),
+        },
+    };
+    // A hand-written document whose one views.graphs row carries a name in the form the synthesized root graph's own
+    // versions and passes are minted in.
+    private static JsonObject HandGraphDocument(string name) => new() {
+        ["schema"] = "puck.world.definition.v1",
+        ["documentId"] = "hand",
+        ["views"] = new JsonObject {
+            ["graphs"] = new JsonArray(new JsonObject { ["name"] = name, ["source"] = "frame.graph.json" }),
         },
     };
     private static List<string> RefusedDocument(JsonObject document, string name) {

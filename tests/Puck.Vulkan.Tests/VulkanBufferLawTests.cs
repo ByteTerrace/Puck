@@ -18,41 +18,40 @@ public sealed class VulkanBufferLawTests {
     private const uint HostVisibleCoherentProperties = 0x00000006;
     private const uint IndirectStorageUsage = 0x00000123;
     private const uint StorageUsage = 0x00000023;
+    private const uint UniformUsage = 0x00000010;
 
-    public static TheoryData<string, uint, VulkanBufferMemory> StorageKinds() => new() {
-        { nameof(IGpuStorageBufferFactory.Create), StorageUsage, VulkanBufferMemory.HostCoherent },
-        { nameof(IGpuStorageBufferFactory.CreateDeviceLocal), StorageUsage, VulkanBufferMemory.DeviceLocal },
-        { nameof(IGpuStorageBufferFactory.CreateIndirectArgs), IndirectStorageUsage, VulkanBufferMemory.HostCoherent },
-        { nameof(IGpuStorageBufferFactory.CreateDeviceLocalIndirectArgs), IndirectStorageUsage, VulkanBufferMemory.DeviceLocal },
+    public static TheoryData<bool, GpuBufferUsage, uint, VulkanBufferMemory> StorageKinds() => new() {
+        { true, GpuBufferUsage.Storage, StorageUsage, VulkanBufferMemory.HostCoherent },
+        { false, GpuBufferUsage.Storage, StorageUsage, VulkanBufferMemory.DeviceLocal },
+        { true, GpuBufferUsage.Storage | GpuBufferUsage.Indirect, IndirectStorageUsage, VulkanBufferMemory.HostCoherent },
+        { false, GpuBufferUsage.Storage | GpuBufferUsage.Indirect, IndirectStorageUsage, VulkanBufferMemory.DeviceLocal },
+        { true, GpuBufferUsage.Uniform, UniformUsage, VulkanBufferMemory.HostCoherent },
     };
     [MemberData(nameof(StorageKinds))]
     [Theory]
-    public void EveryStorageKindIsCreatedWithItsUsageAndMemory(string method, uint usage, VulkanBufferMemory memory) {
+    public void EveryPlacementIsCreatedWithItsUsageAndMemoryOnTheBoundDevice(bool hostVisible, GpuBufferUsage usage, uint vulkanUsage, VulkanBufferMemory memory) {
         var bufferApi = new RecordingBufferApi();
-        var factory = new VulkanGpuStorageBufferFactory(bufferApi: bufferApi);
         var device = new UntouchableDeviceContext();
-        using var buffer = method switch {
-            nameof(IGpuStorageBufferFactory.Create) => factory.Create(
-                deviceContext: device,
-                sizeBytes: 64
-            ),
-            nameof(IGpuStorageBufferFactory.CreateDeviceLocal) => factory.CreateDeviceLocal(
-                deviceContext: device,
-                sizeBytes: 64
-            ),
-            nameof(IGpuStorageBufferFactory.CreateIndirectArgs) => factory.CreateIndirectArgs(
-                deviceContext: device,
-                sizeBytes: 64
-            ),
-            _ => factory.CreateDeviceLocalIndirectArgs(
-                deviceContext: device,
-                sizeBytes: 64
-            ),
-        };
+        var factory = new VulkanGpuBufferFactory(
+            bufferApi: bufferApi,
+            deviceContext: device,
+            naming: GpuObjectNaming.Off
+        );
+        using var buffer = (hostVisible
+            ? factory.CreateHostVisible(
+                name: default,
+                sizeBytes: 64,
+                usage: usage
+            )
+            : factory.CreateDeviceLocal(
+                name: default,
+                sizeBytes: 64,
+                usage: usage
+            ));
 
         Assert.Equal(
             actual: bufferApi.Created,
-            expected: [(usage, memory, 64UL)]
+            expected: [(vulkanUsage, memory, 64UL)]
         );
         Assert.Same(
             actual: bufferApi.Devices.Single(),
@@ -67,9 +66,13 @@ public sealed class VulkanBufferLawTests {
         var bufferApi = new RecordingBufferApi();
         byte[] data = [1, 2, 3, 4, 5, 6, 7, 8];
 
-        using var buffer = ((VulkanBuffer)new VulkanGpuGeometryBufferFactory(bufferApi: bufferApi).Create(
-            data: data,
+        using var buffer = ((VulkanBuffer)new VulkanGpuBufferFactory(
+            bufferApi: bufferApi,
             deviceContext: new UntouchableDeviceContext(),
+            naming: GpuObjectNaming.Off
+        ).CreateHostVisible(
+            data: data,
+            name: default,
             usage: usage
         ));
 
@@ -77,25 +80,37 @@ public sealed class VulkanBufferLawTests {
             actual: bufferApi.Created,
             expected: [(vulkanUsage, VulkanBufferMemory.HostCoherent, 8UL)]
         );
+        var read = new byte[data.Length];
+
+        buffer.Read(destination: read);
         Assert.Equal(
-            actual: buffer.Read(),
+            actual: read,
             expected: data
         );
     }
     [Fact]
-    public void AGeometryBufferWithoutAUsageOrBytesIsRefusedBeforeItIsCreated() {
+    public void ABufferWithoutAUsageOrBytesIsRefusedBeforeItIsCreated() {
         var bufferApi = new RecordingBufferApi();
-        var factory = new VulkanGpuGeometryBufferFactory(bufferApi: bufferApi);
-
-        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => factory.Create(
-            data: [1, 2, 3, 4],
+        var factory = new VulkanGpuBufferFactory(
+            bufferApi: bufferApi,
             deviceContext: new UntouchableDeviceContext(),
+            naming: GpuObjectNaming.Off
+        );
+
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => factory.CreateHostVisible(
+            data: [1, 2, 3, 4],
+            name: default,
             usage: GpuBufferUsage.None
         ));
-        _ = Assert.Throws<ArgumentException>(testCode: () => factory.Create(
+        _ = Assert.Throws<ArgumentException>(testCode: () => factory.CreateHostVisible(
             data: [],
-            deviceContext: new UntouchableDeviceContext(),
+            name: default,
             usage: GpuBufferUsage.Vertex
+        ));
+        _ = Assert.Throws<ArgumentException>(testCode: () => factory.CreateDeviceLocal(
+            name: default,
+            sizeBytes: 0,
+            usage: GpuBufferUsage.Storage
         ));
         Assert.Empty(collection: bufferApi.Created);
     }
@@ -115,15 +130,19 @@ public sealed class VulkanBufferLawTests {
     public void EachMemoryKindSelectsItsPropertiesAndWhetherTheyAreRequired() {
         Assert.Equal(
             actual: VulkanNativeBufferApi.MemoryProperties(memory: VulkanBufferMemory.HostCoherent),
-            expected: (HostVisibleCoherentProperties, true)
+            expected: (HostVisibleCoherentProperties, true, GpuMemoryRole.HostVisible)
+        );
+        Assert.Equal(
+            actual: VulkanNativeBufferApi.MemoryProperties(memory: VulkanBufferMemory.HostCoherentDeviceLocal),
+            expected: (HostVisibleCoherentProperties | DeviceLocalProperty, true, GpuMemoryRole.HostVisibleDeviceLocal)
         );
         Assert.Equal(
             actual: VulkanNativeBufferApi.MemoryProperties(memory: VulkanBufferMemory.DeviceLocal),
-            expected: (DeviceLocalProperty, true)
+            expected: (DeviceLocalProperty, true, GpuMemoryRole.DeviceLocal)
         );
         Assert.Equal(
             actual: VulkanNativeBufferApi.MemoryProperties(memory: VulkanBufferMemory.PreferDeviceLocal),
-            expected: (DeviceLocalProperty, false)
+            expected: (DeviceLocalProperty, false, GpuMemoryRole.DeviceLocal)
         );
     }
     [Fact]
@@ -166,7 +185,7 @@ public sealed class VulkanBufferLawTests {
         );
 
         _ = Assert.Throws<InvalidOperationException>(testCode: () => buffer.Write<uint>(data: [1u]));
-        _ = Assert.Throws<InvalidOperationException>(testCode: () => buffer.Read());
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => buffer.Read(destination: new byte[4]));
         Assert.Equal(
             actual: bufferApi.Calls,
             expected: ["create"]
@@ -220,12 +239,13 @@ public sealed class VulkanBufferLawTests {
     /// context to its buffer API fails the law.</summary>
     private sealed class UntouchableDeviceContext : IVulkanDeviceContext, IGpuDeviceContext {
         public long AdapterLuid => throw new NotSupportedException();
-        public nint DeviceHandle => throw new NotSupportedException();
+        public GpuDeviceCapabilities? Capabilities => throw new NotSupportedException();
         public GpuDeviceIdentity? Identity => throw new NotSupportedException();
         public VulkanInstance Instance => throw new NotSupportedException();
         public VulkanLogicalDevice LogicalDevice => throw new NotSupportedException();
         public GpuMemoryProfile MemoryProfile => throw new NotSupportedException();
         public VkPhysicalDevice PhysicalDevice => throw new NotSupportedException();
+        public GpuDeviceServices Services => throw new NotSupportedException();
         public VulkanSurface Surface => throw new NotSupportedException();
 
         public void WaitIdle() => throw new NotSupportedException();

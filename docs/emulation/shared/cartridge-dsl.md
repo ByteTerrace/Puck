@@ -126,6 +126,9 @@ rule "steer" {
 }
 ```
 
+The light sensor has no gate sugar: `$light` is an operand, 1 while the `cgb` target's infrared receiver sees
+light and 0 otherwise, read wherever an expression is (`when $light == 1`, `seen = $light`).
+
 ## What this project does not do
 
 It compiles no code. A lowered document goes to `HgbCartridgeCompiler` or `AgbCartridgeCompiler` in the per-brick

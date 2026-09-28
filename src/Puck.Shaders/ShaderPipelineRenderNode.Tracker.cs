@@ -1,4 +1,5 @@
 using Puck.Abstractions.Gpu;
+using Puck.Hosting;
 
 namespace Puck.Shaders;
 
@@ -6,9 +7,12 @@ namespace Puck.Shaders;
 // the node records exactly those. The only states the plan cannot place are the ones the host's events leave an instance
 // in: new or reset storage, a zero clear, a presentation, and history carried over from a replaced graph. Each such
 // instance holds an override until its next access, which starts from the override and always records a barrier, so
-// every later planned barrier, which waits only on planned stages, still orders the unplanned accesses through it.
+// every later planned barrier, which waits only on planned stages, still orders the unplanned accesses through it. A
+// package pass that skips a frame (IRenderGraphPackageRecorder.Skips) records none of its barriers and leaves each
+// instance it would have accessed in the state before that access, its planned prior, as a planned override, from which
+// the next access records only the barrier the planned states call for.
 public sealed partial class ShaderPipelineRenderNode {
-    private const GpuComputeStage ShaderStages = GpuComputeStage.ComputeShader | GpuComputeStage.FragmentShader;
+    private const GpuStage ShaderStages = GpuStage.ComputeShader | GpuStage.FragmentShader;
 
     // The state a reset leaves every owned instance in: contents discarded, and any earlier access, including a
     // downstream reader of a published image, possibly still in flight.
@@ -28,7 +32,7 @@ public sealed partial class ShaderPipelineRenderNode {
     // storage no pass writes, and for history a pass rewrites, the instance the first frame reads as the previous one.
     // An instance already cleared or written holds contents, including history carried from a replaced graph, and is
     // not cleared.
-    private void InitializeResources(nint command, IGpuComputeRecorder recorder, int slot) {
+    private void InitializeResources(nint command, IGpuRecorder recorder, int slot) {
         if (!m_initializationPending) {
             return;
         }
@@ -61,23 +65,15 @@ public sealed partial class ShaderPipelineRenderNode {
                     resource: resource
                 );
                 if (resource.Spec.Kind == ShaderPipelineResourceKind.Buffer) {
-                    if (recorder is not IGpuBufferInitializationRecorder buffers) {
-                        throw new InvalidOperationException(message: "The selected GPU backend cannot clear shader pipeline storage buffers.");
-                    }
                     var buffer = resource.Buffers![instance];
 
-                    buffers.ClearStorageBuffer(
-                        m_device.DeviceHandle,
+                    recorder.ClearStorageBuffer(
                         command,
                         buffer.BufferHandle,
                         buffer.SizeBytes
                     );
                 } else {
-                    if (recorder is not IGpuImageInitializationRecorder images) {
-                        throw new InvalidOperationException(message: "The selected GPU backend cannot clear shader pipeline images.");
-                    }
-                    images.ClearStorageImage(
-                        m_device.DeviceHandle,
+                    recorder.ClearStorageImage(
                         command,
                         ResolveImage(
                             resource,
@@ -97,7 +93,7 @@ public sealed partial class ShaderPipelineRenderNode {
         m_initializationPending = false;
     }
     // Records the planned barrier of every access a pass makes, in the plan's order.
-    private void RecordAccesses(RuntimePass pass, int slot, nint command, IGpuComputeRecorder recorder) {
+    private void RecordAccesses(RuntimePass pass, int slot, nint command, IGpuRecorder recorder) {
         var accesses = pass.Accesses;
 
         for (var index = 0; (index < accesses.Length); index++) {
@@ -119,11 +115,17 @@ public sealed partial class ShaderPipelineRenderNode {
                     use: access.Use
                 );
             } else if (resource.HasOverride[instance]) {
-                barrier = ShaderPipelineBarrier.Always(
-                    kind: resource.Spec.Kind,
-                    prior: resource.Override[instance],
-                    use: access.Use
-                );
+                barrier = (resource.OverridePlanned[instance]
+                    ? ShaderPipelineBarrier.Between(
+                        kind: resource.Spec.Kind,
+                        prior: resource.Override[instance],
+                        use: access.Use
+                    )
+                    : ShaderPipelineBarrier.Always(
+                        kind: resource.Spec.Kind,
+                        prior: resource.Override[instance],
+                        use: access.Use
+                    ));
                 resource.HasOverride[instance] = false;
             }
             RecordBarrier(
@@ -141,11 +143,34 @@ public sealed partial class ShaderPipelineRenderNode {
             }
         }
     }
-    private void RecordBarrier(ShaderPipelineBarrier barrier, RuntimeResource resource, int instance, nint command, IGpuComputeRecorder recorder) {
+    // Leaves every instance a skipping pass would have accessed in the state before that access: the override it already
+    // holds, or its planned prior as a planned override. A host-owned instance starts every frame in the host's hands.
+    private void SkipAccesses(RuntimePass pass, int slot) {
+        foreach (var access in pass.Accesses) {
+            if (access.PriorKind == ShaderPipelinePriorKind.Host) {
+                continue;
+            }
+
+            var resource = m_resources[access.Storage];
+            var instance = InstanceIndex(
+                previous: access.PreviousFrame,
+                resource: resource,
+                slot: slot
+            );
+
+            if (resource.HasOverride[instance]) {
+                continue;
+            }
+
+            resource.Override[instance] = access.Prior;
+            resource.HasOverride[instance] = true;
+            resource.OverridePlanned[instance] = true;
+        }
+    }
+    private void RecordBarrier(ShaderPipelineBarrier barrier, RuntimeResource resource, int instance, nint command, IGpuRecorder recorder) {
         switch (barrier.Kind) {
             case ShaderPipelineBarrierKind.Image:
                 recorder.TransitionImageLayout(
-                    m_device.DeviceHandle,
                     command,
                     ResolveImage(
                         resource,
@@ -162,7 +187,6 @@ public sealed partial class ShaderPipelineRenderNode {
                 break;
             case ShaderPipelineBarrierKind.Memory:
                 recorder.MemoryBarrier(
-                    m_device.DeviceHandle,
                     command,
                     barrier.SourceAccess,
                     barrier.DestinationAccess,
@@ -172,7 +196,6 @@ public sealed partial class ShaderPipelineRenderNode {
                 break;
             case ShaderPipelineBarrierKind.Buffer:
                 recorder.TransitionBuffer(
-                    m_device.DeviceHandle,
                     command,
                     ResolveBuffer(
                         resource,
@@ -227,22 +250,38 @@ public sealed partial class ShaderPipelineRenderNode {
         return barrier;
     }
     // Records publication of the selected output and hands every host-owned image back in its host's layout.
-    private void RecordPresentation(RuntimeResource selected, int slot, nint command, IGpuComputeRecorder recorder) {
-        if (!NeedsPreview(spec: selected.Spec)) {
+    // An output a package that drew nothing leaves standing for an input publishes that input: an owned one moved into the
+    // output layout, a host-owned one handed back in its host's layout with the rest.
+    private void RecordPresentation(RuntimeResource selected, int slot, nint command, IGpuRecorder recorder) {
+        var (published, _, instance) = PublicationOf(
+            selected: selected,
+            slot: slot
+        );
+
+        var outputLayout = m_outputLayout;
+
+        m_publishedLayout = (published.Spec.IsExternal
+            ? m_externalImages[published.Spec.Name].Layout
+            : outputLayout);
+
+        if (
+            !published.Spec.IsExternal &&
+            !NeedsPreview(spec: selected.Spec)
+        ) {
             RecordBarrier(
                 barrier: Present(
-                    instance: slot,
-                    resource: selected,
+                    instance: instance,
+                    resource: published,
                     use: new ShaderPipelineAccessState(
-                        Access: GpuComputeAccess.ShaderRead,
-                        Layout: m_outputLayout,
+                        Access: GpuAccess.ShaderRead,
+                        Layout: outputLayout,
                         Stage: ShaderStages
                     )
                 ),
                 command: command,
-                instance: slot,
+                instance: instance,
                 recorder: recorder,
-                resource: selected
+                resource: published
             );
         }
         foreach (var resource in m_resources) {
@@ -267,7 +306,7 @@ public sealed partial class ShaderPipelineRenderNode {
             );
         }
     }
-    // The barrier the float preview records before sampling this frame's instance of the selected output.
+    // The barrier the preview records before sampling this frame's instance of the selected output.
     private ShaderPipelineBarrier PreviewSource(RuntimeResource selected, int slot) =>
         Present(
             instance: InstanceIndex(
@@ -277,9 +316,9 @@ public sealed partial class ShaderPipelineRenderNode {
             ),
             resource: selected,
             use: new ShaderPipelineAccessState(
-                Access: GpuComputeAccess.ShaderRead,
+                Access: GpuAccess.ShaderRead,
                 Layout: GpuImageLayout.ShaderReadOnly,
-                Stage: GpuComputeStage.FragmentShader
+                Stage: GpuStage.FragmentShader
             )
         );
     // A reset discards every owned instance's contents and re-arms zero initialization.

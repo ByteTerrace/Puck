@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Numerics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Puck.Abstractions.Gpu;
 using Puck.Commands;
 using Puck.Launcher;
 using Puck.Overlays;
@@ -107,7 +108,7 @@ internal static class WorldPostBuildWiring {
         // exactly the authority PrincipalOf reports. Unconditional — Disengage on an already-clear route is the
         // ordinary NotEngaged no-op.
         var cameraRoster = services.GetRequiredService<PlayerRoster>();
-        var cameraLink = services.GetRequiredService<IServerLink>();
+        var cameraLink = services.GetRequiredService<LoopbackTransport>();
 
         services.GetRequiredService<WorldReplayTape>().TimelineRestored += () => {
             for (var slot = 0; (slot < WorldSeatBindings.SeatCount); slot++) {
@@ -221,20 +222,21 @@ internal static class WorldPostBuildWiring {
         // toasts are presentation-only (AddWorldPresentation registers it); the stable
         // terminal-session proxy exists in both shapes and mirrors edit outcomes when a windowed bank is attached.
         var toasts = services.GetService<OverlayToastStore>();
-        var pipelineRuntime = services.GetService<WorldPipelineRuntime>();
+        var graphHost = services.GetService<WorldViewGraphHost>();
+
+        // A GPU shape resolves its device context here, before any presenter that creates objects on the device, so
+        // the container, which disposes singletons in reverse creation order, releases every presenter before it.
+        if (graphHost is not null) {
+            _ = services.GetRequiredService<IGpuDeviceContext>();
+        }
+
         var consoleSessions = services.GetRequiredService<TerminalConsoleSessions>();
         var audioDirector = services.GetRequiredService<WorldAudioDirector>();
         var definitionSource = services.GetRequiredService<WorldDefinitionSource>();
-        var deferredVerbEchoes = services.GetRequiredService<WorldDeferredVerbEchoes>();
-
-        deferredVerbEchoes.Completed += result => {
-            if (result.IsError) {
-                Console.Error.WriteLine(value: result.Output);
-            } else {
-                Console.WriteLine(value: result.Output);
-            }
-        };
-
+        var deferredVerbAnswers = WorldDeferredVerbAnswers.Attach(
+            echoes: services.GetRequiredService<WorldDeferredVerbEchoes>(),
+            registry: consoleRegistry
+        );
         var scheduleRunner = services.GetRequiredService<WorldScheduleRunner>();
 
         // The boot row is admitted by the time this runs, so a sibling world the armed document declares can start
@@ -256,14 +258,12 @@ internal static class WorldPostBuildWiring {
             // rejected: …]"), stdout on acceptance (the verb's own confirmation, distinct from the narration's
             // "[world.mutation: …]" stderr line), so a script can account either verdict under the verb it submitted
             // rather than only the reason it was refused.
-            // The same verdict settles the submitting line, for a session that reports settled results.
-            if (deferredVerbEchoes.Settle(echo: in echo) is { } verdict) {
-                if (echo.Rejected) {
-                    Console.Error.WriteLine(value: verdict);
-                } else {
-                    Console.WriteLine(value: verdict);
-                }
-            }
+            // The same verdict settles the submitting line, for a session that reports settled results, and a
+            // refusal is counted so `wire.errors` reports it like a synchronous one, in every boot shape.
+            deferredVerbAnswers.Answer(
+                echo: in echo,
+                row: WorldInstanceHost.BootInstanceName
+            );
 
             // world.load/world.reload move what the console considers "the current origin" — but only once the
             // SERVER's own echo confirms the rebuild actually applied (this tap fires from the tick boundary, after
@@ -276,9 +276,9 @@ internal static class WorldPostBuildWiring {
                 (echo.RebuildOrigin is { } origin)
             ) {
                 definitionSource.SourcePath = origin;
-                // The rendering host resolves views.pipelines sources against this same moved directory from here
+                // The rendering host resolves views.graphs sources against this same moved directory from here
                 // on — presentation-only, so a headless boot has no runtime to rebase.
-                pipelineRuntime?.Rebase(documentDirectory: WorldDocumentPaths.DirectoryOf(documentPath: origin));
+                graphHost?.Rebase(documentDirectory: WorldDocumentPaths.DirectoryOf(documentPath: origin));
             }
 
             // toast/HUD narration is presentation-only; a headless boot simply has nowhere to paint it.
@@ -292,15 +292,6 @@ internal static class WorldPostBuildWiring {
                 message: echo.Message,
                 refused: echo.Rejected
             );
-
-            // A world edit is Simulation-routed: the SUBMIT succeeded (the line entered the tick queue) and the
-            // server refuses it a tick later, so the registry's own dispatch accounting cannot see it. This tap is
-            // the one place both halves meet — count the deferred refusal here so `wire.errors` reports it exactly
-            // like a synchronous one, IN EVERY BOOT SHAPE. No double count: a line refused synchronously never
-            // reaches the server and so never echoes.
-            if (echo.Rejected) {
-                consoleRegistry.NoteDeferredRejection();
-            }
 
             // THE EDIT-ECHO CUE LANE: the same outcome fires its cue token — capability
             // denials as grant.denied, other rejections as mutation.rejected, applied edits as mutation.applied AT
@@ -336,6 +327,7 @@ internal static class WorldPostBuildWiring {
         var renderSettings = services.GetRequiredService<WorldRenderSettings>();
         var pacing = services.GetRequiredService<PresentPacingControl>();
         var bindingBarVisibility = services.GetRequiredService<WorldBindingBarVisibility>();
+        var editorSeats = services.GetRequiredService<WorldEditorSeats>();
 
         // The authored gameplay-cue lane: emitCue publishes a deterministic token from simulation. Audio consumes
         // that token through the same document-authored cue table as built-in events; an optional body association
@@ -359,6 +351,7 @@ internal static class WorldPostBuildWiring {
                 var snapshot = WorldSaveSnapshot.Compose(
                     audio: audioDirector,
                     bindingBar: bindingBarVisibility,
+                    editor: editorSeats,
                     pacing: pacing,
                     render: renderSettings,
                     server: worldServer,
@@ -464,7 +457,7 @@ internal static class WorldPostBuildWiring {
 
         if (services.GetService<WorldRenderProbe>() is { } renderProbe) {
             services.GetRequiredService<IHostApplicationLifetime>().ApplicationStopped.Register(callback: () => {
-                if (renderProbe.Render?.PendingCapturePath is { } pending) {
+                if (renderProbe.Root?.PendingCapturePath is { } pending) {
                     Console.Error.WriteLine(value: $"[world.screenshot] WARNING: a capture of {pending} was still pending when the run ended — no frame composed after it was armed, so NO FILE WAS WRITTEN.");
                 }
             });
@@ -483,7 +476,15 @@ internal static class WorldPostBuildWiring {
                 // rather than inferred from whether it crashed.
                 Console.Error.WriteLine(value: $"[world.render] envelope: {composed.InstanceCapacity} instances, {composed.ProgramWordCapacity} program words, {composed.DynamicTransformCapacity} dynamic slots");
             }
+
+            // The default render graph plans here too, off the GPU, so a views.post config its package's schema does not
+            // bind is refused by name before the renderer is built.
+            _ = services.GetService<WorldRootGraph>();
         } catch (WorldRenderCapacityRefusedException refusal) {
+            Console.Error.WriteLine(value: $"[world] definition refused: {refusal.Message}");
+
+            return false;
+        } catch (WorldRootGraphRefusedException refusal) {
             Console.Error.WriteLine(value: $"[world] definition refused: {refusal.Message}");
 
             return false;

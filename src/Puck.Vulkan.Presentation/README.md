@@ -1,19 +1,18 @@
 # Puck.Vulkan.Presentation
 
 Puck.Vulkan.Presentation connects `Puck.Vulkan` to Puck's rendering contracts.
-It provides the Vulkan surface presenter, command-buffer recording, compute
-service registration, and the small blit shaders used to present a surface.
-The project owns this presentation seam; Vulkan loading and resource APIs stay
-in `Puck.Vulkan`, and shader compilation follows the shared build targets.
+It provides the Vulkan surface presenter, command-buffer recording and compute
+service registration. It presents a surface through the display encode that
+`Puck.Shaders` ships (`SurfaceEncoder`) and carries no shader of its own. The
+project owns this presentation seam; Vulkan loading and resource APIs stay in
+`Puck.Vulkan`.
 `VulkanRenderer` reports its device to backend-neutral code as the device
 command table's token, as described in [the Vulkan backend](../../docs/rendering/vulkan.md#command-tables).
 
 ## Usage
 
 Register the Vulkan presentation services from the composition root after a
-Vulkan device and surface binding are selected. The project carries SPIR-V for
-its presenter shaders and deliberately disables DXIL for this Vulkan-only
-presentation project.
+Vulkan device and surface binding are selected.
 
 ## Verification
 

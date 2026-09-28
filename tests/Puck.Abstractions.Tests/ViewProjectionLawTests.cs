@@ -36,14 +36,13 @@ public sealed class ViewProjectionLawTests {
         foreach (var camera in Cameras) {
             foreach (var offset in FrustumOffsets) {
                 yield return ViewProjection.Create(
-                    camera: camera,
-                    frustumOffset: offset,
+                    camera: (camera with { FrustumOffset = offset }),
                     near: Near
                 );
             }
         }
     }
-    // The ray sdf-world.hlsli's cameraRayDirection takes through a sample, spelled from the camera basis alone.
+    // The ray march/sdf-cone.hlsli's cameraRayDirection takes through a sample, spelled from the camera basis alone.
     private static Vector3 MarchDirection(CameraSnapshot camera, Vector2 offset, Vector2 ndc) =>
         Vector3.Normalize(value: (
             ((camera.Forward +
@@ -77,7 +76,7 @@ public sealed class ViewProjectionLawTests {
     public void AProjectedPointUnprojectsToItself() {
         foreach (var camera in Cameras) {
             foreach (var offset in FrustumOffsets) {
-                var view = ViewProjection.Create(camera: camera, frustumOffset: offset, near: Near);
+                var view = ViewProjection.Create(camera: (camera with { FrustumOffset = offset }), near: Near);
 
                 for (var u = 0; (u <= 8); u++) {
                     for (var v = 0; (v <= 8); v++) {
@@ -125,7 +124,7 @@ public sealed class ViewProjectionLawTests {
     public void ClipDepthOrdersPointsAlongEveryRayNearestFirst() {
         foreach (var camera in Cameras) {
             foreach (var offset in FrustumOffsets) {
-                var view = ViewProjection.Create(camera: camera, frustumOffset: offset, near: Near);
+                var view = ViewProjection.Create(camera: (camera with { FrustumOffset = offset }), near: Near);
                 var direction = MarchDirection(camera: camera, ndc: new Vector2(x: 0.3f, y: -0.6f), offset: offset);
                 var nearer = float.PositiveInfinity;
 
@@ -144,7 +143,7 @@ public sealed class ViewProjectionLawTests {
     public void DepthReconstructsTheMarchRayParameter() {
         foreach (var camera in Cameras) {
             foreach (var offset in FrustumOffsets) {
-                var view = ViewProjection.Create(camera: camera, frustumOffset: offset, near: Near);
+                var view = ViewProjection.Create(camera: (camera with { FrustumOffset = offset }), near: Near);
 
                 for (var pixel = 0; (pixel < 16); pixel++) {
                     var uv = new Vector2(x: ((pixel + 0.5f) / 16f), y: (((15 - pixel) + 0.5f) / 16f));
@@ -183,10 +182,11 @@ public sealed class ViewProjectionLawTests {
         foreach (var near in ((float[])[0f, -1f, float.NaN, float.PositiveInfinity])) {
             _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => ViewProjection.Create(camera: Cameras[0], near: near));
         }
-        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => ViewProjection.Create(
-            camera: Cameras[0],
-            frustumOffset: new Vector2(x: float.NaN, y: 0f),
-            near: Near
-        ));
+    }
+    [Fact]
+    public void ANonFiniteFrustumOffsetIsRefused() {
+        foreach (var offset in ((Vector2[])[new(x: float.NaN, y: 0f), new(x: 0f, y: float.PositiveInfinity)])) {
+            _ = Assert.Throws<ArgumentException>(testCode: () => (Cameras[0] with { FrustumOffset = offset }));
+        }
     }
 }

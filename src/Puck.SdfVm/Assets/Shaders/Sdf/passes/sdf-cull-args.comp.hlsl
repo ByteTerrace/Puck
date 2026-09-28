@@ -1,0 +1,99 @@
+// GPU-driven cull args: a single-WORKGROUP parallel reduction over the beam prepass's per-tile cull buffer. It computes
+// the bounding box of SURVIVING (non-empty) tiles of the one view its dispatch set renders and writes (a) the Stage-1 "views" INDIRECT
+// dispatch group counts and (b) the bbox group origin. The views dispatch then covers ONLY that bbox — the all-empty
+// margins (e.g. the sky above the scene) are never dispatched, and the sky pre-pass alone has written every
+// remaining empty tile. A frame with mesh draws covers the whole grid instead: a mesh pixel needs its record whatever
+// the beam proved about its tile. Dispatched (1,1,1) AFTER the beam prepass (a compute->compute barrier orders the
+// cull-buffer read); its args output feeds the indirect Stage-1 dispatch (a draw-indirect barrier) and its bounds
+// output the Stage-1 kernel (a shader-read barrier). Generic: it operates only on the cull buffer, not on any scene.
+//
+// The reduction is a min/max/any over tile coordinates — order-independent (min/max are associative and commutative), so
+// the workgroup-parallel form is BIT-IDENTICAL to a serial scan regardless of atomic contention order. One workgroup of
+// SDF_CULL_ARGS_THREADS threads strides the flattened (viewport, tile) index space and folds each surviving tile into
+// groupshared min/max via InterlockedMin/InterlockedMax; thread 0 emits the args after a group barrier.
+#include "sdf-world.hlsli"
+
+// It reads the beam's cull buffer through tiles and writes the three indirect group counts through viewsArgsRW and the
+// dispatch box (minGroupX, minGroupY, endGroupX, endGroupY) through cullBoundsRW.
+
+#define SDF_CULL_ARGS_THREADS 256u
+
+// The surviving-tile bounding box, folded across the workgroup. minX/minY seed to the max sentinel (an all-empty frame
+// leaves them untouched, detected below); maxX/maxY seed to 0. A tile survives => all four atomics fire, so
+// minTileX == sentinel iff no tile survived (tileGrid dimensions never reach the sentinel).
+groupshared uint minTileX;
+groupshared uint minTileY;
+groupshared uint maxTileX;
+groupshared uint maxTileY;
+
+[numthreads(SDF_CULL_ARGS_THREADS, 1, 1)]
+void CSMain(uint threadIndex : SV_GroupIndex) {
+    if (0u == threadIndex) {
+        minTileX = 0xFFFFFFFFu;
+        minTileY = 0xFFFFFFFFu;
+        maxTileX = 0u;
+        maxTileY = 0u;
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+
+    // Every tile cull entry of the view this dispatch set renders, flattened: entry = ((ty * tileGrid.x) + tx). The
+    // strided walk visits the SAME entry set as a serial double loop, and runs once per view per frame.
+    uint v = worldViewOf(0u);
+    uint total = (passGroup.tileGrid.x * passGroup.tileGrid.y);
+
+    for (uint entry = threadIndex; (entry < total); entry += SDF_CULL_ARGS_THREADS) {
+        uint ty = (entry / passGroup.tileGrid.x);
+        uint tx = (entry - (ty * passGroup.tileGrid.x));
+
+        // Surviving tiles hold a non-negative march-start; empty tiles hold TileEmpty (-1.0).
+        if (tiles[worldTileIndex(v, uint2(tx, ty), passGroup.tileGrid)] >= 0.0) {
+            InterlockedMin(minTileX, tx);
+            InterlockedMin(minTileY, ty);
+            InterlockedMax(maxTileX, tx);
+            InterlockedMax(maxTileY, ty);
+        }
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+
+    // The reduction walks no field and writes no texel, so its row stays zero.
+    puckCountWork(sdfWorkSteps, sdfWorkTexels);
+
+    if (0u != threadIndex) {
+        return;
+    }
+
+    uint boxMinX = minTileX;
+    uint boxMinY = minTileY;
+    uint boxMaxX = maxTileX;
+    uint boxMaxY = maxTileY;
+
+    if (passGroup.meshDraws != 0u) {
+        // A mesh draws this frame: a mesh pixel reaches the hit passes whatever the beam proved about its tile, so the box
+        // is the whole tile grid and every record of the view is current.
+        boxMinX = 0u;
+        boxMinY = 0u;
+        boxMaxX = (passGroup.tileGrid.x - 1u);
+        boxMaxY = (passGroup.tileGrid.y - 1u);
+    } else if (0xFFFFFFFFu == boxMinX) {
+        // No surviving tiles (every ray clears the field): dispatch one degenerate tile; the compositor flattens all.
+        boxMinX = 0u;
+        boxMinY = 0u;
+        boxMaxX = 0u;
+        boxMaxY = 0u;
+    }
+
+    // A tile is WorldTileSize (16) px = (WorldTileSize / 8) groups of the views kernel's 8x8 workgroup. The dispatch
+    // is origin-anchored (0,0); the views kernel adds cullBounds as its pixel-group origin to land on the bbox. The
+    // box's exclusive end is the extent the hit passes wrote this frame, which is where a visibility record is current.
+    uint groupsPerTile = (WorldTileSize / 8u);
+
+    cullBoundsRW[0] = (boxMinX * groupsPerTile);
+    cullBoundsRW[1] = (boxMinY * groupsPerTile);
+    cullBoundsRW[2] = ((boxMaxX + 1u) * groupsPerTile);
+    cullBoundsRW[3] = ((boxMaxY + 1u) * groupsPerTile);
+    viewsArgsRW[0] = (((boxMaxX - boxMinX) + 1u) * groupsPerTile);
+    viewsArgsRW[1] = (((boxMaxY - boxMinY) + 1u) * groupsPerTile);
+    viewsArgsRW[2] = 1u;
+}

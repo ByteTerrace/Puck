@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using Puck.DirectX.Apis;
 using Puck.DirectX.Interfaces;
 using Windows.Win32;
 using Windows.Win32.Foundation;
@@ -30,6 +31,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     private readonly Func<long>? m_adapterLuidProvider;
     private readonly GpuPipelineCacheStore? m_pipelineCacheStore;
     private readonly GpuPipelineCacheWork? m_pipelineCacheWork;
+    private readonly DirectXGpuBindings m_bindings;
     private readonly Lock m_dispatchSignatureLock = new();
 
     private nint m_commandQueue;
@@ -42,12 +44,13 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     private GpuDeviceIdentity? m_identity;
     private ulong m_idleFenceValue;
     private GpuMemoryProfile m_memoryProfile;
+    private GpuDeviceCapabilities? m_capabilities;
 
     /// <summary>Initializes a new instance that creates its device on the default adapter at feature level 11.0.</summary>
     public DirectXDeviceContext()
         : this(
         adapterLuid: 0,
-        deviceApi: new Apis.DirectXNativeDeviceApi(),
+        deviceApi: new DirectXNativeDeviceApi(),
         minimumFeatureLevel: DirectXFeatureLevel.Level110
     ) {
     }
@@ -60,8 +63,10 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     /// without a library.</param>
     /// <param name="pipelineCacheStore">Where the library lives on disk, or <see langword="null"/> to keep it in
     /// memory only.</param>
+    /// <param name="creationFaults">The host's operator-armed creation faults its services pass through
+    /// (<see cref="GpuCreationFaults.Wrap"/>), or <see langword="null"/> for none.</param>
     /// <exception cref="ArgumentNullException"><paramref name="deviceApi"/> is <see langword="null"/>.</exception>
-    public DirectXDeviceContext(long adapterLuid, IDirectXDeviceApi deviceApi, DirectXFeatureLevel minimumFeatureLevel, GpuPipelineCacheWork? pipelineCacheWork = null, GpuPipelineCacheStore? pipelineCacheStore = null) {
+    public DirectXDeviceContext(long adapterLuid, IDirectXDeviceApi deviceApi, DirectXFeatureLevel minimumFeatureLevel, GpuPipelineCacheWork? pipelineCacheWork = null, GpuPipelineCacheStore? pipelineCacheStore = null, GpuCreationFaults? creationFaults = null) {
         ArgumentNullException.ThrowIfNull(deviceApi);
 
         m_adapterLuid = adapterLuid;
@@ -69,6 +74,8 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         m_pipelineCacheStore = pipelineCacheStore;
         m_pipelineCacheWork = pipelineCacheWork;
         FeatureLevel = minimumFeatureLevel;
+        m_bindings = new DirectXGpuBindings(deviceContext: this);
+        Services = CreateServices(creationFaults: creationFaults);
     }
     /// <summary>Initializes a new instance whose adapter LUID is resolved lazily on first use.</summary>
     /// <param name="adapterLuidProvider">Resolves the adapter LUID to create the device on (zero for the default adapter); invoked once, on first use.</param>
@@ -79,8 +86,10 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     /// without a library.</param>
     /// <param name="pipelineCacheStore">Where the library lives on disk, or <see langword="null"/> to keep it in
     /// memory only.</param>
+    /// <param name="creationFaults">The host's operator-armed creation faults its services pass through
+    /// (<see cref="GpuCreationFaults.Wrap"/>), or <see langword="null"/> for none.</param>
     /// <exception cref="ArgumentNullException"><paramref name="adapterLuidProvider"/> or <paramref name="deviceApi"/> is <see langword="null"/>.</exception>
-    public DirectXDeviceContext(Func<long> adapterLuidProvider, IDirectXDeviceApi deviceApi, DirectXFeatureLevel minimumFeatureLevel, GpuPipelineCacheWork? pipelineCacheWork = null, GpuPipelineCacheStore? pipelineCacheStore = null) {
+    public DirectXDeviceContext(Func<long> adapterLuidProvider, IDirectXDeviceApi deviceApi, DirectXFeatureLevel minimumFeatureLevel, GpuPipelineCacheWork? pipelineCacheWork = null, GpuPipelineCacheStore? pipelineCacheStore = null, GpuCreationFaults? creationFaults = null) {
         ArgumentNullException.ThrowIfNull(adapterLuidProvider);
         ArgumentNullException.ThrowIfNull(deviceApi);
 
@@ -89,6 +98,8 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         m_pipelineCacheStore = pipelineCacheStore;
         m_pipelineCacheWork = pipelineCacheWork;
         FeatureLevel = minimumFeatureLevel;
+        m_bindings = new DirectXGpuBindings(deviceContext: this);
+        Services = CreateServices(creationFaults: creationFaults);
     }
 
     /// <inheritdoc />
@@ -97,14 +108,6 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             EnsureCreated();
 
             return m_deviceApi.GetAdapterLuid(deviceHandle: m_device!.Handle);
-        }
-    }
-    /// <inheritdoc />
-    public nint DeviceHandle {
-        get {
-            EnsureCreated();
-
-            return m_device!.Handle;
         }
     }
     /// <summary>Gets the one-argument <c>DISPATCH</c> command signature <c>ExecuteIndirect</c> uses on this context's
@@ -117,7 +120,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
                     return m_dispatchSignature;
                 }
 
-                var device = ((ID3D12Device*)DeviceHandle);
+                var device = ((ID3D12Device*)Device.Handle);
                 var argumentDesc = new D3D12_INDIRECT_ARGUMENT_DESC {
                     Type = D3D12_INDIRECT_ARGUMENT_TYPE.D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH,
                 };
@@ -146,6 +149,14 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     /// creates the device.</remarks>
     public GpuDeviceIdentity? Identity => m_identity;
     /// <inheritdoc />
+    /// <remarks>Read from the device when it is created; <see langword="null"/> before, and reading it never creates
+    /// the device.</remarks>
+    public GpuDeviceCapabilities? Capabilities => m_capabilities;
+    /// <inheritdoc />
+    /// <remarks>Set by the host's composition; it survives device recreation, so a replaced device counts into the same
+    /// instance.</remarks>
+    public GpuDeviceMemoryWork? Memory { get; init; }
+    /// <inheritdoc />
     /// <remarks>Read from the device and its adapter when the device is created; the default profile before, and
     /// reading it never creates the device.</remarks>
     public GpuMemoryProfile MemoryProfile => m_memoryProfile;
@@ -157,6 +168,14 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             return m_commandQueue;
         }
     }
+    /// <summary>Gets the current device's two shader-visible descriptor heaps, which every descriptor pool is a range of
+    /// and every recorded command list binds, creating the device first when it does not exist yet. They are created
+    /// with the device and released with it, so a recreated device has a fresh pair.</summary>
+    /// <exception cref="GpuDeviceUnavailableException">No device could be created.</exception>
+    public DirectXShaderVisibleHeaps DescriptorHeaps => m_bindings.Heaps;
+    /// <summary>Gets the context's own bindings, beneath any creation-fault wrapper its <c>Services</c> carry: what
+    /// counts the handles its pools and sets hold (<see cref="DirectXGpuBindings.LiveHandles"/>).</summary>
+    public DirectXGpuBindings DescriptorBindings => m_bindings;
     /// <inheritdoc />
     public DirectXDevice Device {
         get {
@@ -184,7 +203,27 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     public bool IsInitialized => (!m_disposed && (m_device is not null));
     /// <inheritdoc />
     public DirectXPipelineLibrary? PipelineLibrary { get; private set; }
+    /// <inheritdoc />
+    /// <remarks>Created with the context, before its device; each service creates the device on its first call that
+    /// needs it, and a device recreated after a loss is reached through the same services.</remarks>
+    public GpuDeviceServices Services { get; }
 
+    private GpuDeviceServices CreateServices(GpuCreationFaults? creationFaults) => GpuCreationFaults.Wrap(
+        faults: creationFaults,
+        services: new() {
+            Bindings = m_bindings,
+            BufferFactory = new DirectXGpuBufferFactory(deviceContext: this),
+            Naming = new DirectXGpuObjectNaming(deviceContext: this),
+            CommandPoolFactory = new DirectXGpuCommandPoolFactory(deviceContext: this),
+            ImageFactory = new DirectXGpuImageFactory(deviceContext: this),
+            PipelineFactory = new DirectXGpuPipelineFactory(deviceContext: this),
+            QueueSubmitter = new DirectXGpuQueueSubmitter(deviceContext: this),
+            Recorder = new DirectXGpuRecorder(deviceContext: this),
+            RenderPassFactory = new DirectXGpuRenderPassFactory(deviceContext: this),
+            ShaderModuleFactory = new DirectXGpuShaderModuleFactory(),
+            SurfaceTransferFactory = new DirectXGpuSurfaceTransferFactory(deviceContext: this),
+        }
+    );
     private void EnsureCreated() {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
@@ -216,31 +255,45 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
 
         // The device bring-up. No Direct3D 12 runtime, no adapter at the feature level, a device creation the driver
         // refuses, or a device below the Shader Model floor all mean this host has no usable Direct3D 12 device; a
-        // removed device during creation stays DeviceLostException.
+        // removed device during creation stays DeviceLostException. Any failure releases everything the bring-up
+        // created, so the next use starts it again rather than finding a device with no queue.
         try {
-            var adapterLuid = (m_adapterLuidProvider?.Invoke() ?? m_adapterLuid);
+            BringUp();
+        } catch (Exception exception) {
+            ReleaseDeviceObjects();
+            m_capabilities = null;
+            m_identity = null;
+            m_memoryProfile = default;
 
-            m_device = ((0 != adapterLuid)
-                ? m_deviceApi.CreateDevice(
-                    adapterLuid: adapterLuid,
-                    minimumFeatureLevel: FeatureLevel
-                )
-                : CreateDefaultDevice(minimumFeatureLevel: FeatureLevel)
-            );
+            if (exception is DirectXException or InvalidOperationException or DllNotFoundException or EntryPointNotFoundException) {
+                throw new GpuDeviceUnavailableException(
+                    backend: "directx",
+                    innerException: exception,
+                    reason: exception.Message
+                );
+            }
 
-            EnsureShaderModelFloor(deviceHandle: m_device.Handle);
-            m_identity = m_deviceApi.GetDeviceIdentity(deviceHandle: m_device.Handle);
-            m_memoryProfile = m_deviceApi.GetMemoryProfile(deviceHandle: m_device.Handle);
-        } catch (Exception exception) when ((exception is DirectXException or InvalidOperationException or DllNotFoundException or EntryPointNotFoundException)) {
-            m_device?.Dispose();
-            m_device = null;
-
-            throw new GpuDeviceUnavailableException(
-                backend: "directx",
-                innerException: exception,
-                reason: exception.Message
-            );
+            throw;
         }
+    }
+    private void BringUp() {
+        var adapterLuid = (m_adapterLuidProvider?.Invoke() ?? m_adapterLuid);
+
+        m_device = ((0 != adapterLuid)
+            ? m_deviceApi.CreateDevice(
+                adapterLuid: adapterLuid,
+                minimumFeatureLevel: FeatureLevel
+            )
+            : CreateDefaultDevice(minimumFeatureLevel: FeatureLevel)
+        );
+        m_identity = m_deviceApi.GetDeviceIdentity(deviceHandle: m_device.Handle);
+        m_memoryProfile = m_deviceApi.GetMemoryProfile(deviceHandle: m_device.Handle);
+        m_capabilities = m_deviceApi.GetDeviceCapabilities(deviceHandle: m_device.Handle);
+        EnsureShaderModelFloor(deviceHandle: m_device.Handle);
+        m_bindings.CreateDeviceHeaps(
+            capabilities: m_capabilities,
+            device: ((ID3D12Device*)m_device.Handle)
+        );
 
         // The info queue (present only when the debug layer loaded) lets DrainDebugMessages surface validation
         // messages to the console instead of only OutputDebugString.
@@ -252,6 +305,14 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             riid: in infoQueueIid
         ).Succeeded) {
             m_infoQueue = ((nint)infoQueuePtr);
+        }
+
+        // A requested layer states whether it is live, so a validation run that prints no [d3d12-debug] line can tell a
+        // clean run from one the layer never watched. The prefix is not [d3d12-debug], which a run's checks fail on.
+        if (EnableDebugLayer) {
+            (DebugOutput ?? Console.Error).WriteLine(value: ((0 != m_infoQueue)
+                ? "[d3d12] debug layer live: the device reports through its info queue"
+                : "[d3d12] debug layer requested but not loaded: the device has no info queue, so nothing is validated"));
         }
 
         var queueDesc = new D3D12_COMMAND_QUEUE_DESC {
@@ -293,11 +354,59 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             PipelineLibrary = DirectXPipelineLibrary.Create(
                 deviceHandle: m_device.Handle,
                 file: GpuPipelineCacheFile.Open(
-                    identity: m_identity!,
+                    identity: m_identity,
                     store: m_pipelineCacheStore,
                     work: m_pipelineCacheWork
                 )
             );
+        }
+    }
+    // Releases the fence, its event, the queue, the info queue, the dispatch signature, the pipeline library, the
+    // descriptor heaps and the device, without a GPU drain, leaving the context with no device.
+    private void ReleaseDeviceObjects() {
+        if (0 != m_idleFence) {
+            _ = ((IUnknown*)m_idleFence)->Release();
+            m_idleFence = 0;
+        }
+
+        if (!m_idleFenceEvent.IsNull) {
+            _ = PInvoke.CloseHandle(hObject: m_idleFenceEvent);
+            m_idleFenceEvent = HANDLE.Null;
+        }
+
+        if (0 != m_commandQueue) {
+            _ = ((IUnknown*)m_commandQueue)->Release();
+            m_commandQueue = 0;
+        }
+
+        if (0 != m_infoQueue) {
+            _ = ((IUnknown*)m_infoQueue)->Release();
+            m_infoQueue = 0;
+        }
+
+        ReleaseDispatchSignature();
+        // Serializing a removed device's library can fail; that is reported, and the file already on disk stays.
+        PipelineLibrary?.Dispose();
+        PipelineLibrary = null;
+        m_bindings.ReleaseDeviceHeaps();
+        m_idleFenceValue = 1;
+        ReleaseDevice();
+    }
+    // Ends the device's memory entries, then releases the device even when an entry was still held, so a leak refuses
+    // the teardown by name without keeping the device alive.
+    private void ReleaseDevice() {
+        var device = m_device;
+
+        m_device = null;
+
+        if (device is null) {
+            return;
+        }
+
+        try {
+            Memory?.EndDevice(device: device.Handle);
+        } finally {
+            device.Dispose();
         }
     }
     // The Shader Model 6.6 device floor — the DXIL peer of the Vulkan SPIR-V 1.6 floor enforced in
@@ -306,41 +415,20 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     // to the driver's actual support, and a runtime too old to recognize 6.6 fails the query outright — both are below
     // the floor. All four supported GPUs clear SM 6.6 on current drivers (the RTX 4070 reaches 6.7/6.8).
     private static void EnsureShaderModelFloor(nint deviceHandle) {
-        const D3D_SHADER_MODEL RequiredShaderModel = D3D_SHADER_MODEL.D3D_SHADER_MODEL_6_6;
-
-        var device = ((ID3D12Device*)deviceHandle);
-        var shaderModel = new D3D12_FEATURE_DATA_SHADER_MODEL {
-            HighestShaderModel = RequiredShaderModel,
-        };
-        var queried = false;
-
-        // CsWin32's friendly CheckFeatureSupport overload throws on a failing HRESULT (E_INVALIDARG on a runtime that
-        // does not recognize the requested model); treat any failure as "below the floor" and fall through to the throw.
-        try {
-            device->CheckFeatureSupport(
-                Feature: D3D12_FEATURE.D3D12_FEATURE_SHADER_MODEL,
-                FeatureSupportDataSize: ((uint)sizeof(D3D12_FEATURE_DATA_SHADER_MODEL)),
-                pFeatureSupportData: &shaderModel
-            );
-            queried = true;
-        } catch {
-            // Swallow — handled by the floor check below.
-        }
-
-        if (
-            queried &&
-            (shaderModel.HighestShaderModel >= RequiredShaderModel)
-        ) {
+        if (DirectXFeatureReads.ReachesShaderModel(
+            reported: out var reported,
+            required: D3D_SHADER_MODEL.D3D_SHADER_MODEL_6_6,
+            support: new DirectXDeviceFeatureSupport(device: ((ID3D12Device*)deviceHandle))
+        )) {
             return;
         }
 
-        var reported = (queried
-            ? $"{(((int)shaderModel.HighestShaderModel) >> 4)}.{((int)shaderModel.HighestShaderModel) & 0xF}"
-            : "unknown (feature query failed)"
-        );
+        if (reported.Length == 0) {
+            reported = "unknown (feature query failed)";
+        }
 
         throw new InvalidOperationException(message:
-            ((((string)$"Direct3D 12 device reports Shader Model {reported}, below the required 6.6 floor. Puck's DXIL kernels are compiled at Shader Model 6.6 and cannot load on this device. Puck supports exactly four GPUs — RTX 2070 ") +
+            ((((string)$"Direct3D 12 device reports Shader Model {reported}, below the required 6.6 floor. Puck's DXIL kernels are compiled at Shader Model 6.6 and cannot load on this device. Puck supports exactly four GPUs — RTX 2060 ") +
             "(Turing), RTX 4070 (Ada), Steam Machine (AMD RDNA3), and Steam Deck (AMD RDNA2 Van Gogh) — all of which ") +
             "clear Shader Model 6.6 on current drivers; update your GPU driver or run on supported hardware."));
     }
@@ -373,26 +461,13 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             return;
         }
 
-        var fence = ((ID3D12Fence*)m_idleFence);
-        var value = m_idleFenceValue;
-
-        ((ID3D12CommandQueue*)m_commandQueue)->Signal(
-            Value: value,
-            pFence: fence
+        DirectXCommandCalls.SignalAndWait(
+            calls: new DirectXDeviceCommandCalls(device: ((ID3D12Device*)m_device.Handle)),
+            fence: ((ID3D12Fence*)m_idleFence),
+            fenceEvent: m_idleFenceEvent,
+            fenceValue: ref m_idleFenceValue,
+            queue: ((ID3D12CommandQueue*)m_commandQueue)
         );
-        m_idleFenceValue++;
-
-        if (fence->GetCompletedValue() < value) {
-            fence->SetEventOnCompletion(
-                Value: value,
-                hEvent: m_idleFenceEvent
-            );
-            _ = PInvoke.WaitForSingleObject(
-                dwMilliseconds: uint.MaxValue,
-                hHandle: m_idleFenceEvent
-            );
-        }
-
         DrainDebugMessages();
     }
     /// <inheritdoc/>
@@ -511,52 +586,56 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         Drain(live: true);
     }
 
-    /// <summary>Recreates the device, command queue, and idle fence IN PLACE after a device removal — preserving this
+    /// <summary>Recreates the device, command queue, idle fence and descriptor heaps IN PLACE after a device removal — preserving this
     /// instance's identity so the published <c>IGpuDeviceContext</c> capability (and every node that resolved it) stays
     /// valid; they rebuild their own device-derived resources. The old objects are released WITHOUT a GPU drain (the
     /// device is removed, so a Signal/wait would never complete; a COM Release on a removed device's objects is safe). The
     /// debug layer is NOT re-enabled here (it cannot be toggled per-process and can poison creation on some configs);
-    /// <see cref="EnsureCreated"/> applies the same opt-in gate it always does.</summary>
-    public void Recreate() {
+    /// <see cref="EnsureCreated"/> applies the same opt-in gate it always does. A device that cannot be created yet is
+    /// still the loss being recovered from: a real removal leaves no capable adapter for seconds, so the host's recovery
+    /// waits and calls again.
+    /// <para>The one retry rule every Direct3D 12 host follows: a rebuild that fails in Direct3D 12 itself, whether the
+    /// device's creation or the <paramref name="reinitialize"/> that rebinds the host's own objects to it (a windowed
+    /// host's swap chain), has not got its device back yet, and answers <see cref="DeviceLostException"/> so the host's
+    /// recovery waits and calls again within its budget. Any other failure ends the recovery.</para></summary>
+    /// <param name="reinitialize">Rebinds the host's own device objects once the device exists, or
+    /// <see langword="null"/> when the host has none.</param>
+    /// <exception cref="InvalidOperationException">A device-local allocation counted in <see cref="Memory"/> was still held on
+    /// the old device; the message names each one, the old device is released, and no new device is created.</exception>
+    /// <exception cref="DeviceLostException">No device could be created yet, or <paramref name="reinitialize"/> failed in
+    /// Direct3D 12; the next call tries again.</exception>
+    public void Recreate(Action? reinitialize = null) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
         );
 
-        if (0 != m_idleFence) {
-            _ = ((IUnknown*)m_idleFence)->Release();
-            m_idleFence = 0;
-        }
-
-        if (!m_idleFenceEvent.IsNull) {
-            _ = PInvoke.CloseHandle(hObject: m_idleFenceEvent);
-            m_idleFenceEvent = HANDLE.Null;
-        }
-
-        if (0 != m_commandQueue) {
-            _ = ((IUnknown*)m_commandQueue)->Release();
-            m_commandQueue = 0;
-        }
-
-        if (0 != m_infoQueue) {
-            _ = ((IUnknown*)m_infoQueue)->Release();
-            m_infoQueue = 0;
-        }
-
-        ReleaseDispatchSignature();
-        // Serializing a removed device's library can fail; that is reported, and the file already on disk stays.
-        PipelineLibrary?.Dispose();
-        PipelineLibrary = null;
-        m_device?.Dispose();
-        m_device = null;
-        m_idleFenceValue = 1;
+        ReleaseDeviceObjects();
 
         // m_device is now null, so this rebuilds a fresh device + queue + fence + event.
-        EnsureCreated();
+        try {
+            EnsureCreated();
+            reinitialize?.Invoke();
+        } catch (GpuDeviceUnavailableException exception) {
+            throw new DeviceLostException(
+                innerException: exception,
+                message: "The Direct3D 12 device could not be recreated yet (the adapter is unavailable).",
+                reasonCode: ((exception.InnerException as DirectXException)?.Result ?? 0)
+            );
+        } catch (DirectXException exception) {
+            throw new DeviceLostException(
+                innerException: exception,
+                message: $"The Direct3D 12 device's objects could not be recreated yet ({exception.Operation} failed).",
+                reasonCode: exception.Result
+            );
+        }
     }
-    /// <summary>Releases the command queue and the owned device. With the debug layer on, every object the device still
+    /// <summary>Drains the queue, a removed device counting as drained (<see cref="DirectXCommandCalls.Drain"/>), then
+    /// releases the command queue and the owned device. With the debug layer on, every object the device still
     /// holds once the context has released its own is written as a <c>[d3d12-debug] live</c> line before the device is
     /// released. Safe to call more than once.</summary>
+    /// <exception cref="InvalidOperationException">A device-local allocation counted in <see cref="Memory"/> was still held on
+    /// the device; the message names each one, and the device is released regardless.</exception>
     public void Dispose() {
         if (m_disposed) {
             return;
@@ -566,7 +645,14 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             (0 != m_commandQueue) &&
             (0 != m_idleFence)
         ) {
-            WaitIdle();
+            _ = DirectXCommandCalls.Drain(
+                calls: new DirectXDeviceCommandCalls(device: ((ID3D12Device*)m_device!.Handle)),
+                fence: ((ID3D12Fence*)m_idleFence),
+                fenceEvent: m_idleFenceEvent,
+                fenceValue: ref m_idleFenceValue,
+                queue: ((ID3D12CommandQueue*)m_commandQueue)
+            );
+            DrainDebugMessages();
         }
 
         m_disposed = true;
@@ -589,6 +675,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         ReleaseDispatchSignature();
         PipelineLibrary?.Dispose();
         PipelineLibrary = null;
+        m_bindings.ReleaseDeviceHeaps();
         ReportLiveObjects();
 
         if (0 != m_infoQueue) {
@@ -596,7 +683,6 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             m_infoQueue = 0;
         }
 
-        m_device?.Dispose();
-        m_device = null;
+        ReleaseDevice();
     }
 }

@@ -1,5 +1,6 @@
 using System.Runtime.Versioning;
 using Puck.DirectX.Interfaces;
+using Puck.DirectX.Interop;
 using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.Graphics.Dxgi.Common;
 using static Puck.DirectX.DirectXConstants;
@@ -9,7 +10,7 @@ namespace Puck.DirectX;
 /// <summary>
 /// A Direct3D 12 <see cref="IGpuRenderPass"/>. Direct3D 12 has no render-pass object, so this is the description with its
 /// formats translated: what a pipeline state object is created for (<see cref="ColorFormats"/>,
-/// <see cref="DepthFormat"/>) and what <see cref="DirectXGpuCommandRecorder.BeginRenderPass"/> begins and ends.
+/// <see cref="DepthFormat"/>) and what <see cref="DirectXGpuRecorder.BeginRenderPass"/> begins and ends.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed class DirectXGpuRenderPass : IGpuRenderPass {
@@ -25,8 +26,16 @@ public sealed class DirectXGpuRenderPass : IGpuRenderPass {
             ? DirectXGpuFormats.ToDxgiFormat(gpuPixelFormat: depth.Format)
             : DXGI_FORMAT.DXGI_FORMAT_UNKNOWN
         );
+        Flags = (description.ShaderWrites
+            ? D3D12_RENDER_PASS_FLAGS.D3D12_RENDER_PASS_FLAG_ALLOW_UAV_WRITES
+            : D3D12_RENDER_PASS_FLAGS.D3D12_RENDER_PASS_FLAG_NONE);
     }
 
+    /// <summary>Gets the flags <see cref="DirectXGpuRecorder.BeginRenderPass"/> opens the pass with:
+    /// <c>D3D12_RENDER_PASS_FLAG_ALLOW_UAV_WRITES</c> when the pass allows shader writes
+    /// (<see cref="GpuRenderPassDescription.ShaderWrites"/>), which a UAV write inside a render pass requires, and none
+    /// otherwise.</summary>
+    public D3D12_RENDER_PASS_FLAGS Flags { get; }
     /// <summary>Gets each color attachment's DXGI format, in order.</summary>
     public IReadOnlyList<DXGI_FORMAT> ColorFormats { get; }
     /// <summary>Gets the depth attachment's DXGI format, or <c>DXGI_FORMAT_UNKNOWN</c> for none.</summary>
@@ -61,7 +70,6 @@ public sealed unsafe class DirectXGpuFramebuffer : IGpuFramebuffer {
             depth: depth,
             description: renderPass.Description
         );
-        ArgumentNullException.ThrowIfNull(deviceContext);
         Pass = renderPass;
         ColorResources = colors.Select(selector: static image => image.ImageHandle).ToArray();
         DepthResource = (depth?.ImageHandle ?? 0);
@@ -74,7 +82,6 @@ public sealed unsafe class DirectXGpuFramebuffer : IGpuFramebuffer {
                 var rtvHeap = DirectXDescriptorHeaps.Create(
                     count: ((uint)colors.Count),
                     device: device,
-                    shaderVisible: false,
                     type: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_RTV
                 );
 
@@ -99,7 +106,6 @@ public sealed unsafe class DirectXGpuFramebuffer : IGpuFramebuffer {
                 var dsvHeap = DirectXDescriptorHeaps.Create(
                     count: 1,
                     device: device,
-                    shaderVisible: false,
                     type: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_DSV
                 );
 
@@ -156,16 +162,16 @@ public sealed unsafe class DirectXGpuFramebuffer : IGpuFramebuffer {
 /// <see cref="DirectXGpuFramebuffer"/>.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
-public sealed class DirectXGpuRenderPassFactory : IGpuRenderPassFactory {
+public sealed class DirectXGpuRenderPassFactory(DirectXDeviceContext deviceContext) : IGpuRenderPassFactory {
     /// <inheritdoc/>
-    public IGpuRenderPass Create(IGpuDeviceContext deviceContext, GpuRenderPassDescription description) =>
+    public IGpuRenderPass Create(GpuRenderPassDescription description, in GpuObjectName name) =>
         new DirectXGpuRenderPass(description: description);
     /// <inheritdoc/>
-    public IGpuFramebuffer CreateFramebuffer(IGpuDeviceContext deviceContext, IGpuRenderPass renderPass, IReadOnlyList<IGpuImage> colors, IGpuImage? depth) =>
+    public IGpuFramebuffer CreateFramebuffer(IGpuRenderPass renderPass, IReadOnlyList<IGpuImage> colors, IGpuImage? depth) =>
         new DirectXGpuFramebuffer(
             colors: colors,
             depth: depth,
-            deviceContext: ((IDirectXDeviceContext)deviceContext),
+            deviceContext: deviceContext,
             renderPass: ((DirectXGpuRenderPass)renderPass)
         );
 }

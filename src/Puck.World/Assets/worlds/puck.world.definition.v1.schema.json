@@ -201,6 +201,12 @@
     "sets": {
       "$ref": "./schema/sets.schema.json"
     },
+    "editor": {
+      "$ref": "./schema/editor.schema.json"
+    },
+    "timeline": {
+      "$ref": "./schema/timeline.schema.json"
+    },
     "basis": {
       "$ref": "./schema/basis.schema.json"
     },

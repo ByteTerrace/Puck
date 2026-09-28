@@ -8,11 +8,11 @@ namespace Puck.Cli.Tests;
 /// DXC on the search path.</summary>
 public sealed class ShadersPackageCommandLawTests {
     private const string Image = """
-        [[vk::binding(0, 0)]] RWTexture2D<float4> image : register(u0);
+        #include "image.interface.hlsli"
 
         [numthreads(8, 8, 1)]
         void main(uint3 id : SV_DispatchThreadID) {
-            image[id.xy] = float4(0.25, 0.5, 0.75, 1.0);
+            output[id.xy] = float4(0.25, 0.5, 0.75, 1.0);
         }
         """;
 
@@ -65,7 +65,7 @@ public sealed class ShadersPackageCommandLawTests {
             foreach (var args in new[] {
                 new[] { "shaders", "compile", Path.Combine(path1: root, path2: "absent.hlsl"), "--out", Path.Combine(path1: root, path2: "out") },
                 new[] { "shaders", "compile", manifest, "--out", Path.Combine(path1: root, path2: "out"), "--stage", "geometry" },
-                new[] { "shaders", "pipeline", Path.Combine(path1: root, path2: "absent.pipeline.json") },
+                new[] { "shaders", "pipeline", Path.Combine(path1: root, path2: "absent.graph.json") },
                 new[] { "shaders", "pipeline", manifest },
             }) {
                 var (exitCode, _, error) = await RunAsync(args: args);

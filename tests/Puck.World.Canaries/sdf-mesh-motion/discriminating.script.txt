@@ -1,0 +1,16 @@
+# The same frames, but the slab never moves.
+world.cadence off
+# The engine builds its pipelines before the first capture is armed, so the capture lands on a rendered frame. The wait
+# releases on readiness, a cold driver cache included; the leg's own timeout bounds it.
+world.wait ready 600
+world.debug-view visibility
+world.wait 30
+world.screenshot {run}/before.png
+world.wait captures 30
+world.wait 30
+world.screenshot {run}/after.png
+world.wait captures 30
+# The camera never pans either.
+world.wait 30
+world.screenshot {run}/panned.png
+world.wait captures 30

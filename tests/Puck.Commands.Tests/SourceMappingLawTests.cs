@@ -7,13 +7,13 @@ namespace Puck.Commands.Tests;
 
 /// <summary>Laws for the published source mapping: a screen at an arbitrary pose and a pane at an arbitrary rectangle map
 /// known points to known source pixels through every layout, fit, crop and warp; a warp with no inverse refuses as an
-/// input path; passthrough needs a local user's source; and the same mapping and input give a bit-identical hit on
-/// every evaluation and thread.</summary>
+/// input path; the draw form a GPU reads runs the chain the hit runs; passthrough needs a local user's source; and the
+/// same mapping and input give a bit-identical hit on every evaluation and thread.</summary>
 public sealed class SourceMappingLawTests {
     private const int SourceHeight = 240;
     private const int SourceWidth = 320;
 
-    private static readonly SourceHandle Emulator = SourceHandle.Producer(id: "emulator");
+    private static readonly SourceHandle Emulator = SourceHandle.Producer(name: "emulator");
     // A face frame with no axis aligned to the world: right (2, 2, 1)/3 and up (-1, 2, -2)/3 are unit and orthogonal.
     private static readonly SourcePlacement.Surface TiltedSurface = new(
         HalfHeight: 1.5f,
@@ -326,6 +326,137 @@ public sealed class SourceMappingLawTests {
             y: 120
         );
     }
+    // The draw form the GPU reads runs the chain MapRay runs: at a grid of face points clear of every edge, over every
+    // layout, fit, crop and warp, the warped point leaves the unit square exactly where the hit falls on the warp's
+    // border, a letterbox's source point leaves the crop exactly where the hit falls on a bar, and on the source the
+    // draw form's point is the hit's to within the fixed-point face's quantization, a fiftieth of a pixel.
+    [Fact]
+    public void TheDrawFormRunsTheChainTheHitRuns() {
+        SourcePixelRect[] crops = [
+            SourcePixelRect.Whole(height: SourceHeight, width: SourceWidth),
+            new(Height: 100, Width: 210, X: 70, Y: 40),
+        ];
+        SourceWarp?[] warps = [null, new SourceWarp(Inverse: SourceWarpInverse.Affine.Inset(border: 0.1f), Pass: "glass")];
+        var checkedOnSource = 0;
+
+        foreach (var layout in Enum.GetValues<SourceUvLayout>()) {
+            foreach (var fit in Enum.GetValues<SourceFit>()) {
+                foreach (var crop in crops) {
+                    foreach (var warp in warps) {
+                        var mapping = Surface(crop: crop, fit: fit, layout: layout, warp: warp);
+                        var draw = mapping.Draw();
+
+                        for (var row = 0; (row < 9); row++) {
+                            for (var column = 0; (column < 9); column++) {
+                                var face = new Vector2(x: ((column + 0.37f) / 9f), y: ((row + 0.61f) / 9f));
+                                var hit = mapping.MapRay(ray: RayAt(surface: TiltedSurface, u: face.X, v: face.Y));
+                                var warped = Vector2.Transform(position: face, matrix: draw.Warp);
+                                var source = Vector2.Transform(position: warped, matrix: draw.Image);
+                                var outsideWarp = ((warped.X < 0f) || (warped.X >= 1f) || (warped.Y < 0f) || (warped.Y >= 1f));
+                                var letterbox = (draw.Letterboxes && (
+                                    (source.X < draw.Crop.X) ||
+                                    (source.Y < draw.Crop.Y) ||
+                                    (source.X >= (draw.Crop.X + draw.Crop.Width)) ||
+                                    (source.Y >= (draw.Crop.Y + draw.Crop.Height))
+                                ));
+                                var expected = (outsideWarp
+                                    ? SourceHitOutcome.OutsideWarp
+                                    : (letterbox ? SourceHitOutcome.Letterbox : SourceHitOutcome.OnSource));
+
+                                Assert.Equal(expected: expected, actual: hit.Outcome);
+
+                                if (hit.IsOnSource) {
+                                    Assert.InRange(actual: Math.Abs(value: ((source.X * SourceWidth) - ((double)hit.Coordinate.X))), high: 0.02, low: 0.0);
+                                    Assert.InRange(actual: Math.Abs(value: ((source.Y * SourceHeight) - ((double)hit.Coordinate.Y))), high: 0.02, low: 0.0);
+                                    checkedOnSource++;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Assert.True(condition: (checkedOnSource > 1000));
+    }
+    // The crop's edges are half-open in the draw form as in MapRay: on a two-to-one face letterboxing a square crop, a
+    // grid of face points in sixty-fourths, exact in both fixed and single precision, falls on the crop's right and
+    // bottom edges and its left and top ones under every layout, and the draw form's letterbox test, the screen
+    // shading's `source >= crop.zw`, agrees with the hit at every one: face point (0.75, 0.5) lies on the bar.
+    [Fact]
+    public void TheDrawFormsLetterboxIsHalfOpenAtTheCropsEdgesAsTheHitsIs() {
+        var face = new SourcePlacement.Surface(
+            HalfHeight: 1f,
+            HalfWidth: 2f,
+            Origin: Vector3.Zero,
+            Right: Vector3.UnitX,
+            Up: Vector3.UnitY
+        );
+        var edges = 0;
+
+        foreach (var layout in Enum.GetValues<SourceUvLayout>()) {
+            var mapping = new SourceMapping(
+                Crop: new SourcePixelRect(Height: 240, Width: 240, X: 40, Y: 0),
+                Fit: SourceFit.Contain,
+                Layout: layout,
+                Placement: face,
+                Source: Emulator,
+                SourceHeight: SourceHeight,
+                SourceWidth: SourceWidth
+            );
+            var draw = mapping.Draw();
+
+            for (var row = 0; (row < 64); row++) {
+                for (var column = 0; (column < 64); column++) {
+                    var point = new Vector2(x: (column / 64f), y: (row / 64f));
+                    var hit = mapping.MapRay(ray: RayAt(surface: face, u: point.X, v: point.Y));
+                    var source = Vector2.Transform(position: point, matrix: draw.Image);
+                    var right = (draw.Crop.X + draw.Crop.Width);
+                    var bottom = (draw.Crop.Y + draw.Crop.Height);
+                    var letterbox = (
+                        (source.X < draw.Crop.X) ||
+                        (source.Y < draw.Crop.Y) ||
+                        (source.X >= right) ||
+                        (source.Y >= bottom)
+                    );
+
+                    Assert.Equal(
+                        expected: (letterbox ? SourceHitOutcome.Letterbox : SourceHitOutcome.OnSource),
+                        actual: hit.Outcome
+                    );
+
+                    if ((source.X == right) || (source.Y == bottom) || (source.X == draw.Crop.X) || (source.Y == draw.Crop.Y)) {
+                        edges++;
+                    }
+                }
+            }
+        }
+
+        Assert.True(condition: (edges > 0));
+        Assert.Equal(
+            expected: SourceHitOutcome.Letterbox,
+            actual: new SourceMapping(
+                Crop: new SourcePixelRect(Height: 240, Width: 240, X: 40, Y: 0),
+                Fit: SourceFit.Contain,
+                Placement: face,
+                Source: Emulator,
+                SourceHeight: SourceHeight,
+                SourceWidth: SourceWidth
+            ).MapRay(ray: RayAt(surface: face, u: 0.75, v: 0.5)).Outcome
+        );
+    }
+    [Fact]
+    public void AMappingIsDrawnOnlyOnASurfaceThroughADeclaredInverse() {
+        var pane = SourceMapping.WholePane(
+            height: SourceHeight,
+            region: new NormalizedRect(Height: 0.5f, Width: 0.5f, X: 0f, Y: 0f),
+            source: Emulator,
+            width: SourceWidth
+        );
+
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => pane.Draw());
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => Surface(warp: new SourceWarp(Pass: "ripple")).Draw());
+    }
     [Fact]
     public void AWarpWithNoInverseRefusesAsAnInputPathButStillDraws() {
         var drawOnly = new SourceWarp(Pass: "ripple");
@@ -385,34 +516,54 @@ public sealed class SourceMappingLawTests {
     }
     [Fact]
     public void PassthroughCoordinatesScaleToTheWindowsClientAreaAndItsDpi() {
+        // The capture spans the window's frame: a border of 8 and a title bar of 40 physical pixels around the client.
+        var window = new SourcePassthroughWindow(
+            Client: new SourcePixelRect(
+                Height: 960,
+                Width: 1280,
+                X: 8,
+                Y: 40
+            ),
+            DpiScale: 1.5f,
+            FrameHeight: 1008,
+            FrameWidth: 1296
+        );
         var point = SourcePassthrough.ToClient(
             coordinate: Point(
                 x: 160,
                 y: 120
             ),
-            sourceHeight: 240,
-            sourceWidth: 320,
-            window: new SourcePassthroughWindow(
-                ClientHeight: 960,
-                ClientWidth: 1280,
-                DpiScale: 1.5f
-            )
+            sourceHeight: 252,
+            sourceWidth: 324,
+            window: window
         );
 
         Assert.Equal(
             expected: new Vector2(
-                x: 640f,
-                y: 480f
+                x: 632f,
+                y: 440f
             ),
             actual: point.Physical
         );
         Assert.Equal(
             expected: new Vector2(
-                x: (640f / 1.5f),
-                y: 320f
+                x: (632f / 1.5f),
+                y: (440f / 1.5f)
             ),
             actual: point.Logical
         );
+        Assert.True(condition: point.InClient);
+
+        // A point on the captured title bar lies outside the client area.
+        Assert.False(condition: SourcePassthrough.ToClient(
+            coordinate: Point(
+                x: 160,
+                y: 5
+            ),
+            sourceHeight: 252,
+            sourceWidth: 324,
+            window: window
+        ).InClient);
     }
     [Fact]
     public void TheSameMappingAndRaysGiveBitIdenticalHitsOnEveryEvaluationAndThread() {

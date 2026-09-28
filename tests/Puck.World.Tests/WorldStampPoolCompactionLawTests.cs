@@ -39,7 +39,7 @@ public sealed class WorldStampPoolCompactionLawTests {
 
         pool.Emit(
             builder: builder,
-            definition: Fixtures.BuildGradientUpDocument(gradientUp: false),
+            colors: WorldBakedColors.Of(definition: Fixtures.BuildGradientUpDocument(gradientUp: false)),
             probeWorstCase: false,
             maxPlacementScale: 1f,
             slotBase: SlotBase
@@ -54,7 +54,7 @@ public sealed class WorldStampPoolCompactionLawTests {
             BodyIndex: body,
             Creation: creation,
             Scale: 1f,
-            Motion: WorldLookMotion.Default
+            Look: WorldLook.Implicit
         )).ToArray()
     );
     private static ShapeDocument Shape(int id, int? group = null, SdfBlendOp blend = SdfBlendOp.Union) => new(
@@ -182,9 +182,10 @@ public sealed class WorldStampPoolCompactionLawTests {
             initial.Document with {
                 Frames = [new FrameDocument(
                     Name: "pose",
+                    // The frame lifts the shape off its authored pose, so the creation animates.
                     Transforms: [new FrameTransformDocument(
                             Id: 0,
-                            Position: Vector3.Zero,
+                            Position: Vector3.UnitY,
                             Rotation: Quaternion.Identity,
                             Scale: new Vector3(value: .1f)
                         )]
@@ -210,7 +211,7 @@ public sealed class WorldStampPoolCompactionLawTests {
             0,
             creation,
             1f,
-            WorldLookMotion.Default
+            WorldLook.Implicit
         ) };
 
         pool.Reconcile(

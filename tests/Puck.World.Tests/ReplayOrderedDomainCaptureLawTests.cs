@@ -1,3 +1,5 @@
+using Puck.World.Server;
+using Puck.Testing;
 using Puck.Commands;
 using Xunit;
 
@@ -18,12 +20,13 @@ namespace Puck.World.Tests;
 public sealed class ReplayOrderedDomainCaptureLawTests {
     [Fact]
     public void MutationUndoCompositionAndQuerySurviveTheTapeRoundTrip() {
-        Fixtures.SkipIfReplayDirectoryUnwritable();
+        using var stateDirectory = new TemporaryDirectory(prefix: "puck-replay-");
 
         using var fixture = Fixtures.FreshServer();
 
         var transport = new LoopbackTransport(server: fixture.Server);
         var tape = new WorldReplayTape(
+            stateRoot: new WorldStateRoot(path: stateDirectory.RootPath),
             liveServer: fixture.Server,
             profiles: fixture.Server.Profiles,
             transport: transport,
@@ -68,7 +71,7 @@ public sealed class ReplayOrderedDomainCaptureLawTests {
 
         _ = tape.StopRecording();
 
-        using var stream = File.OpenRead(path: WorldReplayTape.PathFor(name: name));
+        using var stream = File.OpenRead(path: tape.PathFor(name: name));
 
         var snapshot = WorldReplaySnapshot.Read(stream: stream);
         var kinds = snapshot.Ticks

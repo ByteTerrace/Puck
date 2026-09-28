@@ -494,8 +494,9 @@ public static partial class WorldDecompiler {
     // ---- the sweep ------------------------------------------------------------------------------------------------
 
     // Every name the document declares, as the leaf that holds it and where it stood before anything was read back:
-    // every authored name (WorldAuthoredNames, the walk the compiler and loader read too), and the rows a
-    // composition's links write, whose names are references rather than declarations but are generated all the same.
+    // every authored name (WorldAuthoredNames, the walk the compiler and loader read too), the rows a composition's
+    // links write, whose names are references rather than declarations but are generated all the same, and each
+    // views.graphs row's instance name, which the synthesized root graph's own generated names share a namespace with.
     private static List<(JsonNode Leaf, string Pointer)> NamesToSweep(JsonObject root) {
         var names = new List<(JsonNode Leaf, string Pointer)>();
 
@@ -521,6 +522,11 @@ public static partial class WorldDecompiler {
                 if (face["portal"]?["destination"] is JsonValue leaf) {
                     names.Add(item: (leaf, WorldDocumentEmitter.PointerOf(node: leaf)));
                 }
+            }
+        }
+        foreach (var graph in ((root["views"]?["graphs"] as JsonArray) ?? []).OfType<JsonObject>()) {
+            if (graph["name"] is JsonValue leaf) {
+                names.Add(item: (leaf, WorldDocumentEmitter.PointerOf(node: leaf)));
             }
         }
 

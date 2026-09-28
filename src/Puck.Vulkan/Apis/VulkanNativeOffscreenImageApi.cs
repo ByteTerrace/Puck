@@ -43,6 +43,10 @@ public unsafe sealed class VulkanNativeOffscreenImageApi : IVulkanOffscreenImage
             value: request.Height,
             paramName: nameof(request)
         );
+        ArgumentOutOfRangeException.ThrowIfZero(
+            value: request.MipLevels,
+            paramName: nameof(request)
+        );
     }
 
     /// <inheritdoc/>
@@ -65,7 +69,7 @@ public unsafe sealed class VulkanNativeOffscreenImageApi : IVulkanOffscreenImage
                 Format = request.Format,
                 ImageType = ImageType2D,
                 InitialLayout = ImageLayoutUndefined,
-                MipLevels = 1,
+                MipLevels = request.MipLevels,
                 SType = StructureTypeImageCreateInfo,
                 Samples = SampleCount1Bit,
                 SharingMode = SharingModeExclusive,
@@ -106,6 +110,11 @@ public unsafe sealed class VulkanNativeOffscreenImageApi : IVulkanOffscreenImage
                 0,
                 out memoryHandle
             ).ThrowIfFailed(operation: "vkAllocateMemory");
+            request.Device.CountAllocated(
+                allocationSize: allocateInfo.AllocationSize,
+                memoryHandle: memoryHandle,
+                role: GpuMemoryRole.DeviceLocal
+            );
             request.Device.BindImageMemory(
                 request.Device.Handle,
                 imageHandle,

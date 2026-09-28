@@ -93,7 +93,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck nuget`](../development/ci.md#publish) | pack, select, verify, and push shared-version NuGet package batches, and the GitHub side of a release: `gate`, `tag`, `release`, `pin`, `pin-published`, `smoke`. |
 | [`puck official`](#puck-officialthe-local-official-tree-producer) | builds, serves, and verifies a local `puck.official.manifest.v1` tree—the shipped engine, the authoring workspace, world documents, and their assets, content-addressed. No upload, no signing, no GitHub workflow. |
 | [`puck packages`](#puck-packagespublished-nuget-package-report) | the published `ByteTerrace.Puck.*` NuGet package report—id/description/tags—checked and regenerated against `docs/site/index.html`. |
-| [`puck parity`](#puck-paritycross-backend-parity-over-the-authored-parity-world) | boots the authored parity world offscreen once per graphics backend and judges every capture it schedules: content gate, exact state hash, and per-tile pixels. |
+| [`puck parity`](#puck-paritycross-backend-parity-over-the-authored-parity-world) | boots the authored parity world offscreen once per graphics backend and judges every capture it schedules: content gate, exact state hash, an exact reference image where a station names one, and per-tile pixels. |
 | [`puck publish`](#puck-publishunsigned-release-source-trees) | writes an unsigned `puck.release.manifest.v1` release-source tree from one runtime identifier's built output. |
 | [`puck pull-request`](#puck-pull-requestautomatic-pr-formatting) | the formatting bot's two halves: `format` prepares a pull request's formatting artifact, and `submit-format` is CI's trusted applier. |
 | [`puck qualify`](#puck-qualifypackage-qualification) | qualifies a producer-built `Puck.World` package against the release profile: the functional canaries on the package's own World, then the stability matrix offscreen, each cell judged pass, fail or blocked. |
@@ -102,7 +102,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck scan`](#puck-scansource-sweep) | source sweep over the parsed tree: comments, comment smells, synchronization sites, clones. |
 | [`puck schema`](#puck-schemaworlddef-json-schema) | the generated JSON Schema for `puck.world.definition.v1` and the dashboard portal's TypeScript types derived from it, checked and regenerated. |
 | [`puck search`](#puck-searchcontent-search) | ripgrep-shaped content search over a linear-time symbolic-derivatives regex engine ([RE#](../../ACKNOWLEDGMENTS.md)). |
-| [`puck shaders`](#puck-shadersshader-compilation) | `shaders compile` compiles a source stage; `shaders interface` prints or writes the frame-block declarations a pipeline or shader set reads; `shaders package` writes a pipeline's package with its binaries; `shaders pipeline` validates or compiles connected passes, or loads a package, for both GPU backends. |
+| [`puck shaders`](#puck-shadersshader-compilation) | `shaders collect` and `shaders compare` hand one host's compiled shaders to another and compare them byte for byte; `shaders compile` compiles a source stage; `shaders generate` writes or checks the HLSL includes generated from the C# model, every generated shader interface among them; `shaders interface` prints or writes the frame-block declarations a pipeline or engine package reads; `shaders package` writes a pipeline's package with its binaries; `shaders pipeline` validates or compiles connected passes, or loads a package, for both GPU backends. |
 | [`puck test`](#puck-testtest-worlds) | compiles a `.puck` source's `test` blocks — a world's own, a module's under the arguments a test gives it, and a module's own at every instantiation — into test worlds, boots each through the real `Puck.World` executable, headless, and reads its verdict rows out of the state export the world writes at its own declared export tick. |
 | [`puck vocabulary`](#puck-vocabularyworld-authoring-vocabulary) | the world authoring vocabulary `docs/reference/world-vocabulary.md`, generated from the one construct table the parser, the printer and the language server read, and checked against it. |
 | [`puck wasm`](../../wasm/README.md) | build and refresh the shipped WASM modules. |
@@ -559,7 +559,10 @@ generated atlases preserve source glyph IDs for it.
 ## `puck shaders`—shader compilation
 
 ```sh
+puck shaders collect <directory>
+puck shaders compare <expected> [<actual>] [--build]
 puck shaders compile <source> --out <directory> [--name <name>] [--toolchain <directory>] [--stage compute|vertex|fragment] [--entry <name>]
+puck shaders generate [--check]
 puck shaders interface <source> [--write] [--echo]
 puck shaders package <source> --output <directory> [--root <directory>] [--toolchain <directory>] [--cache <directory>] [--json]
 puck shaders pipeline <source> [--inspect] [--toolchain <directory>] [--cache <directory>]
@@ -567,7 +570,7 @@ puck shaders pipeline <source> [--inspect] [--toolchain <directory>] [--cache <d
 
 `compile` writes SPIR-V and DXIL for one HLSL source stage; `--entry` names its
 entry point and defaults to `main`. `pipeline`
-loads a pipeline document or synthesizes a one-pass pipeline from a shader,
+loads a `puck.render.graph.v1` graph document or reads a one-off shader as a one-pass graph,
 validates its resource graph, and compiles every planned pass. `--inspect`
 prints the execution order, dependencies and named outputs without compiling
 shaders or creating a GPU device. A source or document that does not compile or
@@ -576,13 +579,43 @@ A missing source, an unknown `--stage`, an unreadable file, a
 missing shader tool, or a source edited while it was read is a refusal: exit 2,
 reported as `puck shaders <verb>: <path>: <why>`.
 
-`interface` prints the [frame-block](shaders.md#the-frame-block) declarations
-each pass of a pipeline document or one-off shader reads, or those a shader-set
-manifest's stages read; `--write` writes each as `<interface>.interface.hlsli`
-beside its source instead, which a shader set, compiled at build, checks in, and
-`--echo` also generates each interface's echo pass as `<interface>.echo.hlsl`.
+`compare` holds every compiled shader, each `.spv` and `.dxil`, in one tree to
+the same file in another, byte for byte. Both trees are walked for bytecode,
+skipping `artifacts`, `bin`, `obj`, `.git`, `.tmp` and `node_modules`, and
+matched by relative path; a file only one tree holds, or one whose bytes differ
+(named with its first differing byte), fails with exit 1, and a tree holding no
+bytecode is refused with exit 2. `<actual>` is the repository root when absent.
+`--build` first restores and runs the build's own `CompileShaders` target
+(`build/Shaders.targets`) in every tracked project outside `experimental/` that
+declares a vertex, fragment or compute shader item, with the `dxc` on the path,
+so a second host compiles with exactly the first host's arguments. `collect`
+copies the checkout's compiled shaders into one directory at their repository
+paths, the tree `compare` reads on the other host. CI collects the Windows
+build's shaders and compares a Linux DXC build of the same commit against them
+([CI tooling](../development/ci.md)), the binding contract's cross-host gate
+leg.
 
-`package` compiles a pipeline document or one-off shader and writes its
+`generate` writes the HLSL includes the C# model owns:
+`src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-isa.hlsli`, the SDF instruction set's
+version, enums and packed-layout constants, generated from
+`Puck.SignedDistance` by `Puck.SdfVm.SdfIsaHlsl`; and every generated shader
+interface (`<name>.interface.hlsli`). An engine package that declares
+pass-group members, such as `overlay`, `place` and `sdf.film-grain`, owns the
+one include named by its interface, found by that file name. A checked-in
+interface include that no package owns, and a package whose include is missing
+or named twice, fail by name. `--check` writes nothing, regenerates each include in
+memory and exits 1 naming each file that differs from the model and its first
+differing line; CI runs it beside `puck schema --check`.
+
+`interface` prints the [frame-block](shaders.md#frame-values-extent-and-ports) declarations
+each pass of a graph document or one-off shader reads, or, with
+`--package <id>` (such as `sdf.film-grain`), those an engine package declares,
+its source argument then naming the directory its shaders live in; `--write`
+writes each as `<interface>.interface.hlsli` beside its source instead, which an
+engine package, compiled at build, checks in, and `--echo` also generates each
+interface's echo pass as `<interface>.echo.hlsl`.
+
+`package` compiles a graph document or one-off shader and writes its
 `puck.shader.package.v1` package to `--output`: the source closure, each pass's
 interface and generated declarations, and its SPIR-V and DXIL binaries, with a
 manifest recording the compiler they were built with. Loading a package runs no
@@ -624,17 +657,71 @@ break, and nothing wider:
   file lies in its directory, is a world, script or fixture its manifest
   names, or is a source file the canary executed when coverage was last
   recorded in [`tests/Puck.Affected`](../../tests/Puck.Affected/README.md).
+  A canary is also chosen for any file its manifest's documents reach, read
+  with the documents' own readers: a world reaches the layers it composes,
+  the neighbour worlds its adjacencies name, the `.graph.json` documents its
+  `views.graphs` rows name, and the files of each post-process package its
+  `views.post` rows name; a graph document reaches the pass
+  shaders it declares and every file they include, each resolved as the host
+  resolves it. A world is read composed and parsed but not validated, so a world whose
+  adjacencies or post-process packages need the host's resolvers still reaches
+  them.
   `puck parity` is chosen whenever a chosen canary renders on a GPU.
-- A changed `Puck.World` source the coverage index does not know is listed as
-  `unmapped`. It chooses no canary; the list says coverage is due for a fresh
-  recording.
+- A file no canary can execute is placed through the indexed C# sources it
+  stands for. A project file, restore lock or `NativeMethods.txt` stands for
+  its project's sources. A shader source or include stands for the C# that
+  names, by its file name, each kernel whose include closure reaches it: the
+  kernels are the stage sources the projects' shader items declare, the
+  Direct3D 11 kernels (`Direct3D11KernelSource`) among them, and the naming C#
+  may sit in the kernel's project or any project its build references, as a
+  conversion pass's name is a constant in `ImageSourceConversion`. A
+  post-process package's stage sources (the kernels at
+  `<Directory>/<stem>.hlsl` for the stages its catalog entry declares) with
+  their includes, and the frame interface generated for it, are placed through
+  the canaries whose worlds name the package in `views.post`, read as the rest
+  of a canary's documents are. A package no canary's world names falls back to
+  the C# declaring `PostProcessPackage`, which draws with every post-process
+  package's stages. A file
+  `puck schema` writes stands for the sources declaring the types it is
+  generated from. A shader that no kernel's loader, post-process package or
+  canary's documents reach has no stand-in.
+- A changed `Puck.World` source that neither the coverage index nor a stand-in
+  places is listed as `unmapped`. It chooses no canary; the list says coverage
+  is due for a fresh recording.
+- A file deleted since `--since` can never be recorded, so it is never
+  `unmapped`. The index as the base revision recorded it places it, choosing
+  the canaries that executed it, directly or through the stand-ins the base's
+  own tree gave it: a deleted shader stands for the loader of each base kernel
+  whose closure reached it, read through `git show <since>:<path>` and never
+  from the working tree. It is also placed by document reach in the base's
+  tree: each canary's worlds and graph documents are read as the base recorded
+  them, through the same readers, so a deleted pass source that a base graph
+  document declared, or an asset a base world named, chooses the canaries whose
+  documents reached it there. The canaries are today's, since only a canary
+  that exists now can run. One none of these places is listed as `deleted`, and
+  its project's suites still run. Nothing reads a deleted file from disk.
+
 - Build infrastructure (`build/`, `Directory.Build.*`, `global.json`,
   `Puck.slnx`) chooses every suite. Prose, `.claude/`, `.github/`, `editors/`
   and `experimental/` choose nothing.
 
+The plan prints one line per choice, each naming what `--run` does with it:
+
+```text
+suite Puck.World.Tests
+test src/Puck.World/Assets/worlds/games/reversi.puck
+canary pipeline-ink
+catalog src/Puck.World/bin/Release/net10.0/Assets/worlds (puck compile --tree src/Puck.World/Assets/worlds --check)
+parity
+```
+
+A `test` line is a `.puck` source run with `puck test`. The `catalog` line
+names the game's Release catalog, the compiled worlds the build writes, which
+holds no test worlds: `--run` checks it with the compile the line names.
+
 `--run` builds and runs the chosen suites, then `puck test` on the chosen
-worlds, then the chosen canaries, then parity, and exits 1 when any of them
-fails.
+worlds, then the catalog check, then the chosen canaries, then parity, and
+exits 1 when any of them fails.
 
 `--record` refreshes the coverage index. It builds a `Puck.World` that records
 every method the runtime compiles (`-p:PuckRecordMethods=true`; no other build
@@ -655,8 +742,16 @@ has, and runs every leg against that exact artifact. The build never goes into
 the projects' `bin` directories (see [where the World artifact is
 built](#where-the-world-artifact-is-built)). `--world-artifact <dll>` runs every
 leg on the named entry assembly instead, such as a published package's, and
-builds nothing. `--debug-layers` boots every offscreen leg's World with
-`--debug-layers`, its backend's validation layer. It keeps stdout and stderr
+builds nothing. `--debug-layers` boots the World of every leg that names a
+backend, windowed or offscreen, with `--debug-layers`, its backend's validation
+layer, and then fails any such leg
+whose stderr holds a validation message, naming the first: a
+`[vulkan-debug] validation` line or any `[d3d12-debug]` line, a teardown
+live-object report included. The Vulkan loader's `general` notices do not
+count, and the Direct3D 12 drain never prints the one message the layer raises
+by design, a pipeline-library miss. A Direct3D 12 leg that prints
+`[d3d12] debug layer requested but not loaded` fails too, since nothing
+validated it. The runner keeps stdout and stderr
 separate, pins BOM-less UTF-8 stdin, closes the pipe, drains both streams,
 checks the absolute `--world` boot-origin line, enforces per-leg and
 whole-suite budgets, and kills the process tree on timeout.
@@ -740,9 +835,22 @@ passes no `--headless` value, which would override that shape, and runs every
 leg once per backend with `--backend`. The manifest must list `backends` as
 exactly `vulkan` and `directx` and declare the `gpu` requirement, so it is never
 automatic. It reports one proof per backend, as `<id> on <backend>`, and the
-manifest holds only when both did. No other shape reads `backends`.
+manifest holds only when both did. A `bootShape: "windowed"` manifest may list
+the same `backends`, under the same rules: it then boots each leg windowed once per
+backend with `--backend`. No other shape reads `backends`.
+
+`puck canary --backend vulkan` or `--backend directx` runs every proof that
+lists `backends` on the named backend alone, for a per-change GPU check on one
+backend. Omitted, both run. Every other proof is unaffected: a headless or stub
+leg, and a windowed leg whose manifest lists no `backends`, boot once naming no
+backend, as they always do. The plan (`canary plan: backend-declaring proofs
+run on vulkan only (--backend vulkan), not on directx.`), the selection line
+and the final `PASS` or `FAIL` line name the backends that ran, so a run on one
+backend never reads as a run on both. The option refuses any other value by
+name. It is refused with `--merge`, because the merge gate holds both
+backends, and with `--list`, which runs nothing.
 The `pipeline-feedback`, `pipeline-ink`, `pipeline-edit`, `pipeline-supersede`,
-`pipeline-shapes`, `pipeline-resize`, `pipeline-counters`, `pipeline-override`, `pipeline-package`, `pipeline-budget`, `pipeline-churn` and `pipeline-geometry` canaries use this shape to test shader
+`pipeline-shapes`, `pipeline-resize`, `pipeline-counters`, `pipeline-override`, `pipeline-package`, `pipeline-budget`, `pipeline-churn`, `pipeline-fault` and `pipeline-geometry` canaries use this shape to test shader
 pipelines, and `source-conversion` uses it to run the shipped image-source
 conversion kernels; the [World guide](../../src/Puck.World/README.md#shader-pipelines)
 covers the `pipeline.wait` phases their scripts use.
@@ -754,8 +862,8 @@ usable device on this host or the operating system does not offer it. The
 second is a `[pipeline: <name> unsupported: …]` or
 `[pipeline: <name> wait <phase> unsupported: …]` line, printed when a shader
 tool such as DXC is missing. The proof then reports `UNSUPPORTED` instead of a
-verdict. Because an offscreen proof needs every declared backend, the selection
-is not green: the run exits 2.
+verdict. Because an offscreen proof needs every selected backend, the
+selection is not green: the run exits 2.
 
 A manifest declaring the `audio-output` requirement gets a third check: its
 own `[audio.state: device=… fault=…]` echo. `device=unsupported` (the platform
@@ -792,6 +900,7 @@ puck canary --all                   explicitly run every proof; does not change 
 puck canary --list                  strictly load and list manifests without building or running
 puck canary --capability <class>    filter automatic/headless/windowed/offscreen or an environmental requirement
 puck canary --merge                 run the merge gate: the automatic set plus every proof requiring gpu
+puck canary --backend <name> ...    run every backend-declaring proof on vulkan or directx only
 puck canary --jobs <n>              run at most n World processes at once (n ≥ 1)
 puck canary --plan                  print a selection's counts and ceiling without building or running
 ```
@@ -815,8 +924,26 @@ its ceiling is refused with exit 2 before anything builds, naming both numbers.
 A change that deliberately grows a gate raises the ceiling in the same change
 and states the new `--plan` counts.
 
+A selection with an offscreen or windowed proof on a named backend warms the
+engine's pipeline cache before any leg starts. The runner boots the first
+offscreen proof whose positive leg is one plain World process, once per
+backend those proofs boot, into one state directory: each boot waits for the
+engine to be ready, prints its `pipeline-cache.<backend>` counts, and quits,
+under a 180-second timeout of its own (`CanaryCommand.WarmSeconds`). Every
+offscreen and windowed leg then starts with a copy of that `pipeline-cache`
+directory in its fresh state directory, so no leg builds the engine's
+pipelines on a cold driver inside its own timeout. The shader compiler's
+`pipelines` cache is not copied, so a leg that observes a compile still
+compiles. `--plan` counts the warm boots and their timeouts in the World boots
+and the leg budget, and the run's closing counts report how many seeded legs
+exited with the cache byte for byte as they received it: a pipeline the cache
+did not answer is written back to it, so an unchanged cache means every
+pipeline the leg created was a hit. A warm boot that times out, exits nonzero,
+never narrates the engine ready, or prints no counts fails the selection with
+exit 2, naming its backend, before any leg starts.
+
 The selection forms are mutually exclusive and every execution selection must
-be nonempty. `--jobs` combines with any of them, and `--plan` with any but `--list`. Manifest tokens are case-sensitive. Every non-comment script
+be nonempty. `--jobs` combines with any of them, `--plan` with any but `--list`, and `--backend` with any but `--merge` and `--list`. Manifest tokens are case-sensitive. Every non-comment script
 command declares `accepted` or intentionally expected `refused`, bound to its
 verb and occurrence; an accepted claim may add `"stream": "stderr"` to expect
 its confirmation there instead of stdout—the shape server narration
@@ -860,7 +987,12 @@ A leg's `world` is a repository-relative `.world.json` document or `.puck`
 source; a leg booting a composition source may name the declared world it boots
 with `entry`, passed to the World as `--entry`. A manifest may start a companion authority
 world, pass its allocated endpoint through `connect`, and use `{run}` in scripts
-and assertions for per-leg capture paths. There are no regex programs, loops,
+and assertions for per-leg capture paths. The companion boots headless, so a
+proof with `backends` may start one and boots its own World once per backend. A
+companion that is a composition source is compiled where it stands, every world
+it declares is staged together into the leg's run directory, and the companion
+boots the world the leg's `entry` names, else the source's declared entry; a
+client beside it boots the source itself and must `connect`. There are no regex programs, loops,
 callbacks, conditionals, shell, or embedded scripts.
 Exit codes are 0 for all proofs held, 1 for an observed proof failure, and 2 for
 usage, manifest, build, or infrastructure refusal, including an unsupported
@@ -948,7 +1080,7 @@ its own build output:
 
 ```text
 dotnet build src/Puck.Cli -c Release
-dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll canary pipeline-feedback pipeline-ink pipeline-edit pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override pipeline-package pipeline-budget pipeline-churn pipeline-geometry
+dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll canary pipeline-feedback pipeline-ink pipeline-edit pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override pipeline-package pipeline-budget pipeline-churn pipeline-fault pipeline-geometry
 ```
 
 ---
@@ -1170,11 +1302,26 @@ backend (Vulkan, Direct3D 12) with `host.presentation: offscreen`—no window
 is shown—and lets the world's own `captures` rows land every tick-scheduled
 capture and write a `puck.parity.manifest.v1`. Because both backends capture
 the same simulation ticks, each pair observes one moment by construction.
+The parity world ships its bakes as a released world does: the run compiles
+the parity tree into its artifacts with the World artifact's own CLI (a
+compiled world holds only for the engine build that derived it), copying every
+other file of the tree beside it, and each leg boots that copy, whose `BAKE`
+chunk holds every bake from its bake pack. Each leg ends by reading
+`world.counters sdf.bakes` and fails when it resolved a bake on the device
+(`sdf.bakes.scheduled` above zero), so no capture depends on a local bake, or,
+with bakes on, drew none. The static creations draw their bakes, as a world
+that carries its `BAKE` chunk does by default; with `--bakes off` they draw
+through their fields, and `puck parity compare` of an on run against an off
+run holds every capture's state hash, since bakes are presentation only.
 The offscreen host never steps past an armed capture's tick until the capture
 is served or refused, so a cold driver shader cache lengthens a leg instead of
 losing its first capture. After 60 seconds of holding in all, a capture the
 render chain still cannot serve is refused as `unserved`, naming the reason,
 and the leg runs on (see [the offscreen shape](../../src/Puck.World/README.md#usage)).
+Each leg runs until 30 ticks past the last tick the world's `captures` rows
+schedule, read from the world itself, so a new station needs no change here; a
+world that cannot be read, or whose last tick leaves no room for those 30, is
+refused by name before a leg starts.
 The two manifest directories are then compared by `puck parity compare` under
 the contract versioned beside the world
 (`tests/Puck.Parity/parity.contract.json`).
@@ -1184,32 +1331,55 @@ puck parity                                            full run: both backends, 
 puck parity compare <leftDir> <rightDir> --contract <file> [--output <dir>]   compare two captured runs
 ```
 
-Per capture, three independent verdicts, in order:
+Per capture, these independent verdicts, in order:
 
 1. **Content gate**—a capture its producer refused by name (`cameraInside`,
-   `busy`, `stale`, `failed`, `unserved`; see the
+   `busy`, `stale`, `failed`, `unserved`, `deviceLost`; see the
    [parity README](../../tests/Puck.Parity/README.md)), missing, or below its
    station's census floor never reaches comparison: agreement between
    degenerate frames is vacuous.
 2. **State verdict**—`stateHash` equality, exact, no envelope. A one-bit
    sim-state divergence is a defect, never noise.
-3. **Pixel verdict**—per-tile mean/max deltas against the station's contract
+3. **Tick verdict**—each side's `regionTick`, the tick its frame refreshed
+   its bound regions at, equals the armed tick. A frame composed after the
+   simulation moved on, such as a capture requested in the middle of a
+   catch-up burst, fails here rather than as a pixel difference.
+4. **Source verdict**—only for a capture of a source instance whose source
+   states its image (a `captures` row naming a screen or an uploaded source's
+   instance): each side's `sourceVerdict` must hold, the frame equal to that
+   image of the captured tick, pixel for pixel. `SOURCE-FAILED` prints both
+   sides' verdicts.
+5. **Reference verdict**—only for a station whose contract entry names a
+   `reference`: each side must equal the frame computed on the CPU from the
+   station's own documents, byte for byte, so a mistake both backends share
+   still fails. `REFERENCE-FAILED` names the side, the differing byte count and
+   the first differing pixel.
+6. **Pixel verdict**—per-tile mean/max deltas against the station's contract
    thresholds. A localized defect cannot dilute itself across a whole-frame
    mean.
 
 Failures write both frames, a per-pixel delta heatmap, and a per-verdict
 summary into the run's `evidence/` directory—a red names its tile and shows
 its pixels. There are no stored baselines: both runs come from the same build,
-so content changes cannot fail the check, only a cross-backend divergence can.
+and a reference is computed from the documents the run renders, so a content
+change fails only where it and its reference disagree.
 The runner resolves the `Puck.World` build for the checkout's current sources,
 keeping the build's logs beside its transcripts when this run built it (see
 [where the World artifact is built](#where-the-world-artifact-is-built)), runs
 each leg from fresh state with its own `--state-dir`, and requires every
 scripted command accepted
 (`wire.errors` closes each transcript with zero rejections). It needs both
-GPU devices but takes over no display. Exit codes: 0 every capture held all
-three verdicts, 1 a verdict failed, 2 a leg/build refusal or a malformed
+GPU devices but takes over no display. Exit codes: 0 every capture held every
+verdict, 1 a verdict failed, 2 a leg/build refusal or a malformed
 manifest or contract.
+
+`puck parity` has no `--backend`. Past the content gate, every verdict it
+gives compares the two backends' runs: the state verdict holds one side's
+`stateHash` to the other's, and the pixel verdict measures one side's tiles
+against the other's. Nothing pins a historical hash or frame, so one backend
+alone would leave only the content gate and the reference station, which is
+not parity. A per-change check on one backend is
+`puck canary --capability gpu --backend <name>`.
 
 ---
 
@@ -1220,7 +1390,8 @@ run, so a performance change can be judged by counted work rather than by time.
 `puck bench` stays the only tool that measures wall-clock time.
 
 ```text
-puck counters [--output <file>]            run the workload on both backends and write the report
+puck counters [--output <file>] [--check | --record] [--ceilings <file>]
+                                           run the workload on both backends and write the report
 puck counters compare <left> <right>       compare two reports
 ```
 
@@ -1229,8 +1400,10 @@ The run boots `tests/Puck.Counters/counters.world.json` once per backend
 shown. It uses the same World build and leg machinery as `puck parity` (see
 [where the World artifact is built](#where-the-world-artifact-is-built)). Each
 leg runs `tests/Puck.Counters/counters.script.txt` on the World's console. The
-script turns off the cadence gate so every frame renders every pass, waits a
-pinned number of ticks, and asks for one `world.counters --json` reading. The
+script turns off the cadence gate so every frame renders every pass, pauses the
+simulation until the engine is ready, resumes it, waits a pinned number of
+ticks, and asks for one `world.counters --json` reading, so both backends read
+at the same tick however long their engines took to build. The
 runner closes the script with `wire.errors` and `quit` and requires every
 command accepted.
 
@@ -1246,14 +1419,17 @@ class:
 | Class | Meaning | Compared |
 |---|---|---|
 | `deterministic` | The same inputs give the same count on every run and backend: simulation counts at a pinned tick, and the GPU counts of one submission. | Across backends in one run, and between two reports. |
-| `per-backend-deterministic` | The same on every run of one backend: the GPU objects a node creates. | Between two reports, backend by backend. |
+| `per-backend-deterministic` | The same on every run of one backend: the GPU objects a node creates, the march steps and texels written the SDF kernels count, and the counts of a pass whose work follows the device (the SDF engine's `bricks` and `upload`, which follow its residency policy). | Between two reports, backend by backend. |
 | `pacing` | Depends on timing or on state outside the run: which submission a read lands on, skipped presents, the compile cache's hits. | Never. |
 | `allocation-zero-nonzero` | A managed-allocation reading from `AllocationWindow.Measure` over a named window (`world.counters.read`), recorded with the GC mode. | Only as zero or not zero. |
 
 Each kind's class is declared by the kind's owner (`WorkKind.Class`) and
-reaches the collector through the `kinds` legend of `world.counters --json`. A
-node's submission and revision identities are not kinds; the collector records
-them as `pacing`.
+reaches the collector through the `kinds` legend of `world.counters --json`.
+Each pass there also carries a class, `deterministic` or
+`per-backend-deterministic`, which the node declares (`GpuWorkLedger.Configure`);
+a deterministic kind counted in a per-backend-deterministic pass is recorded as
+per-backend-deterministic. A node's submission and revision identities are not
+kinds; the collector records them as `pacing`.
 
 The run prints the report's path, then one line for each deterministic count or
 pass state that differs between the two backends, naming its kind, pass and
@@ -1268,9 +1444,44 @@ moved, or a class that moved is a difference. It prints one line per
 difference, naming the backend, class, kind, pass and node. When the reports ran
 different sources, a note on standard error says so.
 
-Exit codes: `puck counters` exits 0 when the backends agree, 1 when a
-deterministic count or pass state differs, and 2 for a build, leg or reading
-refusal, including a missing GPU device or shader tool. `counters compare`
+### Counted-cost ceilings
+
+`--check` holds the run's report to the counted-cost ceilings in
+`tests/Puck.Counters/counters.ceilings.json`, a `puck.counters.ceilings.v1`
+document whose schema, `tests/Puck.Counters/puck.counters.ceilings.v1.schema.json`,
+`puck schema` generates. For each backend, recorded on one device at the
+workload's resolution, the file states what every render node's GPU submission
+kinds may read, pass by pass and outside every pass: each deterministic or
+per-backend-deterministic count reads at most its ceiling, and a ceiling of zero
+is a required zero. The SDF view's march steps (`gpu.march.steps`) and texels
+written (`gpu.texels.written`), which its kernels count on the GPU, are among
+them, so a pass that cannot do such work (`sdf.world$cull-args` marches
+nothing) and a pass the floor tier skips (the shadow and ambient passes, and
+the mesh pass of a meshless frame) hold required zeros. Every recorded ceiling must
+have been measured: its count read, of the class it was recorded as, or its pass
+reported and not executed, which reads zero. A per-backend-deterministic count's
+value is judged only on the device the backend's ceilings were recorded on; on
+any other, one line says how many were not judged. The run prints one line for
+each count over its ceiling, each required zero broken, each ceiling not measured
+or measured as another class, and each count no ceiling was recorded for, naming
+its backend, class, kind, pass and node, then whether the ceilings hold.
+
+`--record` writes the run's counts as the ceilings instead, each reading its own
+ceiling, and every submission kind of a pass that did not execute as a required
+zero. A ceiling is re-recorded only in the change that explains why its count
+moved, never from wall-clock or GPU timing. `--ceilings <file>` names another
+ceilings file for either option.
+
+```text
+puck counters --check [--ceilings <file>]   hold the counts to their ceilings
+puck counters --record [--ceilings <file>]  record the counts as the ceilings
+```
+
+Exit codes: `puck counters` exits 0 when the backends agree and every judged
+count holds its ceiling, 1 when a deterministic count or pass state differs or a
+ceiling fails, and 2 for a build, leg or reading refusal, including a missing GPU
+device or shader tool, or a ceilings file that is missing or not a ceilings
+document. `counters compare`
 exits 0 when every comparable count agrees, 1 on a difference, and 2 for a usage
 error or a file that is not a readable report.
 
@@ -1411,8 +1622,9 @@ engine's own parse message is printed verbatim). A path argument that names
 nothing on disk is one of those usage errors—every bad path is reported before
 the run gives up, so a typo cannot pass for "no match". The recursive walk skips
 `.git`, `.tmp`, `artifacts`, `bin`, `obj`, `node_modules`, `publish`,
-`BenchmarkDotNet.Artifacts`, agent worktrees under `.claude/worktrees`, and
-binary files—naming one of those paths searches it anyway. That set is
+`BenchmarkDotNet.Artifacts`, agent worktrees under `.claude/worktrees`,
+directory links (junctions and symbolic links, which the walk never follows),
+and binary files—naming one of those paths searches it anyway. That set is
 `FileWalk.SkipDirectories`, the one prune set every tree-walking verb shares;
 `format` alone also skips the quarantined `experimental/` trees, which every
 reading verb still searches. The build-artifact
@@ -1560,6 +1772,17 @@ the scoped deadline, so that count is the remaining work list.
 ```sh
 puck bench state-evidence
 ```
+
+Replay reads only the manifest and `llvm-mca`. It proves that the pinned
+instruction forms still cost what the manifest records, and says nothing about
+the lowering those forms were read from: a kernel's path exists only after the
+Native AOT compile that [`--capture`](#capturing-the-evidence) runs. The source
+digests cover each kernel's own declaring files, not its callees. So replay and
+the inventory both pass after a change that moves a kernel's path through
+anything else: a callee in `Puck.Maths` or the runtime, the SDK, ILCompiler or
+runtime pack, or the capture's own disassembly walk. After such a change, run
+`--capture`, which exits 1 when the lowering no longer reproduces the pinned
+evidence.
 
 Before producing new kernel artifacts, capture the exact work list and verify that
 the checked-out sources still match the manifest:
@@ -1876,17 +2099,19 @@ positional record's XML doc lives on the record declaration, not the
 property), then a type `<summary>` for a node with no containing property
 (an array's item schema, a `$type` arm).
 
-`render.extensions[]` takes its `id` vocabulary and per-id `config` schema
-from the shipped `puck.shader.manifest.v1` manifests under `src/*/Assets/Shaders`
-(`Puck.Shaders.ShaderSetManifest.ConfigJsonSchema`)—one `if`/`then` arm per
-id—so an entry's config validates by id in an editor, and adding a shader
-set changes the schema (`--check` catches a manifest edit not regenerated).
+`views.post[].package` takes its enum and per-package `config` schema from
+the engine render graph package catalog's post-process packages
+(`Puck.Shaders.RenderGraphPackageCatalog.Engine`, each package's config schema
+from `Puck.Shaders.ShaderConfigBinding.JsonSchema`)—one `if`/`then` arm per
+package—so a row's config validates by package in an editor, and adding a
+post-process package changes the schema (`--check` catches a package config
+edit not regenerated).
 
 Every array and dictionary carries `items`/`additionalProperties`, including
 a converter-hidden shape the exporter cannot introspect on its own (a
 `StateRowJsonConverter<TRow>`-owned row, a fixed-arity vector array, a
 document-identifier list); a raw `JsonElement` slot decided by an id named
-elsewhere in the document (`render.extensions[].config`, `probes[].config`,
+elsewhere in the document (`views.post[].config`, `probes[].config`,
 `metadata.custom`) stays open but carries a `$comment` saying so. The root
 carries `x-puck: {schemaVersion, generator, commit}` (the silo root carries
 its own) and `properties.schema.const` pins the exact tag a well-formed
@@ -1944,7 +2169,8 @@ describes. The same run writes the projection schema beside the root
 (`puck.world.projection.v1.schema.json`), the silo document's schema
 (`src/Puck.World.Silo/Assets/puck.silo.configuration.v1.schema.json`), and the
 schema of the report `puck counters` writes
-(`tests/Puck.Counters/puck.counters.report.v1.schema.json`), the schema of the
+(`tests/Puck.Counters/puck.counters.report.v1.schema.json`) and of the ceilings
+it checks (`tests/Puck.Counters/puck.counters.ceilings.v1.schema.json`), the schema of the
 release profile `puck qualify` reads
 (`tests/Puck.Qualification/puck.release.profile.v1.schema.json`), and the
 frame-graph schema (`src/Puck.Shaders/Assets/puck.render.graph.v1.schema.json`). Running `puck schema` also DELETES any section file the current
@@ -1967,7 +2193,7 @@ sources are formatted by [`puck format`](#puck-formatthe-one-formatter), the one
 formatter for every source kind.
 
 ```text
-puck compile <source.puck|document.world.json>... [-o <out.json-or-directory>] [--tree <root> [--written <report> | --check]] [--validate] [--bundle] [--strict] [--watch] [--update-assets]
+puck compile <source.puck|document.world.json>... [-o <out.json-or-directory>] [--tree <root> [--written <report>] [--bake-cache <directory> | --check]] [--validate] [--bundle] [--strict] [--watch] [--update-assets]
 puck decompile <source.json>... [-o <out.puck>] [--overwrite] [--sql] [--embeddings <file.embeddings.json>]
 puck embed <path> [--check] [--provider <fixture|openai-compatible>] [--endpoint <url>] [--omit-dimensions] [--batch-size <n>] [--timeout-seconds <n>]
 puck embed probe <path> <text> [--space <name>] [--against <table>] [--top <n>]
@@ -2044,12 +2270,20 @@ it needs, and the bakes themselves ship once in a bake pack, `bakes.puckbake`. A
 exactly the bakes its compiled worlds name, after every source compiled; any
 other run writes one beside each compiled world and keeps the bakes an earlier
 compile into that directory left there. Either prints one `Wrote bake pack
-'<path>'` line with the pack's outcomes and bytes and the creations the process
-baked and the field evaluations it spent, each distinct creation baked once. A
-run whose compiled worlds name no bake writes no pack.
+'<path>'` line with the pack's outcomes and bytes and the creations its bake
+cache baked or refused and the field evaluations it spent, each distinct
+creation baked once. A run whose compiled worlds name no bake writes no pack.
+`--bake-cache <directory>` gives a `--tree` run a content-addressed bake cache
+(`WorldBakeStore`): the run reads each outcome whose key the cache holds and
+keeps there every outcome it bakes, so a run over unchanged prototypes bakes
+nothing and one after an edit bakes the edited prototypes alone. The pack's
+bytes are the same with or without the cache. The game's build passes
+`obj/bakes`; `--check` refuses the option, since it compares with a fresh run
+(`TreeBakeCacheLawTests`).
 
 A `--tree` run also packages every pipeline its compiled worlds name by source:
-each `views.pipelines` row's source, resolved from the document's place in the
+each `views.graphs` row's `source` (a row naming an engine `package` has none),
+resolved from the document's place in the
 tree, is compiled with `dxc` from the search path into one
 [shader package](shaders.md#the-builds-package-store) under its key in
 `packages/` at the root of the output, and every package file joins the report.
@@ -2072,8 +2306,11 @@ publishing several files can leave earlier replacements in place.
 
 `asset "path"` verifies bytes against the source's sibling `.assets.json` lock.
 `--update-assets` explicitly refreshes the complete pin set, implies semantic
-validation, and cannot be combined with `--watch`. A source with asset references
-must emit beside its source so relative asset paths retain their meaning.
+validation, and cannot be combined with `--watch`. Every relative file path a
+source or a module it uses writes, `asset "…"` or plain, resolves beside the
+file that writes it, and the compiled document names the file from its own
+directory; a document written away from its source with `--output` names each
+file from where it lands.
 See [file assets and world composition](../authoring/README.md#pinning-file-assets)
 for examples and the distinction between compilation pins and runtime assets.
 
@@ -2557,7 +2794,8 @@ own count.
 ```text
 puck lengths                  rewrite FileLengths.json from the tree: remove stale entries, lower fallen ones;
                               refuses (exit 2, naming the file) to raise a recorded count or record a new file
-puck lengths --check          write nothing; report stale, risen, and unrecorded-over-ceiling files; exit 1 on any
+puck lengths --check          write nothing; report a ledger not in its canonical form, and stale, risen, and
+                              unrecorded-over-ceiling files; exit 1 on any
 puck lengths --ceiling <n>    lower the ceiling to n and record every file over it at its current count
 puck comment-smells [--check | --ceiling <n>]
                               the same three forms over CommentSmells.json
@@ -2566,6 +2804,11 @@ puck comment-smells [--check | --ceiling <n>]
 Splitting a recorded file, or rewriting its smelly comments, is the expected way to change a ledger: shrink the
 file, run the verb, and the entry lowers or disappears. A ceiling only falls. `--ceiling` refuses a raise, and it
 creates a missing ledger.
+
+Each ledger has one spelling, the one its verb writes: entries in ordinal key order, four-space indentation, and
+one final line feed. `--check` reports a ledger whose bytes differ from that form as drift, even when every count
+holds, so a hand edit that reorders or respaces an entry fails the check rather than churning the next rewrite.
+Running the verb without `--check` rewrites the ledger in its canonical form.
 
 ## `puck baselines`—test baselines
 

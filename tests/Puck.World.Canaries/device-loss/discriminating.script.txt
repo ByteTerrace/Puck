@@ -1,0 +1,13 @@
+# No loss armed: the first capture lands, creating the display encode's one capture pipeline, and after it nothing is
+# created again.
+world.wait ready 45
+world.cadence off
+world.wait 10
+world.screenshot {run}/lost.png
+world.wait captures 30
+gpu.faults list
+world.wait 10
+gpu.faults list
+world.wait captures 30
+world.screenshot {run}/after.png
+world.wait captures 30

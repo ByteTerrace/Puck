@@ -1,15 +1,12 @@
 using System.Numerics;
 using Puck.Abstractions.Gpu;
-using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Sources;
 using Puck.Assets.Qr;
-using Puck.Hosting;
-using Puck.SdfVm.Views;
 
 namespace Puck.World.Client;
 
 /// <summary>The <c>qr</c> producer: an authored QR code whose module grid is a pure function of its payload, level and
-/// quiet zone, rasterized once and uploaded once per device.</summary>
+/// quiet zone, rasterized once and converted once by the source instance that shows it.</summary>
 public sealed class WorldQrProducer : IWorldImageProducer {
     /// <inheritdoc/>
     public ImageContentClass Content => ImageContentClass.Deterministic;
@@ -19,7 +16,7 @@ public sealed class WorldQrProducer : IWorldImageProducer {
     public ImageSourceTransport Transport => ImageSourceTransport.Uploaded;
 
     /// <inheritdoc/>
-    public bool TryOpen(WorldScreenSource.Producer source, int screenIndex, out IWorldImageFeed? feed, out string? fault) {
+    public bool TryOpen(WorldScreenSource.Producer source, out IWorldImageFeed? feed, out string? fault) {
         ArgumentNullException.ThrowIfNull(argument: source);
 
         var (settings, refusal) = WorldImageProducerSettings.Bind<WorldQrSettings>(producer: source);
@@ -44,9 +41,10 @@ public sealed class WorldQrProducer : IWorldImageProducer {
         return built;
     }
 }
-/// <summary>One QR screen: the rasterized B8G8R8A8 code, its upload, and the encoder's decisions (version and mask)
-/// <c>screen.source &lt;index&gt; qr</c> reads back. The code never changes, so it uploads once per device.</summary>
-public sealed class WorldQrFeed : IWorldImageFeed, IImageSourceReference {
+/// <summary>One QR source: the rasterized B8G8R8A8 code its source instance's region holds, and the encoder's decisions
+/// (version and mask) <c>screen.source &lt;index&gt; qr</c> reads back. The code never changes, so its static source
+/// converts it once.</summary>
+public sealed class WorldQrFeed : IWorldUploadFeed, IImageSourceReference {
     // The module pixel size lands the rendered image near this many pixels square whatever version the payload chose,
     // clamped so each module stays legibly crisp and even a version-10 grid with a generous quiet zone stays far under
     // the validator's surface-dimension ceiling.
@@ -55,9 +53,6 @@ public sealed class WorldQrFeed : IWorldImageFeed, IImageSourceReference {
     private const int TargetPixelExtent = 640;
 
     private readonly byte[] m_pixels;
-    private readonly CpuSurfaceSource m_surface = new();
-
-    private bool m_published;
 
     private WorldQrFeed(byte[] pixels, uint width, uint height, string payload, QrErrorCorrectionLevel level, int version, int mask, int quietZoneModules) {
         m_pixels = pixels;
@@ -163,31 +158,20 @@ public sealed class WorldQrFeed : IWorldImageFeed, IImageSourceReference {
         return true;
     }
     /// <inheritdoc/>
-    public GpuImageLease AcquireFrame() => m_surface.CurrentHandle;
+    /// <remarks>The code owns no resource.</remarks>
+    public void Dispose() { }
     /// <inheritdoc/>
-    public void Dispose() => m_surface.Dispose();
-    /// <inheritdoc/>
-    public nint Handle() => m_surface.CurrentHandle;
-    /// <inheritdoc/>
-    public void NotifyDeviceLost() {
-        m_surface.NotifyDeviceLost();
-        m_published = false;
-    }
-    /// <inheritdoc/>
-    public void Publish(ulong tick, IGpuDeviceContext deviceContext, IGpuComputeServices gpu) {
-        if (m_published) {
-            return;
-        }
+    /// <remarks>The code never changes, so a region that already holds it owes nothing.</remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="region"/> is <see langword="null"/>.</exception>
+    public bool TryWrite(long tick, GpuRegion region) {
+        ArgumentNullException.ThrowIfNull(argument: region);
 
-        _ = m_surface.Publish(
-            deviceContext: deviceContext,
-            format: SurfaceFormat.B8G8R8A8Unorm,
-            gpu: gpu,
-            height: Descriptor.Height,
-            pixels: m_pixels,
-            width: Descriptor.Width
+        _ = region.Write(
+            bytes: m_pixels,
+            offset: ImageSourceUploadLayout.HeaderBytes
         );
-        m_published = true;
+
+        return true;
     }
     /// <inheritdoc/>
     public bool TryWriteReference(Span<byte> rgba, out ImageSourceStamp stamp) {

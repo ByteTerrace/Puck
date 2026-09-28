@@ -10,7 +10,8 @@
 //   2. the text is spelled onto the word lattice and every three-word sentence along a row or a column is read off
 //      it with a pattern match, giving each noun its properties and its rewrite;
 //   3. every token of a rewritten noun becomes the new noun, all at once;
-//   4. every token is classified for the next push, and each cell collects the properties standing on it;
+//   4. every token is classified for the next push, each cell collects the properties standing on it, and the
+//      tiles lattice records the look of the last token standing on each cell, which the board pass draws;
 //   5. SINK drowns everything sharing its cell, DEFEAT destroys a YOU on it, and a YOU on WIN wins.
 //
 // The group runs a pass a tick until a pass changes nothing, so a turn that sinks a word re-reads the rules on the
@@ -41,6 +42,10 @@ let winBit = 32
 // A cell of the collected board holds the properties standing on it in its low six bits and how many tokens stand
 // there above them.
 let crowd = 64
+
+// Looks, the value a cell of the tiles lattice holds: 0 for an empty cell, noun + 1 for an object and wordLook plus
+// the word for a word tile. The board pass (board.hlsl) draws the same codes.
+let wordLook = 16
 
 // Push classes, the pattern symbol a token shows pushRay.
 let passable = 1
@@ -177,7 +182,7 @@ module rules(width, height, layout) {
   }
 
   let cells = reduce(range(0, height), [], (found, y) => concat(found, map(range(0, width), x => { glyph: layout[y][x], cell: y * width + x })))
-  let tiles = map(filter(cells, c => c.glyph != "."), c => { cell: c.cell, noun: legend[c.glyph].noun, word: legend[c.glyph].word })
+  let pieces = map(filter(cells, c => c.glyph != "."), c => { cell: c.cell, noun: legend[c.glyph].noun, word: legend[c.glyph].word })
 
   state {
     record Thing {
@@ -187,11 +192,12 @@ module rules(width, height, layout) {
       kind: Int bounds(0..3) = 1
     }
 
-    pool things of Thing capacity(length(tiles)) = tiles
+    pool things of Thing capacity(length(pieces)) = pieces
 
     world {
       grid board dimensions(width: width, depth: height)
       grid words dimensions(width: width + 1, depth: height + 1) wrap(Both)
+      grid tiles dimensions(width: width, depth: height) bounds(0..(wordLook + firstProperty + 5))
       table properties capacity(7) {
         "0" = 0
         "1" = 0
@@ -218,7 +224,7 @@ module rules(width, height, layout) {
     }
   }
 
-  stabilize turn undo({ rows [things, words, board, properties, becomes, moves, bumps, won, yous, dirty, sunk], depth: 32 }) maxPasses(8) {
+  stabilize turn undo({ rows [things, words, board, tiles, properties, becomes, moves, bumps, won, yous, dirty, sunk], depth: 32 }) maxPasses(8) {
     move(name: "east", channel: east, direction: E)
     move(name: "west", channel: west, direction: W)
     move(name: "north", channel: north, direction: N)
@@ -265,10 +271,12 @@ module rules(width, height, layout) {
     rule "classify" {
       when dirty == 1
       transform boardCombine(operation: Clear, row: board)
+      transform boardCombine(operation: Clear, row: tiles)
       yous = 0
       for each t in things {
         t.kind = ((properties[t.noun] & stopBit) != 0) ? stopped : (((properties[t.noun] & pushBit) != 0) ? pushed : passable)
         board[t.cell] = (board[t.cell] | properties[t.noun]) + crowd
+        tiles[t.cell] = (t.noun == text) ? (wordLook + t.word) : (t.noun + 1)
         if (properties[t.noun] & youBit) != 0 {
           yous += 1
         }

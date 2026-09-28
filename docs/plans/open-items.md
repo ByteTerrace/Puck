@@ -27,7 +27,7 @@ These items belong to no single programme.
 - [ ] Namespace the remaining module declarations. A module used under an alias namespaces its rows, rules, placements, prototypes and look sources as `alias$name`, but spawn points, kits, look names, cameras, navigation domains and property names stay flat, so two uses of one module declaring the same spawn point declare it twice. A JSON import with `as` has no dotted `alias.name` form in `.puck`; a hand-written JSON composition can make an aliased pool's rows collide with a host pool named after the alias, which only the `.puck` door refuses (PUCK117); and the export check does not look inside a deal's variant map.
 - [x] Add the schema and transpiler assemblies to the inputs of the compiled-world step in `build/WorldAssets.targets`. It lists only the `.puck` sources and `Puck.Cli.dll`, so a change to `Puck.World.Schema` that leaves the CLI assembly unchanged leaves stale compiled worlds in the build output.
 - [ ] Cut the boot's remaining one-time work, measured through the `world.boot` counter source and `AllocationWindow`. A warm island boot still spends about a third of its main-thread allocation composing modules and about a third deriving curve splines. Caching composed images needs `CompileInputs` below `Puck.World.Schema` (in `Puck.Assets`) and a composition entry in `WorldCompileCache`; caching splines needs a public binary form of `CompiledCurvatureSpline` with a round-trip law in `tests/Puck.Maths.Tests`. Smaller items: creation and cartridge documents still resolve JSON metadata by reflection (`DocumentJsonOptions.Shared`); `WorldStateDocumentValues` walks values reflectively; a cold compile lowers `test` blocks the boot never runs; `WorldCompileCache.WritePersisted` copies each entry through a `MemoryStream`; and `WorldNameRegistry.Walk` reads the serializer's metadata instead of `WorldModelShape`.
-- [ ] Prove the World's composition without a device. `WorldBootComposition` is internal to the `Puck.World` executable and no test links it, so nothing checks that the offscreen shape registers every verb the `puck counters` workload sends, or that both presentation shapes register the persistent pipeline cache; both defects reached a GPU run first. Making the composition public and resolving it from a test closes both.
+- [x] Prove the World's composition without a device. `WorldBootComposition` is public and `tests/Puck.World.Tests` links `Puck.World`: `WorldBootCompositionLawTests` builds each presentation shape through `WorldBootComposition.AddWorldBoot`, the method the boot calls, and checks that the offscreen shape answers every verb the `puck counters` script sends and that both presentation shapes register the persistent pipeline cache (see [P1b](rendering.md#p1b--foundation-qualification)).
 - [ ] Finish the canary runner's listener work. A single companion authority still receives a pre-picked UDP port, because its document names its own endpoint as `host.authority` before it boots; the World would need to adopt its bound `--listen` endpoint as the authority identity when `host.authority` is absent. The stub-manifest branch still builds `Puck.Launcher.Stub` in place.
 - [ ] Give `world release deploy` and `rollback` the qualification exit codes. `world release qualify` exits 1 for a failed check and 2 for a refusal, but `AzureCommand.DeployWorldReleaseAsync` still throws on a refused start, so both verbs exit 2 for a failed check. `src/Puck.Azure.Resources/pointToSiteVpn.bicep` also hardcodes a subscription id, misspells `puplicIpAddress`, and lacks the section banners the Azure resources README requires.
 - [ ] Let Snake grow past six segments. `history(row, age)` takes an expression age, and an age outside the ring reads the empty value (`HistoryAgeLawTests`), but [`snake.puck`](../../src/Puck.World/Assets/worlds/games/snake.puck) still reads four fixed ages, clears its tail through a branch per length, and caps `snakeLength` at six.
@@ -80,6 +80,16 @@ Every package below carries its own check on the programme page; tick it there a
 - [ ] The program model: memory model, procedures and banks, interrupts, ROM residency and the save, arithmetic.
 - [ ] The content library; optional distribution.
 
+### [Humble Gaming Deck](humble-gaming-deck.md)
+
+- [x] The shared-layer rename to `Puck.Machines`.
+- [x] Neutral contracts: rational clock rates and multi-port input.
+- [x] The CPU and the bus.
+- [x] A complete NTSC machine.
+- [ ] NTSC accuracy (in progress: AccuracyCoin runs against a recorded ledger).
+- [ ] Common boards; regional hardware; long-tail boards; expansion audio.
+- [ ] The Famicom Disk System; peripherals; World cabinets.
+
 ## [Play](play.md)
 
 Every package below carries its own check on the programme page; tick it there and here in the same change.
@@ -101,20 +111,86 @@ Every package below carries its own check on the programme page; tick it there a
 - [ ] P1a durable functional fixtures (four slices landed; the memory budget is in).
 - [x] P2 per-pass work counters and the collector.
 - [ ] P1b foundation qualification against the candidate that ships the forcing world (`puck qualify` and the release profile are in; the first runs on the reference GPUs are not).
-- [ ] P3 attachments and indexed geometry (P3-1 landed on the CPU side).
-- [ ] P4 shared opaque visibility.
+- [x] P3 attachments and indexed geometry.
+- [x] P4 shared opaque visibility (every build step, P4-0 to P4-2e and the visibility record's names, landed; the mesh canaries hold every scene the check names, the full-size resize included, and no reader of the retired layouts remains; the measured cost is held with P14's counted-cost ceilings).
 - [x] P5 reproducible authoring and packaged dependencies.
 - [ ] P6 representation experiments.
-- [ ] P7 the binding contract and the adapter memory profile, with the one-day spike as its gate.
-- [ ] P8 the shader package, the pass interface and its generated declarations, the echo pass, and HLSL as the one source language.
-- [ ] P9 the state mirror and presentation time, against [the presentation view's](runtime-and-delivery.md#the-presentation-view) state interface.
-- [ ] P10 bound rows reaching a pass: the `parameter` and array statements, the deterministic tick, the capture's tick verdict, pricing, and tiers.
-- [ ] P11 the frame graph document (`puck.render.graph.v1`), views as graph instances scheduled by demand, and self-reference through the previous frame.
-- [ ] P12 image sources: uploaded, imported, and rendered transports, content classes, producer registration, shared conversion passes, and every `WorldScreenSource` kind migrated.
-- [ ] P13 hit-to-source mapping published as data, with simulation, host passthrough, and presentation destinations, and passthrough only for local-user sources.
-- [ ] P14 the SDF engine as a pass package: the capability matrix, the generated frame block, the HLSL module tree, staged shading, float working targets, and the retirements.
-- [ ] P15 temporal reconstruction: jitter, motion vectors, the temporal upscaler, per-instance history, dynamic resolution, and march seeding.
-- [ ] P16 minimal HDR display output: the display-transform node, an HDR swapchain on Windows, paper white for UI, and one HDR source.
-- [ ] P17 assets derived from SDFs: the baker, the texture pipeline, and the content-addressed cache shipped in compiled worlds and filled on the device on a miss.
+- [x] P7 the binding contract and the adapter memory profile, with the one-day spike as its gate (every P7b step landed; the gate's Linux bytecode leg is deferred to the end).
+- [x] P8 the shader package, the pass interface and its generated declarations, the echo pass, and HLSL as the one source language.
+- [x] P9 the state mirror and presentation time, against [the presentation view's](runtime-and-delivery.md#the-presentation-view) state interface.
+- [x] P10 bound rows reaching a pass: the `parameter` and array statements, the deterministic tick, the capture's tick verdict, pricing, and tiers.
+- [x] P11 the frame graph document (`puck.render.graph.v1`), views as graph instances scheduled by demand, and self-reference through the previous frame.
+- [x] P12 image sources: uploaded, imported, and rendered transports, content classes, producer registration, shared conversion passes, and every `WorldScreenSource` kind migrated (every P12b step landed, and the `uploaded-sources` canary checks the unbound glass, a session screen, an opened capture and a `text` screen's drawn text; P12b-4's recorded camera run is deferred to the end).
+- [ ] P13 hit-to-source mapping published as data, with simulation, host passthrough, and presentation destinations, and passthrough only for local-user sources (P13b steps 1, 2, 4, 5 and 6 and step 3's CPU half landed, step 2 with a machine's light gun reading the mapped pointer, step 5 with the GPU drawing every screen from its mapping, and step 6 with a pick through a portal's window reaching the destination's surface, checked by the `portal-window` canary; GPU picking remains, and shares its per-instance identity and one-pixel readback with the [editor plan's E2](editor.md#e2--selection-picking-and-highlight)).
+- [x] P14 the SDF engine as a pass package: the capability matrix, the generated frame block, the HLSL module tree, staged shading, float working targets, and the retirements (steps 1 to 13 landed: every SDF view is an `sdf.world` instance of the render graph whose passes the planner orders and barriers, over one generated pass block, a layered kernel tree, one kernel table and the pass-pipeline cache; the capability matrix law, the ISA handshake and the field-per-kernel kernel record are gone).
+  - [x] P14 counted-cost ceilings, built as P15-1: march steps and texels written are `GpuWork` kinds every pass's shaders count, and `puck counters --check` holds per-pass ceilings and required zeros over `puck counters`' pinned workload (`puck.counters.ceilings.v1`), recorded on the RTX 2060 at the floor tier.
+  - [x] Checks for the capability rows the matrix law held without one, each failing with its capability removed:
+    - the live program report: `SdfWorldResidencyReportLawTests.TheLiveProgramReportIsTheResidentProgramsAndTheFramesVolumes`;
+    - render scale: `WorldViewPlacementLawTests.ALoneViewAtEachRenderScaleTierIsScheduledAtThatTiersExtent`, and the `portal-window` and `view-screens` canaries' pane lines at three-quarter scale;
+    - decals: `SdfWorldTablesUploadLawTests.AScreensGlyphDecalReachesTheDecalTableAndAnUnchangedDecalOwesNothing`, and the `uploaded-sources` canary's text screen;
+    - the glyph atlas: the `uploaded-sources` canary's `the-text-screen-draws-its-glyphs`, which samples it through a text screen's decal; the glyph shape's read of it has no check;
+    - volumes: `SdfWorldTablesUploadLawTests.AFramesBoundedVolumesReachTheVolumeTableRowForRow`; the volume shading stage's read has no check;
+    - the shading levers: `WorldRenderLeverFrameLawTests` (settings to frame), `SdfFrameBlockLawTests.EachShadingLeverWritesItsOwnMemberAlone` (frame to pass block) and `SdfWorldPassesLawTests.TheAmbientAndShadowPartsRunExactlyWhenTheirLeversTurnThemOn` (the stages a frame runs);
+    - debug views: `SdfWorldResidencyReportLawTests.TheDebugViewModeReachesEveryPassBlockWhenSetBeforeTheTablesOrAfter`, and the `visibility` mode's pixels in the `sdf-visibility-fresh`, `sdf-mesh-visibility`, `sdf-mesh-motion` and `sdf-bake-switch` canaries;
+    - brick baking's live half, a height field's host-baked brick: `SdfWorldTablesUploadLawTests.AHostBakedBrickLandsInItsPoolSlotAndTheSlotTurnsReady`.
+  - [ ] Unwired, wired by the [editor plan](editor.md) (E4 debug views and levers): the slice view's world-axis plane (`DebugSliceAxis`, `DebugSliceOffset`), and the levers `DisableShadowCull`, `DisableScreenLights`, `EnableShadowProxy` and `UseFiniteDifferenceNormals`. Each reaches the pass block and the kernels, and no World setting or verb sets it. The grid overlay is wired by E1's build mode.
+  - [ ] The GPU brick bake (`RequestBrickBake`, the bake kernel and `SdfCarveBakePlanner`) gets its live producer in the [editor plan](editor.md)'s carve brush (E13); a live `sdf.bricks` instance goes with it.
+  - [x] P14-8 follow-up: a render node records one command list per instance per frame slot.
+  - [x] P14-8 follow-up: the mesh pass is a conditional package pass that records nothing on a meshless frame.
+  - [x] The camera-view export no longer aliases the image SDF screens sample: an exported view renders its own per-slot outputs and copies each released frame into the export.
+  - [x] P14-8 follow-up: the world tables bind through the group-1 World set that also holds the bake atlases, owned by the tables per ring slot and written once.
+  - [x] P14-11a: one visibility record and one body per hit stage; only primary reads the mesh target, and a textured mesh's atlas albedo, material and emission reach the views pass.
+  - [x] P14-11b: every light, the environment's and each bound screen's, answers through one interface.
+  - [x] P14-11c: the shadow stage as a pass of its own, skipped with the ambient pass when the tier turns them off.
+  - [x] P14-8 follow-up: an `sdf.world` recorder retargets to ready tables in place when the counts, pipeline layouts and mesh render pass agree, including on capture frames (`SdfWorldPasses.CanFollow`; a change it cannot follow still holds the departed image, `RenderGraphRuntimeLawTests.ResidencySwitchHeldFrames`).
+  - [x] P14-8 follow-up: quality is each view's (`SdfViewSnapshot.Quality`), and an endpoint's scene takes window views beside its seats' through `WorldFramePresenter.AttachWindow`, rendered from the scene's one residency.
+  - [x] P14-8 follow-up: a portal window's session view attaches to its destination endpoint's scene and reads the endpoint's mirror, so a routed seat view and the window of one destination share one residency, while its session discloses everything (`WorldSessionWindowRoute`, `WorldRoutedPresentationLawTests.SeatsAndFullyDisclosedWindowsShareOneSceneAndARestrictedWindowNeverJoinsIt`); the routed node's counters row reports its residencies and table bytes (`WorldRoutedResidencyCounts`).
+  - [ ] P15-4 follow-up: a view instance that authors a pixel resolution renders exactly that many texels, with its camera's aspect from that extent (rendering plan P15-4's open item).
+  - [ ] Bound the SDF residencies' aperture footprint on floor hardware. Camera views share the world's tables and brick pool; session and routed residencies carry their own tables. Measure the live residency count, `gpu.memory.device-local.*` and `gpu.memory.host-visible-device-local.*` rows and the Vulkan heap report on the RTX 2060. Share tables where worlds read the same mirror, or stage large and rarely written tables where the aperture budget requires it (rendering plan P14-8).
+  - [x] Camera views render as views of the world's own residency: the shipped world runs one residency where it ran six, and its aperture peak on the RTX 2060 falls from 180.2 MB to 41.6 MB (rendering plan P14-8).
+- [ ] P15 temporal reconstruction: jitter, motion vectors, the temporal upscaler, per-instance history, dynamic resolution, and march seeding, in eight steps, each landing alone.
+  - [x] P15-1: counted march steps and texels written, the brick writes' upload bytes attributed to a pass, and the ceilings file of per-pass ceilings and required zeros that `puck counters --check` holds at the floor tier on the RTX 2060.
+  - [ ] P15-2: jitter from a Halton sequence of period eight indexed by each instance's history, history epochs that reset on a view change, a follow or portal crossing, a cut, an extent change or a view shown again, and the `converge` capture row over a frozen presentation snapshot in which only the jitter index advances.
+  - [ ] P15-3: motion derived from the visibility record, with the previous view in the pass block and a device-local previous dynamic-transform table each residency's upload keeps.
+  - [ ] P15-4: each view renders a render extent inside its output extent, and a spatial `resolve` pass replaces `place`'s upsample of a view, writing a resolved surface (nearest-sample depth, coverage in the color's alpha) in both modes.
+  - [ ] P15-5: the temporal resolve, with history per instance validated by identity and depth, a reactivity image of its own (coverage keeps the color's alpha), `place`'s sharpen, and `converge` stations in the parity world.
+  - [ ] P15-6: dynamic resolution inside the render extent's ceiling, never reallocating, driven by present timing through an injectable timing source, with a counted march-step budget where present timing is unavailable.
+  - [ ] P15-7: march seeding from the previous frame's depth, taken only where a Lipschitz ball test proves the skipped segment empty.
+  - [ ] P15-8: the floor tier's defaults for reconstruction, dynamic resolution and seeding, the lead's call from the counted rows.
+- [ ] P16 minimal HDR display output: the display-transform node, an HDR swapchain on Windows, paper white for UI, and one HDR source (the Direct3D 12 heap fold, HDR swapchain selection and the paper-white setting landed; the display-transform node, requesting HDR, the HUD at paper white and the HDR source remain).
+- [ ] P17 assets derived from SDFs: the baker, the texture pipeline, and the content-addressed cache shipped in compiled worlds and filled on the device on a miss (the baker, its codecs, the block-compressed upload, the one pixel-format vocabulary and a ready bake's mesh drawn in place of its field, with normals, texture coordinates and triangle materials, landed; a bake's textures and impostor and the parity world's shipped bakes remain).
+- [ ] P18 sky and atmosphere: typed bodies, an open layer stack and an atmosphere keyed on clocks from the tick, evaluated once where they are seen, lighting derived from the same sky, any number of shadowed lights, a cadence per pass, and cost counted per layer and per shadowed light, in fourteen steps, each landing alone.
+  - [ ] P18-1: a sky parity station, sky canaries and the counters workload's sky leg, recorded before anything moves.
+  - [x] P18-2: one clock family on the presented engine tick, exact and unsigned 64-bit, with bounded media, twinkle and cloud wind on it and each routed or session scene on its own endpoint's clock.
+  - [ ] P18-3: keys on clocks for every bindable presentation value, blended by the field's type, with one resolver replacing `render.cycle`.
+  - [ ] P18-4: the sky block and the lights table as regions with generated decoders, and the environment out of every pass block.
+  - [ ] P18-5: the sky evaluated once, only where a pixel is uncovered, and a composite pass for the sky, fog and bounded media; the pinned sky branch deleted and parity re-recorded.
+  - [ ] P18-6: a cadence per pass, so a sky-only change runs only the sky and the composite.
+  - [ ] P18-7: celestial bodies with light binding and illumination, and up to four shadowed lights chosen by slot and tier, a slot changing hands by a counted crossfade.
+  - [ ] P18-8: the open, ordered layer stack with one module per kind, the sky frame, per-layer tiers, one noise module and the `skies.puck` presets.
+  - [ ] P18-9: ambient and reflection derived from the same sky through a shared environment map, replacing the hemisphere light, the horizon and the softboxes.
+  - [ ] P18-10: the atmosphere: fog, height fog, haze, a medium, and the bounded media under it.
+  - [ ] P18-11: infinity views, a sky or a body that shows another world or far SDF geometry, following S27 and S28, with a per-world cap on infinity views refused by name.
+  - [ ] P18-12: the sky in the editor's inspector, reload, compare and save, with clock levers and sky debug views.
+  - [ ] P18-13: temporal amortization of secondary shadows, following P15-5.
+  - [ ] P18-14: the floor tier's sky defaults, the lead's call from the counted rows.
 - [ ] Later display work, unscheduled: HDR calibration, per-display metadata, and HDR on the Steam Deck OLED under Linux.
 - [ ] Later source work, unscheduled: Linux producers for PipeWire DMA-BUF capture and V4L2 cameras.
+
+## [Editor](editor.md)
+
+Every package below carries its own check on the programme page; tick it there and here in the same change.
+
+- [x] E1 build mode, the grid and snapping, checked by the `editor-grid` canary.
+- [ ] E2 selection, a visibility identity per drawn instance, GPU and CPU picking, and highlight.
+- [ ] E3 undo, redo, duplicate, delete and measure.
+- [ ] E4 debug views everywhere (startable today).
+- [ ] E5 the inspector.
+- [ ] E6 why is this dark or invisible.
+- [ ] E7 gizmos and pointer dragging.
+- [ ] E8 editor camera.
+- [ ] E9 cost per object and GPU pass timing (startable today).
+- [ ] E10 live reload and before-and-after.
+- [ ] E11 save edits back to source.
+- [ ] E12 the shape gallery as a world, retiring `Puck.SdfVm.Debug` once the gallery reaches parity with it.
+- [ ] E13 carving and the brick bake: a carve brush whose dabs are document rows.

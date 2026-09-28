@@ -738,12 +738,15 @@ public static partial class WorldDecompiler {
                 sb.AppendLine();
             }
             first = false;
+            // Each member in the form the seat control's model gives it, so a closed word such as its yaw reference
+            // prints bare.
             DecompileNamedBlock(
                 sb,
                 "seatControl",
                 null,
                 scObj,
-                indentLevel: 1
+                indentLevel: 1,
+                holder: typeof(WorldSeatViewControl)
             );
         }
 
@@ -775,8 +778,9 @@ public static partial class WorldDecompiler {
             );
         }
 
-        // Pipelines and graph instances: each row prints as its named block.
-        foreach (var (rowsKey, keyword) in ((ReadOnlySpan<(string, string)>)[("pipelines", "pipeline"), ("graphs", "graph")])) {
+        // Graph instances and post passes: each row prints as its named block, each member in the form its row's model
+        // gives it, so a closed word such as a graph's tier prints bare.
+        foreach (var (rowsKey, keyword, holder) in ((ReadOnlySpan<(string, string, Type)>)[("graphs", "graph", typeof(WorldViewGraph)), ("post", "post", typeof(WorldViewPostPass))])) {
             if (
                 !views.TryGetPropertyValue(
                 jsonNode: out var rowsNode,
@@ -807,7 +811,8 @@ public static partial class WorldDecompiler {
                         name,
                         rowObj,
                         indentLevel: 1,
-                        excludedKeys: ["name"]
+                        excludedKeys: ["name"],
+                        holder: holder
                     );
                 }
             }
@@ -815,7 +820,7 @@ public static partial class WorldDecompiler {
 
         // Other views properties
         var handledViewsKeys = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase) {
-            "layouts", "seatControl", "seatRig", "pipelines", "graphs",
+            "layouts", "seatControl", "seatRig", "graphs", "post",
         };
 
         foreach (var (k, v) in views) {
@@ -826,23 +831,12 @@ public static partial class WorldDecompiler {
                 sb.AppendLine();
             }
             first = false;
-            if (v is JsonObject subObj) {
-                DecompileNamedBlock(
-                    sb,
-                    k,
-                    null,
-                    subObj,
-                    indentLevel: 1
-                );
-            } else {
-                sb.AppendLine(
-                    CultureInfo.InvariantCulture,
-                    $"    {PuckPrinter.PrintPropertyName(level: 1, name: k)}: {FormatValue(
-                        indentLevel: 1,
-                        node: v
-                    )}"
-                );
-            }
+            EmitField(
+                indentLevel: 1,
+                key: k,
+                sb: sb,
+                value: v
+            );
         }
 
         sb.AppendLine(value: "}");
@@ -1108,6 +1102,14 @@ public static partial class WorldDecompiler {
                 continue;
             }
             if (
+                string.Equals(a: identifier, b: "graph", comparisonType: StringComparison.Ordinal) &&
+                string.Equals(a: k, b: "parameters", comparisonType: StringComparison.Ordinal) &&
+                (v is JsonObject bound)
+            ) {
+                DecompileGraphParameters(indentLevel: (indentLevel + 1), parameters: bound, sb: sb);
+                continue;
+            }
+            if (
                 string.Equals(
                 a: k,
                 b: "shapes",
@@ -1137,6 +1139,20 @@ public static partial class WorldDecompiler {
             CultureInfo.InvariantCulture,
             $"{indent}}}"
         );
+    }
+    // A graph row's parameters print one `parameter pass.member = value` statement a bound member, the one spelling
+    // the lowering reads them in.
+    private static void DecompileGraphParameters(StringBuilder sb, JsonObject parameters, int indentLevel) {
+        var indent = new string(c: ' ', count: (indentLevel * 4));
+
+        foreach (var (pass, members) in parameters) {
+            foreach (var (member, value) in ((members as JsonObject) ?? [])) {
+                sb.AppendLine(
+                    CultureInfo.InvariantCulture,
+                    $"{indent}parameter {PuckPrinter.PrintName(name: pass)}.{PuckPrinter.PrintName(name: member)} = {FormatValue(indentLevel: indentLevel, node: value)}"
+                );
+            }
+        }
     }
     private static string FormatValue(JsonNode? node, int indentLevel, Type? context = null) {
         if (node is null) {

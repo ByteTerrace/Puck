@@ -55,21 +55,22 @@ public sealed class DirectXAttachmentLawTests {
         };
 
         // No device context: a framebuffer that got past validation would fail on it with another exception.
-        _ = Assert.Throws<ArgumentException>(testCode: () => new DirectXGpuRenderPassFactory().CreateFramebuffer(
+        _ = Assert.Throws<ArgumentException>(testCode: () => new DirectXGpuRenderPassFactory(deviceContext: null!).CreateFramebuffer(
             colors: colors,
             depth: bound,
-            deviceContext: null!,
             renderPass: new DirectXGpuRenderPass(description: ColorAndDepth)
         ));
     }
     [Fact]
     public void APipelineWhoseDepthTestDisagreesWithItsRenderPassIsRefused() {
-        var factory = new DirectXGpuPipelineFactory();
+        var factory = new DirectXGpuPipelineFactory(deviceContext: null!);
         var untested = new GpuGraphicsPipelineDescription(
-            EnableStorageBuffer: false,
+            Layout: new GpuPipelineLayoutDescription(
+                groups: [],
+                pushesIndex: false,
+                stages: GpuShaderStage.Vertex | GpuShaderStage.Fragment
+            ),
             Name: "geometry",
-            PushConstantBinding: null,
-            TextureSamplerCount: 0,
             VertexInput: new GpuVertexInputLayout(
                 Attributes: [],
                 StrideBytes: 0
@@ -79,14 +80,65 @@ public sealed class DirectXAttachmentLawTests {
         foreach (var (pass, description) in (((IGpuRenderPass, GpuGraphicsPipelineDescription)[])[(new DirectXGpuRenderPass(description: ColorAndDepth), untested), (new DirectXGpuRenderPass(description: ColorAndDepth with { Depth = null }), untested with { DepthCompare = GpuDepthCompare.Less })])) {
             _ = Assert.Throws<ArgumentException>(testCode: () => factory.Create(
                 description: description,
-                deviceContext: null!,
                 fragmentShaderModule: null!,
-                height: 8,
+                name: default,
                 renderPass: pass,
-                vertexShaderModule: null!,
-                width: 8
+                vertexShaderModule: null!
             ));
         }
+    }
+
+    // A counting draw's layout: its pass group binds the work counters, a read-write buffer its fragments add to.
+    private static GpuGraphicsPipelineDescription CountingDraw() => new(
+        Layout: new GpuPipelineLayoutDescription(
+            groups: [new GpuGroupLayoutDescription(
+                bindings: [
+                    new GpuGroupBinding(binding: 0, kind: GpuBindingKind.ConstantBuffer),
+                    new GpuGroupBinding(binding: 1, kind: GpuBindingKind.ReadWriteBuffer),
+                ],
+                ordinal: 3
+            )],
+            pushesIndex: false,
+            stages: GpuShaderStage.Vertex | GpuShaderStage.Fragment
+        ),
+        Name: "counting",
+        VertexInput: new GpuVertexInputLayout(
+            Attributes: [],
+            StrideBytes: 0
+        )
+    );
+
+    // A render pass allowing shader writes opens with ALLOW_UAV_WRITES, which Direct3D 12 requires of a UAV write inside
+    // a render pass, as a counting fragment stage makes; one that does not opens with no flag.
+    [Fact]
+    public void ARenderPassAllowingShaderWritesOpensAllowingUavWrites() {
+        var colorOnly = ColorAndDepth with { Depth = null };
+
+        Assert.True(condition: CountingDraw().Layout.ShaderWrites);
+        Assert.Equal(
+            actual: new DirectXGpuRenderPass(description: colorOnly with { ShaderWrites = true }).Flags,
+            expected: Windows.Win32.Graphics.Direct3D12.D3D12_RENDER_PASS_FLAGS.D3D12_RENDER_PASS_FLAG_ALLOW_UAV_WRITES
+        );
+        Assert.Equal(
+            actual: new DirectXGpuRenderPass(description: colorOnly).Flags,
+            expected: Windows.Win32.Graphics.Direct3D12.D3D12_RENDER_PASS_FLAGS.D3D12_RENDER_PASS_FLAG_NONE
+        );
+    }
+    // A pipeline whose layout lets its shaders write is refused against a render pass that does not allow it, before the
+    // device is touched, and validates against one that does.
+    [Fact]
+    public void AWritingPipelineIsRefusedAgainstARenderPassThatDoesNotAllowShaderWrites() {
+        var colorOnly = ColorAndDepth with { Depth = null };
+        var draw = CountingDraw();
+
+        _ = Assert.Throws<ArgumentException>(testCode: () => new DirectXGpuPipelineFactory(deviceContext: null!).Create(
+            description: draw,
+            fragmentShaderModule: null!,
+            name: default,
+            renderPass: new DirectXGpuRenderPass(description: colorOnly),
+            vertexShaderModule: null!
+        ));
+        draw.ValidateAgainst(renderPass: new DirectXGpuRenderPass(description: colorOnly with { ShaderWrites = true }));
     }
 
     private sealed record StubImage(GpuPixelFormat Format, uint Width, uint Height, GpuImageUsage Usage) : IGpuImage {

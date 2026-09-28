@@ -4,15 +4,16 @@ using Puck.SdfVm.Views;
 namespace Puck.World.Client;
 
 /// <summary>One resolved window slot this frame — a normalized rect plus its occupant. A <see cref="Camera"/> and
-/// <see cref="Pipeline"/> both <see langword="null"/> shows the seat at <see cref="SeatOrder"/> (its position among the
-/// joined seats); a named camera renders that authored view into the rect; a named pipeline renders a compiled shader
-/// pipeline instead (see <see cref="Puck.World.WorldViewPipeline"/>) — the three are mutually exclusive.</summary>
+/// <see cref="Instance"/> both <see langword="null"/> shows the seat at <see cref="SeatOrder"/> (its position among the
+/// joined seats); a named camera renders that authored view into the rect; a named graph instance is placed there by the
+/// render graph's root instead (see <see cref="Puck.World.WorldViewGraph"/>) — the three are mutually exclusive.</summary>
 /// <param name="Region">The eased normalized rect.</param>
-/// <param name="SeatOrder">The 0-based seat position for a seat slot, or -1 for a camera/pipeline slot.</param>
-/// <param name="Camera">The authored camera name for a camera slot, or <see langword="null"/> for a seat/pipeline slot.</param>
-/// <param name="Pipeline">The authored <c>views.pipelines</c> row name for a pipeline slot, or <see langword="null"/> for a
-/// seat/camera slot.</param>
-public readonly record struct WorldComposedSlot(NormalizedRect Region, int SeatOrder, string? Camera, string? Pipeline = null);
+/// <param name="SeatOrder">The 0-based seat position for a seat slot, or -1 for a camera or instance slot.</param>
+/// <param name="Camera">The authored camera name for a camera slot, or <see langword="null"/> for a seat or instance
+/// slot.</param>
+/// <param name="Instance">The <c>views.graphs</c> row name for an instance slot, or <see langword="null"/> for a seat or
+/// camera slot.</param>
+public readonly record struct WorldComposedSlot(NormalizedRect Region, int SeatOrder, string? Camera, string? Instance = null);
 /// <summary>
 /// Owns layout SELECTION and TRANSITION for the main window — the data-side replacement for the compiled layout switch.
 /// Given the session shape and the authored <see cref="WorldViewDefaults"/>, it selects one layout (the live override,
@@ -36,8 +37,9 @@ public sealed class WorldViewComposer {
     private readonly List<WorldComposedSlot> m_targetSlots = new();
     private readonly List<ViewBinding> m_currentBindings = new();
     private readonly List<ViewBinding> m_toScratch = new();
-    private readonly Dictionary<string, int> m_cameraIds = new(comparer: StringComparer.Ordinal);
-    private readonly List<string> m_cameraNames = new();
+    // A camera or instance slot's view id indexes this table, so the transition carries either occupant by id alone.
+    private readonly Dictionary<(bool Instance, string Name), int> m_occupantIds = new();
+    private readonly List<(bool Instance, string Name)> m_occupants = new();
     private readonly List<string> m_authoredLayoutNames = new();
     private string m_activeName = "";
 
@@ -70,20 +72,17 @@ public sealed class WorldViewComposer {
         into.Clear();
 
         foreach (var slot in slots) {
-            if (slot.Pipeline is { } pipeline) {
-                into.Add(item: new ViewBinding(
-                    View: ViewId.None,
-                    Region: slot.Region,
-                    Child: pipeline
-                ));
-
-                continue;
-            }
-
-            var id = ((slot.Camera is { } camera)
-                ? new ViewId(Value: CameraId(name: camera))
-                : new ViewId(Value: (-(slot.SeatOrder + 1)))
-            );
+            var id = ((slot.Instance is { } instance)
+                ? new ViewId(Value: OccupantId(
+                    instance: true,
+                    name: instance
+                ))
+                : ((slot.Camera is { } camera)
+                    ? new ViewId(Value: OccupantId(
+                        instance: false,
+                        name: camera
+                    ))
+                    : new ViewId(Value: (-(slot.SeatOrder + 1)))));
 
             into.Add(item: new ViewBinding(
                 View: id,
@@ -91,17 +90,17 @@ public sealed class WorldViewComposer {
             ));
         }
     }
-    private int CameraId(string name) {
-        if (m_cameraIds.TryGetValue(
-            key: name,
+    private int OccupantId(bool instance, string name) {
+        if (m_occupantIds.TryGetValue(
+            key: (instance, name),
             value: out var id
         )) {
             return id;
         }
 
-        id = m_cameraNames.Count;
-        m_cameraNames.Add(item: name);
-        m_cameraIds[name] = id;
+        id = m_occupants.Count;
+        m_occupants.Add(item: (instance, name));
+        m_occupantIds[(instance, name)] = id;
 
         return id;
     }
@@ -116,30 +115,30 @@ public sealed class WorldViewComposer {
         m_slots.Clear();
 
         foreach (var binding in m_currentBindings) {
-            if (binding.Child is { } pipeline) {
+            var value = binding.View.Value;
+
+            if (value < 0) {
                 m_slots.Add(item: new WorldComposedSlot(
                     Region: binding.Region,
-                    SeatOrder: -1,
-                    Camera: null,
-                    Pipeline: pipeline
+                    SeatOrder: (-value - 1),
+                    Camera: null
                 ));
 
                 continue;
             }
 
-            var value = binding.View.Value;
+            var (instance, name) = m_occupants[index: value];
 
-            m_slots.Add(item: ((value < 0)
-                ? new WorldComposedSlot(
-                    Region: binding.Region,
-                    SeatOrder: (-value - 1),
-                    Camera: null
-                )
-                : new WorldComposedSlot(
-                    Region: binding.Region,
-                    SeatOrder: -1,
-                    Camera: m_cameraNames[index: value]
-                )));
+            m_slots.Add(item: new WorldComposedSlot(
+                Camera: (instance
+                    ? null
+                    : name),
+                Instance: (instance
+                    ? name
+                    : null),
+                Region: binding.Region,
+                SeatOrder: -1
+            ));
         }
     }
     private static WorldViewLayout? FindBySeatCount(IReadOnlyList<WorldViewLayout> layouts, int seatCount) {
@@ -197,10 +196,10 @@ public sealed class WorldViewComposer {
                 Height: slot.Height
             );
 
-            if (slot.Pipeline is { } pipeline) {
+            if (slot.Instance is { } instance) {
                 m_targetSlots.Add(item: new WorldComposedSlot(
                     Camera: null,
-                    Pipeline: pipeline,
+                    Instance: instance,
                     Region: region,
                     SeatOrder: -1
                 ));

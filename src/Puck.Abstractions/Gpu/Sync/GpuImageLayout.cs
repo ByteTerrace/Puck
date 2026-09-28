@@ -20,4 +20,8 @@ public enum GpuImageLayout : uint {
     /// <summary>The depth-attachment layout a render pass tests and writes depth in (Vulkan
     /// DEPTH_STENCIL_ATTACHMENT_OPTIMAL; Direct3D 12 DEPTH_WRITE).</summary>
     DepthAttachment = 5,
+    /// <summary>The layout a copy reads the image in (Vulkan TRANSFER_SRC_OPTIMAL; Direct3D 12 COPY_SOURCE).</summary>
+    TransferSource = 6,
+    /// <summary>The layout a copy writes the image in (Vulkan TRANSFER_DST_OPTIMAL; Direct3D 12 COPY_DEST).</summary>
+    TransferDestination = 7,
 }

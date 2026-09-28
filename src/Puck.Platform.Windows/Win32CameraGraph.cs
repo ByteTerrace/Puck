@@ -105,11 +105,11 @@ internal sealed class Win32PixelStream(CameraSensor sensor, int width, int heigh
 
     public LatestFrameBuffer Frames { get; } = new();
 
-    public long FrameVersion => Frames.Version;
     public int Height => height;
     public long LastFrameTimestamp => Frames.LastTimestamp;
     public CameraCaptureFormat NativeFormat => nativeFormat;
     public CameraSensor Sensor => sensor;
+    public long Version => Frames.Version;
     public int Width => width;
 
     public bool TryCapture(out Surface surface) {
@@ -124,7 +124,7 @@ internal sealed class Win32PixelStream(CameraSensor sensor, int width, int heigh
         }
 
         surface = Surface.CpuPixels(
-            format: SurfaceFormat.B8G8R8A8Unorm,
+            format: GpuPixelFormat.B8G8R8A8Unorm,
             height: ((uint)frameHeight),
             pixels: m_pullBuffer,
             width: ((uint)frameWidth)
@@ -133,26 +133,44 @@ internal sealed class Win32PixelStream(CameraSensor sensor, int width, int heigh
         return true;
     }
 }
-/// <summary>A shared-texture stream: <see cref="Start"/> hands the consumer's targets to the worker through
-/// <see cref="Targets"/>; the worker publishes completed slots.</summary>
-internal sealed class Win32SharedStream(CameraSensor sensor, int width, int height, CameraCaptureFormat nativeFormat, SurfaceFormat targetFormat) : ICameraSharedStream {
+/// <summary>A shared-texture stream: <see cref="Start"/> hands the consumer's targets and shared fence to the worker
+/// through <see cref="Targets"/> and <see cref="SharedFenceHandle"/>; the worker publishes each written slot with the
+/// fence value its copy signals and reports the order it opened (<see cref="FenceOrder"/>).</summary>
+internal sealed class Win32SharedStream(CameraSensor sensor, int width, int height, CameraCaptureFormat nativeFormat, GpuPixelFormat targetFormat) : ICameraSharedStream {
+    private readonly Lock m_orderGate = new();
     private readonly TaskCompletionSource<nint[]> m_targets = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+    private SharedFenceOrder m_order = SharedFenceOrder.Pending;
 
     public LatestSlotPublication Slots { get; } = new();
 
-    public long FrameVersion => Slots.Version;
+    public SharedFenceOrder FenceOrder {
+        get {
+            lock (m_orderGate) {
+                return m_order;
+            }
+        }
+        set {
+            lock (m_orderGate) {
+                m_order = value;
+            }
+        }
+    }
     public int Height => height;
     public long LastFrameTimestamp => Slots.Timestamp;
     public int LatestSlot => Slots.LatestSlot;
     public CameraCaptureFormat NativeFormat => nativeFormat;
     public CameraSensor Sensor => sensor;
-    public SurfaceFormat TargetFormat => targetFormat;
+    public long Version => Slots.Version;
+    /// <summary>Gets the consumer's shared fence handle, or zero; read by the worker once <see cref="Targets"/>
+    /// completes.</summary>
+    public nint SharedFenceHandle { get; private set; }
+    public GpuPixelFormat TargetFormat => targetFormat;
     public Task<nint[]> Targets => m_targets.Task;
     public int Width => width;
 
     public void CancelStart() => _ = m_targets.TrySetCanceled();
     public void Release(int slot) => Slots.Release(slot: slot);
-    public void Start(IReadOnlyList<nint> sharedTargetHandles) {
+    public void Start(IReadOnlyList<nint> sharedTargetHandles, nint sharedFenceHandle) {
         ArgumentNullException.ThrowIfNull(sharedTargetHandles);
 
         if (sharedTargetHandles.Count < 2) {
@@ -163,10 +181,14 @@ internal sealed class Win32SharedStream(CameraSensor sensor, int width, int heig
         }
 
         Slots.Configure(targetCount: sharedTargetHandles.Count);
+        SharedFenceHandle = sharedFenceHandle;
 
         if (!m_targets.TrySetResult(result: [.. sharedTargetHandles])) {
             throw new InvalidOperationException(message: $"the {sensor} stream already started");
         }
     }
-    public bool TryAcquireLatest(out int slot) => Slots.TryAcquireLatest(slot: out slot);
+    public bool TryAcquireLatest(out int slot, out ulong fenceValue) => Slots.TryAcquireLatest(
+        fenceValue: out fenceValue,
+        slot: out slot
+    );
 }

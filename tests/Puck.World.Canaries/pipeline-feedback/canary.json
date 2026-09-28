@@ -7,8 +7,8 @@
   "requirements": ["gpu"],
   "timeoutSeconds": 60,
   "fixtures": [
-    "feedback.pipeline.json",
-    "wrong-history.pipeline.json",
+    "feedback.graph.json",
+    "wrong-history.graph.json",
     "accumulate.hlsl",
     "convert.hlsl",
     "copy.hlsl"

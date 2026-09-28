@@ -233,9 +233,9 @@ internal static class PixelToNv12Converter {
     /// <param name="width">The frame width in pixels.</param>
     /// <param name="height">The frame height in pixels.</param>
     /// <param name="destination">The NV12 output, at least <see cref="Nv12Size"/> bytes.</param>
-    public static void Convert(ReadOnlySpan<byte> pixels, SurfaceFormat format, int width, int height, Span<byte> destination) {
+    public static void Convert(ReadOnlySpan<byte> pixels, GpuPixelFormat format, int width, int height, Span<byte> destination) {
         // The two supported layouts differ only in whether byte 0 is red or blue.
-        var blueFirst = (format != SurfaceFormat.R8G8B8A8Unorm);
+        var blueFirst = (format != GpuPixelFormat.R8G8B8A8Unorm);
         var chromaWidth = ((width + 1) / 2);
         var chromaHeight = ((height + 1) / 2);
         var ySize = (width * height);

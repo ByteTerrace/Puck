@@ -30,12 +30,15 @@ internal sealed record QualificationCell(
 /// runner's <c>wire.errors</c> counts these and nothing else as rejected.</param>
 /// <param name="ArmedWaits">The <c>pipeline.wait</c> commands the script arms, each of which must report
 /// <c>reached</c>.</param>
+/// <param name="WorldReloads">The <c>world.reload</c> commands the script makes, each of which must answer that it
+/// applied.</param>
 internal sealed record QualificationExpectation(
     int CountersReadings,
     IReadOnlyList<(int Before, int After)> SoakWindows,
     int Inspections,
     int Releases,
-    int ArmedWaits
+    int ArmedWaits,
+    int WorldReloads
 );
 /// <summary>A cell's console script and what it must produce.</summary>
 /// <param name="Text">The script, one command per line, each ending in a line feed.</param>
@@ -44,7 +47,7 @@ internal sealed record QualificationScript(string Text, QualificationExpectation
 /// <summary>What a pipeline workload's world authors for its instance: the layout row showing it and the source its
 /// row loads, both read from the world document inside the package.</summary>
 /// <param name="Layout">The <c>views.layouts</c> row, as authored.</param>
-/// <param name="Source">The <c>views.pipelines</c> row's source, relative to the world document.</param>
+/// <param name="Source">The <c>views.graphs</c> row's source, relative to the world document.</param>
 internal sealed record QualificationPipelineRows(JsonObject Layout, string Source);
 /// <summary>
 /// Expands a release profile into its stability matrix and writes what each cell runs: the overlay document that boots
@@ -55,6 +58,9 @@ internal sealed record QualificationPipelineRows(JsonObject Layout, string Sourc
 internal static class QualificationPlan {
     /// <summary>The seconds a <c>pipeline.wait</c> may take, the longest the World accepts, of presentation time.</summary>
     public const int WaitSeconds = 40;
+    /// <summary>The seconds the script's <c>world.wait ready</c> may wait for the engine's pipeline set to build and
+    /// produce its first frame; every workload's timeout outlasts it.</summary>
+    public const int ReadySeconds = 180;
 
     private const string WorldSuffix = ".world.json";
 
@@ -135,7 +141,7 @@ internal static class QualificationPlan {
         );
         var source = (Row(
             name: pipeline.Instance,
-            rows: views?["pipelines"]
+            rows: views?["graphs"]
         )?["source"] as JsonValue);
 
         if (layout is null) {
@@ -144,7 +150,7 @@ internal static class QualificationPlan {
             return false;
         }
         if ((source is null) || !source.TryGetValue<string>(value: out var sourceText)) {
-            reason = $"the world authors no views.pipelines row named '{pipeline.Instance}' with a source";
+            reason = $"the world authors no views.graphs row named '{pipeline.Instance}' with a source";
 
             return false;
         }
@@ -176,6 +182,7 @@ internal static class QualificationPlan {
         var inspections = 0;
         var releases = 0;
         var waits = 0;
+        var worldReloads = 0;
 
         void Line(string line) => text.Append(value: line).Append(value: '\n');
         void Counters() {
@@ -193,6 +200,8 @@ internal static class QualificationPlan {
         Line(line: $"# puck qualify: {cell.Id}, generated from the release profile. Lengths are ticks and frames, never time.");
         Line(line: "# Every frame renders every pass, so a soak exercises the whole frame.");
         Line(line: "world.cadence off");
+        Line(line: "# A clean install builds the engine's pipelines on a cold driver cache: warm up from readiness, not boot.");
+        Line(line: $"world.wait ready {Number(value: ReadySeconds)}");
 
         if (workload.Pipeline is not { } pipeline) {
             Line(line: $"world.wait {Number(value: workload.WarmupTicks)}");
@@ -202,6 +211,7 @@ internal static class QualificationPlan {
                 for (var reload = 1; (reload <= workload.WorldReloads); reload++) {
                     Line(line: $"# World reload {Number(value: reload)} of {Number(value: workload.WorldReloads)}.");
                     Line(line: "world.reload");
+                    worldReloads++;
                     Line(line: $"world.wait {Number(value: workload.WarmupTicks)}");
                 }
 
@@ -267,7 +277,7 @@ internal static class QualificationPlan {
             for (var load = 1; (load <= pipeline.Loads); load++) {
                 Line(line: $"# Unload and load {Number(value: load)} of {Number(value: pipeline.Loads)}: the slot stops showing the instance and its row is removed, which releases it; the refused inspection proves the release.");
                 Line(line: $"world.row.set views.layouts {unloaded}");
-                Line(line: $"world.row.remove views.pipelines {name}");
+                Line(line: $"world.row.remove views.graphs {name}");
                 Line(line: $"pipeline.inspect {name}");
                 releases++;
                 Line(line: $"pipeline.load {name} {rows.Source}");
@@ -285,7 +295,8 @@ internal static class QualificationPlan {
                 CountersReadings: counters,
                 Inspections: inspections,
                 Releases: releases,
-                SoakWindows: windows
+                SoakWindows: windows,
+                WorldReloads: worldReloads
             ),
             Text: text.ToString()
         );
@@ -314,7 +325,7 @@ internal static class QualificationPlan {
         var index = -1;
 
         for (var candidate = 0; (candidate < (slots?.Count ?? 0)); candidate++) {
-            if (((slots![candidate]?["pipeline"] as JsonValue)?.TryGetValue<string>(value: out var shown) == true) && string.Equals(
+            if (((slots![candidate]?["instance"] as JsonValue)?.TryGetValue<string>(value: out var shown) == true) && string.Equals(
                 a: shown,
                 b: instance,
                 comparisonType: StringComparison.Ordinal
@@ -326,7 +337,7 @@ internal static class QualificationPlan {
         }
 
         if (index < 0) {
-            reason = $"no slot of the layout shows the pipeline '{instance}'";
+            reason = $"no slot of the layout shows the instance '{instance}'";
 
             return false;
         }
@@ -370,7 +381,7 @@ internal static class QualificationPlan {
 
         var emptied = layout.DeepClone().AsObject();
 
-        emptied["slots"]![index]!.AsObject()["pipeline"] = null;
+        emptied["slots"]![index]!.AsObject()["instance"] = null;
         unloaded = emptied.ToJsonString();
         reason = string.Empty;
 

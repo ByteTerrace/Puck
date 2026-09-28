@@ -196,9 +196,14 @@ public sealed class WorldSiloExtensionLawTests {
                     source: () => source,
                     tagging: new SiloConsoleTagging(output: m_output)
                 ),
-                storageTarget: new DirectoryObjectStorageTarget(m_directory.RootPath)
+                storageTarget: new DirectoryObjectStorageTarget(m_directory.RootPath),
+                timeProvider: Clock
             );
         }
+
+        // The silo's one clock, which only the law advances: the extension worker's poll spacing and every storage and
+        // silo deadline read it.
+        public VirtualClock Clock { get; } = new();
 
         public WorldSiloHost Host { get; }
         public WorldAuthorityIdentity Identity { get; }
@@ -207,7 +212,8 @@ public sealed class WorldSiloExtensionLawTests {
         public async Task<bool> ActivateAsync() {
             Assert.True(condition: (await new WorldAuthorityBlobStore(
                 store: Store,
-                target: new DirectoryObjectStorageTarget(m_directory.RootPath)
+                target: new DirectoryObjectStorageTarget(m_directory.RootPath),
+                timeProvider: Clock
             ).PublishDefinitionAsync(
                 Identity,
                 Document(),
@@ -268,8 +274,11 @@ public sealed class WorldSiloExtensionLawTests {
             actual: runtime.OperationNames
         );
         // The silo's own step drives the row, then pumps its runtime at the master boundary; the installed provider
-        // executes the request and the status projects back through authority.
+        // executes the request and the status projects back through authority. The extension worker waits its poll
+        // interval on the silo's clock between passes, so each step that has not yet seen the status waits for the worker
+        // to arm that wait and then advances the clock past it.
         var simulation = new WorldSiloSimulation(host: silo.Host);
+        var poll = WorldExtensionHostOptions.Default.PollInterval;
 
         for (var step = 0UL; ((step < 4000UL) && (Status(server: row.Server) != ((long)WorldExternalOperationStatus.Succeeded))); step++) {
             simulation.Step(
@@ -281,10 +290,15 @@ public sealed class WorldSiloExtensionLawTests {
                 )
             );
             await runtime.FlushAsync(cancellationToken: Cancel);
-            await Task.Delay(
-                cancellationToken: Cancel,
-                millisecondsDelay: 1
-            );
+
+            if (Status(server: row.Server) != ((long)WorldExternalOperationStatus.Succeeded)) {
+                await silo.Clock.WhenArmedAsync(
+                    count: 1,
+                    ct: Cancel,
+                    dueTime: poll
+                );
+                silo.Clock.Advance(by: poll);
+            }
         }
         Assert.Equal(
             expected: ((long)WorldExternalOperationStatus.Succeeded),
@@ -348,7 +362,7 @@ public sealed class WorldSiloExtensionLawTests {
             machineId: Guid.NewGuid(),
             resolver: new WorldSessionResolver(),
             seats: WorldEmbodiedSeats.None,
-            stateRoot: state.RootPath
+            stateRoot: new WorldStateRoot(path: state.RootPath)
         );
 
         instances.AdmitBoot(row: boot.Instance);

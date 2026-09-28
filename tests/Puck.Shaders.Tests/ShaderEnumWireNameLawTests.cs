@@ -65,7 +65,7 @@ public sealed class ShaderEnumWireNameLawTests {
 
         AssertWireNames(
             expected: expected,
-            typeInfo: ShaderManifestJsonContext.Default.ShaderValueType
+            typeInfo: ProbeKindManifestJsonContext.Default.ShaderValueType
         );
         // The diagnostic spelling and the wire name are one vocabulary.
         Assert.All(
@@ -76,15 +76,6 @@ public sealed class ShaderEnumWireNameLawTests {
             collection: expected
         );
     }
-    [Fact]
-    public void AShaderSetBindingKindCrossesTheWireInLowerCamelCase() => AssertWireNames(
-        expected: new Dictionary<ShaderSetManifestBindingKind, string> {
-            [ShaderSetManifestBindingKind.StorageBuffer] = "storageBuffer",
-            [ShaderSetManifestBindingKind.SampledImage] = "sampledImage",
-            [ShaderSetManifestBindingKind.StorageImage] = "storageImage",
-        },
-        typeInfo: ShaderManifestJsonContext.Default.ShaderSetManifestBindingKind
-    );
     [Fact]
     public void AProbeSocketClassCrossesTheWireInLowerCamelCase() => AssertWireNames(
         expected: new Dictionary<ProbeSocketClass, string> {

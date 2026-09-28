@@ -51,7 +51,7 @@ public sealed record RatchetReconciliation(int Ceiling, IReadOnlyList<RatchetFin
 /// ledgers of this one shape. Keys are repository-relative paths with forward slashes, matched ordinally.
 /// </summary>
 public sealed class RatchetLedger {
-    /// <summary>The ledger document format this reader understands and <see cref="Render"/> writes.</summary>
+    /// <summary>The ledger document format this reader understands and <see cref="Render()"/> writes.</summary>
     public const int Format = 1;
 
     private readonly Dictionary<string, int> m_recorded;
@@ -156,6 +156,7 @@ public sealed class RatchetLedger {
 
         return normalized;
     }
+
     // A file a project links from elsewhere reaches the compiler as `project/../../src/…`; the key is the file's own path.
     private static string CollapseDotSegments(string path) {
         var segments = new List<string>();
@@ -165,7 +166,7 @@ public sealed class RatchetLedger {
                 continue;
             }
 
-            if ((segment == "..") && (segments.Count != 0) && (segments[segments.Count - 1] != "..") && (segments[segments.Count - 1].Length != 0)) {
+            if ((segment == "..") && (segments.Count != 0) && (segments[(segments.Count - 1)] != "..") && (segments[(segments.Count - 1)].Length != 0)) {
                 segments.RemoveAt(index: (segments.Count - 1));
                 continue;
             }
@@ -178,6 +179,7 @@ public sealed class RatchetLedger {
             values: segments
         );
     }
+
     /// <summary>Renders a ledger document: the format, the ceiling, and the recorded counts in ordinal key order,
     /// indented by four spaces and ending in a line feed.</summary>
     /// <param name="ceiling">The ceiling the document declares.</param>
@@ -210,6 +212,13 @@ public sealed class RatchetLedger {
 
         return builder.Append(value: "    }\n}\n").ToString();
     }
+    /// <summary>Renders this ledger's own ceiling and recorded counts as the writer spells them: its one canonical
+    /// form, which a ledger's text must match byte for byte.</summary>
+    /// <returns>The ledger's JSON text, ending in a line feed.</returns>
+    public string Render() => Render(
+        ceiling: Ceiling,
+        recorded: m_recorded
+    );
     /// <summary>Parses the ledger text; a missing, malformed, or off-schema document yields <see langword="false"/> and a message naming the fault.</summary>
     /// <param name="json">The ledger's text, or <see langword="null"/> when it could not be read.</param>
     /// <param name="ledger">The parsed ledger, or <see langword="null"/> on failure.</param>

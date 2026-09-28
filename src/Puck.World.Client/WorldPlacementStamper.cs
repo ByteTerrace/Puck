@@ -1,5 +1,7 @@
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using Puck.World.Authoring;
+using Puck.SdfVm;
 using Puck.SignedDistance;
 using Puck.Text;
 
@@ -9,7 +11,8 @@ namespace Puck.World.Client;
 /// Emits the world's STATIC placements into the program under construction — each materialized pattern or reflected
 /// copy is a static <see cref="SdfProgramBuilder.BeginInstance"/> whose shapes replay the referenced creation's shape
 /// list with the full placement transform baked into every shape's own segment. Animated placements (framed creations)
-/// are NOT emitted here — they ride <see cref="WorldStampPool"/>'s reserved dynamic pool.
+/// are NOT emitted here — they ride <see cref="WorldStampPool"/>'s reserved dynamic pool. A prototype's inline mesh
+/// (<see cref="WorldPrototype.Mesh"/>) becomes one <see cref="SdfMeshDraw"/> per static placement instance.
 /// </summary>
 /// <remarks>Text runs share the same instance and transform as their creation and resolve through the world's packed
 /// font catalog. They count against <see cref="CreationDocument.StampShapeCount"/> like every other emitted shape.</remarks>
@@ -21,30 +24,52 @@ public static class WorldPlacementStamper {
     // segments — a merged probe would under-reserve the segment directory a real scattered world needs (contract).
     private const float ProbeSpread = 100f;
 
+    // Each inline prototype mesh's engine-frame SdfMesh, keyed by the immutable mesh record (MeshOf).
+    private static readonly ConditionalWeakTable<WorldPrototypeMesh, SdfMesh> Meshes = new();
+
     /// <summary>Registers a creation's palette (16-slot clamp) with an optional tint lerp, returning program-relative
     /// material ids indexed like the creation's own palette slots.</summary>
     /// <param name="builder">The program builder.</param>
-    /// <param name="definition">The definition a state-bound palette entry resolves against.</param>
+    /// <param name="colors">The colors the build bakes, which a state-bound palette color resolves through.</param>
     /// <param name="document">The creation document.</param>
     /// <param name="tint">The albedo tint (color + blend), or <see langword="null"/>.</param>
-    internal static int[] RegisterPalette(SdfProgramBuilder builder, WorldDefinition definition, CreationDocument document, (Vector3 Color, float Blend)? tint) {
+    internal static int[] RegisterPalette(SdfProgramBuilder builder, WorldBakedColors colors, CreationDocument document, (Vector3 Color, float Blend)? tint) {
+        var ids = new int[PaletteLength(document: document)];
+
+        FillPalette(
+            builder: builder,
+            colors: colors,
+            document: document,
+            ids: ids,
+            tint: tint
+        );
+
+        return ids;
+    }
+    // The material ids a creation's palette registers: its slots up to the 16-slot clamp, and one when it has none.
+    internal static int PaletteLength(CreationDocument document) =>
+        Math.Max(
+            val1: Math.Min(
+                val1: (document.Palette?.Count ?? 0),
+                val2: CreationDocument.PaletteSize
+            ),
+            val2: 1
+        );
+    // Registers a creation's palette into ids, which holds PaletteLength(document) entries.
+    internal static void FillPalette(SdfProgramBuilder builder, WorldBakedColors colors, CreationDocument document, (Vector3 Color, float Blend)? tint, Span<int> ids) {
+        var resolveLayerColor = colors.LayerColor;
         var palette = (document.Palette ?? []);
         var count = Math.Min(
             val1: palette.Count,
             val2: CreationDocument.PaletteSize
         );
-        var ids = new int[Math.Max(
-            val1: count,
-            val2: 1
-        )];
 
         for (var index = 0; (index < ids.Length); index++) {
             var entry = ((index < count)
                 ? palette[index]
                 : null
             );
-            var albedo = WorldColor.Resolve(
-                definition: definition,
+            var albedo = colors.Resolve(
                 fallback: new Vector3(value: 0.7f),
                 value: entry?.Color
             );
@@ -57,11 +82,6 @@ public static class WorldPlacementStamper {
                 );
             }
 
-            Vector3 ResolveLayerColor(string value) => WorldColor.Resolve(
-                definition: definition,
-                fallback: Vector3.Zero,
-                value: value
-            );
             ids[index] = builder.AddMaterial(material: new SdfMaterial(
                 Albedo: albedo,
                 Emissive: (entry?.Emissive ?? 0f),
@@ -70,19 +90,16 @@ public static class WorldPlacementStamper {
                 Specular: (entry?.Specular ?? 0f),
                 Metal: (entry?.Metal ?? 0f),
                 Coat: (entry?.Coat ?? 0f),
-                Weathering: entry?.Weathering?.ToWeathering(resolve: ResolveLayerColor),
+                Weathering: entry?.Weathering?.ToWeathering(resolve: resolveLayerColor),
                 Wrap: (entry?.Wrap ?? 0f),
                 Soften: (entry?.Soften ?? 0f),
-                Bounce: WorldColor.Resolve(
-                    definition: definition,
+                Bounce: colors.Resolve(
                     fallback: Vector3.Zero,
                     value: entry?.Bounce
                 ),
-                Inset: entry?.Inset?.ToInset(resolve: ResolveLayerColor)
+                Inset: entry?.Inset?.ToInset(resolve: resolveLayerColor)
             ));
         }
-
-        return ids;
     }
 
     // A static instance bakes the placement frame (and, for a parented volume, the parent shape's rest pose) into
@@ -135,6 +152,61 @@ public static class WorldPlacementStamper {
             ));
         }
     }
+    // A static instance's mesh draw, appended when the placement carries a mesh and the caller collects draws.
+    private static void AppendMeshDraw(SdfMesh? mesh, int material, Vector3 origin, Quaternion rotation, float scale, Vector3? reflectionNormal, ICollection<SdfMeshDraw>? meshDraws) {
+        if ((mesh is null) || (meshDraws is null)) {
+            return;
+        }
+
+        meshDraws.Add(item: MeshDrawOf(
+            material: material,
+            mesh: mesh,
+            origin: origin,
+            reflectionNormal: reflectionNormal,
+            rotation: rotation,
+            scale: scale
+        ));
+    }
+
+    /// <summary>Poses a prototype's mesh as a draw: its engine-frame triangles under a uniform scale, an optional mirror (a
+    /// plane through the origin in the local frame, as the shapes reflect), then the rotation and the origin, composed in
+    /// the row-vector convention <see cref="SdfMeshDraw"/> carries. A static placement and a stamp-pool root pose it
+    /// alike.</summary>
+    /// <param name="mesh">The prototype's mesh (<see cref="MeshOf"/>).</param>
+    /// <param name="material">The engine material the mesh's palette entry registered as.</param>
+    /// <param name="origin">The world-space origin.</param>
+    /// <param name="rotation">The orientation.</param>
+    /// <param name="scale">The uniform scale.</param>
+    /// <param name="reflectionNormal">The mirror plane's normal, or <see langword="null"/> for none.</param>
+    /// <returns>The draw.</returns>
+    internal static SdfMeshDraw MeshDrawOf(SdfMesh mesh, int material, Vector3 origin, Quaternion rotation, float scale, Vector3? reflectionNormal = null) {
+        var local = Matrix4x4.CreateScale(scale: scale);
+
+        if (reflectionNormal is { } normal) {
+            local *= Matrix4x4.CreateReflection(value: new Plane(
+                d: 0f,
+                normal: Vector3.Normalize(value: normal)
+            ));
+        }
+
+        return new SdfMeshDraw(
+            Material: material,
+            Mesh: mesh,
+            ObjectToWorld: ((local * Matrix4x4.CreateFromQuaternion(quaternion: rotation)) * Matrix4x4.CreateTranslation(position: origin))
+        );
+    }
+    /// <summary>The engine-frame <see cref="SdfMesh"/> of an inline prototype mesh, converted once: prototype rows are
+    /// replaced, never mutated, so every placement, stamp and rebuild of one row shares one mesh.</summary>
+    /// <param name="mesh">The prototype's inline mesh.</param>
+    /// <returns>The shared mesh.</returns>
+    internal static SdfMesh MeshOf(WorldPrototypeMesh mesh) => Meshes.GetValue(
+        createValueCallback: static authored => new SdfMesh(
+            indices: authored.Indices.ToArray(),
+            positions: authored.EngineVertices.ToArray()
+        ),
+        key: mesh
+    );
+
     // Emits the creation's shapes, EACH its own segment carrying the FULL placement prefix — the shader splits the
     // stream at each ResetPoint and a segment's transforms are local to it, so a shared prefix segment would be dead.
     // Uniform placement scale commutes with the per-shape rotations (shear-free).
@@ -156,7 +228,7 @@ public static class WorldPlacementStamper {
             )]
         );
     }
-    private static void EmitPlacement(SdfProgramBuilder builder, CreationDocument creation, WorldDefinition definition, int[] paletteIds, WorldPlacement placement, PackedFontAtlasCatalog? textCatalog, ulong worldSeed, ICollection<SdfVolume>? volumes) {
+    private static void EmitPlacement(SdfProgramBuilder builder, CreationDocument creation, WorldDefinition definition, int[] paletteIds, WorldPlacement placement, PackedFontAtlasCatalog? textCatalog, ulong worldSeed, ICollection<SdfVolume>? volumes, SdfMesh? mesh, int meshMaterial, ICollection<SdfMeshDraw>? meshDraws, SdfMesh? bakedMesh = null) {
         var frame = WorldDefinitionRows.ResolvedFrame(
             definition: definition,
             placement: placement
@@ -179,9 +251,10 @@ public static class WorldPlacementStamper {
         var reach = CreationStampEmitter.RenderReach(
             document: creation,
             scale: placement.Scale,
-            fontFor: ((textCatalog is { } catalog)
-            ? name => catalog.Resolve(name: name)
-            : null),
+            // A method group, never a lambda over the catalog, which would allocate a closure on every placement.
+            fontFor: (hasText
+                ? textCatalog!.Resolve
+                : null),
             textLayouts: textLayouts
         );
         var rotation = Quaternion.CreateFromAxisAngle(
@@ -203,6 +276,25 @@ public static class WorldPlacementStamper {
             (creation.Shapes is { Count: > 0 })
         );
 
+        var visitor = new StaticInstanceVisitor(
+            bakedMesh: bakedMesh,
+            builder: builder,
+            creation: creation,
+            hasText: hasText,
+            mesh: mesh,
+            meshDraws: meshDraws,
+            meshMaterial: meshMaterial,
+            paletteIds: paletteIds,
+            perShape: perShape,
+            placement: placement,
+            reach: reach,
+            rotation: rotation,
+            scoped: scoped,
+            textCatalog: textCatalog,
+            textLayouts: textLayouts,
+            volumes: volumes
+        );
+
         CreationStampLattice.ForEachInstance(
             origin: frame.Position,
             rotation: rotation,
@@ -212,134 +304,146 @@ public static class WorldPlacementStamper {
                 worldSeed: worldSeed
             ),
             mirror: WorldPlacementStamp.MirrorFor(placement: placement),
-            visitor: instance => {
-                AppendStaticVolumes(
-                    creation: creation,
-                    origin: instance.Origin,
-                    rotation: rotation,
-                    scale: placement.Scale,
-                    volumes: volumes
+            visitor: ref visitor
+        );
+    }
+
+    // One static placement's instances: its volumes and mesh draws, then either one tight instance per shape or one
+    // instance holding the whole creation. A placement drawing its bake draws the baked mesh, its palette's first
+    // material the base its triangles' entries add to, and keeps its instances camera-hidden, so its field still casts shadows and occludes. A struct the
+    // lattice walk calls, so a placement allocates no closure.
+    private readonly struct StaticInstanceVisitor(SdfMesh? bakedMesh, SdfProgramBuilder builder, CreationDocument creation, bool hasText, SdfMesh? mesh, ICollection<SdfMeshDraw>? meshDraws, int meshMaterial, int[] paletteIds, bool perShape, WorldPlacement placement, float reach, Quaternion rotation, bool scoped, PackedFontAtlasCatalog? textCatalog, TextLayoutResult[]? textLayouts, ICollection<SdfVolume>? volumes) : ICreationStampVisitor {
+        public void Visit(CreationStampInstance instance) {
+            AppendStaticVolumes(
+                creation: creation,
+                origin: instance.Origin,
+                rotation: rotation,
+                scale: placement.Scale,
+                volumes: volumes
+            );
+            AppendMeshDraw(
+                material: meshMaterial,
+                mesh: mesh,
+                meshDraws: meshDraws,
+                origin: instance.Origin,
+                reflectionNormal: instance.ReflectionNormal,
+                rotation: rotation,
+                scale: placement.Scale
+            );
+            AppendMeshDraw(
+                material: paletteIds[0],
+                mesh: bakedMesh,
+                meshDraws: meshDraws,
+                origin: instance.Origin,
+                reflectionNormal: instance.ReflectionNormal,
+                rotation: rotation,
+                scale: placement.Scale
+            );
+
+            if (perShape) {
+                var stampTransform = new CreationStampTransform(
+                    Origin: instance.Origin,
+                    Rotation: rotation,
+                    Scale: placement.Scale,
+                    ReflectionNormal: instance.ReflectionNormal
                 );
 
-                if (perShape) {
-                    var stampTransform = new CreationStampTransform(
+                for (var shapeIndex = 0; (shapeIndex < creation.Shapes!.Count); shapeIndex++) {
+                    var shape = creation.Shapes[shapeIndex];
+                    // A fold's copies leave any shape-local sphere, so a domain-bearing shape keeps the
+                    // whole-creation bound.
+                    var (boundCenter, boundRadius) = ((shape.Domain is { Count: > 0 })
+                        ? (instance.Origin, reach)
+                        : CreationStampEmitter.ShapeStampBound(
+                            document: creation,
+                            shapeIndex: shapeIndex,
+                            transform: stampTransform
+                        )
+                    );
+
+                    _ = builder.BeginInstance(
+                        boundCenter: boundCenter,
+                        boundRadius: (boundRadius + PlacementBoundMargin),
+                        cameraHidden: (bakedMesh is not null)
+                    );
+                    CreationStampEmitter.EmitShapeStamp(
+                        builder: builder,
+                        document: creation,
+                        shapeIndex: shapeIndex,
+                        transform: stampTransform,
+                        material: paletteIds[Math.Clamp(
+                            value: (shape.Material ?? 0),
+                            max: (paletteIds.Length - 1),
+                            min: 0
+                        )],
+                        paletteIds: paletteIds
+                    );
+                    _ = builder.EndInstance();
+                }
+
+                return;
+            }
+
+            _ = builder.BeginInstance(
+                boundCenter: instance.Origin,
+                boundRadius: (reach + PlacementBoundMargin),
+                cameraHidden: (bakedMesh is not null)
+            );
+            if (scoped) {
+                _ = builder.PushField(compose: SdfBlendOp.Union);
+            }
+            EmitPlacedShapes(
+                builder: builder,
+                creation: creation,
+                inScope: scoped,
+                paletteIds: paletteIds,
+                placement: placement,
+                placementOrigin: instance.Origin,
+                placementRotation: rotation,
+                reflectionNormal: instance.ReflectionNormal
+            );
+            if (hasText) {
+                // A lambda cannot read a struct's fields, so a run's material reads the palette through a local.
+                var ids = paletteIds;
+
+                CreationStampEmitter.EmitText(
+                    builder: builder,
+                    document: creation,
+                    transform: new CreationStampTransform(
                         Origin: instance.Origin,
                         Rotation: rotation,
                         Scale: placement.Scale,
                         ReflectionNormal: instance.ReflectionNormal
-                    );
-
-                    for (var shapeIndex = 0; (shapeIndex < creation.Shapes!.Count); shapeIndex++) {
-                        var shape = creation.Shapes[shapeIndex];
-                        // A fold's copies leave any shape-local sphere, so a domain-bearing shape keeps the
-                        // whole-creation bound.
-                        var (boundCenter, boundRadius) = ((shape.Domain is { Count: > 0 })
-                            ? (instance.Origin, reach)
-                            : CreationStampEmitter.ShapeStampBound(
-                                document: creation,
-                                shapeIndex: shapeIndex,
-                                transform: stampTransform
-                            )
-                        );
-
-                        _ = builder.BeginInstance(
-                            boundCenter: boundCenter,
-                            boundRadius: (boundRadius + PlacementBoundMargin)
-                        );
-                        CreationStampEmitter.EmitShapeStamp(
-                            builder: builder,
-                            document: creation,
-                            shapeIndex: shapeIndex,
-                            transform: stampTransform,
-                            material: paletteIds[Math.Clamp(
-                                value: (shape.Material ?? 0),
-                                max: (paletteIds.Length - 1),
-                                min: 0
-                            )],
-                            paletteIds: paletteIds
-                        );
-                        _ = builder.EndInstance();
-                    }
-
-                    return;
-                }
-
-                _ = builder.BeginInstance(
-                    boundCenter: instance.Origin,
-                    boundRadius: (reach + PlacementBoundMargin)
+                    ),
+                    fontFor: textCatalog!.Resolve,
+                    materialFor: run => ids[Math.Clamp(
+                        value: (run.Material ?? 0),
+                        max: (ids.Length - 1),
+                        min: 0
+                    )],
+                    textLayouts: textLayouts
                 );
-                if (scoped) {
-                    _ = builder.PushField(compose: SdfBlendOp.Union);
-                }
-                EmitPlacedShapes(
-                    builder: builder,
-                    creation: creation,
-                    inScope: scoped,
-                    paletteIds: paletteIds,
-                    placement: placement,
-                    placementOrigin: instance.Origin,
-                    placementRotation: rotation,
-                    reflectionNormal: instance.ReflectionNormal
-                );
-                if (hasText) {
-                    CreationStampEmitter.EmitText(
-                        builder: builder,
-                        document: creation,
-                        transform: new CreationStampTransform(
-                            Origin: instance.Origin,
-                            Rotation: rotation,
-                            Scale: placement.Scale,
-                            ReflectionNormal: instance.ReflectionNormal
-                        ),
-                        fontFor: textCatalog!.Resolve,
-                        materialFor: run => paletteIds[Math.Clamp(
-                            value: (run.Material ?? 0),
-                            max: (paletteIds.Length - 1),
-                            min: 0
-                        )],
-                        textLayouts: textLayouts
-                    );
-                }
-                if (
-                    scoped &&
-                    (creation.Noise is { } noise)
-                ) {
-                    CreationStampEmitter.EmitNoise(
-                        builder: builder,
-                        noise: noise,
-                        transform: new CreationStampTransform(
-                            Origin: instance.Origin,
-                            Rotation: rotation,
-                            Scale: placement.Scale,
-                            ReflectionNormal: instance.ReflectionNormal
-                        )
-                    );
-                }
-                if (scoped) {
-                    _ = builder.PopField();
-                }
-                _ = builder.EndInstance();
             }
-        );
-    }
-    private static int[] ResolvePalette(SdfProgramBuilder builder, WorldDefinition definition, WorldPrototype creation, Dictionary<string, int[]> paletteById) {
-        if (paletteById.TryGetValue(
-            key: creation.Id,
-            value: out var cached
-        )) {
-            return cached;
+            if (
+                scoped &&
+                (creation.Noise is { } noise)
+            ) {
+                CreationStampEmitter.EmitNoise(
+                    builder: builder,
+                    noise: noise,
+                    transform: new CreationStampTransform(
+                        Origin: instance.Origin,
+                        Rotation: rotation,
+                        Scale: placement.Scale,
+                        ReflectionNormal: instance.ReflectionNormal
+                    )
+                );
+            }
+            if (scoped) {
+                _ = builder.PopField();
+            }
+            _ = builder.EndInstance();
         }
-
-        var ids = RegisterPalette(
-            builder: builder,
-            definition: definition,
-            document: creation.Document,
-            tint: null
-        );
-
-        paletteById[creation.Id] = ids;
-
-        return ids;
     }
 
     /// <summary>Emits the construction probe's placement reservation: <paramref name="reservedCount"/> worst-case
@@ -454,8 +558,7 @@ public static class WorldPlacementStamper {
     /// distinct untinted creation; a tinted stamp (selection amber / change shimmer) registers its own lerped palette
     /// (act-scale rare, never steady-state).</summary>
     /// <param name="builder">The program builder.</param>
-    /// <param name="definition">The definition the rows belong to — what a state-bound palette color resolves
-    /// against.</param>
+    /// <param name="definition">The definition the rows belong to.</param>
     /// <param name="creations">The world's creation rows.</param>
     /// <param name="placements">The (possibly drag-composed) placement rows.</param>
     /// <param name="textCatalog">The packed world font catalog. Null omits creation text; local-world callers use
@@ -464,13 +567,30 @@ public static class WorldPlacementStamper {
     /// <param name="tintFor">Resolves a placement id's albedo tint (color + blend), or <see langword="null"/> untinted.</param>
     /// <param name="volumes">Receives each static placement instance's bounded volumes (<see cref="CreationDocument.Volumes"/>)
     /// baked into world space with no dynamic slot, or <see langword="null"/> when the caller renders none.</param>
-    public static void EmitStatic(SdfProgramBuilder builder, WorldDefinition definition, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<WorldPlacement> placements, PackedFontAtlasCatalog? textCatalog = null, Func<string, (Vector3 Color, float Blend)?>? tintFor = null, ICollection<SdfVolume>? volumes = null) {
+    /// <param name="meshDraws">Receives one draw per static placement instance of a prototype that carries a mesh
+    /// (<see cref="WorldPrototype.Mesh"/>), or <see langword="null"/> when the caller draws none.</param>
+    /// <param name="colors">The colors the build bakes, which a state-bound palette color resolves through, or
+    /// <see langword="null"/> to read them through a mirror of <paramref name="definition"/> built only when a bound
+    /// palette color is emitted (<see cref="WorldBakedColors.Of"/>).</param>
+    /// <param name="palettes">The owner's palettes, reused across its rebuilds so a warm emission allocates none, or
+    /// <see langword="null"/> for palettes this emission keeps alone.</param>
+    /// <param name="bakedMeshFor">Returns a prototype's baked mesh when the presentation draws its bake, or
+    /// <see langword="null"/>: its untinted placements then draw that mesh, and keep their field camera-hidden so it still
+    /// casts shadows and occludes. A creation carrying text or noise relief, which its bake does not hold, draws through
+    /// its field. Collected only with <paramref name="meshDraws"/>.</param>
+    public static void EmitStatic(SdfProgramBuilder builder, WorldDefinition definition, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<WorldPlacement> placements, PackedFontAtlasCatalog? textCatalog = null, Func<string, (Vector3 Color, float Blend)?>? tintFor = null, ICollection<SdfVolume>? volumes = null, ICollection<SdfMeshDraw>? meshDraws = null, WorldBakedColors? colors = null, WorldStaticPalettes? palettes = null, Func<string, SdfMesh?>? bakedMeshFor = null) {
         var worldSeed = (definition.Generation?.WorldSeed ?? 0UL);
-        var paletteById = new Dictionary<string, int[]>(comparer: StringComparer.Ordinal);
+        var baked = (colors ?? WorldBakedColors.Of(definition: definition));
+        var registered = (palettes ?? new WorldStaticPalettes());
+
+        registered.Begin();
 
         WorldBootWork.Count(kind: WorldBootWork.ShapeBuilds);
 
-        foreach (var placement in placements) {
+        // Indexed rather than foreach over the list's interface, which would box an enumerator on every emission.
+        for (var placementIndex = 0; (placementIndex < placements.Count); placementIndex++) {
+            var placement = placements[placementIndex];
+
             if (
                 (WorldDefinitionRows.FindCreation(
                 creations: creations,
@@ -486,15 +606,14 @@ public static class WorldPlacementStamper {
 
             var tint = tintFor?.Invoke(arg: placement.Id);
             var paletteIds = ((tint is null)
-                ? ResolvePalette(
+                ? registered.Resolve(
                     builder: builder,
-                    creation: creation,
-                    definition: definition,
-                    paletteById: paletteById
+                    colors: baked,
+                    creation: creation
                 )
                 : RegisterPalette(
                     builder: builder,
-                    definition: definition,
+                    colors: baked,
                     document: creation.Document,
                     tint: tint
                 )
@@ -508,10 +627,30 @@ public static class WorldPlacementStamper {
                 placement: placement,
                 textCatalog: textCatalog,
                 worldSeed: worldSeed,
-                volumes: volumes
+                volumes: volumes,
+                mesh: (((meshDraws is not null) && (creation.Mesh is { } mesh))
+                    ? MeshOf(mesh: mesh)
+                    : null),
+                meshMaterial: paletteIds[Math.Clamp(
+                    value: (creation.Mesh?.Material ?? 0),
+                    max: (paletteIds.Length - 1),
+                    min: 0
+                )],
+                meshDraws: meshDraws,
+                bakedMesh: (((meshDraws is not null) && (tint is null) && DrawsItsBake(creation: creation.EngineDocument))
+                    ? bakedMeshFor?.Invoke(arg: placement.ShownPrototypeId)
+                    : null)
             );
         }
     }
+
+    // Whether a creation's bake holds everything its placements show: a bake is the creation's contact field, so text
+    // runs and noise relief, which only its presentation carries, keep it drawing through its field.
+    private static bool DrawsItsBake(CreationDocument creation) => (
+        (creation.TextRuns is not { Count: > 0 }) &&
+        (creation.Noise is null)
+    );
+
     /// <summary>The emitted instance count of one placement, including pattern/sampled and reflected copies.</summary>
     /// <param name="placement">The placement row.</param>
     /// <param name="worldSeed">The world's reroll seed (<c>generation.worldSeed</c>) — resolves a Noise/Scatter
@@ -526,10 +665,39 @@ public static class WorldPlacementStamper {
             mirror: WorldPlacementStamp.MirrorFor(placement: placement)
         );
     }
-    /// <summary>Whether a creation row animates through timeline frames or drivers — the static/animated fork every consumer
-    /// shares.</summary>
+    /// <summary>Whether a creation row animates — the static/animated fork every consumer shares. A driver or an
+    /// inverse-kinematics effector animates; a timeline frame animates only where one of its transforms differs from its shape's authored position, rotation or
+    /// scale (a state-bound value always differs from a literal). A creation whose frames carry no transforms, or only
+    /// its shapes' authored poses, moves nothing, so it stamps statically.</summary>
     /// <param name="creation">The creation row.</param>
-    public static bool IsAnimated(WorldPrototype creation) => ((creation.Document.Frames is { Count: > 0 }) || (creation.Document.Drivers is { Count: > 0 }));
+    /// <returns><see langword="true"/> when the creation's drivers, effectors or frames move a shape.</returns>
+    public static bool IsAnimated(WorldPrototype creation) {
+        var document = creation.Document;
+
+        if (
+            (document.Drivers is { Count: > 0 }) ||
+            (document.Effectors is { Count: > 0 })
+        ) {
+            return true;
+        }
+
+        var shapes = (document.Shapes ?? []);
+
+        foreach (var frame in (document.Frames ?? [])) {
+            foreach (var transform in (frame.Transforms ?? [])) {
+                foreach (var shape in shapes) {
+                    if (
+                        (shape.Id == transform.Id) &&
+                        (!Equals(objA: shape.Position, objB: transform.Position) || !Equals(objA: shape.Rotation, objB: transform.Rotation) || !Equals(objA: shape.Scale, objB: transform.Scale))
+                    ) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
     /// <summary>Whether a placement renders as a STATIC furniture stamp — not when it is animated (the stamp pool replays
     /// it), not when it INHABITS (a live body renders its creation through a body-rooted stamp instead), and not when it
     /// ATTACHES (the stamp pool roots it on a live body's pose plus the facet's local offset, so its authored transform

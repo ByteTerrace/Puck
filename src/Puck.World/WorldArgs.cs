@@ -57,9 +57,11 @@ internal static class WorldArgs {
     /// <param name="max">The inclusive upper bound.</param>
     /// <param name="fallback">The default when the token is absent, or <see langword="null"/> to require it.</param>
     /// <param name="value">The parsed (or fallback) value; <c>0</c> on failure.</param>
+    /// <param name="count">The tokens the verb reads as positional values, when a trailing option token (such as
+    /// <c>body.engage</c>'s <c>capture:on</c>) has been read off the end, or <see langword="null"/> for every token.</param>
     /// <returns>Whether a valid index (or the fallback) was resolved.</returns>
-    public static bool TryParseIndex(in WireArgs args, int at, int min, int max, int? fallback, out int value) {
-        if (args.Count <= at) {
+    public static bool TryParseIndex(in WireArgs args, int at, int min, int max, int? fallback, out int value, int? count = null) {
+        if ((count ?? args.Count) <= at) {
             value = (fallback ?? 0);
 
             return fallback.HasValue;

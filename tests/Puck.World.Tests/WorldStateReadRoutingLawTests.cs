@@ -230,7 +230,7 @@ public sealed class WorldStateReadRoutingLawTests {
         );
 
         Assert.Equal(
-            actual: mirror.Register(
+            actual: mirror.Bind(
                 binding: in binding,
                 conversion: WorldStateConversion.Number
             ),
@@ -429,7 +429,7 @@ public sealed class WorldStateReadRoutingLawTests {
             nextInputTick: static () => 6UL,
             observe: sink => {
                 remoteSink = sink;
-                sink.DeliverDefinition(definition: remote);
+                sink.DeliverDefinition(definition: remote, version: default);
                 sink.DeliverSnapshot(snapshot: new WorldSnapshot(
                     Authority: "north",
                     EngineTick: (5UL * 1680UL),
@@ -450,7 +450,7 @@ public sealed class WorldStateReadRoutingLawTests {
             identity: "boot",
             nextInputTick: static () => 2UL,
             observe: sink => {
-                sink.DeliverDefinition(definition: local);
+                sink.DeliverDefinition(definition: local, version: default);
                 sink.DeliverSnapshot(snapshot: new WorldSnapshot(
                     Authority: "boot",
                     Entries: ReadOnlyMemory<EntitySnapshot>.Empty,
@@ -488,6 +488,18 @@ public sealed class WorldStateReadRoutingLawTests {
             )],
             Version: WorldCameraProgram.CurrentVersion
         );
+
+        // The program is no document's, so both mirrors register its operand as a document's manifest would.
+        var slot = routed.Bind(
+            conversion: WorldStateConversion.Number,
+            token: "state.heading"
+        );
+
+        _ = client.StateMirror.Bind(
+            conversion: WorldStateConversion.Number,
+            token: "state.heading"
+        );
+
         var anchor = new SdfAnchor(
             Orientation: Quaternion.Identity,
             Position: Vector3.Zero
@@ -520,10 +532,6 @@ public sealed class WorldStateReadRoutingLawTests {
         );
 
         // A later delivery from the remote authority moves the routed read, and only through the remote stamp.
-        var slot = routed.RegisterToken(
-            conversion: WorldStateConversion.Number,
-            token: "state.heading"
-        );
 
         Assert.True(condition: routed.TryNumber(
             slot: slot,
@@ -551,7 +559,8 @@ public sealed class WorldStateReadRoutingLawTests {
                 Everything: false,
                 MovedRows: new[] { 1 },
                 Tick: 5UL
-            )
+            ),
+            version: default
         );
         Assert.Same(
             actual: client.StateMirrorFor(endpoint: endpoint),
@@ -580,14 +589,14 @@ public sealed class WorldStateReadRoutingLawTests {
         var definition = Fixtures.BuildDocument().WithWorldState(rows: rows);
         var session = new WorldSessionMirror(placeholder: definition);
 
-        session.DeliverDefinition(definition: definition);
+        session.DeliverDefinition(definition: definition, version: default);
 
         var state = session.FollowState();
         var view = new WorldDocumentStateView(definition: () => definition);
         var slots = new int[rows.Length];
 
         for (var index = 0; (index < rows.Length); index++) {
-            slots[index] = state.Register(
+            slots[index] = state.Bind(
                 binding: new StateBinding(
                     Key: null,
                     Row: $"row{index}",
@@ -625,7 +634,8 @@ public sealed class WorldStateReadRoutingLawTests {
                 stamp: Stamp(
                 moved: [moved],
                 tick: tick
-            )
+            ),
+            version: default
             );
             before = Reads(mirror: state);
             _ = session.FollowState();
@@ -649,14 +659,16 @@ public sealed class WorldStateReadRoutingLawTests {
             stamp: Stamp(
             moved: [moved],
             tick: 5UL
-        )
+        ),
+        version: default
         );
         session.DeliverState(
             definition: definition,
             stamp: Stamp(
             moved: [moved],
             tick: 6UL
-        )
+        ),
+        version: default
         );
         before = Reads(mirror: state);
         _ = session.FollowState();
@@ -673,11 +685,11 @@ public sealed class WorldStateReadRoutingLawTests {
         )]);
         var session = new WorldSessionMirror(placeholder: definition);
 
-        session.DeliverDefinition(definition: definition);
+        session.DeliverDefinition(definition: definition, version: default);
 
         var state = session.FollowState();
 
-        _ = state.RegisterToken(
+        _ = state.Bind(
             conversion: WorldStateConversion.Number,
             token: "state.gauge"
         );
@@ -695,7 +707,8 @@ public sealed class WorldStateReadRoutingLawTests {
                         Everything: false,
                         MovedRows: moved,
                         Tick: tick
-                    )
+                    ),
+                    version: default
                 );
                 _ = session.FollowState();
             }

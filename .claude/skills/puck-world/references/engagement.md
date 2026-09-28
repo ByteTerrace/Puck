@@ -80,9 +80,10 @@ Button elements compare the RAW `FixedQ4816` value against
 `WorldChannelTable.DefaultBinaryThreshold`, never a float round-trip; stick axes
 canonicalize to -1..1 and triggers to 0..1 in the fixed-point domain first.
 
-None of the four shipped worlds authors an engaged screen, so there is no worked
-example to cite — the nexus's four portal placements are inert in ENGAGEMENT scope
-only: their faces render their resolved sources, nothing engages them.
+The arcade district (`modules/arcade.world.json`) is the worked example: its
+cabinet screens route engageable with kit `arcadePad`. No shipped world authors a
+portal face; the `portal-window` canary's fixture is the worked portal example, and
+a portal face shows its destination without being engageable.
 
 ## The command kinds
 
@@ -218,10 +219,41 @@ screen maps a pointer ray from the row alone: `WorldScreenMappings.Of(screen,
 source, width, height)` publishes the row's `SourceMapping` (the face frame, the
 whole source, the glass bezel as an exact-inverse warp), and the ray arrives as
 the `source.pointer.origin`/`source.pointer.direction` Axis3D commands
-(`SourcePointerCommands.TryReadRay`), quantized once. `world.screens` echoes
-`input:<destination>` per screen. No module registers the pointer commands and
-no machine reads a mapped pixel yet; that wiring is P13b in
-`docs/plans/rendering.md`, and the `rendering` skill owns the mapping itself.
+quantized once at the seat verbs `PlayerCommandModule` registers.
+`SeatController.HeldIntent` folds them into `PlayerIntent.SourceRay`, which
+every intent path carries behind one flag byte; on a windowed host
+`WorldPointerRayCapture` produces them from the OS pointer over its seat's
+camera (`SourceRay.Through`) and holds them with `InputRouter.Sustain`, so
+every tick carries the ray. A typed `source.pointer.origin`/`direction` line
+holds its half through the same `Sustain` until it is typed again,
+`source.pointer.clear` ends both halves, or the seat is vacated
+(`PlayerRoster.SlotVacated`, which the router answers by ending every value the
+slot sustained). The typed aim and the capture share one sustained value per
+half: the later write rides, and the capture ending its ray ends that value
+whichever wrote it. A rule reads the hit as
+`$pointer:<seat>:<screenIndex>:x|y|on` (or `press:<channelName>`, that
+seat's channel while it points there; `any` in place of the seat reads the
+first seat, then live session by ordinal, holding `Control` over the screen
+whose ray lands on it), mapped in the tick through
+`WorldScreenMappings.Normalized` (source-normalized `x`/`y` in `[0, 1)`, `on`
+1 on the source, all 0 otherwise); a screen whose `input` is not `Simulation`
+is refused for it at compile time. `world.screens` echoes `input:<destination>`
+and the mapping the presentation publishes for the row (named by its source
+instance, at its image's extent) per screen, and `body.channels` echoes the
+seat's ray and hits. A machine reads the hit as a light gun: the fold aims each
+screen application's pad (`MachinePadState.Pointer`, a `MachinePointer` in
+1/65536 fractions of the output) with `WorldEngagement.Aim`, which maps the
+applied body's `SourceRay` through the same `WorldScreenMappings.Normalized`
+mapping, cached per row, and leaves the gun off for no ray, a miss, the bezel or
+a non-`Simulation` screen. So the gun reaches a machine only while the seat holds
+an application onto the screen (mirrored is enough), and its trigger is a kit
+`pad` button. The Humble brick puts the aimed pixel's brightness on its infrared
+receive line (`LightGunComponent`); the advanced brick ignores the pointer. An
+authored cartridge reads it through the `$light` operand (`rom-forge`), and the
+headless `light-gun` canary is the stdin recipe: `body.engage` the screen,
+type `source.pointer.origin`/`direction` once per aim, `world.wait` the ticks
+the aim should hold, read the cartridge's published byte through a memory
+binding, and end with `source.pointer.clear`. The `rendering` skill owns the mapping itself.
 
 ## `Dissolve` — three outcomes, no repair
 
@@ -248,10 +280,20 @@ and addon read pump and before machine stepping, visits EVERY live body once:
    value, so this costs nothing).
 3. For each member: the own-body member routes nowhere (the avatar's own
    integration in `WorldBody.Advance` IS its delivery, which the latch just
-   enabled); a screen member masks `body.EngagedIntent` by `Reach`, translates
-   through the kit's compiled pad map, and merges into the screen's pad
-   (`MachinePadState.Merge`: buttons OR, sticks sum+clamp); a body member appends
-   a `BodyRouteContribution(TargetBody, Principal, Intent)`.
+   enabled); a screen member masks `body.EngagedIntent` by the screen's LIVE
+   reach, translates through its live kit's compiled pad map, aims the pad's
+   light gun through the screen's live mapping (`Aim`, above), and merges into
+   the screen's pad (`MachinePadState.Merge`: buttons OR, sticks sum+clamp, the
+   first on-screen pointer wins); a body member masks by its application's
+   `Reach` and appends a `BodyRouteContribution(TargetBody, Principal, Intent)`.
+
+A screen's policy (reach, pad kit, light-gun mapping) and a kit's pad map are
+read from the rows the live document holds (`WorldEngagement.PolicyOf`/`PadOf`),
+compiled once per row object and kept while the document still holds that row,
+so a `world.row.set` of the screen or kit, or a reload, reaches the next fold
+with no re-compose (`EngagementPolicyLiveEditLawTests`). The `Kit`/`Reach` a
+screen application records are the policy at compose, for the echoes; the fold
+does not read them. Channels are boot-fixed and compile once.
 
 `body.EngagedIntent` is captured on EVERY `WorldBody.Advance` call, so it is
 available whether or not the avatar is idle. The server passes
@@ -266,15 +308,20 @@ write path for possession.
 
 ## `body.engage` grammar
 
-`body.engage <screen>|screen:<n>|body:<n> [player] [capture:on|off]`. The
+`body.engage <screen>|screen:<n>|body:<n> [body] [capture:on|off]`. The
 bare-integer form is a screen index; `body:<n>`/`screen:<n>` reuse
 `GrantSubject.TryParse`'s own grammar (the same tokens `world.grant`/
 `world.revoke` accept). `capture:on|off`, when present, is ALWAYS the trailing
 token, and maps to `ComposeControl.Exclusive` — on drops the own-body
 application, off retains it. A body target skips every screen-only policy check
 (engageable, auto-insert, machine presence, engage radius); it only needs a live
-body at that index. The player defaults to 1 and is bounded to 1..128.
-`body.disengage [player]` submits `DissolveControl`.
+body at that index. The driving body is an optional 0-based body index, like
+every `body.*` verb's: it defaults to body 0 (seat 1's body), is bounded to
+`0..population.capacity - 1`, and `body.engage <target> 1` is driven by body:1,
+seat 2's body. `body.engage` and `body.disengage [body]` resolve it through the
+one `ResolveTarget` the other `body.*` verbs use, a stripped `capture:` token
+counting as absent (`EngageBodyIndexLawTests`). `body.disengage` submits
+`DissolveControl`.
 
 ## Replay visibility
 
@@ -343,11 +390,14 @@ read `WorldEngagement.PlayersOn(screenIndex)`,
 membership). `body.channels` prints an
 `applications=<target>[/<kit>](mask=0x…),…` segment ahead of the per-channel fold
 breakdown; the own-body member is listed like any other, so its ABSENCE (capture)
-is legible rather than inferred.
+is legible rather than inferred. `screen.state` ends its engagement segment with
+`gun=off` or `gun=(<x>, <y>)`, the tick's merged aim as source fractions
+(`WorldEngagement.PointerOn`), the same numbers `body.channels` prints for the
+hit.
 
 ## Verifying
 
-Run the game; drive `body.engage <target> [player] [capture:on|off]` with a
+Run the game; drive `body.engage <target> [body] [capture:on|off]` with a
 control pair: an actor holding `Control` over the target succeeds, a revoked
 actor refuses loudly. For possession, grant Drive over the target body first
 (`world.grant seatN drive body:<n>`) — Control alone moves nothing. Exercising

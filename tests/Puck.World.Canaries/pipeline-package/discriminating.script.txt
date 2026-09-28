@@ -8,6 +8,6 @@ pipeline.capture tint {run}/source.png
 pipeline.wait tint captured 10
 # The row names the relocated package, one of whose files the runner altered after packaging, so loading it is refused
 # by the file's pin before anything compiles.
-world.row.set views.pipelines {"name":"tint","source":"{run}/tint"}
+world.row.set views.graphs {"name":"tint","source":"{run}/tint"}
 pipeline.reload tint
 pipeline.wait tint compiled 40

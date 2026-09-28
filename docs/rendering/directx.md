@@ -22,14 +22,18 @@ buffers and images, shared-surface export, and queue submission. Swapchains and 
 
 Compute, graphics, and readback use one legacy resource-barrier model on the
 same direct queue. Texture owners register their initial state and remove it
-on disposal; command recorders share that state across compute/fullscreen
-passes. Buffer states last only for one command list, because Direct3D 12
-returns every buffer to `COMMON` after each `ExecuteCommandLists`. A buffer's
+on disposal; the one recorder, `DirectXGpuRecorder`, carries that state across
+compute and graphics passes. Buffer states are tracked per command list,
+because Direct3D 12 returns every buffer to `COMMON` after each `ExecuteCommandLists`. One
+submission of several lists carries a buffer's state from each list to the next, so a buffer
+transitions in only one list of a submission: a shader pipeline's copy list hands a copied
+package region to its readers, and a host buffer port's copied buffer is handed over by its
+readers' planned barriers in the pass lists submitted after it. A buffer's
 first transition in a list starts from the state its declared prior access
-implies, so callers declare the access that actually preceded it: the SDF
-engine declares each pass's buffer uses in `SdfFrameBufferPlan`, and a shader
-pipeline takes each access's prior state from its plan (`ShaderPipelineAccess`),
-which records every pass's ordered accesses with the prior state and barrier. A read through a
+implies, so callers declare the access that actually preceded it: every graph
+pass, an SDF view's passes among them, takes each access's prior state from its
+plan (`ShaderPipelineAccess`), which records every pass's ordered accesses with
+the prior state and barrier. A read through a
 read-write binding is declared with the write the binding permits, because
 the buffer must stay in `UNORDERED_ACCESS` for it. An upload-heap buffer stays
 in `GENERIC_READ` for its whole life. A write followed by another access in
@@ -79,16 +83,22 @@ single-sample 2D texture on a default heap; extent, format, heap flags, initial
 state, resource flags and optimized clear value vary). `DirectXTextures.OfUsage`
 and `InitialStateOf` give an image the flags, clear value and initial state its
 declared `GpuImageUsage` needs: `DirectXGpuImage`, `DirectXGpuExportableImage`
-and the surface upload's texture all go through them.
+and the surface upload's texture all go through them. A depth attachment's
+texture is created from its attachment (`IGpuImageFactory.CreateDepth`) with
+that attachment's `GpuDepthAttachment.ClearDepth` as its optimized clear value,
+so a render pass clearing it takes the fast path and the debug layer reports no
+mismatched clear; `Create` refuses a depth attachment.
 
 A Direct3D 12 render pass is data: `DirectXGpuRenderPass` holds the
 description's DXGI formats, which a pipeline state object is created for, and
 `DirectXGpuFramebuffer` owns the render-target and depth-stencil views of the
-images it binds. `DirectXGpuCommandRecorder.BeginRenderPass` transitions each
+images it binds. `DirectXGpuRecorder.BeginRenderPass` transitions each
 attachment into its attachment state, clears an attachment that clears with
 `ClearRenderTargetView` or `ClearDepthStencilView` (a clear inside a render
-pass is disallowed), and begins a first-class render pass whose ending access
-stores or discards; `EndRenderPass` leaves a color attachment declared
+pass is disallowed; a depth attachment clears to its
+`GpuDepthAttachment.ClearDepth`), begins a first-class render pass whose
+ending access stores or discards, and sets the viewport and scissor to the
+area the pass draws; `EndRenderPass` leaves a color attachment declared
 shader-readable in the shader-read state and every other attachment where it
 was. A geometry buffer is an upload-heap buffer bound by its GPU virtual address,
 so it needs no view object of its own: `BindVertexBuffer` and `BindIndexBuffer`
@@ -99,6 +109,13 @@ the pass has a depth attachment, a depth test that writes; the pipeline-library
 identity covers the formats, the depth test and each attribute's format, offset
 and semantic index. A framebuffer or pipeline that does not match its render
 pass is refused before the device is touched.
+
+A command list has separate compute and graphics root signatures, so
+`BindPipeline`, `BindDescriptorSet` and `PushConstants` name their
+`GpuBindPoint`: a compute pass binds and pushes at `Compute`, a draw at
+`Graphics`. The recorder cannot tell a wrong bind point from the handle, and
+one writes to a root signature the bound pipeline never set, which is
+undefined behavior on the device.
 
 Top-level helpers: `DirectXException` (carries the failing operation + `HRESULT`) and
 `DirectXFeatureLevel` (a managed mirror of `D3D_FEATURE_LEVEL`).
@@ -143,6 +160,17 @@ it like any other Puck handle owner.
 | Device creation | `IDirectXDeviceApi` | `D3D12CreateDevice` | `DirectXDevice` (owns `ID3D12Device`) |
 | Software fallback | `IDirectXDeviceApi` | `IDXGIFactory4::EnumWarpAdapter` + `D3D12CreateDevice` | `DirectXDevice` (WARP) |
 | Memory profile | `IDirectXDeviceApi` | `ID3D12Device::CheckFeatureSupport` (architecture, options 16), `IDXGIAdapter1::GetDesc1` | `GpuMemoryProfile` |
+| Binding capabilities | `IDirectXDeviceApi` | `ID3D12Device::CheckFeatureSupport` (options, root signature, shader model, options 19) | `GpuDeviceCapabilities` |
+
+Every feature query goes through `DirectXFeatureReads` over an
+`IDirectXFeatureSupport`, which returns the query's `HRESULT` rather than
+throwing. A runtime that does not know a feature, root signature version or
+shader model answers `E_INVALIDARG`, and each read falls back as its
+documentation states: options 19 to the heap sizes every binding tier
+guarantees, the version and model queries to the next one down, the
+architecture query to the default memory profile, and the Shader Model floor to
+below. A bring-up that fails after its device exists releases the device and
+everything created with it, so the context's next use creates the device again.
 
 ---
 
@@ -161,20 +189,157 @@ fills it from three native structures:
 - `D3D12_FEATURE_DATA_D3D12_OPTIONS16`: a discrete adapter's dedicated memory is
   host-writable only when it supports GPU upload heaps.
 
+A unified-memory profile reports `UnifiedMemory`. On a discrete adapter with
+GPU upload heaps, a region's ring lives in them
+(`IGpuBufferFactory.CreateHostVisibleDeviceLocal` creates a mapped buffer on a
+`GPU_UPLOAD` heap, counted under `memory.directx`); on unified memory it is an
+ordinary `UPLOAD`-heap buffer.
+
 A device that will not answer the architecture query reports the default
-profile, which selects the staged copy. What the profile is for, and how a
+profile, which selects the staged copy.
+
+A staged region's copy writes its destination as a UAV, and the buffer barrier
+after it moves the buffer into the state its readers need.
+`DirectXBufferStates.RequiredState` reads the barrier's stages: a shader read by
+the fragment stage needs `ALL_SHADER_RESOURCE` (`NON_PIXEL_SHADER_RESOURCE |
+PIXEL_SHADER_RESOURCE`), which covers a compute read too, and a compute-only
+read keeps `NON_PIXEL_SHADER_RESOURCE`. What the profile is for, and how a
 policy is chosen from it, is described under
 [the Vulkan memory profile](vulkan.md#memory-profile).
 
 ---
 
+## Descriptor heaps
+
+A device has two shader-visible descriptor heaps, `DirectXShaderVisibleHeaps`:
+a CBV/SRV/UAV heap of the size the device reports
+(`GpuDeviceCapabilities.ViewHeapSize`) and a sampler heap of the smaller of its
+reported `SamplerHeapSize` and `StaticSamplerHeapSize` (options 19's
+`MaxSamplerDescriptorHeapSizeWithStaticSamplers`). The sampler heap stays within
+the static-sampler limit because every recording binds the one sampler heap and
+every pipeline not created from a group plan has static samplers in its root
+signature; past that limit the debug layer rejects each draw and dispatch that
+uses one. `DirectXGpuBindings` creates them when the context brings a
+device up and releases them when the context releases it, on `Recreate` and
+`Dispose`, so a recreated device has a fresh pair. The heaps never grow.
+
+- **A pool is a range.** `CreatePool` admits one range of the view heap through
+  the device's `GpuDescriptorHeapBudget`, and a pool holding samplers one
+  range of the sampler heap too, and `DestroyPool` returns them, so the next
+  pool that fits receives them. `AllocateSet` places each set inside its
+  pool's ranges, and its handle is the pool's: `DestroyPool` frees the handles
+  of every set allocated from it. A pool no free range holds is refused with
+  `GPU_DESCRIPTOR_HEAP` (`GpuDescriptorHeapRefusalException`), and so is a
+  pool whose views fit and whose samplers do not.
+- **Owners are admitted before they allocate.** `IGpuBindings.CanAdmit` checks
+  a candidate's whole statement of pools and allocates nothing. The pipeline
+  node checks a candidate at install and a preview when it is selected;
+  an SDF residency's tables check through `SdfWorldTables.CheckAdmission`
+  before they allocate, so the residency records the refusal like any other
+  failed build of its tables and tries again only when the build's inputs
+  change; a
+  pipeline candidate's statement includes its graph's one region-copy pool,
+  which reserves a copy set per frame slot for every package region and host
+  buffer port that stages, so binding a port later takes no range. A candidate
+  that
+  does not fit is refused by name, and whatever is installed
+  keeps presenting. Heap space is a build input for that refusal alone: the
+  heap's `GpuDescriptorHeapBudget.ReleaseRevision`, read through
+  `IGpuBindings.HeapReleaseRevision`, moves whenever a pool's ranges are
+  returned, and a holder or a pipeline candidate refused by the heap tries once more
+  when it has moved.
+- **A group's samplers are descriptors.** A pipeline created from a
+  `GpuPipelineLayoutDescription` binds through the root signature
+  `DirectXRootSignatures.CreateLayout` creates from `DirectXRootLayout.Plan`: a
+  view table per group, a sampler table for a group that holds samplers, the
+  pushed index as one root constant at `b0` in space 4, and no static sampler.
+  A set of such a group takes its view table from its pool's view range and
+  its sampler table from its pool's sampler range. `WriteConstantBuffer` and
+  `WriteSampledImage` create their views in the view table, and `WriteSampler`
+  creates the sampler descriptor in the sampler table from the filter its
+  handle names (clamp-to-edge, as the static samplers are); a write of a kind
+  the group does not declare at that binding is refused. Every other pipeline
+  still reads its samplers as static samplers in its root signature.
+- **Every command list binds the pair once.** `DirectXGpuRecorder.BeginCommandBuffer`
+  binds both heaps after the reset, so `BindDescriptorSet` sets only
+  descriptor tables: a group's set sets the view table and then the sampler
+  table the bound pipeline's plan gives its group, and any other set the one
+  table. A set bound at a group other than its own, or at a group the pipeline
+  does not have, is refused by name.
+- **A clear takes a slot, not a heap.** A storage clear needs a GPU handle in
+  the bound view heap and a CPU handle in a CPU-only heap. The device keeps
+  `DirectXShaderVisibleHeaps.ClearDescriptors` of each: a range of the view heap
+  admitted with the heaps, mirrored slot for slot by one CPU-only heap. The
+  command list that records a clear holds its slot until it is reset or
+  released.
+- **The heaps count as device memory.** Both shader-visible heaps count under
+  `memory.directx` as device-local allocations of their descriptors at the
+  device's increment, and their release ends those entries before the device's
+  teardown ends the device.
+
+- **No other shader-visible heap exists.** `DirectXDescriptorHeaps.Create`
+  makes only CPU-only heaps (render targets, depth, the clear mirror);
+  `CreateShaderVisible` is called for the device's pair alone and counts each
+  heap it creates into `DirectXGpuBindings.ShaderVisibleHeapsCreated`, which
+  reads two per device brought up (`DirectXShaderVisibleHeapsLawTests`).
+
+The surface compositor in `Puck.DirectX.Presentation` records on command lists
+of its own, but its descriptors live in the device's heaps. It writes the root's
+surface into the back buffer through the
+[display encode](../reference/shaders.md#the-display-encode), the device's pass
+pipeline for `DisplayEncodeLayout` (the source at `t0`, its sampler at `s1` and
+the encode block at `b2`, space 3), leased from `GpuPassPipelineCache` for a
+render pass in the swap chain's format. The compositor admits one pool for that
+group through `IGpuBindings.CanAdmit`, allocates its one set, writes the sampler
+once with a linear filter (`WriteSampler`, clamp-addressed as
+`DirectXGpuBindings.ClampSampler` states) and the encode block for the chosen
+output at the host's paper-white level once, and writes the source image through
+`WriteSampledImage` whenever the source resource changes. Its
+`DirectXDrawCommand` names the group, the device's two heaps and the set's two
+tables, which `DirectXCommandListRecorder` binds at the group's `ViewTableIndex`
+and `SamplerTableIndex`. A CPU surface reaches the encode through the device's
+`IGpuSurfaceUpload`, whose texture holds no descriptor of its own.
+
+The compositor creates its swap chain as SDR in the preferred 8-bit unsigned
+normalized format, then chooses its `DisplayOutput` through
+`DisplayOutput.TrySelect` from what the display reports: SDR in either 8-bit
+order always, and HDR10 and scRGB when the containing output's
+`IDXGIOutput6::GetDesc1` color space is `G2084_NONE_P2020`, which is how Windows
+reports HDR turned on. A requested HDR output (`PresentationOptions.ColorSpace`,
+which every host leaves at `Srgb`) resizes the buffers into its format and sets
+its color space when `CheckColorSpaceSupport` allows presenting it, and returns
+to SDR otherwise. `DirectXSurfaceCompositor.Output` exposes the choice, which
+`ISurfacePresenter.Output` reports for either backend.
+
+---
+
 ## Result handling
 
-Native calls return `HRESULT`. The internal `HResultExtensions.ThrowIfFailed(operation)`
+Native calls return `HRESULT`. `HResultExtensions.ThrowIfFailed(operation)`
 turns a failing code into a `DirectXException` carrying the operation name and the
 `HRESULT`, matching `Puck.Vulkan`'s `VulkanException` pattern. (`EnumWarpAdapter` has no
 non-throwing overload and surfaces the framework's COM exception directly—it effectively
 never fails.)
+
+A removed device is not an ordinary failure. `DXGI_ERROR_DEVICE_REMOVED`,
+`DXGI_ERROR_DEVICE_RESET` and `DXGI_ERROR_DEVICE_HUNG` become the neutral
+`DeviceLostException`, which the host's device-loss recovery catches. The calls a
+removal reaches on a working device (mapping a resource, resetting and closing a
+command list, signalling a queue and arming a fence event) go through
+`DirectXCommandCalls` over an `IDirectXCommandCalls`, which calls each vtable slot
+and returns its `HRESULT`, because the generated wrappers throw a `COMException`
+that recovery never sees. The loss then carries the device's own
+`ID3D12Device::GetDeviceRemovedReason`, such as `DXGI_ERROR_DRIVER_INTERNAL_ERROR`
+for a page fault.
+
+A drain before releasing objects follows one rule: a removed device counts as
+drained. `DirectXCommandCalls.Drain` returns instead of throwing when the signal or
+the event arm reports a removal, because a removed device runs no further work and
+its fences read complete. Every release path drains that way (a surface upload's
+and an exportable image's `Dispose`, the context's own `Dispose`), so a node
+releasing its objects inside `IRenderRoot.OnDeviceLost` never throws. Every frame
+path waits through `SignalAndWait`, which throws, so a loss mid-frame reaches
+recovery.
 
 ---
 
@@ -186,7 +351,7 @@ driver. The file is named from the device identity the context read when it
 created the device, so an adapter whose `CheckInterfaceSupport` will not report
 the user-mode driver version still keeps its library on disk, under a driver
 version of zero. Every compute and graphics pipeline creation asks the library first,
-the presenter's blit included, and stores what it had to create. A pipeline's
+the presenter's display encode included, and stores what it had to create. A pipeline's
 name in the library is a hash of everything that defines it: its bytecode, its
 serialized root signature, and the fixed state the caller sets. A changed
 kernel is therefore a new name rather than a mismatch. The context writes the
@@ -204,6 +369,31 @@ same as on Vulkan, and so is retention: Direct3D 12 keeps its eight most
 recently used library files across all its adapter directories and deletes the
 rest when a device opens its file. See
 [the Vulkan pipeline cache](vulkan.md#pipeline-cache).
+
+## Waiting on another device
+
+A Direct3D 11 producer (a camera, a desktop capture) writes into simultaneous-access textures
+this device owns and orders its writes with a shared fence rather than a CPU wait or a keyed
+mutex. `DirectXGpuSurfaceExportFactory.CreateExportableFence` creates a
+`D3D12_FENCE_FLAG_SHARED` fence and its NT handle (`DirectXExportableFence`); the producer opens
+the handle through `ID3D11Device5::OpenSharedFence` and signals the next value after each write.
+The value rides the image's lease (`GpuImageLease.Wait`), and the node that samples the image adds
+it to the queue submitter with `IGpuQueueSubmitter.AddExternalWait` immediately before the
+submission that samples it (`LeaseRetireList.AddWaits`). `DirectXGpuQueueSubmitter` issues each wait as
+`ID3D12CommandQueue::Wait` immediately before its next submission's `ExecuteCommandLists`, so
+that submission and every later one on the queue wait on the GPU. The wait goes through
+`DirectXCommandCalls.QueueWait`, so a removal it meets is a `DeviceLostException`. A fence
+another device created opens through `IGpuSurfaceTransferFactory.TryImportFence` as a
+`DirectXSharedFence`. A Vulkan host allocates the targets and the fence on a headless Direct3D 12
+device on the render adapter and imports both (see [Vulkan](vulkan.md#waiting-on-another-device)).
+
+The other direction, an image this device writes and a Direct3D 11 device reads (a camera view
+exported to a probe), is ordered by the image's own fence: a `DirectXGpuExportableImage` this
+device writes creates its fence with `D3D12_FENCE_FLAG_SHARED` and an NT handle
+(`SharedFenceHandle`), and `CompleteWrite` queues the fence's next value with
+`ID3D12CommandQueue::Signal` behind the submission that wrote it and returns it. The reader opens
+the fence through `ID3D11Device5::OpenSharedFence` and queues `ID3D11DeviceContext4::Wait` for that
+value ahead of its reads, so neither device blocks.
 
 ## Constraints and invariants
 
@@ -228,11 +418,35 @@ rest when a device opens its file. See
 | `DirectXException` / `HResultExtensions` | The failing-`HRESULT`-to-exception seam every native call funnels through. |
 | `DirectXGpu*` (root and `Interop`) | The `Puck.Abstractions` GPU-contract implementations: compute pipelines, descriptor allocation, storage and geometry buffers, images, render passes and framebuffers, shared-surface export, queue submission. The image factories translate the neutral device context and pixel format once, through `DirectXGpuImageRequest.From`. |
 
+## Debug names
+
+Every object the backend creates carries a debug name taken from its creator,
+a `GpuObjectName` passed to the creating member of `GpuDeviceServices`. The
+name joins the owner (an SDF engine, a graph instance, a package), the part of
+it the object is (a table, a pipeline, a pass), an optional detail within that
+part, and an index for one of several alike, usually a frame slot:
+`sdf.world/program[1]`, `overlay/pass`, or `sdf.world/region-copies` for a
+pool. A name holds no handle, counter or clock, so an object has the same name
+on every run.
+
+`DirectXGpuObjectNaming` applies names through `ID3D12Object::SetName`, and
+only when the debug layer is on (`--debug-layers`). It names resources,
+pipeline states, command allocators and command lists; views, descriptor pools
+and sets, and render passes are not Direct3D 12 objects, so they carry no
+name. Otherwise naming returns before it formats anything, so a normal run
+builds no strings. The debug layer prints the name after the object, so a
+teardown leak reads
+`[d3d12-debug] live Live ID3D12Resource at 0x…, Name: law/leaked`;
+`DirectXDebugLayerLivenessTests` holds that.
+
 ## Verification
 
 `tests/Puck.DirectX.Tests` checks the backend's device-free decisions: which
 barrier a buffer transition records, and how the lazily created device context
-reports a device the host cannot create. It creates no Direct3D 12 device.
+reports a device the host cannot create. Its device laws run on a software
+(WARP) device without the debug layer, and skip on a host without one: the
+teardown's memory entries and the shader-visible heaps
+(`DirectXShaderVisibleHeapsLawTests`).
 Driver behavior is verified by running the engine on Direct3D 12 and by
 `puck parity`, which boots the authored parity world
 (`tests/Puck.Parity/parity.world.json`) offscreen once per backend and gives

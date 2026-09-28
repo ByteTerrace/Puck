@@ -129,11 +129,11 @@ the tick the model is off by.
 ## 3. Snapshots and host boundaries
 
 Both machines implement mid-frame `Snapshot`, `Restore`, and `Fork` through
-`Puck.GamingBricks`: `StateWriter`, `StateReader`, `SnapshotSection`, the FNV-1a
+`Puck.Machines`: `StateWriter`, `StateReader`, `SnapshotSection`, the FNV-1a
 fingerprint, and `SnapshotImage`, behind `ISnapshotable` components. Component
 identity and discovery order remain machine-specific.
 
-The DI-owning instance/fork/pool lifecycle also lives in `Puck.GamingBricks`, as
+The DI-owning instance/fork/pool lifecycle also lives in `Puck.Machines`, as
 one generic triad closed over an `ISnapshotableMachine` marker interface:
 `MachineInstance<TMachine, TConfiguration>`, `MachineFork<TMachine,
 TConfiguration>`, and `MachineInstancePool<TMachine, TConfiguration>`. Each
@@ -142,7 +142,7 @@ brick re-exposes its own closure under a bare name (`MachineFork`/
 `AgbMachineInstance` for `Puck.AdvancedGamingBrick`) through a `global using`
 alias in that project's `GlobalUsings.cs` — searching for a declared
 `class AgbMachineInstance` finds nothing; the type lives in
-`src/Puck.GamingBricks/MachineInstance.cs` under the generic name.
+`src/Puck.Machines/MachineInstance.cs` under the generic name.
 
 - Snapshot bytes are the state-of-record determinism surface.
 - Every component of both cores lists its snapshotted fields once, in a

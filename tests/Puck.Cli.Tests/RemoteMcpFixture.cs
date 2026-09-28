@@ -377,8 +377,7 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
 
             var registry = new CommandRegistry(modules: [new WorldStateCommandModule(
                 authority: new FixedAuthority(instance: m_instance),
-                echoes: new WorldDeferredVerbEchoes(),
-                link: link
+                echoes: new WorldDeferredVerbEchoes()
             )]);
 
             m_source = new TextCommandSource(registry: registry);

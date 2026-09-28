@@ -53,7 +53,7 @@ public sealed class WorldExpressionConverterLawTests {
     }
     [Fact]
     public void TheSchemaDescribesTheIr() {
-        var schema = WorldSchema.Export(postRenderExtensions: []);
+        var schema = WorldSchema.Export(postProcessPackages: []);
         var defs = schema.Common["$defs"]!.AsObject();
         var expression = defs["ExpressionProgram"]!.AsObject();
 

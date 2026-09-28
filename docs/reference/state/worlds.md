@@ -146,7 +146,7 @@ Puck.World extends the rule compiler the way any host does (see
   compile shares. Its operand family answers the reserved world channels:
   `$population`, `$physics:quiescent`, `$region:`, `$influence:`, `$machine:`,
   `$argmax:`, `$argmin:`, `$distance:`, `$los:`, `$upright:`, `$fact:`,
-  `$identity:`, `$nav:`, `$parked:`, `$link:`, `$channel:`, `$nearest:`,
+  `$identity:`, `$nav:`, `$parked:`, `$link:`, `$channel:`, `$pointer:`, `$nearest:`,
   `$clock:`, and `$board:cellOf:`. Its key family answers `$pair:`. Its effect arms cover body motion and
   impulses (`setVerticalVelocity`, `scaleVerticalVelocity`, `planarImpulse`,
   `applyRigidImpulse`), `startTimer`, `designate`, `emitCue`,

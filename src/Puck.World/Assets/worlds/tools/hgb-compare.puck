@@ -1,5 +1,6 @@
 schema: "puck.world.definition.v1"
 documentId: "puck-hgb-compare-v1"
+import "../quality"
 
 let eyeHeight = 1.5
 let eyeDistance = -5

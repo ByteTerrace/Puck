@@ -461,7 +461,7 @@ internal sealed class Win32SourceReaderPixelGraph : Win32SourceReaderCameraGraph
         Start(threadName: "camera-grabber");
     }
 
-    protected override bool IsLive => (m_stream?.FrameVersion > 0L);
+    protected override bool IsLive => (m_stream?.Version > 0L);
 
     protected override void ConfigureReader(IMFAttributes config) {
         // Color rides the video-processing reader for the NV12/YUY2 -> RGB32 converter. Infrared stays native end to
@@ -681,7 +681,7 @@ internal sealed class Win32SourceReaderPixelGraph : Win32SourceReaderCameraGraph
 /// device manager, the DXVA video processor converts each frame to ARGB32 on the GPU, and the worker copies the sample's
 /// texture into the next consumer-provisioned target, completing the copy before publishing the slot.</summary>
 [SupportedOSPlatform("windows10.0.10240")]
-internal sealed class Win32SourceReaderSharedGraph : Win32SourceReaderCameraGraph<Win32SharedStream>, ICameraKernelHost, IProbeInputResolver {
+internal sealed class Win32SourceReaderSharedGraph : Win32SourceReaderCameraGraph<Win32SharedStream>, IProbeKernelHost, IProbeInputResolver {
     private readonly long m_adapterLuid;
 
     private readonly Win32ProbeKernelBench m_bench = new();
@@ -762,7 +762,7 @@ internal sealed class Win32SourceReaderSharedGraph : Win32SourceReaderCameraGrap
             height: height,
             nativeFormat: nativeFormat,
             sensor: Request.Sensor,
-            targetFormat: SurfaceFormat.B8G8R8A8Unorm,
+            targetFormat: GpuPixelFormat.B8G8R8A8Unorm,
             width: width
         );
 
@@ -784,6 +784,8 @@ internal sealed class Win32SourceReaderSharedGraph : Win32SourceReaderCameraGrap
             m_targets[index] = m_device!.OpenSharedTexture(sharedHandle: handles[index]);
             m_targetViews[index] = m_device.CreateShaderResourceView(texture: m_targets[index]);
         }
+
+        m_stream.FenceOrder = m_device!.OpenSignal(sharedFenceHandle: m_stream.SharedFenceHandle);
 
         return true;
     }
@@ -825,12 +827,16 @@ internal sealed class Win32SourceReaderSharedGraph : Win32SourceReaderCameraGrap
                     return;
                 }
 
-                m_device!.CopyToTarget(
+                var fenceValue = m_device!.CopyToTarget(
                     sourceSubresource: subresource,
                     sourceTexture: frameTexture,
                     targetTexture: m_targets[slot]
                 );
-                m_stream.Slots.Publish(slot: slot);
+
+                m_stream.Slots.Publish(
+                    fenceValue: fenceValue,
+                    slot: slot
+                );
                 m_latestSlot = slot;
                 m_bench.OnFrame(
                     captureTimestamp: m_stream.LastFrameTimestamp,
@@ -851,8 +857,6 @@ internal sealed class Win32SourceReaderSharedGraph : Win32SourceReaderCameraGrap
     public bool TryAttachKernel(in ProbeKernelRequest request, ProbeReadingRing ring, [NotNullWhen(true)] out IProbeKernelRun? run, out string fault) {
         ArgumentNullException.ThrowIfNull(ring);
 
-        var triggered = false;
-
         foreach (var input in request.Inputs) {
             switch (input) {
                 case ProbeKernelInput.Sensor sensorInput:
@@ -863,8 +867,6 @@ internal sealed class Win32SourceReaderSharedGraph : Win32SourceReaderCameraGrap
                         return false;
                     }
 
-                    triggered |= (sensorInput.Kind == request.Trigger);
-
                     break;
                 case ProbeKernelInput.StrobePair:
                     run = null;
@@ -874,10 +876,7 @@ internal sealed class Win32SourceReaderSharedGraph : Win32SourceReaderCameraGrap
             }
         }
 
-        if (
-            !triggered ||
-            (CameraSensor.Color != request.Trigger)
-        ) {
+        if (CameraSensor.Color != request.TriggerSensor) {
             run = null;
             fault = "the trigger sensor must be the graph's color stream";
 

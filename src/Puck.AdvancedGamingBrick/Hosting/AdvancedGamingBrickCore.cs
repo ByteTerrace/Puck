@@ -1,4 +1,3 @@
-using Puck.Abstractions.Machines;
 using Puck.Assets;
 
 namespace Puck.AdvancedGamingBrick;
@@ -73,8 +72,8 @@ public sealed partial class AdvancedGamingBrickCore : IQueuedMachineCore {
     /// <inheritdoc/>
     public string CheckpointIdentity { get; }
     /// <inheritdoc/>
-    public ulong CyclesPerSecond =>
-        MachineCyclesPerSecond;
+    public MachineCycleRate CycleRate =>
+        new(cycles: MachineCyclesPerSecond);
     /// <inheritdoc/>
     public long NativeFrameIndex =>
         (m_machine.Cycles / AdvancedGamingBrickMachine.CyclesPerFrame);
@@ -88,11 +87,11 @@ public sealed partial class AdvancedGamingBrickCore : IQueuedMachineCore {
     /// <inheritdoc/>
     // The sensor channels ride the same seam as the buttons: recorded per-segment host input, held constant for the whole
     // cycle budget like every other pad field — never a live read from inside the core.
-    public void ApplyInput(in MachinePadState input) =>
+    public void ApplyInput(in MachinePads input) =>
         AdvancedPad.Apply(
             cartridge: m_cartridge,
             machine: m_machine,
-            pad: in input
+            pad: in input[0]
         );
     /// <inheritdoc/>
     public void RunCycles(long cycles) =>
@@ -116,7 +115,7 @@ public sealed partial class AdvancedGamingBrickCore : IQueuedMachineCore {
         m_saveNeedsFlush = true;
     }
     /// <inheritdoc/>
-    public ITimeTravelLookahead<MachinePadState> CreateLookahead() =>
+    public ITimeTravelLookahead<MachinePads> CreateLookahead() =>
         new AdvancedGamingBrickLookahead(instance: m_instance.Fork());
     /// <inheritdoc/>
     public void ConfigureAudio(int sampleRate) =>

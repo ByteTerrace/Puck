@@ -552,9 +552,9 @@
                             "default": null,
                             "description": "The rotation axis (null = Y, the XZ ground plane).",
                             "x-enumDescriptions": {
-                              "X": "Repeat about the local X axis \u2014 the fold acts in the YZ plane.",
-                              "Y": "Repeat about the local Y axis \u2014 the fold acts in the XZ (ground) plane. The default: the common \u0022arranged on the ground around a centre\u0022 case (columns of a rotunda, spokes of a wheel lying flat).",
-                              "Z": "Repeat about the local Z axis \u2014 the fold acts in the XY plane (a clock face / gear facing \u002BZ)."
+                              "X": "The local X axis; a polar repeat about it folds the YZ plane.",
+                              "Y": "The local Y axis; a polar repeat about it folds the XZ (ground) plane, the common \u0022arranged on the ground around a centre\u0022 case (columns of a rotunda, spokes of a wheel lying flat).",
+                              "Z": "The local Z axis; a polar repeat about it folds the XY plane (a clock face or a gear facing \u002BZ)."
                             }
                           },
                           "mirror": {
@@ -648,9 +648,9 @@
                             "default": null,
                             "description": "The fold plane (null = XZ).",
                             "x-enumDescriptions": {
-                              "XZ": "Fold X and Z (tile the ground).",
-                              "XY": "Fold X and Y (tile a wall facing Z).",
-                              "YZ": "Fold Y and Z (tile a wall facing X)."
+                              "XZ": "X and Z: the ground, facing Y.",
+                              "XY": "X and Y: a wall facing Z.",
+                              "YZ": "Y and Z: a wall facing X."
                             }
                           },
                           "materialStride": {
@@ -1631,7 +1631,7 @@
                         "string",
                         "null"
                       ],
-                      "description": "The feed this face shows when nothing else is wired, as a source token a consuming world resolves through a closed four-token map \u2014 none (no signal), test (the test pattern), and camera:\u003Cname\u003E / feed:\u003Cname\u003E (a View of the named camera, resolved against the placement\u0027s derived creation-eye feeds then the world\u0027s own camera rows). An unrecognized token (including a bare named:emotes, which named a host registry no world provides) lights the no-signal card. Null = the no-signal card until a world\u0027s face override wires a feed."
+                      "description": "The feed this face shows when nothing else is wired, as a source token a consuming world resolves through a closed four-token map \u2014 none (unbound glass), test (the test pattern), and camera:\u003Cname\u003E / feed:\u003Cname\u003E (a View of the named camera, resolved against the placement\u0027s derived creation-eye feeds then the world\u0027s own camera rows). An unrecognized token (including a bare named:emotes, which named a host registry no world provides) shows unbound glass. Null = unbound glass until a world\u0027s face override wires a feed."
                     }
                   },
                   "required": [
@@ -2359,6 +2359,46 @@
           "null"
         ],
         "default": null
+      },
+      "mesh": {
+        "description": "Opaque triangles every static placement of the prototype draws beside its field, or null for none.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "vertices": {
+            "description": "The vertex positions, in the author frame.",
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 3,
+              "maxItems": 3
+            }
+          },
+          "indices": {
+            "description": "Three vertex indices per triangle.",
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "material": {
+            "description": "The index of the creation palette entry the triangles shade with.",
+            "type": "integer",
+            "default": 0
+          }
+        },
+        "required": [
+          "vertices",
+          "indices"
+        ],
+        "additionalProperties": false,
+        "default": null,
+        "title": "WorldPrototypeMesh"
       }
     },
     "required": [

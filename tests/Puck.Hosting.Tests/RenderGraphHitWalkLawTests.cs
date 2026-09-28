@@ -82,7 +82,7 @@ public sealed class RenderGraphHitWalkLawTests {
         );
         var scene = new Scene(placements: [
             [Screen(source: SourceHandle.Instance(name: "room"))],
-            [Screen(source: SourceHandle.Producer(id: "desktop"))],
+            [Screen(source: SourceHandle.Producer(name: "desktop"))],
         ]);
         // A screen fills the middle quarter of each camera's image, so a point e from the image's centre lands 4e from
         // the screen's centre, and after the second hop 16e from the centre of the room's screen.
@@ -110,7 +110,7 @@ public sealed class RenderGraphHitWalkLawTests {
             actual: path.Steps.Select(selector: static step => step.Instance)
         );
         Assert.Equal(
-            expected: SourceHandle.Producer(id: "desktop"),
+            expected: SourceHandle.Producer(name: "desktop"),
             actual: path.Steps[^1].Mapping.Source
         );
         // (0.5 + 0.1)·256 and (0.5 + 0.05)·256.
@@ -132,8 +132,10 @@ public sealed class RenderGraphHitWalkLawTests {
             ).Steps
         );
     }
+    // A ray that meets no placement ends on the nested world, at the surface the scene finds along it when the scene
+    // answers for that world, and with no surface when it does not.
     [Fact]
-    public void ANestedWorldWithNothingUnderThePickEndsOnThatWorld() {
+    public void ANestedWorldWithNothingUnderThePickEndsOnThatWorldsSurface() {
         var set = Set(
             Instance(
                 name: "main",
@@ -141,23 +143,77 @@ public sealed class RenderGraphHitWalkLawTests {
             ),
             Instance(name: "room")
         );
-        var path = RenderGraphHitWalk.Walk(
+        var surface = new FixedVector3(
+            X: FixedQ4816.FromDouble(value: 0.25),
+            Y: FixedQ4816.FromDouble(value: -0.5),
+            Z: FixedQ4816.FromInteger(value: -3)
+        );
+
+        RenderGraphHitPath Pick(FixedVector3? found) => RenderGraphHitWalk.Walk(
             instance: Main,
             maxDepth: set.NestingDepth,
             ray: Ray(
                 x: 0.49,
                 y: 0.51
             ),
-            scene: new Scene(placements: [
-                [Screen(source: SourceHandle.Instance(name: "room"))],
-                [],
-            ]),
+            scene: new Scene(
+                placements: [
+                    [Screen(source: SourceHandle.Instance(name: "room"))],
+                    [],
+                ],
+                surface: found
+            ),
             set: set
         );
+
+        var path = Pick(found: surface);
 
         Assert.Equal(
             expected: (RenderGraphHitEnd.World, Room, 1),
             actual: (path.End, path.Instance, path.Steps.Count)
+        );
+        Assert.Equal(expected: surface, actual: path.Surface);
+        Assert.Null(@object: Pick(found: null).Surface);
+    }
+    // A continued ray starts on the producer camera's near plane: the room's screen, four units ahead of its camera, is
+    // met from a near plane three units ahead and passed from one five units ahead, so the walk ends on the room's world.
+    [Fact]
+    public void AContinuedRayStartsOnTheProducerCamerasNearPlane() {
+        var set = Set(
+            Instance(
+                name: "main",
+                reads: new RenderGraphRead(Producer: "room")
+            ),
+            Instance(name: "room")
+        );
+
+        RenderGraphHitPath Pick(float near) => RenderGraphHitWalk.Walk(
+            instance: Main,
+            maxDepth: set.NestingDepth,
+            ray: Ray(
+                x: 0.51,
+                y: 0.51
+            ),
+            scene: new Scene(
+                near: near,
+                placements: [
+                    [Screen(source: SourceHandle.Instance(name: "room"))],
+                    [Screen(source: SourceHandle.Producer(name: "desktop"))],
+                ]
+            ),
+            set: set
+        );
+
+        var met = Pick(near: 3f);
+        var passed = Pick(near: 5f);
+
+        Assert.Equal(
+            expected: (RenderGraphHitEnd.Producer, Room, 2),
+            actual: (met.End, met.Instance, met.Steps.Count)
+        );
+        Assert.Equal(
+            expected: (RenderGraphHitEnd.World, Room, 1),
+            actual: (passed.End, passed.Instance, passed.Steps.Count)
         );
     }
     [Fact]
@@ -178,7 +234,7 @@ public sealed class RenderGraphHitWalkLawTests {
             ),
             scene: new Scene(placements: [
                 [Screen(source: SourceHandle.Instance(name: "room"))],
-                [Screen(source: SourceHandle.Producer(id: "desktop"))],
+                [Screen(source: SourceHandle.Producer(name: "desktop"))],
             ]),
             set: set
         );
@@ -271,7 +327,7 @@ public sealed class RenderGraphHitWalkLawTests {
             ),
             scene: new Scene(placements: [
                 [],
-                [Screen(source: SourceHandle.Producer(id: "desktop"))],
+                [Screen(source: SourceHandle.Producer(name: "desktop"))],
             ]),
             set: set
         );
@@ -337,12 +393,17 @@ public sealed class RenderGraphHitWalkLawTests {
         );
     }
 
-    private sealed class Scene(IReadOnlyList<SourceMapping>[] placements, bool camera = true) : IRenderGraphHitScene {
+    private sealed class Scene(IReadOnlyList<SourceMapping>[] placements, bool camera = true, FixedVector3? surface = null, float near = 0f) : IRenderGraphHitScene {
         public IReadOnlyList<SourceMapping> Placements(int instance) => placements[instance];
         public bool TryCamera(int instance, out CameraSnapshot snapshot) {
-            snapshot = Camera;
+            snapshot = (Camera with { Near = near });
 
             return camera;
+        }
+        public bool TrySurface(int instance, SourceRay ray, out FixedVector3 point) {
+            point = surface.GetValueOrDefault();
+
+            return surface.HasValue;
         }
     }
 }

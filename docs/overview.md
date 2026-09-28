@@ -1,7 +1,7 @@
 # Engine overview
 
 Puck is a C# engine for document-defined interactive worlds. It combines
-simulation, GPU rendering, shader pipelines and handheld-console emulation.
+simulation, GPU rendering, shader pipelines and console emulation.
 `Puck.World` is the application that brings these libraries together. Its
 worlds and behavior are described by JSON documents; the Puck DSL provides a
 more concise way to author those documents.
@@ -19,8 +19,9 @@ The engine includes several systems that can also be studied independently:
 - **Rendering:** a signed-distance field (SDF) renderer, where shapes are
   described by distance functions, and programmable compute/fullscreen shader
   pipelines. Vulkan and Direct3D 12 provide the GPU implementations.
-- **Emulation:** Game Boy/Game Boy Color and Game Boy Advance machine cores,
-  with cartridge authoring and hosting in World.
+- **Emulation:** Game Boy/Game Boy Color and Game Boy Advance machine cores
+  with cartridge authoring and hosting in World; the Humble Gaming Deck
+  emulates the NTSC NES/Famicom console, not yet placed in World.
 - **World services:** authority, permissions, networking, storage and transfers
   between worlds.
 

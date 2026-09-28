@@ -382,8 +382,9 @@ public sealed record CartridgeStatement(
 /// <param name="Body">Steps executed in declaration order.</param>
 /// <param name="When">The gate, from the engine's own predicate vocabulary (<see cref="ActionPredicate"/>) rather
 /// than a second spelling of it: a comparison of two expressions, or those composed through all, any and not. Absent
-/// means every frame. A button reads through the reserved <see cref="CartridgeExpressions.KeyPrefix"/> operand, so
-/// input composes under any and not like every other operand.</param>
+/// means every frame. A button reads through the reserved <see cref="CartridgeExpressions.KeyPrefix"/> operand and the
+/// light sensor through <see cref="CartridgeExpressions.Light"/>, so input composes under any and not like every other
+/// operand.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record CartridgeRule(string Name, CartridgeStatement[] Body, ActionPredicate? When = null);
 /// <summary>A native 8 by 8 sprite bound to cartridge state. Coordinates are screen pixels; zero visibility hides it.</summary>

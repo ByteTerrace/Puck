@@ -6,9 +6,9 @@ namespace Puck.SdfVm;
 /// The three compiled variants of the views shading kernel. <see cref="Full"/> (sdf-world-views.comp) is the default
 /// reference: the complete ISA,
 /// every op and shape case compiled in. <see cref="CoreOps"/> (sdf-world-views-core.comp) compiles the exotic cases
-/// out (the <c>SDF_CORE_OPS</c> strip in sdf-vm.hlsli), reducing shader size and live register state. Occupancy and
+/// out (the <c>SDF_CORE_OPS</c> strip in the field modules, Assets/Shaders/Sdf/field/), reducing shader size and live register state. Occupancy and
 /// performance depend on the scene, shader build, and device; a previous fixture's counters are not a universal limit.
-/// <see cref="SdfWorldEngine.UploadProgram"/> selects per program via
+/// <see cref="SdfWorldTables.UploadProgram"/> selects per program via
 /// <see cref="SdfViewsKernelVariants.Select"/>: a pure function of the instruction stream, so a program that touches
 /// a heavy op/shape runs <see cref="Full"/>, the middle tier runs <see cref="Folds"/>, and under <see cref="CoreOps"/> every compiled-out case is
 /// unreachable — the rendered field is semantically identical (a separate compiled binary can still carry the usual
@@ -23,12 +23,13 @@ public enum SdfViewsKernelVariant {
     /// instruction stream provably touches no stripped op or shape.</summary>
     CoreOps = 1,
     /// <summary>The fold-ops middle tier (sdf-world-views-folds.comp) — folds, scopes, and the simple exotic shapes
-    /// stay compiled; the HEAVY warp/noise family (<c>SDF_STRIP_HEAVY</c> in sdf-vm.hlsli) compiles out. Selected for
+    /// stay compiled; the HEAVY warp/noise family (<c>SDF_STRIP_HEAVY</c> in the field modules, Assets/Shaders/Sdf/field/) compiles out. Selected for
     /// a program that touches a fold/scope/simple-exotic case but no heavy one.</summary>
     Folds = 2,
 }
 /// <summary>Selects the Stage 1 views kernel variant for a program — the host half of the <c>SDF_CORE_OPS</c>
-/// contract. KEEP the exotic sets IN SYNC with the <c>#ifndef SDF_CORE_OPS</c> strips in sdf-vm.hlsli: an op or shape
+/// contract. KEEP the exotic sets IN SYNC with the <c>#ifndef SDF_CORE_OPS</c> strips in the field modules
+/// (Assets/Shaders/Sdf/field/): an op or shape
 /// stripped there must answer <see cref="SdfViewsKernelVariant.Full"/> here, or the core variant silently no-ops it.</summary>
 public static class SdfViewsKernelVariants {
     /// <summary>The first exotic op/shape the program's instruction stream touches (a human-readable name for the
@@ -55,13 +56,13 @@ public static class SdfViewsKernelVariants {
                         case SdfShapeType.Sphere:
                         case SdfShapeType.Plane:
                         case SdfShapeType.RoundedRectangle:
-                        // ChamferedRectangle's evaluateShape case sits outside both strip guards in sdf-vm.hlsli (a CORE
+                        // ChamferedRectangle's evaluateShape case sits outside both strip guards in field/sdf-shapes.hlsli (a CORE
                         // shape beside RoundedRectangle), so a chamfered program stays on the core-ops interpreter.
                         case SdfShapeType.ChamferedRectangle:
                         case SdfShapeType.ScreenSlab:
                         case SdfShapeType.Glyph:
                         // A SampledRegion (baked carve brick) is compiled into BOTH views variants (its evaluateShape
-                        // case is OUTSIDE the SDF_CORE_OPS strip in sdf-vm.hlsli), so a baked carve scene stays on the
+                        // case is OUTSIDE the SDF_CORE_OPS strip in field/sdf-shapes.hlsli), so a baked carve scene stays on the
                         // faster core-ops interpreter — the whole point of collapsing O(carve-count) to one O(1) brick.
                         case SdfShapeType.SampledRegion:
                             break;
@@ -79,7 +80,7 @@ public static class SdfViewsKernelVariants {
     }
     /// <summary>The first HEAVY op/shape the program's instruction stream touches (the <c>SDF_STRIP_HEAVY</c> set —
     /// the warp/noise family, the analytic-solve 2D shapes, and a superellipsoid past the ellipsoid's exponent 2), or <see langword="null"/> when it touches none. KEEP
-    /// this set IN SYNC with the <c>SDF_STRIP_HEAVY</c> gates in sdf-vm.hlsli.</summary>
+    /// this set IN SYNC with the <c>SDF_STRIP_HEAVY</c> gates in the field modules, Assets/Shaders/Sdf/field/.</summary>
     /// <param name="program">The program to inspect.</param>
     /// <returns>The first heavy touch, or <see langword="null"/>.</returns>
     public static string? FirstHeavyTouch(SdfProgram program) {
@@ -110,8 +111,8 @@ public static class SdfViewsKernelVariants {
                         case SdfShapeType.Path:
                             return $"shape {((SdfShapeType)instruction.Shape)}";
                         // The ellipsoid (e == 2, every ellipsoid the ISA carries) is the pow-free gauge the fold tier
-                        // keeps compiled; only a general exponent needs the heavy pow path (sdf-vm.hlsli's
-                        // SDF_STRIP_HEAVY split of the SDF_SHAPE_SUPERELLIPSOID case).
+                        // keeps compiled; only a general exponent needs the heavy pow path (field/sdf-shapes.hlsli and
+                        // field/sdf-gradients.hlsli's SDF_STRIP_HEAVY split of the SDF_SHAPE_SUPERELLIPSOID case).
                         case SdfShapeType.Superellipsoid when (instruction.Data0.W != SdfProgramBuilder.MinSuperellipsoidExponent):
                             return $"shape {((SdfShapeType)instruction.Shape)} (exponent {instruction.Data0.W})";
                         default:

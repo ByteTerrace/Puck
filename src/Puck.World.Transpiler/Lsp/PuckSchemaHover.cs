@@ -9,7 +9,7 @@ namespace Puck.World.Transpiler.Lsp;
 internal sealed class PuckSchemaHover {
     private readonly record struct Cursor(JsonNode Node, JsonNode Root);
 
-    private readonly WorldSchema.SplitSchema m_schema = WorldSchema.Export(postRenderExtensions: []);
+    private readonly WorldSchema.SplitSchema m_schema = WorldSchema.Export(postProcessPackages: []);
     private readonly Dictionary<string, List<Cursor>> m_operations = new(comparer: StringComparer.Ordinal);
 
     private readonly Cursor m_creation;

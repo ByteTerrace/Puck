@@ -1,4 +1,3 @@
-using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Machines;
 using Puck.SdfVm;
 using Puck.SignedDistance;
@@ -16,29 +15,31 @@ public interface IWorldScreenPresenter {
     /// <param name="instance">The declared machine instance name.</param>
     /// <param name="output">The provider audio output name.</param>
     IAudioMachine? AudioOutput(string instance, string output);
-    /// <summary>Drops every device-owned upload and offscreen view while preserving CPU sessions, machine
-    /// simulation, declarations, and view registrations.</summary>
+    /// <summary>Drops every device-owned upload while preserving CPU sessions, machine simulation, declarations, and view
+    /// registrations.</summary>
     void NotifyDeviceLost();
-    /// <summary>Publishes this tick's declared-screen content to the device.</summary>
-    /// <param name="tick">The world's completed-step ordinal driving deterministic pattern animation.</param>
-    /// <param name="deviceContext">The live GPU device context to upload on.</param>
-    /// <param name="gpu">The neutral GPU compute services (resolves the upload factory).</param>
-    void Publish(ulong tick, IGpuDeviceContext deviceContext, IGpuComputeServices gpu);
-    /// <summary>Reconciles the offscreen camera-view pool against a mutated camera list.</summary>
+    /// <summary>Publishes the screens' content for a produced frame before the render graph schedules it: the capture
+    /// gate's answer for the frame, the fills, the shared feeds and every screen's mapping.</summary>
+    /// <param name="context">The host's frame context, whose host resolves the live GPU device.</param>
+    void Publish(in Puck.Hosting.FrameContext context);
+    /// <summary>Reconciles the camera views against a mutated camera list.</summary>
     /// <param name="cameras">The mutated camera list (the live definition's cameras).</param>
     void ReconcileCameras(IReadOnlyList<WorldCamera> cameras);
     /// <summary>Reconciles the declared-screen slot table against a mutated screen list.</summary>
     /// <param name="screens">The mutated screen list (the live definition's screens).</param>
     void ReconcileScreens(IReadOnlyList<WorldScreen> screens);
-    /// <summary>Renders every registered offscreen camera view for this frame.</summary>
-    /// <param name="context">The host frame's render context.</param>
-    /// <param name="program">The compiled SDF program the room renders.</param>
-    /// <param name="revision">The program's revision counter — each offscreen engine re-uploads only when it advances.</param>
+    /// <summary>Hands the binder a captured frame's packed transforms and simulation tick, once the frame is captured.</summary>
     /// <param name="transforms">This frame's packed dynamic transforms, identical to the main engine's.</param>
-    /// <param name="time">The frame's content clock (seconds).</param>
     /// <param name="authoritativeTick">The latest authoritative simulation tick available to presentation.</param>
-    /// <param name="hostFrame">The frame the room is rendering this frame.</param>
-    void RenderViews(in Puck.Hosting.FrameContext context, SdfProgram program, int revision, DynamicTransform[] transforms, float time, ulong authoritativeTick, SdfFrame hostFrame);
+    void PresentFrame(DynamicTransform[] transforms, ulong authoritativeTick);
+    /// <summary>Adds each camera view's view to the frame the presentation dresses, after its own views: a camera view is
+    /// a view of the world's frame, framed by its registration's camera this frame, so it renders from the world's
+    /// residency. Called from the dress, once the frame's transforms are packed and its own views are latched.</summary>
+    /// <param name="transforms">This frame's packed dynamic transforms, which a camera's anchors resolve against.</param>
+    /// <param name="authoritativeTick">The latest authoritative simulation tick, which a camera's rig clock reads.</param>
+    /// <param name="presentationSeconds">The frame's presentation time, which a camera's rig clock reads.</param>
+    /// <param name="views">The frame's views: its own, to which the camera views are appended.</param>
+    void FilmViews(DynamicTransform[] transforms, ulong authoritativeTick, float presentationSeconds, List<SdfViewSnapshot> views);
     /// <summary>Gets the live decal-text source at a screen index, or <see langword="null"/> when the slot's current
     /// source is not text.</summary>
     /// <param name="index">The engine screen-surface index.</param>

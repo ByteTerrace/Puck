@@ -196,9 +196,11 @@ count in 1..255.
 ## Scalar functions come from `Puck.State`
 
 `squareRoot`, `sine`, `cosine`, `absolute`, `ceiling`, `floor`, `clamp`,
-`minimum`, `maximum`, `floorModulo`, `greatestCommonDivisor`,
+`minimum`, `maximum`, `floorDivide`, `floorModulo`, `floorDivideModulo`,
+`divideRemainder`, `power`, `modularPower`, `modularInverse`,
+`greatestCommonDivisor`, `extendedGreatestCommonDivisor`,
 `leastCommonMultiple`, `setBitCount`, `binomialCoefficient`, `primeAt`,
-`hexIndex`, `mortonIndex`, `hilbertIndex`, `pairMinimum`, `pairMaximum`,
+`hexIndex`, `mortonIndex`, `hilbertIndex`, `pair`, `pairMinimum`, `pairMaximum`,
 and the rest are not declared in the transpiler — they come from
 `Puck.State.ExpressionVocabulary`, the same table a compiled rule runs
 against, so a name can never mean one thing in a rule and another (or nothing)
@@ -207,6 +209,10 @@ in a document:
 - The integer/bit/lattice/combinatorial family delegates exactly to the
   engine's own `ExpressionArithmetic` rather than being reimplemented, so
   integers are exact in both evaluators and can never disagree.
+- A pair value carries two signed components, each in
+  −1,518,500,249..1,518,500,249; `floorDivideModulo`, `divideRemainder` and
+  `extendedGreatestCommonDivisor` return one, read back with `pairX`/`pairY`,
+  and a component outside that range is refused like any domain fault.
 - Everything else the document language folds (`sine`, `squareRoot`, `round`,
   ...) uses `double`; whole-number inputs to integer-preserving functions keep
   signed 64-bit precision. The folded number is document DATA baked into JSON

@@ -1,10 +1,11 @@
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
+using Puck.Testing;
 
 namespace Puck.Abstractions.Tests;
 
 /// <summary>
-/// Laws for <see cref="GpuWorkLedger"/>, driven through the counting wrappers over <see cref="FakeGpu"/> with fences
+/// Laws for <see cref="GpuWorkLedger"/>, driven through the counting wrappers over <see cref="FakeGpuDevice"/> with fences
 /// the test signals by hand, so no GPU is involved. A sample is published only once its submission is known
 /// complete, never older than the one already published, and always under the labels it was recorded with.
 /// </summary>
@@ -56,6 +57,28 @@ public sealed class GpuWorkLedgerLawTests {
 
         second.Counted.Wait();
         sample = rig.Read()!;
+        Assert.Equal(expected: 2L, actual: sample.Submission);
+        Assert.Equal(expected: 2L, actual: sample.GetOutsidePassCount(column: DispatchColumn));
+    }
+    [Fact]
+    public void DiscardedWorkReachesNoSubmissionAndKeepsThePublishedOne() {
+        var rig = new Rig(framesInFlight: 2);
+        var fence = rig.NewFence();
+
+        rig.Dispatch(count: 1);
+        rig.Submit(fence: fence);
+        fence.Counted.Wait();
+        rig.Dispatch(count: 5);
+        rig.Ledger.Discard();
+
+        Assert.Equal(expected: 1L, actual: rig.Read()!.Submission);
+
+        rig.Dispatch(count: 2);
+        rig.Submit(fence: fence);
+        fence.Counted.Wait();
+
+        var sample = rig.Read()!;
+
         Assert.Equal(expected: 2L, actual: sample.Submission);
         Assert.Equal(expected: 2L, actual: sample.GetOutsidePassCount(column: DispatchColumn));
     }
@@ -240,7 +263,7 @@ public sealed class GpuWorkLedgerLawTests {
         var rig = new Rig(framesInFlight: 2);
         var fence = rig.NewFence();
 
-        rig.Services.DescriptorAllocator.WriteStorageImage(arrayElement: 0, binding: 0, descriptorSetHandle: 4, deviceHandle: 1, imageViewHandle: 5);
+        rig.Services.Bindings.WriteStorageImage(arrayElement: 0, binding: 0, descriptorSetHandle: 4, imageViewHandle: 5);
         rig.Ledger.Configure(passLabels: ["a"], revision: 1L);
         rig.Dispatch(count: 1);
         rig.Ledger.EnterPass(pass: 0);
@@ -301,82 +324,114 @@ public sealed class GpuWorkLedgerLawTests {
             rig.Ledger.Poll();
             rig.Ledger.EnterPass(pass: 0);
             rig.Dispatch(count: 1);
-            rig.Services.ComputeRecorder.PushConstants(commandBufferHandle: 2, data: stackalloc byte[8], deviceHandle: 1, offset: 0, pipelineLayoutHandle: 3, stageFlags: GpuShaderStage.Compute);
+            rig.Services.Recorder.PushConstants(bindPoint: GpuBindPoint.Compute, commandBufferHandle: 2, data: stackalloc byte[8], offset: 0, pipelineLayoutHandle: 3, stageFlags: GpuShaderStage.Compute);
             rig.Ledger.LeavePass();
             rig.Ledger.SkipPass(pass: 1);
             rig.Submit(fence: fence);
             _ = rig.Ledger.TryReadCompleted(sample: sample);
         }
     }
-    /// <summary>A reader on another thread never sees counts from two different submissions in one sample. A correct
-    /// ledger passes deterministically. How often reads overlap a publication depends on scheduling, so a run that
-    /// misses a deliberately broken ledger was a weaker run, not a flaky one.</summary>
+    /// <summary>A reader on another thread never sees counts from two different submissions in one sample. The two
+    /// threads meet at a barrier before every submission, and the reader then reads until it has seen that submission
+    /// published, so it is reading while the writer records and publishes every one of them, however the threads are
+    /// scheduled. A correct ledger passes deterministically; how many reads land inside a publication's own stores still
+    /// depends on scheduling, so a run that misses a deliberately broken ledger was a weaker run, not a flaky
+    /// one.</summary>
     [Fact]
     public void AReadOverlappingPublicationIsNeverTorn() {
+        const long Submissions = 4_000L;
+
         var rig = new Rig(framesInFlight: 2);
-        var done = 0;
+        using var meet = new Barrier(participantCount: 2);
+        var timeout = TimeSpan.FromSeconds(value: 30);
         var torn = 0L;
         var reads = 0L;
+        var stalled = false;
         var reader = new Thread(start: () => {
             var sample = new GpuWorkSample();
+            var seen = 0L;
 
-            while (Volatile.Read(location: ref done) == 0) {
-                if (!rig.Ledger.TryReadCompleted(sample: sample)) {
-                    continue;
+            for (var submission = 1L; (submission <= Submissions); submission++) {
+                if (!meet.SignalAndWait(timeout: timeout)) {
+                    stalled = true;
+
+                    return;
                 }
 
-                reads++;
+                var deadline = (Environment.TickCount64 + ((long)timeout.TotalMilliseconds));
 
-                var expected = (sample.Submission % 16L);
+                while (seen < submission) {
+                    if (Environment.TickCount64 > deadline) {
+                        stalled = true;
 
-                if (
-                    (sample.GetOutsidePassCount(column: DispatchColumn) != expected) ||
-                    (sample.GetOutsidePassCount(column: MemoryBarrierColumn) != expected)
-                ) {
-                    torn++;
+                        return;
+                    }
+                    if (!rig.Ledger.TryReadCompleted(sample: sample)) {
+                        continue;
+                    }
+
+                    reads++;
+                    seen = sample.Submission;
+
+                    var expected = (sample.Submission % 16L);
+
+                    if (
+                        (sample.GetOutsidePassCount(column: DispatchColumn) != expected) ||
+                        (sample.GetOutsidePassCount(column: MemoryBarrierColumn) != expected)
+                    ) {
+                        torn++;
+                    }
                 }
             }
         });
 
         reader.Start();
 
-        for (var submission = 1L; (submission <= 20_000L); submission++) {
-            for (var step = 0L; (step < (submission % 16L)); step++) {
-                rig.Dispatch(count: 1);
-                rig.Services.ComputeRecorder.MemoryBarrier(commandBufferHandle: 2, destinationAccessMask: GpuComputeAccess.ShaderRead, destinationStageMask: GpuComputeStage.ComputeShader, deviceHandle: 1, sourceAccessMask: GpuComputeAccess.ShaderWrite, sourceStageMask: GpuComputeStage.ComputeShader);
+        for (var submission = 1L; (submission <= Submissions); submission++) {
+            if (!meet.SignalAndWait(
+                cancellationToken: TestContext.Current.CancellationToken,
+                timeout: timeout
+            )) {
+                break;
             }
 
-            rig.Services.QueueSubmitter.SubmitAndWait(commandBufferHandles: [], deviceContext: rig.Gpu);
+            for (var step = 0L; (step < (submission % 16L)); step++) {
+                rig.Dispatch(count: 1);
+                rig.Services.Recorder.MemoryBarrier(commandBufferHandle: 2, destinationAccessMask: GpuAccess.ShaderRead, destinationStageMask: GpuStage.ComputeShader, sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader);
+            }
+
+            rig.Services.QueueSubmitter.SubmitAndWait(commandBufferHandles: []);
         }
 
-        Volatile.Write(location: ref done, value: 1);
         reader.Join();
-        Assert.True(condition: (reads > 0L));
+        Assert.False(condition: stalled);
+        // The reader saw every submission published, so it read at least once per publication.
+        Assert.True(condition: (reads >= Submissions));
         Assert.Equal(actual: torn, expected: 0L);
     }
 
-    private sealed record Fence(IGpuSubmissionFence Counted, FakeGpu.FakeFence Raw);
+    private sealed record Fence(IGpuSubmissionFence Counted, FakeGpuDevice.Fence Raw);
     private sealed class Rig {
         public Rig(int framesInFlight) {
-            Gpu = new FakeGpu();
+            Gpu = new FakeGpuDevice(holdFences: true);
             Ledger = new GpuWorkLedger(
             framesInFlight: framesInFlight,
             name: "gpu.test"
         );
-            Services = GpuWorkCounting.Wrap(ledger: Ledger, services: ((IGpuComputeServices)Gpu));
+            Services = GpuWorkCounting.Wrap(ledger: Ledger, services: Gpu.Services);
         }
 
-        public FakeGpu Gpu { get; }
+        public FakeGpuDevice Gpu { get; }
         public GpuWorkLedger Ledger { get; }
-        public IGpuComputeServices Services { get; }
+        public GpuDeviceServices Services { get; }
 
         public void Dispatch(int count) {
             for (var index = 0; (index < count); index++) {
-                Services.ComputeRecorder.Dispatch(commandBufferHandle: 2, deviceHandle: 1, groupCountX: 1, groupCountY: 1, groupCountZ: 1);
+                Services.Recorder.Dispatch(commandBufferHandle: 2, groupCountX: 1, groupCountY: 1, groupCountZ: 1);
             }
         }
         public Fence NewFence() {
-            var counted = Services.QueueSubmitter.CreateSubmissionFence(deviceContext: Gpu);
+            var counted = Services.QueueSubmitter.CreateSubmissionFence();
 
             return new Fence(Counted: counted, Raw: Gpu.LastCreatedFence!);
         }
@@ -386,6 +441,6 @@ public sealed class GpuWorkLedgerLawTests {
             return (Ledger.TryReadCompleted(sample: sample) ? sample : null);
         }
         public void Submit(Fence fence) =>
-            Services.QueueSubmitter.Submit(commandBufferHandles: [], deviceContext: Gpu, fence: fence.Counted);
+            Services.QueueSubmitter.Submit(commandBufferHandles: [], fence: fence.Counted);
     }
 }

@@ -36,16 +36,16 @@ public sealed class ProbesAuthoringValidationLawTests {
         Profile: WorldFeedProfile.Default,
         Sensor: sensor
     ));
-    private static WorldDefinition WithProbes(WorldProbe[] probes, WorldProbeBinding[] bindings, WorldRenderExtensionEntry[]? extensions = null) {
+    private static WorldDefinition WithProbes(WorldProbe[] probes, WorldProbeBinding[] bindings, WorldViewPostPass[]? post = null) {
         var document = Fixtures.BuildDocument() with {
             ProbesRaw = ((probes.Length == 0)
             ? probes
             : [probes[0] with { Bindings = bindings }, .. probes[1..]]),
         };
 
-        return ((extensions is null)
+        return ((post is null)
             ? document
-            : (document with { RenderRaw = WorldRenderDefaults.Absent with { Extensions = extensions } })
+            : (document with { ViewsRaw = document.Views with { Post = post } })
         );
     }
 
@@ -453,8 +453,8 @@ public sealed class ProbesAuthoringValidationLawTests {
         );
     }
     [Fact]
-    public void ParameterTargetingAnUncomposedExtensionRefusesWhileAComposedOnePasses() {
-        var extension = new WorldRenderExtensionEntry(Id: "sdf-film-grain");
+    public void ParameterTargetingAnUndeclaredPostPassRefusesWhileADeclaredOnePasses() {
+        var grain = new WorldViewPostPass(Name: "grain", Package: "sdf.film-grain");
 
         Laws.RefusalWithControl(
             lawId: "probes.parameter-target",
@@ -464,9 +464,9 @@ public sealed class ProbesAuthoringValidationLawTests {
                     bindings: [
                     new WorldProbeBinding.Parameter(
                             Channel: "luminance",
-                            Target: new WorldProbeParameterTarget.Extension(
+                            Target: new WorldProbeParameterTarget.Post(
                                 Field: "intensity",
-                                Id: "not-composed"
+                                Pass: "not-declared"
                             ),
                             Range: new Vector2(
                                 x: 0f,
@@ -474,7 +474,7 @@ public sealed class ProbesAuthoringValidationLawTests {
                             )
                         ),
                 ],
-                    extensions: [extension]
+                    post: [grain]
                 ),
                 reason: out _
             ),
@@ -484,9 +484,9 @@ public sealed class ProbesAuthoringValidationLawTests {
                     bindings: [
                     new WorldProbeBinding.Parameter(
                             Channel: "luminance",
-                            Target: new WorldProbeParameterTarget.Extension(
+                            Target: new WorldProbeParameterTarget.Post(
                                 Field: "intensity",
-                                Id: "sdf-film-grain"
+                                Pass: "grain"
                             ),
                             Range: new Vector2(
                                 x: 0f,
@@ -494,7 +494,7 @@ public sealed class ProbesAuthoringValidationLawTests {
                             )
                         ),
                 ],
-                    extensions: [extension]
+                    post: [grain]
                 ),
                 reason: out _
             )

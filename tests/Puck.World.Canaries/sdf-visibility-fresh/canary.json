@@ -1,0 +1,49 @@
+{
+  "id": "sdf-visibility-fresh",
+  "title": "A block moved out of the frame's centre leaves background records there, and the visibility view shows the block where it went",
+  "binding": "The positive leg boots an offscreen 256x144 world with two blocks in front of a fixed camera: an anchor on the left and a mover at the centre. It selects the visibility debug view, which colors each pixel by the kind of its visibility record, captures a frame, moves the mover to the right with a row edit and captures again. The anchor keeps the dispatch box spanning the centre in both frames, so the vacated centre holds records this frame wrote: they are background, and the block reads as an SDF hit on the right. The discriminating leg never moves the block, so the centre still reads as an SDF hit and the right as no hit, and both of those observations turn red.",
+  "bootShape": "offscreen",
+  "backends": ["vulkan", "directx"],
+  "requirements": ["gpu"],
+  "timeoutSeconds": 60,
+  "positive": {
+    "world": "tests/Puck.World.Canaries/sdf-visibility-fresh/fixture.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      { "verb": "world.cadence", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.debug-view", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.row.set", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "imageRegion", "name": "before-centre-is-an-sdf-hit", "capture": "before.png", "extent": [256, 144], "region": [0.48, 0.46, 0.52, 0.54], "reduce": "every", "minimum": [0.1, 0.8, 0.15, 1], "maximum": [0.2, 1, 0.35, 1], "toleranceCodes": 2, "holds": true },
+      { "type": "imageRegion", "name": "before-anchor-is-an-sdf-hit", "capture": "before.png", "extent": [256, 144], "region": [0.28, 0.46, 0.32, 0.54], "reduce": "every", "minimum": [0.1, 0.8, 0.15, 1], "maximum": [0.2, 1, 0.35, 1], "toleranceCodes": 2, "holds": true },
+      { "type": "imageRegion", "name": "after-vacated-centre-is-background", "capture": "after.png", "extent": [256, 144], "region": [0.48, 0.46, 0.52, 0.54], "reduce": "every", "maximum": [1, 0.5, 1, 1], "toleranceCodes": 2, "holds": true },
+      { "type": "imageRegion", "name": "after-moved-block-is-an-sdf-hit", "capture": "after.png", "extent": [256, 144], "region": [0.68, 0.46, 0.72, 0.54], "reduce": "every", "minimum": [0.1, 0.8, 0.15, 1], "maximum": [0.2, 1, 0.35, 1], "toleranceCodes": 2, "holds": true }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/sdf-visibility-fresh/fixture.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      { "verb": "world.cadence", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.debug-view", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "imageRegion", "name": "before-centre-is-an-sdf-hit", "capture": "before.png", "extent": [256, 144], "region": [0.48, 0.46, 0.52, 0.54], "reduce": "every", "minimum": [0.1, 0.8, 0.15, 1], "maximum": [0.2, 1, 0.35, 1], "toleranceCodes": 2, "holds": true },
+      { "type": "imageRegion", "name": "unmoved-centre-is-not-background", "capture": "after.png", "extent": [256, 144], "region": [0.48, 0.46, 0.52, 0.54], "reduce": "every", "maximum": [1, 0.5, 1, 1], "toleranceCodes": 2, "holds": false },
+      { "type": "imageRegion", "name": "unmoved-right-is-no-hit", "capture": "after.png", "extent": [256, 144], "region": [0.68, 0.46, 0.72, 0.54], "reduce": "every", "minimum": [0.1, 0.8, 0.15, 1], "maximum": [0.2, 1, 0.35, 1], "toleranceCodes": 2, "holds": false }
+    ]
+  }
+}

@@ -812,8 +812,6 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         }
     }
     /// <inheritdoc/>
-    public nint Handle(int index) => (VideoOutput(index: index)?.NativeImageViewHandle ?? 0);
-    /// <inheritdoc/>
     public bool HasEngine(string engineId) => Catalog.Engines.ContainsKey(key: engineId);
     /// <inheritdoc/>
     public bool HasMachine(int index) => (ResolveMachine(screenIndex: index).Runtime is not null);

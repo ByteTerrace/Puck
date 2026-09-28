@@ -18,9 +18,6 @@ internal static class TestHookInstaller {
     ]));
     [ModuleInitializer]
     internal static void Install() {
-        WorldSchemaVocabularyHooks.Install(
-            postRenderExtensionCheck: static _ => true,
-            probeKindCheck: static _ => true
-        );
+        WorldSchemaVocabularyHooks.Install(probeKindCheck: static _ => true);
     }
 }

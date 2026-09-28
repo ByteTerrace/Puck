@@ -231,6 +231,10 @@ activation's fence and requires recovery.
   blocking here for a grain turn that itself waits on that mailbox would
   deadlock. Read `silo.grains` for the outcome. `<key>` is
   `owner/{oid}/{world}` or the bare world id (`WorldSiloHost.TryResolveKey`).
+  `silo.publish` publishes the document undrawn, as a release does
+  (`WorldFileOrigin.TryReadPublishable`): each instance draws its own cells
+  when it admits the bytes, and a release bootstrap of the same composed document
+  finds the published bytes equal.
 - `SiloConsoleRouting`—one `TextCommandSession` per admitted row, created
   and retired in the same tick-thread mailbox action that admits/retires the
   row itself. Each session carries its own `WorldConsoleWaitGate` (`row.
@@ -276,8 +280,8 @@ the world's own authored effects; live submissions still refuse a world actor.
 
 ## Document validation
 
-`WorldSiloDataHookInstaller` installs the shared schema hooks for post-render,
-probe, binding, input, and command vocabularies. Machine registration is separate:
+`WorldSiloDataHookInstaller` installs the shared schema hooks for post-process
+package, probe, binding, input, and command vocabularies. Machine registration is separate:
 dynamic extensions register into the silo's own immutable `WorldMachineCatalog`.
 Decoding a world without a catalog proves its document-local facts; provider
 admission requires the deployment's explicit catalog. Loading the silo assembly

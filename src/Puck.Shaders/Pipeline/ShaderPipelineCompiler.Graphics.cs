@@ -1,4 +1,5 @@
 using Puck.Abstractions.Gpu;
+using Puck.Hosting;
 
 namespace Puck.Shaders;
 
@@ -9,7 +10,7 @@ namespace Puck.Shaders;
 public sealed partial class ShaderPipelineCompiler {
     private void ValidateGraphics(ShaderPipelinePass pass, IReadOnlyDictionary<string, ShaderPipelineResource> resources, List<ShaderPipelineDiagnostic> diagnostics) {
         if (
-            (pass.Kind == ShaderPipelinePassKind.Fullscreen) &&
+            (pass.Kind == ShaderPipelineDocumentPassKind.Fullscreen) &&
             (pass.Vertex is { } vertex) &&
             !Enum.IsDefined(value: vertex)
         ) {
@@ -20,7 +21,7 @@ public sealed partial class ShaderPipelineCompiler {
                 pass.Name
             );
         } else if (
-            (pass.Kind == ShaderPipelinePassKind.Geometry) &&
+            (pass.Kind == ShaderPipelineDocumentPassKind.Geometry) &&
             (pass.Vertex is not null)
         ) {
             Add(
@@ -84,7 +85,7 @@ public sealed partial class ShaderPipelineCompiler {
                 pass.Name
             );
         }
-        if (pass.Kind == ShaderPipelinePassKind.Fullscreen) {
+        if (pass.Kind == ShaderPipelineDocumentPassKind.Fullscreen) {
             if (
                 (pass.Geometry is not null) ||
                 (pass.DepthCompare is not null)
@@ -112,6 +113,29 @@ public sealed partial class ShaderPipelineCompiler {
                     diagnostics,
                     "SHADERPIPE_DEPTH_STATE",
                     $"Geometry pass '{pass.Name}' declares depthCompare but writes no depth version to test against.",
+                    pass.Name
+                );
+            }
+        }
+        // A strict test against the depth its writer clears to at the end that test keeps passes no fragment: the pass
+        // would draw nothing.
+        foreach (var depth in attachments) {
+            if ((depth.Kind != ShaderPipelineResourceKind.Depth) || (depth.From is not null)) {
+                continue;
+            }
+
+            var clearDepth = (depth.ClearDepth ?? GpuDepthAttachment.DefaultClearDepth);
+            var passesNothing = ((pass.DepthCompare ?? ShaderPipelineDepthCompare.Less) switch {
+                ShaderPipelineDepthCompare.Less => (clearDepth <= 0f),
+                ShaderPipelineDepthCompare.Greater => (clearDepth >= 1f),
+                _ => false,
+            });
+
+            if (passesNothing) {
+                Add(
+                    diagnostics,
+                    "SHADERPIPE_DEPTH_CLEAR",
+                    $"Geometry pass '{pass.Name}' tests {(pass.DepthCompare ?? ShaderPipelineDepthCompare.Less)} against '{depth.Name}' cleared to {clearDepth}, which no fragment passes; a Greater test clears to 0 (clearDepth) and a Less test to 1.",
                     pass.Name
                 );
             }
@@ -332,6 +356,23 @@ public sealed partial class ShaderPipelineCompiler {
                 $"Depth resource '{resource.Name}' declares history; a depth attachment is not retained into the next frame.",
                 resource.Name
             );
+        }
+        if (resource.ClearDepth is { } clearDepth) {
+            if (!(clearDepth is >= 0f and <= 1f)) {
+                Add(
+                    diagnostics,
+                    "SHADERPIPE_DEPTH_CLEAR",
+                    $"Depth resource '{resource.Name}' clears to {clearDepth}; a depth attachment clears to a depth in [0, 1].",
+                    resource.Name
+                );
+            } else if (resource.From is not null) {
+                Add(
+                    diagnostics,
+                    "SHADERPIPE_DEPTH_CLEAR",
+                    $"Depth resource '{resource.Name}' forwards '{resource.From}' and declares clearDepth; its writer loads what the predecessor left rather than clearing.",
+                    resource.Name
+                );
+            }
         }
     }
 }

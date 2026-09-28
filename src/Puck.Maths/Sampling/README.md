@@ -377,9 +377,8 @@ the whole field, and each octave derives its own lattice.
 ## `Pcg3dLatticeNoise`
 
 Value noise over a 2D cell index, built on the Jarzynski & Olano PCG3D integer
-mix—the same mix `Puck.ShaderVm.ShaderIsa.Pcg3d` and the renderer's
-`sdfPcg3d` HLSL kernel carry, hand-kept in sync across those language
-boundaries. A corner's value is the hash's top 16 bits read directly as a
+mix—the same mix the renderer's `sdfPcg3d` HLSL kernel carries, hand-kept in
+sync across that language boundary. A corner's value is the hash's top 16 bits read directly as a
 `FixedQ4816` fraction; corners blend by the same quintic fade `FieldNoise`
 uses. Unlike `FieldNoise`, the domain is a discrete cell index rather than a
 continuous position, and the hash tree is PCG3D rather than an avalanche mix—

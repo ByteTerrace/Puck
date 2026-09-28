@@ -88,7 +88,9 @@ public sealed partial record WorldDefinition(
     [property: JsonPropertyName("search"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSearchSection? SearchRaw = null,
     [property: JsonPropertyName("machines"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldMachine>? MachinesRaw = null,
     [property: JsonPropertyName("ruleGroups"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<RuleGroupDeclaration>? RuleGroupsRaw = null,
-    [property: JsonPropertyName("sets"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<CellSetRow>? SetsRaw = null
+    [property: JsonPropertyName("sets"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<CellSetRow>? SetsRaw = null,
+    [property: JsonPropertyName("editor"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldEditorDefaults? EditorRaw = null,
+    [property: JsonPropertyName("timeline"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldTimelineSection? TimelineRaw = null
 ) {
     /// <summary>The document schema version. A loader rejects any other value; the canonical writer always emits it.</summary>
     public const string SchemaVersion = "puck.world.definition.v1";
@@ -191,6 +193,10 @@ public sealed partial record WorldDefinition(
     /// unauthored world is unchanged.</summary>
     [JsonIgnore]
     public IReadOnlyList<DynamicsRow> Dynamics => (DynamicsRaw ?? []);
+    /// <summary>Gets what a seat in build mode starts from — ABSENT resolves to <see cref="WorldEditorDefaults.Default"/>:
+    /// the grid hidden and snapping off, so an unauthored world plays unchanged.</summary>
+    [JsonIgnore]
+    public WorldEditorDefaults Editor => (EditorRaw ?? WorldEditorDefaults.Default);
     /// <summary>Gets the surface this document offers a host that imports it (<see cref="WorldExports"/>): the
     /// names the host may read, drive, and bind to. Every other name the document declares is private to it. Consumed
     /// where the document is imported (<see cref="WorldModuleExports"/>), so a live document always carries
@@ -448,6 +454,10 @@ public sealed partial record WorldDefinition(
     /// <c>standard.world.json</c>.</summary>
     [JsonIgnore]
     public WorldThemeSection Theme => (ThemeRaw ?? WorldThemeSection.Absent);
+    /// <summary>Gets the <c>timeline</c> section, the world's named presentation clocks — ABSENT resolves to
+    /// <see cref="WorldTimelineSection.Absent"/> (no named clocks).</summary>
+    [JsonIgnore]
+    public WorldTimelineSection Timeline => (TimelineRaw ?? WorldTimelineSection.Absent);
     /// <summary>Gets the tune asset rows — ABSENT resolves to none.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldTune> Tunes => (TunesRaw ?? []);

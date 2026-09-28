@@ -30,7 +30,7 @@ public sealed class BrowserEngineTests {
     // standard.world.json composed with the tictactoe fragment — a real shipped document pair with no
     // screens[].source.machine engine to trip the extension-vocabulary boundary ComposedPuckWorldBytes hits.
     private static byte[] ComposedTicTacToeBytes() {
-        var basisBytes = File.ReadAllBytes(path: RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/standard.world.json"));
+        var basisBytes = ShippedWorldDocuments.Composed(path: RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/standard.world.json"));
         var fragmentBytes = ShippedWorldDocuments.Read(path: RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/games/tictactoe.puck"));
 
         Assert.True(
@@ -145,7 +145,7 @@ public sealed class BrowserEngineTests {
     public void ParseFragment_composes_a_game_module_under_the_standard_basis() {
         var basisPath = RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/standard.world.json");
         var fragmentPath = RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/games/tictactoe.puck");
-        var hostBytes = File.ReadAllBytes(path: basisPath);
+        var hostBytes = ShippedWorldDocuments.Composed(path: basisPath);
         var fragmentBytes = ShippedWorldDocuments.Read(path: fragmentPath);
 
         var result = BrowserParser.ParseFragment(

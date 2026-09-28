@@ -98,7 +98,12 @@ typed completions (`WorldSubmissionResult`); its `Mutation` case carries a
 and payload, independent of a `WorldMutationPersistenceStatus`
 (`NotRequested`/`Pending`/`Durable`/`RecoveryRequired`) and, once durable, a
 `WorldDurableWatermark` naming the covering root publication, checkpoint, and
-journal sequence. Deliveries fan out through
+journal sequence. Every outcome also carries the `WorldDocumentVersion` of
+the live document it was decided against: the install an applied mutation
+produced, or the document a refusal met. `WorldServer.DocumentVersion` is that
+version: an activation minted per server and the install ordinal
+`WorldDocument.AdoptDefinition` moves forward at every install. Deliveries
+fan out through
 `WorldOutputHub.cs`, which supports multiple subscribed sinks. A sink's live
 definition delivery is `DeliverDefinition` after a shape change or
 `DeliverState` after a value-only write—see `Puck.World.Protocol`'s
@@ -158,7 +163,9 @@ without changing the frozen destination or throwing a stale-authority error.
 
 `WorldReleaseMetadataTransition` supplies the first isolated preservation rule:
 merge only the published author-metadata delta into the checkpoint's live definition
-and undo base. It validates both resulting documents, retains unrelated live edits,
+and undo base. It proves both package definitions through a drawn copy
+(`WorldDefinitionLoader.TryProvePublishable`, the proof a release read runs), validates both
+resulting documents, retains unrelated live edits,
 and refuses a conflict at its metadata path. Object members merge independently;
 arrays are whole values. Reintroducing a removed custom key may change JSON member
 order, while its value survives. Every other checkpoint section and every other
@@ -1264,7 +1271,21 @@ expected authority identity. No connection or held-input lease is stored in the
 checkpoint. Replacing a local route releases its old held-input lease, and that
 retired lease cannot publish again. An empty source authority with forwarding
 routes is not automatically reaped. Explicitly stopping a destination unbinds
-incoming routes; admitting the same authority later binds them again.
+incoming routes; admitting the same authority later binds them again. Stopping or
+reaping an instance stops its server (`WorldServer.Stop`): admission closes, and
+every submission still pending is answered at once with a refusal naming the stop
+(`world.authority.stopped`), through the typed completion and the edit echo a
+refusal at the tick boundary uses, as is every submission after it. A submission
+forwarded to a committed traveler's destination answers through the same typed
+completion (`WorldLocalForwardedAuthority.TryApplySubmission`,
+`IWorldForwardedAuthority.TryForwardSubmission`): a buffered mutation's answer is
+the verdict the destination's tick applied, which the peer host awaits before it
+writes the completion back. On the traveler's side, `WorldFederatedServerLink`
+submits a mutation that carries a completion without waiting: the call returns at
+once, and the verdict, or the routed deadline's refusal
+(`world.transport.completion_unavailable`, naming the deadline), reaches the
+completion when the lane answers (`WorldRemoteAuthority.AnswerAsync`). Other
+submissions still wait for their answer, bounded by the same deadline.
 
 The route follows later transfers whether a hop is local or reached over QUIC.
 Each hop checks its own source-scoped credential before following the next route,
@@ -1827,8 +1848,9 @@ miss)—offline replay reconstructs a FRESH host from the tape's embedded
 definition, so a machine's accumulated core state (or a screen op's effect)
 from before recording began can never be re-established, and the population
 hash covers no machine state to catch the divergence. `Puck.World.WorldScreenBinder`
-is a pure reader of this type's outputs for presentation (framebuffer
-handle/light, `PublishFrame`) and still owns the genuinely presentation
+is a pure reader of this type's outputs for presentation (a machine source
+instance's upload writes an output's frames, `WriteFrame`, and the light
+lights the room) and still owns the genuinely presentation
 screen sources (test pattern, authored QR, webcam, compositor capture,
 jumbotron view) that are not this type's concern. See
 `Puck.World.Addons/README.md` for the concrete host's own shipped-engine
@@ -1854,7 +1876,7 @@ into the arena the tick's own rules write, and delivers through `WorldDocument.D
 per-tick cell write in this project (`WorldTick.Fields.cs`). Both memos are
 keyed by (engine screen index, bus address), so an unmoved value costs one
 dictionary lookup and nothing past it: the peek/poke round trip through
-`Puck.GamingBricks.QueuedMachineWorker`'s marshaled worker thread is a real,
+`Puck.Machines.QueuedMachineWorker`'s marshaled worker thread is a real,
 pre-existing cost every memory read/write pays regardless of caller (shared
 by `screen.peek` and an addon's own memory watch)—what a quiet binding
 elides is the mutation/install cost on top of it, not that shared floor.

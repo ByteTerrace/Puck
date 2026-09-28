@@ -16,10 +16,25 @@ public sealed record ShaderPipelineParameterSlot(
     ShaderValueType Type,
     uint Offset
 );
+/// <summary>One array of a pass's World group: a read-only structured buffer of its element type at the binding its
+/// interface places it, element <c>i</c> at byte <c>4i</c>.</summary>
+/// <param name="Name">The array's name.</param>
+/// <param name="Type">The element type, a scalar.</param>
+/// <param name="Binding">The array's binding in the World group's set.</param>
+/// <param name="Length">The element count the pass reads; its accessor reads zero past it.</param>
+public sealed record ShaderPipelineArraySlot(
+    string Name,
+    ShaderValueType Type,
+    uint Binding,
+    uint Length
+);
 /// <summary>
-/// A pass's frame block: its <see cref="ShaderFrameInterface"/> interface, where the interface's layout places every
-/// member, and the config schema its config fields bind through. <see cref="WriteFrame"/> is the host writer: it places
-/// each frame member at the offset the layout gives it, which is the offset the generated declarations read it from.
+/// A pass's frame data: its <see cref="ShaderFrameInterface"/> interface, where the interface's layout places every
+/// member, and the config schema its config fields bind through. A document pass reads two blocks: the frame group's,
+/// which every pass of a node shares (<see cref="FrameBlockSizeBytes"/>, written by <see cref="WriteFrame"/>), and its
+/// own pass block, holding its extent (<see cref="WriteExtent"/>) and config (<see cref="TryBind"/>). A package pass or a
+/// shader set reads the same two blocks, its pass block also holding the values its recorder writes. Each writer places a member at the offset the layout gives it, which is the offset the
+/// generated declarations read it from.
 /// </summary>
 public sealed class ShaderPipelineParameterLayout {
     private readonly uint m_cameraFov;
@@ -28,6 +43,7 @@ public sealed class ShaderPipelineParameterLayout {
     private readonly uint m_cameraUp;
     private readonly uint m_extent;
     private readonly uint m_frame;
+    private readonly Dictionary<string, uint> m_passOffsets;
     private readonly uint m_pointer;
     private readonly uint m_pointerDown;
     private readonly uint m_pointerPresses;
@@ -38,16 +54,15 @@ public sealed class ShaderPipelineParameterLayout {
 
     private ShaderPipelineParameterLayout(ShaderInterface shaderInterface, IReadOnlyDictionary<string, ShaderConfigField>? schema) {
         var layout = shaderInterface.Layout();
-        var block = layout.PushedGroup!;
-        var offsets = block.BlockMembers.ToDictionary(
-            comparer: StringComparer.Ordinal,
-            elementSelector: static member => member.Offset,
-            keySelector: static member => member.Name
-        );
+        var frameBlock = layout.Groups.Single(predicate: static group => (group.Group == ShaderInterfaceGroup.Frame));
+        var passBlock = layout.Groups.Single(predicate: static group => (group.Group == ShaderInterfaceGroup.Pass));
+        var frameOffsets = Offsets(block: frameBlock);
+        var offsets = Offsets(block: passBlock);
 
         Interface = shaderInterface;
+        FrameBlockSizeBytes = frameBlock.BlockSizeBytes;
         Layout = layout;
-        SizeBytes = block.BlockSizeBytes;
+        SizeBytes = passBlock.BlockSizeBytes;
         Schema = ((schema is null)
             ? null
             : new ReadOnlyDictionary<string, ShaderConfigField>(dictionary: SnapshotConfig(schema: schema)));
@@ -58,32 +73,124 @@ public sealed class ShaderPipelineParameterLayout {
                 Offset: offsets[name],
                 Type: schema[name].Type
             )).ToArray()));
+        var worldGroup = layout.Groups.SingleOrDefault(predicate: static group => (group.Group == ShaderInterfaceGroup.World));
+
+        Arrays = new ReadOnlyCollection<ShaderPipelineArraySlot>(list: ((worldGroup is null)
+            ? []
+            : [.. worldGroup.Resources
+                .Where(predicate: static resource => (resource.Member.Kind == ShaderInterfaceMemberKind.Array))
+                .Select(selector: static resource => new ShaderPipelineArraySlot(
+                    Binding: resource.Binding,
+                    Length: resource.Member.Length!.Value,
+                    Name: resource.Member.Name,
+                    Type: resource.Member.Type!.Value
+                ))]));
         m_extent = offsets[ShaderFrameInterface.Extent];
-        m_pointer = offsets[ShaderFrameInterface.Pointer];
-        m_tick = offsets[ShaderFrameInterface.Tick];
-        m_time = offsets[ShaderFrameInterface.Time];
-        m_timeDelta = offsets[ShaderFrameInterface.TimeDelta];
-        m_frame = offsets[ShaderFrameInterface.Frame];
-        m_tickRate = offsets[ShaderFrameInterface.TickRate];
-        m_pointerDown = offsets[ShaderFrameInterface.PointerDown];
-        m_pointerPresses = offsets[ShaderFrameInterface.PointerPresses];
-        m_cameraPosition = offsets[ShaderFrameInterface.CameraPosition];
-        m_cameraFov = offsets[ShaderFrameInterface.CameraFov];
-        m_cameraTarget = offsets[ShaderFrameInterface.CameraTarget];
-        m_cameraUp = offsets[ShaderFrameInterface.CameraUp];
+        m_passOffsets = offsets;
+        m_pointer = frameOffsets[ShaderFrameInterface.Pointer];
+        m_tick = frameOffsets[ShaderFrameInterface.Tick];
+        m_time = frameOffsets[ShaderFrameInterface.Time];
+        m_timeDelta = frameOffsets[ShaderFrameInterface.TimeDelta];
+        m_frame = frameOffsets[ShaderFrameInterface.Frame];
+        m_tickRate = frameOffsets[ShaderFrameInterface.TickRate];
+        m_pointerDown = frameOffsets[ShaderFrameInterface.PointerDown];
+        m_pointerPresses = frameOffsets[ShaderFrameInterface.PointerPresses];
+        m_cameraPosition = frameOffsets[ShaderFrameInterface.CameraPosition];
+        m_cameraFov = frameOffsets[ShaderFrameInterface.CameraFov];
+        m_cameraTarget = frameOffsets[ShaderFrameInterface.CameraTarget];
+        m_cameraUp = frameOffsets[ShaderFrameInterface.CameraUp];
     }
 
+    /// <summary>Gets the frame group block's size in bytes, a multiple of 16: the block <see cref="WriteFrame"/>
+    /// writes.</summary>
+    public uint FrameBlockSizeBytes { get; }
     /// <summary>Gets the pass's interface.</summary>
     public ShaderInterface Interface { get; }
     /// <summary>Gets where the interface places every member.</summary>
     public ShaderInterfaceLayout Layout { get; }
     /// <summary>Gets the shared config schema, or <see langword="null"/> for no parameters.</summary>
     public IReadOnlyDictionary<string, ShaderConfigField>? Schema { get; }
-    /// <summary>Gets the frame block's size in bytes, a multiple of 16.</summary>
+    /// <summary>Gets the size in bytes, a multiple of 16, of the pass block, which holds the extent and config.</summary>
     public uint SizeBytes { get; }
-    /// <summary>Gets the config fields in ordinal name order, each at its offset inside the frame block.</summary>
+    /// <summary>Gets the config fields in ordinal name order, each at its offset inside the block of
+    /// <see cref="SizeBytes"/>.</summary>
     public IReadOnlyList<ShaderPipelineParameterSlot> Slots { get; }
+    /// <summary>Gets the pass's arrays in ordinal name order, each at its binding in the World group's set; empty for a
+    /// pass that declares none.</summary>
+    public IReadOnlyList<ShaderPipelineArraySlot> Arrays { get; }
 
+    /// <summary>Writes a row's elements into the buffer an array of <paramref name="type"/> reads: element <c>i</c> at
+    /// byte <c>4i</c> as the element type (an integer element rounded to the nearest integer, ties to even, and clamped to
+    /// its range), and zero in every element past <paramref name="values"/>.</summary>
+    /// <param name="elements">The buffer's bytes, a whole number of 4-byte elements.</param>
+    /// <param name="type">The element type: <see cref="ShaderValueType.Float"/>, <see cref="ShaderValueType.Int"/> or
+    /// <see cref="ShaderValueType.Uint"/>.</param>
+    /// <param name="values">The row's values; at most the buffer's element count are written.</param>
+    /// <exception cref="ArgumentException"><paramref name="elements"/> is not a whole number of elements, or
+    /// <paramref name="type"/> is not a scalar.</exception>
+    public static void WriteArray(Span<byte> elements, ShaderValueType type, ReadOnlySpan<double> values) {
+        if (
+            ((elements.Length % ShaderValueTypes.ComponentBytes) != 0) ||
+            (type.ComponentCount() != 1)
+        ) {
+            throw new ArgumentException(
+                message: $"An array's buffer holds whole scalar elements; {elements.Length} bytes of {type} does not.",
+                paramName: nameof(elements)
+            );
+        }
+
+        for (var index = 0; (index < (elements.Length / ((int)ShaderValueTypes.ComponentBytes))); index++) {
+            var value = ((index < values.Length)
+                ? values[index]
+                : 0d);
+            var element = elements[(index * ((int)ShaderValueTypes.ComponentBytes))..];
+
+            switch (type) {
+                case ShaderValueType.Float:
+                    BinaryPrimitives.WriteSingleLittleEndian(destination: element, value: ((float)value));
+
+                    break;
+                case ShaderValueType.Int:
+                    BinaryPrimitives.WriteInt32LittleEndian(destination: element, value: ((int)Math.Clamp(
+                        max: int.MaxValue,
+                        min: int.MinValue,
+                        value: Math.Round(mode: MidpointRounding.ToEven, value: value)
+                    )));
+
+                    break;
+                default:
+                    BinaryPrimitives.WriteUInt32LittleEndian(destination: element, value: ((uint)Math.Clamp(
+                        max: uint.MaxValue,
+                        min: 0d,
+                        value: Math.Round(mode: MidpointRounding.ToEven, value: value)
+                    )));
+
+                    break;
+            }
+        }
+    }
+    /// <summary>Returns where a value of the pass block lies: the byte offset, in a block <see cref="SizeBytes"/> long, the
+    /// generated declarations read the member from. A package's recorder writes the values it declares there each
+    /// frame (<see cref="RenderGraphPackageRecording.PassBlock"/>).</summary>
+    /// <param name="member">The member's name.</param>
+    /// <returns>The offset.</returns>
+    /// <exception cref="ArgumentException">The pass block holds no member of that name.</exception>
+    public uint BlockOffsetOf(string member) => (m_passOffsets.TryGetValue(
+        key: member,
+        value: out var offset
+    )
+        ? offset
+        : throw new ArgumentException(
+            message: $"Interface '{Interface.Name}' holds no pass-block member '{member}'.",
+            paramName: nameof(member)
+        ));
+
+    private static Dictionary<string, uint> Offsets(ShaderInterfaceGroupLayout block) =>
+        block.BlockMembers.ToDictionary(
+            comparer: StringComparer.Ordinal,
+            elementSelector: static member => member.Offset,
+            keySelector: static member => member.Name
+        );
     private static Dictionary<string, ShaderConfigField> SnapshotConfig(IReadOnlyDictionary<string, ShaderConfigField> schema) =>
         schema.ToDictionary(
             static pair => pair.Key,
@@ -119,6 +226,17 @@ public sealed class ShaderPipelineParameterLayout {
             value: value
         );
 
+    /// <summary>Returns this frame data with its interface carrying a stamp (<see cref="ShaderInterface.Stamped"/>): the
+    /// same schema, members and offsets, and a pass block whose variable carries the stamp.</summary>
+    /// <param name="stamp">The stamp.</param>
+    /// <returns>The stamped frame data.</returns>
+    /// <exception cref="InvalidDataException">The stamp is malformed, or the interface has no pass block to carry
+    /// it.</exception>
+    public ShaderPipelineParameterLayout Stamped(string stamp) =>
+        new(
+            schema: Schema,
+            shaderInterface: Interface.Stamped(stamp: stamp)
+        );
     /// <summary>Emits the config JSON Schema through the shared binder.</summary>
     /// <param name="description">The schema's description, or <see langword="null"/>.</param>
     /// <returns>The schema.</returns>
@@ -127,47 +245,100 @@ public sealed class ShaderPipelineParameterLayout {
             schema: Schema,
             description: description
         );
-    /// <summary>Resolves a pass's frame block from its declaration: the interface its source names
-    /// (<see cref="ShaderFrameInterface.NameOf"/>) over the frame members and its config.</summary>
-    /// <param name="pass">The pass.</param>
+    /// <summary>Resolves a package pass's frame data: the frame group, and a pass group holding its extent, its config
+    /// and the members the package declares (<see cref="RenderGraphPackage.Members"/>), under an interface named for the
+    /// package id.</summary>
+    /// <param name="package">The package id.</param>
+    /// <param name="config">The package's config schema, or <see langword="null"/> when it takes none.</param>
+    /// <param name="members">The pass-group members the package's shaders read beside its extent and config: values
+    /// its recorder writes into the pass block each frame, and the resources it binds.</param>
+    /// <param name="pushesIndex">Whether the package's pipelines push one 4-byte index
+    /// (<see cref="RenderGraphPackage.PushesIndex"/>).</param>
     /// <returns>The layout.</returns>
+    /// <exception cref="InvalidDataException">The package id spells no interface name, the schema is invalid, or a
+    /// member or config field's name is not an identifier or repeats another's.</exception>
+    public static ShaderPipelineParameterLayout ForPackage(string package, IReadOnlyDictionary<string, ShaderConfigField>? config, IReadOnlyList<ShaderInterfaceMember> members, bool pushesIndex = false) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: package);
+        ShaderConfigBinding.ValidateSchema(
+            ownerName: package,
+            schema: config
+        );
+
+        // A package's interface is named for its package id, each character an interface name cannot hold, such as the
+        // period of sdf.world, spelled as a hyphen.
+        return Grouped(
+            config: config,
+            members: members,
+            interfaceName: string.Concat(values: package.Select(selector: static character => ((char.IsAsciiLetterLower(c: character) || char.IsAsciiDigit(c: character))
+                ? character
+                : '-'))),
+            pushesIndex: pushesIndex
+        );
+    }
+    /// <summary>Resolves a document pass's frame data from its declaration: the interface its source names
+    /// (<see cref="ShaderFrameInterface.NameOf"/>), with the frame group, its config and its ports
+    /// (<see cref="ShaderPipelinePassPorts"/>) laid out as <see cref="ShaderFrameInterface.ForPass"/> lays them.</summary>
+    /// <param name="pass">The pass.</param>
+    /// <param name="resources">The graph's resource versions by name, which say what each port carries.</param>
+    /// <returns>The layout.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="pass"/> or <paramref name="resources"/> is
+    /// <see langword="null"/>.</exception>
     /// <exception cref="InvalidDataException">The config schema is invalid, the source's file does not name an
-    /// interface, or a config field's name is not an identifier or repeats a frame member's.</exception>
-    public static ShaderPipelineParameterLayout Resolve(ShaderPipelinePass pass) {
+    /// interface, a config field's name is not an identifier or repeats a frame member's, or a port's identifier is not
+    /// valid or is shared (<see cref="ShaderPipelinePassPorts.Members"/>).</exception>
+    public static ShaderPipelineParameterLayout Resolve(ShaderPipelinePass pass, IReadOnlyDictionary<string, ShaderPipelineResource> resources) {
         ArgumentNullException.ThrowIfNull(argument: pass);
         ShaderConfigBinding.ValidateSchema(
             schema: pass.Config,
             ownerName: pass.Name
         );
+        ShaderArrayField.Validate(
+            arrays: pass.Arrays,
+            ownerName: pass.Name
+        );
 
-        // An engine package pass reads no generated declarations; its interface is named for the package, each
-        // character an interface name cannot hold, such as the period of sdf.world, spelled as a hyphen.
-        return For(
-            config: pass.Config,
-            interfaceName: (pass.Source.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: RenderGraphCompiler.PackageSourcePrefix
+        return new(
+            schema: pass.Config,
+            shaderInterface: ShaderFrameInterface.ForPass(
+                arrays: pass.Arrays,
+                config: pass.Config,
+                name: ShaderFrameInterface.NameOf(sourcePath: pass.Source),
+                ports: ShaderPipelinePassPorts.Members(
+                    pass: pass,
+                    resources: resources
+                )
             )
-                ? string.Concat(values: pass.Source[RenderGraphCompiler.PackageSourcePrefix.Length..].Select(selector: static character => ((char.IsAsciiLetterLower(c: character) || char.IsAsciiDigit(c: character))
-                    ? character
-                    : '-')))
-                : ShaderFrameInterface.NameOf(sourcePath: pass.Source))
         );
     }
-    /// <summary>Resolves the frame block of a named interface over a config schema.</summary>
+    /// <summary>Resolves the frame data of a named interface: the frame group, and a pass group holding the extent, then
+    /// the config fields and the block values of <paramref name="members"/> together in ordinal name order, then the
+    /// resources of <paramref name="members"/> in order, as <see cref="ShaderFrameInterface.ForPass"/> lays them. It is
+    /// the layout of every pass whose members are declared rather than derived from a document: a package's.</summary>
     /// <param name="interfaceName">The interface's name.</param>
     /// <param name="config">The config schema, or <see langword="null"/> when there is none.</param>
+    /// <param name="members">The pass-group members beside the config: block values its recorder writes, which join the
+    /// config in name order, and the resources the pass binds.</param>
+    /// <param name="pushesIndex">Whether the pass's pipeline pushes one 4-byte index.</param>
     /// <returns>The layout.</returns>
-    /// <exception cref="InvalidDataException"><paramref name="interfaceName"/> is not an interface name, or a config
-    /// field's name is not an identifier or repeats a frame member's.</exception>
-    public static ShaderPipelineParameterLayout For(string interfaceName, IReadOnlyDictionary<string, ShaderConfigField>? config) =>
-        new(
+    /// <exception cref="ArgumentNullException"><paramref name="members"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidDataException"><paramref name="interfaceName"/> is not an interface name, the schema is
+    /// invalid, a member is outside the pass group, or a name is not an identifier or repeats another's.</exception>
+    public static ShaderPipelineParameterLayout Grouped(string interfaceName, IReadOnlyDictionary<string, ShaderConfigField>? config, IReadOnlyList<ShaderInterfaceMember> members, bool pushesIndex = false) {
+        ShaderConfigBinding.ValidateSchema(
+            ownerName: interfaceName,
+            schema: config
+        );
+
+        return new(
             schema: config,
-            shaderInterface: ShaderFrameInterface.For(
+            shaderInterface: ShaderFrameInterface.ForPass(
                 config: config,
-                name: interfaceName
+                name: interfaceName,
+                ports: members,
+                pushesIndex: pushesIndex
             )
         );
+    }
     /// <summary>Binds authored values and returns a complete frame block holding them at their offsets, with every
     /// frame member zero.</summary>
     /// <param name="config">The authored config object, or <see langword="null"/> for every default.</param>
@@ -202,25 +373,39 @@ public sealed class ShaderPipelineParameterLayout {
         );
         return true;
     }
-    /// <summary>Writes every frame member into a frame block at the offset the interface places it, leaving the config
-    /// fields and the padding as they are.</summary>
-    /// <param name="block">The frame block, at least <see cref="SizeBytes"/> long.</param>
-    /// <param name="values">The host's frame values.</param>
+    /// <summary>Writes the pass's extent into its pass block at the offset the interface places it, leaving the rest as it is.</summary>
+    /// <param name="block">The block, at least <see cref="SizeBytes"/> long.</param>
     /// <param name="width">The pass's output width, in pixels.</param>
     /// <param name="height">The pass's output height, in pixels.</param>
-    /// <param name="tick">The engine tick the frame presents.</param>
-    /// <param name="frame">The frames the pass's node submitted before this one; only the low 32 bits are written.</param>
     /// <exception cref="ArgumentException"><paramref name="block"/> is shorter than <see cref="SizeBytes"/>.</exception>
-    public void WriteFrame(Span<byte> block, in ShaderFrameValues values, uint width, uint height, ulong tick, ulong frame) {
-        if (block.Length < SizeBytes) {
-            throw new ArgumentException(
-                message: $"A frame block holds {SizeBytes} bytes; the destination holds {block.Length}.",
-                paramName: nameof(block)
-            );
-        }
-
+    public void WriteExtent(Span<byte> block, uint width, uint height) {
+        Require(
+            block: block,
+            sizeBytes: SizeBytes
+        );
         WriteUInt32(block: block, offset: m_extent, value: width);
         WriteUInt32(block: block, offset: (m_extent + 4), value: height);
+    }
+    /// <summary>Writes every frame group value into the frame block at the offset the interface places it, leaving the
+    /// padding as it is. The tick is the presented engine tick divided, in whole numbers, by the engine rate over
+    /// <paramref name="tickRate"/>, so every frame presenting one tick at that rate writes the same tick words whatever
+    /// its presentation clock.</summary>
+    /// <param name="block">The block, at least <see cref="FrameBlockSizeBytes"/> long.</param>
+    /// <param name="values">The host's frame values, the presented engine tick among them.</param>
+    /// <param name="frame">The frames the node submitted before this one; only the low 32 bits are written.</param>
+    /// <param name="tickRate">The rate, in ticks a second, the tick is written at: the plan's
+    /// <see cref="ShaderPipelinePlan.TickRate"/>, or <see cref="ShaderFrameInterface.EngineTickRate"/>.</param>
+    /// <exception cref="ArgumentException"><paramref name="block"/> is shorter than
+    /// <see cref="FrameBlockSizeBytes"/>, or <paramref name="tickRate"/> does not divide the engine rate exactly.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="tickRate"/> is zero.</exception>
+    public void WriteFrame(Span<byte> block, in ShaderFrameValues values, ulong frame, uint tickRate = ShaderFrameInterface.EngineTickRate) {
+        Require(
+            block: block,
+            sizeBytes: FrameBlockSizeBytes
+        );
+
+        var tick = (values.Tick / EngineTicks.PerRate(ratePerSecond: tickRate));
+
         WriteSingle(block: block, offset: m_pointer, value: values.Pointer.X);
         WriteSingle(block: block, offset: (m_pointer + 4), value: values.Pointer.Y);
         WriteUInt32(block: block, offset: m_tick, value: unchecked((uint)tick));
@@ -228,13 +413,22 @@ public sealed class ShaderPipelineParameterLayout {
         WriteSingle(block: block, offset: m_time, value: ((float)values.Time));
         WriteSingle(block: block, offset: m_timeDelta, value: ((float)values.TimeDelta));
         WriteUInt32(block: block, offset: m_frame, value: unchecked((uint)frame));
-        WriteUInt32(block: block, offset: m_tickRate, value: ((uint)EngineTicks.PerSecond));
+        WriteUInt32(block: block, offset: m_tickRate, value: tickRate);
         WriteUInt32(block: block, offset: m_pointerDown, value: (values.PointerDown ? 1u : 0u));
         WriteUInt32(block: block, offset: m_pointerPresses, value: values.PointerPresses);
         WriteVector3(block: block, offset: m_cameraPosition, value: values.CameraPosition);
         WriteSingle(block: block, offset: m_cameraFov, value: values.CameraFov);
         WriteVector3(block: block, offset: m_cameraTarget, value: values.CameraTarget);
         WriteVector3(block: block, offset: m_cameraUp, value: values.CameraUp);
+    }
+
+    private static void Require(Span<byte> block, uint sizeBytes) {
+        if (block.Length < sizeBytes) {
+            throw new ArgumentException(
+                message: $"A frame block holds {sizeBytes} bytes; the destination holds {block.Length}.",
+                paramName: nameof(block)
+            );
+        }
     }
 }
 /// <summary>Bound config values, and a frame block holding them at their offsets.</summary>

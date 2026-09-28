@@ -20,4 +20,7 @@
         <!-- The bake sampling fixture BakeSamplingFixtureLawTests holds to a fresh bake. -->
         <Content Include="Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
+    <ItemGroup>
+        <Compile Include="..\Shared\SdfEncodingTrades.cs" Link="SdfEncodingTrades.cs" />
+    </ItemGroup>
 </Project>

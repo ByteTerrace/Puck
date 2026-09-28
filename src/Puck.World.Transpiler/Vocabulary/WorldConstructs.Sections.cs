@@ -32,13 +32,13 @@ public static partial class WorldConstructs {
         ),
         new(
             DocumentMember: "views",
-            Grammar: "views { layout … pipeline … graph … seatRig … seatControl { … } }",
+            Grammar: "views { layout … graph … post … seatRig … seatControl { … } }",
             Keyword: "views",
             RootArm: WorldRootArm.Views,
             Shape: WorldConstructShape.Section,
             Snippet: "views {\n    $0\n}",
             Sugar: new(Fallback: "the generic value path", Open: true),
-            Summary: "Camera layouts, render pipelines, frame-graph instances, and the seat rig a participant looks through."
+            Summary: "Camera layouts, frame-graph instances, and the seat rig a participant looks through."
         ),
         new(
             DocumentMember: "views.layouts[]",
@@ -52,26 +52,81 @@ public static partial class WorldConstructs {
             Summary: "One viewport arrangement."
         ),
         new(
-            DocumentMember: "views.pipelines[]",
-            Enclosing: "views",
-            Grammar: "pipeline \"name\" { … }",
-            Keyword: "pipeline",
-            Members: [QuotedName(key: "name", summary: "The pipeline's name, which a layout slot names it by.")],
-            Shape: WorldConstructShape.Row,
-            Snippet: "pipeline \"${1:main}\" {\n    $0\n}",
-            Sugar: new(Fallback: "the generic value path", Open: true),
-            Summary: "One named post-render pipeline."
-        ),
-        new(
             DocumentMember: "views.graphs[]",
             Enclosing: "views",
             Grammar: "graph \"name\" { … }",
             Keyword: "graph",
-            Members: [QuotedName(key: "name", summary: "The instance's name, which another instance's input names.")],
+            Members: [QuotedName(key: "name", summary: "The instance's name, which a layout slot, another instance's input and the pipeline verbs name.")],
             Shape: WorldConstructShape.Row,
             Snippet: "graph \"${1:main}\" {\n    source: \"$2\"\n}",
             Sugar: new(Fallback: "the generic value path", Open: true),
             Summary: "One named instance of a frame graph."
+        ),
+        new(
+            DocumentMember: "views.graphs[].parameters",
+            Enclosing: "graph",
+            Grammar: "parameter pass.member = <value>",
+            Keyword: "parameter",
+            Members: [
+                new(
+                    DocumentKeys: [],
+                    Kind: WorldMemberKind.Name,
+                    Lowering: "the key under `parameters` the pass's bindings sit on",
+                    Name: "pass",
+                    Position: WorldMemberPosition.Header,
+                    Required: true,
+                    Summary: "The pass the parameter belongs to."
+                ),
+                new(
+                    DocumentKeys: [],
+                    Kind: WorldMemberKind.Name,
+                    Lowering: "the key under the pass that holds the value",
+                    Name: "member",
+                    Position: WorldMemberPosition.Header,
+                    Required: true,
+                    Summary: "The pass's config field the value binds; one statement a field."
+                ),
+                new(
+                    DocumentKeys: ["parameters"],
+                    Kind: WorldMemberKind.Value,
+                    Name: "value",
+                    Position: WorldMemberPosition.Header,
+                    Required: true,
+                    Summary: "A number, or a `state.<row>` binding token naming the cell or the whole row the pass reads."
+                ),
+            ],
+            Shape: WorldConstructShape.Statement,
+            Snippet: "parameter ${1:pass}.${2:member} = ${3:value}",
+            Sugar: new(Fallback: "none: a graph row's `parameters` is written only as `parameter` statements", Open: true),
+            Summary: "One bound parameter of the enclosing graph instance, which the pass reads through its state mirror slot."
+        ),
+        new(
+            DocumentMember: "views.post[]",
+            Enclosing: "views",
+            Grammar: "post \"name\" { package: … config { … } }",
+            Keyword: "post",
+            Members: [
+                QuotedName(key: "name", summary: "The pass's name in the root graph, which a probe's post target names."),
+                new(
+                    DocumentKeys: ["package"],
+                    Kind: WorldMemberKind.Text,
+                    Name: "package",
+                    Position: WorldMemberPosition.Property,
+                    Required: true,
+                    Summary: "The post-process package the pass runs, such as sdf.film-grain."
+                ),
+                new(
+                    DocumentKeys: ["config"],
+                    Kind: WorldMemberKind.Value,
+                    Name: "config",
+                    Position: WorldMemberPosition.Property,
+                    Summary: "The package's config values; an absent field keeps its default."
+                ),
+            ],
+            Shape: WorldConstructShape.Row,
+            Snippet: "post \"${1:grain}\" {\n    package: \"${2:sdf.film-grain}\"\n}",
+            Sugar: new(Fallback: "the generic value path", Open: true),
+            Summary: "One post-process pass the root graph runs over the composed frame, in order."
         ),
         new(
             DocumentMember: "views.seatRig",

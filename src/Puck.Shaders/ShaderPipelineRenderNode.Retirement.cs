@@ -1,5 +1,6 @@
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
+using Puck.Hosting;
 
 namespace Puck.Shaders;
 
@@ -25,7 +26,7 @@ public sealed partial class ShaderPipelineRenderNode {
     private IGpuSubmissionFence? m_lastSubmissionFence;
     private Surface m_previousSurface;
 
-    /// <summary>Gets the bytes of every GPU resource the node owns: the installed graph with its float preview, replaced
+    /// <summary>Gets the bytes of every GPU resource the node owns: the installed graph with its preview, replaced
     /// objects waiting for the GPU to finish with them, published images held from a replaced graph, and the staging
     /// buffer the capture readback holds once a capture has been served.</summary>
     public ulong OwnedBytes {
@@ -53,12 +54,29 @@ public sealed partial class ShaderPipelineRenderNode {
         );
     // The bytes the replaced objects still own once any held image has been taken out of them, counted from the objects
     // themselves: the same kinds ShaderPipelineRenderNode.Budget.cs counts from the plan.
-    private static ulong LiveBytes(RuntimePass[] passes, RuntimeResource[] resources, FloatPreviewPass? preview) {
+    private static ulong LiveBytes(RuntimePass[] passes, RuntimeResource[] resources, PreviewPass? preview) {
         var bytes = (preview?.LiveBytes() ?? 0UL);
 
         foreach (var pass in passes) {
             if (pass?.GeometryBuffer is { } geometry) {
                 bytes = checked((bytes + geometry.SizeBytes));
+            }
+            if (pass?.KernelCounters is { } counters) {
+                bytes = checked((bytes + counters.TotalBytes));
+            }
+            foreach (var region in ((ReadOnlySpan<GpuRegion?>)[pass?.PassRegion, pass?.FrameRegion])) {
+                if (region is not null) {
+                    bytes = checked((bytes + (((ulong)region.ByteCount) * ((ulong)region.SlotCount))));
+                }
+            }
+            foreach (var region in (pass?.RowRegions ?? []).Select(selector: static row => row.Region).Concat(second: (pass?.Regions ?? []))) {
+                if (region is not null) {
+                    bytes = checked((bytes + GpuRegion.BytesOf(
+                        byteCount: region.ByteCount,
+                        policy: region.Policy,
+                        slotCount: region.SlotCount
+                    )));
+                }
             }
         }
 
@@ -67,30 +85,37 @@ public sealed partial class ShaderPipelineRenderNode {
                 continue;
             }
 
-            var bytesPerPixel = ((resource.Spec.Kind != ShaderPipelineResourceKind.Buffer)
-                ? BytesPerPixel(format: resource.Spec.Format)
-                : 0UL);
-
-            if (resource.Images is { } images) {
+            if ((resource.Spec.Kind != ShaderPipelineResourceKind.Buffer) && (resource.Images is { } images)) {
                 foreach (var image in images) {
                     if (image is not null) {
-                        bytes = checked((bytes + ((((ulong)image.Width) * image.Height) * bytesPerPixel)));
+                        bytes = checked((bytes + ImageBytes(
+                            format: resource.Spec.Format,
+                            height: image.Height,
+                            width: image.Width
+                        )));
                     }
                 }
             }
             if (resource.Buffers is { } buffers) {
                 foreach (var buffer in buffers) {
                     if (buffer is not null) {
-                        bytes = checked((bytes + (resource.Spec.SizeBytes ?? 0UL)));
+                        bytes = checked((bytes + buffer.SizeBytes));
                     }
                 }
+            }
+            if (resource.Export is { } export) {
+                bytes = checked((bytes + ImageBytes(
+                    format: resource.Spec.Format,
+                    height: export.Height,
+                    width: export.Width
+                )));
             }
         }
 
         return bytes;
     }
     // Takes the image behind a published surface out of replaced objects, when one of them owns it, and holds it.
-    private void Hold(nint imageHandle, RuntimeResource[] resources, FloatPreviewPass? preview) {
+    private void Hold(nint imageHandle, RuntimeResource[] resources, PreviewPass? preview) {
         if (imageHandle == 0) {
             return;
         }
@@ -111,7 +136,11 @@ public sealed partial class ShaderPipelineRenderNode {
                     if ((images[slot] is { } image) && (image.ImageHandle == imageHandle)) {
                         images[slot] = null!;
                         m_held.Add(item: new HeldImage(
-                            Bytes: ((((ulong)image.Width) * image.Height) * BytesPerPixel(format: resource.Spec.Format)),
+                            Bytes: ImageBytes(
+                                format: resource.Spec.Format,
+                                height: image.Height,
+                                width: image.Width
+                            ),
                             Handle: imageHandle,
                             Image: image
                         ));
@@ -162,7 +191,7 @@ public sealed partial class ShaderPipelineRenderNode {
     }
     // Retires objects an install or a selection replaced: the images behind the published surfaces are held, and the
     // rest is disposed once the node's latest submission has completed, which may already be true.
-    private void Retire(RuntimePass[] passes, RuntimeResource[] resources, FloatPreviewPass? preview) {
+    private void Retire(RuntimePass[] passes, RuntimeResource[] resources, PreviewPass? preview) {
         if (
             (passes.Length == 0) &&
             (resources.Length == 0) &&
@@ -266,7 +295,7 @@ public sealed partial class ShaderPipelineRenderNode {
     // Objects replaced by an install or a selection, or a held image no longer published, waiting for the submission
     // that retires them: the fence of the node's latest submission when they were replaced, or, for an image, the
     // fence of the submission made RetirementLag submissions after it stopped being published.
-    private sealed class RetiredGraph(RuntimePass[] passes, RuntimeResource[] resources, FloatPreviewPass? preview, IDisposable? image, ulong bytes, IGpuSubmissionFence? fence, long afterSubmission) {
+    private sealed class RetiredGraph(RuntimePass[] passes, RuntimeResource[] resources, PreviewPass? preview, IDisposable? image, ulong bytes, IGpuSubmissionFence? fence, long afterSubmission) {
         public long AfterSubmission { get; } = afterSubmission;
         public ulong Bytes { get; } = bytes;
         public IGpuSubmissionFence? Fence { get; set; } = fence;

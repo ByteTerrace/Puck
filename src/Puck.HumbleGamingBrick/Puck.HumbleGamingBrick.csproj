@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <Description>The shared SM83 machine across every DMG, MGB, SGB, CGB, and AGB-compatibility hardware revision: CPU, PPU, APU, timers, DMA, cartridge mappers and battery saves, and serial/infrared/printer link, hosted through the IMachineEngine adapter over Puck.GamingBricks. Hardware differences are expressed as named capability gates on one core, never as forked implementations.</Description>
+        <Description>The shared SM83 machine across every DMG, MGB, SGB, CGB, and AGB-compatibility hardware revision: CPU, PPU, APU, timers, DMA, cartridge mappers and battery saves, and serial/infrared/printer link, hosted through the IMachineEngine adapter over Puck.Machines. Hardware differences are expressed as named capability gates on one core, never as forked implementations.</Description>
         <IsPackable>true</IsPackable>
         <PackageId>ByteTerrace.Puck.HumbleGamingBrick</PackageId>
         <PackageTags>agb;cgb;determinism;dmg;emulation;sm83</PackageTags>
@@ -23,7 +23,7 @@
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="[10.*,)" />
     </ItemGroup>
     <ItemGroup>
-        <Using Include="Puck.GamingBricks" />
+        <Using Include="Puck.Machines" />
     </ItemGroup>
     <ItemGroup>
         <EmbeddedResource Include="Firmware\*.bin" LogicalName="Puck.HumbleGamingBrick.Firmware.%(Filename)%(Extension)" />
@@ -33,7 +33,7 @@
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
-        <ProjectReference Include="..\Puck.GamingBricks\Puck.GamingBricks.csproj" />
+        <ProjectReference Include="..\Puck.Machines\Puck.Machines.csproj" />
         <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
     </ItemGroup>
 </Project>

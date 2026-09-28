@@ -1408,7 +1408,7 @@ views {
   }
   )
   )
-  pipeline {
+  graph {
     $replace: true
   }
 }

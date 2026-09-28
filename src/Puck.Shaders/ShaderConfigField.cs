@@ -1,10 +1,11 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Puck.Shaders;
 
-/// <summary>One field of a <see cref="ShaderSetManifest"/>'s <c>config</c> schema — what a document may author for
-/// this shader set, validated by <see cref="ShaderSetManifest.TryBindConfig"/> and emitted as JSON Schema by
-/// <see cref="ShaderSetManifest.ConfigJsonSchema"/>.</summary>
+/// <summary>One field of a pass's or a package's <c>config</c> schema (<see cref="RenderGraphPackage.Config"/>) — what a
+/// document may author for it, validated by <see cref="ShaderConfigBinding.TryBind"/> and emitted as JSON Schema by
+/// <see cref="ShaderConfigBinding.JsonSchema"/>.</summary>
 /// <param name="Type">The value type; a document value is a number for a scalar type and an array of
 /// <see cref="ShaderValueTypes.ComponentCount"/> numbers for a vector type.</param>
 /// <param name="Default">The value an absent document field resolves to, or <see langword="null"/> when the field is
@@ -12,10 +13,13 @@ namespace Puck.Shaders;
 /// <param name="Min">The inclusive per-component minimum, or <see langword="null"/> for none.</param>
 /// <param name="Max">The inclusive per-component maximum, or <see langword="null"/> for none.</param>
 /// <param name="Description">The field's description, carried into the emitted JSON Schema.</param>
+/// <param name="Length">The element count of a block array of four-component vectors, whose document value is an array
+/// of that many vectors, or <see langword="null"/> for a single value.</param>
 public sealed record ShaderConfigField(
     ShaderValueType Type,
     JsonElement? Default = null,
     double? Min = null,
     double? Max = null,
-    string? Description = null
+    string? Description = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] uint? Length = null
 );

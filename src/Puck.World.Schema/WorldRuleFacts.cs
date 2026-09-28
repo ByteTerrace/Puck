@@ -135,6 +135,19 @@ public static class WorldRuleFacts {
     /// authors no rigid body, so a turn-waiting rule composes without a special case for a world that never wired one
     /// in.</summary>
     public const string PhysicsQuiescent = "$physics:quiescent";
+    /// <summary>The prefix; <c>$pointer:&lt;seat&gt;:&lt;screenIndex&gt;:x|y|on</c> reads the 1-based local seat's pointer
+    /// ray, carried in its intent this tick, mapped through the declared screen's row in fixed point — the row's face
+    /// frame and glass bezel against a one-by-one source (<see cref="WorldScreenMappings.Normalized"/>), so the mapping
+    /// comes from document data alone and a host-computed hit is never trusted. <c>x</c> and <c>y</c> are the
+    /// source-normalized fractions, <c>x</c> right and <c>y</c> down, in <c>[0, 1)</c> in the channel's native
+    /// <see cref="Puck.Maths.FixedQ4816"/> domain; a rule that wants pixels multiplies by a resolution it knows.
+    /// <c>on</c> is <c>1</c> while the ray lands on the source and <c>0</c> otherwise — off the face, on the bezel,
+    /// parallel to or behind the screen, or no ray at all — and <c>x</c> and <c>y</c> read <c>0</c> whenever
+    /// <c>on</c> does. An unseated seat reads <c>0</c>, the convention <see cref="ChannelPrefix"/> sets.
+    /// <c>seat</c> is bounded at compile time by <c>population.localSeats</c>, <c>screenIndex</c> must name a declared
+    /// screen whose <c>route.input</c> is <c>Simulation</c>, and anything else is refused by name
+    /// (<c>WorldRuleRefusal.PointerMalformed</c>, <c>WorldRuleRefusal.ScreenUnknown</c>).</summary>
+    public const string PointerPrefix = "$pointer:";
     /// <summary>Compares the world's own live active-population count.</summary>
     public const string Population = "$population";
     /// <summary>The prefix; <c>$region:&lt;placementId&gt;</c> compares that placement's live region occupant count —

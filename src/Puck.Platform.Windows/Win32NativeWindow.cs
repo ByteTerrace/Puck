@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using Puck.Commands;
 using Puck.Input;
 using Puck.Platform.Windows.Interop;
+using static Puck.Platform.Windows.Win32VirtualKeys;
 
 namespace Puck.Platform.Windows;
 
@@ -13,13 +14,10 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private const int HtClient = 1;
     private const int IdcArrow = 32512;
     // WM_KEYDOWN/WM_KEYUP lParam bit 24 — set for the right-hand Control/Alt (and numpad Enter), clear for the
-    // left-hand ones. Shift carries no such distinction (see MapvkVscToVkEx below).
+    // left-hand ones. Shift carries no such distinction (see Win32VirtualKeys.TryKeyOf).
     private const long ExtendedKeyBit = 0x01000000;
     private const int GwlStyle = -16;
     private const int GwlpUserData = -21;
-    // MapVirtualKey map type: scan code -> the LEFT/RIGHT-distinguishing extended virtual key. The only way to
-    // tell VK_LSHIFT from VK_RSHIFT — Shift's lParam/raw-input extended-key bit is never set for either side.
-    private const uint MapvkVscToVkEx = 0x03;
     private const int MonitorDefaultToNearest = 2;
     private const int PmRemove = 0x0001;
     private const int SwShow = 5;
@@ -27,49 +25,6 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private const int SwpNoActivate = 0x0010;
     private const int SwpNoOwnerZOrder = 0x0200;
     private const int SwpNoZOrder = 0x0004;
-    private const int VkA = 0x41;
-    private const int Vk0 = 0x30;
-    private const int Vk9 = 0x39;
-    private const int VkBack = 0x08;
-    private const int VkC = 0x43;
-    private const int VkCapital = 0x14;
-    private const int VkControl = 0x11;
-    private const int VkDown = 0x28;
-    private const int VkEscape = 0x1B;
-    private const int VkF1 = 0x70;
-    private const int VkF10 = 0x79;
-    private const int VkF11 = 0x7A;
-    private const int VkF12 = 0x7B;
-    private const int VkF2 = 0x71;
-    private const int VkF3 = 0x72;
-    private const int VkF4 = 0x73;
-    private const int VkF5 = 0x74;
-    private const int VkF6 = 0x75;
-    private const int VkF7 = 0x76;
-    private const int VkF8 = 0x77;
-    private const int VkF9 = 0x78;
-    private const int VkLWin = 0x5B;
-    private const int VkLeft = 0x25;
-    private const int VkMenu = 0x12;
-    private const int VkNumLock = 0x90;
-    private const int VkNumpad0 = 0x60;
-    private const int VkNumpad9 = 0x69;
-    private const int VkAdd = 0x6B;
-    private const int VkSubtract = 0x6D;
-    private const int VkOem3 = 0xC0;
-    private const int VkOemMinus = 0xBD;
-    private const int VkOemPlus = 0xBB;
-    private const int VkRShift = 0xA1;
-    private const int VkRWin = 0x5C;
-    private const int VkReturn = 0x0D;
-    private const int VkRight = 0x27;
-    private const int VkScroll = 0x91;
-    private const int VkShift = 0x10;
-    private const int VkSpace = 0x20;
-    private const int VkTab = 0x09;
-    private const int VkUp = 0x26;
-    private const int VkV = 0x56;
-    private const int VkZ = 0x5A;
     private const uint WmChar = 0x0102;
     private const uint WmCancelMode = 0x001F;
     private const uint WmCaptureChanged = 0x0215;
@@ -85,6 +40,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private const uint WmLButtonUp = 0x0202;
     private const uint WmMButtonDown = 0x0207;
     private const uint WmMButtonUp = 0x0208;
+    private const uint WmMouseLeave = 0x02A3;
     private const uint WmMouseMove = 0x0200;
     private const uint WmMouseWheel = 0x020A;
     private const uint WmMouseHWheel = 0x020E;
@@ -116,6 +72,8 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private const ushort HidUsagePageGeneric = 0x01;
     private const ushort RiMouseMoveAbsolute = 0x01;
     private const ushort RiMouseVirtualDesktop = 0x02;
+    // TRACKMOUSEEVENT.dwFlags: post WM_MOUSELEAVE once the cursor leaves the client area.
+    private const uint TmeLeave = 0x00000002;
     // RAWKEYBOARD.Flags: RI_KEY_BREAK (a release, vs. a make/press) and RI_KEY_E0 (the same left/right-disambiguating
     // extended-key bit WM_KEYDOWN's lParam bit 24 carries).
     private const ushort RiKeyBreak = 0x0001;
@@ -176,6 +134,11 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private Vector2 m_frameMouseDelta;
     private int m_pointerButtons;
     private bool m_pointerPositionDirty;
+    // Whether a WM_MOUSELEAVE request is armed; Windows disarms it when it posts the message.
+    private bool m_pointerLeaveTracked;
+    // The physical mouse whose raw report moved last, which the aggregate cursor position is attributed to; default
+    // while raw input names no mouse, when the position stays the aggregate's.
+    private InputDeviceId m_lastRawMouseDevice;
     private bool m_rawKeyboardRegistered;
     private bool m_rawMouseRegistered;
     private int? m_lastMouseX;
@@ -290,7 +253,10 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     }
     private void FlushPointerPosition() {
         if (m_pointerPositionDirty && (m_lastMouseX is { } x) && (m_lastMouseY is { } y)) {
-            m_pendingInput.Enqueue(item: WindowInputEvent.PointerAbsolute(new Vector2(x: x, y: y)));
+            m_pendingInput.Enqueue(item: WindowInputEvent.PointerAbsolute(
+                deviceId: m_lastRawMouseDevice,
+                position: new Vector2(x: x, y: y)
+            ));
             m_pointerPositionDirty = false;
         }
     }
@@ -597,6 +563,9 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
                 return 0;
             case WmCaptureChanged:
                 CancelPointerButtons();
+                // Every capture end lands here, including this window's own ReleaseCapture. A leave that arrived
+                // mid-drag was held back, so re-arm unconditionally: a cursor now outside the client posts it again.
+                ArmPointerLeave(windowHandle: windowHandle);
                 return 0;
             case WmShowWindow:
                 m_isVisible = (wParam != 0);
@@ -663,7 +632,12 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
                     windowHandle: windowHandle
                 );
             case WmMouseMove:
-                return HandleMouseMove(lParam: lParam);
+                return HandleMouseMove(
+                    lParam: lParam,
+                    windowHandle: windowHandle
+                );
+            case WmMouseLeave:
+                return HandleMouseLeave();
             case WmMouseWheel:
                 return HandleMouseWheel(wParam: wParam);
             case WmMouseHWheel:
@@ -797,7 +771,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
             virtualKey: virtualKey
         ) ||
             (virtualKey is >= VkA and <= VkZ) ||
-            TryMapNamedKey(
+            TryKeyOf(
             isExtended: isExtended,
             key: out _,
             scanCode: scanCode,
@@ -832,7 +806,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
 
         if (
             (virtualKey is >= VkA and <= VkZ) ||
-            TryMapNamedKey(
+            TryKeyOf(
             isExtended: isExtended,
             key: out _,
             scanCode: scanCode,
@@ -902,7 +876,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
         // EVERY letter key is a first-class key signal, chorded or plain — a game binds WASD movement the same
         // way it binds Ctrl+C.
         if (virtualKey is >= VkA and <= VkZ) {
-            var character = LetterForVirtualKey(virtualKey: virtualKey);
+            var character = LetterOf(virtualKey: virtualKey);
 
             m_pendingInput.Enqueue(item: (isDown
                 ? (WindowInputEvent.LetterDown(
@@ -919,7 +893,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
             return;
         }
 
-        if (TryMapNamedKey(
+        if (TryKeyOf(
             isExtended: isExtended,
             key: out var key,
             scanCode: scanCode,
@@ -936,66 +910,6 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
                 )));
         }
     }
-    // The single owner of the VK→letter identity BOTH key edges share — a copy-paste slip desyncing the down and up
-    // arithmetic (each previously computed it inline) would silently break every held-letter consumer.
-    private static char LetterForVirtualKey(long virtualKey) {
-        return ((char)('a' + (virtualKey - VkA)));
-    }
-    // The one VK→named-key table both physical edges (and both the raw and legacy-fallback doors) share.
-    // Side-sensitive modifiers derive from the caller's own extended-bit/scan-code reading — the raw stream's
-    // RAWKEYBOARD.Flags/MakeCode, or the legacy lParam via IsExtendedKey/GetScanCode.
-    private static bool TryMapNamedKey(long virtualKey, bool isExtended, byte scanCode, out KeyCode key) {
-        if (virtualKey is >= Vk0 and <= Vk9) {
-            key = ((KeyCode)(((int)KeyCode.Digit0) + (virtualKey - Vk0)));
-            return true;
-        }
-
-        if (virtualKey is >= VkNumpad0 and <= VkNumpad9) {
-            key = ((KeyCode)(((int)KeyCode.Numpad0) + (virtualKey - VkNumpad0)));
-            return true;
-        }
-
-        key = virtualKey switch {
-            VkOem3 => KeyCode.Backtick,
-            VkBack => KeyCode.Backspace,
-            VkEscape => KeyCode.Escape,
-            VkReturn => KeyCode.Enter,
-            VkTab => KeyCode.Tab,
-            VkUp => KeyCode.ArrowUp,
-            VkDown => KeyCode.ArrowDown,
-            VkLeft => KeyCode.ArrowLeft,
-            VkRight => KeyCode.ArrowRight,
-            VkSpace => KeyCode.Space,
-            VkOemMinus => KeyCode.Minus,
-            VkOemPlus => KeyCode.Equals,
-            VkSubtract => KeyCode.NumpadSubtract,
-            VkAdd => KeyCode.NumpadAdd,
-            VkF1 => KeyCode.F1,
-            VkF2 => KeyCode.F2,
-            VkF3 => KeyCode.F3,
-            VkF4 => KeyCode.F4,
-            VkF5 => KeyCode.F5,
-            VkF6 => KeyCode.F6,
-            VkF7 => KeyCode.F7,
-            VkF8 => KeyCode.F8,
-            VkF9 => KeyCode.F9,
-            VkF10 => KeyCode.F10,
-            VkF11 => KeyCode.F11,
-            VkF12 => KeyCode.F12,
-            VkControl => ((isExtended)
-            ? KeyCode.ControlRight
-            : KeyCode.ControlLeft),
-            VkMenu => ((isExtended)
-            ? KeyCode.AltRight
-            : KeyCode.AltLeft),
-            VkShift => ResolveShiftSide(scanCode: scanCode),
-            VkLWin => KeyCode.SuperLeft,
-            VkRWin => KeyCode.SuperRight,
-            _ => KeyCode.None,
-        };
-
-        return (key != KeyCode.None);
-    }
     // WM_KEYDOWN/WM_KEYUP lParam bit 24 (ExtendedKeyBit) — set for the right-hand Control/Alt, clear for the
     // left-hand ones. Verified against the documented WM_KEYDOWN/WM_KEYUP lParam layout, not against hardware. The
     // raw stream carries the identical bit as RAWKEYBOARD.Flags' RI_KEY_E0 instead (see HandleRawKeyboard).
@@ -1003,23 +917,9 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
         return ((lParam.ToInt64() & ExtendedKeyBit) != 0);
     }
     // lParam bits 16..23 carry the scan code on the legacy path; RAWKEYBOARD.MakeCode carries the identical value
-    // directly on the raw path (see HandleRawKeyboard) — both feed TryMapNamedKey's ResolveShiftSide the same way.
+    // directly on the raw path (see HandleRawKeyboard) — both feed TryKeyOf's Shift side the same way.
     private static byte GetScanCode(nint lParam) {
         return unchecked((byte)((lParam.ToInt64() >> 16) & 0xFF));
-    }
-    // Shift's scan code carries no extended-key bit on either side, so MapVirtualKey(MAPVK_VSC_TO_VK_EX) against
-    // the physical scan code is the documented way to recover which physical Shift key fired. Ambiguous or
-    // unresolved input (0, or neither VK) defaults to the left key.
-    private static KeyCode ResolveShiftSide(byte scanCode) {
-        var resolvedVirtualKey = User32.MapVirtualKey(
-            code: scanCode,
-            mapType: MapvkVscToVkEx
-        );
-
-        return ((resolvedVirtualKey == VkRShift)
-            ? KeyCode.ShiftRight
-            : KeyCode.ShiftLeft
-        );
     }
     private nint HandleRawInput(nint windowHandle, uint message, nint wParam, nint lParam) {
         var size = ((uint)Marshal.SizeOf<RawInput>());
@@ -1083,6 +983,14 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     }
     private void HandleRawMouse(nint deviceHandle, in RawMouse mouse) {
         var state = GetOrCreateRawMouseState(deviceHandle: deviceHandle);
+
+        if (
+            ((mouse.Flags & RiMouseMoveAbsolute) != 0) ||
+            (mouse.LastX != 0) ||
+            (mouse.LastY != 0)
+        ) {
+            m_lastRawMouseDevice = state.DeviceId;
+        }
 
         // Absolute mode (RDP / VMs / tablets / touch-as-mouse): LastX/LastY are absolute normalized coordinates
         // across the declared desktop. Difference in that coordinate space before scaling to pixels: moving
@@ -1276,7 +1184,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
             Marshal.FreeHGlobal(hglobal: buffer);
         }
     }
-    private nint HandleMouseMove(nint lParam) {
+    private nint HandleMouseMove(nint lParam, nint windowHandle) {
         var mouseX = GetSignedLowWord(value: lParam);
         var mouseY = GetSignedHighWord(value: lParam);
 
@@ -1297,6 +1205,44 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
         m_lastMouseX = mouseX;
         m_lastMouseY = mouseY;
         m_pointerPositionDirty = true;
+
+        if (!m_pointerLeaveTracked) {
+            ArmPointerLeave(windowHandle: windowHandle);
+        }
+
+        return 0;
+    }
+    // Requests one WM_MOUSELEAVE. Windows posts it at once when the cursor is already outside the client, which is
+    // how a capture that ends outside the window still reports its leave.
+    private void ArmPointerLeave(nint windowHandle) {
+        var request = new TrackMouseEventInfo {
+            Flags = TmeLeave,
+            Size = ((uint)Marshal.SizeOf<TrackMouseEventInfo>()),
+            WindowHandle = windowHandle,
+        };
+
+        m_pointerLeaveTracked = User32.TrackMouseEvent(eventTrack: ref request);
+    }
+    // The cursor left the client area: the window reports no position until it returns, so a consumer's position
+    // ends here, after any position still pending this frame. A drag holding capture keeps receiving WM_MOUSEMOVE
+    // outside the client, so it keeps its position; WM_CAPTURECHANGED re-arms the leave once the capture ends.
+    private nint HandleMouseLeave() {
+        m_pointerLeaveTracked = false;
+
+        if (m_pointerButtons != 0) {
+            return 0;
+        }
+
+        FlushPointerPosition();
+        if (m_lastMouseX is null) {
+            return 0;
+        }
+
+        m_lastMouseX = null;
+        m_lastMouseY = null;
+        m_pointerPositionDirty = false;
+        m_pendingInput.Enqueue(item: WindowInputEvent.PointerLeft());
+
         return 0;
     }
     // The wheel is NOT summed per frame the way relative motion is: a wheel report is already a discrete act at

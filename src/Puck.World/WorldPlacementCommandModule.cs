@@ -333,7 +333,7 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
 
             _ = builder.Append(value: $" {row.PlacementId}/{row.FaceName}[screen={slot} handle={((handle != 0)
                 ? "bound"
-                : "no-signal")}{session}]");
+                : "unbound")}{session}]");
         }
 
         return builder.Append(value: (any
@@ -475,7 +475,7 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
                 rendersEveryFrame: session.RendersEveryFrame
             );
 
-            return $" session={session.Destination} camera={cameraText} generation=gen{session.GenerationId}@{session.InstanceName} lease={leaseText}{projectionText}";
+            return $" session={session.Destination} as={session.Session.Describe()} disclosure={session.Tier.ToString().ToLowerInvariant()} camera={cameraText} generation=gen{session.GenerationId}@{session.InstanceName} lease={leaseText}{projectionText}";
         }
 
         foreach (var faceOverride in (placement.FaceSources ?? [])) {
@@ -501,7 +501,7 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
         return string.Empty;
     }
     // The projection/true-cost tail every session line carries: a window projection renders every produced frame,
-    // never sharing ViewStack's round-robin the way an ordinary camera projection does, so its resolved pixel
+    // never refreshing at the views' divisor the way an ordinary camera projection does, so its resolved pixel
     // dimensions are a real, additive per-frame GPU cost. An ordinary camera projection reports its width/height
     // too (the same resolved render target every session pays for), so the line stays one shape for both.
     private static string ProjectionText(WorldScreenProjection projection, int width, int height, bool rendersEveryFrame) =>
@@ -605,7 +605,7 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.faces",
-            description: "Reports the derived-face census (Immediate): one line per derived creation face — placementId, faceName, screenIndex, resolvedSource, and the bound content handle (0 = the no-signal card). No instance-addressed form: screens, the derived-face index space, and session binding are the boot instance's own presentation state — a spawned instance carries an empty machine host and no client perceiving from it (see WorldInstance's remarks).",
+            description: "Reports the derived-face census (Immediate): one line per derived creation face — placementId, faceName, screenIndex, resolvedSource, and the bound content handle (0 = unbound glass). No instance-addressed form: screens, the derived-face index space, and session binding are the boot instance's own presentation state — a spawned instance carries an empty machine host and no client perceiving from it (see WorldInstance's remarks).",
             handler: (_, args) => {
                 if (args.Count == 0) {
                     return new CommandResult(Output: DescribeFaces());
@@ -644,7 +644,7 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.portals",
-            description: "Reports every placement face's PORTAL facet (Immediate): one line per door — placementId/faceName, the named destination (a destinations row), that row's resolved durability (ephemeral|persisted, from the destinations section — '?' when the name resolves to nothing), the RESOLVED travel (facet.travel, else portals.portalDefaults.travel, else 'body' when the world declares no portals section — the same order WorldDefinitionValidator resolves against), the arrival mode (spawn|mapped), its authored counterpart placementId/face for a mapped facet, and inside=<the 1-based local seats currently latched inside that door's band, 'none' when nobody is>. The inside= column is the live edge latch: a door fires on the edge INTO its band, so a latched seat cannot fire again until it leaves — and an ARRIVING traveler seeds its own latches at transfer commit, which nothing else echoes. Authored data only: no boot-time destination-document or counterpart-existence check (a counterpart's placement/face is resolved against the DESTINATION document at transfer time, not here), and this verb echoes the DECISION — WorldInstanceHost.TriggerPortal, not this verb, is what actually fires it. A trailing instance:<name> token reads a named running instance's own document instead of the boot world's.",
+            description: "Reports every placement face's PORTAL facet (Immediate): one line per door — placementId/faceName, the named destination (a destinations row), that row's resolved durability (ephemeral|persisted, from the destinations section — '?' when the name resolves to nothing), the RESOLVED travel (facet.travel, else portals.portalDefaults.travel, else 'body' when the world declares no portals section — the same order WorldDefinitionValidator resolves against), the arrival mode (spawn|mapped), its authored counterpart placementId/face for a mapped facet, and inside=<the 1-based local seats currently latched inside that door's band, 'none' when nobody is>. The inside= column is the live edge latch: a door fires on the edge INTO its band, so a latched seat cannot fire again until it leaves — and an ARRIVING traveler seeds its own latches at transfer commit, which nothing else echoes. Authored data only: no boot-time destination-document or counterpart-existence check (a counterpart's placement/face is resolved against the DESTINATION document at transfer time, not here), and this verb echoes the DECISION — WorldInstanceHost's portal scan (ScanInstancePortals, then ResolveAndEnqueueCoalescedTransfers), not this verb, is what actually fires it. A trailing instance:<name> token reads a named running instance's own document instead of the boot world's.",
             handler: (_, args) => {
                 if (!TryResolveInstance(
                     args: in args,

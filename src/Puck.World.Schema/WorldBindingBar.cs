@@ -363,6 +363,32 @@ public sealed record WorldBindingBarAuthoring(
         Text: false
     );
 
+    /// <summary>Resolves the binding bar a seat presents: the one its identity's owned world authors, else the one the
+    /// world the seat presents from authors, else <see cref="Absent"/>.</summary>
+    /// <param name="identity">The seat identity's owned world, or <see langword="null"/> for none.</param>
+    /// <param name="world">The world the seat presents from.</param>
+    /// <param name="source">Where the policy came from: <c>identity</c>, <c>world</c> or <c>default</c>.</param>
+    /// <returns>The resolved policy.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="world"/> is <see langword="null"/>.</exception>
+    public static WorldBindingBarAuthoring Resolve(WorldDefinition? identity, WorldDefinition world, out string source) {
+        ArgumentNullException.ThrowIfNull(argument: world);
+
+        if (identity?.BindingOverlays.FirstOrDefault()?.BindingBar is { } owned) {
+            source = "identity";
+
+            return owned;
+        }
+
+        if (world.BindingOverlays.FirstOrDefault()?.BindingBar is { } authored) {
+            source = "world";
+
+            return authored;
+        }
+
+        source = "default";
+
+        return Absent;
+    }
     /// <summary>The layout a selector value names: <see cref="Layouts"/>[<paramref name="name"/>] when it exists,
     /// else <see cref="Layouts"/>[<see cref="Layout"/>], else <see cref="WorldBindingBarLayout.Default"/> (no banks —
     /// nothing drawn).</summary>

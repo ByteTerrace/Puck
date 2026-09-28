@@ -11,6 +11,7 @@ namespace Puck.Vulkan.Messages;
 /// <param name="Height">The height, in texels, of the image.</param>
 /// <param name="Format">The image format, as a <c>VkFormat</c> value.</param>
 /// <param name="UsageFlags">A bitmask of <c>VkImageUsageFlagBits</c> describing the intended usage of the image.</param>
+/// <param name="MipLevels">The number of mip levels the image has; one for an image without mips.</param>
 public readonly record struct VulkanOffscreenImageCreateRequest(
     VulkanDeviceCommands Device,
     VulkanInstanceCommands Instance,
@@ -18,5 +19,6 @@ public readonly record struct VulkanOffscreenImageCreateRequest(
     uint Width,
     uint Height,
     uint Format,
-    uint UsageFlags
+    uint UsageFlags,
+    uint MipLevels = 1U
 );

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Puck.Abstractions.Gpu;
+using Puck.Hosting;
 
 namespace Puck.Shaders.Tests;
 
@@ -49,7 +50,7 @@ public sealed class ShaderPipelineAttachmentLawTests {
         EntryPoint: "ps",
         Geometry: (geometry ?? Quad()),
         Inputs: [],
-        Kind: ShaderPipelinePassKind.Geometry,
+        Kind: ShaderPipelineDocumentPassKind.Geometry,
         Name: name,
         Outputs: [.. outputs.Select(selector: static output => new ResourceReference(Name: output))],
         Source: $"{name}.hlsl"
@@ -57,20 +58,18 @@ public sealed class ShaderPipelineAttachmentLawTests {
     private static ShaderPipelinePass Sample(string input, string output) => new(
         EntryPoint: "main",
         Inputs: [new ResourceReference(
-            Binding: 1,
             Name: input
         )],
-        Kind: ShaderPipelinePassKind.Compute,
+        Kind: ShaderPipelineDocumentPassKind.Compute,
         Name: "sample",
         Outputs: [new ResourceReference(
-            Binding: 0,
             Name: output
         )],
         Source: "sample.hlsl"
     );
     // near clears c0 and d0 and draws; far continues both, testing against what near left; a compute pass samples c1.
     // The passes are declared in reverse, so the order is the planner's.
-    private static ShaderPipelineDefinition Layers(Func<ShaderPipelineResource[], ShaderPipelineResource[]>? resources = null, Func<ShaderPipelinePass[], ShaderPipelinePass[]>? passes = null, string[]? outputs = null) {
+    private static RenderGraphDefinition Layers(Func<ShaderPipelineResource[], ShaderPipelineResource[]>? resources = null, Func<ShaderPipelinePass[], ShaderPipelinePass[]>? passes = null, string[]? outputs = null) {
         ShaderPipelineResource[] declared = [
             Color(name: "c0"),
             Color(
@@ -101,7 +100,7 @@ public sealed class ShaderPipelineAttachmentLawTests {
             ),
         ];
 
-        return new ShaderPipelineDefinition(
+        return new RenderGraphDefinition(
             name: "layers",
             outputs: (outputs ?? ["image"]),
             passes: (passes?.Invoke(arg: written) ?? written),
@@ -109,20 +108,20 @@ public sealed class ShaderPipelineAttachmentLawTests {
         );
     }
     // seed writes an image in a compute pass, and a fullscreen pass continues it, drawing over what seed left.
-    private static ShaderPipelineDefinition Tint() => new(
+    private static RenderGraphDefinition Tint() => new(
         name: "tint",
         outputs: ["tinted"],
         passes: [
             new ShaderPipelinePass(
                 EntryPoint: "main",
-                Kind: ShaderPipelinePassKind.Fullscreen,
+                Kind: ShaderPipelineDocumentPassKind.Fullscreen,
                 Name: "tint",
                 Outputs: [new ResourceReference(Name: "tinted")],
                 Source: "tint.hlsl"
             ),
             new ShaderPipelinePass(
                 EntryPoint: "main",
-                Kind: ShaderPipelinePassKind.Compute,
+                Kind: ShaderPipelineDocumentPassKind.Compute,
                 Name: "seed",
                 Outputs: [new ResourceReference(Name: "seeded")],
                 Source: "seed.hlsl"
@@ -136,11 +135,11 @@ public sealed class ShaderPipelineAttachmentLawTests {
             ),
         ]
     );
-    private static ShaderPipelinePlan Plan(ShaderPipelineDefinition definition) => new ShaderPipelineCompiler().Compile(definition: definition);
+    private static ShaderPipelinePlan Plan(RenderGraphDefinition definition) => new ShaderPipelineCompiler().Compile(definition: definition);
     private static CompiledShaderPipeline Compiled(ShaderPipelinePlan plan) {
         ReadOnlyMemory<byte> bytecode = new byte[] { 0x03, 0x02, 0x23, 0x07 };
 
-        Dictionary<ShaderStage, ReadOnlyMemory<byte>> Stages(ShaderPipelinePassKind kind) => ((kind == ShaderPipelinePassKind.Compute)
+        Dictionary<ShaderStage, ReadOnlyMemory<byte>> Stages(ShaderPipelineDocumentPassKind kind) => ((kind == ShaderPipelineDocumentPassKind.Compute)
             ? new() { [ShaderStage.Compute] = bytecode }
             : new() { [ShaderStage.Vertex] = bytecode, [ShaderStage.Fragment] = bytecode });
 
@@ -149,7 +148,7 @@ public sealed class ShaderPipelineAttachmentLawTests {
             shaders: plan.Passes.ToDictionary(
                 elementSelector: pass => new CompiledShader(
                     diagnostics: [],
-                    dxil: Stages(kind: pass.Declaration.Kind),
+                    dxil: Stages(kind: pass.Declaration!.Kind),
                     name: pass.Name,
                     sourceHash: pass.Name,
                     sourcePath: $"{pass.Name}.hlsl",
@@ -162,9 +161,8 @@ public sealed class ShaderPipelineAttachmentLawTests {
     private static ShaderPipelineRenderNode InstalledNode(FakePipelineGpu gpu, ShaderPipelinePlan plan) {
         const uint InFlight = 3;
         var node = new ShaderPipelineRenderNode(
+            pipelines: new GpuPassPipelineCache(),
             deviceContext: gpu,
-            gpu: gpu,
-            graphics: gpu,
             height: Extent,
             hostsOnDirectX: false,
             inFlightFrames: InFlight,
@@ -181,7 +179,7 @@ public sealed class ShaderPipelineAttachmentLawTests {
 
         return node;
     }
-    private static IReadOnlyList<ShaderPipelineDiagnostic> Refusal(ShaderPipelineDefinition definition) =>
+    private static IReadOnlyList<ShaderPipelineDiagnostic> Refusal(RenderGraphDefinition definition) =>
         Assert.Throws<ShaderPipelineCompilationException>(testCode: () => Plan(definition: definition)).Diagnostics;
     private static ShaderPipelineResource[] Replace(ShaderPipelineResource[] resources, string name, Func<ShaderPipelineResource, ShaderPipelineResource> change) =>
         [.. resources.Select(selector: resource => ((resource.Name == name)
@@ -191,7 +189,7 @@ public sealed class ShaderPipelineAttachmentLawTests {
         [.. passes.Select(selector: pass => ((pass.Name == name)
             ? change(arg: pass)
             : pass))];
-    private static ShaderPipelineDefinition WithGeometry(Func<ShaderPipelineGeometry, ShaderPipelineGeometry> change) =>
+    private static RenderGraphDefinition WithGeometry(Func<ShaderPipelineGeometry, ShaderPipelineGeometry> change) =>
         Layers(passes: passes => ReplacePass(
             change: pass => (pass with { Geometry = change(arg: pass.Geometry!) }),
             name: "near",
@@ -237,11 +235,11 @@ public sealed class ShaderPipelineAttachmentLawTests {
         Assert.Equal(
             actual: accesses,
             expected: [
-                ("near", "d0", GpuComputeAccess.DepthAttachmentRead | GpuComputeAccess.DepthAttachmentWrite, ShaderPipelineBarrierKind.Memory, GpuImageLayout.DepthAttachment, GpuImageLayout.DepthAttachment),
-                ("near", "c0", GpuComputeAccess.ColorAttachmentWrite, ShaderPipelineBarrierKind.Image, GpuImageLayout.ShaderReadOnly, GpuImageLayout.RenderTarget),
-                ("far", "c1", GpuComputeAccess.ColorAttachmentRead | GpuComputeAccess.ColorAttachmentWrite, ShaderPipelineBarrierKind.Memory, GpuImageLayout.RenderTarget, GpuImageLayout.RenderTarget),
-                ("far", "d1", GpuComputeAccess.DepthAttachmentRead | GpuComputeAccess.DepthAttachmentWrite, ShaderPipelineBarrierKind.Memory, GpuImageLayout.DepthAttachment, GpuImageLayout.DepthAttachment),
-                ("sample", "c1", GpuComputeAccess.ShaderRead, ShaderPipelineBarrierKind.Image, GpuImageLayout.RenderTarget, GpuImageLayout.ShaderReadOnly),
+                ("near", "d0", GpuAccess.DepthAttachmentRead | GpuAccess.DepthAttachmentWrite, ShaderPipelineBarrierKind.Memory, GpuImageLayout.DepthAttachment, GpuImageLayout.DepthAttachment),
+                ("near", "c0", GpuAccess.ColorAttachmentWrite, ShaderPipelineBarrierKind.Image, GpuImageLayout.ShaderReadOnly, GpuImageLayout.RenderTarget),
+                ("far", "c1", GpuAccess.ColorAttachmentRead | GpuAccess.ColorAttachmentWrite, ShaderPipelineBarrierKind.Memory, GpuImageLayout.RenderTarget, GpuImageLayout.RenderTarget),
+                ("far", "d1", GpuAccess.DepthAttachmentRead | GpuAccess.DepthAttachmentWrite, ShaderPipelineBarrierKind.Memory, GpuImageLayout.DepthAttachment, GpuImageLayout.DepthAttachment),
+                ("sample", "c1", GpuAccess.ShaderRead, ShaderPipelineBarrierKind.Image, GpuImageLayout.RenderTarget, GpuImageLayout.ShaderReadOnly),
             ]
         );
     }
@@ -320,6 +318,11 @@ public sealed class ShaderPipelineAttachmentLawTests {
         { "depth-written-by-compute", "SHADERPIPE_DEPTH_WRITER" },
         { "depth-written-by-fullscreen", "SHADERPIPE_DEPTH_WRITER" },
         { "compare-without-depth", "SHADERPIPE_DEPTH_STATE" },
+        { "clear-outside-unit-range", "SHADERPIPE_DEPTH_CLEAR" },
+        { "clear-on-a-forward", "SHADERPIPE_DEPTH_CLEAR" },
+        { "clear-on-a-color", "SHADERPIPE_DEPTH_CLEAR" },
+        { "greater-against-a-far-clear", "SHADERPIPE_DEPTH_CLEAR" },
+        { "less-against-a-near-clear", "SHADERPIPE_DEPTH_CLEAR" },
         { "geometry-on-fullscreen", "SHADERPIPE_GRAPHICS_FIELDS" },
         { "graphics-fields-on-compute", "SHADERPIPE_GRAPHICS_FIELDS" },
         { "no-geometry", "SHADERPIPE_GEOMETRY_SHAPE" },
@@ -388,7 +391,7 @@ public sealed class ShaderPipelineAttachmentLawTests {
                 resources: resources
             )),
             "depth-sampled" => Layers(passes: static passes => ReplacePass(
-                change: static pass => (pass with { Inputs = [.. pass.InputReferences, new ResourceReference(Binding: 2, Name: "d1")] }),
+                change: static pass => (pass with { Inputs = [.. pass.InputReferences, new ResourceReference(Name: "d1")] }),
                 name: "sample",
                 passes: passes
             )),
@@ -406,9 +409,9 @@ public sealed class ShaderPipelineAttachmentLawTests {
             "depth-written-by-compute" => Layers(
                 passes: static passes => [.. passes, new ShaderPipelinePass(
                     EntryPoint: "main",
-                    Kind: ShaderPipelinePassKind.Compute,
+                    Kind: ShaderPipelineDocumentPassKind.Compute,
                     Name: "stamp",
-                    Outputs: [new ResourceReference(Binding: 0, Name: "stamped")],
+                    Outputs: [new ResourceReference(Name: "stamped")],
                     Source: "stamp.hlsl"
                 )],
                 resources: static resources => [.. resources, Depth(name: "stamped")]
@@ -416,7 +419,7 @@ public sealed class ShaderPipelineAttachmentLawTests {
             "depth-written-by-fullscreen" => Layers(
                 passes: static passes => [.. passes, new ShaderPipelinePass(
                     EntryPoint: "main",
-                    Kind: ShaderPipelinePassKind.Fullscreen,
+                    Kind: ShaderPipelineDocumentPassKind.Fullscreen,
                     Name: "stamp",
                     Outputs: [new ResourceReference(Name: "stamped"), new ResourceReference(Name: "painted")],
                     Source: "stamp.hlsl"
@@ -429,11 +432,36 @@ public sealed class ShaderPipelineAttachmentLawTests {
                 name: "far",
                 passes: passes
             )),
+            "clear-outside-unit-range" => Layers(resources: static resources => Replace(
+                change: static resource => (resource with { ClearDepth = 2f }),
+                name: "d0",
+                resources: resources
+            )),
+            "clear-on-a-forward" => Layers(resources: static resources => Replace(
+                change: static resource => (resource with { ClearDepth = 0f }),
+                name: "d1",
+                resources: resources
+            )),
+            "clear-on-a-color" => Layers(resources: static resources => Replace(
+                change: static resource => (resource with { ClearDepth = 0f }),
+                name: "c0",
+                resources: resources
+            )),
+            "greater-against-a-far-clear" => Layers(passes: static passes => ReplacePass(
+                change: static pass => (pass with { DepthCompare = ShaderPipelineDepthCompare.Greater }),
+                name: "near",
+                passes: passes
+            )),
+            "less-against-a-near-clear" => Layers(resources: static resources => Replace(
+                change: static resource => (resource with { ClearDepth = 0f }),
+                name: "d0",
+                resources: resources
+            )),
             "geometry-on-fullscreen" => Layers(
                 passes: static passes => [.. passes, new ShaderPipelinePass(
                     EntryPoint: "main",
                     Geometry: Quad(),
-                    Kind: ShaderPipelinePassKind.Fullscreen,
+                    Kind: ShaderPipelineDocumentPassKind.Fullscreen,
                     Name: "cover",
                     Outputs: [new ResourceReference(Name: "covered")],
                     Source: "cover.hlsl"
@@ -530,10 +558,11 @@ public sealed class ShaderPipelineAttachmentLawTests {
             collection: gpu.GraphicsPipelines
         );
 
-        // A geometry pass with no input binds no descriptor, so only the sampling consumer has a pool in each slot.
+        // Every pass binds its frame group set and its pass group set in each slot, a geometry pass with no input too, since
+        // its pass block holds its extent: the graph's one pool holds two sets for each of the three passes and slots.
         Assert.Equal(
-            actual: gpu.CreatedObjects.Count(predicate: static created => (created.Kind == "descriptor pool")),
-            expected: 3
+            actual: (Pools: gpu.CreatedObjects.Count(predicate: static created => (created.Kind == "descriptor pool")), Sets: gpu.DescriptorPools.Single().MaxSets),
+            expected: (Pools: 1, Sets: 18U)
         );
 
         gpu.Recording = true;
@@ -610,22 +639,23 @@ public sealed class ShaderPipelineAttachmentLawTests {
             plan: Plan(definition: Layers())
         );
 
-        // Three slots of three 16x16 four-byte storages (the color chain, the depth chain, the image), and two 60-byte
-        // geometry buffers, exactly as the fake holds them.
+        // Three slots of three 16x16 four-byte storages (the color chain, the depth chain, the image), two 60-byte geometry
+        // buffers, and three slots of four 256-byte constant buffers (the frame group's block and each pass's), exactly as the
+        // fake holds them.
         Assert.Equal(
             actual: (Owned: node.OwnedBytes, Steady: node.InstalledAccount.SteadyBytes),
             expected: (Owned: gpu.LiveBytes, Steady: gpu.LiveBytes)
         );
         Assert.Equal(
             actual: gpu.LiveBytes,
-            expected: (((((3UL * 3UL) * 16UL) * 16UL) * 4UL) + (2UL * 60UL))
+            expected: ((((((3UL * 3UL) * 16UL) * 16UL) * 4UL) + (2UL * 60UL)) + ((3UL * 4UL) * 256UL))
         );
     }
     [Fact]
     public void TheDocumentSpellsAGeometryPassAndItsDepthAttachment() {
         const string Document = """
             {
-              "$schema": "puck.shader.pipeline.v1",
+              "$schema": "puck.render.graph.v1",
               "name": "spelled",
               "resources": [
                 { "name": "color", "kind": "Image", "format": "R8G8B8A8Unorm", "dimensions": { "mode": "Absolute", "width": 16, "height": 16 } },
@@ -655,17 +685,75 @@ public sealed class ShaderPipelineAttachmentLawTests {
             """;
         var definition = JsonSerializer.Deserialize(
             json: Document,
-            jsonTypeInfo: ShaderPipelineJsonContext.Default.ShaderPipelineDefinition
+            jsonTypeInfo: RenderGraphJsonContext.Default.RenderGraphDefinition
         )!;
         var pass = Plan(definition: definition).Passes.Single();
 
         Assert.Equal(
-            actual: (pass.Declaration.Kind, pass.Declaration.DepthCompare, pass.Declaration.Geometry!.VertexEntryPoint, pass.Declaration.Geometry.IndexFormat, pass.Declaration.Geometry.VertexCount, pass.Declaration.Geometry.SizeBytes),
-            expected: (ShaderPipelinePassKind.Geometry, ((ShaderPipelineDepthCompare?)ShaderPipelineDepthCompare.LessOrEqual), "vs", ShaderPipelineIndexFormat.UInt32, 3U, ((9UL * 4UL) + (3UL * 4UL)))
+            actual: (pass.Declaration!.Kind, pass.Declaration!.DepthCompare, pass.Declaration!.Geometry!.VertexEntryPoint, pass.Declaration!.Geometry.IndexFormat, pass.Declaration!.Geometry.VertexCount, pass.Declaration!.Geometry.SizeBytes),
+            expected: (ShaderPipelineDocumentPassKind.Geometry, ((ShaderPipelineDepthCompare?)ShaderPipelineDepthCompare.LessOrEqual), "vs", ShaderPipelineIndexFormat.UInt32, 3U, ((9UL * 4UL) + (3UL * 4UL)))
         );
         Assert.Equal(
             actual: pass.Attachments.Select(selector: static attachment => (attachment.Version, attachment.Depth, attachment.Load, attachment.Store)),
             expected: [("color", false, GpuAttachmentLoad.Clear, GpuAttachmentStore.Store), ("depth", true, GpuAttachmentLoad.Clear, GpuAttachmentStore.Discard)]
+        );
+    }
+    [Fact]
+    public void AGreaterTestClearsItsDepthToTheDepthItsDocumentStates() {
+        const string Document = """
+            {
+              "$schema": "puck.render.graph.v1",
+              "name": "reversed",
+              "resources": [
+                { "name": "color", "kind": "Image", "format": "R8G8B8A8Unorm", "dimensions": { "mode": "Absolute", "width": 16, "height": 16 } },
+                { "name": "depth", "kind": "Depth", "format": "D32Float", "dimensions": { "mode": "Absolute", "width": 16, "height": 16 }, "clearDepth": 0 }
+              ],
+              "passes": [
+                {
+                  "name": "draw",
+                  "source": "draw.hlsl",
+                  "entryPoint": "ps",
+                  "kind": "Geometry",
+                  "outputs": [ { "name": "color" }, { "name": "depth" } ],
+                  "depthCompare": "Greater",
+                  "geometry": {
+                    "vertexEntryPoint": "vs",
+                    "strideBytes": 12,
+                    "attributes": [ { "location": 0, "format": "R32G32B32Float", "offsetBytes": 0 } ],
+                    "vertices": [ -1, -1, 0.5, 1, -1, 0.5, -1, 1, 0.5 ],
+                    "indices": [ 2, 0, 1 ]
+                  }
+                }
+              ],
+              "outputs": [ "color" ]
+            }
+            """;
+        var gpu = new FakePipelineGpu();
+        var plan = Plan(definition: JsonSerializer.Deserialize(
+            json: Document,
+            jsonTypeInfo: RenderGraphJsonContext.Default.RenderGraphDefinition
+        )!);
+        using var node = InstalledNode(
+            gpu: gpu,
+            plan: plan
+        );
+
+        gpu.Recording = true;
+        _ = node.ProduceFrame(context: default);
+
+        // The planned attachment, the render pass it begins and the depth test all state the reversed-Z convention.
+        Assert.Equal(
+            actual: plan.Passes.Single().Attachments.Select(selector: static attachment => (attachment.Version, attachment.ClearDepth)),
+            expected: [("color", GpuDepthAttachment.DefaultClearDepth), ("depth", 0f)]
+        );
+        Assert.Equal(
+            actual: Assert.Single(collection: gpu.RenderPasses).Pass.Depth,
+            expected: new GpuDepthAttachment(
+                ClearDepth: 0f,
+                Format: GpuPixelFormat.D32Float,
+                Load: GpuAttachmentLoad.Clear,
+                Store: GpuAttachmentStore.Discard
+            )
         );
     }
     [Fact]

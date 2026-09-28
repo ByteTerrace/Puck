@@ -7,7 +7,7 @@
   "requirements": ["gpu"],
   "timeoutSeconds": 60,
   "fixtures": [
-    "halved.pipeline.json",
+    "halved.graph.json",
     "convert-halved.hlsl"
   ],
   "positive": {

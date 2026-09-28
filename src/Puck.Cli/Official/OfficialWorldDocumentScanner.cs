@@ -338,33 +338,22 @@ internal static class OfficialWorldDocumentScanner {
             return false;
         }
 
-        if (!WorldDefinitionFileSource.TryParseComposed(
+        if (!WorldDefinitionLoader.TryReadPublishable(
+            catalog: machines,
             definition: out var definition,
+            documentDirectory: WorldDocumentPaths.DirectoryOf(documentPath: rootPath),
             json: ((tree is null)
                 ? Encoding.UTF8.GetString(bytes: root.Bytes)
                 : tree.ToJsonString()),
-            neighbours: null,
             reason: out reason,
-            sourceName: rootPath,
-            validateAdjacencyClaims: false,
-            catalog: machines,
-            documentDirectory: WorldDocumentPaths.DirectoryOf(documentPath: rootPath)
+            sourceName: rootPath
         )) {
-            reason = $"parsing composed '{RootDocumentName}' ({root.Source}): {reason}";
+            reason = $"admitting composed '{RootDocumentName}' ({root.Source}): {reason}";
 
             return false;
         }
 
-        if (!WorldDefinitionValidator.TryValidateLocally(
-            definition: definition!,
-            machines: machines,
-            reason: out reason
-        )) {
-            reason = $"machine admission in '{RootDocumentName}' ({root.Source}): {reason}";
-            return false;
-        }
-
-        var canonicalBytes = WorldDefinitionSerialization.Serialize(definition: definition!);
+        var canonicalBytes = WorldDefinitionSerialization.Serialize(definition: definition);
         var pin = WorldDefinitionFileSource.ComputeContentHash(content: canonicalBytes);
 
         var (objectPath, hash, size) = writer.Put(bytes: canonicalBytes);

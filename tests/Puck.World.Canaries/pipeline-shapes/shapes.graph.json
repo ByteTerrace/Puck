@@ -1,0 +1,56 @@
+{
+  "$schema": "puck.render.graph.v1",
+  "name": "shapes",
+  "resources": [
+    {
+      "name": "field",
+      "kind": "Image",
+      "format": "R16G16B16A16Float",
+      "dimensions": { "mode": "Absolute", "width": 32, "height": 32 }
+    },
+    {
+      "name": "words",
+      "kind": "Buffer",
+      "sizeBytes": 16
+    },
+    {
+      "name": "mixed",
+      "kind": "Image",
+      "format": "R16G16B16A16Float",
+      "dimensions": { "mode": "Absolute", "width": 32, "height": 32 }
+    },
+    {
+      "name": "image",
+      "kind": "Image",
+      "format": "R8G8B8A8Unorm",
+      "dimensions": { "mode": "Absolute", "width": 32, "height": 32 }
+    }
+  ],
+  "passes": [
+    {
+      "name": "seed",
+      "source": "seed.hlsl",
+      "entryPoint": "main",
+      "kind": "Compute",
+      "outputs": [ { "name": "field" }, { "name": "words" } ]
+    },
+    {
+      "name": "combine",
+      "source": "combine.hlsl",
+      "entryPoint": "main",
+      "kind": "Compute",
+      "inputs": [ { "name": "field" }, { "name": "words" } ],
+      "outputs": [ { "name": "mixed" } ]
+    },
+    {
+      "name": "present",
+      "source": "present.hlsl",
+      "entryPoint": "main",
+      "kind": "Fullscreen",
+      "vertex": "Position",
+      "inputs": [ { "name": "mixed" } ],
+      "outputs": [ { "name": "image" } ]
+    }
+  ],
+  "outputs": ["image", "mixed", "field"]
+}

@@ -1,3 +1,4 @@
+using Puck.Testing;
 using Puck.Commands;
 using System.Text.Json;
 using Puck.Abstractions;
@@ -16,7 +17,7 @@ namespace Puck.World.Tests;
 public sealed partial class PipelineOverrideLawTests {
     private static WorldDefinition WithExposure(WorldDefinition definition, double exposure) => (definition with {
         ViewsRaw = (definition.Views with {
-            Pipelines = [.. definition.Views.Pipelines.Select(selector: row => ((row.Name == "left")
+            Graphs = [.. (definition.Views.Graphs ?? []).Select(selector: row => ((row.Name == "left")
                 ? (row with { Overrides = new Dictionary<string, JsonElement> { ["visualize"] = Change(json: $"{{\"exposure\":{exposure.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}}}") } })
                 : row))],
         }),
@@ -99,8 +100,8 @@ public sealed partial class PipelineOverrideLawTests {
     }
     // A row's relative source resolves against the LOADED document's own directory, not the boot document's — both
     // where the server's own bind gate reads it (Host.PipelineSources, re-pointed once the load applies) and where
-    // the rendering host reads it (WorldPipelineRuntime, re-pointed by WorldPostBuildWiring's identical Rebuild-echo
-    // tap). "only-here.pipeline.json" exists in the loaded directory alone, so a resolution that stayed pinned to
+    // the rendering host reads it (WorldViewGraphHost, re-pointed by WorldPostBuildWiring's identical Rebuild-echo
+    // tap). "only-here.graph.json" exists in the loaded directory alone, so a resolution that stayed pinned to
     // the boot directory would refuse the load by name instead of accepting it.
     [Fact]
     public void AWorldLoadFromAnotherDirectoryBindsAndTheRuntimeResolvesARelativeSourceThere() {
@@ -113,7 +114,7 @@ public sealed partial class PipelineOverrideLawTests {
         Directory.CreateDirectory(path: otherDirectory);
 
         try {
-            const string RelativeSource = "only-here.pipeline.json";
+            const string RelativeSource = "only-here.graph.json";
 
             File.Copy(
                 destFileName: Path.Combine(path1: otherDirectory, path2: RelativeSource),
@@ -122,9 +123,9 @@ public sealed partial class PipelineOverrideLawTests {
 
             var candidate = (Document() with {
                 ViewsRaw = (Document().Views with {
-                    Pipelines = [
-                        new WorldViewPipeline(Name: "left", Source: RelativeSource, Overrides: new Dictionary<string, JsonElement> { ["visualize"] = Change(json: "{\"exposure\":4}") }),
-                        new WorldViewPipeline(Name: "right", Source: RelativeSource),
+                    Graphs = [
+                        new WorldViewGraph(Name: "left", Source: RelativeSource, Overrides: new Dictionary<string, JsonElement> { ["visualize"] = Change(json: "{\"exposure\":4}") }),
+                        new WorldViewGraph(Name: "right", Source: RelativeSource),
                     ],
                 }),
             });
@@ -158,7 +159,7 @@ public sealed partial class PipelineOverrideLawTests {
             );
 
             // The rendering host rebases the identical way WorldPostBuildWiring's Rebuild-echo tap does.
-            using var runtime = new WorldPipelineRuntime(
+            using var runtime = new WorldViewGraphHost(
                 documentDirectory: m_directory,
                 packager: new ShaderPackager(compiler: new ShaderCompiler(
                     cacheDirectory: Path.Combine(path1: m_directory, path2: "cache"),
@@ -184,11 +185,12 @@ public sealed partial class PipelineOverrideLawTests {
     // the drive names as a mutation outcome that disagrees with the recording.
     [Fact]
     public void ARecordedCommitReDrivesToTheOutcomeItHadLive() {
-        Fixtures.SkipIfReplayDirectoryUnwritable();
+        using var stateDirectory = new TemporaryDirectory(prefix: "puck-replay-");
 
         using var fixture = Server();
         var transport = new LoopbackTransport(server: fixture.Server);
         var tape = new WorldReplayTape(
+            stateRoot: new WorldStateRoot(path: stateDirectory.RootPath),
             addonHostFactory: static (_, _) => new NullAddonHost(),
             engines: [],
             liveServer: fixture.Server,
@@ -222,7 +224,7 @@ public sealed partial class PipelineOverrideLawTests {
 
         WorldReplaySnapshot recording;
 
-        using (var stream = File.OpenRead(path: WorldReplayTape.PathFor(name: name))) {
+        using (var stream = File.OpenRead(path: tape.PathFor(name: name))) {
             recording = WorldReplaySnapshot.Read(stream: stream);
         }
 

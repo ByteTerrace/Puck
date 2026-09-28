@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Puck.Abstractions.Gpu;
 
 namespace Puck.Shaders;
 
@@ -7,10 +8,14 @@ namespace Puck.Shaders;
 /// Generates the HLSL include a pass reads its <see cref="ShaderInterface"/> through. Every declaration carries its
 /// placement explicitly and for both backends at once: a block member carries <c>[[vk::offset(n)]]</c> and sits after
 /// named padding that makes Direct3D 12's packing land on the same offset, and a binding carries
-/// <c>[[vk::binding(b, set)]]</c> paired with <c>register(xb, spaceset)</c>, and a pushed group's block carries
-/// <c>[[vk::push_constant]]</c> paired with <c>register(b0, space0)</c>, where both backends' root constants live. Values
-/// reach a pass as members of a named struct per group, and an array is read through a generated accessor that hides how
-/// its elements are stored.
+/// <c>[[vk::binding(b, set)]]</c> paired with <c>register(xb, spaceset)</c>, and an arrayed image or sampler declares its
+/// length. Values reach a pass as members of a named struct per group, and an array is read through a generated
+/// accessor that hides how its elements are stored. A buffer with an element type is a <c>StructuredBuffer&lt;T&gt;</c> or
+/// <c>RWStructuredBuffer&lt;T&gt;</c>, and one without is a <c>ByteAddressBuffer</c> or <c>RWByteAddressBuffer</c>. A
+/// pushed index (<see cref="ShaderInterface.PushesIndex"/>) follows the groups as a one-member struct carrying
+/// <c>[[vk::push_constant]]</c> paired with <c>register(b0, space4)</c>, the space
+/// <see cref="GpuPipelineLayoutDescription.PushIndexSpace"/> names. An interface declaring the work counters
+/// (<see cref="ShaderWorkCounters"/>) ends with the functions its kernels count their own work through.
 /// <para>The text is a pure function of the interface: the same interface generates the same bytes, with LF line
 /// endings, on every host.</para>
 /// </summary>
@@ -58,9 +63,7 @@ public static class ShaderInterfaceHlsl {
                 text: text
             );
             Line(
-                line: (group.Pushed
-                    ? $"// The {group.Group} group: push constants, register space {group.Set}."
-                    : $"// The {group.Group} group: descriptor set {group.Set}, register space {group.Set}."),
+                line: $"// The {group.Group} group: descriptor set {group.Set}, register space {group.Set}.",
                 text: text
             );
 
@@ -84,9 +87,20 @@ public static class ShaderInterfaceHlsl {
                     text: text
                 );
                 Line(
-                    line: $"{(group.Pushed ? "[[vk::push_constant]]" : Binding(binding: 0, set: group.Set))} ConstantBuffer<{group.BlockTypeName}> {group.BlockVariableName}{Register(binding: 0, register: 'b', set: group.Set)};",
+                    line: $"{Binding(binding: 0, set: group.Set)} ConstantBuffer<{group.BlockTypeName}> {group.BlockVariableName}{Register(binding: 0, register: 'b', set: group.Set)};",
                     text: text
                 );
+
+                // A stamped block's variable carries the stamp in its name, which the bytecode reflects; a pass still reads
+                // it by the group's own name.
+                var unstamped = ShaderInterface.BlockVariableName(group: group.Group);
+
+                if (!string.Equals(a: unstamped, b: group.BlockVariableName, comparisonType: StringComparison.Ordinal)) {
+                    Line(
+                        line: $"#define {unstamped} {group.BlockVariableName}",
+                        text: text
+                    );
+                }
             }
 
             foreach (var resource in group.Resources) {
@@ -100,8 +114,40 @@ public static class ShaderInterfaceHlsl {
             }
         }
 
-        var arrays = layout.Groups.SelectMany(selector: static group => group.BlockMembers.Select(selector: member => (Group: group, Member: member)))
-            .Where(predicate: static entry => (entry.Member.Length != 0))
+        if (shaderInterface.PushesIndex) {
+            var typeName = ShaderInterface.PushedIndexTypeName(interfaceName: shaderInterface.Name);
+            var space = Number(value: GpuPipelineLayoutDescription.PushIndexSpace);
+
+            Line(
+                line: "",
+                text: text
+            );
+            Line(
+                line: $"// The pushed index: Vulkan push constants at offset 0, Direct3D 12 root constants at register b0, space {space}.",
+                text: text
+            );
+            Line(
+                line: $"struct {typeName} {{",
+                text: text
+            );
+            Line(
+                line: $"    [[vk::offset(0)]] uint {ShaderInterface.PushedIndexMemberName};",
+                text: text
+            );
+            Line(
+                line: "};",
+                text: text
+            );
+            Line(
+                line: $"[[vk::push_constant]] ConstantBuffer<{typeName}> {ShaderInterface.PushedIndexVariableName}{Register(binding: 0, register: 'b', set: GpuPipelineLayoutDescription.PushIndexSpace)};",
+                text: text
+            );
+        }
+
+        // An array reads zero past its declared length, whatever the buffer bound for it holds there.
+        var arrays = layout.Groups.SelectMany(selector: static group => group.Resources)
+            .Select(selector: static resource => resource.Member)
+            .Where(predicate: static member => (member.Kind == ShaderInterfaceMemberKind.Array))
             .ToArray();
 
         if (arrays.Length != 0) {
@@ -111,19 +157,19 @@ public static class ShaderInterfaceHlsl {
             );
         }
 
-        foreach (var (group, member) in arrays) {
-            var declared = shaderInterface.Members.Single(predicate: candidate => string.Equals(
-                a: candidate.Name,
-                b: member.Name,
-                comparisonType: StringComparison.Ordinal
-            ));
-            var type = declared.Type!.Value;
+        foreach (var member in arrays) {
+            var type = member.Type!.Value.Spelling();
 
             Line(
-                line: $"{type.Spelling()} {ShaderInterface.AccessorName(member: declared)}(uint index) {{ return {group.BlockVariableName}.{member.Name}[index].{"xyzw"[..((int)type.ComponentCount())]}; }}",
+                line: $"{type} {ShaderInterface.AccessorName(member: member)}(uint index) {{ return ((index < {Number(value: member.Length!.Value)}u) ? {member.Name}[index] : (({type})0)); }}",
                 text: text
             );
         }
+
+        ShaderWorkCounters.AppendHlsl(
+            counts: ShaderWorkCounters.IsDeclaredBy(shaderInterface: shaderInterface),
+            text: text
+        );
 
         Line(
             line: "",
@@ -143,9 +189,15 @@ public static class ShaderInterfaceHlsl {
         var member = resource.Member;
 
         var (register, declaration) = resource.Kind switch {
-            ShaderBindingKind.SampledImage => ('t', $"Texture2D<{member.Type!.Value.Spelling()}> {member.Name}"),
-            ShaderBindingKind.StorageImage => ('u', $"[[vk::image_format(\"{ShaderInterface.StorageFormatSpelling(format: member.Format!.Value)}\")]] RWTexture2D<{member.Type!.Value.Spelling()}> {member.Name}"),
-            ShaderBindingKind.Sampler => ('s', $"SamplerState {member.Name}"),
+            GpuBindingKind.SampledImage => ('t', $"Texture2D<{member.Type!.Value.Spelling()}> {member.Name}"),
+            GpuBindingKind.StorageImage => ('u', $"[[vk::image_format(\"{ShaderInterface.StorageFormatSpelling(format: member.Format!.Value)}\")]] RWTexture2D<{member.Type!.Value.Spelling()}> {member.Name}"),
+            GpuBindingKind.ReadOnlyBuffer => ('t', ((member.Type is { } element)
+                ? $"StructuredBuffer<{element.Spelling()}> {member.Name}"
+                : $"ByteAddressBuffer {member.Name}")),
+            GpuBindingKind.ReadWriteBuffer => ('u', ((member.Type is { } element)
+                ? $"RWStructuredBuffer<{element.Spelling()}> {member.Name}"
+                : $"RWByteAddressBuffer {member.Name}")),
+            GpuBindingKind.Sampler => ('s', $"SamplerState {member.Name}"),
             _ => throw new ArgumentOutOfRangeException(
                 actualValue: resource.Kind,
                 message: "The binding kind is not generated for an interface member.",
@@ -153,7 +205,11 @@ public static class ShaderInterfaceHlsl {
             ),
         };
 
-        return $"{Binding(binding: resource.Binding, set: set)} {declaration}{Register(binding: resource.Binding, register: register, set: set)};";
+        var extent = (((resource.Kind is GpuBindingKind.SampledImage or GpuBindingKind.Sampler) && (member.Length is { } length))
+            ? $"[{Number(value: length)}]"
+            : "");
+
+        return $"{Binding(binding: resource.Binding, set: set)} {declaration}{extent}{Register(binding: resource.Binding, register: register, set: set)};";
     }
     private static void Line(StringBuilder text, string line) =>
         text.Append(value: line).Append(value: '\n');

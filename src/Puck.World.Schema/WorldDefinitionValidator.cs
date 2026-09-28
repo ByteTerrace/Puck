@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Numerics;
 using System.Text.Json;
-using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Machines;
 using Puck.Assets;
 using Puck.Assets.Documents;
@@ -391,75 +390,6 @@ public static partial class WorldDefinitionValidator {
 
         return false;
     }
-    private static void ValidateRenderCycle(WorldDefinition definition, List<string> errors) {
-        if (definition.Render.Cycle is not { } cycle) {
-            return;
-        }
-
-        var row = definition.State.FirstOrDefault(predicate: candidate => string.Equals(
-            a: candidate.Name.Value,
-            b: cycle.State,
-            comparisonType: StringComparison.Ordinal
-        ));
-
-        if (row is null) {
-            errors.Add(item: $"render.cycle.state names no state row '{cycle.State}'.");
-        } else if (row.Kind is not (CellKind.Fixed or CellKind.Int)) {
-            errors.Add(item: $"render.cycle.state '{cycle.State}' must be a Fixed or Int row.");
-        }
-
-        if (cycle.Keys is not { Count: >= 2 }) {
-            errors.Add(item: "render.cycle.keys must carry at least two keys.");
-
-            return;
-        }
-
-        // A key over an unauthored section moves the PINNED topology (the sun and hemisphere; the two-stop gradient
-        // and the fog), which is what the cycle track resolves it against.
-        var lightingShape = ResolvedLightingShape(lighting: definition.Render.Lighting);
-        var skyShape = (definition.Render.Sky ?? WorldRenderSky.Pinned);
-
-        for (var index = 0; (index < cycle.Keys.Count); index++) {
-            var key = cycle.Keys[index];
-            var path = $"render.cycle.keys[{index}]";
-
-            if (
-                !float.IsFinite(f: key.At) ||
-                (key.At < 0f) ||
-                (key.At >= 1f)
-            ) {
-                errors.Add(item: $"{path}.at must be finite and in [0, 1).");
-            } else if (
-                (index > 0) &&
-                (key.At <= cycle.Keys[(index - 1)].At)
-            ) {
-                errors.Add(item: $"{path}.at must exceed the previous key's.");
-            }
-
-            ValidateRenderLighting(
-                definition: definition,
-                errors: errors,
-                lighting: key.Lighting,
-                path: $"{path}.lighting",
-                shape: lightingShape
-            );
-            ValidateRenderSky(
-                definition: definition,
-                errors: errors,
-                path: $"{path}.sky",
-                sky: key.Sky,
-                shape: skyShape,
-                lighting: lightingShape
-            );
-        }
-
-        ValidateRenderCycleResolution(
-            cycle: cycle,
-            errors: errors,
-            lightingShape: lightingShape,
-            skyShape: skyShape
-        );
-    }
     // The fields a key may leave to inheritance are judged where they RESOLVE, not where they are written: each key
     // holds every field the previous key left it, the first inherits from the statics and then from the last key
     // (the wrap), so a stop order or an ink band that is fine in every fragment can still resolve inverted. Walks
@@ -839,21 +769,6 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{name} must be finite and positive.");
         }
     }
-    // The per-axis effective-extent check for a box solidity facet: a margin that inverts any axis (halfExtent + margin
-    // <= 0) is rejected by name, not turned into a negative-extent collider.
-    private static void RequirePositiveEffectiveExtent(Vector3 halfExtents, float margin, string path, List<string> errors) {
-        if (!float.IsFinite(f: margin)) {
-            return;
-        }
-
-        if (
-            ((halfExtents.X + margin) <= 0f) ||
-            ((halfExtents.Y + margin) <= 0f) ||
-            ((halfExtents.Z + margin) <= 0f)
-        ) {
-            errors.Add(item: $"{path} {margin} inverts the collider (halfExtent + margin must be > 0 on every axis).");
-        }
-    }
     // The general bounded-float door every closed-interval check (unit alphas, gain ceilings, half-angle cones, …)
     // folds onto: finite, and within [min, max] with either edge switchable to an open bound (e.g. a half-angle's
     // 0 is excluded — a zero-width cone senses nothing — while its 180 ceiling is admitted).
@@ -1050,8 +965,8 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
 
-        ValidateRenderExtensions(
-            extensions: definition.Render.Extensions,
+        ValidatePostPasses(
+            views: definition.Views,
             errors: errors,
             deferred: deferredSink
         );
@@ -1079,6 +994,10 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
         ValidateRenderCycle(
+            definition: definition,
+            errors: errors
+        );
+        ValidateTimeline(
             definition: definition,
             errors: errors
         );
@@ -1119,6 +1038,10 @@ public static partial class WorldDefinitionValidator {
 
         ValidatePlayerDefaults(
             defaults: definition.PlayerDefaults,
+            errors: errors
+        );
+        ValidateEditor(
+            editor: definition.Editor,
             errors: errors
         );
         ValidateSteerBinding(
@@ -1678,7 +1601,7 @@ public static partial class WorldDefinitionValidator {
         scope.FontNames = fontNames;
         scope.HasTextCatalog = (definition.Text is not null);
 
-        var prototypeIds = ValidateCreations(
+        var prototypeIds = ValidatePrototypes(
             definition: definition,
             creations: definition.Creations,
             fontNames: fontNames,
@@ -1717,20 +1640,11 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
 
-        // Document-wide, independent of any single placement's own row checks above — see its own remarks.
-        ValidateSessionWindowBudget(
-            placements: definition.Placements,
-            errors: errors
-        );
 
         var cameras = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         {
             var authoredCameras = definition.Cameras;
-
-            if (authoredCameras.Count > OffscreenRenderBudget.RegisteredViews) {
-                errors.Add(item: $"cameras count {authoredCameras.Count} exceeds the maximum of {OffscreenRenderBudget.RegisteredViews} (each camera can carry a persistent offscreen render; the runtime registers no more views than that).");
-            }
 
             for (var index = 0; (index < authoredCameras.Count); index++) {
                 var camera = authoredCameras[index];
@@ -2007,6 +1921,9 @@ public static partial class WorldDefinitionValidator {
                     (screen.HalfDepth <= 0f)
                 ) {
                     errors.Add(item: $"{path} half extents must be finite and positive.");
+                }
+                if (!Enum.IsDefined(value: screen.Filter)) {
+                    errors.Add(item: $"{path}.filter {((uint)screen.Filter)} is not a sampler filter; a screen samples its source Nearest or Linear.");
                 }
 
                 // The declared source and each magazine entry cross the same source gate (a magazine entry could

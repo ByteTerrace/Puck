@@ -1,10 +1,11 @@
 # Shared emulation infrastructure
 
-The shared `Puck.GamingBricks` layer provides the host contracts used by both
+The shared `Puck.Machines` layer provides the host contracts used by the
+handheld cores and the serialization and fork lifecycle used by all three
 machine families. It owns worker lifetime, integer tick-to-cycle pacing,
 backpressure, frame and audio publication, snapshots, and multi-device link
-coordination. Hardware behavior remains with the [Humble Gaming Brick](../hgb/README.md) or
-[Advanced Gaming Brick](../agb/README.md) core.
+coordination. Hardware behavior remains with the [Humble Gaming Brick](../hgb/README.md),
+[Advanced Gaming Brick](../agb/README.md), or [Humble Gaming Deck](../hgd/README.md) core.
 
 ## Shared contracts
 

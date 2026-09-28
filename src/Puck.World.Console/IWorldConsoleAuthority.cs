@@ -1,4 +1,5 @@
 using Puck.Commands;
+using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
@@ -36,21 +37,60 @@ public static class WorldConsoleAuthorityExtensions {
     /// <param name="error">The inline refusal echo, on failure.</param>
     /// <returns><see langword="true"/> when a row was resolved.</returns>
     public static bool TryResolveServer(this IWorldConsoleAuthority authority, CommandContext context, string verb, out WorldServer server, out CommandResult error) {
+        var resolved = authority.TryResolveInstance(
+            context: context,
+            error: out error,
+            instance: out var instance,
+            verb: verb
+        );
+
+        server = (resolved ? instance.Server : null!);
+
+        return resolved;
+    }
+    /// <summary>Resolves this invocation's row whole — the shape every handler that reads the row and then writes to it
+    /// needs, so the write goes back through that row's own <see cref="WorldInstance.SubmissionLink"/>.</summary>
+    /// <param name="authority">The authority to resolve against.</param>
+    /// <param name="context">The invocation's context.</param>
+    /// <param name="verb">The calling verb's name, for the refusal echo.</param>
+    /// <param name="instance">The resolved row, on success.</param>
+    /// <param name="error">The inline refusal echo, on failure.</param>
+    /// <returns><see langword="true"/> when a row was resolved.</returns>
+    public static bool TryResolveInstance(this IWorldConsoleAuthority authority, CommandContext context, string verb, out WorldInstance instance, out CommandResult error) {
         if (!authority.TryResolve(
             context: context,
-            instance: out var instance,
+            instance: out instance,
             refusal: out var refusal
         )) {
-            server = null!;
             error = CommandResult.Error(output: $"[{verb}: refused ({refusal})]");
 
             return false;
         }
 
-        server = instance.Server;
         error = default;
 
         return true;
+    }
+    /// <summary>Resolves this invocation's row and hands back the link a console submits to it through
+    /// (<see cref="WorldInstance.SubmissionLink"/>) — the shape every handler that submits without reading the row first
+    /// opens with, so a submission never reaches another row than the one addressed.</summary>
+    /// <param name="authority">The authority to resolve against.</param>
+    /// <param name="context">The invocation's context.</param>
+    /// <param name="verb">The calling verb's name, for the refusal echo.</param>
+    /// <param name="link">The resolved row's submission link, on success.</param>
+    /// <param name="error">The inline refusal echo, on failure.</param>
+    /// <returns><see langword="true"/> when a row was resolved.</returns>
+    public static bool TryResolveLink(this IWorldConsoleAuthority authority, CommandContext context, string verb, out IServerLink link, out CommandResult error) {
+        var resolved = authority.TryResolveInstance(
+            context: context,
+            error: out error,
+            instance: out var instance,
+            verb: verb
+        );
+
+        link = (resolved ? instance.SubmissionLink : null!);
+
+        return resolved;
     }
     /// <summary>Resolves this invocation's row and hands back the view its acting principal reads that row's state
     /// through — the shape every read-back of state values opens with, in place of the server itself.</summary>

@@ -1,0 +1,23 @@
+# The engine ready first: its pipeline set installed and its first frame produced.
+world.wait ready 45
+world.cadence off
+world.wait 10
+# The door's glass face shows a window session onto its destination.
+world.screens
+# The viewer steps a unit right of the door, and the window reframes the destination from that eye.
+body.pose 1 0 9 0 0 0 0
+world.wait 10
+world.screenshot {run}/right.png
+world.wait captures 30
+# The viewer steps a unit left, and the destination's marker moves across the glass the other way.
+body.pose -1 0 9 0 0 0 0
+world.wait 10
+world.screenshot {run}/left.png
+world.wait captures 30
+# The view renders at three-quarter scale, so the room's view is a pane a display point walks into.
+world.render-scale three-quarter
+world.wait 10
+# A pick on the marker's image walks through the room's view onto the glass and through the window's camera into the
+# destination, where it lands on the marker's surface; a pick beside it lands on the backdrop.
+world.view.panes 118.5 71.5
+world.view.panes 128.5 71.5

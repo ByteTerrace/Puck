@@ -6,37 +6,6 @@ namespace Puck.World;
 
 /// <summary>Composition-root wiring for identity-bearing owned world documents.</summary>
 internal static class WorldOwnedWorldRegistration {
-    private static Guid ResolveMachineId(string root) {
-        Directory.CreateDirectory(path: root);
-        var path = Path.Combine(
-            path1: root,
-            path2: "machine.id"
-        );
-
-        try {
-            if (
-                File.Exists(path: path) &&
-                Guid.TryParse(
-                input: File.ReadAllText(path: path).Trim(),
-                result: out var stored
-            ) &&
-                (stored != Guid.Empty)
-            ) {
-                return stored;
-            }
-            var created = Guid.NewGuid();
-
-            File.WriteAllText(
-                path: path,
-                contents: created.ToString(format: "D")
-            );
-            return created;
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            Console.Error.WriteLine(value: $"[identity] machine id is session-only ({exception.Message})");
-            return Guid.NewGuid();
-        }
-    }
-
     /// <summary>Registers the owned-world directory and its live identity views.</summary>
     public static IServiceCollection AddWorldOwnedWorlds(this IServiceCollection services) {
         ArgumentNullException.ThrowIfNull(argument: services);
@@ -44,12 +13,16 @@ internal static class WorldOwnedWorldRegistration {
             var definition = serviceProvider.GetRequiredService<WorldDefinitionSource>().Definition;
             var catalog = serviceProvider.GetRequiredService<WorldMachineCatalog>();
             var catalogFingerprint = WorldBootComposition.MachineCatalogFingerprint(machineCatalog: catalog);
-            var root = WorldStateRoot.Resolve();
-            var directory = Path.Combine(
-                path1: root,
-                path2: "owned-worlds"
+            var root = serviceProvider.GetRequiredService<WorldStateRoot>();
+            var directory = root.PathOf(name: "owned-worlds");
+            var machineId = root.MachineId(
+                failure: out var machineIdFailure,
+                fileName: "machine.id"
             );
-            var machineId = ResolveMachineId(root: root);
+
+            if (machineIdFailure is not null) {
+                Console.Error.WriteLine(value: $"[identity] machine id is session-only ({machineIdFailure})");
+            }
             var neighbours = new WorldFileNeighbourResolver(
                 baseDirectory: () => directory,
                 catalog: catalog,

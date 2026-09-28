@@ -1,4 +1,5 @@
 using Puck.Abstractions.Gpu;
+using Puck.Hosting;
 
 namespace Puck.Shaders;
 
@@ -9,51 +10,83 @@ namespace Puck.Shaders;
 // frame follows the instance's last previous-role use, or its last current-role use when nothing reads it as the
 // previous frame, and the first previous-role use follows the last current-role use. The planner walks those sequences
 // once, at compile time, and gives every access its exact prior state and barrier; the render node records exactly
-// those and keeps no layout state of its own.
+// those and keeps no layout state of its own. A transient storage has one instance every slot shares, and the same
+// steady state holds for it one frame apart: its first use of a frame follows the previous frame's last, and the barrier
+// planned between them orders the two frames on the queue.
 public sealed partial class ShaderPipelineCompiler {
-    // The state a pass's reference needs from the instance it reaches, which is also the state the reference leaves it in.
-    // A graphics pass's render pass keeps each attachment in its attachment layout, so a later sampling reader's planned
-    // barrier is the transition to shader-readable. A preserving write also reads what its predecessor left: a compute
-    // pass through the shader, a render pass through the attachment load. A depth test always reads.
-    private static ShaderPipelineAccessState UseOf(ShaderPipelinePass pass, ShaderPipelineResource resource, bool write, bool preserve) {
+    // An indirect dispatch reads its group counts in the indirect-argument state, before any shader stage runs.
+    private static ShaderPipelineAccessState ArgumentsUse { get; } = new(
+        Access: GpuAccess.IndirectCommandRead,
+        Layout: GpuImageLayout.Undefined,
+        Stage: GpuStage.DrawIndirect
+    );
+
+    // A pass's references in recording order, each with whether it writes and whether a graphics stage reaches it: an
+    // indirect dispatch's arguments (read in the indirect-argument state), then the inputs, then the outputs. A shader
+    // pass reaches every reference in its own kind's stage; a package pass reaches each in the stage its port declares.
+    private static IEnumerable<(ResourceReference Reference, bool Write, bool Arguments, bool Graphics)> ReferencesOf(ShaderPipelinePass pass, ShaderPipelinePackagePass? package) {
+        if (pass.DispatchArguments is { } arguments) {
+            yield return (new ResourceReference(Name: arguments), false, true, false);
+        }
+
+        var inputs = pass.InputReferences;
+        var outputs = pass.OutputReferences;
+
+        for (var index = 0; (index < inputs.Count); index++) {
+            yield return (inputs[index], false, false, ((package is null)
+                ? pass.IsGraphics
+                : (package.InputAccess(index: index) == RenderGraphPortAccess.FragmentSampled)));
+        }
+        for (var index = 0; (index < outputs.Count); index++) {
+            yield return (outputs[index], true, false, ((package is null)
+                ? pass.IsGraphics
+                : (package.OutputAccess(index: index) == RenderGraphPortAccess.ColorAttachmentWrite)));
+        }
+    }
+    // The state a reference needs from the instance it reaches, which is also the state the reference leaves it in. A
+    // graphics read samples in the fragment stage, and a graphics write is a render pass's attachment, which it keeps in
+    // its attachment layout, so a later sampling reader's planned barrier is the transition to shader-readable. A
+    // preserving write also reads what its predecessor left: a compute pass through the shader, a render pass through
+    // the attachment load. A depth test always reads.
+    private static ShaderPipelineAccessState UseOf(bool graphics, ShaderPipelineResource resource, bool write, bool preserve) {
         var buffer = (resource.Kind == ShaderPipelineResourceKind.Buffer);
 
         if (!write) {
             return new ShaderPipelineAccessState(
-                Access: GpuComputeAccess.ShaderRead,
+                Access: GpuAccess.ShaderRead,
                 Layout: (buffer
                     ? GpuImageLayout.Undefined
                     : GpuImageLayout.ShaderReadOnly),
-                Stage: (pass.IsGraphics
-                    ? GpuComputeStage.FragmentShader
-                    : GpuComputeStage.ComputeShader)
+                Stage: (graphics
+                    ? GpuStage.FragmentShader
+                    : GpuStage.ComputeShader)
             );
         }
         if (resource.Kind == ShaderPipelineResourceKind.Depth) {
             return new ShaderPipelineAccessState(
-                Access: GpuComputeAccess.DepthAttachmentRead | GpuComputeAccess.DepthAttachmentWrite,
+                Access: GpuAccess.DepthAttachmentRead | GpuAccess.DepthAttachmentWrite,
                 Layout: GpuImageLayout.DepthAttachment,
-                Stage: GpuComputeStage.FragmentTests
+                Stage: GpuStage.FragmentTests
             );
         }
-        if (pass.IsGraphics) {
+        if (graphics) {
             return new ShaderPipelineAccessState(
                 Access: (preserve
-                    ? GpuComputeAccess.ColorAttachmentRead | GpuComputeAccess.ColorAttachmentWrite
-                    : GpuComputeAccess.ColorAttachmentWrite),
+                    ? GpuAccess.ColorAttachmentRead | GpuAccess.ColorAttachmentWrite
+                    : GpuAccess.ColorAttachmentWrite),
                 Layout: GpuImageLayout.RenderTarget,
-                Stage: GpuComputeStage.ColorAttachmentOutput
+                Stage: GpuStage.ColorAttachmentOutput
             );
         }
 
         return new ShaderPipelineAccessState(
             Access: (preserve
-                ? GpuComputeAccess.ShaderRead | GpuComputeAccess.ShaderWrite
-                : GpuComputeAccess.ShaderWrite),
+                ? GpuAccess.ShaderRead | GpuAccess.ShaderWrite
+                : GpuAccess.ShaderWrite),
             Layout: (buffer
                 ? GpuImageLayout.Undefined
                 : GpuImageLayout.General),
-            Stage: GpuComputeStage.ComputeShader
+            Stage: GpuStage.ComputeShader
         );
     }
     private static ShaderPipelineAccessState Fold(ShaderPipelineAccessState start, List<(int Pass, int Slot, ShaderPipelineAccessState Use)> uses) {
@@ -73,6 +106,9 @@ public sealed partial class ShaderPipelineCompiler {
         }
 
         return pass.OutputReferences.Select(selector: output => resources[output.Name]).OrderBy(keySelector: static resource => (resource.Declaration.Kind == ShaderPipelineResourceKind.Depth)).Select(selector: static resource => new ShaderPipelineAttachment(
+            ClearDepth: ((resource.Declaration.Kind == ShaderPipelineResourceKind.Depth)
+                ? (resource.Declaration.ClearDepth ?? GpuDepthAttachment.DefaultClearDepth)
+                : GpuDepthAttachment.DefaultClearDepth),
             Depth: (resource.Declaration.Kind == ShaderPipelineResourceKind.Depth),
             Load: ((resource.Contents == ShaderPipelineContents.Preserved)
                 ? GpuAttachmentLoad.Load
@@ -84,7 +120,7 @@ public sealed partial class ShaderPipelineCompiler {
             Version: resource.Name
         )).ToArray();
     }
-    private static (IReadOnlyList<ShaderPipelinePlannedResource> Resources, IReadOnlyList<ShaderPipelinePlannedStorage> Storages, ShaderPipelineAccess[][] Accesses) PlanVersions(ShaderPipelineDefinition definition, IReadOnlySet<string> liveResources, IReadOnlyList<ShaderPipelinePlannedPass> passes) {
+    private static (IReadOnlyList<ShaderPipelinePlannedResource> Resources, IReadOnlyList<ShaderPipelinePlannedStorage> Storages, ShaderPipelineAccess[][] Accesses) PlanVersions(RenderGraphDefinition definition, IReadOnlySet<string> liveResources, IReadOnlyList<ShaderPipelinePass> passes, IReadOnlyList<ShaderPipelinePackagePass?> packages) {
         var declarations = definition.Resources.Where(predicate: resource => liveResources.Contains(item: resource.Name)).ToDictionary(
             keySelector: static resource => resource.Name,
             comparer: StringComparer.Ordinal
@@ -138,35 +174,40 @@ public sealed partial class ShaderPipelineCompiler {
             roles[storage, 0] = [];
             roles[storage, 1] = [];
         }
-        foreach (var pass in passes) {
-            var declaration = pass.Declaration;
+        for (var index = 0; (index < passes.Count); index++) {
+            var declaration = passes[index];
             var list = new List<(int Storage, string Version, bool PreviousFrame, ShaderPipelineAccessState Use)>();
 
-            foreach (var (reference, write) in declaration.InputReferences.Select(selector: static input => (input, false)).Concat(second: declaration.OutputReferences.Select(selector: static output => (output, true)))) {
+            foreach (var (reference, write, arguments, graphics) in ReferencesOf(
+                package: packages[index],
+                pass: declaration
+            )) {
                 var resource = declarations[reference.Name];
                 var storage = storageOf[reference.Name];
 
-                var use = UseOf(
-                    pass: declaration,
-                    preserve: (resource.From is not null),
-                    resource: resource,
-                    write: write
-                );
+                var use = (arguments
+                    ? ArgumentsUse
+                    : UseOf(
+                        graphics: graphics,
+                        preserve: (resource.From is not null),
+                        resource: resource,
+                        write: write
+                    ));
 
-                roles[storage, (reference.PreviousFrame ? 1 : 0)].Add(item: (pass.Index, list.Count, use));
+                roles[storage, (reference.PreviousFrame ? 1 : 0)].Add(item: (index, list.Count, use));
                 list.Add(item: (storage, reference.Name, reference.PreviousFrame, use));
                 if (write) {
-                    writers[reference.Name] = pass.Index;
+                    writers[reference.Name] = index;
                 } else {
                     readers.Add(item: reference.Name);
                 }
                 firstUse.TryAdd(
                     key: reference.Name,
-                    value: pass.Index
+                    value: index
                 );
-                lastUse[reference.Name] = pass.Index;
+                lastUse[reference.Name] = index;
             }
-            accesses[pass.Index] = [.. list];
+            accesses[index] = [.. list];
         }
 
         // The steady state: each role's first use starts where the instance's previous role left it. Folding twice
@@ -323,5 +364,80 @@ public sealed partial class ShaderPipelineCompiler {
         }).ToArray();
 
         return (resources, storages, planned);
+    }
+    // A transient storage is one allocation every frame slot shares, so it may hold nothing a later frame reads: it is no
+    // history, no public output, never read as the previous frame, and host- or zero-initialized contents would outlive
+    // the frame that set them. Its first access in the frame writes its first version from discarded contents, so no read
+    // ever sees what an earlier frame left. Only the chain's first version declares it.
+    private static void ValidateTransients(RenderGraphDefinition definition, IReadOnlyList<ShaderPipelinePlannedStorage> storages, ShaderPipelineAccess[][] accesses, List<ShaderPipelineDiagnostic> diagnostics) {
+        foreach (var resource in definition.Resources) {
+            if (
+                resource.Transient &&
+                (resource.From is not null)
+            ) {
+                Add(
+                    diagnostics,
+                    "SHADERPIPE_TRANSIENT",
+                    $"Resource '{resource.Name}' forwards '{resource.From}' and declares transient; only a chain's first version declares it.",
+                    resource.Name
+                );
+            }
+        }
+
+        var outputs = definition.Outputs.ToHashSet(comparer: StringComparer.Ordinal);
+
+        foreach (var storage in storages) {
+            var root = storage.Declaration;
+
+            if (!root.Transient) {
+                continue;
+            }
+
+            string? why = null;
+
+            if (root.IsExternal || (root.Initialization == ShaderPipelineInitialization.Zero)) {
+                why = $"is initialized {root.Initialization}";
+            } else if (storage.History) {
+                why = "is history";
+            } else if (storage.Versions.FirstOrDefault(predicate: outputs.Contains) is { } published) {
+                why = $"is published as '{published}'";
+            } else {
+                var first = default(ShaderPipelineAccess);
+
+                foreach (var pass in accesses) {
+                    foreach (var access in pass) {
+                        if (access.Storage != storage.Index) {
+                            continue;
+                        }
+                        if (access.PreviousFrame) {
+                            why = $"is read as the previous frame through '{access.Version}'";
+                        }
+
+                        first ??= access;
+                    }
+                }
+
+                if (
+                    (why is null) &&
+                    (first is not null) &&
+                    (!first.Use.Writes || !string.Equals(
+                        a: first.Version,
+                        b: root.Name,
+                        comparisonType: StringComparison.Ordinal
+                    ))
+                ) {
+                    why = $"is first reached through '{first.Version}' without being written from discarded contents";
+                }
+            }
+
+            if (why is not null) {
+                Add(
+                    diagnostics,
+                    "SHADERPIPE_TRANSIENT",
+                    $"Transient storage '{root.Name}' {why}; a transient storage is written before it is read within the frame and never read across frames.",
+                    root.Name
+                );
+            }
+        }
     }
 }

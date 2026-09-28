@@ -1,5 +1,8 @@
 using System.CommandLine;
 using System.Diagnostics;
+using System.Globalization;
+using System.Text.Json;
+using Puck.World;
 
 namespace Puck.Cli.Parity;
 
@@ -15,10 +18,12 @@ internal static class ParityCommand {
     private const string ScratchPrefix = "puck-parity-";
     private const string SdfDocumentPath = "tests/Puck.Parity/parity.sdf.json";
     private const string WorldPath = "tests/Puck.Parity/parity.world.json";
+    // The ticks a leg runs past the world's last scheduled capture, so the frame that serves it lands first.
+    private const ulong WaitMarginTicks = 30;
 
-    private static readonly TimeSpan SuiteBudget = TimeSpan.FromSeconds(value: 600);
+    private static readonly TimeSpan SuiteBudget = TimeSpan.FromSeconds(value: 900);
 
-    private static int Run() {
+    private static int Run(bool bakes) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return CliExit.Refused;
         }
@@ -46,11 +51,26 @@ internal static class ParityCommand {
 
         using var lease = world;
 
+        // The parity world ships its bakes as a released world does: the tree compile writes its documents, their
+        // compiled worlds and the one bake pack into the run, beside a copy of every other file the tree holds (the
+        // graph and its sources the documents name), and the legs boot that copy, whose BAKE chunk holds every bake
+        // from the pack, so no capture depends on a bake made on the device.
+        if (!TryShipWorld(
+            artifact: world.Path,
+            repositoryRoot: repositoryRoot,
+            runDirectory: runDirectory,
+            suiteClock: suiteClock,
+            world: out var shippedWorld
+        )) {
+            return CliExit.Refused;
+        }
+
         foreach (var backend in WorldOffscreenLeg.Backends) {
             var leg = RunBackend(
                 artifact: world.Path,
                 backend: backend,
-                repositoryRoot: repositoryRoot,
+                bakes: bakes,
+                shippedWorld: shippedWorld,
                 runDirectory: runDirectory,
                 suiteClock: suiteClock
             );
@@ -79,48 +99,227 @@ internal static class ParityCommand {
             )
         );
     }
-    // Boots one offscreen leg on the named backend; the parity world's own captures rows land every scheduled
-    // frame and write the manifest. Returns CliExit.Success with the manifest written, or CliExit.Refused with the
-    // refusal already reported.
-    private static int RunBackend(string artifact, string backend, string repositoryRoot, string runDirectory, Stopwatch suiteClock) {
+
+    // The tick the leg waits to, past the last tick the world's captures rows schedule, read from the document itself
+    // so a station added there is captured without a second statement of its schedule here. A world that cannot be
+    // read, or whose last tick leaves no room for the margin, is refused by name.
+    internal static bool TryReadWaitTick(string worldPath, out ulong waitTick, out string error) {
+        waitTick = 0UL;
+        error = string.Empty;
+
+        ulong lastTick;
+
+        try {
+            lastTick = (WorldDefinitionSerialization.Deserialize(
+                documentDirectory: Path.GetDirectoryName(path: worldPath),
+                utf8Json: File.ReadAllBytes(path: worldPath)
+            ).Captures?.Rows.SelectMany(selector: static row => row.Ticks).DefaultIfEmpty().Max() ?? 0UL);
+        } catch (Exception exception) when ((exception is InvalidDataException or JsonException or IOException or UnauthorizedAccessException or InvalidOperationException or FormatException or NotSupportedException)) {
+            error = $"the parity world '{worldPath}' could not be read for its capture schedule: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+
+            return false;
+        }
+
+        if (lastTick > (ulong.MaxValue - WaitMarginTicks)) {
+            error = $"the parity world '{worldPath}' schedules a capture at tick {lastTick}, which leaves no room for the {WaitMarginTicks}-tick wait margin.";
+
+            return false;
+        }
+
+        waitTick = checked((lastTick + WaitMarginTicks));
+
+        return true;
+    }
+
+    // Compiles the parity tree into the run: every document and .puck source under it, with the per-user bake cache the
+    // World keeps its bakes in, so a key baked once is never baked again; every other file of the tree is copied beside.
+    // The compile runs through the CLI the World artifact's own build wrote beside it, since a compiled world holds only
+    // for the engine build that derived it (CompiledWorld.EngineBuild) and the World artifact's build is the one that
+    // boots it.
+    private static bool TryShipWorld(string artifact, string repositoryRoot, string runDirectory, Stopwatch suiteClock, out string world) {
+        world = string.Empty;
+
+        try {
+            return ShipWorld(artifact: artifact, repositoryRoot: repositoryRoot, runDirectory: runDirectory, suiteClock: suiteClock, world: out world);
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or InvalidOperationException)) {
+            Console.Error.WriteLine(value: $"ERROR: the parity tree could not ship: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
+
+            return false;
+        }
+    }
+    private static bool ShipWorld(string artifact, string repositoryRoot, string runDirectory, Stopwatch suiteClock, out string world) {
+        var tree = Path.Combine(
+            path1: repositoryRoot,
+            path2: Path.GetDirectoryName(path: WorldPath)!
+        );
+        var output = Path.Combine(
+            path1: runDirectory,
+            path2: "world"
+        );
+        var sources = new List<string>();
+
+        _ = Directory.CreateDirectory(path: output);
+        world = Path.Combine(
+            path1: output,
+            path2: Path.GetFileName(path: WorldPath)
+        );
+
+        foreach (var file in Directory.EnumerateFiles(path: tree, searchOption: SearchOption.AllDirectories, searchPattern: "*")) {
+            var name = Path.GetFileName(path: file);
+
+            if (name.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: WorldDocumentName.DocumentSuffix) || name.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".puck")) {
+                sources.Add(item: file);
+            } else {
+                var destination = Path.Combine(
+                    path1: output,
+                    path2: Path.GetRelativePath(path: file, relativeTo: tree)
+                );
+
+                _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: destination)!);
+                File.Copy(
+                    destFileName: destination,
+                    overwrite: true,
+                    sourceFileName: file
+                );
+            }
+        }
+
+        var timeout = CliProcess.RemainingBudget(budget: SuiteBudget, clock: suiteClock);
+
+        if (timeout <= TimeSpan.Zero) {
+            Console.Error.WriteLine(value: "ERROR: the parity time budget expired before the tree could compile.");
+
+            return false;
+        }
+
+        var compile = CliProcess.RunCaptured(
+            arguments: [
+                Path.Combine(
+                    path1: Path.GetDirectoryName(path: artifact)!,
+                    path2: "Puck.Cli.dll"
+                ),
+                "compile",
+                "--tree", tree,
+                "--output", output,
+                "--bake-cache", Puck.Abstractions.PuckUserDirectory.Resolve(name: "bakes"),
+                .. sources,
+            ],
+            fileName: "dotnet",
+            input: string.Empty,
+            timeout: timeout
+        );
+
+        File.WriteAllText(
+            contents: (compile.Stdout + compile.Stderr),
+            path: Path.Combine(
+                path1: runDirectory,
+                path2: "compile.log"
+            )
+        );
+
+        if (compile.TimedOut || (compile.ExitCode != 0)) {
+            Console.Error.WriteLine(value: $"ERROR: the parity tree did not compile ({(compile.TimedOut ? "timed out" : $"exit {compile.ExitCode.ToString(provider: CultureInfo.InvariantCulture)}")}; see compile.log beside the run), so its bakes cannot ship.");
+
+            return false;
+        }
+        if (
+            !File.Exists(path: world) ||
+            !File.Exists(path: CompiledWorld.Beside(documentPath: world)) ||
+            !File.Exists(path: Path.Combine(path1: output, path2: WorldBakePack.FileName))
+        ) {
+            Console.Error.WriteLine(value: $"ERROR: the parity tree compiled but did not write {world}, its compiled world and its bake pack, so its bakes cannot ship.");
+
+            return false;
+        }
+
+        Console.WriteLine(value: $"parity: shipped the parity world with its bake pack into {output}");
+
+        return true;
+    }
+    // Refuses a leg that resolved any bake on the device or drew none: with the pack every bake is held when the world
+    // loads, so the schedule resolves nothing (sdf.bakes.scheduled 0), and the bakes on, the parity world's creations
+    // draw them (sdf.bakes.drawn above 0).
+    private static string? BakeRefusal(string stdout, bool bakes) {
+        long? Count(string kind) {
+            foreach (var line in stdout.ReplaceLineEndings(replacementText: "\n").Split(separator: '\n')) {
+                var fields = line.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: ' ');
+
+                if ((fields.Length == 2) && string.Equals(a: fields[0], b: kind, comparisonType: StringComparison.Ordinal) && long.TryParse(provider: CultureInfo.InvariantCulture, result: out var value, s: fields[1], style: NumberStyles.None)) {
+                    return value;
+                }
+            }
+
+            return null;
+        }
+
+        var scheduled = Count(kind: "sdf.bakes.scheduled");
+        var drawn = Count(kind: "sdf.bakes.drawn");
+
+        if ((scheduled is null) || (drawn is null)) {
+            return "the leg printed no sdf.bakes counts";
+        }
+        if (scheduled != 0) {
+            return $"the leg resolved {scheduled} bake(s) on the device (sdf.bakes.scheduled), so a capture could depend on a local bake";
+        }
+        if (bakes && (drawn == 0)) {
+            return "the leg drew no bake (sdf.bakes.drawn 0), so the pack's bakes never reached a capture";
+        }
+
+        return null;
+    }
+    private static int RunBackend(string artifact, string backend, bool bakes, string shippedWorld, string runDirectory, Stopwatch suiteClock) {
         var captureDirectory = Path.Combine(
             path1: runDirectory,
             path2: $"captures-{backend}"
         );
+
+        if (!TryReadWaitTick(
+            error: out var scheduleError,
+            waitTick: out var waitTick,
+            worldPath: shippedWorld
+        )) {
+            Console.Error.WriteLine(value: $"ERROR: {scheduleError}");
+
+            return CliExit.Refused;
+        }
+
         // The parity world drives no seats and reads no input, so no controller-clearing guard is needed; the script
-        // only composes the world's companion SDF document and waits past the last scheduled capture tick.
-        var script = $"world.sdf.load {Path.Combine(
-            path1: repositoryRoot,
-            path2: SdfDocumentPath
+        // only turns the bakes off when asked (a world carrying its bakes draws them), composes the world's companion SDF
+        // document and waits past the last tick its captures rows schedule.
+        // It closes by reading the bake counts, which the leg is then held to (BakeRefusal).
+        var script = $"{(bakes ? string.Empty : "world.bakes off\n")}world.sdf.load \"{Path.Combine(
+            path1: Path.GetDirectoryName(path: shippedWorld)!,
+            path2: Path.GetFileName(path: SdfDocumentPath)
         ).Replace(
-            newChar: '\\',
-            oldChar: '/'
-        )}\nworld.wait 1180\n";
+            newChar: '/',
+            oldChar: '\\'
+        )}\"\nworld.wait {waitTick}\nworld.counters sdf.bakes\n";
         var leg = WorldOffscreenLeg.Run(
             arguments: ["--capture-dir", captureDirectory],
             artifact: artifact,
             backend: backend,
             budget: SuiteBudget,
             // A SAFETY NET, not the leg length: the script closes with quit, so a healthy leg ends as soon as its
-            // 1180-tick wait releases. The net only has to outlast a slow machine — an offscreen leg on the RTX 2060
-            // desktop paces one produced frame per tick and needs ~45 s for the wait alone, so 40 s (the pre-1180
-            // value) cut legs off before wire.errors on every other run there. A cold driver shader cache adds at most
-            // the capture hold budget (WorldCaptureScheduler.HoldBudgetSeconds, 60 s) while the host holds its clock
-            // at the first capture, which still ends inside this net.
-            exitAfterSeconds: 150,
-            process: out _,
+            // wait releases. The net outlasts a slow machine's whole leg: an offscreen leg paces one produced
+            // frame per tick (about 45 s for the wait on an RTX 2060), and the host may hold its clock at a capture for
+            // at most WorldCaptureScheduler.BuildHoldBudgetSeconds while the engine's pipeline set builds on a cold
+            // driver cache plus WorldCaptureScheduler.HoldBudgetSeconds once it is ready.
+            exitAfterSeconds: 300,
+            process: out var process,
             runDirectory: runDirectory,
             script: script,
             suiteClock: suiteClock,
             verb: "parity",
-            world: Path.Combine(
-                path1: repositoryRoot,
-                path2: WorldPath
-            )
+            world: shippedWorld
         );
 
         if (leg != CliExit.Success) {
             return leg;
+        }
+        if (BakeRefusal(bakes: bakes, stdout: (process?.Stdout ?? string.Empty)) is { } refusal) {
+            Console.Error.WriteLine(value: $"ERROR: the {backend} leg: {refusal}.");
+
+            return CliExit.Failed;
         }
         if (!File.Exists(path: Path.Combine(
             path1: captureDirectory,
@@ -142,16 +341,25 @@ internal static class ParityCommand {
 
         command.Detail(detail: """
             Boots tests/Puck.Parity/parity.world.json offscreen once per backend (vulkan, directx — no
-            window is shown), collects each run's tick-scheduled captures and puck.parity.manifest.v1, and
-            compares the pair under tests/Puck.Parity/parity.contract.json.
+            window is shown), runs each leg until 30 ticks past the last tick its captures rows schedule,
+            collects each run's tick-scheduled captures and puck.parity.manifest.v1, and compares the pair
+            under tests/Puck.Parity/parity.contract.json.
 
-            Per capture, three independent verdicts, in order: the content gate (a capture its
+            Per capture, four independent verdicts, in order: the content gate (a capture its
             producer refused by name, one missing, or one below its station's census floor never reaches
             comparison — agreement between degenerate frames is vacuous), the state verdict
-            (stateHash equality, exact, no envelope), and the pixel verdict (per-tile deltas
+            (stateHash equality, exact, no envelope), the tick verdict (each frame refreshed its bound
+            regions at the armed tick), and the pixel verdict (per-tile deltas
             against the station's contract thresholds — a localized defect cannot dilute itself
             across a whole-frame mean). Failures write both frames, a delta heatmap, and a
             per-verdict summary beside the run.
+
+            The parity world ships its bakes: the run compiles the parity tree with the World artifact's own
+            CLI and boots the compiled world, whose BAKE chunk holds every bake from its pack, and a leg that
+            resolved a bake on the device (sdf.bakes.scheduled above zero) fails, so no capture depends on a
+            local bake. The static creations draw their bakes, as a world that ships them does by default. With
+            --bakes off every creation draws through its field, and `puck parity compare` of an on run
+            against an off run holds each capture's stateHash, since bakes are presentation only.
 
             Requires both a Vulkan and a Direct3D 12 device on this machine; no display is taken over.
 
@@ -159,8 +367,12 @@ internal static class ParityCommand {
             refusal or a malformed manifest or contract.
             """);
 
+        var bakesOption = new Option<string>(name: "--bakes") { DefaultValueFactory = static _ => "on", Description = "Whether the parity world's static creations draw their bakes (on, the default) or their fields (off)." };
+
+        bakesOption.AcceptOnlyFromAmong(values: ["on", "off"]);
+        command.Options.Add(item: bakesOption);
         command.Subcommands.Add(item: ParityCompareCommand.Create());
-        command.SetAction(action: _ => Run());
+        command.SetAction(action: result => Run(bakes: string.Equals(a: result.GetValue(option: bakesOption), b: "on", comparisonType: StringComparison.Ordinal)));
         return command;
     }
 }

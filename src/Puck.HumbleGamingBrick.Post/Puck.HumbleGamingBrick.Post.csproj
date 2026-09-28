@@ -11,7 +11,7 @@
     <ItemGroup>
         <!-- PngEncoder, which the diagnostics and link explorers write framebuffer dumps through. -->
         <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
-        <ProjectReference Include="..\Puck.GamingBricks.Post\Puck.GamingBricks.Post.csproj" />
+        <ProjectReference Include="..\Puck.Machines.Post\Puck.Machines.Post.csproj" />
         <!-- ChildProcess, which the SameBoy co-simulation diagnostic runs sb-trace through. -->
         <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
         <ProjectReference Include="..\Puck.HumbleGamingBrick\Puck.HumbleGamingBrick.csproj" />
@@ -20,6 +20,6 @@
         <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
     </ItemGroup>
     <ItemGroup>
-        <Using Include="Puck.GamingBricks.Post" />
+        <Using Include="Puck.Machines.Post" />
     </ItemGroup>
 </Project>

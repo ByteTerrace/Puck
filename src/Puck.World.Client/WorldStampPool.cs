@@ -68,9 +68,10 @@ public sealed partial class WorldStampPool {
     /// <param name="BodyIndex">The population entity index whose interpolated pose roots the stamp.</param>
     /// <param name="Creation">The creation whose geometry the body wears.</param>
     /// <param name="Scale">The uniform render scale (a placement's scale, or a look's scale).</param>
-    /// <param name="Motion">The look's motion — cues, timeline replay, and the root/part second-order followers
-    /// (<see cref="WorldLookMotion.Dynamics"/>/<see cref="WorldLookMotion.PartDynamics"/>).</param>
-    public readonly record struct BodyStamp(int BodyIndex, WorldPrototype Creation, float Scale, WorldLookMotion Motion);
+    /// <param name="Look">The look the body wears, whose motion carries the cues, timeline replay, and the root/part
+    /// second-order followers (<see cref="WorldLookMotion.Dynamics"/>/<see cref="WorldLookMotion.PartDynamics"/>), and
+    /// whose state reads the registration's lease acquires when the body arrives.</param>
+    public readonly record struct BodyStamp(int BodyIndex, WorldPrototype Creation, float Scale, WorldLook Look);
 
     // One live registration: the resolved creation, its root source (a placement row — static or attached — OR a body
     // index), and the replay cursor state.
@@ -87,6 +88,9 @@ public sealed partial class WorldStampPool {
 
         public float Clock;
         public required WorldPrototype Creation;
+        // The look a body-rooted registration wears, or null for a row-rooted one: with Creation, the document objects
+        // whose manifest templates Reads acquires when the body arrives.
+        public WorldLook? Look;
         public int FrameCursor;
         // Cue state: the look's cues, each cue's timeline frame (1-based cursor, 0 = unresolved), when each next
         // self-fires on the cue clock, its fire count (the draw's seed), and the cue frame holding now (0 = none).
@@ -136,13 +140,17 @@ public sealed partial class WorldStampPool {
 
         public float Scale = 1f;
 
+        // The creation's mesh (WorldPrototype.Mesh) and the engine material its palette entry registered as, set by
+        // each live EmitOne; PackTransforms poses it at the registration's root. Null for a creation without a mesh.
+        public SdfMesh? Mesh;
+        public int MeshMaterial;
         // The root position/orientation followers — set only for a body-rooted registration whose look names a root
         // Motion.Dynamics row (see ApplyMotion; a row-rooted registration never has this true). FollowedPosition/
         // FollowedOrientation are the values PackTransforms actually rendered this frame: the followers step at most
         // once per frame, there, so TryBodyPartAuthoredPose/TryShapePosition read the latch instead of re-stepping.
         public bool HasRootDynamics;
 
-        // The body's WorldClient.PoseEpoch/EntityAddress this registration's followers last seeded against — -1/
+        // The body's IWorldStampSource.PoseEpoch/EntityAddress this registration's followers last seeded against — -1/
         // default before the first pack. PackTransforms reseeds both root followers (and every part follower riding
         // this root) whenever either moves past this: PoseEpoch for a teleport or an over-threshold correction,
         // EntityAddress for a body index reused by a different inhabitant (a distinct address, even at the SAME
@@ -292,7 +300,7 @@ public sealed partial class WorldStampPool {
     }
     // One pool slot's emission: palette, Pass 1 authored ungrouped shapes, Pass 2 blend groups, then the
     // creation's text runs as ONE root-anchored dynamic instance.
-    private static void EmitOne(SdfProgramBuilder builder, WorldDefinition definition, Registration? live, bool probeWorstCase, int rootSlot, float maxPlacementScale, PackedFontAtlasCatalog? textCatalog) {
+    private static void EmitOne(SdfProgramBuilder builder, WorldBakedColors colors, Registration? live, bool probeWorstCase, int rootSlot, float maxPlacementScale, PackedFontAtlasCatalog? textCatalog) {
         var document = live?.Creation.EngineDocument;
         var shapes = (document?.Shapes ?? []);
         // The probe reserves a FULL distinct palette per pool slot (the conservative material bound); a live slot
@@ -301,7 +309,7 @@ public sealed partial class WorldStampPool {
             ? ProbePalette(builder: builder)
             : WorldPlacementStamper.RegisterPalette(
                 builder: builder,
-                definition: definition,
+                colors: colors,
                 document: (document ?? EmptyDocument),
                 tint: null
             )
@@ -310,6 +318,19 @@ public sealed partial class WorldStampPool {
             ? maxPlacementScale
             : (live?.Scale ?? 1f)
         );
+
+        // The mesh rides the registration's root, drawn by the mesh pass rather than emitted into the program, so the
+        // probe reserves nothing for it; the material is this build's registration of its palette entry.
+        if (!probeWorstCase && (live is not null)) {
+            live.Mesh = ((live.Creation.Mesh is { } mesh)
+                ? WorldPlacementStamper.MeshOf(mesh: mesh)
+                : null);
+            live.MeshMaterial = paletteIds[Math.Clamp(
+                value: (live.Creation.Mesh?.Material ?? 0),
+                max: (paletteIds.Length - 1),
+                min: 0
+            )];
+        }
         // Text stays inside the probed envelope by trading capacity the validator already reserved: glyphs charge the
         // same stamp budget the boxes do (CreationDocument.StampShapeCount), each glyph chain is shorter than
         // the probe's full-modifier shape chain, and the one text instance takes the place of the last parked
@@ -657,7 +678,7 @@ public sealed partial class WorldStampPool {
                     bulge: (probeWorstCase ? ShapeFlareDocument.MaxBulge : flare!.Bulge),
                     top: (probeWorstCase ? 0f : ((flare!.Top ?? 0f) * lengthScale)),
                     span: (probeWorstCase ? 1f : (flare!.Span * lengthScale)),
-                    axis: (probeWorstCase ? 1 : flare!.Axis),
+                    axis: (probeWorstCase ? SdfAxis.Y : (SdfAxis)flare!.Axis),
                     startScale: (probeWorstCase ? ShapeFlareDocument.MaxStartScale : flare!.StartScale)
                 );
             }
@@ -676,8 +697,8 @@ public sealed partial class WorldStampPool {
                     linear: (probeWorstCase ? ShapeDocument.MaxShear : shear!.Linear),
                     quadratic: (probeWorstCase ? ShapeDocument.MaxShear : (shear!.Quadratic / lengthScale)),
                     cubic: (probeWorstCase ? ShapeDocument.MaxShear : (shear!.Cubic / (lengthScale * lengthScale))),
-                    target: (probeWorstCase ? 0 : shear!.Target),
-                    driver: (probeWorstCase ? 1 : shear!.Driver)
+                    target: (probeWorstCase ? SdfAxis.X : (SdfAxis)shear!.Target),
+                    driver: (probeWorstCase ? SdfAxis.Y : (SdfAxis)shear!.Driver)
                 );
             }
 
@@ -998,15 +1019,16 @@ public sealed partial class WorldStampPool {
         var registration = new Registration {
             BodyIndex = stamp.BodyIndex,
             Creation = stamp.Creation,
+            Look = stamp.Look,
             Parts = CreationPartCompiler.Compile(document: stamp.Creation.Document),
             Scale = stamp.Scale,
             FramePoses = new Dictionary<int, FrameTransformDocument>?[((stamp.Creation.Document.Frames?.Count ?? 0) + 1)],
-            Cues = stamp.Motion.Cues,
-            Replay = stamp.Motion.ReplayFrames,
-            Lanes = stamp.Motion.Lanes,
+            Cues = stamp.Look.Motion.Cues,
+            Replay = stamp.Look.Motion.ReplayFrames,
+            Lanes = stamp.Look.Motion.Lanes,
         };
 
-        if (stamp.Motion.Poses is { Count: > 0 } poses) {
+        if (stamp.Look.Motion.Poses is { Count: > 0 } poses) {
             var frames = (stamp.Creation.Document.Frames ?? []);
 
             ResolvePoses(
@@ -1017,7 +1039,7 @@ public sealed partial class WorldStampPool {
             );
         }
 
-        if (stamp.Motion.Cues is { Count: > 0 } cues) {
+        if (stamp.Look.Motion.Cues is { Count: > 0 } cues) {
             var frames = (stamp.Creation.Document.Frames ?? []);
 
             registration.CueFrames = new int[cues.Count];
@@ -1104,7 +1126,7 @@ public sealed partial class WorldStampPool {
     );
     // The root pose FollowedRootPose falls back to before the first PackTransforms has ever latched one, or for a
     // registration whose root has no dynamics — the un-followed RootPose, bit for bit.
-    private static (Vector3 Position, Quaternion Rotation, float Scale) FollowedRootPose(Registration live, WorldClient client) {
+    private static (Vector3 Position, Quaternion Rotation, float Scale) FollowedRootPose(Registration live, IWorldStampSource client) {
         var (position, rotation, scale) = RootPose(
             client: client,
             live: live
@@ -1182,7 +1204,7 @@ public sealed partial class WorldStampPool {
     // The root pose of a live registration: a body-rooted stamp reads the client's interpolated body pose; an ATTACHED
     // row reads that same pose composed with its authored local offset/yaw; an animated placement reads its static
     // stamped transform.
-    private static (Vector3 Position, Quaternion Rotation, float Scale) RootPose(Registration live, WorldClient client) {
+    private static (Vector3 Position, Quaternion Rotation, float Scale) RootPose(Registration live, IWorldStampSource client) {
         if (live.BodyIndex is { } bodyIndex) {
             return (client.Position(index: bodyIndex), client.Orientation(index: bodyIndex), live.Scale);
         }
@@ -1245,7 +1267,8 @@ public sealed partial class WorldStampPool {
     /// the creation-root envelope. Unused registrations and shape slots emit no instances;
     /// dynamic-transform addresses remain fixed. The probe path still takes the largest legal form.</summary>
     /// <param name="builder">The program builder.</param>
-    /// <param name="definition">The live definition a registration's state-bound palette color resolves against.</param>
+    /// <param name="colors">The colors the build bakes, which a registration's state-bound palette color resolves
+    /// through.</param>
     /// <param name="probeWorstCase">Emit the worst-case form for capacity measurement (never rendered).</param>
     /// <param name="maxPlacementScale">Live-consumed: the placement scale envelope's ceiling
     /// (<see cref="WorldPlacementPolicyDefaults.MaxPlacementScale"/>), read fresh at every call — it only feeds spatial-cull
@@ -1257,7 +1280,9 @@ public sealed partial class WorldStampPool {
     /// <param name="textCatalog">The world's packed font catalog, or <see langword="null"/> when none is resolved (a
     /// remote projection) — a registration's text runs are then omitted, exactly as the static stamper omits
     /// them.</param>
-    public void Emit(SdfProgramBuilder builder, WorldDefinition definition, bool probeWorstCase, float maxPlacementScale, int slotBase, PackedFontAtlasCatalog? textCatalog = null) {
+    public void Emit(SdfProgramBuilder builder, WorldBakedColors colors, bool probeWorstCase, float maxPlacementScale, int slotBase, PackedFontAtlasCatalog? textCatalog = null) {
+        ArgumentNullException.ThrowIfNull(argument: colors);
+
         for (var index = 0; (index < m_pool.Length); index++) {
             var live = (probeWorstCase
                 ? null
@@ -1272,7 +1297,7 @@ public sealed partial class WorldStampPool {
 
             EmitOne(
                 builder: builder,
-                definition: definition,
+                colors: colors,
                 live: live,
                 maxPlacementScale: maxPlacementScale,
                 probeWorstCase: probeWorstCase,
@@ -1454,7 +1479,7 @@ public sealed partial class WorldStampPool {
 
                         ApplyMotion(
                             live: fresh,
-                            motion: stamp.Motion,
+                            motion: stamp.Look.Motion,
                             dynamics: dynamics
                         );
 
@@ -1462,10 +1487,11 @@ public sealed partial class WorldStampPool {
                     },
                     update: (entry, stamp) => {
                         entry.Creation = stamp.Creation;
+                        entry.Look = stamp.Look;
                         entry.Scale = stamp.Scale;
                         ApplyMotion(
                             live: entry,
-                            motion: stamp.Motion,
+                            motion: stamp.Look.Motion,
                             dynamics: dynamics
                         );
                     }
@@ -1551,7 +1577,7 @@ public sealed partial class WorldStampPool {
             m_pool[slot] = fresh;
             ApplyMotion(
                 live: fresh,
-                motion: stamp.Motion,
+                motion: stamp.Look.Motion,
                 dynamics: dynamics
             );
         }
@@ -1611,7 +1637,7 @@ public sealed partial class WorldStampPool {
     /// effector correction — read off the latch the last <see cref="PackTransforms"/> left, so an anchor consumer
     /// and the rendered geometry answer with the same pose. A shape with no animation has an identity delta, so its
     /// anchor is the authored pose exactly as before.</remarks>
-    public bool TryBodyPartAuthoredPose(int bodyIndex, string partId, WorldClient client, out SdfAnchor pose) {
+    public bool TryBodyPartAuthoredPose(int bodyIndex, string partId, IWorldStampSource client, out SdfAnchor pose) {
         if (
             !TryFindBody(
             bodyIndex: bodyIndex,
@@ -1785,7 +1811,7 @@ public sealed partial class WorldStampPool {
     /// <param name="shapeId">The creation shape id to ride, or <see langword="null"/> for the stamped root.</param>
     /// <param name="client">The client whose interpolated body poses root the body-rooted stamps.</param>
     /// <param name="position">The resolved world position.</param>
-    public bool TryShapePosition(string placementId, int? shapeId, WorldClient client, out Vector3 position) {
+    public bool TryShapePosition(string placementId, int? shapeId, IWorldStampSource client, out Vector3 position) {
         var live = FindRow(id: placementId);
 
         // An inhabited placement (a body-rooted stamp) resolves through the client's body pose, keyed by placement id.
@@ -1881,7 +1907,7 @@ public sealed partial class WorldStampPool {
     /// <param name="shapeId">The creation shape id to ride, or <see langword="null"/> for the stamped root.</param>
     /// <param name="client">The client whose inhabitant lookup resolves a body-rooted placement.</param>
     /// <param name="transformSlot">The absolute packed dynamic-transform slot, or -1 when unresolved.</param>
-    public bool TryShapeTransformSlot(string placementId, int? shapeId, WorldClient client, out int transformSlot) {
+    public bool TryShapeTransformSlot(string placementId, int? shapeId, IWorldStampSource client, out int transformSlot) {
         transformSlot = -1;
 
         if (m_packedSlotBase < 0) {

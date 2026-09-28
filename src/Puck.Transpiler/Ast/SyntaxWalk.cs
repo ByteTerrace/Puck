@@ -71,6 +71,7 @@ public static class SyntaxWalk {
             WorkflowNode workflow => [.. Present(workflow.Undo), .. workflow.Steps],
             RuleBlockNode rule => [.. Present(rule.NameExpression), .. rule.Statements],
             LocalStatementNode local => [.. Present(local.NameExpression), local.Expression],
+            GraphParameterNode parameter => [parameter.Value],
             DecisionBlockNode decision => decision.Statements,
             OptionBlockNode option => option.Statements,
             ScoreStatementNode score => [score.Expression],

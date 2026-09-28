@@ -28,7 +28,7 @@ surface.
 
 ## Format and development version
 
-- Extension `.puckreplay`, stored under `<WorldStateRoot.Resolve()>/Replays`
+- Extension `.puckreplay`, stored under the tape's injected `WorldStateRoot`, in `Replays`
   (so `--state-dir` isolates replays too).
 - `Magic = 0x5052_4C57` ("WLRP" in wire byte order) + `ShapeToken`.
   The current key includes authoritative state-system hashes, local flock
@@ -66,10 +66,10 @@ surface.
   `WorldReplaySnapshot.ForkedFrom` (`WorldReplayForkProvenance`), refused by
   name when it claims more copied ticks than the tape holds. Right behind it,
   a nullable string carries the directory the recording server's pipeline
-  source reader resolved `views.pipelines` rows against
+  source reader resolved `views.graphs` rows against
   (`WorldReplaySnapshot.PipelineSourceDirectory`); `Drive` attaches a
   `WorldPipelineSources` over it to the shadow server, so a recorded
-  `CommitViewPipeline` binds against the same sources and re-drives to the
+  `CommitViewGraph` binds against the same sources and re-drives to the
   recorded outcome.
   World remains at version 1 during development (owner instruction). Change the
   current format directly; do not bump versions or accumulate retired magic values
@@ -238,8 +238,9 @@ matches.
 **`world.reset`/`world.load`/`world.reload` are replay-compatible.** They ride
 the ordered domain and tape as the `Rebuild` payload kind, CAS-pinned by a
 `sha256-64/{hex}` content hash: for Load/Reload, of the
-EXACT bytes the console read off disk (`WorldDefinitionFileSource.TryLoad`, a
-JSON-only reader shared by the console path and the offline re-drive — see
+EXACT bytes the console read off disk (the pin
+`WorldDefinitionLoader.TryLoadFileForAdmission` returns, taken before the
+instance's draws, the door shared by the console path and the offline re-drive — see
 [console.md](console.md) for what that means for a `.puck`-booted world's
 `world.reload`/`world.save`); for Reset, of the
 re-driven run's OWN base's canonical bytes (`WorldDefinitionSerialization.

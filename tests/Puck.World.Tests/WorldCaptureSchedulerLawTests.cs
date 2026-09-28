@@ -1,8 +1,12 @@
 using System.Buffers.Binary;
 using System.Globalization;
+using System.Numerics;
 using System.Text.Json;
 using Puck.Abstractions.Counting;
+using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Machines;
 using Puck.Abstractions.Presentation;
+using Puck.Abstractions.Sources;
 using Puck.Assets;
 using Puck.Assets.Documents;
 using Puck.Commands;
@@ -19,8 +23,10 @@ namespace Puck.World.Tests;
 /// <see cref="FixedStepPump"/> stepping a real <see cref="WorldServer"/> through <see cref="WorldServerStepShell"/>,
 /// the scheduler published after every step as <c>WorldHostStep</c> publishes it, and one composed frame after every
 /// pump call. The frame is a fake render chain whose PNG records the tick and capture-scope state hash of the server
-/// at the moment it was composed, so a manifest entry can be checked against what its frame really showed. Every
-/// armed capture must end as exactly one manifest entry: the frame showing its tick, or a named refusal.</summary>
+/// at the moment it was composed, so a manifest entry can be checked against what its frame really showed, and whose
+/// region tick is the server's last completed tick when it composes, as the presenter's is the state it refreshed its
+/// regions from. Every armed capture must end as exactly one manifest entry: the frame showing its tick and recording
+/// the tick its regions were refreshed at, or a named refusal.</summary>
 public sealed class WorldCaptureSchedulerLawTests : IDisposable {
     private const ulong BurstSteps = 60UL;
     private const ulong FirstTick = 10UL;
@@ -29,15 +35,38 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
     private readonly TemporaryDirectory m_directory = new();
 
     // A render chain that serves an armed request with the next frame it composes, writing the shown tick and the
-    // server's capture-scope hash into the PNG's first pixels.
-    private sealed class StampingFrameTarget(WorldServer server, bool serves) : ICaptureRequestTarget {
+    // server's capture-scope hash into the PNG's first pixels. One that loses its device instead refuses the armed
+    // request the way a capture-capable node's device-loss release does.
+    private sealed class StampingFrameTarget(WorldServer server, bool serves, bool losesDevice = false) : ICaptureRequestTarget {
         private FrameCaptureRequest? m_request;
 
         public int Frames { get; private set; }
+        // Runs once a capture is served, before the scheduler judges it.
+        public Action? OnServed { get; set; }
         public string? PendingCapturePath => m_request?.Path;
+        // Writes a served capture's PNG in place of the tick and hash stamp.
+        public Action<string>? Writer { get; set; }
+        // The paths of the captures this target served.
+        public List<string> Served { get; } = [];
 
         public void Compose() {
             Frames++;
+
+            if (
+                losesDevice &&
+                (m_request is { } armed)
+            ) {
+                var slot = new CaptureRequestSlot();
+
+                m_request = null;
+                slot.Arm(
+                    pendingPath: null,
+                    request: armed
+                );
+                slot.RefuseForDeviceLoss();
+
+                return;
+            }
 
             if (
                 !serves ||
@@ -47,7 +76,19 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
             }
 
             m_request = null;
-            _ = request.Write(writer: path => {
+            Served.Add(item: request.Path);
+
+            if (Writer is { } writer) {
+                _ = request.Write(
+                    tick: (server.NextInputTick - 1UL),
+                    writer: writer
+                );
+                OnServed?.Invoke();
+
+                return;
+            }
+
+            _ = request.Write(tick: (server.NextInputTick - 1UL), writer: path => {
                 var tick = (server.NextInputTick - 1UL);
                 var rgba = new byte[((8 * 2) * 4)];
                 Span<byte> stamp = stackalloc byte[16];
@@ -128,7 +169,7 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
         private readonly HostRow m_row;
         private readonly ulong m_stepTicks;
 
-        public Run(string directory, bool honoursFrames, bool serves) {
+        public Run(string directory, bool honoursFrames, bool serves, bool losesDevice = false, string? secondInstance = null, bool rendersWorld = true, int? secondScreen = null, IWorldCaptureSources? sources = null) {
             m_row = HostRow.Build(
                 definition: (Fixtures.BuildDocument() with {
                     Captures = new WorldCapturesSection(
@@ -138,24 +179,38 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
                                 station: "first",
                                 tick: FirstTick
                             ),
-                            Row(
+                            (Row(
                                 station: "second",
                                 tick: SecondTick
-                            ),
+                            ) with {
+                                Instance = secondInstance,
+                                Screen = secondScreen,
+                            }),
                         ]
                     ),
                 }),
                 name: "boot"
             );
             Target = new StampingFrameTarget(
+                losesDevice: losesDevice,
+                server: m_row.Server,
+                serves: serves
+            );
+            WorldTarget = new StampingFrameTarget(
+                losesDevice: losesDevice,
                 server: m_row.Server,
                 serves: serves
             );
             Scheduler = new WorldCaptureScheduler(
                 backend: "vulkan",
-                captureTarget: () => Target,
+                captureTarget: instance => ((instance is null)
+                    ? Target
+                    : ((rendersWorld && (instance == WorldViewGraphs.WorldInstance))
+                        ? WorldTarget
+                        : throw new ArgumentException(message: $"The render graph has no instance '{instance}'."))),
                 directory: directory,
                 server: m_row.Server,
+                sources: sources,
                 worldFile: "fixture.world.json"
             );
             Simulation = new CaptureStepSimulation(
@@ -183,6 +238,8 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
         public WorldCaptureScheduler Scheduler { get; }
         public CaptureStepSimulation Simulation { get; }
         public StampingFrameTarget Target { get; }
+        // The target a row naming the world instance is armed on.
+        public StampingFrameTarget WorldTarget { get; }
 
         private static WorldCaptureRow Row(string station, ulong tick) => new(
             Palette: [new WorldCapturePaletteEntry(
@@ -206,6 +263,7 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
                 );
                 owed = 0UL;
                 Target.Compose();
+                WorldTarget.Compose();
             } while (m_pump.AccumulatorTicks >= m_stepTicks);
 
             Scheduler.Drain();
@@ -213,6 +271,75 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
         public void Dispose() {
             m_router.Dispose();
             m_row.Dispose();
+        }
+    }
+    // Screen 0 reads the world instance, whose source is whichever machine upload runs now.
+    private sealed class MachineSources : IWorldCaptureSources {
+        public MachineVideoSourceUpload? Upload { get; set; }
+
+        public string? InstanceOf(int screen) => ((screen == 0)
+            ? WorldViewGraphs.WorldInstance
+            : null);
+        public IImageSourceReference? ReferenceOf(string instance) => ((instance == WorldViewGraphs.WorldInstance)
+            ? Upload
+            : null);
+    }
+    // An RGBA8 machine output whose pixels carry their coordinates and extent.
+    private sealed class ResizableOutput(int width, int height) : IMachineVideoOutput {
+        private long m_sequence;
+
+        public Vector3 EmittedLight => Vector3.Zero;
+        public ImagePixelFormat Format => ImagePixelFormat.R8G8B8A8Unorm;
+        public int Height => height;
+        public int Width => width;
+
+        public long WriteFrame(Span<byte> region) {
+            var plane = region[ImageSourceUploadLayout.HeaderBytes..];
+
+            for (var pixel = 0; (pixel < (width * height)); pixel++) {
+                plane[(pixel * 4)] = ((byte)(pixel % width));
+                plane[((pixel * 4) + 1)] = ((byte)(pixel / width));
+                plane[((pixel * 4) + 2)] = ((byte)width);
+                plane[((pixel * 4) + 3)] = 0xFF;
+            }
+
+            return ++m_sequence;
+        }
+    }
+    // The sources a row naming screen 0 captures: screen 0 reads the world instance, whose reference is the frame the
+    // capture landed, one pixel of it changed when asked, stating the tick it is asked to.
+    private sealed class CaptureSources(int? differingPixel, string framePath, ulong statedTick) : IWorldCaptureSources, IImageSourceReference {
+        public ImageSourceDescriptor Descriptor { get; } = new(
+            Cadence: ImageSourceCadence.Tick,
+            Color: ImageColorEncoding.Srgb,
+            Content: ImageContentClass.Deterministic,
+            Format: ImagePixelFormat.R8G8B8A8Unorm,
+            Height: 2U,
+            Producer: "law",
+            Transport: ImageSourceTransport.Uploaded,
+            Width: 8U
+        );
+        public bool Reads { get; init; } = true;
+
+        public string? InstanceOf(int screen) => ((Reads && (screen == 0))
+            ? WorldViewGraphs.WorldInstance
+            : null);
+        public IImageSourceReference? ReferenceOf(string instance) => ((instance == WorldViewGraphs.WorldInstance)
+            ? this
+            : null);
+        public bool TryWriteReference(Span<byte> rgba, out ImageSourceStamp stamp) {
+            PngDecoder.Decode(pngBytes: File.ReadAllBytes(path: framePath)).RgbaPixels.CopyTo(destination: rgba);
+
+            if (differingPixel is { } pixel) {
+                rgba[(pixel * 4)] ^= 0xFE;
+            }
+
+            stamp = new ImageSourceStamp(
+                Sequence: 1UL,
+                Tick: statedTick
+            );
+
+            return true;
         }
     }
 
@@ -269,6 +396,10 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
                 expected: tick,
                 actual: entry.GetProperty(propertyName: "tick").GetUInt64()
             );
+            Assert.Equal(
+                expected: tick,
+                actual: entry.GetProperty(propertyName: "regionTick").GetUInt64()
+            );
             Assert.False(condition: entry.TryGetProperty(
                 propertyName: "refusal",
                 value: out _
@@ -288,6 +419,181 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
                 actual: shown.Hash
             );
         }
+    }
+    [Fact]
+    public void ARowNamingAnInstanceIsCapturedFromThatInstanceAndOneTheGraphLacksIsRefusedByName() {
+        using (var run = new Run(
+            directory: m_directory.RootPath,
+            honoursFrames: true,
+            secondInstance: WorldViewGraphs.WorldInstance,
+            serves: true
+        )) {
+            run.BurstThenDrain();
+
+            // The first row reads the root and the second the world, each served by the frame showing its tick.
+            Assert.Equal(
+                expected: (Path.Combine(path1: m_directory.RootPath, path2: "first~10.png"), Path.Combine(path1: m_directory.RootPath, path2: "second~30.png")),
+                actual: (Assert.Single(collection: run.Target.Served), Assert.Single(collection: run.WorldTarget.Served))
+            );
+            Assert.All(
+                action: static entry => Assert.False(condition: entry.TryGetProperty(
+                    propertyName: "refusal",
+                    value: out _
+                )),
+                collection: ReadManifest(directory: m_directory.RootPath)
+            );
+        }
+
+        // A render graph without the instance a row names refuses its capture by name, and the run steps on.
+        using var unknown = new Run(
+            directory: m_directory.RootPath,
+            honoursFrames: true,
+            rendersWorld: false,
+            secondInstance: WorldViewGraphs.WorldInstance,
+            serves: true
+        );
+
+        unknown.BurstThenDrain();
+        Assert.Equal(
+            expected: ["first:10::", "second:30:failed:the render graph cannot capture instance 'world' (The render graph has no instance 'world'.)"],
+            actual: ReadManifest(directory: m_directory.RootPath).Select(selector: static entry => $"{entry.GetProperty(propertyName: "station").GetString()}:{entry.GetProperty(propertyName: "tick").GetUInt64()}:{(entry.TryGetProperty(propertyName: "refusal", value: out var refusal) ? refusal.GetString() : string.Empty)}:{(entry.TryGetProperty(propertyName: "detail", value: out var detail) ? detail.GetString() : string.Empty)}")
+        );
+        Assert.Empty(collection: unknown.WorldTarget.Served);
+    }
+    [Fact]
+    public void ACaptureOfASourceThatStatesItsImageRecordsTheExactVerdictAndOneDifferingPixelFailsIt() {
+        // The second row captures screen 0's source, which reads the world instance here; its reference is the landed
+        // frame, or the landed frame with one pixel changed.
+        string[] Verdicts(int? differingPixel, ulong statedTick = SecondTick) {
+            var sources = new CaptureSources(
+                differingPixel: differingPixel,
+                framePath: Path.Combine(path1: m_directory.RootPath, path2: "second~30.png"),
+                statedTick: statedTick
+            );
+
+            using (var run = new Run(
+                directory: m_directory.RootPath,
+                honoursFrames: true,
+                secondScreen: 0,
+                serves: true,
+                sources: sources
+            )) {
+                run.BurstThenDrain();
+                Assert.Single(collection: run.WorldTarget.Served);
+            }
+
+            return [.. ReadManifest(directory: m_directory.RootPath).Select(selector: static entry => (entry.TryGetProperty(propertyName: "sourceVerdict", value: out var verdict)
+                ? $"{verdict.GetProperty(propertyName: "holds").GetBoolean()}:{verdict.GetProperty(propertyName: "detail").GetString()}"
+                : "none"))];
+        }
+
+        Assert.Equal(expected: ["none", "True:law 8x2 exact"], actual: Verdicts(differingPixel: null));
+        var differing = Verdicts(differingPixel: 11);
+
+        Assert.Equal(expected: "none", actual: differing[0]);
+        Assert.StartsWith(expectedStartString: "False:law 8x2 1 pixel(s) differ; first at (3, 1) expected #FF0000", actualString: differing[1]);
+        Assert.Equal(expected: ["none", "False:source 'world' states the image of tick 29, and the capture shows tick 30"], actual: Verdicts(differingPixel: null, statedTick: (SecondTick - 1UL)));
+    }
+    [Fact]
+    public void ACaptureOfAMachineSourceIsJudgedAgainstTheFrameItServedAfterTheMachineIsReplaced() {
+        var gpu = new FakeGpuDevice();
+        var output = new ResizableOutput(height: 2, width: 8);
+        var served = new MachineVideoSourceUpload(
+            name: WorldViewGraphs.WorldInstance,
+            output: () => output,
+            producer: "machine"
+        );
+        var replacement = new ResizableOutput(height: 4, width: 16);
+        var sources = new MachineSources {
+            Upload = served,
+        };
+
+        using var region = new GpuRegion(
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
+            byteCount: ImageSourceUploadLayout.ByteCount(header: ImageSourceUploadLayout.HeaderOf(
+                color: ImageColorEncoding.Srgb,
+                format: ImagePixelFormat.R8G8B8A8Unorm,
+                height: 2U,
+                width: 8U
+            )),
+            copyPipeline: null,
+            memory: GpuHostVisibleMemory.Host,
+            name: default,
+            policy: GpuResidencyPolicy.InPlace,
+            recorder: gpu.Services.Recorder,
+            slotCount: 1
+        );
+
+        using (var run = new Run(
+            directory: m_directory.RootPath,
+            honoursFrames: true,
+            secondScreen: 0,
+            serves: true,
+            sources: sources
+        )) {
+            // The frame that serves the capture is the source's conversion of the tick it presents; once it is served, the
+            // machine is replaced by one of another extent, the old source reads the new output's shape, and a rebuilt
+            // source runs in its place, before the scheduler judges the capture.
+            run.WorldTarget.Writer = path => {
+                Assert.True(condition: served.TryWrite(region: region, tick: ((long)SecondTick)));
+
+                var rgba = new byte[((8 * 2) * 4)];
+
+                Assert.True(condition: ((IImageSourceReference)served).TryWriteReference(rgba: rgba, stamp: out _));
+                PngEncoder.Write(
+                    height: 2,
+                    path: path,
+                    rgba: rgba,
+                    width: 8
+                );
+            };
+            run.WorldTarget.OnServed = () => {
+                output = replacement;
+
+                Assert.Equal(expected: (16U, 4U), actual: (served.Descriptor!.Width, served.Descriptor.Height));
+
+                sources.Upload = new MachineVideoSourceUpload(
+                    name: WorldViewGraphs.WorldInstance,
+                    output: () => replacement,
+                    producer: "machine"
+                );
+            };
+            run.BurstThenDrain();
+            Assert.Single(collection: run.WorldTarget.Served);
+        }
+
+        var verdict = ReadManifest(directory: m_directory.RootPath)[1].GetProperty(propertyName: "sourceVerdict");
+
+        Assert.Equal(
+            expected: "True:machine 8x2 exact",
+            actual: $"{verdict.GetProperty(propertyName: "holds").GetBoolean()}:{verdict.GetProperty(propertyName: "detail").GetString()}"
+        );
+    }
+    [Fact]
+    public void ARowNamingAScreenThatReadsNoSourceInstanceIsRefusedByName() {
+        using var run = new Run(
+            directory: m_directory.RootPath,
+            honoursFrames: true,
+            secondScreen: 0,
+            serves: true,
+            sources: new CaptureSources(
+                differingPixel: null,
+                framePath: string.Empty,
+                statedTick: SecondTick
+            ) {
+                Reads = false,
+            }
+        );
+
+        run.BurstThenDrain();
+        Assert.Equal(
+            expected: "failed:the render graph cannot capture screen 0's source (screen 0 reads no source instance)",
+            actual: ((ReadManifest(directory: m_directory.RootPath)[1] is var entry)
+                ? $"{entry.GetProperty(propertyName: "refusal").GetString()}:{entry.GetProperty(propertyName: "detail").GetString()}"
+                : null)
+        );
+        Assert.Empty(collection: run.WorldTarget.Served);
     }
     [Fact]
     public void ControlWithoutTheFrameStopTheBurstRefusesBothCapturesByName() {
@@ -313,6 +619,22 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
             path1: m_directory.RootPath,
             path2: "first~10.png"
         )));
+    }
+    [Fact]
+    public void ACaptureArmedWhenTheDeviceIsLostIsRefusedAsDeviceLostNamingTheReason() {
+        using var run = new Run(
+            directory: m_directory.RootPath,
+            honoursFrames: true,
+            losesDevice: true,
+            serves: true
+        );
+
+        run.BurstThenDrain();
+
+        Assert.Equal(
+            expected: [("first:10:deviceLost:" + CaptureRequestSlot.DeviceLostReason), ("second:30:deviceLost:" + CaptureRequestSlot.DeviceLostReason)],
+            actual: ReadManifest(directory: m_directory.RootPath).Select(selector: static entry => $"{entry.GetProperty(propertyName: "station").GetString()}:{entry.GetProperty(propertyName: "tick").GetUInt64()}:{entry.GetProperty(propertyName: "refusal").GetString()}:{entry.GetProperty(propertyName: "detail").GetString()}")
+        );
     }
     [Fact]
     public void ACaptureNoFrameServesIsRefusedAsUnservedAndTheNextAsBusy() {

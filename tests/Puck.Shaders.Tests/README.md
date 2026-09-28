@@ -1,6 +1,6 @@
 # Puck.Shaders.Tests
 
-This xUnit v3 suite verifies shader manifests, pipeline graphs and liveness,
+This xUnit v3 suite verifies shader packages, pipeline graphs and liveness,
 versioned resources and the planned barriers, binding layouts and the generated frame block, compiler adapters, probe kinds, and
 compiled-bytecode freshness. It tests the document and build contracts without
 claiming correctness for every GPU driver.
@@ -20,6 +20,12 @@ allocation in steady-state frames, building every candidate's modules and
 pipelines off the frame thread while the installed graph keeps presenting, and
 retiring the old graph only once the queue has finished with it, without a
 device drain.
+`RenderGraphRuntimeLawTests` run `RenderGraphRuntime` on the same fake, with
+cameras as package graphs whose fake recorders count their records: demand
+(a camera on two screens renders once a frame, an off-view one never), extent,
+previous-frame and buffer edges bound to what their producers published,
+captures from the root, device loss, disposal, and zero managed allocation in
+steady frames. The fake records descriptor writes while `Recording` is on.
 `ShaderPipelineVersionLawTests` cover forwarding: readers ordered before an
 overwrite, each refusal by name, one storage per chain, and a node that records
 exactly the barriers the plan gives each access.
@@ -30,10 +36,20 @@ interface's layout and require byte-identical output from two builds.
 `-showLiveOutput` prints each build's content pins for comparison with another
 host running the same DXC. `ShaderFrameBlockLawTests` compile every shipped
 pipeline pass and hold the offsets DXC gave each frame member in both bytecodes
-to the bytes the host writer puts there, and the film grain set's checked-in
+to the bytes the host writer puts there, and the film grain package's checked-in
 declarations to the generator. `EchoCanaryFixtureTests` hold the `pipeline-echo`
 canary's generated fixtures to the generator and show reflection catching its
-hand-perturbed offset.
+hand-perturbed offset. `InterfaceEchoCanaryFixtureTests` hold each
+`interface-echo` document's blocks to the shipped interfaces it stands for,
+each echo file to the generator, and every shipped package with frame data to
+some echo.
+`SdfFilmGrainPackageLawTests` hold the film grain package's declaration: its
+config's defaults, refusals by field and schema, its interface layout under the name its
+checked-in declarations carry, and its stages shipped for both backends.
+`PostProcessPackageLawTests` run that package as a pass of a graph on
+`FakePipelineGpu`: its pinned recording and live config changes, its planned
+barriers, its pipeline built off the frame thread, a config the graph compiler
+refuses by pass name, and faulted creations released by name.
 
 `ShaderPackageLawTests` cover the source closure and `puck.shader.package.v1`
 packages over the fixtures in `Assets/ShaderPackages`: transitive, missing and

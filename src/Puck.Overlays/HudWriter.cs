@@ -3,7 +3,7 @@ namespace Puck.Overlays;
 /// <summary>
 /// The authored-HUD writer: renders <see cref="HudStore"/>'s structural snapshot in four separate calls —
 /// <see cref="EmitUnder"/>, <see cref="EmitReplace"/>, <see cref="EmitOver"/> (the world-scope bands, one per band,
-/// so <c>UnifiedOverlayNode</c>'s banded pipeline can sequence them around the four first-party writers' base slot)
+/// so <see cref="OverlayFrameComposer"/>'s banded pipeline can sequence them around the four first-party writers' base slot)
 /// and <see cref="EmitSeatPanels"/> (the player-scope per-seat panels, unbanded — see its own remarks). Each call
 /// resolves every bound element's live value through <see cref="IHudBindingResolver"/> at emission time
 /// (presentation float; resolved fresh every produced frame, never cached across frames) and draws rect/text/gauge
@@ -40,6 +40,10 @@ public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
 
     private OverlayHudFrame m_frame;
     private bool m_hasFrame;
+
+    // The seat whose player-scope panel is being emitted, which its bindings resolve for; -1 while a world-scope panel
+    // is.
+    private int m_seat = -1;
 
     /// <summary>Initializes a new instance of the <see cref="HudWriter"/> class.</summary>
     /// <param name="source">The HUD structure source.</param>
@@ -83,6 +87,7 @@ public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
 
             if (m_bindings.TryResolve(
                 binding: segment.Text,
+                seat: m_seat,
                 fraction: out _,
                 text: out var resolved
             )) {
@@ -222,6 +227,7 @@ public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
             m_bindings.TryResolve(
             binding: binding,
             fraction: out var resolved,
+            seat: m_seat,
             text: out var text
         )
         ) {
@@ -371,6 +377,7 @@ public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
 
         var panel = seat.Panel;
 
+        m_seat = seat.Seat;
         EmitPanelInto(
             builder: builder,
             originX: vx,
@@ -379,6 +386,7 @@ public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
             spanH: vh,
             spanW: vw
         );
+        m_seat = -1;
 
         builder.EndClip();
     }
@@ -392,6 +400,7 @@ public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
             m_bindings.TryResolve(
             binding: binding,
             fraction: out _,
+            seat: m_seat,
             text: out var resolved
         )
         ) {

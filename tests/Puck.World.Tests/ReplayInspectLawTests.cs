@@ -1,3 +1,5 @@
+using Puck.World.Server;
+using Puck.Testing;
 using Puck.Commands;
 using Xunit;
 
@@ -85,11 +87,12 @@ public sealed class ReplayInspectLawTests {
     }
     [Fact]
     public void AuthorityEntry_PrintsItsTickCompactlyNamed() {
-        Fixtures.SkipIfReplayDirectoryUnwritable();
+        using var stateDirectory = new TemporaryDirectory(prefix: "puck-replay-");
 
         using var fixture = Fixtures.FreshServer();
         var transport = new LoopbackTransport(server: fixture.Server);
         var tape = new WorldReplayTape(
+            stateRoot: new WorldStateRoot(path: stateDirectory.RootPath),
             liveServer: fixture.Server,
             profiles: fixture.Server.Profiles,
             transport: transport,
@@ -125,7 +128,7 @@ public sealed class ReplayInspectLawTests {
 
         _ = tape.StopRecording();
 
-        using var stream = File.OpenRead(path: WorldReplayTape.PathFor(name: name));
+        using var stream = File.OpenRead(path: tape.PathFor(name: name));
         var persisted = WorldReplaySnapshot.Read(stream: stream);
         var lines = Walk(
             ticks: persisted.Ticks,

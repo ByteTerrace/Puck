@@ -293,7 +293,7 @@ public sealed class StrictEnumAnalyzerTests {
     }
     [Fact]
     public void EnumRegisteredAsAClosedBespokeJsonConverterOnTheContextIsNotReported() {
-        // The SurfaceFormat/WorldBackendPreference shape: a hand-written JsonConverter<TEnum> (not
+        // The surface-format/WorldBackendPreference shape: a hand-written JsonConverter<TEnum> (not
         // JsonStringEnumConverter) registered on the context rather than the enum's own declaration.
         var result = Run(source: """
             using System;

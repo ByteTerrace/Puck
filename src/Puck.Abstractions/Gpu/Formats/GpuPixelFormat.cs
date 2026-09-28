@@ -1,14 +1,11 @@
-using Puck.Abstractions.Presentation;
-
 namespace Puck.Abstractions.Gpu;
 
 /// <summary>
-/// Backend-neutral GPU resource pixel formats. Each backend maps these to its native format values.
-/// Deliberately distinct from <see cref="SurfaceFormat"/>: that enum is the presentable-surface vocabulary
-/// (what a swapchain, window, or capture produces), while this one describes GPU resources (storage images,
-/// render targets) and is free to grow GPU-only members with no presentable equivalent. The explicit
-/// <see cref="GpuPixelFormats.FromSurfaceFormat"/> bridge marks exactly where a presentable format enters
-/// GPU-resource land.
+/// The one pixel-format vocabulary: the layout of an image's texels wherever they live. A GPU resource (a storage
+/// image, a render target, a sampled texture, a swapchain image) is created in one, a presented or captured
+/// <see cref="Presentation.Surface"/> declares one, and a baked texture's levels and the block codecs of
+/// <c>Puck.Assets.Textures</c> are stored in one. Each backend maps a member to its native format value, and
+/// <see cref="GpuPixelFormats"/> states each member's byte layout once.
 /// </summary>
 public enum GpuPixelFormat : uint {
     /// <summary>The R8G8B8A8 unsigned normalized format.</summary>
@@ -21,25 +18,188 @@ public enum GpuPixelFormat : uint {
     R32G32B32A32Float = 4,
     /// <summary>One 32-bit floating-point depth channel, for a depth attachment.</summary>
     D32Float = 5,
+    /// <summary>BC4: one unsigned normalized channel in 8-byte blocks of 4x4 texels (Vulkan <c>BC4_UNORM_BLOCK</c>,
+    /// <c>DXGI_FORMAT_BC4_UNORM</c>). Sampled only.</summary>
+    Bc4Unorm = 6,
+    /// <summary>BC5: two unsigned normalized channels in 16-byte blocks of 4x4 texels (Vulkan <c>BC5_UNORM_BLOCK</c>,
+    /// <c>DXGI_FORMAT_BC5_UNORM</c>). Sampled only.</summary>
+    Bc5Unorm = 7,
+    /// <summary>BC6H: three unsigned 16-bit floating-point channels in 16-byte blocks of 4x4 texels (Vulkan
+    /// <c>BC6H_UFLOAT_BLOCK</c>, <c>DXGI_FORMAT_BC6H_UF16</c>). Sampled only.</summary>
+    Bc6hUfloat = 8,
+    /// <summary>BC7: four unsigned normalized channels in 16-byte blocks of 4x4 texels, read without sRGB decode (Vulkan
+    /// <c>BC7_UNORM_BLOCK</c>, <c>DXGI_FORMAT_BC7_UNORM</c>). Sampled only.</summary>
+    Bc7Unorm = 9,
+    /// <summary>The R8G8B8A8 format with sRGB encoding: a read decodes and a write encodes (Vulkan <c>R8G8B8A8_SRGB</c>,
+    /// <c>DXGI_FORMAT_R8G8B8A8_UNORM_SRGB</c>). A swapchain may be created in it.</summary>
+    R8G8B8A8Srgb = 10,
+    /// <summary>The B8G8R8A8 format with sRGB encoding (Vulkan <c>B8G8R8A8_SRGB</c>,
+    /// <c>DXGI_FORMAT_B8G8R8A8_UNORM_SRGB</c>). A swapchain may be created in it.</summary>
+    B8G8R8A8Srgb = 11,
+    /// <summary>Three 10-bit unsigned normalized color channels and a 2-bit alpha in one 32-bit word, red in the low bits
+    /// (Vulkan <c>A2B10G10R10_UNORM_PACK32</c>, <c>DXGI_FORMAT_R10G10B10A2_UNORM</c>). A swapchain may be created in
+    /// it.</summary>
+    R10G10B10A2Unorm = 12,
+    /// <summary>One 8-bit unsigned normalized channel (Vulkan <c>R8_UNORM</c>, <c>DXGI_FORMAT_R8_UNORM</c>).</summary>
+    R8Unorm = 13,
+    /// <summary>Two 8-bit unsigned normalized channels, red first (Vulkan <c>R8G8_UNORM</c>,
+    /// <c>DXGI_FORMAT_R8G8_UNORM</c>).</summary>
+    R8G8Unorm = 14,
 }
 /// <summary>
-/// Conversions into the <see cref="GpuPixelFormat"/> vocabulary.
+/// The byte layout of <see cref="GpuPixelFormat"/> images: the one statement of each format's texel or block size, and
+/// the level and mip-chain lengths an upload, a block codec and a bake read from it.
 /// </summary>
 public static class GpuPixelFormats {
+    /// <summary>The texels along each edge of a block-compressed format's block.</summary>
+    public const uint BlockTexels = 4U;
+
     /// <summary>Gets whether a format holds depth rather than color.</summary>
     /// <param name="format">The format.</param>
     /// <returns><see langword="true"/> for a depth format.</returns>
     public static bool IsDepth(GpuPixelFormat format) => (format == GpuPixelFormat.D32Float);
-    /// <summary>Converts a <see cref="SurfaceFormat"/> to its <see cref="GpuPixelFormat"/> equivalent.</summary>
-    public static GpuPixelFormat FromSurfaceFormat(SurfaceFormat format) {
-        return format switch {
-            SurfaceFormat.B8G8R8A8Unorm => GpuPixelFormat.B8G8R8A8Unorm,
-            SurfaceFormat.R8G8B8A8Unorm => GpuPixelFormat.R8G8B8A8Unorm,
-            _ => throw new ArgumentOutOfRangeException(
+    /// <summary>Gets whether a format stores 4x4 texel blocks rather than texels. A block-compressed image is only ever
+    /// sampled: no shader writes it and no render pass draws into it.</summary>
+    /// <param name="format">The format.</param>
+    /// <returns><see langword="true"/> for BC4, BC5, BC6H and BC7.</returns>
+    public static bool IsBlockCompressed(GpuPixelFormat format) =>
+        (format is GpuPixelFormat.Bc4Unorm or GpuPixelFormat.Bc5Unorm or GpuPixelFormat.Bc6hUfloat or GpuPixelFormat.Bc7Unorm);
+    /// <summary>Gets the largest code a color channel of a format stores: the steps a write quantizes the range zero to
+    /// one into, 255 for an 8-bit format, sRGB or not, and 1023 for the 10-bit color channels of
+    /// <see cref="GpuPixelFormat.R10G10B10A2Unorm"/>; zero for a floating-point format, which a write does not
+    /// quantize.</summary>
+    /// <param name="format">The format.</param>
+    /// <returns>The largest code, or zero for a floating-point format.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The format holds depth or blocks, which no color write targets, or is
+    /// not defined.</exception>
+    public static uint ColorCodeMaximum(GpuPixelFormat format) => format switch {
+        GpuPixelFormat.R8Unorm or GpuPixelFormat.R8G8Unorm or GpuPixelFormat.R8G8B8A8Unorm or GpuPixelFormat.B8G8R8A8Unorm
+            or GpuPixelFormat.R8G8B8A8Srgb or GpuPixelFormat.B8G8R8A8Srgb => 255U,
+        GpuPixelFormat.R10G10B10A2Unorm => 1023U,
+        GpuPixelFormat.R16G16B16A16Float or GpuPixelFormat.R32G32B32A32Float => 0U,
+        _ => throw new ArgumentOutOfRangeException(
             actualValue: format,
-            message: "The surface format has no GPU pixel format mapping.",
+            message: "The pixel format is not a color format a write targets.",
             paramName: nameof(format)
         ),
-        };
+    };
+    /// <summary>Gets whether a format encodes sRGB on a write and decodes it on a read, so a shader writes it linear
+    /// light.</summary>
+    /// <param name="format">The format.</param>
+    /// <returns><see langword="true"/> for <see cref="GpuPixelFormat.R8G8B8A8Srgb"/> and
+    /// <see cref="GpuPixelFormat.B8G8R8A8Srgb"/>.</returns>
+    public static bool EncodesSrgb(GpuPixelFormat format) =>
+        (format is GpuPixelFormat.R8G8B8A8Srgb or GpuPixelFormat.B8G8R8A8Srgb);
+    /// <summary>Gets the bytes one texel of an uncompressed format, or one 4x4 block of a block-compressed format,
+    /// occupies.</summary>
+    /// <param name="format">The format.</param>
+    /// <returns>The bytes per texel, or per block for a block-compressed format.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The format is not defined.</exception>
+    public static uint UnitBytes(GpuPixelFormat format) => format switch {
+        GpuPixelFormat.R8Unorm => 1U,
+        GpuPixelFormat.R8G8Unorm => 2U,
+        GpuPixelFormat.R8G8B8A8Unorm or GpuPixelFormat.B8G8R8A8Unorm or GpuPixelFormat.D32Float or GpuPixelFormat.R8G8B8A8Srgb
+            or GpuPixelFormat.B8G8R8A8Srgb or GpuPixelFormat.R10G10B10A2Unorm => 4U,
+        GpuPixelFormat.R16G16B16A16Float or GpuPixelFormat.Bc4Unorm => 8U,
+        GpuPixelFormat.R32G32B32A32Float or GpuPixelFormat.Bc5Unorm or GpuPixelFormat.Bc6hUfloat or GpuPixelFormat.Bc7Unorm => 16U,
+        _ => throw new ArgumentOutOfRangeException(
+            actualValue: format,
+            message: "The pixel format is not defined.",
+            paramName: nameof(format)
+        ),
+    };
+    /// <summary>Gets the extent of one mip level: each edge halved per level, and never below one texel.</summary>
+    /// <param name="width">The width of level 0, in texels.</param>
+    /// <param name="height">The height of level 0, in texels.</param>
+    /// <param name="level">The level.</param>
+    /// <returns>The level's width and height, in texels.</returns>
+    public static (uint Width, uint Height) LevelExtent(uint width, uint height, uint level) => (
+        Math.Max(val1: 1U, val2: (width >> ((int)level))),
+        Math.Max(val1: 1U, val2: (height >> ((int)level)))
+    );
+    /// <summary>Gets the bytes one tightly packed level of an image occupies: rows of texels, or for a block-compressed
+    /// format rows of blocks, each edge rounded up to whole blocks.</summary>
+    /// <param name="format">The format.</param>
+    /// <param name="width">The level's width, in texels.</param>
+    /// <param name="height">The level's height, in texels.</param>
+    /// <returns>The level's byte length.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The format is not defined.</exception>
+    /// <exception cref="OverflowException">The length exceeds a 64-bit count.</exception>
+    public static ulong LevelByteLength(GpuPixelFormat format, uint width, uint height) {
+        var (columns, rows) = (IsBlockCompressed(format: format)
+            ? (BlocksAcross(texels: width), BlocksAcross(texels: height))
+            : (((ulong)width), ((ulong)height)));
+
+        return checked(((columns * rows) * UnitBytes(format: format)));
     }
+    /// <summary>Gets the bytes a tightly packed mip chain occupies: every level from 0, largest first, each at
+    /// <see cref="LevelByteLength"/>, with nothing between them. This is the layout an image upload reads
+    /// (<see cref="IGpuSurfaceUpload.Upload"/>).</summary>
+    /// <param name="format">The format.</param>
+    /// <param name="width">The width of level 0, in texels.</param>
+    /// <param name="height">The height of level 0, in texels.</param>
+    /// <param name="levels">The number of levels.</param>
+    /// <returns>The chain's byte length.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The format is not defined.</exception>
+    /// <exception cref="OverflowException">The length exceeds a 64-bit count.</exception>
+    public static ulong ChainByteLength(GpuPixelFormat format, uint width, uint height, uint levels) {
+        var total = 0UL;
+
+        for (var level = 0U; (level < levels); level++) {
+            var (levelWidth, levelHeight) = LevelExtent(
+                height: height,
+                level: level,
+                width: width
+            );
+
+            total = checked((total + LevelByteLength(
+                format: format,
+                height: levelHeight,
+                width: levelWidth
+            )));
+        }
+
+        return total;
+    }
+    /// <summary>Refuses an upload whose extent or level count is empty, whose level count exceeds the extent's full mip
+    /// chain, or whose bytes are not exactly the chain's tightly packed length, so every backend's upload refuses the
+    /// same requests with the same words.</summary>
+    /// <param name="byteLength">The length, in bytes, of the pixels offered.</param>
+    /// <param name="format">The pixel format.</param>
+    /// <param name="width">The width of level 0, in texels.</param>
+    /// <param name="height">The height of level 0, in texels.</param>
+    /// <param name="levels">The number of levels offered.</param>
+    /// <returns>The chain's byte length.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">A dimension or the level count is zero, the level count exceeds
+    /// the full chain, or the format is not defined.</exception>
+    /// <exception cref="ArgumentException"><paramref name="byteLength"/> is not the chain's length.</exception>
+    public static ulong RequireChain(long byteLength, GpuPixelFormat format, uint width, uint height, uint levels) {
+        ArgumentOutOfRangeException.ThrowIfZero(value: width);
+        ArgumentOutOfRangeException.ThrowIfZero(value: height);
+        ArgumentOutOfRangeException.ThrowIfZero(value: levels);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            other: (32U - ((uint)uint.LeadingZeroCount(value: Math.Max(val1: width, val2: height)))),
+            value: levels
+        );
+
+        var required = ChainByteLength(
+            format: format,
+            height: height,
+            levels: levels,
+            width: width
+        );
+
+        if (((ulong)byteLength) != required) {
+            throw new ArgumentException(
+                message: $"The upload of {levels} {format} level(s) at {width}x{height} requires exactly {required} tightly packed bytes; it offers {byteLength}.",
+                paramName: nameof(byteLength)
+            );
+        }
+
+        return required;
+    }
+    /// <summary>Gets the blocks along an edge of a block-compressed image, a partial block counting as one.</summary>
+    /// <param name="texels">The edge, in texels.</param>
+    /// <returns>The blocks.</returns>
+    public static ulong BlocksAcross(uint texels) => (((((ulong)texels) + BlockTexels) - 1UL) / BlockTexels);
 }

@@ -8,11 +8,6 @@ namespace Puck.World.Transpiler.Composition;
 /// against the documents beside it. The game's boot loader and the laws that pin a boot's work both go through
 /// here.</summary>
 public static class WorldSourceLoader {
-    /// <summary>Gets the memory-only bake cache every compiled world this process derives fills: a compile writes its
-    /// bake pack (<see cref="WorldBakePack"/>) from it, and a tree compile bakes a creation its worlds share
-    /// once.</summary>
-    public static WorldBakeStore Bakes { get; } = new();
-
     /// <summary>Composes and admits <paramref name="document"/>, the document <paramref name="path"/> compiled to.</summary>
     /// <param name="path">The full path of the <c>.puck</c> source; its basis, imports and neighbours resolve beside
     /// it.</param>
@@ -81,7 +76,7 @@ public static class WorldSourceLoader {
     /// <returns><see langword="true"/> when the document composed and parsed.</returns>
     /// <exception cref="ArgumentException"><paramref name="path"/> is <see langword="null"/>, empty or white space.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
-    public static bool TryParseComposed(string path, byte[] document, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldDefinition? authored, out string reason,
+    public static bool TryReadAuthored(string path, byte[] document, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldDefinition? authored, out string reason,
         string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: path);
         ArgumentNullException.ThrowIfNull(argument: document);
@@ -107,13 +102,15 @@ public static class WorldSourceLoader {
         authored = (parsed! with { DocumentDirectory = WorldDocumentPaths.DirectoryOf(documentPath: path) });
         return true;
     }
-    /// <summary>Composes and parses <paramref name="document"/> (<see cref="TryParseComposed"/>) and derives its
+    /// <summary>Composes and parses <paramref name="document"/> (<see cref="TryReadAuthored"/>) and derives its
     /// compiled world fresh for the boot instance (<see cref="CompiledWorld.TryCompile"/>): the file <c>puck compile</c>
     /// and the build write beside a document. It carries the standard chunks and the <c>BAKE</c> chunk
-    /// (<see cref="WorldBakeChunk"/>), whose outcomes the derivation leaves in <see cref="Bakes"/> for the caller's bake
-    /// pack.</summary>
+    /// (<see cref="WorldBakeChunk"/>), whose outcomes the derivation leaves in <paramref name="bakes"/> for the caller's
+    /// bake pack.</summary>
     /// <param name="path">The full path the document is read as; its basis and imports resolve beside it.</param>
     /// <param name="document">The document, UTF-8.</param>
+    /// <param name="bakes">The bake cache the derivation reads each outcome from and bakes a missing one into
+    /// (<see cref="WorldBakeStore.GetOrBake"/>).</param>
     /// <param name="compiledWorld">The compiled world, or <see langword="null"/> on refusal.</param>
     /// <param name="reason">Why the document has no compiled world, or empty on success.</param>
     /// <param name="catalogFingerprint">The stable metadata fingerprint for the selected host catalog.</param>
@@ -123,12 +120,15 @@ public static class WorldSourceLoader {
     /// beside it.</param>
     /// <returns><see langword="true"/> when the document composed, parsed, drew, and every chunk derived.</returns>
     /// <exception cref="ArgumentException"><paramref name="path"/> is <see langword="null"/>, empty or white space.</exception>
-    /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
-    public static bool TryCompileWorld(string path, byte[] document, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out byte[]? compiledWorld, out string reason,
+    /// <exception cref="ArgumentNullException"><paramref name="document"/> or <paramref name="bakes"/> is
+    /// <see langword="null"/>.</exception>
+    public static bool TryCompileWorld(string path, byte[] document, WorldBakeStore bakes, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out byte[]? compiledWorld, out string reason,
         string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, string? bakePack = null) {
+        ArgumentNullException.ThrowIfNull(argument: bakes);
+
         compiledWorld = null;
 
-        return (TryParseComposed(
+        return (TryReadAuthored(
             authored: out var authored,
             catalog: catalog,
             catalogFingerprint: catalogFingerprint,
@@ -142,7 +142,7 @@ public static class WorldSourceLoader {
             chunks: WorldBakeChunk.Register(
                 chunks: CompiledWorldChunks.Standard,
                 packReference: bakePack,
-                store: Bakes
+                store: bakes
             ),
             instanceIdentity: WorldDefinitionLoader.BootInstanceName,
             reason: out reason,

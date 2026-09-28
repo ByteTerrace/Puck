@@ -26,7 +26,7 @@ public sealed partial class SdfProgramBuilder {
     /// deterministic across both backends. Not 1-Lipschitz — the relief's gradient reaches <c>amplitude·‖frequency‖</c>,
     /// so the field can overestimate true distance by up to <c>1 + amplitude·‖frequency‖</c> and <c>AnalyzeLipschitz</c>
     /// bakes that as a conservative step clamp; keep <c>amplitude·‖frequency‖</c> moderate (a large product clamps the
-    /// march to tiny steps). KEEP IN SYNC with SDF_OP_DISPLACE in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// march to tiny steps). KEEP IN SYNC with SDF_OP_DISPLACE in Assets/Shaders/Sdf/field/sdf-map.hlsli and field/sdf-map-grad.hlsli.</summary>
     /// <param name="frequency">Per-axis angular frequency of the sinusoid (radians per world unit).</param>
     /// <param name="amplitude">Peak displacement added to the field (world units; 0 = an exact identity).</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="frequency"/> or <paramref name="amplitude"/> is
@@ -62,7 +62,7 @@ public sealed partial class SdfProgramBuilder {
     /// <c>1 + |amplitude|·frequency·(15/4)·√3·Σ(gain·lacunarity)ᵏ/Σgainᵏ</c> as a conservative step clamp; keep the
     /// <c>amplitude·frequency·lacunarity^octaves</c> budget moderate or the march crawls. The octave sum is host-
     /// normalized to <c>[-1, 1]</c>, so the outward surface reach is at most <c>|amplitude|</c>. KEEP IN SYNC with
-    /// SDF_OP_NOISE_DISPLACE in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// SDF_OP_NOISE_DISPLACE in Assets/Shaders/Sdf/field/sdf-map.hlsli and field/sdf-map-grad.hlsli.</summary>
     /// <param name="frequency">Base lattice frequency (cells per world unit; the sign is absorbed downstream).</param>
     /// <param name="amplitude">Peak displacement added to the field (world units; 0 = an exact identity).</param>
     /// <param name="octaves">Octave count, 1..<see cref="MaxNoiseOctaves"/>.</param>
@@ -156,7 +156,7 @@ public sealed partial class SdfProgramBuilder {
     }
     /// <summary>Closes the scope opened by the matching <see cref="PushField"/> and composes its field back into the
     /// parent as one candidate, using the compose blend + smooth radius that <see cref="PushField"/> recorded. KEEP IN
-    /// SYNC with SDF_OP_POP_FIELD in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// SYNC with SDF_OP_POP_FIELD in Assets/Shaders/Sdf/field/sdf-map.hlsli and field/sdf-map-grad.hlsli.</summary>
     /// <exception cref="InvalidOperationException">No field scope is open, or the scope emitted no shape.</exception>
     public SdfProgramBuilder PopField() {
         if (m_fieldScope is not { } scope) {
@@ -305,7 +305,7 @@ public sealed partial class SdfProgramBuilder {
     /// nest no deeper than <see cref="MaxFieldScopeDepth"/>, and close (via <see cref="PopField"/>) before
     /// <see cref="Build"/> or an enclosing <see cref="EndInstance"/>. A scope touches only the field, not the point, so
     /// per-shape cull bounds inside it stay sound and <see cref="ResetPoint"/> works as usual. KEEP IN SYNC with
-    /// SDF_OP_PUSH_FIELD in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// SDF_OP_PUSH_FIELD in Assets/Shaders/Sdf/field/sdf-map.hlsli and field/sdf-map-grad.hlsli.</summary>
     /// <param name="compose">How the closed scope's field composes back into the parent (default <see cref="SdfBlendOp.Union"/>).</param>
     /// <param name="smooth">The smooth/chamfer radius of the <paramref name="compose"/> blend (ignored by the hard blends).</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="smooth"/> is not finite, or

@@ -898,7 +898,7 @@ public sealed partial class WorldBody {
         }
 
         m_channelReadHeld = new PlayerIntent(Channels: heldOverlay);
-        m_channelReadComposed = new PlayerIntent(Channels: channels);
+        m_channelReadComposed = (movement with { Channels = channels });
 
         return m_channelReadComposed;
     }

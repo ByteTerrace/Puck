@@ -952,6 +952,7 @@ internal static partial class CanaryManifestLoader {
             unknownMemberDetail: UnknownMemberDetail,
             refusal: Refusal,
             "literal",
+            "minus",
             "value"
         );
 
@@ -976,11 +977,34 @@ internal static partial class CanaryManifestLoader {
                 throw new CanaryManifestRefusal(message: $"{context} value must be a non-blank extracted name.");
             }
 
+            string? minus = null;
+
+            if (element.TryGetProperty(
+                propertyName: "minus",
+                value: out var minusElement
+            )) {
+                if (
+                    (minusElement.ValueKind != JsonValueKind.String) ||
+                    string.IsNullOrWhiteSpace(value: minusElement.GetString())
+                ) {
+                    throw new CanaryManifestRefusal(message: $"{context} minus must be a non-blank extracted name.");
+                }
+
+                minus = minusElement.GetString();
+            }
+
             return new CanaryOperand(
-                ValueName: valueElement.GetString(),
+                Minus: minus,
+                NumberLiteral: null,
                 StringLiteral: null,
-                NumberLiteral: null
+                ValueName: valueElement.GetString()
             );
+        }
+        if (element.TryGetProperty(
+            propertyName: "minus",
+            value: out _
+        )) {
+            throw new CanaryManifestRefusal(message: $"{context} minus subtracts from an extracted value; a literal takes none.");
         }
 
         return literalElement.ValueKind switch {
@@ -1507,17 +1531,24 @@ internal static partial class CanaryManifestLoader {
         string repositoryRoot,
         string id
     ) {
-        var childDirectories = Directory.GetDirectories(
+        // A canary directory holds its manifest, the worlds and scripts its legs select, and its declared fixtures,
+        // which may sit in subdirectories (a fixture tree a script names by directory), and nothing else: every
+        // subdirectory holds some of them.
+        foreach (var directory in Directory.GetDirectories(
             path: canaryDirectory,
             searchOption: SearchOption.AllDirectories,
             searchPattern: "*"
-        );
-
-        if (childDirectories.Length != 0) {
-            throw new CanaryManifestRefusal(message: $"canary '{id}' contains unexpected directory '{CliPaths.ToDisplay(
-                relativeTo: repositoryRoot,
-                fullPath: childDirectories.Order(comparer: StringComparer.Ordinal).First()
-            )}'; its rigid layout contains files only.");
+        ).Order(comparer: StringComparer.Ordinal)) {
+            if (!Directory.EnumerateFiles(
+                path: directory,
+                searchOption: SearchOption.AllDirectories,
+                searchPattern: "*"
+            ).Any()) {
+                throw new CanaryManifestRefusal(message: $"canary '{id}' contains directory '{CliPaths.ToDisplay(
+                    fullPath: directory,
+                    relativeTo: repositoryRoot
+                )}', which holds no file; every directory in a canary directory holds declared fixtures.");
+            }
         }
 
         var expected = new HashSet<string>(comparer: PuckPaths.Comparer) {
@@ -1559,13 +1590,13 @@ internal static partial class CanaryManifestLoader {
 
         foreach (var file in Directory.GetFiles(
             path: canaryDirectory,
-            searchOption: SearchOption.TopDirectoryOnly,
+            searchOption: SearchOption.AllDirectories,
             searchPattern: "*"
         ).Order(comparer: StringComparer.Ordinal)) {
             var fullPath = Path.GetFullPath(path: file);
 
             if (!expected.Contains(item: fullPath)) {
-                throw new CanaryManifestRefusal(message: $"canary '{id}' contains orphan file '{Path.GetFileName(path: file)}'; every file in a canary directory must be the manifest, a selected world/script, or a declared fixture.");
+                throw new CanaryManifestRefusal(message: $"canary '{id}' contains orphan file '{CliPaths.ToDisplay(fullPath: fullPath, relativeTo: canaryDirectory)}'; every file in a canary directory must be the manifest, a selected world/script, or a declared fixture.");
             }
         }
     }
@@ -1575,6 +1606,12 @@ internal static partial class CanaryManifestLoader {
             !values.Contains(item: valueName)
         ) {
             throw new CanaryManifestRefusal(message: $"{context} names unknown extracted value '{valueName}'.");
+        }
+        if (
+            (operand.Minus is { } minus) &&
+            !values.Contains(item: minus)
+        ) {
+            throw new CanaryManifestRefusal(message: $"{context} minus names unknown extracted value '{minus}'.");
         }
     }
     private static string ResolveFile(string rawPath, string basePath, string containmentRoot, string context) {

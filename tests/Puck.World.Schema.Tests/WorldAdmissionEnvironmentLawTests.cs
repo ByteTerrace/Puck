@@ -65,7 +65,7 @@ public sealed class WorldAdmissionEnvironmentLawTests {
                     var file = Path.Combine(path1: directory.FullName, path2: "world.json");
 
                     File.WriteAllBytes(bytes: bytes, path: file);
-                    accepted = WorldDefinitionLoader.TryLoadFileForAdmission(file, out admission, out reason);
+                    accepted = WorldDefinitionLoader.TryLoadFileForAdmission(file, out admission, out _, out reason);
                 } else {
                     accepted = WorldDefinitionLoader.TryLoadForAdmission(bytes, "bytes", out admission, out reason);
                 }

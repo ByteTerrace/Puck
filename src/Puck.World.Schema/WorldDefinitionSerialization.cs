@@ -6,8 +6,8 @@ using System.Text.Json.Schema;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 using Puck.Abstractions.Documents;
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Machines;
-using Puck.Abstractions.Presentation;
 using Puck.Commands;
 using Puck.Maths;
 using Puck.World.Protocol;
@@ -96,7 +96,7 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldSeatViewControl))]
 [JsonSerializable(typeof(WorldViewDefaults))]
 [JsonSerializable(typeof(WorldViewLayout))]
-[JsonSerializable(typeof(WorldViewPipeline))]
+[JsonSerializable(typeof(WorldViewGraph))]
 [JsonSerializable(typeof(WorldSpawnPoint[]))]
 [JsonSerializable(typeof(WorldMotionDefaults))]
 [JsonSerializable(typeof(WorldRenderDefaults))]
@@ -114,6 +114,7 @@ namespace Puck.World;
 // puck.creation.v1 document rides CreationDocumentJsonConverter — its OWN canonical serializer — never this context's
 // member policies (see the converter's remarks).
 [JsonSerializable(typeof(WorldPrototype))]
+[JsonSerializable(typeof(WorldPrototypeMesh))]
 [JsonSerializable(typeof(WorldPlacement))]
 [JsonSerializable(typeof(WorldPlacementSpatialVolume))]
 [JsonSerializable(typeof(WorldPlacementReflowRequest))]
@@ -185,7 +186,7 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldProbeBinding.Axis), TypeInfoPropertyName = "WorldProbeBindingAxis")]
 [JsonSerializable(typeof(WorldProbeBinding.Parameter), TypeInfoPropertyName = "WorldProbeBindingParameter")]
 [JsonSerializable(typeof(WorldProbeBinding.Control), TypeInfoPropertyName = "WorldProbeBindingControl")]
-[JsonSerializable(typeof(WorldProbeParameterTarget.Extension), TypeInfoPropertyName = "WorldProbeParameterTargetExtension")]
+[JsonSerializable(typeof(WorldProbeParameterTarget.Post), TypeInfoPropertyName = "WorldProbeParameterTargetPost")]
 [JsonSerializable(typeof(WorldProbeParameterTarget.Probe), TypeInfoPropertyName = "WorldProbeParameterTargetProbe")]
 [JsonSerializable(typeof(WorldScreenSource.Probe), TypeInfoPropertyName = "WorldScreenSourceProbe")]
 // The shipped image producers' settings shapes, which a producer source's settings object binds to
@@ -196,7 +197,7 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldQrSettings))]
 [JsonSerializable(typeof(WorldTestPatternSettings))]
 // The host-section defaults row (the world.row.set host payload shape + the document `host` section). WorldBackendPreference
-// and SurfaceFormat ride explicit name-map converters (below) rather than the camelCase enum policy, which would emit
+// and the surface format ride explicit name-map converters (below) rather than the camelCase enum policy, which would emit
 // "directX" / "r8G8B8A8Unorm"; PresentMode keeps the generic camelCase converter (immediate/adaptive/…).
 [JsonSerializable(typeof(WorldHostDefaults))]
 // The LOOK rows (the world.row.set looks payload shape + the document `looks`/`lookAssignment` sections). The polymorphic
@@ -326,6 +327,8 @@ namespace Puck.World;
 // The counters report (puck.counters.report.v1) — the document `puck counters` writes and compares, sharing this
 // context's strictness so a foreign or damaged report is refused by name, and its schema rides the same exporter.
 [JsonSerializable(typeof(WorldCountersReport))]
+// The counters ceilings (puck.counters.ceilings.v1) `puck counters --check` holds a report to and `--record` writes.
+[JsonSerializable(typeof(WorldCountersCeilings))]
 [JsonSourceGenerationOptions(
     // Puck.Commands' own types are absent from this list deliberately: CommandValue and every binding enum carry
     // their converter at their own declaration now (Puck.Commands references Puck.Abstractions for exactly that),
@@ -458,6 +461,8 @@ public sealed class WorldJsonContext : IJsonTypeInfoResolver {
     public JsonTypeInfo<WorldSeatViewControl> WorldSeatViewControl => Get<WorldSeatViewControl>();
     /// <summary>Gets the type info for <see cref="WorldCountersReport"/>.</summary>
     public JsonTypeInfo<WorldCountersReport> WorldCountersReport => Get<WorldCountersReport>();
+    /// <summary>Gets the type info for <see cref="WorldCountersCeilings"/>.</summary>
+    public JsonTypeInfo<WorldCountersCeilings> WorldCountersCeilings => Get<WorldCountersCeilings>();
     /// <summary>Gets the type info for <see cref="GpuDeviceIdentity"/>, as a counters report and <c>world.counters</c>
     /// spell it.</summary>
     public JsonTypeInfo<Puck.Abstractions.Gpu.GpuDeviceIdentity> GpuDeviceIdentity => Get<Puck.Abstractions.Gpu.GpuDeviceIdentity>();
@@ -473,10 +478,12 @@ public sealed class WorldJsonContext : IJsonTypeInfoResolver {
     public JsonTypeInfo<WorldStateRow> WorldStateRow => Get<WorldStateRow>();
     /// <summary>Gets the type info for <see cref="WorldTune"/>.</summary>
     public JsonTypeInfo<WorldTune> WorldTune => Get<WorldTune>();
+    /// <summary>Gets the type info for <see cref="WorldViewGraph"/>.</summary>
+    public JsonTypeInfo<WorldViewGraph> WorldViewGraph => Get<WorldViewGraph>();
     /// <summary>Gets the type info for <see cref="WorldViewLayout"/>.</summary>
     public JsonTypeInfo<WorldViewLayout> WorldViewLayout => Get<WorldViewLayout>();
-    /// <summary>Gets the type info for <see cref="WorldViewPipeline"/>.</summary>
-    public JsonTypeInfo<WorldViewPipeline> WorldViewPipeline => Get<WorldViewPipeline>();
+    /// <summary>Gets the type info for the <see cref="WorldViewDefaults.Post"/> list.</summary>
+    public JsonTypeInfo<IReadOnlyList<WorldViewPostPass>> WorldViewPostPassList => Get<IReadOnlyList<WorldViewPostPass>>();
 
     private WorldJsonContext() {
         var options = new JsonSerializerOptions(options: WorldJsonSourceContext.Default.Options) {
@@ -930,20 +937,19 @@ internal sealed class WorldBackendPreferenceJsonConverter() : TokenEnumJsonConve
     protected override string ToToken(WorldBackendPreference value) => WorldHostTokens.BackendToken(backend: value);
 }
 /// <summary>
-/// Reads and writes the two authorable <see cref="SurfaceFormat"/> values as explicit tokens (<c>r8g8b8a8</c> /
-/// <c>b8g8r8a8</c>), which would otherwise emit the unreadable <c>r8G8B8A8Unorm</c>.
-/// <see cref="SurfaceFormat.Unknown"/> and any other member are rejected at read (the validator also rejects
-/// <see cref="SurfaceFormat.Unknown"/> — the hole the Demo's string list could not express). The
-/// <c>world.host</c> read-back prints through the same map.
+/// Reads and writes the two authorable surface formats, <see cref="GpuPixelFormat.R8G8B8A8Unorm"/> and
+/// <see cref="GpuPixelFormat.B8G8R8A8Unorm"/>, as explicit tokens (<c>r8g8b8a8</c> / <c>b8g8r8a8</c>), which would
+/// otherwise emit the unreadable <c>r8G8B8A8Unorm</c>. Any other member is rejected at read, and the validator rejects
+/// one set another way. The <c>world.host</c> read-back prints through the same map.
 /// </summary>
-internal sealed class SurfaceFormatJsonConverter() : TokenEnumJsonConverter<SurfaceFormat>(
+internal sealed class SurfaceFormatJsonConverter() : TokenEnumJsonConverter<GpuPixelFormat>(
     "surfaceFormat",
     [WorldHostTokens.SurfaceFormatRgba, WorldHostTokens.SurfaceFormatBgra]
 ) {
     /// <inheritdoc/>
-    protected override SurfaceFormat? Parse(string? token) => WorldHostTokens.ParseSurfaceFormat(token: token);
+    protected override GpuPixelFormat? Parse(string? token) => WorldHostTokens.ParseSurfaceFormat(token: token);
     /// <inheritdoc/>
-    protected override string ToToken(SurfaceFormat value) => WorldHostTokens.SurfaceFormatToken(format: value);
+    protected override string ToToken(GpuPixelFormat value) => WorldHostTokens.SurfaceFormatToken(format: value);
 }
 /// <summary>
 /// Reads and writes a <see cref="WorldDestinationDurability"/> as the lowercase token

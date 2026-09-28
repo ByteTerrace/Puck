@@ -19,7 +19,7 @@ namespace Puck.Launcher.Tests;
 internal static class WindowedHostFixture {
     public static readonly TimeSpan HostBudget = TimeSpan.FromSeconds(value: 30);
 
-    public static IHost Build(FakePresenter presenter, IGpuDeviceContext device, IRenderNode? root = null, Action<IServiceCollection>? configure = null) {
+    public static IHost Build(FakePresenter presenter, IGpuDeviceContext device, IRenderRoot? root = null, Action<IServiceCollection>? configure = null) {
         var builder = Host.CreateApplicationBuilder(settings: new HostApplicationBuilderSettings {
             DisableDefaults = true,
         });
@@ -27,7 +27,7 @@ internal static class WindowedHostFixture {
         builder.Logging.ClearProviders();
         builder.Services.AddSingleton<ISurfacePresenter>(implementationInstance: presenter);
         builder.Services.AddSingleton<INativeWindowFactory, FakeWindowFactory>();
-        builder.Services.AddSingleton(implementationInstance: (root ?? new FakeRenderNode()));
+        builder.Services.AddSingleton(implementationInstance: (root ?? new FakeRenderRoot()));
         builder.Services.AddSingleton(implementationInstance: new HostCapabilityContribution(
             CapabilityType: typeof(IGpuDeviceContext),
             Instance: device,
@@ -48,6 +48,7 @@ internal static class WindowedHostFixture {
         public int ActivateCalls { get; private set; }
         public int DisposeCalls { get; private set; }
         public Exception? Failure { get; } = failure;
+        public DisplayOutput? Output => null;
 
         public void Activate(NativeSurfaceBinding binding, uint width, uint height) {
             ActivateCalls++;
@@ -61,20 +62,14 @@ internal static class WindowedHostFixture {
         public void Dispose() => DisposeCalls++;
         public void Present(Surface surface) => throw new InvalidOperationException(message: "The fixture's window is closed; nothing should present.");
     }
-    /// <summary>A device context whose handle reads and drains are counted, and both fail: the handle the way a device
-    /// that never came up fails when a consumer asks for it, the drain as a failing teardown step.</summary>
+    /// <summary>A device context whose drains are counted and fail, as a failing teardown step; it has no services, the
+    /// way a device that never came up has none to give a consumer that asks.</summary>
     public sealed class CountingDeviceContext : IGpuDeviceContext {
         public long AdapterLuid => 0L;
-        public nint DeviceHandle {
-            get {
-                DeviceHandleReads++;
-
-                throw new InvalidOperationException(message: "The fixture device was never created.");
-            }
-        }
-        public int DeviceHandleReads { get; private set; }
+        public GpuDeviceCapabilities? Capabilities => null;
         public GpuDeviceIdentity? Identity => null;
         public GpuMemoryProfile MemoryProfile => default;
+        public GpuDeviceServices Services => throw new InvalidOperationException(message: "The fixture device was never created.");
         public int WaitIdleCalls { get; private set; }
 
         public void WaitIdle() {
@@ -84,28 +79,18 @@ internal static class WindowedHostFixture {
         }
     }
     /// <summary>The device context of a renderer whose bring-up failed, as <c>VulkanRenderer</c> presents it: draining
-    /// returns at once, and reading the handle throws.</summary>
-    public sealed class NeverInitializedDeviceContext : IGpuDeviceContext {
+    /// returns at once, and its services are the ones given, which a law makes refuse every call, or absent.</summary>
+    public sealed class NeverInitializedDeviceContext(GpuDeviceServices? services = null) : IGpuDeviceContext {
         public long AdapterLuid => 0L;
-        public nint DeviceHandle {
-            get {
-                DeviceHandleReads++;
-
-                throw new InvalidOperationException(message: "The renderer must be initialized before its device is used.");
-            }
-        }
-        public int DeviceHandleReads { get; private set; }
+        public GpuDeviceCapabilities? Capabilities => null;
         public GpuDeviceIdentity? Identity => null;
         public GpuMemoryProfile MemoryProfile => default;
+        public GpuDeviceServices Services => (services ?? throw new InvalidOperationException(message: "The renderer must be initialized before its device is used."));
 
         public void WaitIdle() { }
     }
-    /// <summary>A render node that produces nothing, whose <see cref="Dispose"/> throws <c>failure</c> when one is set.</summary>
-    public sealed class FakeRenderNode(Exception? failure = null) : IRenderNode {
-        public NodeDescriptor Descriptor { get; } = new(
-            Name: "windowed-host-fixture",
-            SurfaceId: SurfaceId.New()
-        );
+    /// <summary>A render root that produces nothing, whose <see cref="Dispose"/> throws <c>failure</c> when one is set.</summary>
+    public sealed class FakeRenderRoot(Exception? failure = null) : IRenderRoot {
         public int DisposeCalls { get; private set; }
 
         public void Dispose() {

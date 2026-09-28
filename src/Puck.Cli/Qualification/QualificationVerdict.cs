@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Documents;
+using Puck.Abstractions.Gpu;
 using Puck.Cli.Canary;
 using Puck.Cli.Counters;
 using Puck.World;
@@ -37,13 +38,17 @@ internal sealed record QualificationWait(string Phase, string Outcome);
 /// <param name="Inspections">The <c>pipeline.inspect</c> responses, in order.</param>
 /// <param name="Releases">The inspections refused because the instance is no longer rendered.</param>
 /// <param name="Waits">The <c>pipeline.wait</c> outcomes, in order.</param>
-/// <param name="ValidationMessages">Every validation-layer line: a <c>[vulkan-debug] validation</c> message or any
-/// <c>[d3d12-debug]</c> message.</param>
+/// <param name="ValidationMessages">Every line that fails a validation-layer run: a <c>[vulkan-debug] validation</c>
+/// message, any <c>[d3d12-debug]</c> message, or the statement that the Direct3D 12 layer never loaded, so nothing was
+/// validated.</param>
 /// <param name="CandidateRefusals">Every pipeline candidate the instance refused.</param>
 /// <param name="CompilerAbsent">The line saying a pipeline could not compile because a shader tool is absent, or
 /// <see langword="null"/>.</param>
 /// <param name="MemoryProfile">The device's memory profile as the first inspection echoes it, or
 /// <see langword="null"/>.</param>
+/// <param name="WorldReloads">The <c>world.reload</c> commands that answered they applied.</param>
+/// <param name="SubmissionRefusals">Every line refusing a <c>world.reload</c> or refusing a submission at the wire
+/// codec, which refuses before the verb can answer.</param>
 internal sealed record QualificationReadings(
     IReadOnlyList<WorldCountersRun> Counters,
     IReadOnlyList<string> CountersRefusals,
@@ -53,8 +58,17 @@ internal sealed record QualificationReadings(
     IReadOnlyList<string> ValidationMessages,
     IReadOnlyList<string> CandidateRefusals,
     string? CompilerAbsent,
-    string? MemoryProfile
+    string? MemoryProfile,
+    int WorldReloads,
+    IReadOnlyList<string> SubmissionRefusals
 ) {
+    /// <summary>Gets the most device-local bytes the World held at once, as the largest <c>gpu.memory.device-local.peak</c> any
+    /// <c>world.counters --json</c> reading reports, or <see langword="null"/> when no reading carries
+    /// it.</summary>
+    public long? PeakDeviceLocalBytes => Counters.SelectMany(selector: static run => run.Counts)
+        .Where(predicate: static count => (count.Kind == GpuDeviceMemoryWork.Peak.Name))
+        .Select(selector: static count => ((long?)count.Value))
+        .Max();
     /// <summary>Gets the most bytes the instance owned or planned to own at any inspection, or <see langword="null"/>
     /// when nothing was inspected.</summary>
     public long? PeakOwnedPipelineBytes => ((Inspections.Count == 0)
@@ -74,9 +88,10 @@ internal sealed record QualificationVerdict(QualificationOutcome Outcome, IReadO
 /// </summary>
 internal static partial class QualificationJudge {
     private const string CandidateRefusedInfix = " GPU candidate refused: ";
+    private const string CodecRefusedPrefix = "[world.codec refused: ";
     private const string CreatedKindPrefix = "gpu.created.";
-    private const string Direct3D12DebugPrefix = "[d3d12-debug] ";
-    private const string VulkanValidationPrefix = "[vulkan-debug] validation ";
+    private const string WorldReloadAppliedPrefix = "[world.reload: world.reload applied";
+    private const string WorldReloadPrefix = "[world.reload: ";
 
     // "[pipeline.inspect: <name>; owned=N bytes; steady=N bytes; peak=N bytes; budget=N bytes; …", the record's first
     // line (ShaderPipelineRenderNode.TryAppendInspection).
@@ -95,7 +110,9 @@ internal static partial class QualificationJudge {
         var waits = new List<QualificationWait>();
         var validation = new List<string>();
         var candidates = new List<string>();
+        var submissionRefusals = new List<string>();
         var releases = 0;
+        var worldReloads = 0;
         string? compilerAbsent = null;
         string? memory = null;
         var released = ((cell.Workload.Pipeline is { } pipeline)
@@ -132,6 +149,11 @@ internal static partial class QualificationJudge {
                     value: "memory: "
                 )) {
                     memory = line.Trim();
+                } else if (line.StartsWith(
+                    comparisonType: StringComparison.Ordinal,
+                    value: WorldReloadAppliedPrefix
+                )) {
+                    worldReloads++;
                 }
 
                 continue;
@@ -143,13 +165,7 @@ internal static partial class QualificationJudge {
                     Phase: wait.Groups["phase"].Value
                 ));
             }
-            if (line.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: VulkanValidationPrefix
-            ) || line.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: Direct3D12DebugPrefix
-            )) {
+            if (DebugLayerOutput.IsValidationMessage(line: line) || DebugLayerOutput.IsBlind(line: line)) {
                 validation.Add(item: line);
             }
             if (line.StartsWith(
@@ -160,6 +176,15 @@ internal static partial class QualificationJudge {
                 value: CandidateRefusedInfix
             )) {
                 candidates.Add(item: line);
+            }
+            if (line.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: CodecRefusedPrefix
+            ) || line.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: WorldReloadPrefix
+            )) {
+                submissionRefusals.Add(item: line);
             }
             if ((compilerAbsent is null) && CanaryCommand.PipelineUnsupported().IsMatch(input: line)) {
                 compilerAbsent = line;
@@ -181,8 +206,10 @@ internal static partial class QualificationJudge {
             Inspections: inspections,
             MemoryProfile: memory,
             Releases: releases,
+            SubmissionRefusals: submissionRefusals,
             ValidationMessages: validation,
-            Waits: waits
+            Waits: waits,
+            WorldReloads: worldReloads
         );
     }
     /// <summary>Judges a cell.</summary>
@@ -311,11 +338,24 @@ internal static partial class QualificationJudge {
         ) {
             findings.Add(item: $"the pipeline instance owned or planned {peak} bytes, over the cell's threshold of {limit}");
         }
+        if (cell.Threshold.PeakDeviceLocalBytes is { } deviceLocalLimit) {
+            if (readings.PeakDeviceLocalBytes is not { } deviceLocalPeak) {
+                findings.Add(item: $"no world.counters reading reported {GpuDeviceMemoryWork.Peak.Name}, which the cell's threshold of {deviceLocalLimit} bytes judges");
+            } else if (deviceLocalPeak > deviceLocalLimit) {
+                findings.Add(item: $"the World held {deviceLocalPeak} device-local bytes at its peak, over the cell's threshold of {deviceLocalLimit}");
+            }
+        }
         if (readings.Releases != expectation.Releases) {
             findings.Add(item: $"{readings.Releases} unload(s) released the instance, of the {expectation.Releases} the script makes");
         }
         foreach (var candidate in readings.CandidateRefusals) {
             findings.Add(item: candidate);
+        }
+        if (readings.WorldReloads != expectation.WorldReloads) {
+            findings.Add(item: $"{readings.WorldReloads} world.reload(s) applied, of the {expectation.WorldReloads} the script makes");
+        }
+        foreach (var refusal in readings.SubmissionRefusals) {
+            findings.Add(item: refusal);
         }
         if (
             debugLayers &&

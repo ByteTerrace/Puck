@@ -15,24 +15,35 @@ namespace Puck.Shaders;
 /// includes, and the interface's <see cref="Hash"/> versions both.
 /// <para>Member order is significant: a group's constant block and its bindings follow declaration order, so reordering
 /// members moves offsets and bindings and changes the hash.</para>
-/// <para>A pass that binds no descriptor set for its frame group receives the frame group's block as push constants
-/// instead (<see cref="PushConstants"/>): Vulkan push constants, and Direct3D 12 root constants at register <c>b0</c>,
-/// space 0. The block's offsets are the same either way.</para>
+/// <para>A pass binds every group it uses as a descriptor set, and can push one 4-byte index
+/// (<see cref="PushesIndex"/>), which it reads as <c>pushedIndex.index</c>: Vulkan push constants at offset 0, and
+/// Direct3D 12 root constants at register <c>b0</c> in space
+/// <see cref="GpuPipelineLayoutDescription.PushIndexSpace"/>.</para>
+/// <para>An interface can carry a stamp (<see cref="Stamp"/>): a token naming what its owner built it against, which the
+/// generated pass block's variable carries in its name (<see cref="BlockVariableNameOf"/>), so every module compiled
+/// from the generated declarations reflects it, and <see cref="ShaderInterfaceLayout.Mismatch"/> refuses a module whose
+/// pass block carries another stamp or none.</para>
 /// </summary>
 public sealed partial class ShaderInterface {
+    /// <summary>The HLSL name of the constant buffer variable generated for the pushed index.</summary>
+    public const string PushedIndexVariableName = "pushedIndex";
+    /// <summary>The name of the pushed index's one member, which a pass reads as <c>pushedIndex.index</c>.</summary>
+    public const string PushedIndexMemberName = "index";
+
     private ContentPin m_hash;
 
     /// <summary>Initializes a new instance of the <see cref="ShaderInterface"/> class.</summary>
     /// <param name="name">The interface's name: lowercase ASCII words joined by hyphens, such as <c>film-grain</c>.</param>
     /// <param name="members">The members in declaration order; at least one.</param>
-    /// <param name="pushConstants">The group whose constant block is delivered as push constants rather than bound as a
-    /// constant buffer, or <see langword="null"/> when every block is a constant buffer. Only the frame group can be
-    /// pushed, and a pushed group holds values and arrays only.</param>
-    /// <exception cref="InvalidDataException">The name or a member is malformed, a name repeats or collides with a
-    /// generated declaration, a member carries a field its kind does not take or lacks one it needs, or the pushed group
-    /// is not the frame group, holds an image or sampler, or holds no value.</exception>
+    /// <param name="pushesIndex">Whether the pass's pipeline pushes one 4-byte index, which the generated include
+    /// declares as <see cref="PushedIndexVariableName"/>.</param>
+    /// <param name="stamp">The interface's stamp (<see cref="Stamp"/>), or <see langword="null"/> for none: an ASCII
+    /// capital letter followed by ASCII letters and digits.</param>
+    /// <exception cref="InvalidDataException">The name, the stamp or a member is malformed, a name repeats or collides
+    /// with a generated declaration, a member carries a field its kind does not take or lacks one it needs, a buffer's
+    /// element is a three-component vector, or a stamped interface has no pass block to carry its stamp.</exception>
     [JsonConstructor]
-    public ShaderInterface(string name, IReadOnlyList<ShaderInterfaceMember> members, ShaderInterfaceGroup? pushConstants = null) {
+    public ShaderInterface(string name, IReadOnlyList<ShaderInterfaceMember> members, bool pushesIndex = false, string? stamp = null) {
         if (
             (name is null) ||
             !InterfaceNamePattern().IsMatch(input: name)
@@ -46,6 +57,21 @@ public sealed partial class ShaderInterface {
             throw new InvalidDataException(message: $"Shader interface '{name}' declares no members.");
         }
 
+        if (stamp is not null) {
+            if (!StampPattern().IsMatch(input: stamp)) {
+                throw new InvalidDataException(message: $"Shader interface '{name}' stamp '{stamp}' is not an ASCII capital letter followed by ASCII letters and digits.");
+            }
+            if (!members.Any(predicate: static member => (
+                (member is not null) &&
+                member.IsBlockMember &&
+                (member.Group == ShaderInterfaceGroup.Pass)
+            ))) {
+                throw new InvalidDataException(message: $"Shader interface '{name}' is stamped '{stamp}' but declares no pass block to carry the stamp.");
+            }
+        }
+
+        Stamp = stamp;
+
         var identifiers = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         foreach (var member in members) {
@@ -56,7 +82,7 @@ public sealed partial class ShaderInterface {
             );
         }
         foreach (var group in members.Where(predicate: static member => member.IsBlockMember).Select(selector: static member => member.Group).Distinct()) {
-            foreach (var generated in ((ReadOnlySpan<string>)[BlockVariableName(group: group), BlockTypeName(
+            foreach (var generated in ((ReadOnlySpan<string>)[BlockVariableNameOf(group: group), BlockTypeName(
                 group: group,
                 interfaceName: name
             )])) {
@@ -66,31 +92,32 @@ public sealed partial class ShaderInterface {
             }
         }
 
-        if (pushConstants is { } pushed) {
-            if (pushed != ShaderInterfaceGroup.Frame) {
-                throw new InvalidDataException(message: $"Shader interface '{name}' pushes the {pushed} group; only the frame group's block can be pushed.");
-            }
-            if (members.Any(predicate: member => ((member.Group == pushed) && !member.IsBlockMember))) {
-                throw new InvalidDataException(message: $"Shader interface '{name}' pushes the {pushed} group, which then holds values and arrays only.");
-            }
-            if (!members.Any(predicate: member => ((member.Group == pushed) && member.IsBlockMember))) {
-                throw new InvalidDataException(message: $"Shader interface '{name}' pushes the {pushed} group, which holds no value.");
+        if (pushesIndex) {
+            foreach (var generated in ((ReadOnlySpan<string>)[PushedIndexVariableName, PushedIndexTypeName(interfaceName: name)])) {
+                if (!identifiers.Add(item: generated)) {
+                    throw new InvalidDataException(message: $"Shader interface '{name}' declares '{generated}', which its generated pushed index declares.");
+                }
             }
         }
 
         Name = name;
         Members = new ReadOnlyCollection<ShaderInterfaceMember>(list: members.ToArray());
-        PushConstants = pushConstants;
+        PushesIndex = pushesIndex;
     }
 
     /// <summary>Gets the interface's name.</summary>
     public string Name { get; }
     /// <summary>Gets the members in declaration order.</summary>
     public IReadOnlyList<ShaderInterfaceMember> Members { get; }
-    /// <summary>Gets the group whose constant block is delivered as push constants, or <see langword="null"/> when every
-    /// block is bound as a constant buffer.</summary>
+    /// <summary>Gets a value indicating whether the pass's pipeline pushes one 4-byte index, read as
+    /// <c>pushedIndex.index</c>. The canonical JSON writes it only when it is set.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool PushesIndex { get; }
+    /// <summary>Gets the token naming what the interface's owner built it against, or <see langword="null"/> for none. The
+    /// generated pass block's variable carries it (<see cref="BlockVariableNameOf"/>), and the canonical JSON writes it only
+    /// when it is set.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public ShaderInterfaceGroup? PushConstants { get; }
+    public string? Stamp { get; }
     /// <summary>Gets the content pin of the interface's canonical JSON (<see cref="ToJson"/>), which versions its
     /// layout and its generated declarations.</summary>
     [JsonIgnore]
@@ -111,6 +138,8 @@ public sealed partial class ShaderInterface {
     private static partial Regex InterfaceNamePattern();
     [GeneratedRegex(pattern: "^[A-Za-z][A-Za-z0-9]*$")]
     private static partial Regex MemberNamePattern();
+    [GeneratedRegex(pattern: "^[A-Z][A-Za-z0-9]*$")]
+    private static partial Regex StampPattern();
     private static void Validate(ShaderInterfaceMember member, string interfaceName, HashSet<string> identifiers) {
         if (member is null) {
             throw new InvalidDataException(message: $"Shader interface '{interfaceName}' declares a null member.");
@@ -137,15 +166,20 @@ public sealed partial class ShaderInterface {
             throw new InvalidDataException(message: $"{where}: its accessor '{AccessorName(member: member)}' collides with another name.");
         }
 
-        var needsType = (member.Kind != ShaderInterfaceMemberKind.Sampler);
-
         if (!Enum.IsDefined(value: member.Kind)) {
             throw new InvalidDataException(message: $"{where}: kind {((int)member.Kind)} is not a member kind.");
         }
-        if (needsType != member.Type.HasValue) {
-            throw new InvalidDataException(message: (needsType
-                ? $"{where}: a {member.Kind} names its type."
-                : $"{where}: a {member.Kind} takes no type."));
+
+        // A buffer's element type is optional: with one it is a structured buffer, without one a raw buffer.
+        var isBuffer = (member.Kind is ShaderInterfaceMemberKind.ReadOnlyBuffer or ShaderInterfaceMemberKind.ReadWriteBuffer);
+
+        if (
+            !isBuffer &&
+            ((member.Kind != ShaderInterfaceMemberKind.Sampler) != member.Type.HasValue)
+        ) {
+            throw new InvalidDataException(message: (member.Type.HasValue
+                ? $"{where}: a {member.Kind} takes no type."
+                : $"{where}: a {member.Kind} names its type."));
         }
         if (
             member.Type.HasValue &&
@@ -153,13 +187,43 @@ public sealed partial class ShaderInterface {
         ) {
             throw new InvalidDataException(message: $"{where}: type {((int)member.Type.Value)} is not a value type.");
         }
-        if ((member.Kind == ShaderInterfaceMemberKind.Array) != member.Length.HasValue) {
-            throw new InvalidDataException(message: ((member.Kind == ShaderInterfaceMemberKind.Array)
-                ? $"{where}: an array names its length."
-                : $"{where}: only an array takes a length."));
+        // DXIL's structured stride for a three-component element is its 12 bytes, where SPIR-V's buffer layout may pad
+        // it to 16, so the two backends would disagree on where element i starts.
+        if (
+            isBuffer &&
+            (member.Type?.ComponentCount() == 3)
+        ) {
+            throw new InvalidDataException(message: $"{where}: a buffer's element cannot be the three-component {member.Type.Value.Spelling()}, whose stride differs between Direct3D 12 (12 bytes) and Vulkan (16 when padded); use a scalar, a two-component or a four-component element.");
+        }
+        if (
+            (member.Kind == ShaderInterfaceMemberKind.Array) &&
+            !member.Length.HasValue
+        ) {
+            throw new InvalidDataException(message: $"{where}: an array names its length.");
+        }
+        if (
+            member.Length.HasValue &&
+            (member.Kind is not (ShaderInterfaceMemberKind.Array or ShaderInterfaceMemberKind.Value or ShaderInterfaceMemberKind.SampledImage or ShaderInterfaceMemberKind.Sampler))
+        ) {
+            throw new InvalidDataException(message: $"{where}: only an array, a block value, a sampled image or a sampler takes a length.");
+        }
+        // A block array's element is a whole 16-byte row on both backends only when it is a four-component vector: a
+        // shorter element pads to a row in a constant block, which a host writing element after element would miss.
+        if (
+            (member.Kind == ShaderInterfaceMemberKind.Value) &&
+            member.Length.HasValue &&
+            (member.Type?.ComponentCount() != 4)
+        ) {
+            throw new InvalidDataException(message: $"{where}: a block array's element is a four-component vector, not {member.Type?.Spelling()}.");
         }
         if (member.Length == 0) {
             throw new InvalidDataException(message: $"{where}: an array holds at least one element.");
+        }
+        if (
+            (member.Kind == ShaderInterfaceMemberKind.Array) &&
+            (member.Type?.ComponentCount() != 1)
+        ) {
+            throw new InvalidDataException(message: $"{where}: an array's element is a scalar, not {member.Type?.Spelling()}.");
         }
         if ((member.Kind == ShaderInterfaceMemberKind.StorageImage) != member.Format.HasValue) {
             throw new InvalidDataException(message: ((member.Kind == ShaderInterfaceMemberKind.StorageImage)
@@ -197,6 +261,28 @@ public sealed partial class ShaderInterface {
                 paramName: nameof(group)
             ),
         };
+    /// <summary>Returns the HLSL name of the constant buffer variable this interface's generated declarations give a
+    /// group's block: <see cref="BlockVariableName"/>, followed for the pass group by the interface's
+    /// <see cref="Stamp"/>, such as <c>passGroupIsa1234ABCD</c>. The generated include defines the unstamped name as the
+    /// stamped one, so a pass reads its pass block as <c>passGroup</c> either way.</summary>
+    /// <param name="group">The frequency group.</param>
+    /// <returns>The variable's name.</returns>
+    public string BlockVariableNameOf(ShaderInterfaceGroup group) =>
+        (((group == ShaderInterfaceGroup.Pass) && (Stamp is not null))
+            ? (BlockVariableName(group: group) + Stamp)
+            : BlockVariableName(group: group));
+    /// <summary>Returns this interface carrying a stamp in place of its own.</summary>
+    /// <param name="stamp">The stamp (<see cref="Stamp"/>).</param>
+    /// <returns>The stamped interface.</returns>
+    /// <exception cref="InvalidDataException">The stamp is malformed, or the interface has no pass block to carry
+    /// it.</exception>
+    public ShaderInterface Stamped(string stamp) =>
+        new(
+            members: Members,
+            name: Name,
+            pushesIndex: PushesIndex,
+            stamp: stamp
+        );
     /// <summary>Returns the HLSL name of the struct generated for a group's block.</summary>
     /// <param name="interfaceName">The interface's hyphenated name.</param>
     /// <param name="group">The frequency group.</param>
@@ -206,9 +292,18 @@ public sealed partial class ShaderInterface {
         ArgumentNullException.ThrowIfNull(argument: interfaceName);
 
         return string.Concat(
-            str0: string.Concat(values: interfaceName.Split(separator: '-').Select(selector: static word => (char.ToUpperInvariant(c: word[0]) + word[1..]))),
+            str0: TypePrefix(interfaceName: interfaceName),
             str1: group.ToString()
         );
+    }
+    /// <summary>Returns the HLSL name of the struct generated for the pushed index.</summary>
+    /// <param name="interfaceName">The interface's hyphenated name.</param>
+    /// <returns>The interface name in upper camel case followed by <c>PushedIndex</c>, such as
+    /// <c>SdfBricksPushedIndex</c>.</returns>
+    public static string PushedIndexTypeName(string interfaceName) {
+        ArgumentNullException.ThrowIfNull(argument: interfaceName);
+
+        return (TypePrefix(interfaceName: interfaceName) + "PushedIndex");
     }
     /// <summary>Returns the image-format spelling a storage image of <paramref name="format"/> declares in SPIR-V, or
     /// <see langword="null"/> when a storage image cannot have that format.</summary>
@@ -254,6 +349,10 @@ public sealed partial class ShaderInterface {
             jsonTypeInfo: ShaderInterfaceJsonContext.Default.ShaderInterface,
             value: this
         );
+
+    // The interface name in upper camel case, which every generated struct name begins with.
+    private static string TypePrefix(string interfaceName) =>
+        string.Concat(values: interfaceName.Split(separator: '-').Select(selector: static word => (char.ToUpperInvariant(c: word[0]) + word[1..])));
 }
 /// <summary>Source-generated, strict JSON metadata for <see cref="ShaderInterface"/>.</summary>
 [JsonSerializable(typeof(ShaderInterface))]

@@ -55,14 +55,16 @@ public sealed class LineupDealLawTests(ITestOutputHelper output) {
             definition: fixture.Server.Definition,
             recipient: recipient,
             revision: 1,
-            tier: WorldDisclosureTier.Presentation
+            tier: WorldDisclosureTier.Presentation,
+            version: default
         );
 
         Assert.True(condition: WorldFederationCodec.TryDecodeDocument(
             body: bytes,
             definition: out var served,
             failure: out var failure,
-            tier: out var tier
+            tier: out var tier,
+            version: out _
         ), userMessage: $"the served document did not decode: {failure}");
         Assert.Equal(actual: tier, expected: WorldDisclosureTier.Presentation);
 

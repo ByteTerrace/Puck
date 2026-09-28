@@ -311,14 +311,14 @@ surface, including parameters, return values, and exceptions.
 | `SimplestRational` | Locate the minimal-denominator fraction strictly inside an exact interval, by Stern–Brocot descent. |
 | `CostBound` / `CostModelProfile` | Preserve known, unmodeled, and overflowed costs; compute exact budgets and deadline conversions under an authored service-rate policy. These abstract cycles do not measure a processor's frequency or certify hardware performance. |
 | `DiscreteMeasure` / `CompiledDiscreteMeasure64` / `DiscreteMeasureCompilationFailure` | Allocate an exact integer amount across integer intervals, then compile supported measures into a bounded, allocation-free form for frequently run code. |
-| `NumberTheoryFunctions` / `BigIntegerFunctions` | Provide prime enumeration, modular roots and inverses, primality, and factorization when the calculation needs arbitrary-width integers. |
+| `NumberTheoryFunctions` / `BigIntegerFunctions` | Provide prime enumeration, modular roots and inverses, primality, and factorization when the calculation needs arbitrary-width integers, and for machine words a modular power and inverse under any modulus (the inverse by Pornin's division-free binary GCD) and the extended greatest common divisor with its Bézout coefficients. |
 | `Combinatorics` | Count subsets and permutations exactly, and give them dense integer identities; see [combination and permutation ranks](#combination-and-permutation-ranks). |
 | `MonotonicPartitioner` / `MonotonicPartitionerMetrics` | Route a value to one of 1–1024 buckets while minimizing movement when another bucket is added, and report when that value moves. |
 | `CyclicRotation` / `SymmetryLattice` / `SymmetryWord` | Provide a bit-exact rotation loop (the thirty-step table, or any order's root of unity), the fixed, symmetric node set behind it in eight dimensions with its exact root pairing and ring walks, and a word of its reflections baked to a permutation with a derived order and a constant-time counted power. |
 | `Fnv1aHash` | Accumulate an explicit, stable 64-bit digest for replay and determinism checks. |
 | `LexicographicOrder` | Compare two records by a primary key and break a primary tie by a secondary key: the total order a deterministic sort needs. |
 | `IMeetSemilattice<TSelf>` / `MeetMask64` / `MeetQuantity64` / `MeetProduct<TFirst, TSecond>` | Combine restrictions so the result never grants more than either input, whether the restriction is a bit mask, a quantity, or a pair of both. |
-| `BinaryIntegerFunctions` / `UnsignedNumberFunctions` / `PrimeExtensions` | Supply generic bit and decimal-digit operations, integer roots and pairing, an add that reports overflow (`TryAdd`), a narrowing that refuses an out-of-range value (`TryNarrow`), and exact 32-bit primality and factorization. |
+| `BinaryIntegerFunctions` / `UnsignedNumberFunctions` / `PrimeExtensions` | Supply generic bit and decimal-digit operations, integer roots and pairing, an add, a multiply and a power that report overflow (`TryAdd`, `TryMultiply`, `TryExponentiate`), a narrowing that refuses an out-of-range value (`TryNarrow`), and exact 32-bit primality and factorization. |
 | `SignedByteVectorFunctions` | Quantized signed 8-bit vector arithmetic normalized on radius 127: unit sphere admission, dot product, Q48.16 cosine similarity, unit normalization, and weighted combination. |
 
 The chooser above is the quickest way into these types. The API reference is
@@ -358,9 +358,10 @@ is true when BMI2 is present, unless the processor is AMD or Hygon below family
 `0x19` (Zen 3). `ParallelBitDeposit`, `ParallelBitExtract` and the four Morton members
 take the hardware path only when it is true. `BitManipulation.IsParallelBitsFast`
 makes the same decision as a pure function of vendor, family and BMI2 support.
-The gate changes speed only, because both paths return the same bits. The JIT
-folds the field to a constant, so a fast host runs the same code it would
-without the gate.
+The gate changes speed only, because both paths return the same bits. The
+assembly's module initializer sets it before any Maths code runs, so the class
+has no static constructor: a path that tests the gate pays a load and a branch,
+and never a check that a constructor has run.
 
 | Member | Result |
 |---|---|

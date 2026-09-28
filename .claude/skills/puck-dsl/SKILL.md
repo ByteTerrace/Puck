@@ -21,10 +21,10 @@ change you were asked to make is stale; correct it in the same change.
 ## What is and isn't DSL-authored today
 
 A document's own `schema:` field selects its vocabulary — never the filename.
-Every tracked `.puck` file is spelled as a bare `*.puck`; the two shipped
+Every tracked `.puck` file is spelled as a bare `*.puck`; the shipped
 cartridges additionally carry `.cgb.` in their name as an author convention,
-not a parser rule. `.puck` authors both shipped CGB cartridges
-(`tetromino.cgb.puck`, `hgb-mirror.cgb.puck`, each gated byte-for-byte against
+not a parser rule. `.puck` authors every shipped CGB cartridge
+(`tetromino.cgb.puck`, `hgb-mirror.cgb.puck`, `light-gun.cgb.puck`, each gated byte-for-byte against
 its committed `.cartridge.json` twin — see below), the worlds under
 `src/Puck.World/Assets/worlds/` (avatars, games, tools, `moth-courtyard.puck`),
 the asset packages under `worlds/`, and the `Puck.World.Transpiler` test
@@ -80,8 +80,8 @@ must be valid alone: Parlor's basis declares no bodies and each game owns its se
 running console reads `.puck` the same way:
 
 - `world.reload` re-reads the current origin through
-  `WorldDefinitionFileSource.TryLoad` with the `PuckDocumentComposer` document
-  source, so an edited `.puck` world (and its basis chain) recompiles in place.
+  `WorldDefinitionLoader.TryLoadFileForAdmission` with the `PuckDocumentComposer`
+  document source, so an edited `.puck` world (and its basis chain) recompiles in place.
   The composer compiles through `WorldCompileCache`, so only the sources whose
   recorded file facts (their bytes, their modules', their locks' and assets',
   every probed path, and the listing and sources of each directory a basis
@@ -146,11 +146,25 @@ case: a document whose name a source of another stem declares, or two sources
 emitting one name. `--written` reports the files the
 run left under `<directory>`, one forward-slashed relative path per line, only
 for a run that succeeded; `build/WorldAssets.targets` ships exactly that report
-(`TreeCompileReportLawTests`), since the run is what wrote them. `asset "path"` references use one `<stem>.assets.json` lock
+(`TreeCompileReportLawTests`), since the run is what wrote them.
+`--bake-cache <directory>` reads and keeps the run's creation bakes in that
+content-addressed cache, so only keys the cache lacks are baked and the pack's
+bytes do not change; the build passes `obj/bakes`, and `--check` refuses it
+(`TreeBakeCacheLawTests`). `asset "path"` references use one `<stem>.assets.json` lock
 beside the root source; ordinary compilation verifies its full SHA-256 pins,
-while `--update-assets` is the only compile mode that replaces them. An
-asset-bearing output currently has to stay in the source directory so its
-relative paths keep their meaning. Each destination and the lock is replaced
+while `--update-assets` is the only compile mode that replaces them. Every
+relative file path a module writes, `asset "…"` or plain (a member
+`WorldDocumentPaths.IsFileField` names), resolves beside the module and is
+re-expressed for the document that uses it (`WorldDocumentVocabulary.RelocateFileReference`).
+Relocation follows the value: a string is re-expressed from the directory of
+the source whose literal produced it (a `let`'s own file, a module argument's
+call site), whatever expression carries it to the file-path member
+(`IDocumentVocabulary.NoteWrittenString`); the record rides every copy the
+evaluator makes (`DocumentEvaluationBudget.Copy`), so an array holding the path
+or a builtin copying it keeps it. A builtin that builds a brand-new string
+(`concat` of two strings) carries no record, so its result is not
+re-expressed. `--output` elsewhere re-expresses
+the written document's paths from where it lands. Each destination and the lock is replaced
 atomically on its own, but publication of the whole set is not transactional.
 
 ## Grammar, in brief

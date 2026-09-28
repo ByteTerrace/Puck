@@ -260,15 +260,19 @@ block alignment. Each usage filters its own way:
 
 **Compression** is `Puck.Assets.Textures`: a CPU encoder per format whose bytes
 are the same on every machine, and an exact decoder that is its test oracle.
-BC7 writes mode 6, or mode 5 when a block's alpha runs independently of its
-color, and stores a one-color block exactly. BC5 is two BC4 blocks, and BC4 keeps
-the better of its two palettes. BC6H writes the one-region modes 11 to 14 and
-stores a one-value block exactly. Neither encoder writes a partitioned mode yet,
-and each decoder refuses one. On the codec laws' natural test image (gradients,
-noise and a hard-edged disc), BC4 decodes within 2 codes of the source
-(root-mean-square 0.63), BC5 within 8 (0.88), and BC7 within 13 (2.3); BC6H
-stays within 8% of each value in smooth blocks and 23% in a block across a hard
-edge between two colors, which a one-region mode cannot hold both of. From the
+BC7 writes whichever of its modes decodes nearest: mode 6, mode 5 when a block's
+alpha runs independently of its color, or a partitioned mode, which splits the
+block into two or three subsets with their own endpoints, when the block holds
+colors no one line does. It stores a one-color block exactly. BC5 is two BC4
+blocks, and BC4 keeps the better of its two palettes. BC6H writes whichever of
+its one-region modes 11 to 14 or two-region modes 1 to 10 decodes nearest, the
+two-region modes splitting the block by one of the first 32 of BC7's two-subset
+partitions, and stores a one-value block exactly. On the codec laws' natural
+test image (gradients, noise and a hard-edged disc), BC4 decodes within 2 codes
+of the source (root-mean-square 0.63), BC5 within 8 (0.88), and BC7 within 10
+(2.2); BC6H stays within 8% of each value in smooth blocks and 23% in a corner
+block that ramps from about 0.001 to 1.24, a thousandfold range whose half bits
+bend away from any line two endpoints interpolate. From the
 second level down a block holds four
 or sixteen tiles; the filter never mixes them, but they share the block's
 endpoints, so compression error there is shared within those bounds.
@@ -277,11 +281,13 @@ endpoints, so compression error there is shared within those bounds.
 ray per texel through the evaluator's own march, covering every direction with +Y
 as the octahedron's pole, so a camera below a flying body is covered as well as
 one above a prop. It stores albedo with coverage in alpha (BC7), the normal as an
-octahedral pair (BC5; a miss holds the direction toward the view's camera), and
-the hit's depth across the bounding sphere (BC4; a miss is the far side). Each
-view is a tile of its chains, and the normal and depth mips are weighted by the
-albedo's coverage, so empty texels never bend a silhouette's normals or pull its
-depth. A single billboard is right from one direction only, which no orbiting or
+octahedral pair (BC5; a miss holds the direction toward the view's camera), the
+hit's depth across the bounding sphere (BC4; a miss is the far side), and the
+light the hit's material emits, in the surface textures' linear half-precision
+form (BC6H; a miss emits none), so a placement drawn as its impostor keeps its
+glow. Each view is a tile of its chains, and the normal, depth and emission mips
+are weighted by the albedo's coverage, so empty texels never bend a silhouette's
+normals, pull its depth or dim its glow. A single billboard is right from one direction only, which no orbiting or
 overhead camera satisfies.
 | Tier | Cells a side | Impostor |
 |---|---|---|
@@ -315,6 +321,59 @@ palette slot whose color is bound to a state cell bakes the fallback gray, thoug
 its material texels still name the slot. How bakes are keyed, shipped in a
 build's bake pack, and baked on a device is in
 [creation bakes](../../../architecture/worlds.md#creation-bakes).
+
+Both backends upload a bake's textures as they are stored. `GpuPixelFormat`
+names BC4, BC5, BC6H (unsigned) and BC7, and the one image upload,
+`IGpuSurfaceUpload.Upload`, takes a whole mip chain: every level, largest first,
+tightly packed and back to back, rows of 4x4 blocks for a compressed format
+(`GpuPixelFormats.ChainByteLength`). The view it returns covers every level, and
+the samplers `IGpuBindings.CreateSampler` makes select levels by point and clamp
+no level away, so an explicit level reaches the level asked for on both
+backends. A device that cannot sample a compressed format refuses the upload by
+name: a Vulkan device created without `textureCompressionBC`, and a Direct3D 12
+device whose format support lacks two-dimensional sampling. BC7 albedo is
+sampled as stored codes, without sRGB decode. `BakeSamplingDeviceLawTests`
+samples each probe texel of the bake sampling fixture on Vulkan, Direct3D 12
+hardware and WARP and holds it to the CPU decoder.
+
+A presentation draws its bakes by default when the loaded world's `BAKE`
+chunk supplies every bake from its pack (`WorldRenderSettings.DrawsBakes`).
+A source boot draws fields even when a cache or another world's pack holds
+the same keys. `world.bakes off` forces fields; `world.bakes on` permits ready
+local bakes to draw. While bakes draw, an untinted static placement
+whose prototype's bake is ready draws the baked mesh through the mesh pass and
+keeps
+its field as camera-hidden instances that still cast shadows and occlude; a
+creation with text or noise relief keeps drawing through its field. A baked
+mesh carries its five surface textures (`SdfMeshTextures`). The SDF tables pack
+every textured mesh a frame draws into five mesh atlases, one per usage
+(`SdfMeshAtlas`): each mesh takes a rectangle aligned to 16 texels, so its
+stored blocks move into the atlases unchanged at every level, and the mesh
+region writes its vertices' texture coordinates moved onto that rectangle. The
+atlases are World-group members of the `sdf.world` interface, bound with the
+tables in their World set of each ring slot at group 1; a change to the textured meshes a frame
+draws repacks them once the device is idle. At a textured mesh hit
+(`frame/sdf-mesh-textures.hlsli`) the hit passes interpolate the texture
+coordinate, choose the level whose texels match the pixel's footprint, blend
+the two nearest levels, and sample each level bilinearly inside the hit's own
+tile, clamped half a texel in, so no tap reads a neighbouring quad. Surface
+takes the normal (the octahedral pair under the draw's normal matrix) and the
+occlusion; views takes the material (the draw's plus the texel's palette entry,
+unfiltered), the albedo (decoded from sRGB after filtering) and the emission,
+which replaces the material's albedo times its emissive strength.
+`MeshTextureDeviceLawTests` holds the reads to the CPU decoders on Vulkan,
+Direct3D 12 hardware and WARP, and `SdfMeshAtlasLawTests` holds the packing.
+The engine is not ready until the bake schedule has reconciled and, while the
+presentation draws its bakes, settled, so a capture or `world.wait ready` never
+lands between a placement's field and its bake. The mesh region is always
+staged into device-local memory, never a ring in the host-visible device-local
+heap every residency's small tables share. `WorldBakeSchedule.TryGetMesh` hands out a ready prototype's mesh,
+decoded once, and counts the switch from field to bake once per bake
+(`sdf.bakes.drawn`); a bake landing moves the schedule's revision, so the static
+scene rebuilds on the next frame. A camera-hidden instance
+(`SdfInstanceRange.CameraHidden`, the second-highest bit of its segment-end lane)
+is left out of every camera mask the tile cull writes, so primary never marches
+it, while the shadow and ambient gathers still read it.
 
 ---
 

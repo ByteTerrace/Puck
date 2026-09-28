@@ -183,7 +183,12 @@ public sealed partial class ShaderCompiler {
                 Directory.CreateDirectory(path: Path.GetDirectoryName(path: dependencyPath)!);
                 await File.WriteAllTextAsync(
                     dependencyPath,
-                    dependency.Value,
+                    SnapshotText(
+                        path: dependency.Key,
+                        root: buildRoot,
+                        snapshotBase: snapshotBase,
+                        text: dependency.Value
+                    ),
                     Encoding.UTF8,
                     cancellationToken
                 ).ConfigureAwait(continueOnCapturedContext: false);
@@ -200,7 +205,12 @@ public sealed partial class ShaderCompiler {
                 Directory.CreateDirectory(path: Path.GetDirectoryName(path: snapshotPath)!);
                 await File.WriteAllTextAsync(
                     snapshotPath,
-                    stage.Source,
+                    SnapshotText(
+                        path: stage.Path,
+                        root: buildRoot,
+                        snapshotBase: snapshotBase,
+                        text: stage.Source
+                    ),
                     Encoding.UTF8,
                     cancellationToken
                 ).ConfigureAwait(continueOnCapturedContext: false);
@@ -213,7 +223,8 @@ public sealed partial class ShaderCompiler {
                 var dxilPath = $"{stageStem}.dxil.tmp";
                 var steps = identity.Stages.First(predicate: compiled => (compiled.Stage == stage.Stage)).Steps;
                 var stageDiagnostics = new List<ShaderDiagnostic>();
-                var includeDirectory = Path.GetDirectoryName(path: snapshotPath);
+                // The stage's own directory, then the build root every snapshotted include directive names its include from.
+                string[] includeDirectories = [Path.GetDirectoryName(path: snapshotPath)!, buildRoot];
                 var diagnosticPaths = new Dictionary<string, string>(comparer: StringComparer.OrdinalIgnoreCase) { [snapshotPath] = Path.GetFullPath(path: stage.Path) };
 
                 foreach (var dependency in closure.Contents.Keys) {
@@ -226,7 +237,7 @@ public sealed partial class ShaderCompiler {
 
                 var spv = await RunStepAsync(
                     cancellationToken: cancellationToken,
-                    includeDirectory: includeDirectory,
+                    includeDirectories: includeDirectories,
                     input: snapshotPath,
                     output: spvPath,
                     step: steps[0]
@@ -251,7 +262,7 @@ public sealed partial class ShaderCompiler {
 
                 var dx = await RunStepAsync(
                     cancellationToken: cancellationToken,
-                    includeDirectory: includeDirectory,
+                    includeDirectories: includeDirectories,
                     input: snapshotPath,
                     output: dxilPath,
                     step: steps[1]
@@ -400,6 +411,28 @@ public sealed partial class ShaderCompiler {
         }
         return common;
     }
+    // The text a snapshot holds of a source: each include directive names its include by its snapshot path relative to
+    // the build root, with forward slashes, which the compile's include directories resolve. DXC joins a relative include
+    // to the including file's directory before it normalizes the result, so an include that climbs out of a deep snapshot
+    // directory can pass the Windows path limit and not be found; a path under the build root is normalized, and names
+    // nothing of where the cache lives, so a snapshot compiles to the same bytes wherever it is taken. Lines do not move,
+    // and a diagnostic's path maps back through the snapshot.
+    private static string SnapshotText(string text, string path, string root, string? snapshotBase) =>
+        ShaderSourceClosure.WithIncludes(
+            map: include => Path.GetRelativePath(
+                path: SnapshotPath(
+                    path: include,
+                    root: root,
+                    snapshotBase: snapshotBase
+                ),
+                relativeTo: root
+            ).Replace(
+                newChar: '/',
+                oldChar: '\\'
+            ),
+            path: path,
+            text: text
+        );
     private static string SnapshotPath(string root, string? snapshotBase, string path) {
         var fullPath = Path.GetFullPath(path: path);
 

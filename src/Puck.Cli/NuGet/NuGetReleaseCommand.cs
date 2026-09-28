@@ -250,7 +250,7 @@ internal static class NuGetReleaseCommand {
             searchPattern: "ByteTerrace.Puck.Cli.*.nupkg"
         ).Single();
         var version = Path.GetFileName(path: package)["ByteTerrace.Puck.Cli.".Length..^".nupkg".Length];
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-package-smoke-").FullName;
+        var directory = CliScratchDirectories.CreateProject(prefix: "puck-package-smoke-");
 
         try {
             var executable = await InstallAsync(
@@ -315,7 +315,7 @@ internal static class NuGetReleaseCommand {
                 arguments: ["restore", Path.Combine(
                         path1: probe,
                         path2: "Probe.csproj"
-                    ), "--configfile", Path.Combine(
+                    ), "--disable-build-servers", "--configfile", Path.Combine(
                         path1: root,
                         path2: "nuget.config"
                     )],
@@ -326,7 +326,7 @@ internal static class NuGetReleaseCommand {
                 arguments: ["build", Path.Combine(
                         path1: probe,
                         path2: "Probe.csproj"
-                    ), "-c", "Release", "--no-restore"],
+                    ), "--disable-build-servers", "-c", "Release", "--no-restore"],
                 fileName: "dotnet",
                 workingDirectory: root
             );

@@ -5,7 +5,7 @@ using Puck.Maths;
 
 namespace Puck.SignedDistance.Queries;
 
-// KEEP IN SYNC with mapCore's RIGID op/shape cases in Assets/Shaders/Sdf/sdf-vm.hlsli (the SYNC PAIR this file is
+// KEEP IN SYNC with mapCore's RIGID op/shape cases in Assets/Shaders/Sdf/field/sdf-map.hlsli (the SYNC PAIR this file is
 // half of — see the rendering skill's sync-pair table). This is a SECOND, INDEPENDENT interpreter of the same
 // SdfInstruction stream mapCore walks, in FixedQ4816/FixedVector3 instead of shader float — a deliberate DUAL
 // implementation (like SdfProgram's own host-side AnalyzeBounds/AnalyzeLipschitz passes), not a codegen of the
@@ -43,10 +43,10 @@ namespace Puck.SignedDistance.Queries;
 // point-transform chain, so localPosition/distanceScale carry through unchanged from before the instance, and only
 // a following ResetPoint discards that carried-through value before anything reads it.
 public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
-    // SDF_FAR_DISTANCE (sdf-vm.hlsli): the accumulator's seed value — "nothing found yet," farther than any real
+    // SDF_FAR_DISTANCE (field/sdf-program.hlsli): the accumulator's seed value — "nothing found yet," farther than any real
     // program's geometry, so the first SHAPE candidate always wins the initial compose.
     private static readonly FixedQ4816 FarDistance = FixedQ4816.FromInteger(value: 1_000_000_000L);
-    // SDF_SMOOTH_RADIUS_MIN / SDF_SQRT_HALF (sdf-vm.hlsli) — the same epsilon floors the
+    // SDF_SMOOTH_RADIUS_MIN / SDF_SQRT_HALF (field/sdf-program.hlsli) — the same epsilon floors the
     // shader's blend/shape math uses, transcribed to fixed point so a zero/degenerate radius behaves identically.
     private static readonly FixedQ4816 SmoothRadiusMin = FixedQ4816.FromDouble(value: 0.0001);
     private static readonly FixedQ4816 SqrtHalf = FixedQ4816.FromDouble(value: 0.70710678118654752440);
@@ -107,9 +107,9 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     /// <see cref="FixedQ4816"/> exactly once and is cached, never re-converted per query.</param>
     /// <exception cref="ArgumentNullException"><paramref name="program"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="program"/> contains an op or shape this WARP-FREE
-    /// evaluator cannot interpret, or contains a non-uniform <see cref="SdfOp.Scale"/> whose value is only a
-    /// conservative march bound — see the type remarks' excluded-op rule. <see cref="SdfOp.TransformDynamic"/> is
-    /// excluded not because a rigid dynamic transform is hard to interpret (it is the same cross/mul/add as
+    /// evaluator cannot interpret, or a <see cref="SdfOp.Scale"/> whose axes differ in magnitude (a sign is exact), whose
+    /// value is only a conservative march bound — see the type remarks' excluded-op rule. <see cref="SdfOp.TransformDynamic"/>
+    /// is excluded not because a rigid dynamic transform is hard to interpret (it is the same cross/mul/add as
     /// <see cref="SdfOp.Rotate"/> plus a translate), but because THIS constructor takes only a program, never a
     /// per-frame dynamic-transform table against which to resolve a slot.</exception>
     public SdfFieldEvaluator(SdfProgram program) {
@@ -313,7 +313,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
         ), // SDF_BLEND_UNION, the default
         };
     }
-    // Both saturated endpoints return their input to the bit — see blendSmoothUnion's remarks in sdf-vm.hlsli for
+    // Both saturated endpoints return their input to the bit — see blendSmoothUnion's remarks in field/sdf-blend.hlsli for
     // why the `h <= 0` select matters (an unselected far-shape's SDF_FAR_DISTANCE accumulator would otherwise poison
     // the result).
     private static FixedQ4816 BlendSmoothUnion(FixedQ4816 a, FixedQ4816 b, FixedQ4816 k) {
@@ -346,7 +346,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
 
             if (
                 (instruction.Op == SdfOp.Scale) &&
-                ((instruction.Data0.X != instruction.Data0.Y) || (instruction.Data0.Y != instruction.Data0.Z))
+                ((MathF.Abs(x: instruction.Data0.X) != MathF.Abs(x: instruction.Data0.Y)) || (MathF.Abs(x: instruction.Data0.Y) != MathF.Abs(x: instruction.Data0.Z)))
             ) {
                 throw new ArgumentException(
                     message: $"SdfFieldEvaluator cannot interpret instruction {index}'s non-uniform Scale ({instruction.Data0.X}, {instruction.Data0.Y}, {instruction.Data0.Z}) as physical distance. The renderer's minimum-axis correction is a conservative march bound; bake anisotropy into an exact primitive spelling before constructing a query/contact field.",
@@ -602,7 +602,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
 
         return (blended, winnerMaterial);
     }
-    // === The shape distance functions (KEEP IN SYNC with the matching sdf* functions in Assets/Shaders/Sdf/sdf-vm.hlsli)
+    // === The shape distance functions (KEEP IN SYNC with the matching sdf* functions in Assets/Shaders/Sdf/field/sdf-shapes.hlsli)
     // ======================================================================================================================
 
     private static FixedQ4816 EvaluateShape(CompiledInstruction instruction, FixedVector3 p) {
@@ -869,7 +869,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
 
         return (inside + outside);
     }
-    // KEEP IN SYNC with sdfSuperellipsoid in sdf-vm.hlsli. Exactly 1-Lipschitz for every radius and exponent (see
+    // KEEP IN SYNC with sdfSuperellipsoid in field/sdf-shapes.hlsli. Exactly 1-Lipschitz for every radius and exponent (see
     // SdfProgramBuilder.Superellipsoid's remarks) — no step-scale correction needed here beyond m_stepScale, which
     // this program's own Data1.y lane bakes to 1.0 already for a scope carrying nothing else non-1-Lipschitz.
     // The l_e gauge in its FACTORED form, m * (sum((q_i/m)^e))^(1/e) with m = max(q): every Pow argument stays in
@@ -928,7 +928,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             y: inverseExponent
         )) - FixedQ4816.One) * minRadius);
     }
-    // KEEP IN SYNC with sdfConvexPolygon2D in sdf-vm.hlsli — the exact iq polygon SDF (running minimum squared
+    // KEEP IN SYNC with sdfConvexPolygon2D in field/sdf-shapes.hlsli — the exact iq polygon SDF (running minimum squared
     // distance to every edge segment, signed by one even/odd crossing-parity flip per edge).
     private static FixedQ4816 SdfConvexPolygon2D(FixedVector2 p, FixedVector2[] vertices) {
         var count = vertices.Length;
@@ -988,7 +988,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             : distance
         );
     }
-    // KEEP IN SYNC with sdfConvexPolygonSolid in sdf-vm.hlsli.
+    // KEEP IN SYNC with sdfConvexPolygonSolid in field/sdf-shapes.hlsli.
     private static FixedQ4816 SdfConvexPolygonSolid(FixedVector3 p, FixedVector2[] vertices, FixedQ4816 liftAmount, FixedQ4816 lift, FixedQ4816 capChamfer) {
         if (lift > Half) {
             return SdfExtrudeChamfer2D(
@@ -1019,7 +1019,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
         );
     }
 
-    // KEEP IN SYNC with sdfBezierPoint/sdfSweepClosestT/sdfSweepRadiusAt/sdfSweepConservativeMargin (sdf-vm.hlsli)
+    // KEEP IN SYNC with sdfBezierPoint/sdfSweepClosestT/sdfSweepRadiusAt/sdfSweepConservativeMargin (field/sdf-shapes.hlsli)
     // for the parts that carry over — this evaluator finds the closest parameter t by SAMPLE-AND-REFINE (9 fixed
     // candidates, then 5 rounds of halving-step probes either side of the best) rather than the shader's closed-form
     // cubic solve: the trigonometric (three-real-root) branch of that solve needs acos, which FixedQ4816 does not
@@ -1239,7 +1239,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
 
         return (inside + outside);
     }
-    // The chamfered extrude join (KEEP IN SYNC with sdfExtrudeChamfer2D in sdf-vm.hlsli): sdfExtrude2D's box/slab
+    // The chamfered extrude join (KEEP IN SYNC with sdfExtrudeChamfer2D in field/sdf-shapes.hlsli): sdfExtrude2D's box/slab
     // intersection, further intersected with a 45-degree bevel plane across the cap seam. c = zero collapses to
     // SdfExtrude2D exactly, by the same triangle-inequality argument the HLSL comment carries.
     private static FixedQ4816 SdfExtrudeChamfer2D(FixedQ4816 distance2D, FixedQ4816 z, FixedQ4816 halfDepth, FixedQ4816 c) {
@@ -1324,7 +1324,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             )
             : distance2D);
     // capChamfer is Data1Z — a cap-only bevel radius on the extrude's rims (KEEP IN SYNC with sdfRoundedRect's data1.z
-    // read in sdf-vm.hlsli). Zero (every pre-existing caller) takes SdfExtrude2D's plain join exactly.
+    // read in field/sdf-shapes.hlsli). Zero (every pre-existing caller) takes SdfExtrude2D's plain join exactly.
     private static FixedQ4816 SdfRoundedRectangle(FixedVector3 p, FixedQ4816 halfWidth, FixedQ4816 halfHeight, FixedQ4816 cornerRadius, FixedQ4816 liftAmount, FixedQ4816 lift, FixedQ4816 capChamfer) {
         var point2D = ProjectLiftPoint(
             lift: lift,
@@ -1370,7 +1370,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
 
         return ((inside + outside) - cornerRadius);
     }
-    // KEEP IN SYNC with sdfChamferedRect in sdf-vm.hlsli. The shape's own chamfer c (Data0Z) doubles as its cap
+    // KEEP IN SYNC with sdfChamferedRect in field/sdf-shapes.hlsli. The shape's own chamfer c (Data0Z) doubles as its cap
     // bevel (the extrude call below passes it as capChamfer too), exactly as the shader does.
     private static FixedQ4816 SdfChamferedRectangle(FixedVector3 p, FixedQ4816 halfWidth, FixedQ4816 halfHeight, FixedQ4816 chamfer, FixedQ4816 liftAmount, FixedQ4816 lift) {
         var point2D = ProjectLiftPoint(
@@ -1392,7 +1392,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             p: p
         );
     }
-    // KEEP IN SYNC with sdfChamferBox2D in sdf-vm.hlsli.
+    // KEEP IN SYNC with sdfChamferBox2D in field/sdf-shapes.hlsli.
     private static FixedQ4816 SdfChamferBox2D(FixedVector2 p, FixedQ4816 halfWidth, FixedQ4816 halfHeight, FixedQ4816 chamfer) {
         var q = new FixedVector2(
             X: (FixedQ4816.Abs(value: p.X) - halfWidth),
@@ -1492,7 +1492,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
         )));
     }
     // capChamfer is Data1Z — a cap-only bevel radius on the extrude's rims (KEEP IN SYNC with sdfTrapezoidSolid's
-    // data1.z read in sdf-vm.hlsli). Zero (every pre-existing caller) takes SdfExtrude2D's plain join exactly.
+    // data1.z read in field/sdf-shapes.hlsli). Zero (every pre-existing caller) takes SdfExtrude2D's plain join exactly.
     private static FixedQ4816 SdfTrapezoidSolid(FixedVector3 p, FixedQ4816 bottomHalfWidth, FixedQ4816 topHalfWidth, FixedQ4816 halfHeight, FixedQ4816 liftAmount, FixedQ4816 lift, FixedQ4816 capChamfer) {
         if (lift > Half) {
             var distance2D = SdfTrapezoid2D(

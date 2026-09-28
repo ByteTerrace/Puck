@@ -11,8 +11,9 @@ namespace Puck.Cli.Tests;
 /// CONTRACT UNDER TEST: <c>puck qualify</c> judges a matrix cell from its readings alone. A cell passes only when every
 /// armed wait is reached, no <c>gpu.created.*</c> count rises across a soak window, every settled inspection shows the
 /// instance owning exactly its installed graph, the peak owned or planned pipeline bytes stay within the cell's
-/// threshold (equal passes, one byte over fails), every unload releases the instance, and, with the validation layer on,
-/// no validation message appears. A leg that never ran or whose machine lacks the backend is blocked; an absent shader
+/// threshold (equal passes, one byte over fails), every unload releases the instance, every <c>world.reload</c> answers
+/// that it applied, no submission is refused at the wire codec, and, with the validation layer on, no validation message
+/// appears. A leg that never ran or whose machine lacks the backend is blocked; an absent shader
 /// compiler blocks a cell whose profile lets the World find one and fails a cell whose profile withholds it. One failure
 /// fails a run, otherwise one blocked check blocks it. The transcript reader recognizes each line the World prints for
 /// these readings, and the package check tells a ReadyToRun entry assembly from an IL-only one.
@@ -23,7 +24,7 @@ public sealed class QualificationVerdictLawTests {
     private static readonly QualificationCell Cell = new(
         Backend: "vulkan",
         Resolution: new QualificationResolution(Height: 32, Width: 64),
-        Threshold: new QualificationThreshold(Backend: "vulkan", Height: 32, PeakOwnedPipelineBytes: Limit, Width: 64, Workload: "ink"),
+        Threshold: new QualificationThreshold(Backend: "vulkan", Height: 32, PeakDeviceLocalBytes: null, PeakOwnedPipelineBytes: Limit, Width: 64, Workload: "ink"),
         Workload: new QualificationWorkload(
             Name: "ink",
             Pipeline: new QualificationPipeline(Instance: "ink", Layout: "pipeline", Loads: 1, Reloads: 0, Resizes: 0, SettleFrames: 4),
@@ -39,13 +40,15 @@ public sealed class QualificationVerdictLawTests {
         CountersReadings: 2,
         Inspections: 2,
         Releases: 1,
-        SoakWindows: [(0, 1)]
+        SoakWindows: [(0, 1)],
+        WorldReloads: 2
     );
 
-    private static WorldCountersRun Counters(long pipelines, long images = 3L) => new(
+    private static WorldCountersRun Counters(long pipelines, long images = 3L, long deviceLocalPeak = 0L) => new(
         Backend: "vulkan",
         Compiler: "toolchain",
         Counts: [
+            new WorldCount(Class: WorkClass.Pacing, Kind: GpuDeviceMemoryWork.Peak.Name, Node: null, Pass: null, Source: "memory.vulkan", Value: deviceLocalPeak),
             new WorldCount(Class: WorkClass.PerBackendDeterministic, Kind: "gpu.created.pipelines", Node: "ink", Pass: null, Source: "gpu", Value: pipelines),
             new WorldCount(Class: WorkClass.PerBackendDeterministic, Kind: "gpu.created.images", Node: "ink", Pass: null, Source: "gpu", Value: images),
             new WorldCount(Class: WorkClass.Pacing, Kind: "gpu.pipeline-cache.hits", Node: null, Pass: null, Source: "pipeline-cache.vulkan", Value: (pipelines * 7L)),
@@ -65,8 +68,10 @@ public sealed class QualificationVerdictLawTests {
         Inspections: [new QualificationInspection(Budget: 4096L, Owned: 400L, Peak: 800L, Steady: 400L), new QualificationInspection(Budget: 4096L, Owned: 500L, Peak: 1000L, Steady: 500L)],
         MemoryProfile: "memory: unified.coherent=no device-local=8589934592",
         Releases: 1,
+        SubmissionRefusals: [],
         ValidationMessages: [],
-        Waits: [new QualificationWait(Outcome: "reached", Phase: "installed"), new QualificationWait(Outcome: "reached", Phase: "counted 4")]
+        Waits: [new QualificationWait(Outcome: "reached", Phase: "installed"), new QualificationWait(Outcome: "reached", Phase: "counted 4")],
+        WorldReloads: 2
     );
     private static QualificationVerdict Judge(QualificationReadings? readings, WorldOffscreenLegStatus leg = WorldOffscreenLegStatus.Completed, bool debugLayers = true, ReleaseCompilerDiscovery compiler = ReleaseCompilerDiscovery.None) =>
         QualificationJudge.Judge(
@@ -104,6 +109,31 @@ public sealed class QualificationVerdictLawTests {
         );
     }
     [Fact]
+    public void ADeviceLocalThresholdJudgesTheLargestPeakInclusively() {
+        const long DeviceLocalLimit = 4096L;
+
+        var cell = (Cell with { Threshold = (Cell.Threshold with { PeakDeviceLocalBytes = DeviceLocalLimit }) });
+
+        QualificationVerdict JudgeCell(QualificationReadings readings) => QualificationJudge.Judge(
+            cell: cell,
+            compiler: ReleaseCompilerDiscovery.None,
+            debugLayers: true,
+            expectation: Expected,
+            leg: WorldOffscreenLegStatus.Completed,
+            legDetail: string.Empty,
+            readings: readings
+        );
+        var atLimit = (Good() with { Counters = [Counters(deviceLocalPeak: 1024L, pipelines: 2L), Counters(deviceLocalPeak: DeviceLocalLimit, pipelines: 2L)] });
+        var overLimit = (Good() with { Counters = [Counters(deviceLocalPeak: (DeviceLocalLimit + 1L), pipelines: 2L), Counters(deviceLocalPeak: 1024L, pipelines: 2L)] });
+        var unread = (Good() with { Counters = [Counters(pipelines: 2L) with { Counts = [] }, Counters(pipelines: 2L) with { Counts = [] }] });
+
+        Assert.Equal(actual: atLimit.PeakDeviceLocalBytes, expected: DeviceLocalLimit);
+        Assert.Equal(actual: JudgeCell(readings: atLimit).Outcome, expected: QualificationOutcome.Pass);
+        Assert.Contains(collection: JudgeCell(readings: overLimit).Findings, filter: static line => line.Contains(comparisonType: StringComparison.Ordinal, value: "4097 device-local bytes at its peak, over the cell's threshold of 4096"));
+        Assert.Contains(collection: JudgeCell(readings: unread).Findings, filter: static line => line.Contains(comparisonType: StringComparison.Ordinal, value: "no world.counters reading reported gpu.memory.device-local.peak"));
+        Assert.Equal(actual: Judge(readings: overLimit).Outcome, expected: QualificationOutcome.Pass);
+    }
+    [Fact]
     public void AnObjectCreatedAcrossASoakFails() {
         Fails(
             finding: "gpu/ink gpu.created.pipelines 2 -> 3",
@@ -129,6 +159,14 @@ public sealed class QualificationVerdictLawTests {
         Fails(finding: "pipeline.wait counted 4: timed out", readings: (Good() with { Waits = [Good().Waits[0], new QualificationWait(Outcome: "timed out", Phase: "counted 4")] }));
         Fails(finding: "refused: kind", readings: (Good() with { CountersRefusals = ["kind 'x' is not in the legend"] }));
         Fails(finding: "GPU candidate refused", readings: (Good() with { CandidateRefusals = ["[pipeline: ink GPU candidate refused: SHADERPIPE_BUDGET"] }));
+    }
+    [Fact]
+    public void AWorldReloadThatDoesNotApplyFails() {
+        const string Refused = "[world.codec refused: PayloadMalformed: the embedded world definition is not a valid puck.world.definition.v1 document]";
+
+        Fails(finding: "1 world.reload(s) applied, of the 2 the script makes", readings: (Good() with { WorldReloads = 1 }));
+        Fails(finding: Refused, readings: (Good() with { SubmissionRefusals = [Refused] }));
+        Assert.Equal(actual: Judge(debugLayers: false, readings: (Good() with { WorldReloads = 1, SubmissionRefusals = [Refused] })).Outcome, expected: QualificationOutcome.Fail);
     }
     [Fact]
     public void AValidationMessageFailsOnlyWithTheLayerOn() {
@@ -185,8 +223,14 @@ public sealed class QualificationVerdictLawTests {
                 Out(line: "[pipeline.inspect: 'ink' has no rendered pipeline instance]", stream: CliProcessOutputStream.Stderr),
                 Out(line: "[vulkan-debug] validation error: an object was not destroyed", stream: CliProcessOutputStream.Stderr),
                 Out(line: "[vulkan-debug] general: loader notice", stream: CliProcessOutputStream.Stderr),
+                Out(line: "[d3d12] debug layer live: the device reports through its info queue", stream: CliProcessOutputStream.Stderr),
+                Out(line: "[d3d12] debug layer requested but not loaded: the device has no info queue, so nothing is validated", stream: CliProcessOutputStream.Stderr),
                 Out(line: "[pipeline: ink GPU candidate refused: SHADERPIPE_BUDGET", stream: CliProcessOutputStream.Stderr),
                 Out(line: "[pipeline: ink unsupported: the dxc shader tool is absent", stream: CliProcessOutputStream.Stderr),
+                Out(line: "[world.reload: world.reload applied — base is 'Assets/worlds/pipeline.world.json' (world.reload), journal cleared]"),
+                Out(line: "[world.definition: world.reload applied — base is 'Assets/worlds/pipeline.world.json' (world.reload), journal cleared]", stream: CliProcessOutputStream.Stderr),
+                Out(line: "[world.codec refused: PayloadMalformed: a cell holds no value]", stream: CliProcessOutputStream.Stderr),
+                Out(line: "[world.reload: the file is missing]", stream: CliProcessOutputStream.Stderr),
                 Out(line: Reading),
             ],
             Stderr: string.Empty,
@@ -201,9 +245,11 @@ public sealed class QualificationVerdictLawTests {
         Assert.StartsWith(actualString: readings.MemoryProfile, expectedStartString: "memory: unified.coherent=no device-local=8589934592");
         Assert.Equal(actual: readings.Waits, expected: [new QualificationWait(Outcome: "reached", Phase: "counted 4")]);
         Assert.Equal(actual: readings.Releases, expected: 1);
-        Assert.Equal(actual: readings.ValidationMessages, expected: ["[vulkan-debug] validation error: an object was not destroyed"]);
+        Assert.Equal(actual: readings.ValidationMessages, expected: ["[vulkan-debug] validation error: an object was not destroyed", "[d3d12] debug layer requested but not loaded: the device has no info queue, so nothing is validated"]);
         Assert.Single(collection: readings.CandidateRefusals);
         Assert.Equal(actual: readings.CompilerAbsent, expected: "[pipeline: ink unsupported: the dxc shader tool is absent");
+        Assert.Equal(actual: readings.WorldReloads, expected: 1);
+        Assert.Equal(actual: readings.SubmissionRefusals, expected: ["[world.codec refused: PayloadMalformed: a cell holds no value]", "[world.reload: the file is missing]"]);
     }
     [Fact]
     public void ThePackageCheckTellsReadyToRunFromIlOnly() {

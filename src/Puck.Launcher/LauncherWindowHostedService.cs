@@ -13,26 +13,17 @@ namespace Puck.Launcher;
 
 /// <summary>
 /// The outermost host loop — the dumb terminal. It owns the window + swapchain, and each frame drives the
-/// single primary <see cref="IRenderNode"/> to produce one surface, then blits that surface to the
+/// <see cref="IRenderRoot"/> to produce one surface, then blits that surface to the
 /// swapchain. The terminal knows nothing about the world — only the one surface the engine hands up. The
 /// engine drives the terminal's lifecycle through the baton it was handed on the root host context; this
 /// loop merely drains the resulting exit request (and honors <c>--exit-after</c> for scripted runs).
 /// </summary>
 public sealed class LauncherWindowHostedService : BackgroundService {
-    // A real device loss (driver crash/update, the adapter disabled/removed) leaves NO capable adapter for SECONDS: the
-    // fresh device create keeps failing until it returns. Recovery waits out that window — retrying the rebuild with this
-    // backoff for up to this budget — before giving up. These waits are ONE loss's recovery, so they do NOT advance the
-    // consecutive-loss streak above (which guards against a device that drops again the instant it is recovered).
-    private const int DeviceReacquireBackoffMilliseconds = 250;
-    private const double DeviceReacquireBudgetSeconds = 10.0;
-    // Cap on back-to-back device-loss recoveries with no successful frame between them, so a permanently-dead GPU (or a
-    // presenter that cannot recover) fails loudly instead of spinning forever. Reset to 0 after any good frame.
-    private const int MaxConsecutiveDeviceLossRecoveries = 8;
-
     private readonly IHostApplicationLifetime m_applicationLifetime;
     private readonly BufferedConsoleOutput m_bufferedOutput;
     private readonly FrameCaptureController? m_capture;
     private readonly ExternalClockRegistry m_externalClocks;
+    private readonly GpuCreationFaults? m_faults;
     private readonly IInputClock m_inputClock;
     private readonly StandardInputBacklog m_inputBacklog;
     private readonly InputRouter? m_inputRouter;
@@ -42,7 +33,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
     private readonly IPresentSurfaceReadback? m_presentReadback;
     private readonly ISurfacePresenter m_presenter;
     private readonly CommandRegistry m_registry;
-    private readonly IRenderNode m_root;
+    private readonly IRenderRoot m_root;
     private readonly IHostContext m_rootHostContext;
     private readonly IFixedStepSimulation? m_simulation;
     private readonly ISnapshotInputCapture[] m_snapshotInputCaptures;
@@ -59,7 +50,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
         LauncherOptions options,
         PresentPacingControl presentPacing,
         ISurfacePresenter presenter,
-        IRenderNode root,
+        IRenderRoot root,
         IHostContext rootHostContext,
         IEnumerable<InputRouter> inputRouters,
         IEnumerable<IFixedStepSimulation> simulations,
@@ -69,12 +60,14 @@ public sealed class LauncherWindowHostedService : BackgroundService {
         TextCommandSource textSource,
         TerminalControl terminal,
         StandardInputBacklog inputBacklog,
-        INativeWindowFactory windowFactory
+        INativeWindowFactory windowFactory,
+        IEnumerable<GpuCreationFaults> faults
     ) {
         ArgumentNullException.ThrowIfNull(applicationLifetime);
         ArgumentNullException.ThrowIfNull(bufferedOutput);
         ArgumentNullException.ThrowIfNull(captureControllers);
         ArgumentNullException.ThrowIfNull(externalClocks);
+        ArgumentNullException.ThrowIfNull(faults);
         ArgumentNullException.ThrowIfNull(inputClock);
         ArgumentNullException.ThrowIfNull(inputRouters);
         ArgumentNullException.ThrowIfNull(logger);
@@ -97,6 +90,11 @@ public sealed class LauncherWindowHostedService : BackgroundService {
             hostDescription: "windowed host"
         );
         m_externalClocks = externalClocks;
+        m_faults = LauncherHostLoop.SingleOrDefault(
+            items: faults,
+            name: nameof(GpuCreationFaults),
+            hostDescription: "windowed host"
+        );
         m_inputClock = inputClock;
         m_inputRouter = LauncherHostLoop.SingleOrDefault(
             items: inputRouters,
@@ -157,20 +155,9 @@ public sealed class LauncherWindowHostedService : BackgroundService {
             );
         }
     }
-    // A clean frame rendered: if it follows one or more device-loss recoveries, announce that rendering is back and clear
-    // the streak. (Without the announcement a recovery only logged "recovering…" then went quiet — reading as a failure
-    // even though presents had resumed.)
-    private void NoteFrameSucceeded(ref int streak) {
-        if (streak > 0) {
-            m_logger.LogInformation(
-                message: "Graphics device recovered; rendering resumed after {Attempts} attempt(s).",
-                streak
-            );
-
-            streak = 0;
-        }
-    }
-    private long ResolveRenderPeriod(DisplayTimingSnapshot displayTiming, long frequency, double requestedHertz) {
+    // The pacer's period in stopwatch ticks, and the presented rate it targets in whole frames a second (zero when
+    // unbounded), which the frame context carries to the render graph's rate sources.
+    private (long Period, int Hertz) ResolveRenderPeriod(DisplayTimingSnapshot displayTiming, long frequency, double requestedHertz) {
         var decision = PresentPacingPolicy.Resolve(
             requestedHertz: requestedHertz,
             timing: displayTiming
@@ -194,14 +181,9 @@ public sealed class LauncherWindowHostedService : BackgroundService {
             );
         }
 
-        return decision.ToPeriodTicks(frequency: frequency);
-    }
-    // Resolves the one-shot synthetic-device-loss injection time from LauncherOptions.SyntheticDeviceLossSeconds,
-    // or null when the test hook is off. Render/test only.
-    private static long? ResolveSyntheticDeviceLossTimestamp(double? seconds, long startTimestamp, long frequency) {
-        return (((seconds is { } value) && (value > 0.0))
-            ? (long?)(startTimestamp + ((long)(value * frequency)))
-            : null
+        return (
+            decision.ToPeriodTicks(frequency: frequency),
+            ((int)Math.Round(a: decision.TargetHertz))
         );
     }
     private void RunWindowLoop(CancellationToken stoppingToken) {
@@ -273,6 +255,9 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 // this observer updates presentation state, while WindowInputMapper independently feeds their
                 // relative motion/buttons/wheel into command bindings. Resolved once: contributions never change.
                 _ = m_rootHostContext.HoldsCapability<IWindowInputObserver>(capability: out var windowInputObserver);
+                // An optional HELD root capability offered every raw event before the observer: an event it consumes
+                // (a key a focused passthrough source takes, for one) reaches neither the observer nor the router.
+                _ = m_rootHostContext.HoldsCapability<IWindowInputFilter>(capability: out var windowInputFilter);
                 // Physical truth for edge-reported window controls. Each frame reasserts held keys and mouse buttons
                 // in original press order, allowing a freshly-installed profile or modality to recover continuous
                 // channels without synthesizing a Started edge.
@@ -311,7 +296,8 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 // this control's version advances (mirroring the display-change re-resolve below). Presentation only —
                 // never reaches the fixed-step sim.
                 var presentPacingVersion = m_presentPacing.Version;
-                var renderPeriod = ResolveRenderPeriod(
+
+                var (renderPeriod, displayHertz) = ResolveRenderPeriod(
                     displayTiming: displayTiming,
                     frequency: frequency,
                     requestedHertz: m_presentPacing.TargetHertz
@@ -323,16 +309,12 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     ? (startTimestamp + ((long)(exitAfter.TotalSeconds * frequency)))
                     : (long?)null
                 );
-                // Consecutive device-loss recoveries with no good frame in between; bounded so a permanently-dead GPU
-                // (or a backend that can't recover) surfaces the failure instead of spinning forever.
-                var deviceLossStreak = 0;
-                // Test hook: a one-shot synthetic device loss N seconds in, to exercise recovery without real GPU churn.
-                var syntheticDeviceLossAt = ResolveSyntheticDeviceLossTimestamp(
-                    seconds: m_options.SyntheticDeviceLossSeconds,
-                    startTimestamp: startTimestamp,
-                    frequency: frequency
+                var deviceLoss = new DeviceLossRecovery(
+                    logger: m_logger,
+                    root: m_root,
+                    rootHostContext: m_rootHostContext,
+                    writeLine: m_bufferedOutput.WriteErrorLine
                 );
-                var syntheticDeviceLossFired = false;
 
                 // The registered simulation declares its own rate; DefaultUpdateRate is the null-simulation fallback
                 // (console pump alone) and the fallback while the registered simulation reports 0 (an authored
@@ -372,7 +354,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     ) {
                         displayConfigurationVersion = displayTimingInfo.DisplayConfigurationVersion;
                         displayTiming = DisplayTimingSnapshot.Unknown;
-                        renderPeriod = ResolveRenderPeriod(
+                        (renderPeriod, displayHertz) = ResolveRenderPeriod(
                             displayTiming: displayTiming,
                             frequency: frequency,
                             requestedHertz: m_presentPacing.TargetHertz
@@ -390,7 +372,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
 
                         --displayTimingRetryAttemptsRemaining;
                         displayTiming = requeriedTiming;
-                        renderPeriod = ResolveRenderPeriod(
+                        (renderPeriod, displayHertz) = ResolveRenderPeriod(
                             displayTiming: displayTiming,
                             frequency: frequency,
                             requestedHertz: m_presentPacing.TargetHertz
@@ -409,7 +391,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     // only — the fixed-step sim is untouched.
                     if (m_presentPacing.Version != presentPacingVersion) {
                         presentPacingVersion = m_presentPacing.Version;
-                        renderPeriod = ResolveRenderPeriod(
+                        (renderPeriod, displayHertz) = ResolveRenderPeriod(
                             displayTiming: displayTiming,
                             frequency: frequency,
                             requestedHertz: m_presentPacing.TargetHertz
@@ -421,10 +403,14 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     NoteExternalClockContention(observedElectionGeneration: ref observedElectionGeneration);
 
                     while (inputSource.TryDequeueInput(inputEvent: out var windowInput)) {
+                        if (windowInputFilter?.Intercept(inputEvent: in windowInput) == true) {
+                            continue;
+                        }
+
                         var hasInputFocus = m_rootHostContext.HoldsCapability<IInputFocus>(capability: out var inputFocus);
                         var wasInputActive = (hasInputFocus && inputFocus.IsActiveFor(deviceId: windowInput.DeviceId));
 
-                        // Hand the RAW event to the window input observer first, unconditionally (not focus-gated):
+                        // Hand the RAW event the filter left to the window input observer, unconditionally (not focus-gated):
                         // it captures presentation/session-only state (pointer drag, a console's typed keystrokes)
                         // that never touches CaptureTick/CommandSnapshot below — the focus gate a few lines down is
                         // what stops a captured keystroke from ALSO driving the avatar or firing a bound command
@@ -440,9 +426,9 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                             continue;
                         }
 
-                        if (windowInput.Kind == WindowInputKind.PointerPosition) {
-                            // Absolute cursor coordinates remain presentation-only. The other mouse shapes below
-                            // have a command projection in addition to the raw observer projection above.
+                        if (windowInput.Kind is WindowInputKind.PointerPosition or WindowInputKind.PointerLeft) {
+                            // The absolute cursor position, and its leaving the window, reach only the observer
+                            // above. The other mouse shapes below have a command projection in addition.
                             continue;
                         }
 
@@ -549,23 +535,18 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     var height = window.Height;
 
                     // The frame body (present-side GPU work) can surface a device-lost error (DXGI_ERROR_DEVICE_REMOVED /
-                    // VK_ERROR_DEVICE_LOST) at BeginFrame's wait-for-idle, the node tree's own submit, or Present, all
+                    // VK_ERROR_DEVICE_LOST) at BeginFrame's wait-for-idle, the render root's own submit, or Present, all
                     // translated to a neutral DeviceLostException at the backend boundary. Catch it here, recover the
                     // device + resources, and resume. The fixed-step sim above is already advanced for this tick and is
                     // not touched — a recovery that burns several wall-clock frames is absorbed by the maxFrameTicks
                     // clamp, so a recorded run produces identical sim ticks regardless of recovery hitches.
                     try {
-                        // Test hook (PUCK_TEST_DEVICE_LOSS=<seconds>): inject ONE synthetic device loss to exercise the
-                        // full recovery path (catch -> node reset -> device recreate -> resume) on a HEALTHY GPU — no
-                        // driver reset, no black-screen risk. Validates the rebuild machinery; the real native-detection
-                        // path is exercised separately by a true loss (e.g. Win+Ctrl+Shift+B).
-                        ThrowIfSyntheticDeviceLossDue(
-                            at: syntheticDeviceLossAt,
-                            fired: ref syntheticDeviceLossFired
-                        );
+                        // The operator's gpu.faults lose: the armed frame loses the device here, on a healthy GPU, and
+                        // recovers through the same policy a real loss does.
+                        m_faults?.ThrowIfLossDue();
 
                         // BeginFrame recreates presentation resources when the size changed and waits for the
-                        // previous frame's GPU work, so the node tree can safely reuse its per-frame resources.
+                        // previous frame's GPU work, so the render root can safely reuse its per-frame resources.
                         m_presenter.BeginFrame(
                             height: height,
                             width: width
@@ -578,6 +559,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                             var frameContext = new FrameContext(
                                 AccumulatorTicks: (pump?.AccumulatorTicks ?? 0UL),
                                 DeltaTicks: (fixedSteps * stepTicks),
+                                DisplayHertz: displayHertz,
                                 ElapsedTicks: (pump?.ElapsedTicks ?? 0UL),
                                 FrameDeltaTicks: deltaTicks,
                                 Host: m_rootHostContext,
@@ -596,14 +578,19 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                             m_presenter.Present(surface: surface);
                         }
 
-                        NoteFrameSucceeded(streak: ref deviceLossStreak);
+                        deviceLoss.NoteFrameProduced();
                     } catch (DeviceLostException deviceLost) {
-                        if (!TryRecoverFromDeviceLoss(
-                            binding: window.CreateSurfaceBinding(),
+                        if (!deviceLoss.TryRecover(
                             deviceLost: deviceLost,
-                            height: height,
-                            streak: ref deviceLossStreak,
-                            width: width
+                            rebuild: ((m_presenter is IDeviceLostRecoverable recoverable)
+                                ? new PresenterDeviceRebuild(
+                                    Binding: window.CreateSurfaceBinding(),
+                                    Height: height,
+                                    Presenter: recoverable,
+                                    Width: width
+                                )
+                                : null
+                            )
                         )) {
                             // Unrecoverable (device never returned, presenter can't recover, or too many losses in a
                             // row). Shut DOWN cleanly rather than crashing: close the window and break to the normal
@@ -734,121 +721,6 @@ public sealed class LauncherWindowHostedService : BackgroundService {
             }
         } finally {
             m_applicationLifetime.StopApplication();
-        }
-    }
-    // Throws a synthetic DeviceLostException once the configured time has elapsed (test hook only); flips the one-shot
-    // flag so it fires exactly once.
-    private static void ThrowIfSyntheticDeviceLossDue(long? at, ref bool fired) {
-        if (
-            (at is { } dueTimestamp) &&
-            !fired &&
-            (Stopwatch.GetTimestamp() >= dueTimestamp)
-        ) {
-            fired = true;
-
-            throw new DeviceLostException(message: "Synthetic device-loss test injection (PUCK_TEST_DEVICE_LOSS).");
-        }
-    }
-    /// <summary>Recovers from a graphics device loss on the pump thread: the render tree releases its device-derived GPU
-    /// resources (on the still-valid lost device), then the presenter rebuilds the device + presentation resources in
-    /// place; the next frame rebuilds the node resources on the new device. Returns <see langword="false"/> (so the caller
-    /// rethrows and the run ends) when the presenter cannot recover or recovery has failed too many times in a row.</summary>
-    private bool TryRecoverFromDeviceLoss(NativeSurfaceBinding binding, DeviceLostException deviceLost, uint width, uint height, ref int streak) {
-        ++streak;
-
-        if (m_presenter is not IDeviceLostRecoverable recoverable) {
-            m_logger.LogError(
-                exception: deviceLost,
-                message: "Graphics device lost (reason 0x{Reason:X}) but the active presenter cannot recover.",
-                deviceLost.ReasonCode
-            );
-
-            return false;
-        }
-
-        if (streak > MaxConsecutiveDeviceLossRecoveries) {
-            m_logger.LogError(
-                exception: deviceLost,
-                message: "Graphics device-loss recovery failed {Count} times in a row (reason 0x{Reason:X}); aborting the run.",
-                MaxConsecutiveDeviceLossRecoveries,
-                deviceLost.ReasonCode
-            );
-
-            return false;
-        }
-
-        m_logger.LogWarning(
-            exception: deviceLost,
-            message: "Graphics device lost (reason 0x{Reason:X}); recovering (attempt {Attempt}/{Max}).",
-            deviceLost.ReasonCode,
-            streak,
-            MaxConsecutiveDeviceLossRecoveries
-        );
-
-        // Drain in-flight GPU work BEFORE any teardown. On a genuinely lost device this faults and is swallowed
-        // (nothing will ever complete); on a still-healthy device — a recoverable RESET, or the synthetic test hook —
-        // it is essential, because destroying command pools / image views still referenced by pending work is a
-        // validation error and can crash the driver.
-        if (m_rootHostContext.TryResolveCapability<IGpuDeviceContext>(capability: out var deviceContext)) {
-            try {
-                deviceContext.WaitIdle();
-            } catch (DeviceLostException) {
-                // Device already lost; there is no in-flight work to wait on.
-            }
-        }
-
-        // Order matters: the node tree releases its GPU objects FIRST — they are children of the device and must go
-        // before it does — then the presenter destroys + recreates the device IN PLACE (so the capability-published
-        // context keeps its identity and nodes rebuild against the new handle next frame). Release once, here.
-        m_root.OnDeviceLost();
-
-        // Recreate the device, waiting out an extended device-ABSENT window: a real removal leaves no capable adapter
-        // for seconds, and the fresh create keeps failing (surfaced by the backend as another DeviceLostException) until
-        // it returns. Retry with backoff until the rebuild succeeds or the reacquire budget elapses.
-        var reacquireDeadlineTimestamp = (Stopwatch.GetTimestamp() + ((long)(DeviceReacquireBudgetSeconds * Stopwatch.Frequency)));
-        var waitedForDevice = false;
-
-        while (true) {
-            try {
-                recoverable.RecoverFromDeviceLoss(
-                    binding: binding,
-                    height: height,
-                    width: width
-                );
-
-                if (waitedForDevice) {
-                    m_logger.LogInformation(message: "A graphics device returned; presentation resources rebuilt.");
-                }
-
-                return true;
-            } catch (DeviceLostException reacquireLoss) {
-                if (Stopwatch.GetTimestamp() >= reacquireDeadlineTimestamp) {
-                    // The device did not return within the budget. This also covers the case where it CANNOT return in
-                    // this process: a full adapter removal (vs. a self-recovering driver reset) can leave the graphics
-                    // driver unable to reinitialize in-process — the fresh device create keeps failing even after the
-                    // adapter is back — and only a new process recovers. Either way, give up so the caller shuts down
-                    // cleanly rather than hanging.
-                    m_logger.LogError(
-                        exception: reacquireLoss,
-                        message: "The graphics device did not return within {Seconds}s of the loss (reason 0x{Reason:X}); it cannot be reinitialized in this process. Shutting down.",
-                        DeviceReacquireBudgetSeconds,
-                        reacquireLoss.ReasonCode
-                    );
-
-                    return false;
-                }
-
-                if (!waitedForDevice) {
-                    m_logger.LogWarning(
-                        message: "The graphics device is still absent; waiting up to {Seconds}s for it to return...",
-                        DeviceReacquireBudgetSeconds
-                    );
-
-                    waitedForDevice = true;
-                }
-
-                Thread.Sleep(millisecondsTimeout: DeviceReacquireBackoffMilliseconds);
-            }
         }
     }
 

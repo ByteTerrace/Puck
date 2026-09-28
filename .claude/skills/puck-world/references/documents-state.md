@@ -409,6 +409,11 @@ raises a solid column above the origin that bodies stand on
 (`Puck.Physics.Fields.FieldLatticeSolid`, unioned with the authored solids for contact) and
 the renderer shows (`WorldFieldEmitter`: one CPU-baked distance brick per
 height field, coloured by `color`, uploaded through the engine's brick pool).
+A field row's live cells ride the snapshot, never the document; the client's
+state view keeps them (`WorldDocumentStateView.ApplyFieldCells`) and presentation
+reads them through the state mirror like any row: the brick bakes from the
+height field's row slot, and a pass binds a field row to a float array as
+`state.<field>` (one element per lattice cell, z, then layer, then x).
 `WorldFieldProgram.Compile` is the typed reaction compiler view over that same
 authored topology and reaction list: stable field/node handles, its canonical
 state catalog, fixed-point scalar inputs, typed state dependencies, immutable
@@ -644,9 +649,10 @@ hashes and checkpoints. `world.search` narrates each job. Sharp edge: a token
 row whose `min` is a cell ordinal is refused — the off-board value must be no
 cell.
 
-`depth` (default 1) and `score` search deeper: `score` is an infix expression
-(the rule expression grammar, compiled like a rule binding, refused if it
-reads a host-only fact) required once `depth` exceeds one or `best` is
+`depth` (default 1) and `score` search deeper: `score` is a value expression
+(infix text in `.puck`, stored as its `instructions` program like every other
+document expression and refused by name as text, compiled like a rule binding,
+refused if it reads a host-only fact) required once `depth` exceeds one or `best` is
 authored. `best` is a keyed int row receiving `token`/`to`/`score` — the
 deepest completed depth's answer. Iterative-deepening negamax with alpha-beta:
 each accepted root candidate recurses one more ply (negated — the value is

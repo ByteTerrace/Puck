@@ -159,7 +159,8 @@ public sealed record MemoryClassEvidence(
 /// <param name="ShapeParameters">The compiled shape parameters the price depends on.</param>
 /// <param name="Kernel">The reference kernel supplying the reference implementation, instruction evidence,
 /// input-domain bound and included overhead, or null when no kernel has been captured.</param>
-/// <param name="Bound">The reference-cycle price, or why it is unmodeled.</param>
+/// <param name="Bound">The reference-cycle price, or why it is unmodeled: the representative service of
+/// <paramref name="Kernel"/> when it names one, otherwise the bound the manifest states for the coefficient.</param>
 public sealed record CostCoefficient(
     string Vocabulary,
     string Operation,
@@ -253,8 +254,11 @@ public static class ReferenceScheduleManifest {
                 element: representative,
                 name: "evenSizedMedian"
             );
-            Coefficients = ReadCoefficients(root: document.RootElement);
             Kernels = ReadKernels(root: document.RootElement);
+            Coefficients = ReadCoefficients(
+                kernels: Kernels,
+                root: document.RootElement
+            );
 
             var memory = Section(
                 element: document.RootElement,
@@ -529,37 +533,65 @@ public static class ReferenceScheduleManifest {
         }
         return rows;
     }
-    private static IReadOnlyList<CostCoefficient> ReadCoefficients(JsonElement root) {
+    // A coefficient that names a kernel takes that kernel's representative service as its bound, so the price and the
+    // reason are recorded once, where the capture renders them. Only a coefficient with no kernel states its own bound.
+    private static IReadOnlyList<CostCoefficient> ReadCoefficients(IReadOnlyList<ReferenceKernel> kernels, JsonElement root) {
         if (!root.TryGetProperty(
             propertyName: "coefficients",
             value: out var coefficients
         ) || (coefficients.ValueKind != JsonValueKind.Array)) {
             throw new InvalidOperationException(message: "The reference-schedule manifest registers no coefficients.");
         }
+        var byId = kernels.ToDictionary(
+            comparer: StringComparer.Ordinal,
+            keySelector: kernel => kernel.Id
+        );
         var rows = new List<CostCoefficient>(capacity: coefficients.GetArrayLength());
 
         foreach (var coefficient in coefficients.EnumerateArray()) {
-            var bound = Section(
-                element: coefficient,
-                name: "bound"
-            );
+            var kernel = ((coefficient.TryGetProperty(
+                propertyName: "kernel",
+                value: out var named
+            ) && (named.ValueKind == JsonValueKind.String))
+                ? named.GetString()!
+                : null);
+            CostBound bound;
 
-            rows.Add(item: new(
-                Bound: (bound.TryGetProperty(
+            if (kernel is null) {
+                var stated = Section(
+                    element: coefficient,
+                    name: "bound"
+                );
+
+                bound = (stated.TryGetProperty(
                     propertyName: "known",
                     value: out var known
                 )
                     ? CostBound.Known(cycles: known.GetInt64())
                     : CostBound.Unmodeled(reason: Text(
-                        element: bound,
+                        element: stated,
                         name: "unmodeled"
-                    ))),
-                Kernel: ((coefficient.TryGetProperty(
-                    propertyName: "kernel",
-                    value: out var kernel
-                ) && (kernel.ValueKind == JsonValueKind.String))
-                    ? kernel.GetString()
-                    : null),
+                    )));
+            } else {
+                if (coefficient.TryGetProperty(
+                    propertyName: "bound",
+                    value: out _
+                )) {
+                    throw new InvalidOperationException(message: $"The coefficient for kernel '{kernel}' states a bound; a kernel's coefficients take the kernel's representative service.");
+                }
+                if (!byId.TryGetValue(
+                    key: kernel,
+                    value: out var owner
+                )) {
+                    throw new InvalidOperationException(message: $"A coefficient names kernel '{kernel}', which the manifest does not record.");
+                }
+                bound = (owner.RepresentativeService.IsUnmodeled
+                    ? CostBound.Unmodeled(reason: $"reference kernel {kernel} is unmodeled: {owner.RepresentativeService.Reason}")
+                    : owner.RepresentativeService);
+            }
+            rows.Add(item: new(
+                Bound: bound,
+                Kernel: kernel,
                 NumericKinds: [.. Strings(
                     element: coefficient,
                     name: "numericKinds"

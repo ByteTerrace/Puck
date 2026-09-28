@@ -15,105 +15,84 @@ namespace Puck.Abstractions.Gpu;
 /// </para>
 /// </summary>
 public static class GpuWorkCounting {
-    /// <summary>Wraps every counted member of a compute service bundle. The command-pool factory and the
-    /// surface-transfer factory are passed through unwrapped, because nothing they do is counted.</summary>
-    /// <param name="services">The node's services.</param>
+    /// <summary>Wraps every counted member of a device's services. The command-pool, render-pass and surface-transfer
+    /// factories are passed through unwrapped, because nothing they do is counted.</summary>
+    /// <param name="services">The device's services.</param>
     /// <param name="ledger">The ledger the counts go to.</param>
-    /// <returns>A bundle whose members count into <paramref name="ledger"/>.</returns>
+    /// <returns>A set whose counted members count into <paramref name="ledger"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> or <paramref name="ledger"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="services"/> is already a counting bundle.</exception>
-    public static IGpuComputeServices Wrap(IGpuComputeServices services, GpuWorkLedger ledger) =>
-        new CountingComputeServices(
-            ledger: ledger,
-            services: Guard(
-                instance: services,
+    /// <exception cref="ArgumentException">A member of <paramref name="services"/> already counts.</exception>
+    public static GpuDeviceServices Wrap(GpuDeviceServices services, GpuWorkLedger ledger) {
+        ArgumentNullException.ThrowIfNull(services);
+
+        return new GpuDeviceServices {
+            Bindings = Wrap(
+                bindings: services.Bindings,
                 ledger: ledger
-            )
-        );
-    /// <summary>Wraps a graphics command recorder. Counts command buffers begun, render passes begun, pipeline and
-    /// descriptor-set binds, push-constant bytes, and draws.</summary>
+            ),
+            BufferFactory = Wrap(
+                factory: services.BufferFactory,
+                ledger: ledger
+            ),
+            CommandPoolFactory = services.CommandPoolFactory,
+            Faults = services.Faults,
+            Naming = services.Naming,
+            ImageFactory = Wrap(
+                factory: services.ImageFactory,
+                ledger: ledger
+            ),
+            PipelineFactory = Wrap(
+                factory: services.PipelineFactory,
+                ledger: ledger
+            ),
+            QueueSubmitter = Wrap(
+                ledger: ledger,
+                submitter: services.QueueSubmitter
+            ),
+            Recorder = Wrap(
+                ledger: ledger,
+                recorder: services.Recorder
+            ),
+            RenderPassFactory = services.RenderPassFactory,
+            ShaderModuleFactory = Wrap(
+                factory: services.ShaderModuleFactory,
+                ledger: ledger
+            ),
+            SurfaceTransferFactory = services.SurfaceTransferFactory,
+        };
+    }
+    /// <summary>Wraps a command recorder. Counts command buffers begun, render passes begun, pipeline and
+    /// descriptor-set binds, push-constant bytes, draws, dispatches, indirect dispatches, image, memory, and buffer
+    /// barriers, storage image and buffer clears, and image copies.</summary>
     /// <param name="recorder">The recorder to forward to.</param>
     /// <param name="ledger">The ledger the counts go to.</param>
     /// <returns>The counting recorder.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="recorder"/> or <paramref name="ledger"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="recorder"/> is already counting.</exception>
-    public static IGpuCommandRecorder Wrap(IGpuCommandRecorder recorder, GpuWorkLedger ledger) =>
-        new CountingCommandRecorder(
+    public static IGpuRecorder Wrap(IGpuRecorder recorder, GpuWorkLedger ledger) =>
+        new CountingRecorder(
             inner: Guard(
                 instance: recorder,
                 ledger: ledger
             ),
             ledger: ledger
         );
-    /// <summary>Wraps a compute command recorder. Counts command buffers begun, pipeline and descriptor-set binds,
-    /// push-constant bytes, dispatches, indirect dispatches, and image, memory, and buffer barriers. The wrapper
-    /// implements <see cref="IGpuImageInitializationRecorder"/> and <see cref="IGpuBufferInitializationRecorder"/>
-    /// exactly when <paramref name="recorder"/> does, and counts each clear.</summary>
-    /// <param name="recorder">The recorder to forward to.</param>
+    /// <summary>Wraps a bindings service. Counts every descriptor write, and the descriptor pools and sets created.</summary>
+    /// <param name="bindings">The bindings service to forward to.</param>
     /// <param name="ledger">The ledger the counts go to.</param>
-    /// <returns>The counting recorder.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="recorder"/> or <paramref name="ledger"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="recorder"/> is already counting.</exception>
-    public static IGpuComputeRecorder Wrap(IGpuComputeRecorder recorder, GpuWorkLedger ledger) {
-        _ = Guard(
-            instance: recorder,
-            ledger: ledger
-        );
-
-        return (recorder, recorder) switch {
-            (IGpuImageInitializationRecorder image, IGpuBufferInitializationRecorder buffer) => new CountingClearingComputeRecorder(
-                bufferClears: buffer,
-                imageClears: image,
-                inner: recorder,
-                ledger: ledger
-            ),
-            (IGpuImageInitializationRecorder image, _) => new CountingImageClearingComputeRecorder(
-                imageClears: image,
-                inner: recorder,
-                ledger: ledger
-            ),
-            (_, IGpuBufferInitializationRecorder buffer) => new CountingBufferClearingComputeRecorder(
-                bufferClears: buffer,
-                inner: recorder,
-                ledger: ledger
-            ),
-            _ => new CountingComputeRecorder(
-                inner: recorder,
-                ledger: ledger
-            ),
-        };
-    }
-    /// <summary>Wraps a descriptor allocator. Counts every descriptor write, and the descriptor pools and sets created.</summary>
-    /// <param name="allocator">The allocator to forward to.</param>
-    /// <param name="ledger">The ledger the counts go to.</param>
-    /// <returns>The counting allocator.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="allocator"/> or <paramref name="ledger"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="allocator"/> is already counting.</exception>
-    public static IGpuDescriptorAllocator Wrap(IGpuDescriptorAllocator allocator, GpuWorkLedger ledger) =>
-        new CountingDescriptorAllocator(
+    /// <returns>The counting bindings service.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="bindings"/> or <paramref name="ledger"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="bindings"/> is already counting.</exception>
+    public static IGpuBindings Wrap(IGpuBindings bindings, GpuWorkLedger ledger) =>
+        new CountingBindings(
             inner: Guard(
-                instance: allocator,
+                instance: bindings,
                 ledger: ledger
             ),
             ledger: ledger
         );
-    /// <summary>Wraps a compute pipeline factory. Counts the pipelines created; the pipelines themselves are the
-    /// backend's, unwrapped.</summary>
-    /// <param name="factory">The factory to forward to.</param>
-    /// <param name="ledger">The ledger the counts go to.</param>
-    /// <returns>The counting factory.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="factory"/> or <paramref name="ledger"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="factory"/> is already counting.</exception>
-    public static IGpuComputePipelineFactory Wrap(IGpuComputePipelineFactory factory, GpuWorkLedger ledger) =>
-        new CountingComputePipelineFactory(
-            inner: Guard(
-                instance: factory,
-                ledger: ledger
-            ),
-            ledger: ledger
-        );
-    /// <summary>Wraps a graphics pipeline factory. Counts the pipelines created; the pipelines themselves are the
-    /// backend's, unwrapped.</summary>
+    /// <summary>Wraps a pipeline factory. Counts the compute and graphics pipelines created; the pipelines themselves
+    /// are the backend's, unwrapped.</summary>
     /// <param name="factory">The factory to forward to.</param>
     /// <param name="ledger">The ledger the counts go to.</param>
     /// <returns>The counting factory.</returns>
@@ -160,16 +139,16 @@ public static class GpuWorkCounting {
             ),
             ledger: ledger
         );
-    /// <summary>Wraps a storage-buffer factory. Counts every buffer created. A host-writable buffer comes back
-    /// wrapped, and each <see cref="IGpuStorageBuffer.Write{T}(ReadOnlySpan{T})"/> counts the bytes written; a
-    /// device-local buffer comes back unwrapped.</summary>
+    /// <summary>Wraps a buffer factory. Counts every buffer created. A host-visible buffer comes back wrapped, and each
+    /// <see cref="IGpuStorageBuffer.Write{T}(ReadOnlySpan{T})"/> counts the bytes written, as does the initial data
+    /// one is created with; a device-local buffer comes back unwrapped.</summary>
     /// <param name="factory">The factory to forward to.</param>
     /// <param name="ledger">The ledger the counts go to.</param>
     /// <returns>The counting factory.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="factory"/> or <paramref name="ledger"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="factory"/> is already counting.</exception>
-    public static IGpuStorageBufferFactory Wrap(IGpuStorageBufferFactory factory, GpuWorkLedger ledger) =>
-        new CountingStorageBufferFactory(
+    public static IGpuBufferFactory Wrap(IGpuBufferFactory factory, GpuWorkLedger ledger) =>
+        new CountingBufferFactory(
             inner: Guard(
                 instance: factory,
                 ledger: ledger
@@ -228,130 +207,53 @@ file abstract class CountingWrapper(GpuWorkLedger ledger) {
             column: column
         );
 }
-file sealed class CountingComputeServices(IGpuComputeServices services, GpuWorkLedger ledger) : CountingWrapper(ledger: ledger), IGpuComputeServices {
-    public IGpuComputeCommandPoolFactory CommandPoolFactory { get; } = services.CommandPoolFactory;
-    public IGpuComputePipelineFactory ComputePipelineFactory { get; } = GpuWorkCounting.Wrap(
-        factory: services.ComputePipelineFactory,
-        ledger: ledger
-    );
-    public IGpuComputeRecorder ComputeRecorder { get; } = GpuWorkCounting.Wrap(
-        ledger: ledger,
-        recorder: services.ComputeRecorder
-    );
-    public IGpuDescriptorAllocator DescriptorAllocator { get; } = GpuWorkCounting.Wrap(
-        allocator: services.DescriptorAllocator,
-        ledger: ledger
-    );
-    public IGpuQueueSubmitter QueueSubmitter { get; } = GpuWorkCounting.Wrap(
-        ledger: ledger,
-        submitter: services.QueueSubmitter
-    );
-    public IGpuShaderModuleFactory ShaderModuleFactory { get; } = GpuWorkCounting.Wrap(
-        factory: services.ShaderModuleFactory,
-        ledger: ledger
-    );
-    public IGpuStorageBufferFactory StorageBufferFactory { get; } = GpuWorkCounting.Wrap(
-        factory: services.StorageBufferFactory,
-        ledger: ledger
-    );
-    public IGpuImageFactory ImageFactory { get; } = GpuWorkCounting.Wrap(
-        factory: services.ImageFactory,
-        ledger: ledger
-    );
-    public IGpuSurfaceTransferFactory SurfaceTransferFactory { get; } = services.SurfaceTransferFactory;
-}
-file sealed class CountingCommandRecorder(IGpuCommandRecorder inner, GpuWorkLedger ledger) : CountingWrapper(ledger: ledger), IGpuCommandRecorder {
-    public void BeginCommandBuffer(nint deviceHandle, nint commandBufferHandle) {
-        inner.BeginCommandBuffer(
-            commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle
-        );
+file sealed class CountingRecorder(IGpuRecorder inner, GpuWorkLedger ledger) : CountingWrapper(ledger: ledger), IGpuRecorder {
+    public void BeginCommandBuffer(nint commandBufferHandle) {
+        inner.BeginCommandBuffer(commandBufferHandle: commandBufferHandle);
         Tally(column: GpuWork.CommandBuffersColumn);
     }
-    public void BeginDebugGroup(nint deviceHandle, nint commandBufferHandle, string label) =>
+    public void EndCommandBuffer(nint commandBufferHandle) =>
+        inner.EndCommandBuffer(commandBufferHandle: commandBufferHandle);
+    public void BeginDebugGroup(nint commandBufferHandle, string label) =>
         inner.BeginDebugGroup(
             commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle,
             label: label
         );
-    public void BeginRenderPass(nint deviceHandle, nint commandBufferHandle, IGpuFramebuffer framebuffer) {
+    public void EndDebugGroup(nint commandBufferHandle) =>
+        inner.EndDebugGroup(commandBufferHandle: commandBufferHandle);
+    public void BeginRenderPass(nint commandBufferHandle, IGpuFramebuffer framebuffer, GpuPixelRect? area = null) {
         inner.BeginRenderPass(
+            area: area,
             commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle,
             framebuffer: framebuffer
         );
         Tally(column: GpuWork.RenderPassesColumn);
     }
-    public void BindDescriptorSet(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, nint descriptorSetHandle) {
-        inner.BindDescriptorSet(
+    public void EndRenderPass(nint commandBufferHandle) =>
+        inner.EndRenderPass(commandBufferHandle: commandBufferHandle);
+    public void BindPipeline(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineHandle) {
+        inner.BindPipeline(
+            bindPoint: bindPoint,
             commandBufferHandle: commandBufferHandle,
-            descriptorSetHandle: descriptorSetHandle,
-            deviceHandle: deviceHandle,
-            pipelineLayoutHandle: pipelineLayoutHandle
-        );
-        Tally(column: GpuWork.DescriptorSetBindsColumn);
-    }
-    public void BindGraphicsPipeline(nint deviceHandle, nint commandBufferHandle, nint pipelineHandle) {
-        inner.BindGraphicsPipeline(
-            commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle,
             pipelineHandle: pipelineHandle
         );
         Tally(column: GpuWork.PipelineBindsColumn);
     }
-    public void BindVertexBuffer(nint deviceHandle, nint commandBufferHandle, nint bufferHandle, ulong sizeBytes, uint strideBytes) =>
-        inner.BindVertexBuffer(
-            bufferHandle: bufferHandle,
+    public void BindDescriptorSet(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, uint group, nint descriptorSetHandle) {
+        inner.BindDescriptorSet(
+            bindPoint: bindPoint,
             commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle,
-            sizeBytes: sizeBytes,
-            strideBytes: strideBytes
+            descriptorSetHandle: descriptorSetHandle,
+            group: group,
+            pipelineLayoutHandle: pipelineLayoutHandle
         );
-    public void BindIndexBuffer(nint deviceHandle, nint commandBufferHandle, nint bufferHandle, ulong offsetBytes, ulong sizeBytes, GpuIndexFormat format) =>
-        inner.BindIndexBuffer(
-            bufferHandle: bufferHandle,
-            commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle,
-            format: format,
-            offsetBytes: offsetBytes,
-            sizeBytes: sizeBytes
-        );
-    public void Draw(nint deviceHandle, nint commandBufferHandle, in GpuDrawParameters parameters) {
-        inner.Draw(
-            commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle,
-            parameters: in parameters
-        );
-        Tally(column: GpuWork.DrawsColumn);
+        Tally(column: GpuWork.DescriptorSetBindsColumn);
     }
-    public void DrawIndexed(nint deviceHandle, nint commandBufferHandle, uint indexCount) {
-        inner.DrawIndexed(
-            commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle,
-            indexCount: indexCount
-        );
-        Tally(column: GpuWork.DrawsColumn);
-    }
-    public void EndCommandBuffer(nint deviceHandle, nint commandBufferHandle) =>
-        inner.EndCommandBuffer(
-            commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle
-        );
-    public void EndDebugGroup(nint deviceHandle, nint commandBufferHandle) =>
-        inner.EndDebugGroup(
-            commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle
-        );
-    public void EndRenderPass(nint deviceHandle, nint commandBufferHandle) =>
-        inner.EndRenderPass(
-            commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle
-        );
-    public void PushConstants(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, GpuShaderStage stageFlags, uint offset, ReadOnlySpan<byte> data) {
+    public void PushConstants(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, GpuShaderStage stageFlags, uint offset, ReadOnlySpan<byte> data) {
         inner.PushConstants(
+            bindPoint: bindPoint,
             commandBufferHandle: commandBufferHandle,
             data: data,
-            deviceHandle: deviceHandle,
             offset: offset,
             pipelineLayoutHandle: pipelineLayoutHandle,
             stageFlags: stageFlags
@@ -361,119 +263,97 @@ file sealed class CountingCommandRecorder(IGpuCommandRecorder inner, GpuWorkLedg
             column: GpuWork.PushConstantBytesColumn
         );
     }
-    public void SetScissor(nint deviceHandle, nint commandBufferHandle, int x, int y, uint width, uint height) =>
+    public void BindVertexBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes, uint strideBytes) =>
+        inner.BindVertexBuffer(
+            bufferHandle: bufferHandle,
+            commandBufferHandle: commandBufferHandle,
+            sizeBytes: sizeBytes,
+            strideBytes: strideBytes
+        );
+    public void BindIndexBuffer(nint commandBufferHandle, nint bufferHandle, ulong offsetBytes, ulong sizeBytes, GpuIndexFormat format) =>
+        inner.BindIndexBuffer(
+            bufferHandle: bufferHandle,
+            commandBufferHandle: commandBufferHandle,
+            format: format,
+            offsetBytes: offsetBytes,
+            sizeBytes: sizeBytes
+        );
+    public void SetScissor(nint commandBufferHandle, GpuPixelRect rect) =>
         inner.SetScissor(
             commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle,
-            height: height,
-            width: width,
-            x: x,
-            y: y
+            rect: rect
         );
-}
-file class CountingComputeRecorder(IGpuComputeRecorder inner, GpuWorkLedger ledger) : CountingWrapper(ledger: ledger), IGpuComputeRecorder {
-    public void BeginCommandBuffer(nint deviceHandle, nint commandBufferHandle) {
-        inner.BeginCommandBuffer(
+    public void Draw(nint commandBufferHandle, in GpuDrawParameters parameters) {
+        inner.Draw(
             commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle
+            parameters: in parameters
         );
-        Tally(column: GpuWork.CommandBuffersColumn);
+        Tally(column: GpuWork.DrawsColumn);
     }
-    public void BeginDebugGroup(nint deviceHandle, nint commandBufferHandle, string label) =>
-        inner.BeginDebugGroup(
+    public void DrawIndexed(nint commandBufferHandle, uint indexCount) {
+        inner.DrawIndexed(
             commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle,
-            label: label
+            indexCount: indexCount
         );
-    public void BindComputeDescriptorSet(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, nint descriptorSetHandle) {
-        inner.BindComputeDescriptorSet(
-            commandBufferHandle: commandBufferHandle,
-            descriptorSetHandle: descriptorSetHandle,
-            deviceHandle: deviceHandle,
-            pipelineLayoutHandle: pipelineLayoutHandle
-        );
-        Tally(column: GpuWork.DescriptorSetBindsColumn);
+        Tally(column: GpuWork.DrawsColumn);
     }
-    public void BindComputePipeline(nint deviceHandle, nint commandBufferHandle, nint pipelineHandle) {
-        inner.BindComputePipeline(
-            commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle,
-            pipelineHandle: pipelineHandle
-        );
-        Tally(column: GpuWork.PipelineBindsColumn);
-    }
-    public void Dispatch(nint deviceHandle, nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) {
+    public void Dispatch(nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) {
         inner.Dispatch(
             commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle,
             groupCountX: groupCountX,
             groupCountY: groupCountY,
             groupCountZ: groupCountZ
         );
         Tally(column: GpuWork.DispatchesColumn);
     }
-    public void DispatchIndirect(nint deviceHandle, nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset) {
+    public void DispatchIndirect(nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset) {
         inner.DispatchIndirect(
             argumentBufferHandle: argumentBufferHandle,
             argumentBufferOffset: argumentBufferOffset,
-            commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle
+            commandBufferHandle: commandBufferHandle
         );
         Tally(column: GpuWork.IndirectDispatchesColumn);
     }
-    public void EndCommandBuffer(nint deviceHandle, nint commandBufferHandle) =>
-        inner.EndCommandBuffer(
+    public void ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) {
+        inner.ClearStorageImage(
             commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle
+            format: format,
+            imageHandle: imageHandle
         );
-    public void EndDebugGroup(nint deviceHandle, nint commandBufferHandle) =>
-        inner.EndDebugGroup(
-            commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle
-        );
-    public void MemoryBarrier(nint deviceHandle, nint commandBufferHandle, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) {
-        inner.MemoryBarrier(
-            commandBufferHandle: commandBufferHandle,
-            destinationAccessMask: destinationAccessMask,
-            destinationStageMask: destinationStageMask,
-            deviceHandle: deviceHandle,
-            sourceAccessMask: sourceAccessMask,
-            sourceStageMask: sourceStageMask
-        );
-        Tally(column: GpuWork.MemoryBarriersColumn);
+        Tally(column: GpuWork.ClearsColumn);
     }
-    public void PushConstants(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, GpuShaderStage stageFlags, uint offset, ReadOnlySpan<byte> data) {
-        inner.PushConstants(
+    public void CopyImage(nint commandBufferHandle, nint sourceImageHandle, nint destinationImageHandle, uint width, uint height) {
+        inner.CopyImage(
             commandBufferHandle: commandBufferHandle,
-            data: data,
-            deviceHandle: deviceHandle,
-            offset: offset,
-            pipelineLayoutHandle: pipelineLayoutHandle,
-            stageFlags: stageFlags
+            destinationImageHandle: destinationImageHandle,
+            height: height,
+            sourceImageHandle: sourceImageHandle,
+            width: width
         );
-        Tally(
-            amount: data.Length,
-            column: GpuWork.PushConstantBytesColumn
-        );
+        Tally(column: GpuWork.CopiesColumn);
     }
-    public void TransitionBuffer(nint deviceHandle, nint commandBufferHandle, nint bufferHandle, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) {
-        inner.TransitionBuffer(
+    public void CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes) {
+        inner.CopyBuffer(
+            commandBufferHandle: commandBufferHandle,
+            destinationBufferHandle: destinationBufferHandle,
+            sizeBytes: sizeBytes,
+            sourceBufferHandle: sourceBufferHandle
+        );
+        Tally(column: GpuWork.CopiesColumn);
+    }
+    public void ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) {
+        inner.ClearStorageBuffer(
             bufferHandle: bufferHandle,
             commandBufferHandle: commandBufferHandle,
-            destinationAccessMask: destinationAccessMask,
-            destinationStageMask: destinationStageMask,
-            deviceHandle: deviceHandle,
-            sourceAccessMask: sourceAccessMask,
-            sourceStageMask: sourceStageMask
+            sizeBytes: sizeBytes
         );
-        Tally(column: GpuWork.BufferBarriersColumn);
+        Tally(column: GpuWork.ClearsColumn);
     }
-    public void TransitionImageLayout(nint deviceHandle, nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) {
+    public void TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) {
         inner.TransitionImageLayout(
             commandBufferHandle: commandBufferHandle,
             destinationAccessMask: destinationAccessMask,
             destinationStageMask: destinationStageMask,
-            deviceHandle: deviceHandle,
             imageHandle: imageHandle,
             newLayout: newLayout,
             oldLayout: oldLayout,
@@ -482,220 +362,146 @@ file class CountingComputeRecorder(IGpuComputeRecorder inner, GpuWorkLedger ledg
         );
         Tally(column: GpuWork.ImageBarriersColumn);
     }
-
-    protected void ClearBuffer(IGpuBufferInitializationRecorder bufferClears, nint deviceHandle, nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) {
-        bufferClears.ClearStorageBuffer(
-            bufferHandle: bufferHandle,
+    public void MemoryBarrier(nint commandBufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) {
+        inner.MemoryBarrier(
             commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle,
-            sizeBytes: sizeBytes
+            destinationAccessMask: destinationAccessMask,
+            destinationStageMask: destinationStageMask,
+            sourceAccessMask: sourceAccessMask,
+            sourceStageMask: sourceStageMask
         );
-        Tally(column: GpuWork.ClearsColumn);
+        Tally(column: GpuWork.MemoryBarriersColumn);
     }
-    protected void ClearImage(IGpuImageInitializationRecorder imageClears, nint deviceHandle, nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) {
-        imageClears.ClearStorageImage(
+    public void TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) {
+        inner.TransitionBuffer(
+            bufferHandle: bufferHandle,
             commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle,
-            format: format,
-            imageHandle: imageHandle
+            destinationAccessMask: destinationAccessMask,
+            destinationStageMask: destinationStageMask,
+            sourceAccessMask: sourceAccessMask,
+            sourceStageMask: sourceStageMask
         );
-        Tally(column: GpuWork.ClearsColumn);
+        Tally(column: GpuWork.BufferBarriersColumn);
     }
 }
-file sealed class CountingBufferClearingComputeRecorder(IGpuComputeRecorder inner, IGpuBufferInitializationRecorder bufferClears, GpuWorkLedger ledger)
-    : CountingComputeRecorder(
-        inner: inner,
-        ledger: ledger
-    ), IGpuBufferInitializationRecorder {
-    public void ClearStorageBuffer(nint deviceHandle, nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) =>
-        ClearBuffer(
-            bufferClears: bufferClears,
-            bufferHandle: bufferHandle,
-            commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle,
-            sizeBytes: sizeBytes
-        );
-}
-file sealed class CountingClearingComputeRecorder(IGpuComputeRecorder inner, IGpuImageInitializationRecorder imageClears, IGpuBufferInitializationRecorder bufferClears, GpuWorkLedger ledger)
-    : CountingComputeRecorder(
-        inner: inner,
-        ledger: ledger
-    ), IGpuImageInitializationRecorder, IGpuBufferInitializationRecorder {
-    public void ClearStorageBuffer(nint deviceHandle, nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) =>
-        ClearBuffer(
-            bufferClears: bufferClears,
-            bufferHandle: bufferHandle,
-            commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle,
-            sizeBytes: sizeBytes
-        );
-    public void ClearStorageImage(nint deviceHandle, nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) =>
-        ClearImage(
-            commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle,
-            format: format,
-            imageClears: imageClears,
-            imageHandle: imageHandle
-        );
-}
-file sealed class CountingImageClearingComputeRecorder(IGpuComputeRecorder inner, IGpuImageInitializationRecorder imageClears, GpuWorkLedger ledger)
-    : CountingComputeRecorder(
-        inner: inner,
-        ledger: ledger
-    ), IGpuImageInitializationRecorder {
-    public void ClearStorageImage(nint deviceHandle, nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) =>
-        ClearImage(
-            commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle,
-            format: format,
-            imageClears: imageClears,
-            imageHandle: imageHandle
-        );
-}
-file sealed class CountingComputePipelineFactory(IGpuComputePipelineFactory inner, GpuWorkLedger ledger) : CountingWrapper(ledger: ledger), IGpuComputePipelineFactory {
-    public IGpuComputePipeline Create(IGpuDeviceContext deviceContext, IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) =>
-        Created(
-            created: inner.Create(
-                computeShaderModule: computeShaderModule,
-                description: description,
-                deviceContext: deviceContext
-            ),
-            lifetimeIndex: GpuWork.PipelinesCreatedIndex
-        );
-}
-file sealed class CountingDescriptorAllocator(IGpuDescriptorAllocator inner, GpuWorkLedger ledger) : CountingWrapper(ledger: ledger), IGpuDescriptorAllocator {
-    public nint AllocateSet(nint deviceHandle, nint poolHandle, nint descriptorSetLayoutHandle) =>
+file sealed class CountingBindings(IGpuBindings inner, GpuWorkLedger ledger) : CountingWrapper(ledger: ledger), IGpuBindings {
+    public nint AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle, in GpuObjectName name) =>
         Created(
             created: inner.AllocateSet(
                 descriptorSetLayoutHandle: descriptorSetLayoutHandle,
-                deviceHandle: deviceHandle,
+                name: name,
                 poolHandle: poolHandle
             ),
             lifetimeIndex: GpuWork.DescriptorSetsCreatedIndex
         );
-    public nint CreatePool(nint deviceHandle, in GpuDescriptorPoolSizes sizes) =>
+
+    public long HeapReleaseRevision => inner.HeapReleaseRevision;
+
+    public bool CanAdmit(string owner, IReadOnlyList<GpuDescriptorPoolSizes> pools, out string refusal) =>
+        inner.CanAdmit(
+            owner: owner,
+            pools: pools,
+            refusal: out refusal
+        );
+    public nint CreatePool(in GpuDescriptorPoolSizes sizes, in GpuObjectName name) =>
         Created(
-            created: inner.CreatePool(
-                deviceHandle: deviceHandle,
-                sizes: in sizes
-            ),
+            created: inner.CreatePool(name: name, sizes: in sizes),
             lifetimeIndex: GpuWork.DescriptorPoolsCreatedIndex
         );
-    public nint CreateSampler(nint deviceHandle, GpuSamplerFilter filter = GpuSamplerFilter.Linear) =>
-        inner.CreateSampler(
-            deviceHandle: deviceHandle,
-            filter: filter
+    public nint CreateSampler(GpuSamplerFilter filter = GpuSamplerFilter.Linear) =>
+        inner.CreateSampler(filter: filter);
+    public void DestroyPool(nint poolHandle) =>
+        inner.DestroyPool(poolHandle: poolHandle);
+    public void DestroySampler(nint samplerHandle) =>
+        inner.DestroySampler(samplerHandle: samplerHandle);
+    public void WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride) {
+        inner.WriteBuffer(
+            binding: binding,
+            bufferHandle: bufferHandle,
+            bufferSize: bufferSize,
+            descriptorSetHandle: descriptorSetHandle,
+            elementStride: elementStride,
+            kind: kind
         );
-    public void DestroyPool(nint deviceHandle, nint poolHandle) =>
-        inner.DestroyPool(
-            deviceHandle: deviceHandle,
-            poolHandle: poolHandle
+        Tally(column: GpuWork.DescriptorWritesColumn);
+    }
+    public void WriteConstantBuffer(nint descriptorSetHandle, uint binding, uint arrayElement, nint bufferHandle, ulong bufferSize) {
+        inner.WriteConstantBuffer(
+            arrayElement: arrayElement,
+            binding: binding,
+            bufferHandle: bufferHandle,
+            bufferSize: bufferSize,
+            descriptorSetHandle: descriptorSetHandle
         );
-    public void DestroySampler(nint deviceHandle, nint samplerHandle) =>
-        inner.DestroySampler(
-            deviceHandle: deviceHandle,
-            samplerHandle: samplerHandle
-        );
-    public void WriteCombinedImageSampler(nint deviceHandle, nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) {
-        inner.WriteCombinedImageSampler(
+        Tally(column: GpuWork.DescriptorWritesColumn);
+    }
+    public void WriteSampledImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) {
+        inner.WriteSampledImage(
             arrayElement: arrayElement,
             binding: binding,
             descriptorSetHandle: descriptorSetHandle,
-            deviceHandle: deviceHandle,
-            imageViewHandle: imageViewHandle,
-            samplerHandle: samplerHandle
-        );
-        Tally(column: GpuWork.DescriptorWritesColumn);
-    }
-    public void WriteRawBuffer(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, bool writable) {
-        inner.WriteRawBuffer(
-            binding: binding,
-            bufferHandle: bufferHandle,
-            bufferSize: bufferSize,
-            descriptorSetHandle: descriptorSetHandle,
-            deviceHandle: deviceHandle,
-            writable: writable
-        );
-        Tally(column: GpuWork.DescriptorWritesColumn);
-    }
-    public void WriteStorageBuffer(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize) {
-        inner.WriteStorageBuffer(
-            binding: binding,
-            bufferHandle: bufferHandle,
-            bufferSize: bufferSize,
-            descriptorSetHandle: descriptorSetHandle,
-            deviceHandle: deviceHandle
-        );
-        Tally(column: GpuWork.DescriptorWritesColumn);
-    }
-    public void WriteStorageBufferReadOnly(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize) {
-        inner.WriteStorageBufferReadOnly(
-            binding: binding,
-            bufferHandle: bufferHandle,
-            bufferSize: bufferSize,
-            descriptorSetHandle: descriptorSetHandle,
-            deviceHandle: deviceHandle
-        );
-        Tally(column: GpuWork.DescriptorWritesColumn);
-    }
-    public void WriteStorageBufferReadWrite(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize) {
-        inner.WriteStorageBufferReadWrite(
-            binding: binding,
-            bufferHandle: bufferHandle,
-            bufferSize: bufferSize,
-            descriptorSetHandle: descriptorSetHandle,
-            deviceHandle: deviceHandle
-        );
-        Tally(column: GpuWork.DescriptorWritesColumn);
-    }
-    public void WriteStorageImage(nint deviceHandle, nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) {
-        inner.WriteStorageImage(
-            arrayElement: arrayElement,
-            binding: binding,
-            descriptorSetHandle: descriptorSetHandle,
-            deviceHandle: deviceHandle,
             imageViewHandle: imageViewHandle
         );
         Tally(column: GpuWork.DescriptorWritesColumn);
     }
-
-    private void CountWrite() =>
+    public void WriteSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint samplerHandle) {
+        inner.WriteSampler(
+            arrayElement: arrayElement,
+            binding: binding,
+            descriptorSetHandle: descriptorSetHandle,
+            samplerHandle: samplerHandle
+        );
         Tally(column: GpuWork.DescriptorWritesColumn);
+    }
+    public void WriteStorageImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) {
+        inner.WriteStorageImage(
+            arrayElement: arrayElement,
+            binding: binding,
+            descriptorSetHandle: descriptorSetHandle,
+            imageViewHandle: imageViewHandle
+        );
+        Tally(column: GpuWork.DescriptorWritesColumn);
+    }
 }
 file sealed class CountingPipelineFactory(IGpuPipelineFactory inner, GpuWorkLedger ledger) : CountingWrapper(ledger: ledger), IGpuPipelineFactory {
-    public IGpuPipeline Create(IGpuDeviceContext deviceContext, IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description, uint width, uint height) =>
+    public IGpuComputePipeline Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description, in GpuObjectName name) =>
+        Created(
+            created: inner.Create(
+                computeShaderModule: computeShaderModule,
+                description: description,
+                name: name
+            ),
+            lifetimeIndex: GpuWork.PipelinesCreatedIndex
+        );
+    public IGpuPipeline Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description, in GpuObjectName name) =>
         Created(
             created: inner.Create(
                 description: description,
-                deviceContext: deviceContext,
                 fragmentShaderModule: fragmentShaderModule,
-                height: height,
+                name: name,
                 renderPass: renderPass,
-                vertexShaderModule: vertexShaderModule,
-                width: width
+                vertexShaderModule: vertexShaderModule
             ),
             lifetimeIndex: GpuWork.PipelinesCreatedIndex
         );
 }
 file sealed class CountingQueueSubmitter(IGpuQueueSubmitter inner, GpuWorkLedger ledger) : CountingWrapper(ledger: ledger), IGpuQueueSubmitter {
-    public IGpuSubmissionFence CreateSubmissionFence(IGpuDeviceContext deviceContext) =>
+    public void AddExternalWait(GpuExternalWait wait) =>
+        inner.AddExternalWait(wait: wait);
+    public IGpuSubmissionFence CreateSubmissionFence() =>
         new GpuWorkCountingFence(
-            inner: inner.CreateSubmissionFence(deviceContext: deviceContext),
+            inner: inner.CreateSubmissionFence(),
             ledger: Ledger
         );
-    public void Submit(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles) {
-        inner.Submit(
-            commandBufferHandles: commandBufferHandles,
-            deviceContext: deviceContext
-        );
+    public void Submit(ReadOnlySpan<nint> commandBufferHandles) {
+        inner.Submit(commandBufferHandles: commandBufferHandles);
         _ = Ledger.Seal(fence: null);
     }
-    public void Submit(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) {
+    public void Submit(ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) {
         var counting = (fence as GpuWorkCountingFence);
 
         inner.Submit(
             commandBufferHandles: commandBufferHandles,
-            deviceContext: deviceContext,
             fence: (counting?.Inner ?? fence)
         );
 
@@ -708,20 +514,16 @@ file sealed class CountingQueueSubmitter(IGpuQueueSubmitter inner, GpuWorkLedger
 
         owned?.ArmedSubmission = submission;
     }
-    public void SubmitAndWait(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles) {
-        inner.SubmitAndWait(
-            commandBufferHandles: commandBufferHandles,
-            deviceContext: deviceContext
-        );
+    public void SubmitAndWait(ReadOnlySpan<nint> commandBufferHandles) {
+        inner.SubmitAndWait(commandBufferHandles: commandBufferHandles);
         Ledger.Complete(submission: Ledger.Seal(fence: null));
     }
 }
 file sealed class CountingShaderModuleFactory(IGpuShaderModuleFactory inner, GpuWorkLedger ledger) : CountingWrapper(ledger: ledger), IGpuShaderModuleFactory {
-    public IGpuShaderModule Create(IGpuDeviceContext deviceContext, GpuShaderStage stage, ReadOnlyMemory<byte> bytecode) =>
+    public IGpuShaderModule Create(GpuShaderStage stage, ReadOnlyMemory<byte> bytecode) =>
         Created(
             created: inner.Create(
                 bytecode: bytecode,
-                deviceContext: deviceContext,
                 stage: stage
             ),
             lifetimeIndex: GpuWork.ShaderModulesCreatedIndex
@@ -753,35 +555,52 @@ file sealed class CountingStorageBuffer(IGpuStorageBuffer inner, GpuWorkLedger l
             column: GpuWork.HostVisibleUploadBytesColumn
         );
 }
-file sealed class CountingStorageBufferFactory(IGpuStorageBufferFactory inner, GpuWorkLedger ledger) : CountingWrapper(ledger: ledger), IGpuStorageBufferFactory {
-    public IGpuStorageBuffer Create(IGpuDeviceContext deviceContext, ulong sizeBytes) =>
-        WrapHostWritable(buffer: inner.Create(
-            deviceContext: deviceContext,
-            sizeBytes: sizeBytes
-        ));
-    public IGpuBuffer CreateDeviceLocal(IGpuDeviceContext deviceContext, ulong sizeBytes) =>
+file sealed class CountingBufferFactory(IGpuBufferFactory inner, GpuWorkLedger ledger) : CountingWrapper(ledger: ledger), IGpuBufferFactory {
+    public IGpuBuffer CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) =>
         Created(
             created: inner.CreateDeviceLocal(
-                deviceContext: deviceContext,
-                sizeBytes: sizeBytes
+                name: name,
+                sizeBytes: sizeBytes,
+                usage: usage
             ),
             lifetimeIndex: GpuWork.BuffersCreatedIndex
         );
-    public IGpuBuffer CreateDeviceLocalIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes) =>
-        Created(
-            created: inner.CreateDeviceLocalIndirectArgs(
-                deviceContext: deviceContext,
-                sizeBytes: sizeBytes
-            ),
-            lifetimeIndex: GpuWork.BuffersCreatedIndex
-        );
-    public IGpuStorageBuffer CreateIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes) =>
-        WrapHostWritable(buffer: inner.CreateIndirectArgs(
-            deviceContext: deviceContext,
-            sizeBytes: sizeBytes
+    public IGpuStorageBuffer CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) =>
+        WrapHostVisible(buffer: inner.CreateHostVisible(
+            name: name,
+            sizeBytes: sizeBytes,
+            usage: usage
+        ));
+    public IGpuStorageBuffer CreateHostVisibleDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) =>
+        WrapHostVisible(buffer: inner.CreateHostVisibleDeviceLocal(
+            name: name,
+            sizeBytes: sizeBytes,
+            usage: usage
+        ));
+    public IGpuStorageBuffer CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage, in GpuObjectName name) {
+        var buffer = WrapHostVisible(buffer: inner.CreateHostVisible(
+            data: data,
+            name: name,
+            usage: usage
         ));
 
-    private CountingStorageBuffer WrapHostWritable(IGpuStorageBuffer buffer) =>
+        Tally(
+            amount: data.Length,
+            column: GpuWork.HostVisibleUploadBytesColumn
+        );
+
+        return buffer;
+    }
+    public IGpuReadbackBuffer CreateReadback(ulong sizeBytes, in GpuObjectName name) =>
+        Created(
+            created: inner.CreateReadback(
+                name: name,
+                sizeBytes: sizeBytes
+            ),
+            lifetimeIndex: GpuWork.BuffersCreatedIndex
+        );
+
+    private CountingStorageBuffer WrapHostVisible(IGpuStorageBuffer buffer) =>
         Created(
             created: new CountingStorageBuffer(
                 inner: buffer,
@@ -791,13 +610,23 @@ file sealed class CountingStorageBufferFactory(IGpuStorageBufferFactory inner, G
         );
 }
 file sealed class CountingImageFactory(IGpuImageFactory inner, GpuWorkLedger ledger) : CountingWrapper(ledger: ledger), IGpuImageFactory {
-    public IGpuImage Create(IGpuDeviceContext deviceContext, GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) =>
+    public IGpuImage Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, in GpuObjectName name) =>
         Created(
             created: inner.Create(
-                deviceContext: deviceContext,
                 format: format,
                 height: height,
+                name: name,
                 usage: usage,
+                width: width
+            ),
+            lifetimeIndex: GpuWork.ImagesCreatedIndex
+        );
+    public IGpuImage CreateDepth(in GpuDepthAttachment attachment, uint width, uint height, in GpuObjectName name) =>
+        Created(
+            created: inner.CreateDepth(
+                attachment: in attachment,
+                height: height,
+                name: name,
                 width: width
             ),
             lifetimeIndex: GpuWork.ImagesCreatedIndex

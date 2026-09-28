@@ -59,20 +59,30 @@ public readonly record struct ScreenPadSnapshot(int ScreenIndex, MachinePadState
 /// command-apply window and <see cref="FoldTick"/> reads it during <see cref="WorldServer.Step"/>, both on the
 /// launcher's window-pump thread, so no lock guards this state.</para>
 /// </remarks>
-public sealed class WorldEngagement {
+public sealed partial class WorldEngagement {
+    private readonly WorldChannelTable m_channels;
     private readonly WorldPadElement?[] m_defaultPad;
+    private readonly Func<WorldDefinition> m_definition;
     private readonly IWorldGrantsView m_grants;
     private readonly WorldPopulation m_population;
 
-    // The compiled pad map of every kit that declares one (channel ordinal -> pad element, or null when unmapped),
-    // resolved ONCE at construction from definition.Kits, plus the engine's baked default table a screen naming no
-    // kit falls back to. An application's Kit names a row here; a null Kit on a screen target reads the default,
-    // and a null Kit on a body target never reaches a pad at all (pure passthrough).
-    private readonly Dictionary<string, WorldPadElement?[]> m_kitPads = new(comparer: StringComparer.Ordinal);
-    // Per-screen authored reach mask and pad-kit name, resolved ONCE at construction from each screen's
-    // WorldScreenRoute — what Compose stamps onto a screen application.
-    private readonly Dictionary<int, ChannelReachMask> m_screenReach = new();
-    private readonly Dictionary<int, string?> m_screenKit = new();
+    // The policy cache, the one place a screen's or a kit's engagement policy is compiled: each entry is compiled from
+    // the live definition's row and kept only while that definition still holds the very same row object, so a live
+    // edit (world.row.set, a reload) replaces the row and the next read compiles the new one, once. A screen's entry is
+    // its authored reach mask and pad-kit name (what Compose stamps and FoldTick reads) and its light gun's mapping
+    // (what FoldTick aims through); a kit's is its compiled pad map (channel ordinal -> pad element, or null when
+    // unmapped). A kit that declares no pad, like a screen naming no kit, reads the engine's baked default table; a null
+    // Kit on a body target never reaches a pad at all (pure passthrough). Channels are boot-fixed, so the channel table
+    // is compiled once.
+    private readonly Dictionary<int, (WorldScreen Row, ScreenPolicy Policy)> m_screenPolicies = new();
+    private readonly Dictionary<string, (WorldKit Row, WorldPadElement?[] Pad)> m_kitPads = new(comparer: StringComparer.Ordinal);
+    // The live definition's screen and kit rows by index and name (IndexRows), for the section objects they were read from.
+    private readonly Dictionary<int, WorldScreen> m_screenRows = new();
+    private readonly Dictionary<string, WorldKit> m_kitRows = new(comparer: StringComparer.Ordinal);
+
+    private WorldKitsSection? m_indexedKits;
+    private IReadOnlyList<WorldScreen>? m_indexedScreens;
+
     // Reused scratch for the per-frame PlayersOn/DissolveScreen collect+prune, so the hot path allocates nothing
     // after warmup.
     private readonly List<Principal> m_holderScratch = new();
@@ -191,6 +201,9 @@ public sealed class WorldEngagement {
 
         return false;
     }
+    // Whether a principal's Index is its own body — only a seat's and a peer's is. An application set is written for a
+    // body's participant, so any other identity (a session's ordinal, the console, an addon) owns no set here.
+    private static bool OwnsABody(Principal principal) => (principal.Kind is PrincipalKind.Seat or PrincipalKind.Peer);
     // The principal a 0-based entity index resolves to — a seat slot below the local seat count, a population peer
     // identity above it (see the class remarks: no roster indirection is needed on the read half).
     private Principal PrincipalOf(int index) => ((index < m_population.LocalSeatCount)
@@ -209,7 +222,10 @@ public sealed class WorldEngagement {
     // The shared check-then-mutate decision Dissolve applies and PeekDissolve reports. Every dissolved target is
     // Control-checked against the actor — the identical pair composing it required — before anything is written.
     private ControlOutcome ResolveDissolve(int entityIndex, Principal actingPrincipal, Principal targetPrincipal, bool apply) {
-        if (Body(index: entityIndex) is null) {
+        if (
+            !OwnsABody(principal: targetPrincipal) ||
+            (Body(index: entityIndex) is null)
+        ) {
             return ControlOutcome.NotApplied;
         }
 
@@ -340,7 +356,8 @@ public sealed class WorldEngagement {
     /// no route row to author them from). Screen policy (engageable, proximity, and machine presence) remains the
     /// caller's concern; <see cref="WorldServer.ApplyCommand"/> and its context-button probe share the authoritative
     /// server-side policy check. Denied when the actor lacks Control, or when the entity index holds no live body —
-    /// either way nothing is mutated.</summary>
+    /// either way nothing is mutated, and so is a target identity that owns no body (a session, the console, an
+    /// addon), whose index names none.</summary>
     /// <param name="entityIndex">The 0-based entity index whose intent the composed application carries.</param>
     /// <param name="target">The application target subject — a screen or a body.</param>
     /// <param name="exclusive">Whether composing drops the own-body application (capture) or retains it (mirror).</param>
@@ -357,7 +374,10 @@ public sealed class WorldEngagement {
             return false;
         }
 
-        if (Body(index: entityIndex) is null) {
+        if (
+            !OwnsABody(principal: targetPrincipal) ||
+            (Body(index: entityIndex) is null)
+        ) {
             return false;
         }
 
@@ -388,18 +408,15 @@ public sealed class WorldEngagement {
             m_composeScratch.Add(item: ControlApplication.OwnBody(bodyIndex: targetPrincipal.Index));
         }
 
+        // A screen application records the screen's policy as it stands at compose, for the echoes and the set's
+        // identity; FoldTick reads the live policy again, so a later edit of the screen still reaches the fold.
+        var policy = ((target.Kind == GrantSubjectKind.Screen)
+            ? PolicyOf(screenIndex: target.Value)
+            : null);
+
         m_composeScratch.Add(item: new ControlApplication(
-            Kit: ((target.Kind == GrantSubjectKind.Screen)
-            ? m_screenKit.GetValueOrDefault(key: target.Value)
-            : null),
-            Reach: ((target.Kind == GrantSubjectKind.Screen)
-            ? (m_screenReach.TryGetValue(
-                    key: target.Value,
-                    value: out var reach
-                )
-                ? reach
-                : ChannelReachMask.All)
-            : ChannelReachMask.All),
+            Kit: policy?.Kit,
+            Reach: (policy?.Reach ?? ChannelReachMask.All),
             Target: target
         ));
 
@@ -470,17 +487,21 @@ public sealed class WorldEngagement {
     }
     /// <summary>Folds every applied body's channel-masked intent onto its targets for this tick — a screen member
     /// merges into <see cref="m_screenPads"/> (the multiplayer-cabinet OR-merge,
-    /// <see cref="MachinePadState.Merge"/>); a body member queues a co-drive contribution into
+    /// <see cref="MachinePadState.Merge"/>), its light gun aimed where the body's pointer ray maps on a
+    /// <see cref="SourceDestination.Simulation"/> screen (<see cref="Aim"/>); a body member queues a co-drive contribution into
     /// <see cref="BodyContributions"/> for <see cref="WorldServer.Step"/> to enqueue onto the target's next tick,
     /// through the ordinary Drive-gated contribution path. ONE loop over the whole population covers both, and
     /// re-asserts each visited body's capture latch from the same set it folds (see the class remarks) — the
     /// own-body member is visited like any other and simply has nowhere to route, because the avatar's own
     /// integration IS its delivery. Run once per <see cref="WorldServer.Step"/>, before the tick's
     /// <see cref="Protocol.WorldSnapshot"/> is built, so <see cref="BuildPadSnapshot"/> reflects this tick's
-    /// applied intents.</summary>
-    public void FoldTick() {
+    /// applied intents. A tick that replays recorded input stages no portal forward: the destinations beyond a portal
+    /// are not replaying with this world.</summary>
+    /// <param name="replaysInput">Whether this tick's input was fed from a replay tape (<see cref="WorldServer.ReplaysInput"/>).</param>
+    public void FoldTick(bool replaysInput) {
         m_screenPads.Clear();
         m_bodyContributions.Clear();
+        m_portalForwards.Clear();
 
         for (var index = 0; (index < m_population.Capacity); index++) {
             if (m_population.EntryBody(index: index) is not { } body) {
@@ -507,16 +528,36 @@ public sealed class WorldEngagement {
                     continue;
                 }
 
-                var masked = ApplyMask(
-                    intent: body.EngagedIntent,
-                    mask: application.Reach
-                );
-
                 if (application.Target.Kind == GrantSubjectKind.Screen) {
-                    var pad = Translate(
-                        intent: masked,
-                        kit: application.Kit
+                    // The screen's live policy, never the one stamped at compose, so an edit of the screen or its kit
+                    // reaches the next fold. A screen the document no longer declares routes nowhere.
+                    // A screen with no row of its own may be a portal face, which routes the body's input through its
+                    // glass to the session the face observes (StagePortalForward).
+                    if (PolicyOf(screenIndex: application.Target.Value) is not { } policy) {
+                        if (!replaysInput) {
+                            StagePortalForward(
+                                intent: body.EngagedIntent,
+                                principal: principal,
+                                screenIndex: application.Target.Value
+                            );
+                        }
+
+                        continue;
+                    }
+
+                    var masked = ApplyMask(
+                        intent: body.EngagedIntent,
+                        mask: policy.Reach
                     );
+                    var pad = (Translate(
+                        intent: masked,
+                        kit: policy.Kit
+                    ) with {
+                        Pointer = AimThrough(
+                            mapping: policy.Aim,
+                            ray: masked.SourceRay
+                        ),
+                    });
 
                     m_screenPads[application.Target.Value] = (m_screenPads.TryGetValue(
                         key: application.Target.Value,
@@ -532,12 +573,49 @@ public sealed class WorldEngagement {
                     m_bodyContributions.Add(item: new BodyRouteContribution(
                         TargetBody: application.Target.Value,
                         Principal: principal,
-                        Intent: masked
+                        Intent: ApplyMask(
+                            intent: body.EngagedIntent,
+                            mask: application.Reach
+                        )
                     ));
                 }
             }
         }
     }
+    /// <summary>Returns where a pointer ray aims a screen's light gun, mapped in fixed point from the live document's
+    /// screen row alone through <see cref="WorldScreenMappings.Normalized"/>, the mapping the <c>$pointer:</c> rule read
+    /// runs: the hit's source-normalized fractions while the ray lands on the source, and <see cref="MachinePointer.Off"/>
+    /// for no ray, a miss, the bezel, a screen the document does not declare, or a screen whose route input is not
+    /// <see cref="SourceDestination.Simulation"/>.</summary>
+    /// <param name="screenIndex">The engine screen index.</param>
+    /// <param name="ray">The applied body's pointer ray this tick, or <see langword="null"/> for none.</param>
+    /// <returns>The light gun's aim.</returns>
+    public MachinePointer Aim(int screenIndex, SourceRay? ray) => AimThrough(
+        mapping: PolicyOf(screenIndex: screenIndex)?.Aim,
+        ray: ray
+    );
+
+    // Maps a pointer ray through a screen's light-gun mapping (ScreenPolicy.Aim); off for no mapping, no ray, or a hit
+    // off the source.
+    private static MachinePointer AimThrough(SourceMapping? mapping, SourceRay? ray) {
+        if (
+            (mapping is not { } normalized) ||
+            (ray is not { } pointer)
+        ) {
+            return MachinePointer.Off;
+        }
+
+        var hit = normalized.MapRay(ray: pointer);
+
+        return (hit.IsOnSource
+            ? new MachinePointer(
+                x: checked((ushort)hit.Coordinate.X.Value),
+                y: checked((ushort)hit.Coordinate.Y.Value)
+            )
+            : MachinePointer.Off
+        );
+    }
+
     /// <summary>Returns the read-only twin of <see cref="Dissolve"/>: computes the identical outcome without
     /// mutating anything. The client submits <see cref="WorldCommand.DissolveControl"/> for the actual
     /// (server-authoritative) mutation regardless of what this reports — the command's own apply re-derives the same
@@ -555,6 +633,17 @@ public sealed class WorldEngagement {
             entityIndex: entityIndex,
             targetPrincipal: targetPrincipal
         );
+    /// <summary>Returns where this tick's merged pad aims <paramref name="screenIndex"/>'s light gun — the
+    /// <c>screen.state</c> read-back of <see cref="FoldTick"/>'s aim.</summary>
+    /// <param name="screenIndex">The engine screen index.</param>
+    /// <returns>The aim, or <see cref="MachinePointer.Off"/> when no application reaches the screen this tick.</returns>
+    public MachinePointer PointerOn(int screenIndex) => (m_screenPads.TryGetValue(
+        key: screenIndex,
+        value: out var pad
+    )
+        ? pad.Pointer
+        : MachinePointer.Off
+    );
     /// <summary>Returns every entity currently applied to <paramref name="screenIndex"/>, reported as 1-based display
     /// numbers (1..128, matching the <c>player.*</c> verb convention — a Seat/Peer principal's
     /// <see cref="Principal.Index"/> plus one) alongside whether the application captures it (its avatar idle,
@@ -599,13 +688,7 @@ public sealed class WorldEngagement {
     /// <param name="kit">The application's kit name, or <see langword="null"/> for the engine default.</param>
     /// <returns>The controller image the intent presses.</returns>
     public MachinePadState Translate(PlayerIntent intent, string? kit) {
-        var table = (((kit is { Length: > 0 } name) && m_kitPads.TryGetValue(
-            key: name,
-            value: out var resolved
-        ))
-            ? resolved
-            : m_defaultPad
-        );
+        var table = PadOf(kit: kit);
         var buttons = MachineButtons.None;
         var leftStick = Vector2.Zero;
         var rightStick = Vector2.Zero;
@@ -648,37 +731,169 @@ public sealed class WorldEngagement {
     /// sets live in.</summary>
     /// <param name="population">The entity table.</param>
     /// <param name="grants">The capability table's view (application set reads/writes plus the Control-over-target check).</param>
-    /// <param name="definition">The world definition, read once for its boot-fixed channel table, each kit's pad
-    /// map, and each screen's authored application policy (channel reach, pad kit).</param>
+    /// <param name="definition">Reads the live world definition: its boot-fixed channel table once, here, and each
+    /// screen's application policy (channel reach, pad kit) and each kit's pad map whenever a fold or a compose needs
+    /// them, compiled again only after a live edit replaces the row.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldEngagement(WorldPopulation population, IWorldGrantsView grants, WorldDefinition definition) {
+    public WorldEngagement(WorldPopulation population, IWorldGrantsView grants, Func<WorldDefinition> definition) {
         ArgumentNullException.ThrowIfNull(argument: population);
         ArgumentNullException.ThrowIfNull(argument: grants);
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         m_population = population;
         m_grants = grants;
-
-        var channels = WorldChannelTable.Compile(channels: definition.Channels);
-
+        m_definition = definition;
+        m_channels = WorldChannelTable.Compile(channels: definition().Channels);
         m_defaultPad = CompileDefaultPad();
+    }
 
-        foreach (var kit in definition.Kits) {
-            if (kit.PadRaw is { Count: > 0 }) {
-                m_kitPads[kit.Name] = CompilePad(
-                    channels: channels,
-                    pad: kit.Pad
+    /// <summary>Returns an application as the fold delivers it now: a screen member carries its screen's live policy
+    /// (the reach and pad kit the document's row authors today, which <see cref="FoldTick"/> reads), not the policy it
+    /// recorded at compose; any other member, or a screen the document no longer declares, is returned as held.</summary>
+    /// <param name="application">A member of an application set.</param>
+    /// <returns>The member with the policy the fold applies.</returns>
+    public ControlApplication Live(ControlApplication application) =>
+        (((application.Target.Kind == GrantSubjectKind.Screen) && (PolicyOf(screenIndex: application.Target.Value) is { } policy))
+            ? (application with {
+                Kit = policy.Kit,
+                Reach = policy.Reach,
+            })
+            : application);
+
+    // Indexes the live definition's screen and kit rows by index and name, each again only when its own section object
+    // has changed: only a screen or kit mutation (or a reload) replaces those, while every other install, a state
+    // publication included, carries them over, so a steady tick indexes nothing. The first row of an index or name wins,
+    // as a scan would find it. A screen or kit the new section no longer declares leaves the policy cache, so live
+    // edits that rename or remove rows never grow it (removing while enumerating a Dictionary's keys is allowed).
+    private void IndexRows() {
+        var definition = m_definition();
+
+        if (!ReferenceEquals(
+            objA: definition.ScreensRaw,
+            objB: m_indexedScreens
+        )) {
+            m_indexedScreens = definition.ScreensRaw;
+            m_screenRows.Clear();
+
+            var screens = definition.Screens;
+
+            for (var index = 0; (index < screens.Count); index++) {
+                _ = m_screenRows.TryAdd(
+                    key: screens[index].Index,
+                    value: screens[index]
                 );
             }
+            foreach (var screenIndex in m_screenPolicies.Keys) {
+                if (!m_screenRows.ContainsKey(key: screenIndex)) {
+                    _ = m_screenPolicies.Remove(key: screenIndex);
+                }
+            }
+        }
+        if (!ReferenceEquals(
+            objA: definition.KitsRaw,
+            objB: m_indexedKits
+        )) {
+            m_indexedKits = definition.KitsRaw;
+            m_kitRows.Clear();
+
+            var kits = definition.Kits;
+
+            for (var index = 0; (index < kits.Count); index++) {
+                _ = m_kitRows.TryAdd(
+                    key: kits[index].Name,
+                    value: kits[index]
+                );
+            }
+            foreach (var kitName in m_kitPads.Keys) {
+                if (!m_kitRows.ContainsKey(key: kitName)) {
+                    _ = m_kitPads.Remove(key: kitName);
+                }
+            }
+        }
+    }
+    // A screen's application policy from the live definition's row for that index, compiled once per row object; null
+    // when the definition declares no screen at that index. Allocates nothing once the row's entry is compiled.
+    private ScreenPolicy? PolicyOf(int screenIndex) {
+        IndexRows();
+
+        if (!m_screenRows.TryGetValue(
+            key: screenIndex,
+            value: out var screen
+        )) {
+            return null;
+        }
+        if (
+            m_screenPolicies.TryGetValue(
+                key: screenIndex,
+                value: out var cached
+            ) &&
+            ReferenceEquals(
+                objA: cached.Row,
+                objB: screen
+            )
+        ) {
+            return cached.Policy;
         }
 
-        foreach (var screen in definition.Screens) {
-            m_screenKit[screen.Index] = screen.Route.Kit;
-            m_screenReach[screen.Index] = CompileReach(
-                channels: channels,
+        var mapping = ((screen.Route.Input == SourceDestination.Simulation)
+            ? WorldScreenMappings.Normalized(screen: screen)
+            : null
+        );
+        var policy = new ScreenPolicy(
+            Aim: ((mapping?.TryValidate(refusal: out _) ?? false)
+                ? mapping
+                : null
+            ),
+            Kit: screen.Route.Kit,
+            Reach: CompileReach(
+                channels: m_channels,
                 names: screen.Route.Channels
-            );
+            )
+        );
+
+        m_screenPolicies[screenIndex] = (screen, policy);
+
+        return policy;
+    }
+    // A kit's compiled pad map from the live definition's row of that name, compiled once per row object; the engine's
+    // baked default table for no kit, a kit the definition does not declare, or a kit that declares no pad.
+    private WorldPadElement?[] PadOf(string? kit) {
+        if (kit is not { Length: > 0 } name) {
+            return m_defaultPad;
         }
+
+        IndexRows();
+
+        if (
+            !m_kitRows.TryGetValue(
+                key: name,
+                value: out var row
+            ) ||
+            (row.PadRaw is not { Count: > 0 })
+        ) {
+            return m_defaultPad;
+        }
+        if (
+            m_kitPads.TryGetValue(
+                key: name,
+                value: out var cached
+            ) &&
+            ReferenceEquals(
+                objA: cached.Row,
+                objB: row
+            )
+        ) {
+            return cached.Pad;
+        }
+
+        var pad = CompilePad(
+            channels: m_channels,
+            pad: row.Pad
+        );
+
+        m_kitPads[name] = (row, pad);
+
+        return pad;
     }
 
     /// <summary>Gets this tick's body-target contributions — <see cref="WorldServer.Step"/> drains this right after
@@ -697,3 +912,12 @@ public sealed class WorldEngagement {
 /// <paramref name="TargetBody"/> at the ordinary intent-submission door; an application alone never grants Drive).</param>
 /// <param name="Intent">The reach-masked intent to contribute.</param>
 public readonly record struct BodyRouteContribution(int TargetBody, Principal Principal, PlayerIntent Intent);
+
+/// <summary>A screen's engagement policy as its row authors it: the pad kit its applications translate through, the
+/// channels they reach, and the mapping its light gun aims through.</summary>
+/// <param name="Aim">The row's source-normalized mapping (<see cref="WorldScreenMappings.Normalized"/>), the one the
+/// <c>$pointer:</c> rule read maps through, or <see langword="null"/> for a screen whose route input is not
+/// <see cref="SourceDestination.Simulation"/> or that maps no ray.</param>
+/// <param name="Kit">The route's <see cref="WorldScreenRoute.Kit"/>, or <see langword="null"/> for the engine default.</param>
+/// <param name="Reach">The compiled mask of the route's <see cref="WorldScreenRoute.Channels"/>.</param>
+internal readonly record struct ScreenPolicy(SourceMapping? Aim, string? Kit, ChannelReachMask Reach);

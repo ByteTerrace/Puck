@@ -41,7 +41,7 @@ internal static class FormatFileProject {
             string project;
 
             if (directives.Length > 0) {
-                Run(arguments: ["project", "convert", file, "--output", scratch]);
+                Run(arguments: ["project", "convert", file, "--output", scratch], workingDirectory: repository);
                 source = Path.Combine(
                     path1: scratch,
                     path2: Path.GetFileName(path: file)
@@ -157,7 +157,7 @@ internal static class FormatFileProject {
 
             // An explicit target makes MSBuild report items as the build left them rather than as evaluated, so this
             // one build is also the closure evaluation the semantic passes would otherwise run.
-            Run(arguments: ["build", project, "-t:Build", "-c", Configuration, "-p:RestoreLockedMode=false", "-getItem:ReferencePathWithRefAssemblies", $"-getItem:{SourceItem}", "-getProperty:TargetPath", $"-getResultOutputFile:{report}"]);
+            Run(arguments: ["build", project, "--disable-build-servers", "-t:Build", "-c", Configuration, "-p:RestoreLockedMode=false", "-getItem:ReferencePathWithRefAssemblies", $"-getItem:{SourceItem}", "-getProperty:TargetPath", $"-getResultOutputFile:{report}"], workingDirectory: repository);
             var closures = new CompileClosures();
 
             closures.Record(
@@ -198,7 +198,7 @@ internal static class FormatFileProject {
                     a: original,
                     b: rewritten
                 )) {
-                    Run(arguments: ["build", project, "-c", Configuration, "--no-restore"]);
+                    Run(arguments: ["build", project, "--disable-build-servers", "-c", Configuration, "--no-restore"], workingDirectory: repository);
                     RewriteIo.WriteText(
                         file: file,
                         text: rewritten
@@ -216,11 +216,14 @@ internal static class FormatFileProject {
         }
     }
 
-    private static void Run(string[] arguments) {
+    // The disposable project lives under the checkout's .tmp; running from the checkout resolves the SDK through its
+    // global.json.
+    private static void Run(string[] arguments, string workingDirectory) {
         if (CliProcess.RunAsync(
             arguments: arguments,
             capture: false,
-            fileName: "dotnet"
+            fileName: "dotnet",
+            workingDirectory: workingDirectory
         ).GetAwaiter().GetResult().ExitCode != 0) {
             throw new InvalidOperationException(message: "The standalone formatter project failed; no result was copied back.");
         }

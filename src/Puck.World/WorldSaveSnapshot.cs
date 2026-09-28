@@ -16,11 +16,13 @@ internal static class WorldSaveSnapshot {
     /// <param name="pacing">The live present-rate control.</param>
     /// <param name="audio">The audio director owning the master-volume lever.</param>
     /// <param name="bindingBar">The live per-seat binding-bar visibility overrides.</param>
+    /// <param name="editor">The live per-seat editor state, whose primary seat folds into <c>editor</c>.</param>
     /// <returns>The snapshot definition to serialize.</returns>
-    public static WorldDefinition Compose(WorldServer server, ulong tick, WorldRenderSettings render, PresentPacingControl pacing, IWorldAudioLever audio, WorldBindingBarVisibility bindingBar) =>
+    public static WorldDefinition Compose(WorldServer server, ulong tick, WorldRenderSettings render, PresentPacingControl pacing, IWorldAudioLever audio, WorldBindingBarVisibility bindingBar, WorldEditorSeats editor) =>
         WorldSessionLevers.Fold(
             audio: audio,
             bindingBar: bindingBar,
+            editor: editor,
             definition: WorldSessionCapture.Capture(
                 definition: server.Definition,
                 engineTick: server.CompletedEngineTicks,

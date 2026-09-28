@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using Puck.DirectX.Apis;
 using Puck.DirectX.Interfaces;
 using Windows.Win32;
 using Windows.Win32.Foundation;
@@ -11,30 +12,27 @@ namespace Puck.DirectX.Interop;
 
 /// <summary>Who touches an exportable image, which decides its resource flags and resting state.</summary>
 public enum DirectXExportableImageAccess {
-    /// <summary>This device's work writes it with the usages it declares; the handle crosses to another Direct3D 12 or
-    /// Vulkan device.</summary>
-    ComputeWrite,
     /// <summary>A foreign Direct3D 11 device writes it (copying from a private texture); this device never
     /// dispatches into it. <c>ALLOW_SIMULTANEOUS_ACCESS</c> with render-target binds, resting in <c>COMMON</c>.</summary>
     ForeignWrite,
     /// <summary>This device's compute work writes it through a UAV while a foreign Direct3D 11 device opens and
     /// samples it: <c>ALLOW_UNORDERED_ACCESS</c> plus <c>ALLOW_SIMULTANEOUS_ACCESS</c>, plus <c>ALLOW_RENDER_TARGET</c>
-    /// — without a render-target bind Direct3D 11 refuses to open the allocation. The reader sees whichever frame
-    /// last landed.</summary>
+    /// — without a render-target bind Direct3D 11 refuses to open the allocation. Each write signals the image's shared
+    /// fence, which the reader waits for.</summary>
     ComputeWriteForeignRead,
 }
 /// <summary>
 /// A Direct3D 12 image in <em>shared</em> GPU memory implementing <see cref="IGpuExportableImage"/>: a default-heap
 /// texture created by <see cref="DirectXTextures"/> with the shared heap flag, an NT handle to it (from
-/// <c>CreateSharedHandle</c>), and a fence to drain the producer's queue. Another backend on the same adapter (a Vulkan
-/// host) imports <see cref="SharedHandle"/> and samples the texture without a CPU round-trip.
+/// <c>CreateSharedHandle</c>), and a fence: shared, with an NT handle of its own (<see cref="SharedFenceHandle"/>), when
+/// this device writes the texture. Another backend on the same adapter (a Vulkan host, or a Direct3D 11 device) opens
+/// <see cref="SharedHandle"/> and samples the texture without a CPU round-trip.
 /// <para>
-/// A <see cref="DirectXExportableImageAccess.ComputeWrite"/> texture has the resource flags, initial state and
-/// optimized clear value its declared usages need, as a <see cref="DirectXGpuImage"/> does. Both simultaneous-access
-/// shapes have fixed flags, and start and rest in <c>COMMON</c>, the cross-device handoff state their foreign device
-/// expects; a legacy first UAV use promotes from <c>COMMON</c>. The producer's final recorded barrier returns a written
-/// texture to <c>COMMON</c> via <see cref="GpuImageLayout.External"/>, and <see cref="FinalizeForExport"/> only blocks
-/// on a fence until that submitted work completes. Single-thread affine.
+/// Both shapes are simultaneous-access textures with fixed flags that start and rest in <c>COMMON</c>, the cross-device
+/// handoff state their foreign device expects; a legacy first UAV use promotes from <c>COMMON</c>. The producer's final recorded barrier returns a written
+/// texture to <c>COMMON</c> via <see cref="GpuImageLayout.External"/>, and <see cref="CompleteWrite"/> queues the
+/// shared fence's next value behind that submitted work, which the reading device waits for on the GPU. Single-thread
+/// affine.
 /// </para>
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
@@ -45,6 +43,7 @@ public sealed unsafe class DirectXGpuExportableImage : IGpuExportableImage {
     private bool m_disposed;
     private nint m_fence;
     private HANDLE m_fenceEvent;
+    private HANDLE m_fenceSharedHandle;
     private ulong m_fenceValue;
     private nint m_resource;
     private HANDLE m_sharedHandle;
@@ -54,11 +53,8 @@ public sealed unsafe class DirectXGpuExportableImage : IGpuExportableImage {
     /// pixel format, and the image extent in pixels.</param>
     /// <param name="format">The neutral format, which <paramref name="request"/> carries translated; a color
     /// format.</param>
-    /// <param name="usage">The usages the image declares: what the caller asked for under
-    /// <see cref="DirectXExportableImageAccess.ComputeWrite"/>, and what the fixed flags permit under the
-    /// simultaneous-access shapes.</param>
-    /// <param name="access">Who writes and who reads the image — see <see cref="DirectXExportableImageAccess"/>.
-    /// Direct3D 11 can open the shared handle only under the two simultaneous-access shapes.</param>
+    /// <param name="usage">The usages the image declares: what its shape's fixed flags permit.</param>
+    /// <param name="access">Who writes and who reads the image — see <see cref="DirectXExportableImageAccess"/>.</param>
     /// <exception cref="ArgumentNullException">The request's device context is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">The format is a depth format, or the usage does not fit it.</exception>
     /// <exception cref="DirectXException">A Direct3D 12 call failed.</exception>
@@ -88,77 +84,95 @@ public sealed unsafe class DirectXGpuExportableImage : IGpuExportableImage {
 
         // The foreign-write shape swaps UAV capability for RENDER_TARGET: its Direct3D 11 writer opens the handle
         // with D3D11-expressible binds, performs any compute work in a private UAV, and copies into this texture.
-        // Adding simultaneous access to the compute-write shape lets a Direct3D 11 reader open the same allocation.
-        var (flags, clearValue) = (access switch {
-            DirectXExportableImageAccess.ForeignWrite => (D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS, ((D3D12_CLEAR_VALUE?)null)),
-            DirectXExportableImageAccess.ComputeWriteForeignRead => (D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS | D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS, ((D3D12_CLEAR_VALUE?)null)),
-            _ => DirectXTextures.OfUsage(
-                format: dxgiFormat,
-                usage: usage
-            ),
-        });
-        var initialState = ((access == DirectXExportableImageAccess.ComputeWrite)
-            ? DirectXTextures.InitialStateOf(usage: usage)
-            : D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON
+        var flags = ((access == DirectXExportableImageAccess.ForeignWrite)
+            ? D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS
+            : D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS | D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS
         );
+        var initialState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON;
         var device = ((ID3D12Device*)deviceContext.Device.Handle);
         var resource = DirectXTextures.CreateCommitted(
-            clearValue: clearValue,
+            clearValue: null,
             device: device,
             flags: flags,
             format: dxgiFormat,
             heapFlags: D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_SHARED,
             height: height,
             initialState: initialState,
+            memory: deviceContext.Memory,
             width: width
         );
 
         m_resource = ((nint)resource);
-        DirectXResourceStates.Register(
-            resource: m_resource,
-            state: initialState
-        );
 
-        if (access != DirectXExportableImageAccess.ComputeWrite) {
-            DirectXSimultaneousAccessResources.Register(resourceHandle: m_resource);
-        }
-
-        var sharedHandle = default(HANDLE);
-
-        device->CreateSharedHandle(
-            Access: GenericAll,
-            Name: default(PCWSTR),
-            pAttributes: ((SECURITY_ATTRIBUTES*)null),
-            pHandle: &sharedHandle,
-            pObject: ((ID3D12DeviceChild*)resource)
-        );
-        m_sharedHandle = sharedHandle;
-
-        m_imageViewToken = GCHandle.Alloc(value: new DirectXImageView {
-            Format = dxgiFormat,
-            ResourceHandle = m_resource,
-        });
-
-        device->CreateFence(
-            Flags: default,
-            InitialValue: 0,
-            ppFence: out var fence,
-            riid: ID3D12Fence.IID_Guid
-        );
-        m_fence = ((nint)fence);
-        m_fenceValue = 1;
-        m_fenceEvent = PInvoke.CreateEvent(
-            bInitialState: false,
-            bManualReset: false,
-            lpEventAttributes: ((SECURITY_ATTRIBUTES*)null),
-            lpName: default(PCWSTR)
-        );
-
-        if (m_fenceEvent.IsNull) {
-            throw new DirectXException(
-                operation: "CreateEventW",
-                result: Marshal.GetHRForLastWin32Error()
+        // The resource is counted from here on, so a failure below releases everything made so far, the count
+        // included, before it propagates.
+        try {
+            DirectXResourceStates.Register(
+                resource: m_resource,
+                state: initialState
             );
+
+            DirectXSimultaneousAccessResources.Register(resourceHandle: m_resource);
+
+            var sharedHandle = default(HANDLE);
+
+            device->CreateSharedHandle(
+                Access: GenericAll,
+                Name: default(PCWSTR),
+                pAttributes: ((SECURITY_ATTRIBUTES*)null),
+                pHandle: &sharedHandle,
+                pObject: ((ID3D12DeviceChild*)resource)
+            );
+            m_sharedHandle = sharedHandle;
+
+            m_imageViewToken = GCHandle.Alloc(value: new DirectXImageView {
+                Format = dxgiFormat,
+                ResourceHandle = m_resource,
+            });
+
+            // A texture this device writes signals its fence for the consumer on another device to wait on, so the fence
+            // is shared; a foreign-written texture's fence only drains this device's queue.
+            var writtenHere = (access != DirectXExportableImageAccess.ForeignWrite);
+
+            device->CreateFence(
+                Flags: (writtenHere
+                    ? D3D12_FENCE_FLAGS.D3D12_FENCE_FLAG_SHARED
+                    : default),
+                InitialValue: 0,
+                ppFence: out var fence,
+                riid: ID3D12Fence.IID_Guid
+            );
+            m_fence = ((nint)fence);
+            m_fenceValue = 1;
+
+            if (writtenHere) {
+                var fenceHandle = default(HANDLE);
+
+                device->CreateSharedHandle(
+                    Access: GenericAll,
+                    Name: default(PCWSTR),
+                    pAttributes: ((SECURITY_ATTRIBUTES*)null),
+                    pHandle: &fenceHandle,
+                    pObject: ((ID3D12DeviceChild*)fence)
+                );
+                m_fenceSharedHandle = fenceHandle;
+            }
+            m_fenceEvent = PInvoke.CreateEvent(
+                bInitialState: false,
+                bManualReset: false,
+                lpEventAttributes: ((SECURITY_ATTRIBUTES*)null),
+                lpName: default(PCWSTR)
+            );
+
+            if (m_fenceEvent.IsNull) {
+                throw new DirectXException(
+                    operation: "CreateEventW",
+                    result: Marshal.GetHRForLastWin32Error()
+                );
+            }
+        } catch {
+            ReleaseResources(drainQueue: false);
+            throw;
         }
     }
 
@@ -171,52 +185,32 @@ public sealed unsafe class DirectXGpuExportableImage : IGpuExportableImage {
     /// <inheritdoc/>
     public nint ImageViewHandle => GCHandle.ToIntPtr(value: m_imageViewToken);
     /// <inheritdoc/>
+    /// <remarks>A texture this device writes has one, which a Direct3D 11 device opens through
+    /// <c>ID3D11Device5::OpenSharedFence</c>; a foreign-written texture has none.</remarks>
+    public nint SharedFenceHandle => ((nint)m_fenceSharedHandle.Value);
+    /// <inheritdoc/>
     public nint SharedHandle => m_sharedHandle;
     /// <inheritdoc/>
     public GpuImageUsage Usage { get; }
     /// <inheritdoc/>
     public uint Width { get; }
 
-    private void WaitForGpu() {
-        DirectXFence.SignalAndWait(
-            deviceContext: m_deviceContext,
-            fenceEvent: m_fenceEvent,
-            fenceHandle: m_fence,
-            fenceValue: ref m_fenceValue
-        );
-    }
-
-    /// <inheritdoc/>
-    public void FinalizeForExport() {
-        ObjectDisposedException.ThrowIf(
-            condition: m_disposed,
-            instance: this
-        );
-
-        // The producer already recorded the COMMON handoff transition and submitted; block on the queue so the
-        // importing backend opens the shared handle on completed pixels in the resting state.
-        WaitForGpu();
-    }
-    /// <inheritdoc/>
-    public void Dispose() {
-        if (m_disposed) {
-            return;
-        }
-
-        m_disposed = true;
+    // Releases every object the image holds, each one only if it was made, and counts the resource's release.
+    private void ReleaseResources(bool drainQueue) {
         DirectXResourceStates.Forget(resource: m_resource);
         DirectXSimultaneousAccessResources.Withdraw(resourceHandle: m_resource);
 
-        // Drain the producer queue only while the device context is still alive: at host shutdown the DI container
-        // may tear the context down before a late owner (e.g. a screen binder's capture feed) releases its shared
-        // textures, and CommandQueueHandle THROWS on a disposed context — with the queue gone there is nothing left
-        // in flight to wait for, so the drain is skipped rather than resurrected.
         if (
-            m_deviceContext.IsInitialized &&
-            (0 != m_deviceContext.CommandQueueHandle) &&
+            drainQueue &&
             (0 != m_fence)
         ) {
-            WaitForGpu();
+            _ = DirectXCommandCalls.Drain(
+                calls: DirectXDeviceCommandCalls.Of(deviceContext: m_deviceContext),
+                fence: ((ID3D12Fence*)m_fence),
+                fenceEvent: m_fenceEvent,
+                fenceValue: ref m_fenceValue,
+                queue: ((ID3D12CommandQueue*)m_deviceContext.CommandQueueHandle)
+            );
         }
 
         if (m_imageViewToken.IsAllocated) {
@@ -224,6 +218,10 @@ public sealed unsafe class DirectXGpuExportableImage : IGpuExportableImage {
         }
 
         Release(pointer: ref m_fence);
+        DirectXDeviceMemory.CountReleased(
+            memory: m_deviceContext.Memory,
+            resource: m_resource
+        );
         Release(pointer: ref m_resource);
 
         if (!m_sharedHandle.IsNull) {
@@ -231,9 +229,75 @@ public sealed unsafe class DirectXGpuExportableImage : IGpuExportableImage {
             m_sharedHandle = HANDLE.Null;
         }
 
+        if (!m_fenceSharedHandle.IsNull) {
+            _ = PInvoke.CloseHandle(hObject: m_fenceSharedHandle);
+            m_fenceSharedHandle = HANDLE.Null;
+        }
+
         if (!m_fenceEvent.IsNull) {
             _ = PInvoke.CloseHandle(hObject: m_fenceEvent);
             m_fenceEvent = HANDLE.Null;
         }
+    }
+    private void WaitForGpu() =>
+        DirectXCommandCalls.SignalAndWait(
+            calls: DirectXDeviceCommandCalls.Of(deviceContext: m_deviceContext),
+            fence: ((ID3D12Fence*)m_fence),
+            fenceEvent: m_fenceEvent,
+            fenceValue: ref m_fenceValue,
+            queue: ((ID3D12CommandQueue*)m_deviceContext.CommandQueueHandle)
+        );
+
+    /// <inheritdoc/>
+    /// <remarks>Does nothing: a simultaneous-access texture rests in <c>COMMON</c>, which the reading device shares.</remarks>
+    public void BeginWrite() => ObjectDisposedException.ThrowIf(
+        condition: m_disposed,
+        instance: this
+    );
+    /// <inheritdoc/>
+    /// <remarks>Queues <c>ID3D12CommandQueue::Signal</c> on the shared fence; a foreign-written texture, which has no
+    /// shared fence, drains the queue.</remarks>
+    public ulong CompleteWrite() {
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
+
+        if (m_fenceSharedHandle.IsNull) {
+            WaitForGpu();
+
+            return 0UL;
+        }
+
+        var value = m_fenceValue;
+
+        DirectXCommandCalls.Signal(
+            calls: DirectXDeviceCommandCalls.Of(deviceContext: m_deviceContext),
+            fence: ((ID3D12Fence*)m_fence),
+            queue: ((ID3D12CommandQueue*)m_deviceContext.CommandQueueHandle),
+            value: value
+        );
+        m_fenceValue++;
+
+        return value;
+    }
+    /// <summary>Waits for the producer queue, then releases the texture, its shared handle and its fence. Safe to call
+    /// more than once.</summary>
+    /// <exception cref="InvalidOperationException">The device context was disposed first, so the device has already
+    /// reported the texture as leaked and the owner's teardown order is wrong; the image stays undisposed and its
+    /// texture stays counted as held.</exception>
+    public void Dispose() {
+        if (m_disposed) {
+            return;
+        }
+
+        // The texture and fence are children of the device. An owner that releases this image after its device context
+        // is gone has its teardown in the wrong order, and the caller disposing this image is that owner.
+        if (!m_deviceContext.IsInitialized) {
+            throw new InvalidOperationException(message: $"A {nameof(DirectXGpuExportableImage)} was released after its device context was disposed; the owner disposing it must release it before the device goes.");
+        }
+
+        m_disposed = true;
+        ReleaseResources(drainQueue: (0 != m_deviceContext.CommandQueueHandle));
     }
 }

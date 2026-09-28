@@ -10,10 +10,10 @@ namespace Puck.SignedDistance;
 /// <para>An improper isometry has determinant −1 and no quaternion holds it, so the mirror is factored out against the
 /// fixed generator <c>H(x̂)</c> — reflection across the plane x = 0. The stored <see cref="Rotation"/> is the proper
 /// remainder: the true isometry is <c>translate(Position) ∘ Rotation ∘ H(x̂)^Mirrored</c>.</para>
-/// <para>Every primitive in <see cref="SdfSolidPrimitive"/> is symmetric under <c>x → −x</c> in its own local frame, so
-/// a consumer placing one may emit <see cref="Position"/> and <see cref="Rotation"/> and ignore
-/// <see cref="Mirrored"/> — the trailing reflection maps the primitive onto itself. A consumer transforming a POINT
-/// may not: use <see cref="TransformPoint"/>, which applies the full isometry.</para>
+/// <para>A consumer placing geometry through a mirrored frame emits <see cref="Position"/>, <see cref="Rotation"/> and
+/// then <see cref="SdfProgramBuilder.MirrorX"/>. It may not drop the trailing reflection: a convex or path prism profile,
+/// a sweep and any shape-local op can differ under <c>x → −x</c>, so only the full isometry places the mirror image. A
+/// consumer transforming a POINT uses <see cref="TransformPoint"/>, which applies it.</para>
 /// </remarks>
 /// <param name="Position">The image of the origin.</param>
 /// <param name="Rotation">The proper rotation remaining once the mirror is factored out.</param>

@@ -33,6 +33,12 @@ public sealed class ProductionLoweringTests {
         );
     }
     [InlineData("floorModulo(9007199254740993, 2)", "1")]
+    [InlineData("floorDivide(-9007199254740993, 2)", "-4503599627370497")]
+    [InlineData("power(2, 62)", "4611686018427387904")]
+    [InlineData("modularPower(2, 10, 1000)", "24")]
+    [InlineData("modularInverse(3, 7)", "5")]
+    [InlineData("pairX(extendedGreatestCommonDivisor(240, 46))", "-9")]
+    [InlineData("pairY(extendedGreatestCommonDivisor(240, 46))", "47")]
     [InlineData("9007199254740993 % 2", "1")]
     [InlineData("9007199254740993 + 2", "9007199254740995")]
     [InlineData("9007199254740993 > 9007199254740992", "1")]
@@ -86,6 +92,11 @@ public sealed class ProductionLoweringTests {
     }
     [InlineData("value: clamp(1, 5, 2)")]
     [InlineData("value: squareRoot(-1)")]
+    [InlineData("value: power(2, -1)")]
+    [InlineData("value: power(2, 63)")]
+    [InlineData("value: modularPower(2, 3, 0)")]
+    [InlineData("value: modularInverse(4, 8)")]
+    [InlineData("value: floorDivide(1, 0)")]
     [InlineData("value: 1e999")]
     [InlineData("let a = b\nlet b = a\nvalue: a")]
     [InlineData("let a = 1\nlet a = 2\nvalue: a")]

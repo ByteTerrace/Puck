@@ -1,4 +1,3 @@
-using Puck.Abstractions.Gpu;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
@@ -25,30 +24,9 @@ public interface ISdfFrameSource {
     /// <see cref="ScreenDecals"/>) so a host node's type coupling doesn't grow to thread it.</summary>
     /// <param name="bakes">The engine's brick-bake service (poll/request), never null.</param>
     void AdvanceBricks(ISdfBrickBakeService bakes) { }
-    /// <summary>Hands the frame source the live GPU device + compute services once per produced frame, right AFTER
-    /// <see cref="CaptureFrame"/> and BEFORE the host polls this frame's screen-source providers — the seam a source
-    /// that feeds a screen from CPU pixels uses to upload this frame's image to a stable handle its provider then
-    /// returns (the provider is polled just after this call). Default no-op: a source with no CPU-fed screen (the vast
-    /// majority) need not override it. Mirrors <see cref="AdvanceBricks"/>: an engine seam handed an engine
-    /// capability, not a host-shaped hook.</summary>
-    /// <param name="deviceContext">The live GPU device context to upload on.</param>
-    /// <param name="gpu">The neutral GPU compute services (resolves the upload factory).</param>
-    void PrepareScreenSources(IGpuDeviceContext deviceContext, IGpuComputeServices gpu) { }
-    /// <summary>Hands the frame source this frame's full <see cref="Puck.Hosting.FrameContext"/> once per produced frame,
-    /// right AFTER <see cref="PrepareScreenSources"/> and BEFORE the host polls this frame's screen-source providers — the
-    /// seam a source that hosts its own offscreen view pool (a <see cref="Views.ViewStack"/> of diegetic camera / nested-
-    /// world renders) uses to render those views against the live device this frame, so a screen-source provider that
-    /// returns a view's handle reads a freshly-rendered image. Distinct from <see cref="PrepareScreenSources"/> (which
-    /// hands over the device + compute services alone) because an offscreen view render resolves its own device from the
-    /// frame context's host and renders the SAME world program the host is composing. Default no-op: a source with no
-    /// view pool (the vast majority) need not override it. Mirrors <see cref="PrepareScreenSources"/>/
-    /// <see cref="AdvanceBricks"/>: an engine seam handed an engine-frame capability, not a host-shaped hook.</summary>
-    /// <param name="context">This frame's host frame context (its <see cref="Puck.Hosting.FrameContext.Host"/> resolves
-    /// the live GPU device the offscreen views render on).</param>
-    void RenderViews(in Puck.Hosting.FrameContext context) { }
 
     /// <summary>Screen-surface TRANSFORM providers keyed by the program-declared screen index (see
-    /// <see cref="SdfEngineNode"/>'s <c>screenSurfaceTransforms</c> constructor parameter): a screen riding a dynamic
+    /// <see cref="SdfWorldResidency"/>'s <c>screenSurfaceTransforms</c> constructor parameter): a screen riding a dynamic
     /// entity re-poses its world-space sampling frame every frame it moved. Default null (no dynamic screen
     /// surfaces) — a frame source that never declares one need not override this. Reading this straight off the
     /// frame source (rather than threading it through a separate render-spec field) keeps a host node's own type
@@ -62,9 +40,9 @@ public interface ISdfFrameSource {
     /// node's type coupling doesn't grow to thread it.</summary>
     SdfGlyphAtlas? GlyphAtlas => null;
     /// <summary>Per-frame GLYPH DECAL providers keyed by the program-declared screen index — a screen slot showing dense
-    /// reading text (the material-level text tier, <see cref="SdfWorldEngine.SetScreenDecal"/>) instead of a bound
+    /// reading text (the material-level text tier, <see cref="SdfWorldTables.SetScreenDecal"/>) instead of a bound
     /// image. Each provider returns this frame's cell grid, or <see langword="null"/> to leave the slot on the
-    /// image/procedural path (the atlas-unavailable degrade). Default null (no decal screens) — a source with none need
+    /// image or unbound-glass path (the atlas-unavailable degrade). Default null (no decal screens) — a source with none need
     /// not override it. Mirrors <see cref="ScreenSurfaceTransforms"/>/<see cref="GlyphAtlas"/>: read straight off the
     /// frame source so a host node's type coupling doesn't grow to thread it.</summary>
     IReadOnlyDictionary<int, Func<SdfScreenDecalFrame?>>? ScreenDecals => null;

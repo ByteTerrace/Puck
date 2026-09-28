@@ -33,14 +33,24 @@ internal static class AffectedCommand {
     private static IReadOnlyList<string> Lines(string text) => [.. text.Split(separator: '\n')
         .Select(selector: static line => line.TrimEnd(trimChar: '\r'))
         .Where(predicate: static line => (line.Length > 0))];
-    // Tracked files that differ from the base, staged or not, plus untracked files git does not ignore.
-    private static bool TryReadChanged(string repositoryRoot, string since, out IReadOnlyList<string> changed, out string error) {
+    // Tracked files that differ from the base, staged or not, plus untracked files git does not ignore; and of those, the
+    // ones deleted since the base.
+    private static bool TryReadChanged(string repositoryRoot, string since, out IReadOnlyList<string> changed, out IReadOnlySet<string> deleted, out string error) {
         changed = [];
+        deleted = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         var diff = CliGit.Run(repositoryRoot, "diff", "--name-only", "--no-renames", since);
 
         if (diff.ExitCode != 0) {
             error = $"git diff against '{since}' failed: {diff.Stderr.Trim()}";
+
+            return false;
+        }
+
+        var removed = CliGit.Run(repositoryRoot, "diff", "--name-only", "--no-renames", "--diff-filter=D", since);
+
+        if (removed.ExitCode != 0) {
+            error = $"git diff against '{since}' failed: {removed.Stderr.Trim()}";
 
             return false;
         }
@@ -54,6 +64,7 @@ internal static class AffectedCommand {
         }
 
         changed = [.. Lines(text: diff.Stdout).Concat(second: Lines(text: untracked.Stdout)).Distinct(comparer: StringComparer.Ordinal).Order(comparer: StringComparer.Ordinal)];
+        deleted = Lines(text: removed.Stdout).ToHashSet(comparer: StringComparer.Ordinal);
         error = string.Empty;
 
         return true;
@@ -106,34 +117,14 @@ internal static class AffectedCommand {
         return closure;
     }
 
-    /// <summary>Plans what the working tree's changes against <paramref name="since"/> need.</summary>
+    /// <summary>Reads every canary as selection sees it: its directory, and the worlds, scripts and fixtures its legs
+    /// name.</summary>
     /// <param name="repositoryRoot">The repository root.</param>
-    /// <param name="since">The base revision.</param>
-    /// <param name="changed">The changed files the plan was made from.</param>
-    /// <param name="plan">The plan.</param>
-    /// <param name="error">The refusal, or empty.</param>
-    /// <returns><see langword="true"/> when the plan was made.</returns>
-    public static bool TryPlan(string repositoryRoot, string since, out IReadOnlyList<string> changed, out AffectedPlan? plan, out string error) {
-        plan = null;
-
-        if (!TryReadChanged(changed: out changed, error: out error, repositoryRoot: repositoryRoot, since: since)) {
-            return false;
-        }
-
-        var model = ArchitectureModel.Load(repositoryRoot: repositoryRoot);
-        var projects = model.Projects.Values.Select(selector: project => {
-            var directory = Relative(
-                path: Path.GetDirectoryName(path: project.File)!,
-                repositoryRoot: repositoryRoot
-            );
-
-            return new AffectedProject(
-                Directory: directory,
-                IsSuite: directory.StartsWith(comparisonType: StringComparison.Ordinal, value: "tests/"),
-                Name: project.Name,
-                References: project.References
-            );
-        }).ToArray();
+    /// <param name="canaries">The canaries, on success.</param>
+    /// <param name="error">Why the manifests could not be read, or empty.</param>
+    /// <returns>Whether the manifests were read.</returns>
+    internal static bool TryCanaries(string repositoryRoot, out AffectedCanary[] canaries, out string error) {
+        canaries = [];
 
         if (!CanaryManifestLoader.TryLoadAll(
             error: out error,
@@ -145,7 +136,7 @@ internal static class AffectedCommand {
             return false;
         }
 
-        var canaries = manifests.Select(selector: manifest => new AffectedCanary(
+        canaries = [.. manifests.Select(selector: manifest => new AffectedCanary(
             Directory: Relative(path: manifest.DirectoryPath, repositoryRoot: repositoryRoot),
             Files: [.. new[] { manifest.Positive, manifest.Discriminating }
                 .SelectMany(selector: static leg => new[] { leg.WorldPath, leg.ScriptPath, leg.AuthorityWorldPath })
@@ -154,22 +145,121 @@ internal static class AffectedCommand {
                 .Select(selector: path => Relative(path: path, repositoryRoot: repositoryRoot))],
             Id: manifest.Id,
             RequiresGpu: manifest.Requirements.Contains(value: "gpu", comparer: StringComparer.Ordinal)
-        )).ToArray();
+        ))];
+
+        return true;
+    }
+
+    // The kinds of file a canary's documents can reach: worlds, graph documents and other JSON fixtures, .puck
+    // sources, and shader sources.
+    private static readonly string[] ReachableExtensions = [".json", ".puck", ".hlsl", ".hlsli"];
+
+    /// <summary>Returns every project in the repository's graph as selection sees it.</summary>
+    /// <param name="model">The repository's project graph.</param>
+    /// <param name="repositoryRoot">The repository root.</param>
+    /// <returns>The projects.</returns>
+    internal static AffectedProject[] Projects(ArchitectureModel model, string repositoryRoot) => [.. model.Projects.Values.Select(selector: project => {
+        var directory = Relative(
+            path: Path.GetDirectoryName(path: project.File)!,
+            repositoryRoot: repositoryRoot
+        );
+
+        return new AffectedProject(
+            Directory: directory,
+            IsSuite: directory.StartsWith(comparisonType: StringComparison.Ordinal, value: "tests/"),
+            Name: project.Name,
+            References: project.References
+        );
+    })];
+
+    /// <summary>Plans what the working tree's changes against <paramref name="since"/> need.</summary>
+    /// <param name="repositoryRoot">The repository root.</param>
+    /// <param name="since">The base revision.</param>
+    /// <param name="changed">The changed files the plan was made from.</param>
+    /// <param name="plan">The plan.</param>
+    /// <param name="error">The refusal, or empty.</param>
+    /// <returns><see langword="true"/> when the plan was made.</returns>
+    public static bool TryPlan(string repositoryRoot, string since, out IReadOnlyList<string> changed, out AffectedPlan? plan, out string error) {
+        plan = null;
+
+        if (!TryReadChanged(changed: out changed, deleted: out var deleted, error: out error, repositoryRoot: repositoryRoot, since: since)) {
+            return false;
+        }
+
+        var model = ArchitectureModel.Load(repositoryRoot: repositoryRoot);
+        var projects = Projects(model: model, repositoryRoot: repositoryRoot);
+
+        if (!TryCanaries(canaries: out var canaries, error: out error, repositoryRoot: repositoryRoot)) {
+            return false;
+        }
+
         var closure = Closure(model: model, seeds: ["Puck.World"]);
         var catalogProjects = Closure(model: model, seeds: CatalogSeeds);
+
+        var coverage = AffectedCoverage.Read(repositoryRoot: repositoryRoot);
+        var recorded = ((deleted.Count > 0)
+            ? AffectedCoverage.ReadAt(repositoryRoot: repositoryRoot, revision: since)
+            : null);
+        // Reading every canary world is the cost of this map, so it is built only for a change a document can reach; the
+        // base's map, over the tree the base recorded, only for a deleted file one can reach.
+        var workingTree = new AffectedWorkingTree(root: repositoryRoot);
+        var baseTree = new AffectedRevisionTree(revision: since, root: repositoryRoot);
+        // Each tree's kernels and post-process packages are read once, for both its documents' reach and its stand-ins.
+        var workingShaders = new AffectedShaders(projects: projects, tree: workingTree);
+        var baseShaders = new AffectedShaders(projects: projects, tree: baseTree);
+        var reachedBy = new Lazy<IReadOnlyDictionary<string, IReadOnlySet<string>>>(valueFactory: () => AffectedDocuments.ReachedBy(
+            canaries: canaries,
+            packageFiles: workingShaders.FilesOf,
+            tree: workingTree
+        ));
+        var recordedReachedBy = new Lazy<IReadOnlyDictionary<string, IReadOnlySet<string>>>(valueFactory: () => AffectedDocuments.ReachedBy(
+            canaries: canaries,
+            packageFiles: baseShaders.FilesOf,
+            tree: baseTree
+        ));
+        IReadOnlySet<string> none = new HashSet<string>();
+
+        bool Reachable(string path) => ReachableExtensions.Any(predicate: extension => path.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: extension));
 
         plan = AffectedSelection.Select(
             canaries: canaries,
             changed: changed,
             consumersOf: ConsumerSearch(projects: projects, repositoryRoot: repositoryRoot),
-            coverage: AffectedCoverage.Read(repositoryRoot: repositoryRoot),
+            coverage: coverage,
             catalogInputs: (path, owner) => (path.StartsWith(comparisonType: StringComparison.Ordinal, value: (ShippedTree + "/")) ||
-                (path.StartsWith(comparisonType: StringComparison.Ordinal, value: "src/Puck.World/Assets/") && (path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".hlsl") || path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".hlsli") || path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".pipeline.json"))) ||
+                (path.StartsWith(comparisonType: StringComparison.Ordinal, value: "src/Puck.World/Assets/") && (path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".hlsl") || path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".hlsli") || path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".graph.json"))) ||
                 path.StartsWith(comparisonType: StringComparison.Ordinal, value: "src/Puck.Cli/Transpiler/") ||
                 ((owner is not null) && catalogProjects.Contains(item: owner))),
             declaresTests: path => File.ReadLines(path: Path.Combine(path1: repositoryRoot, path2: path)).Any(predicate: static line => line.TrimStart().StartsWith(comparisonType: StringComparison.Ordinal, value: "test \"")),
             projects: projects,
-            worldClosure: closure
+            canariesReaching: path => ((Reachable(path: path) && reachedBy.Value.TryGetValue(key: path, value: out var reaching))
+                ? reaching
+                : none),
+            standInsFor: AffectedStandIns.Create(
+                documented: source => reachedBy.Value.ContainsKey(key: source),
+                indexed: [.. coverage.Keys],
+                projects: projects,
+                shaders: workingShaders,
+                tree: workingTree
+            ),
+            worldClosure: closure,
+            deleted: deleted,
+            // A file deleted since the base is placed through the index the base recorded, which is the only one that
+            // can still name it, or through the stand-ins the base's own tree gave it there.
+            recorded: recorded,
+            recordedStandInsFor: ((recorded is null)
+                ? null
+                : AffectedStandIns.Create(
+                    documented: source => recordedReachedBy.Value.ContainsKey(key: source),
+                    indexed: [.. recorded.Keys],
+                    projects: projects,
+                    shaders: baseShaders,
+                    tree: baseTree
+                )),
+            // A deleted file is reached through the documents the base's tree held.
+            recordedCanariesReaching: path => ((Reachable(path: path) && recordedReachedBy.Value.TryGetValue(key: path, value: out var reaching))
+                ? reaching
+                : none)
         );
 
         return true;
@@ -179,7 +269,7 @@ internal static class AffectedCommand {
     // sources build/WorldAssets.targets passes: every .puck and .world.json under the shipped tree.
     private static int CheckCatalog(string repositoryRoot) {
         var build = CliProcess.RunCaptured(
-            arguments: ["build", "src/Puck.World/Puck.World.csproj", "-c", "Release", "-v", "q", "-nologo"],
+            arguments: ["build", "--disable-build-servers", "src/Puck.World/Puck.World.csproj", "-c", "Release", "-v", "q", "-nologo"],
             fileName: "dotnet",
             input: string.Empty,
             timeout: TimeSpan.FromMinutes(minutes: 30),
@@ -210,7 +300,9 @@ internal static class AffectedCommand {
         var failed = new List<string>();
 
         // dotnet test builds each suite and applies the settings its project binds (RunSettingsFilePath), so an
-        // opt-in tier such as Maths' Deep and Exhaustive stays out exactly as it does in CI.
+        // opt-in tier such as Maths' Deep and Exhaustive stays out exactly as it does in CI. The suites build one after
+        // another over a shared project graph, so build servers stay enabled for the next suite to reuse; the capture's
+        // post-exit drain bounds a server that inherited its pipes.
         foreach (var suite in plan.Suites) {
             var run = CliProcess.RunCaptured(
                 arguments: ["test", Path.Combine(path1: repositoryRoot, path2: "tests", path3: suite, path4: $"{suite}.csproj"), "-c", "Release", "-v", "q", "-nologo"],
@@ -261,6 +353,54 @@ internal static class AffectedCommand {
 
         return CliExit.Success;
     }
+
+    /// <summary>Writes a plan as the verb prints it: one line per chosen suite (<c>suite</c>), world (<c>test</c>, run with
+    /// <c>puck test</c>) and canary (<c>canary</c>); the catalog, named with the check <c>--run</c> makes of it; parity; then
+    /// each unmapped and deleted source with the note that explains it.</summary>
+    /// <param name="plan">The plan.</param>
+    /// <param name="into">The writer.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="plan"/> or <paramref name="into"/> is <see langword="null"/>.</exception>
+    public static void Describe(AffectedPlan plan, TextWriter into) {
+        ArgumentNullException.ThrowIfNull(argument: plan);
+        ArgumentNullException.ThrowIfNull(argument: into);
+
+        foreach (var suite in plan.Suites) {
+            into.WriteLine(value: $"suite {suite}");
+        }
+
+        foreach (var world in plan.Worlds) {
+            into.WriteLine(value: $"test {world}");
+        }
+
+        foreach (var canary in plan.Canaries) {
+            into.WriteLine(value: $"canary {canary}");
+        }
+
+        if (plan.Catalog) {
+            into.WriteLine(value: $"catalog {ShippedCatalog} (puck compile --tree {ShippedTree} --check)");
+        }
+
+        if (plan.Parity) {
+            into.WriteLine(value: "parity");
+        }
+
+        foreach (var path in plan.Unmapped) {
+            into.WriteLine(value: $"unmapped {path}");
+        }
+
+        if (plan.Unmapped.Count > 0) {
+            into.WriteLine(value: $"affected: {plan.Unmapped.Count} World source(s) are missing from {CoveragePath}, so no canary was chosen for them; record coverage with `puck affected --record` when the owner asks for a full run.");
+        }
+
+        foreach (var path in plan.Deleted) {
+            into.WriteLine(value: $"deleted {path}");
+        }
+
+        if (plan.Deleted.Count > 0) {
+            into.WriteLine(value: $"affected: {plan.Deleted.Count} deleted World source(s) are placed by neither {CoveragePath} nor the index the base recorded, directly or through the stand-ins the base's tree gave them, so no canary was chosen for them; a recording cannot place a file that no longer exists, and their projects' suites still run.");
+        }
+    }
+
     private static int Run(string since, bool run, bool record) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return CliExit.Refuse(verb: Verb, what: Environment.CurrentDirectory, why: "is not inside the Puck repository.");
@@ -285,33 +425,10 @@ internal static class AffectedCommand {
             Console.Out.WriteLine(value: "affected: build infrastructure changed, which reaches every project.");
         }
 
-        foreach (var suite in plan.Suites) {
-            Console.Out.WriteLine(value: $"suite {suite}");
-        }
-
-        foreach (var world in plan.Worlds) {
-            Console.Out.WriteLine(value: $"test {world}");
-        }
-
-        foreach (var canary in plan.Canaries) {
-            Console.Out.WriteLine(value: $"canary {canary}");
-        }
-
-        if (plan.Catalog) {
-            Console.Out.WriteLine(value: $"catalog {ShippedCatalog}");
-        }
-
-        if (plan.Parity) {
-            Console.Out.WriteLine(value: "parity");
-        }
-
-        foreach (var path in plan.Unmapped) {
-            Console.Out.WriteLine(value: $"unmapped {path}");
-        }
-
-        if (plan.Unmapped.Count > 0) {
-            Console.Out.WriteLine(value: $"affected: {plan.Unmapped.Count} World source(s) are missing from {CoveragePath}, so no canary was chosen for them; record coverage with `puck affected --record` when the owner asks for a full run.");
-        }
+        Describe(
+            into: Console.Out,
+            plan: plan
+        );
 
         return (run
             ? Execute(plan: plan, repositoryRoot: repositoryRoot)
@@ -324,7 +441,7 @@ internal static class AffectedCommand {
             DefaultValueFactory = static _ => "HEAD",
             Description = "The base revision the working tree is compared against (default: HEAD, so only uncommitted changes).",
         };
-        var runOption = new Option<bool>(name: "--run") { Description = "Build and run the chosen suites, then puck test on the chosen worlds, then the chosen canaries and parity." };
+        var runOption = new Option<bool>(name: "--run") { Description = "Build and run the chosen suites, then puck test on the chosen worlds, then the catalog check, then the chosen canaries and parity." };
         var recordOption = new Option<bool>(name: "--record") { Description = $"Record {CoveragePath}: build a World that records the methods it compiles, run the full canary set on it, and map each canary's methods to source files. A full run; do it when the owner asks for one." };
         var command = new Command(
             description: "Name the test suites and canaries a change needs, and with --run run exactly those.",
@@ -337,11 +454,25 @@ internal static class AffectedCommand {
               references included), owns a changed file; a file in a directory no project owns chooses
               the projects whose sources name that directory. A canary is chosen when a changed file is
               one its manifest names, lies in its directory, or is a source the canary executed when
-              coverage was last recorded ({CoveragePath}); parity is chosen with any GPU canary. A changed
-              World source the index does not know is listed as unmapped rather than widening the run.
+              coverage was last recorded ({CoveragePath}), or is a file the manifest's documents reach:
+              the layers, neighbour worlds and graph documents a world names, and the pass shaders a
+              graph document declares with their includes. Parity is chosen with any GPU canary. A file no
+              canary can execute is placed through the indexed sources it stands for: a project file,
+              restore lock or NativeMethods list through its project's sources, a shader source or
+              include through the C# that names each kernel whose include closure reaches it, in the
+              kernel's project or one its build references, a post-process package's stage sources and
+              its frame interface through the canaries whose worlds name the package in views.post, or
+              the C# that draws post-process packages when none does, and a file puck schema writes through
+              the sources declaring the types it is generated from. A changed
+              World source neither the index nor a stand-in places is listed as unmapped rather than
+              widening the run. A file deleted since --since is placed by the index the base recorded,
+              directly or through the stand-ins the base's tree gave it, or by the canaries whose
+              documents reached it in the base's tree; one none of these places is listed as deleted,
+              never unmapped.
               Changing build infrastructure (build/, Directory.Build.*, global.json, Puck.slnx) chooses
-              every suite. A changed .puck source that declares test blocks is run with puck test.
-              Prose, .claude/, .github/, editors/ and experimental/ choose nothing.
+              every suite. A changed .puck source that declares test blocks is run with puck test, and
+              prints as a test line. A catalog line names the game's Release catalog, which --run checks
+              with the compile it names; it holds no test worlds. Prose, .claude/, .github/, editors/ and experimental/ choose nothing.
 
               Exit codes: 0 planned or every chosen check passed, 1 a chosen check failed, 2 refused.
             """);
