@@ -101,27 +101,26 @@ public static class WorldWindowFrustumFit {
             Up: up
         );
     }
-    /// <summary>Returns the eye a window fits against: the position of the camera the primary local seat's view
-    /// rendered with in the frame just dressed — chase or first person, whatever rig the seat renders through — the same
-    /// camera a pointer ray through that view is cast from (<see cref="Commands.SourceRay.Through"/>), so the texel the window
-    /// shows at a glass point and a click at that point look along one line into the destination. A window renders one
-    /// image, so it fits against one eye.</summary>
-    /// <param name="viewports">The seats' views for the frame just dressed.</param>
-    /// <returns>The eye, or <see langword="null"/> while the primary seat resolved no view.</returns>
+    /// <summary>Returns the eye a window fits against: the position of the camera the frame just dressed renders its
+    /// viewer with (<see cref="WorldSeatViewports.Viewer"/>). With a seat resolving a view that is the lowest such seat's view — chase or
+    /// first person, whatever rig the seat renders through — the same camera a pointer ray through that view is cast from
+    /// (<see cref="Commands.SourceRay.Through"/>), so the texel the window shows at a glass point and a click at that point
+    /// look along one line into the destination; with none it is the camera the frame's first view renders with. A window
+    /// renders one image, so it fits against one eye.</summary>
+    /// <param name="viewports">The seats' views and the viewer for the frame just dressed.</param>
+    /// <returns>The eye, or <see langword="null"/> before a dress has published a viewer.</returns>
     public static Vector3? ViewerEye(WorldSeatViewports viewports) {
         ArgumentNullException.ThrowIfNull(argument: viewports);
 
-        return ((viewports.Seat(slot: 0) is { Present: true } view)
-            ? view.Camera.Position
-            : null);
+        return viewports.Viewer?.Position;
     }
     /// <summary>Returns the fit a window session renders through (<see cref="WorldSessionSceneEmitter.SetWindowFit"/>):
     /// asked as each frame is dressed, it reads the documents and the screen row at that moment and fits against the
     /// viewer's eye in that frame (<see cref="TryFitFromView"/>), so a placement mutation or a camera move reaches the
-    /// very next frame. A transient gap (no seat view yet, no local document or row, a destination that has not delivered
+    /// very next frame. A transient gap (no dressed frame yet, no local document or row, a destination that has not delivered
     /// the counterpart, an eye behind the glass) yields <see langword="null"/>, the ordinary session projection for the
     /// frame.</summary>
-    /// <param name="viewports">The seats' views, which the world's own capture publishes each frame.</param>
+    /// <param name="viewports">The seats' views and the viewer, which the world's own capture publishes each frame.</param>
     /// <param name="local">Reads the local document, whose face catalog seats the screen, or <see langword="null"/>.</param>
     /// <param name="destination">Reads the destination's document, as its session mirror last delivered it.</param>
     /// <param name="screen">Reads the screen row the window shows on, or <see langword="null"/>.</param>
@@ -148,7 +147,7 @@ public static class WorldWindowFrustumFit {
     /// <summary>Fits a window screen's camera for the frame being dressed: the local face the screen shows on and its
     /// counterpart in the destination (<see cref="TryResolveApertures"/>), the glass its row draws (<see cref="Glass"/>),
     /// and the viewer's eye (<see cref="ViewerEye"/>).</summary>
-    /// <param name="viewports">The seats' views for the frame just dressed.</param>
+    /// <param name="viewports">The seats' views and the viewer for the frame just dressed.</param>
     /// <param name="local">The local document, whose face catalog seats the screen.</param>
     /// <param name="destination">The destination's document, as its session mirror last delivered it.</param>
     /// <param name="screen">The screen row the window shows on.</param>
