@@ -462,7 +462,19 @@ and its edits are submitted through that world's own link, whose admission
 accepts them or refuses them by name. They never touch the world the seat left.
 A seat's selection (its current placement, its reference, the height its
 following plane found) belongs to the world it was made in, so a bound nudge
-after a crossing names nothing until the seat selects again there.
+after a crossing names nothing until the seat selects again there. A seat that
+sees a nested world across an adjacency, drawn in this world's frame, still
+edits in that world's own coordinates: its aim and every surface it meets are
+carried through the adjacency's isometry, the one its crossing and rendering
+use, and its grid and snapping read that world's `editor` section.
+
+A seat's edits to one placement run one at a time. Each is based on the value
+the seat last submitted, not on the document as it last arrived, which trails
+every edit still in flight. Edits made faster than the world answers queue, the
+newest superseding the rest, and go when the one in flight is answered, so
+holding a nudge key moves the placement once per press. When the world refuses
+an edit, the one queued on it is dropped and the placement rolls back to the
+value the world last confirmed, with a `rolled back to` line naming it.
 
 The grid rides each view's pass block (`SdfViewSnapshot.Grid`), so one seat can
 build on a grid while another plays. [The editor plan](../../docs/plans/editor.md)

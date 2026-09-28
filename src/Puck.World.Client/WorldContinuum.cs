@@ -308,6 +308,50 @@ public sealed class WorldContinuum(WorldClient client, WorldSeatAuthorityRouter 
     public WorldAuthorityEndpoint? PresentedElsewhere(int slot) => (m_inFrame
         ? m_frameElsewhere[slot]
         : ResolvePresentedElsewhere(route: m_routes.TryRoute(slot: slot)));
+    /// <summary>Resolves how a seat's presentation frame relates to the frame of the world it is routed to, which is the
+    /// frame it edits in: the same frame for a seat presented in its own world (the boot world, another authority of the
+    /// boot document, or the scene of a world it is presented elsewhere in), or the path of the adjacency projection its
+    /// pose is presented through in the boot frame, whose isometry (<see cref="WorldAdjacencyPath"/>) carries a point from
+    /// the frame the seat sees into its world's own.</summary>
+    /// <param name="slot">The seat's slot.</param>
+    /// <param name="path">The projection's path, or <see langword="null"/> when the two frames are one.</param>
+    /// <returns><see langword="false"/> when the seat is routed to another document through no projection this
+    /// presentation holds, so nothing relates what it sees to the world it edits.</returns>
+    public bool TryEditingPath(int slot, out IReadOnlyList<WorldAdjacencyFramePair>? path) {
+        path = null;
+
+        if (
+            ((m_inFrame ? m_frameRoutes[slot] : m_routes.TryRoute(slot: slot))?.Endpoint is not { } endpoint) ||
+            (PresentedElsewhere(slot: slot) is not null)
+        ) {
+            return true;
+        }
+
+        var authority = endpoint.Authority;
+
+        if (
+            (authority.Length == 0) ||
+            string.Equals(a: authority, b: m_client.Authority, comparisonType: StringComparison.Ordinal) ||
+            string.Equals(a: endpoint.Definition.DocumentId, b: m_client.Definition.DocumentId, comparisonType: StringComparison.Ordinal)
+        ) {
+            return true;
+        }
+
+        if (m_selectedProjectionNames[slot] is { } name) {
+            foreach (var projection in m_adjacencies.Visuals()) {
+                if (
+                    string.Equals(a: projection.Name, b: name, comparisonType: StringComparison.Ordinal) &&
+                    string.Equals(a: projection.Neighbour.Authority, b: authority, comparisonType: StringComparison.Ordinal)
+                ) {
+                    path = projection.Path;
+
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
 
     private WorldAuthorityEndpoint? ResolvePresentedElsewhere(WorldAuthorityRoute? route) {
         if (route?.Endpoint is not { } endpoint) {

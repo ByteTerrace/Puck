@@ -258,10 +258,15 @@ public sealed class WorldDeferredVerbEchoes {
 
         RaiseAll(answers: forgotten);
     }
-    internal void Publish(CommandResult result) => Raise(
+
+    /// <summary>Publishes a verb's late line to every <see cref="Completed"/> subscriber, as a settled verdict is: a line
+    /// that answers after its verb's own result has already been returned.</summary>
+    /// <param name="result">The line.</param>
+    public void Publish(CommandResult result) => Raise(
         callbacks: Completed,
         value: result
     );
+
     internal void RefusedCodec() => Raise(
         callbacks: Answered,
         value: new WorldDeferredVerbAnswer(

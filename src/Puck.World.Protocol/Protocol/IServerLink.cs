@@ -116,17 +116,42 @@ public static class ServerLinkSubmissions {
     /// <param name="verb">The submitting verb, exactly as its response line spells it.</param>
     /// <returns>The verdict itself when the link refused the submission before returning; otherwise a result with no
     /// output of its own that settles with the tick-boundary verdict, which <paramref name="echoes"/> publishes.</returns>
-    public static CommandResult Submit(this IServerLink link, WorldMutation mutation, WorldDeferredVerbEchoes echoes, string verb) {
+    public static CommandResult Submit(this IServerLink link, WorldMutation mutation, WorldDeferredVerbEchoes echoes, string verb) => link.Submit(
+        echoes: echoes,
+        mutation: mutation,
+        observe: null,
+        verb: verb
+    );
+    /// <summary>Submits a mutation as <see cref="Submit(IServerLink, WorldMutation, WorldDeferredVerbEchoes, string)"/>
+    /// does, and hands its typed result to <paramref name="observe"/> after the verdict settles, on whatever thread the
+    /// link completes on.</summary>
+    /// <param name="link">The link.</param>
+    /// <param name="mutation">The world mutation to apply.</param>
+    /// <param name="echoes">The pending-verb table the echo subscriber consumes.</param>
+    /// <param name="verb">The submitting verb, exactly as its response line spells it.</param>
+    /// <param name="observe">Receives the typed result, or <see langword="null"/> for none.</param>
+    /// <returns>The verdict itself when the link refused the submission before returning; otherwise a result with no
+    /// output of its own that settles with the tick-boundary verdict, which <paramref name="echoes"/> publishes.</returns>
+    public static CommandResult Submit(this IServerLink link, WorldMutation mutation, WorldDeferredVerbEchoes echoes, string verb, Action<WorldSubmissionResult>? observe) {
         var settlement = new CommandSettlement();
 
-        _ = link.SubmitWorldMutation(mutation: mutation, completion: result => settlement.Settle(result: result switch {
-            WorldSubmissionResult.Mutation reply when reply.Outcome.Applied => new CommandResult(Output: $"[{verb}: {reply.Outcome.Code} {reply.Outcome.Detail}]"),
-            WorldSubmissionResult.Mutation reply => CommandResult.Error(output: $"[{verb}: {reply.Outcome.Code} {reply.Outcome.Detail}]"),
-            WorldSubmissionResult.Refusal refusal => CommandResult.Error(output: $"[{verb}: {refusal.Code} {refusal.Detail}]"),
-            _ => CommandResult.Error(output: $"[{verb}: no authoritative mutation verdict; inspect state before any retry]"),
-        }));
+        _ = link.SubmitWorldMutation(mutation: mutation, completion: result => {
+            settlement.Settle(result: Verdict(result: result, verb: verb));
+            observe?.Invoke(obj: result);
+        });
         return CommandResult.Settling(late: echoes.Publish, settlement: settlement);
     }
+    /// <summary>Returns a mutation's typed result as the verb's verdict line: the outcome's code and detail, an error
+    /// unless the mutation applied.</summary>
+    /// <param name="result">The typed result.</param>
+    /// <param name="verb">The submitting verb, exactly as its response line spells it.</param>
+    /// <returns>The verdict.</returns>
+    public static CommandResult Verdict(WorldSubmissionResult result, string verb) => result switch {
+        WorldSubmissionResult.Mutation reply when reply.Outcome.Applied => new CommandResult(Output: $"[{verb}: {reply.Outcome.Code} {reply.Outcome.Detail}]"),
+        WorldSubmissionResult.Mutation reply => CommandResult.Error(output: $"[{verb}: {reply.Outcome.Code} {reply.Outcome.Detail}]"),
+        WorldSubmissionResult.Refusal refusal => CommandResult.Error(output: $"[{verb}: {refusal.Code} {refusal.Detail}]"),
+        _ => CommandResult.Error(output: $"[{verb}: no authoritative mutation verdict; inspect state before any retry]"),
+    };
     /// <summary>Submits a validated authority command for one entity. Applies synchronously at submit (like a grant or
     /// a session request), so a query following it in the same script observes its effect.</summary>
     /// <param name="link">The link.</param>

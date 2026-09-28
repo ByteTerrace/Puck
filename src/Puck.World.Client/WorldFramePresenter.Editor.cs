@@ -7,7 +7,7 @@ public sealed partial class WorldFramePresenter {
     /// views of building seats draw.</summary>
     public WorldEditorSeats Editor { get; }
 
-    // The grid a seat's view draws this frame, in the world the seat is presented in: none unless the seat builds;
+    // The grid a seat's view draws this frame, for the world the seat edits: none unless the seat builds;
     // otherwise its grid over that world's editor section, on the working plane its mode names (a fixed height, or the
     // surface under its pointer when following, else the base of the placement it last put down there), with the
     // lattice of the reference it captured there.
@@ -16,8 +16,13 @@ public sealed partial class WorldFramePresenter {
             return GridOverlayState.Hidden;
         }
 
-        var world = m_continuum.Route(slot: slot).Endpoint.Identity;
-        var definition = (m_continuum.PresentedElsewhere(slot: slot)?.Definition ?? m_client.Definition);
+        // The world the seat edits, whether it is drawn in that world's own scene or across an adjacency in this frame:
+        // its editor section sets the pitch and snapping the seat's edits land on.
+        var endpoint = m_continuum.Route(slot: slot).Endpoint;
+        var world = endpoint.Identity;
+        var definition = (string.Equals(a: world, b: WorldDefinitionLoader.BootInstanceName, comparisonType: StringComparison.Ordinal)
+            ? m_client.Definition
+            : endpoint.Definition);
         var grid = Editor.GridOf(document: definition.Editor, slot: slot);
 
         if (!grid.Visible) {
