@@ -25,13 +25,16 @@ public sealed partial class WorldFramePresenter {
             : endpoint.Definition);
         var grid = Editor.GridOf(document: definition.Editor, slot: slot);
 
-        if (!grid.Visible) {
+        // The frame the seat's view draws the edited world in: the same frame, or across an adjacency. A seat whose view
+        // nothing relates to the world it edits draws no grid rather than one in the wrong frame.
+        if (!grid.Visible || !m_continuum.TryEditingPath(path: out var path, slot: slot)) {
             return GridOverlayState.Hidden;
         }
 
         var snap = Editor.SnapOf(document: definition.Editor, slot: slot);
         var planeY = grid.PlaneY;
 
+        // Heights here are the edited world's own: the pointer probe answers in that world's frame.
         if (grid.Mode == WorldEditorGridMode.Follow) {
             if (Editor.PointerProbe?.Invoke(arg: slot) is { } hit) {
                 Editor.Follow(height: hit.Point.Y, slot: slot, world: world);
@@ -40,13 +43,16 @@ public sealed partial class WorldFramePresenter {
             planeY = (Editor.FollowedHeightOf(slot: slot, world: world) ?? (BaseOf(definition: definition, id: Editor.CurrentOf(slot: slot, world: world)) ?? planeY));
         }
 
-        return WorldEditorGeometry.Overlay(
-            grid: grid,
-            planeY: planeY,
-            reference: (((Editor.ReferenceOf(slot: slot, world: world) is { } id) && (WorldDefinitionRows.FindPlacement(id: id, placements: definition.Placements) is { } placement))
-                ? WorldEditorGeometry.ReferenceOf(definition: definition, pitch: grid.ResolvedPitch, placement: placement)
-                : null),
-            snap: snap
+        return WorldEditorGeometry.InViewFrame(
+            grid: WorldEditorGeometry.Overlay(
+                grid: grid,
+                planeY: planeY,
+                reference: (((Editor.ReferenceOf(slot: slot, world: world) is { } id) && (WorldDefinitionRows.FindPlacement(id: id, placements: definition.Placements) is { } placement))
+                    ? WorldEditorGeometry.ReferenceOf(definition: definition, pitch: grid.ResolvedPitch, placement: placement)
+                    : null),
+                snap: snap
+            ),
+            path: path
         );
     }
     // The height of a placement's resolved position, or null when there is none of that id.

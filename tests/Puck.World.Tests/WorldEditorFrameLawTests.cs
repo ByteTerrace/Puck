@@ -1,4 +1,6 @@
 using System.Numerics;
+using Puck.Abstractions.Cameras;
+using Puck.Abstractions.Presentation;
 using Puck.Commands;
 using Puck.Maths;
 using Puck.SignedDistance;
@@ -138,13 +140,9 @@ public sealed class WorldEditorFrameLawTests {
         EditorRaw = new WorldEditorDefaults(Grid: new WorldEditorGrid(Pitch: new Vector3(value: DestinationPitch))),
         PlacementRowsRaw = [SlabAt(position: Slab)],
     });
-
-    [Fact]
-    public void APlaceAcrossAnAdjacencyLandsAtTheDestinationsOwnCoordinatesOnItsPitch() {
-        using var row = HostRow.Build(definition: (Fixtures.BuildDocument() with { CreationsRaw = [Crate] }), name: "boot");
-        var destination = Destination(basis: row.Server.Definition);
-        var link = new RecordingLink(definition: destination);
-        using var north = EditorEndpoints.Of(definition: destination, identity: North, link: link, pose: Slab);
+    // A seat routed to the destination and drawn in the boot frame across the adjacency, whose boot-frame field holds the
+    // destination's slab where the adjacency draws it.
+    private static (WorldClient Client, WorldContinuum Continuum, WorldSeatAuthorityRouter Routes) Across(WorldAuthorityEndpoint north, WorldDefinition destination) {
         var routes = new WorldSeatAuthorityRouter();
         var client = ClientFixtures.Client(definition: (Fixtures.BuildDocument() with { DocumentId = "home" }));
 
@@ -166,6 +164,82 @@ public sealed class WorldEditorFrameLawTests {
         // The seat is drawn in the boot frame across the adjacency, not in the destination's own scene.
         Assert.Null(@object: continuum.PresentedElsewhere(slot: 0));
         Assert.True(condition: continuum.TryResolveSeatPose(interpolationAlpha: 1f, orientation: out _, position: out _, slot: 0));
+
+        return (client, continuum, routes);
+    }
+
+    [Fact]
+    public void AGridAcrossAnAdjacencyLiesAlongTheDestinationsAxesAtItsFollowedHeight() {
+        var destination = Destination(basis: Fixtures.BuildDocument());
+        using var north = EditorEndpoints.Of(definition: destination, identity: North, link: new RecordingLink(definition: destination), pose: Slab);
+
+        var (client, continuum, _) = Across(destination: destination, north: north);
+
+        Assert.True(condition: continuum.TryEditingPath(path: out var path, slot: 0));
+        Assert.NotNull(@object: path);
+
+        // The grid composed in the destination's frame, as the boot view draws it: its lattice's axes are the
+        // destination's axes carried through the adjacency (a quarter turn), and its origin the destination's origin.
+        var composed = WorldEditorGeometry.Overlay(
+            grid: new WorldEditorGrid(Pitch: new Vector3(value: DestinationPitch), Visible: true),
+            planeY: 0.25f,
+            reference: null,
+            snap: WorldEditorDefaults.Default.ResolvedSnap
+        );
+        var drawn = WorldEditorGeometry.InViewFrame(grid: composed, path: path);
+        var destinationX = WorldAdjacencyPath.MapVectorIntoSource(path: path, value: new FixedVector3(X: FixedQ4816.One, Y: FixedQ4816.Zero, Z: FixedQ4816.Zero)).ToVector3();
+
+        Assert.True(condition: (Vector3.Distance(value1: Vector3.Transform(rotation: drawn.WorldFrame, value: Vector3.UnitX), value2: destinationX) < 1e-4f));
+        Assert.True(condition: (Vector3.Distance(value1: Vector3.Transform(rotation: drawn.WorldFrame, value: Vector3.UnitY), value2: Vector3.UnitY) < 1e-4f));
+        Assert.True(condition: (Vector3.Distance(value1: drawn.WorldOrigin, value2: WorldAdjacencyPath.MapPointIntoSource(path: path, value: FixedVector3.Zero).ToVector3()) < 1e-4f));
+        Assert.Equal(actual: drawn.WorldPitch, expected: new Vector3(value: DestinationPitch));
+
+        // Red leg: composed without the seat's path, the lattice keeps the boot axes, which are not the destination's.
+        Assert.True(condition: (Vector3.Distance(value1: Vector3.Transform(rotation: WorldEditorGeometry.InViewFrame(grid: composed, path: null).WorldFrame, value: Vector3.UnitX), value2: destinationX) > 0.5f));
+
+        // The following plane takes the destination's height: the pointer over the seat's view, looking straight down on
+        // the slab as the boot frame draws it, meets its top at the destination's 0.25, where the boot frame has it at
+        // -0.75.
+        var viewports = new WorldSeatViewports();
+        var pointer = new WorldPointer();
+        var drawnSlab = WorldAdjacencyPath.MapPointIntoSource(path: path, value: FixedVector3.FromVector3(value: Slab)).ToVector3();
+
+        viewports.Publish(
+            camera: new CameraSnapshot(
+                AspectRatio: (64f / 48f),
+                Forward: -Vector3.UnitY,
+                Position: (drawnSlab + new Vector3(x: 0f, y: 10f, z: 0f)),
+                Right: Vector3.UnitX,
+                TanHalfFieldOfView: 0.5f,
+                Up: Vector3.UnitZ
+            ),
+            height: 48u,
+            region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f),
+            slot: 0,
+            width: 64u
+        );
+        pointer.SetPosition(position: new Vector2(x: 32f, y: 24f), slot: 0);
+
+        var followed = new WorldEditorPointer(client: client, continuum: continuum, pointer: pointer, viewports: viewports).Probe(slot: 0);
+
+        Assert.NotNull(@object: followed);
+        Assert.Equal(actual: followed.Value.Point.Y, expected: 0.25f, tolerance: 0.02);
+
+        // Red leg: probed in the frame the view draws, the height is the boot frame's.
+        var presented = new WorldEditorPointer(client: client, pointer: pointer, viewports: viewports).Probe(slot: 0);
+
+        Assert.NotNull(@object: presented);
+        Assert.Equal(actual: presented.Value.Point.Y, expected: -0.75f, tolerance: 0.02);
+    }
+    [Fact]
+    public void APlaceAcrossAnAdjacencyLandsAtTheDestinationsOwnCoordinatesOnItsPitch() {
+        using var row = HostRow.Build(definition: (Fixtures.BuildDocument() with { CreationsRaw = [Crate] }), name: "boot");
+        var destination = Destination(basis: row.Server.Definition);
+        var link = new RecordingLink(definition: destination);
+        using var north = EditorEndpoints.Of(definition: destination, identity: North, link: link, pose: Slab);
+
+        var (client, continuum, routes) = Across(destination: destination, north: north);
+
 
         var pointer = new WorldEditorPointer(client: client, continuum: continuum, viewports: new WorldSeatViewports());
         var expected = new Vector3(x: Aim.Origin.X, y: 0.25f, z: Aim.Origin.Z);

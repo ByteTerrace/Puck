@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/05abdc9a3325b29a56e54b3247edefff650ddfc38b634d7c415c819eef8d5f79). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/7447ddf1d1ef5232b01bee67d97b4a3ba3274ffc900a02ec32cfb41a7cd33729). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -71,31 +71,34 @@ struct SdfWorldPass {
     [[vk::offset(972)]] float gridObjectPatchRadius;
     [[vk::offset(976)]] float3 gridObjectPitch;
     [[vk::offset(988)]] float gridPlaneY;
-    [[vk::offset(992)]] float3 gridWorldPitch;
-    [[vk::offset(1004)]] uint _pad1004;
-    [[vk::offset(1008)]] uint2 imageExtent;
-    [[vk::offset(1016)]] uint instanceMaskWordCount;
-    [[vk::offset(1020)]] uint meshDraws;
-    [[vk::offset(1024)]] float nearDistance;
-    [[vk::offset(1028)]] uint screenCount;
-    [[vk::offset(1032)]] float shadowDistanceScale;
-    [[vk::offset(1036)]] float sunScale;
-    [[vk::offset(1040)]] float tanHalfFieldOfView;
-    [[vk::offset(1044)]] uint _pad1044;
-    [[vk::offset(1048)]] uint2 tileGrid;
-    [[vk::offset(1056)]] uint viewBase;
-    [[vk::offset(1060)]] uint _pad1060;
-    [[vk::offset(1064)]] uint _pad1064;
-    [[vk::offset(1068)]] uint _pad1068;
-    [[vk::offset(1072)]] float3 viewForward;
-    [[vk::offset(1084)]] uint _pad1084;
-    [[vk::offset(1088)]] float3 viewPosition;
+    [[vk::offset(992)]] float4 gridWorldFrame;
+    [[vk::offset(1008)]] float3 gridWorldOrigin;
+    [[vk::offset(1020)]] uint _pad1020;
+    [[vk::offset(1024)]] float3 gridWorldPitch;
+    [[vk::offset(1036)]] uint _pad1036;
+    [[vk::offset(1040)]] uint2 imageExtent;
+    [[vk::offset(1048)]] uint instanceMaskWordCount;
+    [[vk::offset(1052)]] uint meshDraws;
+    [[vk::offset(1056)]] float nearDistance;
+    [[vk::offset(1060)]] uint screenCount;
+    [[vk::offset(1064)]] float shadowDistanceScale;
+    [[vk::offset(1068)]] float sunScale;
+    [[vk::offset(1072)]] float tanHalfFieldOfView;
+    [[vk::offset(1076)]] uint _pad1076;
+    [[vk::offset(1080)]] uint2 tileGrid;
+    [[vk::offset(1088)]] uint viewBase;
+    [[vk::offset(1092)]] uint _pad1092;
+    [[vk::offset(1096)]] uint _pad1096;
     [[vk::offset(1100)]] uint _pad1100;
-    [[vk::offset(1104)]] float3 viewRight;
+    [[vk::offset(1104)]] float3 viewForward;
     [[vk::offset(1116)]] uint _pad1116;
-    [[vk::offset(1120)]] float3 viewUp;
-    [[vk::offset(1132)]] uint viewportCount;
-    [[vk::offset(1136)]] uint workCounterRow;
+    [[vk::offset(1120)]] float3 viewPosition;
+    [[vk::offset(1132)]] uint _pad1132;
+    [[vk::offset(1136)]] float3 viewRight;
+    [[vk::offset(1148)]] uint _pad1148;
+    [[vk::offset(1152)]] float3 viewUp;
+    [[vk::offset(1164)]] uint viewportCount;
+    [[vk::offset(1168)]] uint workCounterRow;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsaC521032A : register(b0, space3);
 #define passGroup passGroupIsaC521032A

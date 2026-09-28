@@ -113,21 +113,29 @@ public sealed class WorldEditorPointer(WorldSeatViewports viewports, WorldClient
     /// <param name="slot">The seat, zero-based.</param>
     /// <returns>The ray, or <see langword="null"/> when the seat presents no view, or nothing relates its view to the
     /// world it edits.</returns>
-    public WorldEditorRay? Aim(int slot) {
+    public WorldEditorRay? Aim(int slot) => IntoEditingFrame(
+        ray: Through(pointerOnly: false, slot: slot),
+        slot: slot
+    );
+
+    // A ray through the seat's view carried into the frame of the world it edits, or null when there is none or nothing
+    // relates the two frames.
+    private WorldEditorRay? IntoEditingFrame(int slot, WorldEditorRay? ray) {
         if (
-            (Through(pointerOnly: false, slot: slot) is not { } ray) ||
+            (ray is not { } presented) ||
             !TryEditingPath(path: out var path, slot: slot)
         ) {
             return null;
         }
 
         return ((path is null)
-            ? ray
+            ? presented
             : new WorldEditorRay(
-                Direction: Vector3.Normalize(value: WorldAdjacencyPath.MapVectorIntoNeighbour(path: path, value: FixedVector3.FromVector3(value: ray.Direction)).ToVector3()),
-                Origin: WorldAdjacencyPath.MapPointIntoNeighbour(path: path, value: FixedVector3.FromVector3(value: ray.Origin)).ToVector3()
+                Direction: Vector3.Normalize(value: WorldAdjacencyPath.MapVectorIntoNeighbour(path: path, value: FixedVector3.FromVector3(value: presented.Direction)).ToVector3()),
+                Origin: WorldAdjacencyPath.MapPointIntoNeighbour(path: path, value: FixedVector3.FromVector3(value: presented.Origin)).ToVector3()
             ));
     }
+
     /// <summary>Gives a set of editor seats this host's aim and pointer probes.</summary>
     /// <param name="seats">The editor seats.</param>
     /// <returns>The same editor seats.</returns>
@@ -140,12 +148,12 @@ public sealed class WorldEditorPointer(WorldSeatViewports viewports, WorldClient
 
         return seats;
     }
-    /// <summary>Returns the surface under a seat's pointer in the frame the seat's view draws, where its grid is drawn,
-    /// or <see langword="null"/> for none.</summary>
+    /// <summary>Returns the surface under a seat's pointer in the frame of the world it edits, where its grid's plane and
+    /// lattice are composed, or <see langword="null"/> for none.</summary>
     /// <param name="slot">The seat, zero-based.</param>
     /// <returns>The hit, its normal the field's gradient there, or zero where the field gives none.</returns>
-    public WorldEditorPointerHit? Probe(int slot) => ((Through(pointerOnly: true, slot: slot) is { } ray)
-        ? PresentedSurface(
+    public WorldEditorPointerHit? Probe(int slot) => ((IntoEditingFrame(ray: Through(pointerOnly: true, slot: slot), slot: slot) is { } ray)
+        ? Surface(
             maxDistance: WorldRenderFarDistance.Resolve(defaults: client.Definition.Render),
             ray: ray,
             slot: slot

@@ -1,6 +1,8 @@
 using System.Numerics;
+using Puck.Maths;
 using Puck.SdfVm;
 using Puck.World.Authoring;
+using Puck.World.Server;
 
 namespace Puck.World.Client;
 
@@ -39,6 +41,29 @@ public static class WorldEditorGeometry {
             Origin: frame.Position,
             Pitch: pitch
         );
+    }
+    /// <summary>Returns a grid composed in the frame of the world a seat edits as its view draws it: unchanged when the
+    /// two frames are one; otherwise with the world lattice's frame (<see cref="GridOverlayState.WorldOrigin"/>,
+    /// <see cref="GridOverlayState.WorldFrame"/>) set to that world's origin and orientation carried through the adjacency
+    /// the view draws it across, and the reference's origin and orientation carried likewise, so every line lies where the
+    /// seat's edits snap. The pitch and plane height stay in the edited world's own units.</summary>
+    /// <param name="grid">The grid, in the edited world's frame.</param>
+    /// <param name="path">The adjacency path from the view's frame to the edited world's
+    /// (<see cref="WorldContinuum.TryEditingPath"/>), or <see langword="null"/> when the two frames are one.</param>
+    /// <returns>The grid as the view draws it.</returns>
+    public static GridOverlayState InViewFrame(GridOverlayState grid, IReadOnlyList<WorldAdjacencyFramePair>? path) {
+        if ((path is null) || !grid.IsVisible) {
+            return grid;
+        }
+
+        var frame = WorldAdjacencyPath.MapOrientationIntoSource(path: path, value: FixedQuaternion.Identity).ToQuaternion();
+
+        return (grid with {
+            ObjectFrame = Quaternion.Normalize(value: (frame * grid.ObjectFrame)),
+            ObjectOrigin = WorldAdjacencyPath.MapPointIntoSource(path: path, value: FixedVector3.FromVector3(value: grid.ObjectOrigin)).ToVector3(),
+            WorldFrame = frame,
+            WorldOrigin = WorldAdjacencyPath.MapPointIntoSource(path: path, value: FixedVector3.Zero).ToVector3(),
+        });
     }
     /// <summary>Returns the grid a building seat's view draws: nothing while the grid is hidden; otherwise the world
     /// lattice on every surface in <see cref="WorldEditorGridMode.Surface"/>, or on the working plane at

@@ -68,17 +68,24 @@ float3 sdfApplyGrid(float3 color, float3 surfacePoint, float3 normal, float3 ray
     float width = ((footprint * max(passGroup.gridLineWidth, 0.5)) / max(facing, 0.2));
     float graze = saturate((facing / 0.15));
 
+    // The world lattice lives in the frame of the world it belongs to: the view's own world, or one drawn across an
+    // adjacency, whose origin and orientation carry the surface point and normal into that world's coordinates. The
+    // identity frame leaves both exactly as they are.
+    float4 worldFrame = passGroup.gridWorldFrame;
+    float3 latticePoint = rotatePointByInverseQuaternion((surfacePoint - passGroup.gridWorldOrigin), worldFrame);
+    float3 latticeNormal = rotatePointByInverseQuaternion(normal, worldFrame);
+
     if ((flags & SDF_GRID_SURFACE) != 0u) {
-        float coverage = sdfGridProjected(surfacePoint, normal, passGroup.gridWorldPitch, width);
+        float coverage = sdfGridProjected(latticePoint, latticeNormal, passGroup.gridWorldPitch, width);
 
         color = lerp(color, GridWorldLineColor, ((coverage * graze) * GridWorldLineOpacity));
     } else if ((flags & SDF_GRID_WORLD) != 0u) {
-        // The working plane: a surface at the plane's height, within a band as wide as the drawn line and never under a
-        // hundredth of a unit, facing up or down.
+        // The working plane: a surface at the plane's height along the lattice's up, within a band as wide as the drawn
+        // line and never under a hundredth of a unit, facing up or down.
         float band = max((2.0 * width), 0.01);
 
-        if ((abs(surfacePoint.y - passGroup.gridPlaneY) <= band) && (abs(normal.y) > 0.5)) {
-            float coverage = sdfGridPlane(surfacePoint.xz, passGroup.gridWorldPitch.xz, width);
+        if ((abs(latticePoint.y - passGroup.gridPlaneY) <= band) && (abs(latticeNormal.y) > 0.5)) {
+            float coverage = sdfGridPlane(latticePoint.xz, passGroup.gridWorldPitch.xz, width);
 
             color = lerp(color, GridWorldLineColor, ((coverage * graze) * GridWorldLineOpacity));
         }

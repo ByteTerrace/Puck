@@ -55,6 +55,8 @@ public static class SdfFrameBlock {
     private static readonly int GridObjectPatchRadius = Offset(member: SdfWorldPackage.GridObjectPatchRadius);
     private static readonly int GridObjectPitch = Offset(member: SdfWorldPackage.GridObjectPitch);
     private static readonly int GridPlaneY = Offset(member: SdfWorldPackage.GridPlaneY);
+    private static readonly int GridWorldFrame = Offset(member: SdfWorldPackage.GridWorldFrame);
+    private static readonly int GridWorldOrigin = Offset(member: SdfWorldPackage.GridWorldOrigin);
     private static readonly int GridWorldPitch = Offset(member: SdfWorldPackage.GridWorldPitch);
     private static readonly int ImageExtent = Offset(member: SdfWorldPackage.ImageExtent);
     private static readonly int InstanceMaskWordCount = Offset(member: SdfWorldPackage.InstanceMaskWordCount);
@@ -155,6 +157,11 @@ public static class SdfFrameBlock {
         WriteSingle(block: block, offset: (GridObjectFrame + (2 * sizeof(float))), value: grid.ObjectFrame.Z);
         WriteSingle(block: block, offset: (GridObjectFrame + (3 * sizeof(float))), value: grid.ObjectFrame.W);
         WriteSingle(block: block, offset: GridObjectPatchRadius, value: grid.ObjectPatchRadius);
+        WriteVector3(block: block, offset: GridWorldOrigin, value: grid.WorldOrigin);
+        WriteSingle(block: block, offset: GridWorldFrame, value: grid.WorldFrame.X);
+        WriteSingle(block: block, offset: (GridWorldFrame + sizeof(float)), value: grid.WorldFrame.Y);
+        WriteSingle(block: block, offset: (GridWorldFrame + (2 * sizeof(float))), value: grid.WorldFrame.Z);
+        WriteSingle(block: block, offset: (GridWorldFrame + (3 * sizeof(float))), value: grid.WorldFrame.W);
         WriteFlag(block: block, offset: FiniteDifferenceNormals, value: frame.UseFiniteDifferenceNormals);
         WriteFlag(block: block, offset: DisableShadowCull, value: frame.DisableShadowCull);
         WriteFlag(block: block, offset: DisableSoftShadows, value: quality.DisableSoftShadows);

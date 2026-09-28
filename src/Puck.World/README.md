@@ -466,7 +466,10 @@ after a crossing names nothing until the seat selects again there. A seat that
 sees a nested world across an adjacency, drawn in this world's frame, still
 edits in that world's own coordinates: its aim and every surface it meets are
 carried through the adjacency's isometry, the one its crossing and rendering
-use, and its grid and snapping read that world's `editor` section.
+use; its grid and snapping read that world's `editor` section, and its grid is
+drawn in that world's frame (`GridOverlayState.WorldOrigin` and `WorldFrame`), so
+the lines, the plane height it follows and the reference's lattice lie where its
+edits snap.
 
 A seat's edits to one placement run one at a time. Each is based on the value
 the seat last submitted, not on the document as it last arrived, which trails

@@ -76,9 +76,15 @@ public static class SdfWorldPackage {
     /// <summary>The pass-group value holding the grid's line width in pixels at the surface, which the on-plane band
     /// scales with (<c>float</c>).</summary>
     public const string GridLineWidth = "gridLineWidth";
-    /// <summary>The pass-group value holding the world grid's pitch on X, Y and Z, in world units, zero disabling an axis
+    /// <summary>The pass-group value holding the world grid's pitch on its own X, Y and Z, in world units, zero disabling an axis
     /// (<c>float3</c>).</summary>
     public const string GridWorldPitch = "gridWorldPitch";
+    /// <summary>The pass-group value holding the world grid's origin in the view's world space: the origin of the world the
+    /// lattice belongs to (<c>float3</c>).</summary>
+    public const string GridWorldOrigin = "gridWorldOrigin";
+    /// <summary>The pass-group value holding the world grid's orientation quaternion in the view's world space, xyzw, identity
+    /// for the world the view draws (<c>float4</c>).</summary>
+    public const string GridWorldFrame = "gridWorldFrame";
     /// <summary>The pass-group value holding the object grid's reference origin in world space (<c>float3</c>).</summary>
     public const string GridObjectOrigin = "gridObjectOrigin";
     /// <summary>The pass-group value holding the object grid's pitch on its reference X, Y and Z, zero disabling an axis
@@ -262,6 +268,8 @@ public static class SdfWorldPackage {
         Value(name: GridPlaneY, type: ShaderValueType.Float),
         Value(name: GridLineWidth, type: ShaderValueType.Float),
         Value(name: GridWorldPitch, type: ShaderValueType.Float3),
+        Value(name: GridWorldOrigin, type: ShaderValueType.Float3),
+        Value(name: GridWorldFrame, type: ShaderValueType.Float4),
         Value(name: GridObjectOrigin, type: ShaderValueType.Float3),
         Value(name: GridObjectPitch, type: ShaderValueType.Float3),
         Value(name: GridObjectFrame, type: ShaderValueType.Float4),
