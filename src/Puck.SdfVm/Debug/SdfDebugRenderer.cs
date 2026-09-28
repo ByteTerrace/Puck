@@ -385,7 +385,7 @@ public sealed class SdfDebugRenderer {
         ),
             SdfDebugOpKind.Polar => builder.RepeatPolar(
             count: op.I0,
-            axis: ((SdfPolarAxis)op.I1),
+            axis: ((SdfAxis)op.I1),
             mirror: op.Flag
         ),
             SdfDebugOpKind.Symmetry => builder.SymmetryPlane(
@@ -749,7 +749,7 @@ public sealed class SdfDebugRenderer {
                         x: 3f,
                         y: 3f
                     ),
-                    plane: SdfWallpaperPlane.XZ
+                    plane: SdfPlane.XZ
                 ).Box(
                     halfExtents: new Vector3(
                         x: 0.55f,

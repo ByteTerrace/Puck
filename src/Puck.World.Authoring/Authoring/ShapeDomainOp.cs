@@ -54,7 +54,7 @@ public abstract record ShapeDomainOp {
     /// <param name="MaterialStride">The per-sector palette stride (null = 0, geometric only).</param>
     /// <param name="Origin">The point the sector fold pivots around, creation units (null = the creation origin,
     /// the pivot this op has always used). A null origin is byte-identical to today's fold.</param>
-    public sealed record Polar(int Count, SdfPolarAxis? Axis = null, bool? Mirror = null, int? MaterialStride = null, DocumentVector3? Origin = null) : ShapeDomainOp;
+    public sealed record Polar(int Count, SdfAxis? Axis = null, bool? Mirror = null, int? MaterialStride = null, DocumentVector3? Origin = null) : ShapeDomainOp;
     /// <summary>Wallpaper-group lattice fold — <see cref="SdfDomainOp.Wallpaper"/>. Render only: it has no rigid-copy
     /// expansion, so a solid placement carrying one is refused by name at validation.</summary>
     /// <param name="Group">The wallpaper group.</param>
@@ -67,7 +67,7 @@ public abstract record ShapeDomainOp {
         SdfWallpaperGroup Group,
         DocumentVector2 Cell,
         DocumentVector2? Limit = null,
-        SdfWallpaperPlane? Plane = null,
+        SdfPlane? Plane = null,
         int? MaterialStride = null,
         float? LodDistance = null
     ) : ShapeDomainOp {
@@ -114,7 +114,7 @@ public static class ShapeDomainOps {
             Spacing: repeat.Spacing
         ),
             ShapeDomainOp.Polar polar => new SdfDomainOp.Polar(
-            Axis: (polar.Axis ?? SdfPolarAxis.Y),
+            Axis: (polar.Axis ?? SdfAxis.Y),
             Count: polar.Count,
             MaterialStride: (polar.MaterialStride ?? 0),
             Mirror: (polar.Mirror ?? false),
@@ -126,7 +126,7 @@ public static class ShapeDomainOps {
             Limit: (wallpaper.Limit ?? new Vector2(value: ShapeDomainOp.Wallpaper.UnboundedLimit)),
             LodDistance: (wallpaper.LodDistance ?? 0f),
             MaterialStride: (wallpaper.MaterialStride ?? 0),
-            Plane: (wallpaper.Plane ?? SdfWallpaperPlane.XZ)
+            Plane: (wallpaper.Plane ?? SdfPlane.XZ)
         ),
             _ => throw new ArgumentOutOfRangeException(
             paramName: nameof(op),

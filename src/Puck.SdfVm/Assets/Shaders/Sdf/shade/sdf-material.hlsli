@@ -42,13 +42,13 @@ static const float SdfSheenFresnelExponent = 2.0;
 SdfMaterialData sdfMaterialLoad(int material) {
     uint4 header = sdfWords[0];
     SdfMaterialData data = (SdfMaterialData)0;
-    if ((material < 0) || ((uint)material >= header.y)) {
+    if ((material < 0) || ((uint)material >= SDF_PROGRAM_MATERIAL_COUNT(header))) {
         data.albedo = float3(1.0, 0.0, 1.0);
         data.emissive = 4.0;
         data.roughness = 1.0;
         return data;
     }
-    uint materialBase = header.w + SDF_MATERIAL_VECTORS_PER_ENTRY * (uint)material;
+    uint materialBase = SDF_PROGRAM_MATERIAL_OFFSET(header) + SDF_MATERIAL_VECTORS_PER_ENTRY * (uint)material;
     float4 m0 = asfloat(sdfWords[materialBase]);
     float4 m1 = asfloat(sdfWords[materialBase + 1u]);
     float4 m2 = asfloat(sdfWords[materialBase + 2u]);

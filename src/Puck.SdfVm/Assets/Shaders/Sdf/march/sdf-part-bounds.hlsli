@@ -75,34 +75,34 @@ bool sdfPartShapeBox(uint type, float4 d0, float4 d1, float level, out float3 bo
 
 bool sdfPartLeafBox(uint shapeIndex, uint domainCode, uint poseBinding, float level, out float3 lower, out float3 upper) {
     lower = 1e20; upper = -1e20;
-    uint4 shape = sdfWords[1u + shapeIndex];
-    if (!sdfShapeEnabled(shape.y)) return true;
+    uint4 shape = sdfWords[SDF_PROGRAM_HEADER_VECTORS + shapeIndex];
+    if (!sdfShapeEnabled(SDF_INSTRUCTION_SHAPE(shape))) return true;
     uint4 domain = 0u;
     float4 domain0 = 0.0, domain1 = 0.0;
     float correction = 1.0;
     if (domainCode != 0u) {
         uint domainIndex = domainCode - 1u;
-        domain = sdfWords[1u + domainIndex];
-        domain0 = asfloat(sdfWords[sdfProgramLayout.dataOffset + 2u * domainIndex]);
-        domain1 = asfloat(sdfWords[sdfProgramLayout.dataOffset + 2u * domainIndex + 1u]);
-        if (domain.x == SDF_OP_SCALE) correction = domain0.w;
-        else if (domain.x == SDF_OP_AXIAL_PROFILE) correction = domain1.x;
-        else if (domain.x != SDF_OP_SHEAR) return false;
+        domain = sdfWords[SDF_PROGRAM_HEADER_VECTORS + domainIndex];
+        domain0 = asfloat(sdfWords[sdfProgramLayout.dataOffset + SDF_INSTRUCTION_DATA_VECTORS * domainIndex]);
+        domain1 = asfloat(sdfWords[sdfProgramLayout.dataOffset + SDF_INSTRUCTION_DATA_VECTORS * domainIndex + 1u]);
+        if (SDF_INSTRUCTION_OP(domain) == SDF_OP_SCALE) correction = domain0.w;
+        else if (SDF_INSTRUCTION_OP(domain) == SDF_OP_AXIAL_PROFILE) correction = domain1.x;
+        else if (SDF_INSTRUCTION_OP(domain) != SDF_OP_SHEAR) return false;
         if (!(correction > 0.0) || !isfinite(correction)) return false;
     }
-    float4 shape0 = asfloat(sdfWords[sdfProgramLayout.dataOffset + 2u * shapeIndex]);
-    float4 shape1 = asfloat(sdfWords[sdfProgramLayout.dataOffset + 2u * shapeIndex + 1u]);
+    float4 shape0 = asfloat(sdfWords[sdfProgramLayout.dataOffset + SDF_INSTRUCTION_DATA_VECTORS * shapeIndex]);
+    float4 shape1 = asfloat(sdfWords[sdfProgramLayout.dataOffset + SDF_INSTRUCTION_DATA_VECTORS * shapeIndex + 1u]);
     float3 box;
-    if (!sdfPartShapeBox(shape.y & SDF_SHAPE_TYPE_MASK, shape0, shape1, level / correction, box)) return false;
+    if (!sdfPartShapeBox(SDF_INSTRUCTION_SHAPE(shape) & SDF_SHAPE_TYPE_MASK, shape0, shape1, level / correction, box)) return false;
     if (domainCode != 0u) {
-        if (domain.x == SDF_OP_SCALE) box *= abs(domain0.xyz);
-        else if (domain.x == SDF_OP_AXIAL_PROFILE) {
+        if (SDF_INSTRUCTION_OP(domain) == SDF_OP_SCALE) box *= abs(domain0.xyz);
+        else if (SDF_INSTRUCTION_OP(domain) == SDF_OP_AXIAL_PROFILE) {
             float maximumScale = max(SDF_FLARE_MIN_SCALE, abs(domain1.y) + abs(domain0.x) + abs(domain0.y));
             [unroll] for (uint component = 0u; component < 3u; component++)
-                if (component != domain.y) box[component] *= maximumScale;
+                if (component != SDF_INSTRUCTION_SHAPE(domain)) box[component] *= maximumScale;
         } else {
-            float reach = box[domain.z];
-            box[domain.y] += abs(domain0.x) * reach + abs(domain0.y) * reach * reach +
+            float reach = box[SDF_INSTRUCTION_BLEND(domain)];
+            box[SDF_INSTRUCTION_SHAPE(domain)] += abs(domain0.x) * reach + abs(domain0.y) * reach * reach +
                 abs(domain0.z) * reach * reach * reach;
         }
     }
@@ -125,29 +125,29 @@ bool sdfPartLeafBox(uint shapeIndex, uint domainCode, uint poseBinding, float le
 
 bool sdfChainSublevelBox(uint cursor, uint end, float level, bool requireUnion, out float3 lower, out float3 upper) {
     lower = -1e20; upper = 1e20;
-    if (cursor >= end || sdfWords[1u + cursor++].x != SDF_OP_RESET_POINT) return false;
+    if (cursor >= end || SDF_INSTRUCTION_OP(sdfWords[SDF_PROGRAM_HEADER_VECTORS + cursor++]) != SDF_OP_RESET_POINT) return false;
     uint poseBinding = 0u, domainCode = 0u;
-    if (cursor < end && sdfWords[1u + cursor].x == SDF_OP_TRANSFORM_DYNAMIC) {
-        poseBinding = (uint)asfloat(sdfWords[sdfProgramLayout.dataOffset + 2u * cursor]).x + 1u;
+    if (cursor < end && SDF_INSTRUCTION_OP(sdfWords[SDF_PROGRAM_HEADER_VECTORS + cursor]) == SDF_OP_TRANSFORM_DYNAMIC) {
+        poseBinding = (uint)asfloat(sdfWords[sdfProgramLayout.dataOffset + SDF_INSTRUCTION_DATA_VECTORS * cursor]).x + 1u;
         cursor++;
     }
     float3 translation = 0.0;
     float4 rotation = float4(0, 0, 0, 1);
-    if (cursor < end && sdfWords[1u + cursor].x == SDF_OP_TRANSLATE) {
-        translation = asfloat(sdfWords[sdfProgramLayout.dataOffset + 2u * cursor]).xyz;
+    if (cursor < end && SDF_INSTRUCTION_OP(sdfWords[SDF_PROGRAM_HEADER_VECTORS + cursor]) == SDF_OP_TRANSLATE) {
+        translation = asfloat(sdfWords[sdfProgramLayout.dataOffset + SDF_INSTRUCTION_DATA_VECTORS * cursor]).xyz;
         cursor++;
     }
-    if (cursor < end && sdfWords[1u + cursor].x == SDF_OP_ROTATE) {
-        rotation = asfloat(sdfWords[sdfProgramLayout.dataOffset + 2u * cursor]);
+    if (cursor < end && SDF_INSTRUCTION_OP(sdfWords[SDF_PROGRAM_HEADER_VECTORS + cursor]) == SDF_OP_ROTATE) {
+        rotation = asfloat(sdfWords[sdfProgramLayout.dataOffset + SDF_INSTRUCTION_DATA_VECTORS * cursor]);
         cursor++;
     }
     if (cursor < end) {
-        uint op = sdfWords[1u + cursor].x;
+        uint op = SDF_INSTRUCTION_OP(sdfWords[SDF_PROGRAM_HEADER_VECTORS + cursor]);
         if (op == SDF_OP_SCALE || op == SDF_OP_AXIAL_PROFILE || op == SDF_OP_SHEAR) domainCode = ++cursor;
     }
     if (cursor + 1u != end) return false;
-    uint4 shape = sdfWords[1u + cursor];
-    if (shape.x != SDF_OP_SHAPE_BLEND || (requireUnion && shape.z != SDF_BLEND_UNION)) return false;
+    uint4 shape = sdfWords[SDF_PROGRAM_HEADER_VECTORS + cursor];
+    if (SDF_INSTRUCTION_OP(shape) != SDF_OP_SHAPE_BLEND || (requireUnion && SDF_INSTRUCTION_BLEND(shape) != SDF_BLEND_UNION)) return false;
     if (!sdfPartLeafBox(cursor, domainCode, 0u, level, lower, upper)) return false;
     if (any(lower > upper)) return true;
     float3 center = (lower + upper) * 0.5, box = (upper - lower) * 0.5;
@@ -173,27 +173,27 @@ bool sdfFlatSublevelBox(uint instance, float level, out float3 lower, out float3
     uint4 meta = sdfWords[sdfInstanceEntryOffset(sdfProgramLayout.instanceOffset, instance) + 1u];
     uint segmentEnd = meta.w & SDF_INSTANCE_SEGMENT_END_MASK;
     if (segmentEnd <= meta.z) return false;
-    uint first = sdfWords[sdfProgramLayout.segmentOffset + 2u + 2u * meta.z].z;
-    uint end = sdfWords[sdfProgramLayout.segmentOffset + 2u + 2u * (segmentEnd - 1u)].w;
+    uint first = sdfWords[sdfProgramLayout.segmentOffset + SDF_DIRECTORY_HEADER_VECTORS + 1u + SDF_BOUND_RECORD_VECTORS * meta.z].z;
+    uint end = sdfWords[sdfProgramLayout.segmentOffset + SDF_DIRECTORY_HEADER_VECTORS + 1u + SDF_BOUND_RECORD_VECTORS * (segmentEnd - 1u)].w;
     if (segmentEnd == meta.z + 1u && sdfChainSublevelBox(first, end, level, true, lower, upper)) return true;
-    if (first >= end || sdfWords[1u + first].x != SDF_OP_PUSH_FIELD) return false;
-    uint4 pop = sdfWords[end];
-    if (pop.x != SDF_OP_POP_FIELD || pop.z != SDF_BLEND_UNION) return false;
-    float scale = asfloat(sdfWords[sdfProgramLayout.dataOffset + 2u * (end - 1u) + 1u]).y;
+    if (first >= end || SDF_INSTRUCTION_OP(sdfWords[SDF_PROGRAM_HEADER_VECTORS + first]) != SDF_OP_PUSH_FIELD) return false;
+    uint4 pop = sdfWords[SDF_PROGRAM_HEADER_VECTORS + end - 1u];
+    if (SDF_INSTRUCTION_OP(pop) != SDF_OP_POP_FIELD || SDF_INSTRUCTION_BLEND(pop) != SDF_BLEND_UNION) return false;
+    float scale = asfloat(sdfWords[sdfProgramLayout.dataOffset + SDF_INSTRUCTION_DATA_VECTORS * (end - 1u) + 1u]).y;
     if (scale <= 0.0) scale = 1.0;
     level /= scale;
     float slack = 0.0;
     [loop] for (uint instruction = first + 1u; instruction < end - 1u; instruction++) {
-        uint4 code = sdfWords[1u + instruction];
-        if (code.x != SDF_OP_SHAPE_BLEND || !sdfShapeEnabled(code.y)) continue;
-        if (code.z == SDF_BLEND_SMOOTH_UNION) slack += max(asfloat(sdfWords[sdfProgramLayout.dataOffset + 2u * instruction + 1u]).x, SDF_SMOOTH_RADIUS_MIN) * 0.25;
-        else if (!(code.z == SDF_BLEND_UNION || code.z == SDF_BLEND_SUBTRACTION || code.z == SDF_BLEND_INTERSECTION || code.z == SDF_BLEND_SMOOTH_INTERSECTION || code.z == SDF_BLEND_SMOOTH_SUBTRACTION)) return false;
+        uint4 code = sdfWords[SDF_PROGRAM_HEADER_VECTORS + instruction];
+        if (SDF_INSTRUCTION_OP(code) != SDF_OP_SHAPE_BLEND || !sdfShapeEnabled(SDF_INSTRUCTION_SHAPE(code))) continue;
+        if (SDF_INSTRUCTION_BLEND(code) == SDF_BLEND_SMOOTH_UNION) slack += max(asfloat(sdfWords[sdfProgramLayout.dataOffset + SDF_INSTRUCTION_DATA_VECTORS * instruction + 1u]).x, SDF_SMOOTH_RADIUS_MIN) * 0.25;
+        else if (!(SDF_INSTRUCTION_BLEND(code) == SDF_BLEND_UNION || SDF_INSTRUCTION_BLEND(code) == SDF_BLEND_SUBTRACTION || SDF_INSTRUCTION_BLEND(code) == SDF_BLEND_INTERSECTION || SDF_INSTRUCTION_BLEND(code) == SDF_BLEND_SMOOTH_INTERSECTION || SDF_INSTRUCTION_BLEND(code) == SDF_BLEND_SMOOTH_SUBTRACTION)) return false;
     }
     lower = 1e20; upper = -1e20;
     uint cursor = first + 1u;
     [loop] while (cursor < end - 1u) {
         uint chainEnd = cursor + 1u;
-        [loop] while (chainEnd < end - 1u && sdfWords[1u + chainEnd].x != SDF_OP_RESET_POINT) chainEnd++;
+        [loop] while (chainEnd < end - 1u && SDF_INSTRUCTION_OP(sdfWords[SDF_PROGRAM_HEADER_VECTORS + chainEnd]) != SDF_OP_RESET_POINT) chainEnd++;
         float3 chainLower, chainUpper;
         if (!sdfChainSublevelBox(cursor, chainEnd, level + slack, false, chainLower, chainUpper)) return false;
         lower = min(lower, chainLower); upper = max(upper, chainUpper);
@@ -212,15 +212,15 @@ bool sdfPartSublevelBox(uint4 part, float depth, float footprint, float minimumL
     float blendSlack = 0.0;
     [loop] for (uint leaf = 0u; leaf < count; leaf++) {
         uint4 code = sdfWords[part.x + leaf];
-        uint4 shape = sdfWords[1u + code.x];
-        if (!sdfShapeEnabled(shape.y)) continue;
-        if (shape.z == SDF_BLEND_SMOOTH_UNION) {
-            float k = asfloat(sdfWords[sdfProgramLayout.dataOffset + 2u * code.x + 1u]).x;
+        uint4 shape = sdfWords[SDF_PROGRAM_HEADER_VECTORS + code.x];
+        if (!sdfShapeEnabled(SDF_INSTRUCTION_SHAPE(shape))) continue;
+        if (SDF_INSTRUCTION_BLEND(shape) == SDF_BLEND_SMOOTH_UNION) {
+            float k = asfloat(sdfWords[sdfProgramLayout.dataOffset + SDF_INSTRUCTION_DATA_VECTORS * code.x + 1u]).x;
             // Polynomial smooth-min lowers min(a,b) by at most k/4. Sum the whole ordered chain's slack.
             blendSlack += max(k, SDF_SMOOTH_RADIUS_MIN) * 0.25;
-        } else if (!(shape.z == SDF_BLEND_UNION || shape.z == SDF_BLEND_SUBTRACTION ||
-            shape.z == SDF_BLEND_INTERSECTION || shape.z == SDF_BLEND_SMOOTH_INTERSECTION ||
-            shape.z == SDF_BLEND_SMOOTH_SUBTRACTION)) return false;
+        } else if (!(SDF_INSTRUCTION_BLEND(shape) == SDF_BLEND_UNION || SDF_INSTRUCTION_BLEND(shape) == SDF_BLEND_SUBTRACTION ||
+            SDF_INSTRUCTION_BLEND(shape) == SDF_BLEND_INTERSECTION || SDF_INSTRUCTION_BLEND(shape) == SDF_BLEND_SMOOTH_INTERSECTION ||
+            SDF_INSTRUCTION_BLEND(shape) == SDF_BLEND_SMOOTH_SUBTRACTION)) return false;
     }
     level += blendSlack;
     if (!isfinite(level) || level >= SDF_FAR_DISTANCE * 0.5) return false;
@@ -229,8 +229,8 @@ bool sdfPartSublevelBox(uint4 part, float depth, float footprint, float minimumL
     // can only raise the accumulated distance; including their candidates may loosen, never shrink, this box.
     [loop] for (uint leaf = 0u; leaf < count; leaf++) {
         uint4 code = sdfWords[part.x + leaf];
-        uint4 shape = sdfWords[1u + code.x];
-        if (!sdfShapeEnabled(shape.y)) continue;
+        uint4 shape = sdfWords[SDF_PROGRAM_HEADER_VECTORS + code.x];
+        if (!sdfShapeEnabled(SDF_INSTRUCTION_SHAPE(shape))) continue;
         float3 leafLower, leafUpper;
         if (!sdfPartLeafBox(code.x, code.y, sdfWords[part.y + leaf].x, level, leafLower, leafUpper)) return false;
         lower = min(lower, leafLower); upper = max(upper, leafUpper);

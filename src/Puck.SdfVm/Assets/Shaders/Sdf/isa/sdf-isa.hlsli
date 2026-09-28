@@ -82,10 +82,19 @@
 #define SDF_NOISE_BLUE     1u
 #define SDF_NOISE_GAUSSIAN 2u
 
-// Puck.SignedDistance.SdfPolarAxis.
-#define SDF_POLAR_AXIS_X 0u
-#define SDF_POLAR_AXIS_Y 1u
-#define SDF_POLAR_AXIS_Z 2u
+// Puck.SignedDistance.SdfCellMode.
+#define SDF_CELL_MODE_F1          0u
+#define SDF_CELL_MODE_F2_MINUS_F1 1u
+
+// Puck.SignedDistance.SdfAxis.
+#define SDF_AXIS_X 0u
+#define SDF_AXIS_Y 1u
+#define SDF_AXIS_Z 2u
+
+// Puck.SignedDistance.SdfPlane.
+#define SDF_PLANE_XZ 0u
+#define SDF_PLANE_XY 1u
+#define SDF_PLANE_YZ 2u
 
 // Puck.SignedDistance.SdfWallpaperGroup.
 #define SDF_WPG_P1   0u
@@ -106,10 +115,30 @@
 #define SDF_WPG_P6   15u
 #define SDF_WPG_P6M  16u
 
-// Puck.SignedDistance.SdfWallpaperPlane.
-#define SDF_WPG_PLANE_XZ 0u
-#define SDF_WPG_PLANE_XY 1u
-#define SDF_WPG_PLANE_YZ 2u
+// The program header, the first vector of the word stream: the vectors before the instruction headers, and each lane's accessor.
+#define SDF_PROGRAM_HEADER_VECTORS       1u
+#define SDF_PROGRAM_INSTRUCTION_COUNT(v) ((v).x)
+#define SDF_PROGRAM_MATERIAL_COUNT(v)    ((v).y)
+#define SDF_PROGRAM_DATA_OFFSET(v)       ((v).z)
+#define SDF_PROGRAM_MATERIAL_OFFSET(v)   ((v).w)
+
+// An instruction: its header's lane accessors, and the data vectors each instruction holds in the data table.
+#define SDF_INSTRUCTION_OP(v)        ((v).x)
+#define SDF_INSTRUCTION_SHAPE(v)     ((v).y)
+#define SDF_INSTRUCTION_BLEND(v)     ((v).z)
+#define SDF_INSTRUCTION_MATERIAL(v)  ((v).w)
+#define SDF_INSTRUCTION_DATA_VECTORS 2u
+
+// The bound records and the directories: a record's vectors, a directory's header vectors, and its header's lane accessors.
+#define SDF_BOUND_RECORD_VECTORS         2u
+#define SDF_DIRECTORY_HEADER_VECTORS     1u
+#define SDF_SEGMENT_COUNT(v)             ((v).x)
+#define SDF_SEGMENT_STEP_SCALE(v)        ((v).y)
+#define SDF_SEGMENT_RIGID_PLAN_OFFSET(v) ((v).z)
+#define SDF_INSTANCE_COUNT(v)            ((v).x)
+#define SDF_INSTANCE_PART_PROGRAMS(v)    ((v).y)
+#define SDF_INSTANCE_FLAGS(v)            ((v).z)
+#define SDF_WORLD_SEGMENT_COUNT(v)       ((v).x)
 
 // Shape-lane flags and the type mask on a ShapeBlend instruction's header.
 #define SDF_SHAPE_DETAIL_FLAG       0x80000000u

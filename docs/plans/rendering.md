@@ -4279,8 +4279,13 @@ item 2 landed.
     derive. A kernel set agrees with the instruction set it was built with
     because the build refuses bytecode stale against its sources and every
     include, the generated `sdf-isa.hlsli` among them, and `puck shaders
-    generate --check` refuses that file stale against the C# model. The include's
-    hash (`SdfIsaHlsl.Fingerprint`) is the stamp the kernels' interfaces carry in
+    generate --check` refuses that file stale against the C# model. The
+    instruction set's fingerprint (`SdfIsaHlsl.Fingerprint`) hashes the include,
+    which generates every lane enum, header lane accessor and vector count the
+    kernels read, and the model's described encoding (`SdfEncodingProbe`: where
+    the builder and packer put every field, bitfield and table entry, found by
+    raising each input alone), recorded in `SdfIsaFingerprint.cs` for the host
+    to read. It is the stamp the kernels' interfaces carry in
     their pass block's variable name (`ShaderInterface.Stamp`), so every kernel's
     bytecode reflects the instruction set it was compiled against, and a reload
     reflects each changed kernel and holds it to the host's interface
