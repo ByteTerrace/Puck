@@ -178,6 +178,10 @@
                 "Eighth"
               ],
               "title": "WorldRenderScaleTier"
+            },
+            "dynamicResolution": {
+              "description": "Whether the preset enables the presentation-only dynamic-resolution controller.",
+              "type": "boolean"
             }
           },
           "additionalProperties": false,
@@ -215,6 +219,10 @@
                 "Eighth"
               ],
               "title": "WorldRenderScaleTier"
+            },
+            "dynamicResolution": {
+              "description": "Whether the preset enables the presentation-only dynamic-resolution controller.",
+              "type": "boolean"
             }
           },
           "additionalProperties": false,
@@ -252,6 +260,10 @@
                 "Eighth"
               ],
               "title": "WorldRenderScaleTier"
+            },
+            "dynamicResolution": {
+              "description": "Whether the preset enables the presentation-only dynamic-resolution controller.",
+              "type": "boolean"
             }
           },
           "additionalProperties": false,
@@ -1400,6 +1412,11 @@
             "null"
           ],
           "default": null
+        },
+        "dynamicResolution": {
+          "description": "Whether dynamic resolution starts enabled. Absent is off; the live world.dynamic-resolution lever moves only the per-frame render extent inside its existing ceiling.",
+          "type": "boolean",
+          "default": false
         }
       },
       "additionalProperties": false,

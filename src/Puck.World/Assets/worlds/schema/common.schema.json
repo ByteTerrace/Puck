@@ -52,6 +52,10 @@
         "renderScale": {
           "$ref": "#/$defs/WorldRenderScaleTier",
           "description": "The render-scale tier the preset selects."
+        },
+        "dynamicResolution": {
+          "description": "Whether the preset enables the presentation-only dynamic-resolution controller.",
+          "type": "boolean"
         }
       },
       "additionalProperties": false,

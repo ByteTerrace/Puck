@@ -340,4 +340,30 @@ console contract.
 
 ## Documentation
 
+## Dynamic resolution
+
+`WorldDynamicResolutionController` holds one view's continuous demand and
+resolved render scale. Fresh confirmed-present intervals are its preferred load
+signal. When timing or display frequency is unavailable, it reads the view's
+latest completed `gpu.march.steps` through `IGpuWorkSource`. A repeated
+completion, a retained-frame composite without primary traversal, or a repeated
+present sample does not move demand again. Replacing or restarting a timing
+source establishes a new baseline.
+
+Demand holds within ten percent of its target. Outside that band it moves by
+at most 1/16 downward or 1/32 upward per observation. The existing
+`RenderGraphExtent.Quantize` resolves that demand, including its 0.875 shrink
+hysteresis. Several demand changes may collect into one resolved step. At an
+exact floor or ceiling, the same quantizer resolves the endpoint directly, so
+hysteresis cannot strand an overloaded view above its configured floor.
+
+`WorldDynamicResolutionBudget` reads the committed counter ceilings and the
+counter workload's low preset, embedded by this project's build. The larger
+backend march total supplies one common budget, scaled by output pixel area
+and the shared quantizer's squared ceiling scale. The source workload's scale
+is quantized by the same rule before its recorded pixel area is normalized.
+Re-recording those source documents updates the shipped budget; no count is copied into controller code. These are
+counted-work targets, not elapsed-time guarantees. Sampling and scale changes
+allocate nothing after initialization and do not recreate GPU resources.
+
 📚 [Worlds and federation](../../docs/architecture/worlds.md) · 🛠️ [Contributing to Puck](../../docs/development/contributing.md)

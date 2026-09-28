@@ -24,6 +24,8 @@ public static partial class WorldSessionLevers {
     public const string Bakes = "bakes";
     /// <summary>The unchanged-frame cadence gate (<c>world.cadence</c>).</summary>
     public const string CadenceGate = "cadence";
+    /// <summary>The dynamic-resolution controller toggle (<c>world.dynamic-resolution</c>).</summary>
+    public const string DynamicResolution = "dynamic-resolution";
     /// <summary>The per-tile far-bound cull (<c>world.far-field bound</c>).</summary>
     public const string FarBound = "far-field.bound";
     /// <summary>The audio mix master gain (<c>world.volume</c>), folding into <c>audio</c>.</summary>
@@ -59,6 +61,8 @@ public static partial class WorldSessionLevers {
         ArgumentNullException.ThrowIfNull(bindingBar);
 
         var sink = new WorldSessionLeverSink();
+
+        sink.Register(name: DynamicResolution, setter: lever => settings.DynamicResolution = Flag(lever: lever));
 
         sink.Register(
             name: MasterVolume,

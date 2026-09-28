@@ -29,6 +29,12 @@ device handle, and a throwing teardown step neither replaces the fault nor
 skips the steps after it. A hosted service whose construction finds no device
 also exits 2.
 
+`PresentTimingCapabilityLawTests` checks the inherited timing source: an
+injected source wins, windowed timing lazily borrows the active presenter, and
+offscreen timing remains unavailable. Resolving host capabilities does not
+construct a device-facing presenter or give the borrowed presenter a second
+disposal owner.
+
 ## Verification
 
 From the repository root, run in PowerShell or another shell:

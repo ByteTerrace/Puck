@@ -8695,6 +8695,10 @@ export type WorldQualityPreset = {
    * The render-scale tier the preset selects.
    */
   renderScale?: WorldRenderScaleTier;
+  /**
+   * Whether the preset enables the presentation-only dynamic-resolution controller.
+   */
+  dynamicResolution?: boolean;
 };
 
 export type WorldReaction = WorldReactionDiffuse | WorldReactionDecay | WorldReactionTransform | WorldReactionEmit | WorldReactionExpose | WorldReactionFlow | null;
@@ -8923,6 +8927,10 @@ export type WorldRenderDefaults = {
    * The far distance in world units: the depth at which every camera march ends — the far plane the renderer's fine march exits at, the reach of the beam's cone proofs, and the depth the fog and depth ramps are measured against. Geometry beyond it is never marched, so an infinite plane ends on a visible horizon curve at this depth unless the sky fog has absorbed it (render.sky.fogDensity). Optional; absent resolves to the engine's pinned 40 — exactly the value every world marched to before this field existed. Must lie within [MinFarDistance, MaxFarDistance]. Re-read on every definition revision (a world.row.set render lands on the next frame); world.budget echoes it with its derived costs.
    */
   farDistance?: number | null;
+  /**
+   * Whether dynamic resolution starts enabled. Absent is off; the live world.dynamic-resolution lever moves only the per-frame render extent inside its existing ceiling.
+   */
+  dynamicResolution?: boolean;
 };
 
 export type WorldRenderEnvironment = {

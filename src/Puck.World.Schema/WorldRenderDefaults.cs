@@ -70,10 +70,12 @@ public static class WorldApplicationDefaults {
 /// <param name="Shadows">The soft-shadow tier the preset selects.</param>
 /// <param name="AmbientOcclusion">Whether the preset enables ambient occlusion.</param>
 /// <param name="RenderScale">The render-scale tier the preset selects.</param>
+/// <param name="DynamicResolution">Whether the preset enables the presentation-only dynamic-resolution controller.</param>
 public readonly record struct WorldQualityPreset(
     ShadowTier Shadows,
     bool AmbientOcclusion,
-    WorldRenderScaleTier RenderScale
+    WorldRenderScaleTier RenderScale,
+    bool DynamicResolution = false
 );
 /// <summary>The world's render-lever defaults — the boot values <c>Puck.World.WorldRenderSettings</c> wakes on and the
 /// <c>world.quality</c> preset table. Session state, not identity: these are engine-wide levers (shadows, AO, render
@@ -107,6 +109,8 @@ public readonly record struct WorldQualityPreset(
 /// lie within [<see cref="MinFarDistance"/>, <see cref="MaxFarDistance"/>]. Re-read on every definition revision
 /// (a <c>world.row.set render</c> lands on the next frame); <c>world.budget</c> echoes it with its derived
 /// costs.</param>
+/// <param name="DynamicResolution">Whether dynamic resolution starts enabled. Absent is off; the live
+/// <c>world.dynamic-resolution</c> lever moves only the per-frame render extent inside its existing ceiling.</param>
 public sealed record WorldRenderDefaults(
     ShadowTier Shadows = ShadowTier.Off,
     float ShadowCrowdRadius = 0f,
@@ -121,7 +125,8 @@ public sealed record WorldRenderDefaults(
     WorldRenderCycle? Cycle = null,
     WorldRenderEnvironment? Environment = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldTonemap? Tonemap = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? FarDistance = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? FarDistance = null,
+    bool DynamicResolution = false
 ) {
     /// <summary>The largest <see cref="FarDistance"/> the validator admits: 8192 world units. The march advances a
     /// float depth against a 0.001-unit surface epsilon; 8192 is the largest power of two at which a float's spacing

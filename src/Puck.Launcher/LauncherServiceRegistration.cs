@@ -42,6 +42,15 @@ public static class LauncherServiceRegistration {
         // document-configured instance. With no publisher (or no election) the pacer is unaffected.
         services.TryAddSingleton<ExternalClockRegistry>();
 
+        // Presentation-only feedback is inherited by render nodes. A root may inject a scripted source; otherwise
+        // the active presenter supplies confirmed presents, and a headless/offscreen host reports unavailable.
+        services.TryAddSingleton<IPresentTimingFeedback>(implementationFactory: static _ => new LauncherPresentTiming());
+        services.AddSingleton(implementationFactory: static sp => new HostCapabilityContribution(
+            CapabilityType: typeof(IPresentTimingFeedback),
+            Instance: sp.GetRequiredService<IPresentTimingFeedback>(),
+            IsHeld: false
+        ));
+
         services.TryAddSingleton<TerminalControl>();
         // Caught up unless a standard-input reader claims it; every tick host holds its first step on it.
         services.TryAddSingleton<StandardInputBacklog>();
@@ -55,7 +64,7 @@ public static class LauncherServiceRegistration {
         // register the aggregator that assembles that context from every module's contributions — the device
         // capability from whichever graphics backend is composed in, plus these — so neither side references
         // the other. Registered with TryAdd so a composition root may publish its own root context instead. A
-        // headless boot never contributes a device capability, so IHostContext ends up carrying only these two.
+        // headless boot never contributes a device capability, so IHostContext carries these two and unavailable present timing.
         services.AddSingleton(implementationFactory: static sp => new HostCapabilityContribution(
             CapabilityType: typeof(IInputFocus),
             Instance: sp.GetRequiredService<IInputFocus>(),
@@ -301,6 +310,10 @@ public static class LauncherServiceRegistration {
     /// router folds physical input through, and any engine-specific <see cref="ICommandModule"/>s.</summary>
     /// <param name="services">The service collection.</param>
     public static IServiceCollection AddLauncherTerminal(this IServiceCollection services) {
+        // Resolve the presenter only when a rendered frame first samples it. Resolving host capabilities alone
+        // must not construct a device-facing service. Offscreen/headless keep the shared unavailable source.
+        services.TryAddSingleton<IPresentTimingFeedback>(implementationFactory: static sp =>
+            new LauncherPresentTiming(resolve: () => (sp.GetService<ISurfacePresenter>() as IPresentTimingFeedback)));
         AddLauncherTerminalShared(services: services);
         // Hosting owns the generic session/cadence controller; the windowed launcher owns its placement between root
         // production and presentation. Register one idle controller for every windowed host so composition roots need
