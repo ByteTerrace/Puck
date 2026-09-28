@@ -17,7 +17,8 @@ The running engine is the visual editor. Puck has no separate scene editor or
 content-creation tool: selecting, placing, sculpting and inspecting happen
 inside a live World, through its console, views and HUD, and produce the same
 document an author could write by hand. A missing editing affordance is a
-feature of the World, not a reason for a second application.
+feature of the World, not a reason for a second application; the
+[editor plan](../plans/editor.md) lists the ones still missing.
 
 Prefer existing data and operations when they express a new feature clearly.
 For example, a body can be controlled through permissions without classifying
