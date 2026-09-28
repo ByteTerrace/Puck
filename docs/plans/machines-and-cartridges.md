@@ -9,7 +9,9 @@ running machine its own named identity, keeps screens as the physical
 vocabulary, and puts provider knowledge behind extension contracts; the guest
 side gives `puck.cartridge.v1` the program and memory structures a whole game
 needs. The reasoning behind every decision is in
-[the decisions register](../decisions/machines-and-cartridges.md).
+[the decisions register](../decisions/machines-and-cartridges.md). A third
+machine family, the NES and Famicom core, is planned on its own page:
+[Humble Gaming Deck](humble-gaming-deck.md).
 
 ## Implementation status
 
@@ -189,7 +191,10 @@ recorded `A.gba` render failure investigated before any compatibility claim.
 The policy is enforced below every loading path (boot, insert, replacement,
 reload, restore, replay) after trusted preparation and before runtime creation,
 over exact source and executable bytes and the provider-verified format, with
-selection under separate operator authority.
+selection under separate operator authority. The `puck.cartridge.v1` admission preset,
+`GamingBrickContentPolicies`, sits in the machine-neutral `Puck.Machines` with no
+production consumer; it moves beside the format it names, in
+`Puck.GamingBricks.Forge`, when the machine host first invokes it.
 
 **Check:** raw ROM rejection, relabeled input, changed source or output pins,
 valid new user-authored content, allowlist acceptance and rejection, and a

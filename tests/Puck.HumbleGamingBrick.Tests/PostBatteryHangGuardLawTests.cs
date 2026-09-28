@@ -1,4 +1,4 @@
-using Puck.GamingBricks.Post;
+using Puck.Machines.Post;
 using Puck.Testing;
 
 namespace Puck.HumbleGamingBrick.Tests;

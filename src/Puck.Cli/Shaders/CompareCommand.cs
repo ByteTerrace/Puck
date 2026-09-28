@@ -106,7 +106,7 @@ internal static class CompareCommand {
             Console.Out.WriteLine(value: $"{Verb}: compiling {project}");
 
             var build = CliProcess.RunCaptured(
-                arguments: ["msbuild", project, "-restore", "-t:CompileShaders", "-p:Configuration=Release", "-nologo", "-v:minimal"],
+                arguments: ["msbuild", project, "--disable-build-servers", "-restore", "-t:CompileShaders", "-p:Configuration=Release", "-nologo", "-v:minimal"],
                 fileName: "dotnet",
                 input: string.Empty,
                 timeout: TimeSpan.FromMinutes(minutes: 30),

@@ -85,7 +85,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
         if (!IsMesh) {
             m_sets = new RenderGraphPackageSets(
                 context: context,
-                groupLayoutHandles: tables.Pipeline(index: SdfWorldTables.BeamPipelineIndex).GroupLayoutHandles,
+                groupLayoutHandles: tables.Pipeline(kernel: SdfKernel.Beam).GroupLayoutHandles,
                 groups: groups
             );
 
@@ -314,14 +314,14 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
         var recorder = recording.Recorder;
         var commandBuffer = recording.CommandBuffer;
         var pipeline = m_part switch {
-            SdfWorldPackage.Parts.Sky => tables.Pipeline(index: SdfWorldTables.SkyPipelineIndex),
-            SdfWorldPackage.Parts.Mask => tables.Pipeline(index: SdfWorldTables.InstanceCullPipelineIndex),
-            SdfWorldPackage.Parts.Beam => tables.Pipeline(index: SdfWorldTables.BeamPipelineIndex),
-            SdfWorldPackage.Parts.CullArgs => tables.Pipeline(index: SdfWorldTables.CullArgsPipelineIndex),
-            SdfWorldPackage.Parts.Primary => tables.Pipeline(index: SdfWorldTables.PrimaryPipelineIndex),
-            SdfWorldPackage.Parts.Surface => tables.Pipeline(index: SdfWorldTables.SurfacePipelineIndex),
-            SdfWorldPackage.Parts.Ambient => tables.Pipeline(index: SdfWorldTables.AmbientPipelineIndex),
-            SdfWorldPackage.Parts.Shadow => tables.Pipeline(index: SdfWorldTables.ShadowPipelineIndex),
+            SdfWorldPackage.Parts.Sky => tables.Pipeline(kernel: SdfKernel.Sky),
+            SdfWorldPackage.Parts.Mask => tables.Pipeline(kernel: SdfKernel.InstanceCull),
+            SdfWorldPackage.Parts.Beam => tables.Pipeline(kernel: SdfKernel.Beam),
+            SdfWorldPackage.Parts.CullArgs => tables.Pipeline(kernel: SdfKernel.CullArgs),
+            SdfWorldPackage.Parts.Primary => tables.Pipeline(kernel: SdfKernel.Primary),
+            SdfWorldPackage.Parts.Surface => tables.Pipeline(kernel: SdfKernel.Surface),
+            SdfWorldPackage.Parts.Ambient => tables.Pipeline(kernel: SdfKernel.Ambient),
+            SdfWorldPackage.Parts.Shadow => tables.Pipeline(kernel: SdfKernel.Shadow),
             _ => tables.ViewsPipeline,
         };
 

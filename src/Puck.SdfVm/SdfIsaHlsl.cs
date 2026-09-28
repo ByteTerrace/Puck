@@ -1,4 +1,6 @@
+using System.Buffers.Binary;
 using System.Globalization;
+using System.Security.Cryptography;
 using System.Text;
 using Puck.Abstractions.Gpu;
 using Puck.SignedDistance;
@@ -6,14 +8,17 @@ using Puck.SignedDistance;
 namespace Puck.SdfVm;
 
 /// <summary>
-/// Generates <see cref="FileName"/>, the kernels' declarations of the SDF instruction set: its version handshake, every
-/// enum an instruction word carries, the packed-layout constants the interpreter decodes words with, the screen count,
+/// Generates <see cref="FileName"/>, the kernels' declarations of the SDF instruction set: every enum an instruction word
+/// carries, the packed-layout constants the interpreter decodes words with, the screen count,
 /// the sampler filters a screen's row indexes the engine's samplers by, and where each row of the environment lies in a
 /// pass block's environment array, with its light kinds. Every value is read from the C# model, never
 /// transcribed, and an enum member's name is its C# name in upper snake case after the enum's prefix (<see cref="SdfOp.ResetPoint"/> is <c>SDF_OP_RESET_POINT</c>), so a new member reaches the kernels by
 /// regenerating. <c>puck shaders generate</c> writes the file beside the kernels and <c>--check</c> fails on drift.
 /// <para>The text is a pure function of the model: the same build generates the same bytes, with LF line endings, on
 /// every host.</para>
+/// <para>The text's fingerprint (<see cref="Fingerprint"/>) names the instruction set: the SDF kernels' interfaces carry
+/// it as their stamp (<see cref="Stamp"/>, <see cref="SdfWorldInterfaces"/>), so every kernel's bytecode reflects the
+/// instruction set it was compiled against, and a reload refuses kernels whose stamp is not this host's.</para>
 /// </summary>
 public static class SdfIsaHlsl {
     /// <summary>The file name of the generated include, which sits with the other generated declarations in
@@ -22,21 +27,41 @@ public static class SdfIsaHlsl {
 
     private const string Guard = "SDF_ISA_HLSLI";
 
+    /// <summary>Gets the fingerprint of this build's instruction set: <see cref="FingerprintOf"/> of the generated
+    /// include. It moves with any member, value or constant the kernels read from the model.</summary>
+    public static uint Fingerprint { get; } = FingerprintOf(include: Generate());
+    /// <summary>Gets the stamp the SDF kernels' interfaces carry for this build's instruction set: <see cref="StampOf"/>
+    /// of <see cref="Fingerprint"/>.</summary>
+    public static string Stamp { get; } = StampOf(fingerprint: Fingerprint);
+
     /// <summary>Generates the include.</summary>
     /// <returns>The HLSL text.</returns>
     /// <exception cref="InvalidOperationException">Two declarations would share one HLSL name.</exception>
-    public static string Generate() {
+    public static string Generate() => Declare();
+    /// <summary>Returns the fingerprint of an instruction-set include: the first four bytes, little-endian, of the SHA-256
+    /// of its UTF-8 text.</summary>
+    /// <param name="include">The include's text.</param>
+    /// <returns>The fingerprint.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="include"/> is <see langword="null"/>.</exception>
+    public static uint FingerprintOf(string include) {
+        ArgumentNullException.ThrowIfNull(argument: include);
+
+        return BinaryPrimitives.ReadUInt32LittleEndian(source: SHA256.HashData(source: Encoding.UTF8.GetBytes(s: include)));
+    }
+    /// <summary>Returns the interface stamp (<see cref="Puck.Shaders.ShaderInterface.Stamp"/>) of an instruction set:
+    /// <c>Isa</c> followed by its fingerprint in eight upper-case hexadecimal digits.</summary>
+    /// <param name="fingerprint">The instruction set's fingerprint.</param>
+    /// <returns>The stamp.</returns>
+    public static string StampOf(uint fingerprint) =>
+        string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"Isa{fingerprint:X8}"
+        );
+
+    // Every declaration the include makes.
+    private static string Declare() {
         var declarations = new Declarations();
 
-        declarations.Section(title: "The instruction-set version and the report word the version handshake dispatches with.");
-        declarations.Count(
-            name: "SDF_ISA_VERSION",
-            value: SdfIsa.Version
-        );
-        declarations.Bits(
-            name: "SDF_ISA_REPORT_REQUEST",
-            value: SdfShaderSetVerification.ReportRequest
-        );
         declarations.Members<SdfOp>(prefix: "SDF_OP");
         declarations.Members<SdfShapeType>(prefix: "SDF_SHAPE");
         declarations.Members<SdfBlendOp>(prefix: "SDF_BLEND");
@@ -154,6 +179,10 @@ public static class SdfIsaHlsl {
             name: "SDF_MAX_SCREEN_SURFACES",
             value: SdfProgramBuilder.MaxScreenSurfaces
         );
+        declarations.Real(
+            name: "SDF_MINIMUM_NEAR",
+            value: SdfFrameBlock.MinimumNear
+        );
         declarations.Members<GpuSamplerFilter>(prefix: "SDF_FILTER");
         declarations.Section(title: "The environment's rows in the pass block's environment array (SdfEnvironment) and its light kinds.");
         declarations.Count(name: "SDF_ENV_ROW_COUNT", value: SdfEnvironment.RowCount);
@@ -178,7 +207,6 @@ public static class SdfIsaHlsl {
 
         return declarations.Text();
     }
-
     // A C# member name's HLSL spelling: upper snake case, with a word break before an upper-case letter that follows a
     // lower-case one or that starts a new word after an upper-case run (P4M stays P4M, LogSphere becomes LOG_SPHERE).
     private static string UpperSnake(string name) {

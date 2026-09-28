@@ -206,7 +206,7 @@ public sealed class WorldCaptureFillLawTests {
     // through the capture gate and the fills, and each frame converts the fills it needs before its source resolves, on a
     // device of its own whose every pipeline creation can be held.
     private sealed class Scene : IDisposable {
-        private readonly FakeGpuDevice m_gpu = new(reportVersion: 1);
+        private readonly FakeGpuDevice m_gpu = new();
         private readonly ManualResetEventSlim m_held = new(initialState: true);
 
         private int m_pipelinesEntered;

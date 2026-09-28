@@ -496,7 +496,7 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
     }
     [Fact]
     public void ACaptureOfAMachineSourceIsJudgedAgainstTheFrameItServedAfterTheMachineIsReplaced() {
-        var gpu = new FakeGpuDevice(reportVersion: 0);
+        var gpu = new FakeGpuDevice();
         var output = new ResizableOutput(height: 2, width: 8);
         var served = new MachineVideoSourceUpload(
             name: WorldViewGraphs.WorldInstance,

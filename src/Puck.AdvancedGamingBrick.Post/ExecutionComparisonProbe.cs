@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
-using Puck.GamingBricks;
+using Puck.Machines;
 
 namespace Puck.AdvancedGamingBrick.Post;
 

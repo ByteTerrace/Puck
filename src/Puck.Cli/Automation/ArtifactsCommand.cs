@@ -45,6 +45,10 @@ internal static class ArtifactsCommand {
             destination: "artifacts/batteries/agb",
             source: "src/Puck.AdvancedGamingBrick.Post/bin/Release/net10.0"
         );
+        CliFiles.CopyDirectory(
+            destination: "artifacts/batteries/hgd",
+            source: "src/Puck.HumbleGamingDeck.Post/bin/Release/net10.0"
+        );
         foreach (var project in new[] { "Puck.World.Azure.Tests", "Puck.World.Schema.Tests", "Puck.World.Tests" }) {
             CliFiles.CopyDirectory(
                 destination: $"artifacts/world-tests/{project}",

@@ -175,6 +175,47 @@ public sealed class RenderGraphHitWalkLawTests {
         Assert.Equal(expected: surface, actual: path.Surface);
         Assert.Null(@object: Pick(found: null).Surface);
     }
+    // A continued ray starts on the producer camera's near plane: the room's screen, four units ahead of its camera, is
+    // met from a near plane three units ahead and passed from one five units ahead, so the walk ends on the room's world.
+    [Fact]
+    public void AContinuedRayStartsOnTheProducerCamerasNearPlane() {
+        var set = Set(
+            Instance(
+                name: "main",
+                reads: new RenderGraphRead(Producer: "room")
+            ),
+            Instance(name: "room")
+        );
+
+        RenderGraphHitPath Pick(float near) => RenderGraphHitWalk.Walk(
+            instance: Main,
+            maxDepth: set.NestingDepth,
+            ray: Ray(
+                x: 0.51,
+                y: 0.51
+            ),
+            scene: new Scene(
+                near: near,
+                placements: [
+                    [Screen(source: SourceHandle.Instance(name: "room"))],
+                    [Screen(source: SourceHandle.Producer(name: "desktop"))],
+                ]
+            ),
+            set: set
+        );
+
+        var met = Pick(near: 3f);
+        var passed = Pick(near: 5f);
+
+        Assert.Equal(
+            expected: (RenderGraphHitEnd.Producer, Room, 2),
+            actual: (met.End, met.Instance, met.Steps.Count)
+        );
+        Assert.Equal(
+            expected: (RenderGraphHitEnd.World, Room, 1),
+            actual: (passed.End, passed.Instance, passed.Steps.Count)
+        );
+    }
     [Fact]
     public void TheWalkStopsAtTheDepthLimit() {
         var set = Set(
@@ -352,10 +393,10 @@ public sealed class RenderGraphHitWalkLawTests {
         );
     }
 
-    private sealed class Scene(IReadOnlyList<SourceMapping>[] placements, bool camera = true, FixedVector3? surface = null) : IRenderGraphHitScene {
+    private sealed class Scene(IReadOnlyList<SourceMapping>[] placements, bool camera = true, FixedVector3? surface = null, float near = 0f) : IRenderGraphHitScene {
         public IReadOnlyList<SourceMapping> Placements(int instance) => placements[instance];
         public bool TryCamera(int instance, out CameraSnapshot snapshot) {
-            snapshot = Camera;
+            snapshot = (Camera with { Near = near });
 
             return camera;
         }

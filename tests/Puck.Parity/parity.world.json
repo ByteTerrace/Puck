@@ -925,6 +925,7 @@
     }
   ],
   "render": {
+    "ambientOcclusion": true,
     "lighting": {
       "lights": [
         {
@@ -946,7 +947,8 @@
           "weight": 1.6
         }
       ]
-    }
+    },
+    "shadows": "High"
   },
   "rules": [
     {

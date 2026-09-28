@@ -39,13 +39,6 @@
 
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
-    if (passGroup.sampleIndex == SDF_ISA_REPORT_REQUEST) {
-        if (all(id == uint3(0, 0, 0))) {
-            output[uint2(0, 0)] = (float4(0x53u, 0x44u, asuint(tiles[0]), SDF_ISA_VERSION) / 255.0);
-        }
-        return;
-    }
-
     uint viewIndex = worldViewOf(id.z);
 
     if (viewIndex >= passGroup.viewportCount) {

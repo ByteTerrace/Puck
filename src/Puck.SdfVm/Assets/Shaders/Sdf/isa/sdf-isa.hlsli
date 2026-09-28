@@ -2,10 +2,6 @@
 #ifndef SDF_ISA_HLSLI
 #define SDF_ISA_HLSLI
 
-// The instruction-set version and the report word the version handshake dispatches with.
-#define SDF_ISA_VERSION        3u
-#define SDF_ISA_REPORT_REQUEST 0x53444656u
-
 // Puck.SignedDistance.SdfOp.
 #define SDF_OP_RESET_POINT       0u
 #define SDF_OP_TRANSLATE         1u
@@ -150,6 +146,7 @@
 #define SDF_LANE_ERODE_RAGGED_AMOUNT   0.35
 #define SDF_SCREEN_MATERIAL            65535
 #define SDF_MAX_SCREEN_SURFACES        32u
+#define SDF_MINIMUM_NEAR               0.02
 
 // Puck.Abstractions.Gpu.GpuSamplerFilter.
 #define SDF_FILTER_NEAREST 0u

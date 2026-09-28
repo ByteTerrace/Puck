@@ -89,6 +89,17 @@ public static class ShaderInterfaceHlsl {
                     line: $"{Binding(binding: 0, set: group.Set)} ConstantBuffer<{group.BlockTypeName}> {group.BlockVariableName}{Register(binding: 0, register: 'b', set: group.Set)};",
                     text: text
                 );
+
+                // A stamped block's variable carries the stamp in its name, which the bytecode reflects; a pass still reads
+                // it by the group's own name.
+                var unstamped = ShaderInterface.BlockVariableName(group: group.Group);
+
+                if (!string.Equals(a: unstamped, b: group.BlockVariableName, comparisonType: StringComparison.Ordinal)) {
+                    Line(
+                        line: $"#define {unstamped} {group.BlockVariableName}",
+                        text: text
+                    );
+                }
             }
 
             foreach (var resource in group.Resources) {

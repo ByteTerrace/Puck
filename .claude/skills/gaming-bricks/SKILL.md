@@ -7,7 +7,11 @@ description: Guides changes to Puck's deterministic GB, GBC, and GBA GamingBrick
 
 Treat the GamingBricks as one deterministic machine family: a shared SM83
 compatibility core covering every DMG/MGB/SGB/CGB/AGB hardware revision, plus
-the separate ARM7TDMI-based GBA-native core. The current implementation and its
+the separate ARM7TDMI-based GBA-native core. The Humble Gaming Deck adds the
+NTSC NES/Famicom console on the shared machine substrate; its master tick is
+distinct from either handheld clock. Read its
+[manual](../../../docs/emulation/hgd/README.md) and run
+`Puck.HumbleGamingDeck.Post` for changes to that core. The current implementation and its
 Post stages are authoritative; update stale skill guidance in the same change.
 
 ## Core invariants
@@ -61,7 +65,7 @@ Post stages are authoritative; update stale skill guidance in the same change.
   for clock and event ordering, serial and timer edges, snapshots, GB PPU
   timing, oracle conflicts, and the documented GBA ready-line gap.
 - Read the
-  [`Puck.GamingBricks.Post` README](../../../src/Puck.GamingBricks.Post/README.md)
+  [`Puck.Machines.Post` README](../../../src/Puck.Machines.Post/README.md)
   first when a change touches stage or verdict semantics rather than one
   brick's own context — the shared battery scaffold both Post projects close
   over: `PostBattery<TContext>`, `IPostStage<TContext>`, `PostVerdict`,

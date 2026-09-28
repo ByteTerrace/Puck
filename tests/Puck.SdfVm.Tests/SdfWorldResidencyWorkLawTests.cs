@@ -90,7 +90,7 @@ public sealed class SdfWorldResidencyWorkLawTests {
         private readonly FrameContext m_context;
 
         public Rig() {
-            var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version);
+            var gpu = new FakeGpuDevice();
             var builder = new SdfProgramBuilder();
 
             builder.Sphere(

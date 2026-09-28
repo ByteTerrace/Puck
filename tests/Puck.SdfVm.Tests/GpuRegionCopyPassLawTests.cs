@@ -17,8 +17,8 @@ namespace Puck.SdfVm.Tests;
 public sealed class GpuRegionCopyPassLawTests {
     [Fact]
     public void LeasesOnOneDeviceShareOnePipelineCreatedOnce() {
-        var gpu = new UploadModelGpu(reportVersion: 0);
-        var other = new UploadModelGpu(reportVersion: 0);
+        var gpu = new UploadModelGpu();
+        var other = new UploadModelGpu();
         var cache = new GpuPassPipelineCache();
         var pass = new GpuRegionCopyPass(kernel: new byte[] { UploadModelGpu.RegionCopyBytecode }, pipelines: cache);
         var first = pass.Acquire(device: gpu);
@@ -57,7 +57,7 @@ public sealed class GpuRegionCopyPassLawTests {
         _ = Assert.Throws<FileNotFoundException>(testCode: () => new GpuRegionCopyPass(bytecodeExtension: ".absent", pipelines: cache));
 
         var pass = new GpuRegionCopyPass(bytecodeExtension: ".spv", pipelines: cache);
-        var gpu = new UploadModelGpu(reportVersion: 0);
+        var gpu = new UploadModelGpu();
 
         Assert.Equal(
             actual: pass.Key,
@@ -79,7 +79,7 @@ public sealed class GpuRegionCopyPassLawTests {
     [Theory]
     public void TwoRegionsCopyingThroughTheLeasedPipelineReadTheirContentsExactly(GpuResidencyPolicy policy) {
         const int Slots = 3;
-        var gpu = new UploadModelGpu(reportVersion: 0);
+        var gpu = new UploadModelGpu();
         var cache = new GpuPassPipelineCache();
         var pass = new GpuRegionCopyPass(kernel: new byte[] { UploadModelGpu.RegionCopyBytecode }, pipelines: cache);
         var firstLease = pass.Acquire(device: gpu);

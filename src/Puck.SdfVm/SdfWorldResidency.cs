@@ -62,7 +62,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     // the frame thread and kept across rebuilds until a device loss or disposal releases it.
     private readonly SdfWorldPipelineSource m_pipelines;
 
-    private SdfWorldKernels m_kernels;
+    private SdfKernelSet m_kernels;
     private IGpuDeviceContext? m_deviceContext;
     private SdfWorldTables? m_tables;
     // The latest captured frame, which every view of the residency renders, and whether this frame captured or packed
@@ -119,7 +119,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <see cref="SdfWorldTablesOptions.BrickPoolVoxelCapacity"/>), frozen at construction; 0 allocates no pool.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">A dimension is zero.</exception>
-    public SdfWorldResidency(SdfWorldPipelineCatalog pipelines, ISdfFrameSource frameSource, SdfWorldKernels kernels, string name, uint width, uint height, ISdfScreenSources? screenSources = null, Func<FrameContext, bool>? film = null, int dynamicTransformCapacity = 0, int programWordCapacity = 0, int instanceCapacity = 0, int brickPoolVoxelCapacity = SdfWorldTables.DefaultBrickPoolVoxelCapacity) {
+    public SdfWorldResidency(SdfWorldPipelineCatalog pipelines, ISdfFrameSource frameSource, SdfKernelSet kernels, string name, uint width, uint height, ISdfScreenSources? screenSources = null, Func<FrameContext, bool>? film = null, int dynamicTransformCapacity = 0, int programWordCapacity = 0, int instanceCapacity = 0, int brickPoolVoxelCapacity = SdfWorldTables.DefaultBrickPoolVoxelCapacity) {
         ArgumentNullException.ThrowIfNull(pipelines);
         ArgumentNullException.ThrowIfNull(frameSource);
         ArgumentException.ThrowIfNullOrEmpty(name);

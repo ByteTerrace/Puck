@@ -6,7 +6,7 @@ timers, DMA, cartridge mappers and battery saves, and serial/infrared/printer
 link. Hardware differences (Color palette RAM, HDMA, double speed, the boot
 handoff, the fetcher's row latch) are expressed as named capability gates read
 off `ConsoleModel`, never as a forked implementation per console. Snapshot,
-fork, and queued off-thread hosting come from `Puck.GamingBricks`; this project
+fork, and queued off-thread hosting come from `Puck.Machines`; this project
 supplies only the SM83-family hardware itself.
 
 Start with [Quick start](#quick-start) to run a cartridge in your own loop.
@@ -31,7 +31,7 @@ owns threading, pacing, output buffers, snapshots, and queued execution.
 - *Queued, backpressured hosting:* `GamingBrickEngine` (engine id `gaming-brick`)
   creates the `MachineHost` runtime, which forwards the neutral
   `IMachineRuntime`/`IQueuedMachineRuntime`/`IAudioMachine`/`IFeedbackMachine`
-  surface to `Puck.GamingBricks`'s `QueuedMachineWorker`, converting engine
+  surface to `Puck.Machines`'s `QueuedMachineWorker`, converting engine
   ticks to LCD-dot budgets through a remainder-carrying accumulator.
 - *Deterministic peripheral link:* `SerialLinkSession` and `IrLinkSession`
   interleave two machines instruction-atomically, and `GamePrinterLinkSession`
@@ -49,7 +49,7 @@ owns threading, pacing, output buffers, snapshots, and queued execution.
 flowchart LR
     Bytes["cartridge bytes + options"] --> Engine["GamingBrickEngine.Create"]
     Engine --> Host["MachineHost : QueuedMachineHost"]
-    Host --> Worker["Puck.GamingBricks QueuedMachineWorker"]
+    Host --> Worker["Puck.Machines QueuedMachineWorker"]
     Worker --> Surface["IMachineRuntime / IQueuedMachineRuntime / IAudioMachine"]
 ```
 
@@ -109,7 +109,7 @@ window, GPU backend, worker thread, or environment configuration is required.
 
 ```csharp
 using Puck.HumbleGamingBrick;
-using Puck.Abstractions.Machines;
+using Puck.Machines;
 
 using var core = new HumbleGamingBrickCore(
     configuration: new MachineConfiguration(
@@ -118,7 +118,7 @@ using var core = new HumbleGamingBrickCore(
     dmgSpeed: true); // keep the reported pacing rate at the hardware dot rate
 
 core.ConfigureAudio(sampleRate: 48_000);
-core.ApplyInput(input: new MachinePadState());
+core.ApplyInput(input: MachinePads.Neutral);
 core.RunCycles(cycles: 70_224); // one nominal DMG frame at 4,194,304 Hz
 uint[] pixels = core.Framebuffer.ToArray(); // 160 × 144, packed 0x00RRGGBB
 short[] audio = new short[4096];
@@ -186,16 +186,16 @@ that has to satisfy it read the same data.
 | Audio | `ApuComponent`, `ApuGeneratorClock`, `AudioOutputComponent` | The four-channel APU and its host-facing output ring. |
 | Cartridges | `Cartridge`, `CartridgeHeader`, `CartridgeBase`, `MapperKind`, `RomOnlyCartridge`, `Mbc1Cartridge`…`Mbc7Cartridge`, `HuC1Cartridge`, `HuC3Cartridge`, `Mmm01Cartridge`, `CameraCartridge` | Header-selected mapper implementations and the camera peripheral. |
 | Link | `LinkSession<TPort>`, `LinkResumeToken`, `SerialComponent`, `SerialLinkSession`, `InfraredPort`, `IrLinkSession`, `IInfraredPeer`, `IInfraredCartridge`, `LightGunComponent`, `ILightGun`, `GamePrinterDevice`, `GamePrinterLinkSession` | The deterministic serial/infrared/printer link sessions and the light gun on the infrared receiver. |
-| Hosting | `MachineHost`, `GamingBrickEngine`, `HumbleGamingBrickCore`, `BrickPad`, `HumbleGamingBrickLookahead`, `SerialLinkGroupCore` | The `IMachineEngine`/`IMachineLinkingEngine` adapter over `Puck.GamingBricks`'s queued-host and cable-link substrate. |
+| Hosting | `MachineHost`, `GamingBrickEngine`, `HumbleGamingBrickCore`, `BrickPad`, `HumbleGamingBrickLookahead`, `SerialLinkGroupCore` | The `IMachineEngine`/`IMachineLinkingEngine` adapter over `Puck.Machines`'s queued-host and cable-link substrate. |
 
 ## Verification and further reading
 
 The [HGB Post battery](../../../src/Puck.HumbleGamingBrick.Post/README.md) owns
 tiers, assets, diagnostics, and run instructions; embedding exercises the
 synchronous core without a worker or graphics/audio device. Shared substrate
-checks live in [Puck.GamingBricks.Tests](../../../tests/Puck.GamingBricks.Tests/README.md).
+checks live in [Puck.Machines.Tests](../../../tests/Puck.Machines.Tests/README.md).
 
 - [Humble Gaming Brick](README.md) — hardware topics and evidence.
 - [Machine hosting runtime](../shared/machine-hosting.md) — shared host obligations.
 - [Project map](../../project-map.md) — dependency ownership.
-- [GamingBricks license](../../../src/Puck.GamingBricks/LICENSE.md) — shared legal terms.
+- [GamingBricks license](../../../src/Puck.Machines/LICENSE.md) — shared legal terms.

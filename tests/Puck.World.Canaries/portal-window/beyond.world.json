@@ -27,6 +27,13 @@
         "yawDegrees": 0
       },
       {
+        "id": "occluder",
+        "position": [0, 1.5, 4],
+        "prototypeId": "occluder",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
         "id": "marker",
         "position": [0, 1.5, -6],
         "prototypeId": "marker",
@@ -98,6 +105,27 @@
         ]
       },
       "id": "marker"
+    },
+    {
+      "document": {
+        "name": "occluder",
+        "palette": [ { "color": "#FF20FF", "emissive": 0.5, "roughness": 0.8, "sheen": 0, "specular": 0 } ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "slab",
+            "position": [0, 0, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [1.2, 0.7, 0.05],
+            "smooth": 0,
+            "type": "Box"
+          }
+        ]
+      },
+      "id": "occluder"
     },
     {
       "document": {

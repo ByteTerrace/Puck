@@ -5,7 +5,7 @@
       "id": 1,
       "name": "add-blend-op-plan",
       "prompt": "i want to add a new blend to the sdf vm - a chamfered subtraction with a variable bevel (think ChamferSubtraction but the bevel width comes from a second radius). before i write any code, give me the full list of every file/symbol i have to touch on the C# side and the HLSL side, what has to stay in sync, and how i'd verify it. dont implement it.",
-      "expected_output": "A change plan naming the SdfBlendOp enum and SDF_BLEND_* define, SdfProgramBuilder, SdfProgram validation and Lipschitz compose bound, the cull-margin channel (MaxSmoothBlendRadius halo), blendShape and blendShapeDual in both mapCore and mapGradCore, the kernel variant tiers, SdfFieldEvaluator.Compose (interpret or refuse by name), the ISA version decision, and verification via Puck.SignedDistance.Tests, the SdfVm build, and puck parity. It first asks whether the blend can be composed from existing vocabulary.",
+      "expected_output": "A change plan naming the SdfBlendOp enum and SDF_BLEND_* define, SdfProgramBuilder, SdfProgram validation and Lipschitz compose bound, the cull-margin channel (MaxSmoothBlendRadius halo), blendShape and blendShapeDual in both mapCore and mapGradCore, the kernel variant tiers, SdfFieldEvaluator.Compose (interpret or refuse by name), and verification via Puck.SignedDistance.Tests, the SdfVm build, and puck parity. It first asks whether the blend can be composed from existing vocabulary.",
       "files": [],
       "assertions": [
         "Names both the C# enum (SdfBlendOp) and the matching SDF_BLEND_* define generated into isa/sdf-isa.hlsli",
@@ -13,7 +13,6 @@
         "Addresses the cull-margin halo for a soft blend (MaxSmoothBlendRadius or equivalent bound inflation)",
         "Addresses the Lipschitz / step-scale compose bound (ComposeLipschitz or SdfProgram.Lipschitz)",
         "Says SdfFieldEvaluator must interpret the new blend or refuse it by name, never substitute",
-        "Considers whether to bump SdfIsa.Version / SDF_ISA_VERSION",
         "Checks whether the blend can be built from existing vocabulary before adding an instruction",
         "Verification includes a real command that exists (dotnet test tests/Puck.SignedDistance.Tests, dotnet build src/Puck.SdfVm, or puck parity)",
         "Cites no nonexistent symbol or verb (e.g. HasUnmaskableCompose, sdf.* verbs, gpu.timing)"

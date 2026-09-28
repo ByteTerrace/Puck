@@ -42,7 +42,7 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
     // frame thread, so a device loss reaches the host's recovery; the next call starts again. Leases whose kernels are
     // already loaded are taken on this call: taking one joins the cache's entry or starts its build, and never waits,
     // so a holder whose pipelines another holder already built has its set in the frame that first asks.
-    public SdfWorldPipelines? Poll(IGpuDeviceContext device, SdfWorldKernels? kernels, bool hostsOnDirectX, bool includeBrickPipelines) {
+    public SdfWorldPipelines? Poll(IGpuDeviceContext device, SdfKernelSet? kernels, bool hostsOnDirectX, bool includeBrickPipelines) {
         if (
             (m_lease is null) &&
             (kernels is not null) &&
@@ -137,7 +137,7 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
     // release revision (IGpuBindings.HeapReleaseRevision) moves, as another owner returns its pools; a refusal of any
     // other kind never reads it. Release (a device loss or disposal) forgets the refusal. The inputs are read with inputsOf only when a build is due or a refusal is being
     // checked, never while the set builds. A device loss is never refused: it reaches the host's recovery.
-    public SdfWorldTables? TryBuild<TState, TInputs>(IGpuDeviceContext device, SdfWorldKernels? kernels, bool hostsOnDirectX, bool includeBrickPipelines, string label, TState state, Func<TState, TInputs> inputsOf, Func<SdfWorldPipelines, SdfWorldPassPipelines, TInputs, SdfWorldTables> construct) where TInputs : IEquatable<TInputs> {
+    public SdfWorldTables? TryBuild<TState, TInputs>(IGpuDeviceContext device, SdfKernelSet? kernels, bool hostsOnDirectX, bool includeBrickPipelines, string label, TState state, Func<TState, TInputs> inputsOf, Func<SdfWorldPipelines, SdfWorldPassPipelines, TInputs, SdfWorldTables> construct) where TInputs : IEquatable<TInputs> {
         var key = new BuildKey(
             Device: device,
             FaultsRevision: (device.Services.Faults?.Revision ?? 0L),
@@ -228,11 +228,11 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
     }
 
     // What a build is made from besides the holder's own inputs; a refused build is tried again when any of it changes.
-    private readonly record struct BuildKey(IGpuDeviceContext? Device, long FaultsRevision, SdfWorldKernels? Kernels, bool HostsOnDirectX, bool IncludeBrickPipelines, GpuPassPipeline? MeshRaster, IGpuComputePipeline? RegionCopy, SdfWorldPipelines? Set, SdfWorldKernels? SetKernels);
+    private readonly record struct BuildKey(IGpuDeviceContext? Device, long FaultsRevision, SdfKernelSet? Kernels, bool HostsOnDirectX, bool IncludeBrickPipelines, GpuPassPipeline? MeshRaster, IGpuComputePipeline? RegionCopy, SdfWorldPipelines? Set, SdfKernelSet? SetKernels);
 
     // Kept apart from Poll so the closure is allocated only when a lease is taken, never on a polled frame. Only loading
     // the deployed kernels reads files, so only a holder with none of its own takes its leases on the thread pool.
-    private void Start(IGpuDeviceContext device, SdfWorldKernels? kernels, bool hostsOnDirectX, bool includeBrickPipelines) =>
+    private void Start(IGpuDeviceContext device, SdfKernelSet? kernels, bool hostsOnDirectX, bool includeBrickPipelines) =>
         m_acquire.Start(build: _ => TakeLeases(
             device: device,
             hostsOnDirectX: hostsOnDirectX,
@@ -240,7 +240,7 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
             kernels: kernels
         ));
     // Takes every lease a holder's engine needs. A pass-pipeline acquire that throws releases the leases taken before it.
-    private Leases TakeLeases(IGpuDeviceContext device, SdfWorldKernels? kernels, bool hostsOnDirectX, bool includeBrickPipelines) {
+    private Leases TakeLeases(IGpuDeviceContext device, SdfKernelSet? kernels, bool hostsOnDirectX, bool includeBrickPipelines) {
         var set = SdfWorldPipelines.Acquire(
             cache: catalog.Pipelines,
             device: device,

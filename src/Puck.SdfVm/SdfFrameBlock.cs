@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Numerics;
 using System.Runtime.InteropServices;
+using Puck.Abstractions.Cameras;
 using Puck.Hosting;
 using Puck.Shaders;
 using Puck.SignedDistance;
@@ -58,6 +59,7 @@ public static class SdfFrameBlock {
     private static readonly int ImageExtent = Offset(member: SdfWorldPackage.ImageExtent);
     private static readonly int InstanceMaskWordCount = Offset(member: SdfWorldPackage.InstanceMaskWordCount);
     private static readonly int MeshDraws = Offset(member: SdfWorldPackage.MeshDraws);
+    private static readonly int NearDistance = Offset(member: SdfWorldPackage.NearDistance);
     private static readonly int SampleIndex = Offset(member: SdfWorldPackage.SampleIndex);
     private static readonly int SceneTime = Offset(member: SdfWorldPackage.SceneTime);
     private static readonly int ScreenCount = Offset(member: SdfWorldPackage.ScreenCount);
@@ -72,9 +74,26 @@ public static class SdfFrameBlock {
     private static readonly int ViewUp = Offset(member: SdfWorldPackage.ViewUp);
     private static readonly int ViewportCount = Offset(member: SdfWorldPackage.ViewportCount);
 
+    /// <summary>The nearest forward distance, in world units, a view's surfaces are rendered from (<see cref="NearOf"/>):
+    /// the mesh pass's reversed-Z depth needs a positive near. The kernels read it as <c>SDF_MINIMUM_NEAR</c>, which
+    /// <see cref="SdfIsaHlsl"/> generates from this value.</summary>
+    public const float MinimumNear = 0.02f;
+
     /// <summary>Gets the bytes of the pass block, a multiple of 16.</summary>
     public static int SizeBytes => ((int)Layout.SizeBytes);
 
+    /// <summary>Returns the forward distance of the plane a view's surfaces are rendered from: the camera's own
+    /// <see cref="CameraSnapshot.Near"/>, or <see cref="MinimumNear"/> when that is nearer. The kernels start every
+    /// surface march where its ray crosses this plane and the mesh pass clips there
+    /// (<see cref="ViewProjection.Create"/>'s <c>near</c>). The pass block carries the camera's own near distance, which
+    /// the bounded volumes start from, and the kernels apply this floor themselves.</summary>
+    /// <param name="camera">The view's camera.</param>
+    /// <returns>The plane's forward distance, in world units; at least <see cref="MinimumNear"/>.</returns>
+    public static float NearOf(in CameraSnapshot camera) =>
+        MathF.Max(
+            x: camera.Near,
+            y: MinimumNear
+        );
     /// <summary>Writes a view's values into a pass block: its render extent and tile grid, the frame's bound screens,
     /// instance-mask width, twinkle tick and mesh draws the tables packed, the view's camera, the far distance and the
     /// debug view mode, the frame's levers, and the environment the tables baked. The extent is not written: the node
@@ -111,6 +130,7 @@ public static class SdfFrameBlock {
         WriteSingle(block: block, offset: AspectRatio, value: camera.AspectRatio);
         WriteSingle(block: block, offset: FrustumOffset, value: camera.FrustumOffset.X);
         WriteSingle(block: block, offset: (FrustumOffset + sizeof(float)), value: camera.FrustumOffset.Y);
+        WriteSingle(block: block, offset: NearDistance, value: camera.Near);
         WriteSingle(block: block, offset: FarDistance, value: frame.FarDistance);
         WriteSingle(block: block, offset: SceneTime, value: sceneTime);
         WriteUInt32(block: block, offset: DebugMode, value: ((uint)tables.DebugMode));

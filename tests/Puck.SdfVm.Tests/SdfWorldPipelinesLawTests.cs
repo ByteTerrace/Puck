@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using Puck.Abstractions.Gpu;
 using Puck.Shaders;
-using Puck.SignedDistance;
 using Puck.Testing;
 using Xunit;
 
@@ -18,7 +17,7 @@ namespace Puck.SdfVm.Tests;
 public sealed class SdfWorldPipelinesLawTests {
     [Fact]
     public void ASetLeasesEveryEnginePipelineAndAReloadOnlyTheChangedOnes() {
-        var device = new PersistingDevice(services: new FakeGpuDevice(reportVersion: SdfIsa.Version).Services);
+        var device = new PersistingDevice(services: new FakeGpuDevice().Services);
         var cache = new GpuPassPipelineCache();
 
         using var pipelines = SdfTestPipelines.Build(
@@ -29,10 +28,13 @@ public sealed class SdfWorldPipelinesLawTests {
 
         Assert.Equal(expected: (11L, 11), actual: (Created(cache: cache), device.Persisted));
 
+        using var reflector = SdfTestPipelines.Reflector();
+
         using (var unchanged = pipelines.PrepareReload(
             cache: cache,
             device: device,
-            kernels: SdfTestPipelines.Kernels(beam: 1)
+            kernels: SdfTestPipelines.Kernels(beam: 1),
+            reflector: reflector
         )) {
             Assert.Equal(expected: 0, actual: unchanged.ChangedPipelines);
         }
@@ -40,7 +42,8 @@ public sealed class SdfWorldPipelinesLawTests {
         using (var changed = pipelines.PrepareReload(
             cache: cache,
             device: device,
-            kernels: SdfTestPipelines.Kernels(beam: 2)
+            kernels: SdfTestPipelines.Kernels(beam: 2),
+            reflector: reflector
         )) {
             changed.Wait(cancellationToken: CancellationToken.None);
             Assert.Equal(expected: 1, actual: changed.ChangedPipelines);
@@ -57,16 +60,88 @@ public sealed class SdfWorldPipelinesLawTests {
 
         Assert.Equal(expected: 12L, actual: Created(cache: cache));
     }
+    // A reload is held to the host's interface before it leases anything: a kernel compiled against another instruction
+    // set (its pass block carries another stamp), one binding the program words and the frame's instance grid in each
+    // other's places, and one binding the cull bounds and the views' dispatch arguments, two buffers of one shape, in each
+    // other's places, each refuse the reload by name, and the set keeps its kernels and creates nothing; the same kernels
+    // compiled as the host was prepare.
+    [Fact]
+    public void AReloadWhoseKernelsDoNotReadTheHostsInterfaceIsRefusedAndTheSetKeepsItsKernels() {
+        var gpu = new FakeGpuDevice();
+        var cache = new GpuPassPipelineCache();
+        using var pipelines = SdfTestPipelines.Build(
+            cache: cache,
+            device: gpu,
+            kernels: SdfTestPipelines.Kernels(beam: 1)
+        );
+        using var reflector = SdfTestPipelines.Reflector();
+        var installed = pipelines.Kernels;
+        var created = Created(cache: cache);
+        var changed = SdfTestPipelines.Kernels(beam: 2);
+        var foreign = changed.With(
+            bytecode: SpirvEdits.Renamed(
+                from: ("passGroup" + SdfIsaHlsl.Stamp),
+                module: changed[SdfKernel.Beam].Span,
+                to: ("passGroup" + SdfIsaHlsl.StampOf(fingerprint: SdfIsaHlsl.Fingerprint ^ 1U))
+            ),
+            kernel: SdfKernel.Beam
+        );
+        var swapped = changed.With(
+            bytecode: SpirvEdits.BindingsSwapped(
+                first: SdfWorldPackage.ProgramWords,
+                module: changed[SdfKernel.InstanceCull].Span,
+                second: SdfWorldPackage.FrameInstanceGrid
+            ),
+            kernel: SdfKernel.InstanceCull
+        );
+
+        var sameShaped = changed.With(
+            bytecode: SpirvEdits.BindingsSwapped(
+                first: SdfWorldPackage.CullBoundsWritten,
+                module: changed[SdfKernel.CullArgs].Span,
+                second: SdfWorldPackage.ViewsArgsWritten
+            ),
+            kernel: SdfKernel.CullArgs
+        );
+
+        foreach (var (kernels, stem, reason) in ((ReadOnlySpan<(SdfKernelSet, string, string)>)[
+            (foreign, "sdf-beam", "stamped"),
+            (swapped, "sdf-instance-cull", SdfWorldPackage.ProgramWords),
+            (sameShaped, "sdf-cull-args", SdfWorldPackage.CullBoundsWritten),
+        ])) {
+            var refusal = Assert.Throws<InvalidOperationException>(testCode: () => pipelines.PrepareReload(
+                cache: cache,
+                device: gpu,
+                kernels: kernels,
+                reflector: reflector
+            ));
+
+            Assert.Contains(actualString: refusal.Message, expectedSubstring: $"'{stem}': ");
+            Assert.Contains(actualString: refusal.Message, expectedSubstring: reason);
+            Assert.Same(expected: installed, actual: pipelines.Kernels);
+            Assert.Equal(expected: created, actual: Created(cache: cache));
+        }
+
+        using var reload = pipelines.PrepareReload(
+            cache: cache,
+            device: gpu,
+            kernels: changed,
+            reflector: reflector
+        );
+
+        reload.Wait(cancellationToken: CancellationToken.None);
+        Assert.Equal(expected: 1, actual: reload.ChangedPipelines);
+    }
     [Fact]
     public void ASetWithABrickPoolAddsTheBrickBakePipelineItsKernelCarries() {
-        var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version);
+        var gpu = new FakeGpuDevice();
         var cache = new GpuPassPipelineCache();
 
         using var pipelines = SdfTestPipelines.Build(
             cache: cache,
             device: gpu,
             includeBrickPipelines: true,
-            kernels: SdfTestPipelines.Kernels(beam: 1) with { BrickBake = new byte[] { 1 } }
+            kernels: SdfTestPipelines.Kernels(beam: 1).With(bytecode: new byte[] { 1 }, kernel: SdfKernel.BrickBake)
         );
 
         Assert.True(condition: pipelines.IncludesBrickPipelines);
@@ -75,7 +150,7 @@ public sealed class SdfWorldPipelinesLawTests {
     [Fact]
     public async Task TheCacheHoldsAtMostItsConcurrencyInTheDriverAndBuildsEveryPipeline() {
         using var driver = new SteppedDriver();
-        var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version) {
+        var gpu = new FakeGpuDevice() {
             BeforeComputePipeline = driver.Enter,
         };
         var cache = new GpuPassPipelineCache();
@@ -111,7 +186,7 @@ public sealed class SdfWorldPipelinesLawTests {
     [Fact]
     public async Task ASetDisposedWhilePipelinesAreInTheDriverWaitsOnlyForThoseAndCreatesNoMore() {
         using var driver = new SteppedDriver();
-        var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version) {
+        var gpu = new FakeGpuDevice() {
             BeforeComputePipeline = driver.Enter,
         };
         var cache = new GpuPassPipelineCache();
@@ -153,7 +228,6 @@ public sealed class SdfWorldPipelinesLawTests {
         // Each failing creation waits in the driver for the other before it throws, so both fail while the set builds.
         using var bothInDriver = new Barrier(participantCount: 2);
         var gpu = new FakeGpuDevice(
-            reportVersion: SdfIsa.Version,
             trackObjects: true
         ) {
             BeforeComputePipeline = description => {

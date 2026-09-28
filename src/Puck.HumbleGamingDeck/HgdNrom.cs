@@ -1,0 +1,147 @@
+namespace Puck.HumbleGamingDeck;
+
+/// <summary>NROM's fixed PRG/CHR windows, optional PRG memory, and header-selected nametable wiring, including the
+/// four-screen variant's own 2 KiB of nametable RAM.</summary>
+public sealed class HgdNrom : IHgdMapper {
+    private readonly HgdCartridge m_cartridge;
+    private readonly byte[] m_prgRam;
+    private readonly byte[] m_chrRam;
+    private readonly byte[] m_batteryRam;
+    private readonly byte[] m_fourScreenRam;
+
+    /// <summary>Initializes a new instance of the <see cref="HgdNrom"/> class and installs a trainer at $7000 when present.</summary>
+    /// <param name="cartridge">The validated, immutable NROM image.</param>
+    /// <exception cref="ArgumentNullException">The cartridge is null.</exception>
+    public HgdNrom(HgdCartridge cartridge) {
+        ArgumentNullException.ThrowIfNull(argument: cartridge);
+        m_cartridge = cartridge;
+        m_prgRam = new byte[Header.PrgRamSize];
+        m_chrRam = new byte[Header.ChrRamSize];
+        m_batteryRam = new byte[(Header.PrgNvRamSize + Header.ChrNvRamSize)];
+        m_fourScreenRam = new byte[((Header.Mirroring == HgdMirroring.FourScreen) ? 2048 : 0)];
+        if (Header.HasTrainer) {
+            for (var index = 0; (index < cartridge.Trainer.Length); ++index) {
+                CpuWrite(address: ((ushort)(0x7000 + index)), value: cartridge.Trainer[index]);
+            }
+        }
+    }
+
+    /// <inheritdoc/>
+    public HgdCartridgeHeader Header => m_cartridge.Header;
+    /// <inheritdoc/>
+    public bool Irq => false;
+    /// <inheritdoc/>
+    /// <remarks>The save contains declared PRG NVRAM followed by CHR NVRAM; volatile RAM is excluded.</remarks>
+    public Span<byte> BatteryRam => m_batteryRam;
+
+    /// <inheritdoc/>
+    public byte CpuRead(ushort address, byte openBus) {
+        return CpuPeek(address: address, openBus: openBus);
+    }
+    /// <inheritdoc/>
+    public byte CpuPeek(ushort address, byte openBus) {
+        if (address >= 0x8000) {
+            return m_cartridge.PrgRom[address & (m_cartridge.PrgRom.Length - 1)];
+        }
+
+        var size = (m_prgRam.Length + Header.PrgNvRamSize);
+
+        if ((address < 0x6000) || (size == 0)) {
+            return openBus;
+        }
+
+        var offset = address & (size - 1);
+
+        return ((offset < m_prgRam.Length) ? m_prgRam[offset] : m_batteryRam[(offset - m_prgRam.Length)]);
+    }
+    /// <inheritdoc/>
+    public void CpuWrite(ushort address, byte value) {
+        var size = (m_prgRam.Length + Header.PrgNvRamSize);
+
+        if ((address >= 0x6000) && (address < 0x8000) && (size != 0)) {
+            var offset = address & (size - 1);
+
+            if (offset < m_prgRam.Length) {
+                m_prgRam[offset] = value;
+            } else {
+                m_batteryRam[(offset - m_prgRam.Length)] = value;
+            }
+        }
+    }
+    /// <inheritdoc/>
+    public byte PpuRead(ushort address, HgdNametableRam nametables) =>
+        PpuPeek(
+            address: address,
+            nametables: nametables
+        );
+    /// <inheritdoc/>
+    public byte PpuPeek(ushort address, HgdNametableRam nametables) {
+        if (address < 0x2000) {
+            if (!m_cartridge.ChrRom.IsEmpty) {
+                return m_cartridge.ChrRom[address];
+            }
+
+            return ((address < m_chrRam.Length) ? m_chrRam[address] : m_batteryRam[((Header.PrgNvRamSize + address) - m_chrRam.Length)]);
+        }
+
+        var quadrant = (address >> 10) & 3;
+
+        return (((Header.Mirroring == HgdMirroring.FourScreen) && (quadrant >= 2))
+            ? m_fourScreenRam[((quadrant & 1) << 10) | (address & 0x3FF)]
+            : nametables.Read(
+                offset: address,
+                page: Page(quadrant: quadrant)
+            )
+        );
+    }
+    /// <inheritdoc/>
+    public void PpuWrite(ushort address, byte value, HgdNametableRam nametables) {
+        if (address < 0x2000) {
+            if (m_cartridge.ChrRom.IsEmpty) {
+                if (address < m_chrRam.Length) {
+                    m_chrRam[address] = value;
+                } else {
+                    m_batteryRam[((Header.PrgNvRamSize + address) - m_chrRam.Length)] = value;
+                }
+            }
+
+            return;
+        }
+
+        var quadrant = (address >> 10) & 3;
+
+        if ((Header.Mirroring == HgdMirroring.FourScreen) && (quadrant >= 2)) {
+            m_fourScreenRam[((quadrant & 1) << 10) | (address & 0x3FF)] = value;
+        } else {
+            nametables.Write(
+                offset: address,
+                page: Page(quadrant: quadrant),
+                value: value
+            );
+        }
+    }
+    /// <inheritdoc/>
+    public void ObservePpuAddress(ushort address, ulong masterTick) { }
+    /// <inheritdoc/>
+    public void ObserveM2(bool high, ulong masterHalfTick) { }
+    /// <inheritdoc/>
+    public void SaveState(StateWriter writer) {
+        TransferState(transfer: new StateSaveTransfer(writer: writer));
+    }
+    /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">The reader does not contain all declared board RAM.</exception>
+    public void LoadState(StateReader reader) {
+        TransferState(transfer: new StateLoadTransfer(reader: reader));
+    }
+
+    private void TransferState<TTransfer>(TTransfer transfer) where TTransfer : struct, IStateTransfer {
+        transfer.Block(values: m_prgRam.AsSpan());
+        transfer.Block(values: m_chrRam.AsSpan());
+        transfer.Block(values: m_batteryRam.AsSpan());
+        transfer.Block(values: m_fourScreenRam.AsSpan());
+    }
+    // CIRAM A10 follows PPU A11 on a horizontally mirrored board and PPU A10 on a vertically mirrored one; a four-screen
+    // board answers the upper two quadrants from its own RAM and wires the lower two as vertical mirroring does.
+    private int Page(int quadrant) =>
+        ((Header.Mirroring == HgdMirroring.Horizontal) ? (quadrant >> 1) : quadrant & 1);
+}

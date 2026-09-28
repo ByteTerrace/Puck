@@ -6,11 +6,17 @@ using Xunit;
 
 namespace Puck.Testing;
 
-// How a harness gets an engine's pipelines: a fake kernel set, a set leased and waited for inline for an engine it drives
+// How a harness gets an engine's pipelines: a kernel set, a set leased and waited for inline for an engine it drives
 // directly, or the frames a node produces while its build runs on the thread pool.
 internal static class SdfTestPipelines {
+    // The build's own SPIR-V kernels, deployed beside the test assembly, read once.
+    private static readonly Lazy<ReadOnlyMemory<byte>[]> Compiled = new(valueFactory: static () => [.. SdfKernelSet.Kernels.Select(selector: static kernel => ((ReadOnlyMemory<byte>)File.ReadAllBytes(path: Path.Combine(
+        path1: SdfKernelSet.DefaultDirectory,
+        path2: $"{SdfKernelSet.StemOf(kernel: kernel)}.comp.spv"
+    ))))]);
+
     // Leases a set from a pass-pipeline cache and waits for it on the calling thread; the cache counts what it creates.
-    public static SdfWorldPipelines Build(IGpuDeviceContext device, SdfWorldKernels kernels, GpuPassPipelineCache cache, bool includeBrickPipelines = false) {
+    public static SdfWorldPipelines Build(IGpuDeviceContext device, SdfKernelSet kernels, GpuPassPipelineCache cache, bool includeBrickPipelines = false) {
         var set = SdfWorldPipelines.Acquire(
             cache: cache,
             device: device,
@@ -65,26 +71,18 @@ internal static class SdfTestPipelines {
             ),
             ledger: ledger
         );
-    // A kernel set whose every kernel is one byte, the beam's chosen by the caller so two sets can differ by one kernel,
-    // and whose brick kernels are empty, so no set built from it has brick pipelines.
-    public static SdfWorldKernels Kernels(byte beam = 1) {
-        ReadOnlyMemory<byte> code = new byte[] { 1 };
-
-        return new SdfWorldKernels(
-            Ambient: code,
-            Beam: new byte[] { beam },
-            BrickBake: ReadOnlyMemory<byte>.Empty,
-            CullArgs: code,
-            InstanceCull: code,
-            Primary: code,
-            Shadow: code,
-            Sky: code,
-            Surface: code,
-            Views: code,
-            ViewsCore: code,
-            ViewsFolds: code
-        );
-    }
+    // The build's own SPIR-V kernel set, whose beam kernel's generator word the caller chooses so two sets can differ by
+    // one kernel whose bindings are the same, and whose brick kernel is empty, so no set built from it has brick pipelines.
+    // Every kernel reads the host's interface, so a reload of it passes the interface check.
+    public static SdfKernelSet Kernels(byte beam = 1) =>
+        new(bytecode: [.. SdfKernelSet.Kernels.Select(selector: kernel => kernel switch {
+            SdfKernel.Beam => SpirvEdits.WithGenerator(generator: beam, module: Compiled.Value[((int)kernel)].Span),
+            SdfKernel.BrickBake => ReadOnlyMemory<byte>.Empty,
+            _ => Compiled.Value[((int)kernel)],
+        })]);
+    // A reflector for a reload's interface check; the kernels a harness reloads are SPIR-V, which needs no tool.
+    public static ShaderBytecodeReflector Reflector() =>
+        new(toolchain: new ShaderToolchain());
     // Produces frames until the residency's pipeline build has built its tables, then submits that frame's upload, as a
     // view's first pass of the frame does. The bound is liveness for a build over a fake device; it decides nothing.
     public static void ProduceFirstFrame(this SdfWorldResidency residency, in FrameContext context) {

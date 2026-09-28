@@ -5,7 +5,7 @@ CPU (ARM and Thumb instruction sets), PPU, APU, DMA, timers,
 interrupts, cartridge, and link cable. It shares no CPU core with the SM83
 compatibility machine in `Puck.HumbleGamingBrick`—only the master-clock and
 link abstractions are shared where the hardware itself shares them. Snapshot,
-fork, and queued off-thread hosting come from `Puck.GamingBricks`; this
+fork, and queued off-thread hosting come from `Puck.Machines`; this
 project supplies only the AGB hardware itself.
 
 Start with [Quick start](#quick-start) to run a cartridge in your own loop.
@@ -38,7 +38,7 @@ output buffers, snapshots, and queued execution.
   transfer-idle first.
 - *Queued, backpressured hosting:* `AdvancedGamingBrickEngine`
   (engine id `advanced-gaming-brick`) creates an `AdvancedMachineHost` that forwards
-  the neutral machine surface to `Puck.GamingBricks`'s `QueuedMachineWorker`.
+  the neutral machine surface to `Puck.Machines`'s `QueuedMachineWorker`.
 
 ## Hosting
 
@@ -46,7 +46,7 @@ output buffers, snapshots, and queued execution.
 flowchart LR
     Bytes["cartridge bytes + BIOS option"] --> Engine["AdvancedGamingBrickEngine.Create"]
     Engine --> Host["AdvancedMachineHost : QueuedMachineHost"]
-    Host --> Worker["Puck.GamingBricks QueuedMachineWorker"]
+    Host --> Worker["Puck.Machines QueuedMachineWorker"]
     Worker --> Surface["IMachineRuntime / IQueuedMachineRuntime / IAudioMachine"]
 ```
 
@@ -88,13 +88,13 @@ window, GPU backend, worker thread, or environment configuration is required.
 
 ```csharp
 using Puck.AdvancedGamingBrick;
-using Puck.Abstractions.Machines;
+using Puck.Machines;
 
 using var core = new AdvancedGamingBrickCore(
     cartridgeRom: File.ReadAllBytes(args[0])); // bundled firmware, native cold startup
 
 core.ConfigureAudio(sampleRate: 48_000);
-core.ApplyInput(input: new MachinePadState());
+core.ApplyInput(input: MachinePads.Neutral);
 core.RunCycles(cycles: 280_896); // one nominal native frame at 16,777,216 Hz
 uint[] pixels = core.Framebuffer.ToArray(); // 240 × 160, packed 0x00RRGGBB
 short[] audio = new short[4096];
@@ -159,7 +159,7 @@ startup mode; its bundled-firmware convenience constructor defaults to cold boot
 | Cartridge | `AgbCartridge`, `CartridgeBackup`, `AgbGameOverride`, `AgbGameOverrides` | ROM signature scanning and header game-code overrides for save/RTC/GPIO detection. |
 | BIOS | `IBios`, `ReplacementBios`, `AgbBiosProfile`, `AgbFirmware` | The BIOS image contract, owned image storage, content-hash identification, and bundled firmware configuration. |
 | Link | `AgbLinkCable`, `AgbLinkSession`, `AgbLinkResumeToken`, `IAgbLink`, `NullAgbLink`, `AgbSerialController`, `IAgbSerialController` | The deterministic, instruction-atomic multi-machine link cable. |
-| Hosting | `AdvancedMachineHost`, `AdvancedGamingBrickEngine`, `AdvancedGamingBrickCore`, `AdvancedPad`, `AdvancedGamingBrickLookahead` | The `IMachineEngine` adapter over `Puck.GamingBricks`'s queued-host substrate. |
+| Hosting | `AdvancedMachineHost`, `AdvancedGamingBrickEngine`, `AdvancedGamingBrickCore`, `AdvancedPad`, `AdvancedGamingBrickLookahead` | The `IMachineEngine` adapter over `Puck.Machines`'s queued-host substrate. |
 
 ## Verification and further reading
 
@@ -169,10 +169,10 @@ synchronous core without a worker or graphics/audio device. The component
 snapshot layout law lives in
 [Puck.AdvancedGamingBrick.Tests](../../../tests/Puck.AdvancedGamingBrick.Tests/README.md),
 and shared substrate checks live in
-[Puck.GamingBricks.Tests](../../../tests/Puck.GamingBricks.Tests/README.md).
+[Puck.Machines.Tests](../../../tests/Puck.Machines.Tests/README.md).
 
 - [Advanced Gaming Brick](README.md) — hardware topics and evidence.
 - [Performance techniques](performance-techniques.md) — execution equivalence and architectural constraints.
 - [Machine hosting runtime](../shared/machine-hosting.md) — shared host obligations.
 - [Project map](../../project-map.md) — dependency ownership.
-- [GamingBricks license](../../../src/Puck.GamingBricks/LICENSE.md) — shared legal terms.
+- [GamingBricks license](../../../src/Puck.Machines/LICENSE.md) — shared legal terms.

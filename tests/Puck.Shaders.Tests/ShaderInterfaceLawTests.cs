@@ -353,6 +353,83 @@ public sealed class ShaderInterfaceLawTests {
         Assert.Null(@object: layout.Mismatch(reflected: layout.Bindings));
         Assert.Null(@object: layout.Mismatch(reflected: layout.DxilBindings));
     }
+    /// <summary>A stamp rides the pass block's variable name, which the generated include declares and aliases to the
+    /// group's own name; the layout holds a module to it (a module whose pass block carries another stamp, or that reads
+    /// no pass block, is refused), as does an unstamped layout, whose pass block goes by its own name; and the document and
+    /// hash carry it.</summary>
+    [Fact]
+    public void A_stamped_interface_holds_a_module_to_its_stamp() {
+        var plain = ShaderInterfaceSpike.FilmGrain;
+        var stamped = plain.Stamped(stamp: "Isa0000ABCD");
+        var layout = stamped.Layout();
+        var passBlock = layout.Bindings.Single(predicate: static binding => ((binding.Set == ((uint)ShaderInterfaceGroup.Pass)) && (binding.Binding == 0)));
+        var generated = ShaderInterfaceHlsl.Generate(shaderInterface: stamped);
+
+        Assert.Equal(expected: "passGroupIsa0000ABCD", actual: passBlock.Name);
+        Assert.Contains(actualString: generated, expectedSubstring: " passGroupIsa0000ABCD : register(b0, space3);\n#define passGroup passGroupIsa0000ABCD\n");
+        Assert.DoesNotContain(actualString: ShaderInterfaceHlsl.Generate(shaderInterface: plain), expectedSubstring: "#define passGroup");
+        Assert.Null(@object: layout.Mismatch(reflected: layout.Bindings));
+        Assert.Null(@object: layout.Mismatch(reflected: layout.DxilBindings));
+        Assert.Contains(
+            actualString: layout.Mismatch(reflected: plain.Layout().Bindings),
+            expectedSubstring: "the module's pass block is 'passGroup'; interface 'film-grain' is stamped 'Isa0000ABCD'"
+        );
+        Assert.Contains(
+            actualString: layout.Mismatch(reflected: [.. layout.Bindings.Where(predicate: binding => !ReferenceEquals(objA: binding, objB: passBlock))]),
+            expectedSubstring: "the module reads no pass block, so it carries no stamp"
+        );
+        Assert.Contains(
+            actualString: plain.Layout().Mismatch(reflected: layout.Bindings),
+            expectedSubstring: "the module reads passGroupIsa0000ABCD set 3 binding 0 ConstantBuffer"
+        );
+
+        var parsed = ShaderInterface.Parse(json: stamped.ToJson());
+
+        Assert.Equal(expected: "Isa0000ABCD", actual: parsed.Stamp);
+        Assert.Equal(expected: stamped.Hash, actual: parsed.Hash);
+        Assert.NotEqual(expected: plain.Hash, actual: stamped.Hash);
+        Assert.DoesNotContain(actualString: plain.ToJson(), expectedSubstring: "stamp");
+        _ = Assert.Throws<InvalidDataException>(testCode: () => plain.Stamped(stamp: "isa"));
+        _ = Assert.Throws<InvalidDataException>(testCode: () => new ShaderInterface(
+            members: ShaderFrameInterface.FrameGroupMembers,
+            name: "unblocked",
+            stamp: "Isa0000ABCD"
+        ));
+    }
+    /// <summary>A binding is its resource by name: two buffers of one shape exchanged between their bindings fit every
+    /// shape rule, and are refused by their names on both views; a module that names no resource there is refused as
+    /// one whose resource cannot be told.</summary>
+    [Fact]
+    public void Two_resources_of_one_shape_exchanged_between_their_bindings_are_refused() {
+        var layout = new ShaderInterface(
+            members: [
+                .. ShaderFrameInterface.FrameGroupMembers,
+                ShaderInterfaceMember.ReadWriteBuffer(element: ShaderValueType.Uint, group: ShaderInterfaceGroup.Pass, name: "bounds"),
+                ShaderInterfaceMember.ReadWriteBuffer(element: ShaderValueType.Uint, group: ShaderInterfaceGroup.Pass, name: "arguments"),
+            ],
+            name: "exchange"
+        ).Layout();
+
+        foreach (var view in ((ReadOnlySpan<IReadOnlyList<ShaderInterfaceBinding>>)[layout.Bindings, layout.DxilBindings])) {
+            var bounds = view.Single(predicate: static binding => (binding.Name == "bounds"));
+            var arguments = view.Single(predicate: static binding => (binding.Name == "arguments"));
+            var exchanged = view.Select(selector: binding => (ReferenceEquals(objA: binding, objB: bounds)
+                ? (binding with { Name = arguments.Name })
+                : (ReferenceEquals(objA: binding, objB: arguments)
+                    ? (binding with { Name = bounds.Name })
+                    : binding))).ToArray();
+
+            Assert.Null(@object: layout.Mismatch(reflected: view));
+            Assert.Contains(
+                actualString: layout.Mismatch(reflected: exchanged),
+                expectedSubstring: $"the module reads arguments set 3 binding {bounds.Binding} ReadWriteBuffer stride 4;"
+            );
+            Assert.Contains(
+                actualString: layout.Mismatch(reflected: [.. view.Select(selector: binding => (ReferenceEquals(objA: binding, objB: bounds) ? (binding with { Name = "%12" }) : binding))]),
+                expectedSubstring: $"the module names no resource at set 3 binding {bounds.Binding}"
+            );
+        }
+    }
     [Fact]
     public void An_echo_interface_keeps_the_pushed_index_it_is_given() {
         var pushing = new ShaderInterface(

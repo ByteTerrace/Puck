@@ -10,8 +10,7 @@ namespace Puck.Testing;
 /// can be checked exactly without a device. By default a fence reads signaled once submitted, so every submission
 /// completes as soon as a node polls it.
 /// <para>
-/// A 1×1 readback returns the SDF ISA report of the version given at construction, so an SDF engine passes its shader-set
-/// handshake; any other readback returns zeroed pixels. Nothing here allocates once a node has created its resources.
+/// A readback returns zeroed pixels. Nothing here allocates once a node has created its resources.
 /// </para>
 /// <para>
 /// Two modes serve the laws over the counting wrappers themselves. With <c>countCalls</c>, each member of a wrapped
@@ -40,7 +39,6 @@ internal sealed class FakeGpuDevice :
     private readonly bool m_countCalls;
     private readonly bool m_holdFences;
     private readonly GpuObjectNaming m_naming;
-    private readonly byte m_reportVersion;
 
     private readonly Dictionary<nint, Creation> m_trackedHandles = [];
     private readonly Lock m_trackGate = new();
@@ -55,18 +53,16 @@ internal sealed class FakeGpuDevice :
     private nint m_nextHeapPool = 0x10000;
 
     /// <summary>Initializes a new instance of the <see cref="FakeGpuDevice"/> class.</summary>
-    /// <param name="reportVersion">The ISA version a 1×1 readback reports.</param>
     /// <param name="countCalls">Whether each wrapped member counts its calls into <see cref="Calls"/>.</param>
     /// <param name="holdFences">Whether a submitted fence waits for the test to complete it.</param>
     /// <param name="trackObjects">Whether every created object is tracked in <see cref="Created"/> and
     /// <see cref="Memory"/>.</param>
     /// <param name="naming">The naming every creating member hands its object to, as a backend's do, or
     /// <see langword="null"/> for <see cref="GpuObjectNaming.Off"/>.</param>
-    public FakeGpuDevice(byte reportVersion = 0, bool countCalls = false, bool holdFences = false, bool trackObjects = false, GpuObjectNaming? naming = null) {
+    public FakeGpuDevice(bool countCalls = false, bool holdFences = false, bool trackObjects = false, GpuObjectNaming? naming = null) {
         m_countCalls = countCalls;
         m_naming = (naming ?? GpuObjectNaming.Off);
         m_holdFences = holdFences;
-        m_reportVersion = reportVersion;
         m_trackObjects = trackObjects;
         Services = new GpuDeviceServices {
             Bindings = this,
@@ -609,7 +605,7 @@ internal sealed class FakeGpuDevice :
 
         return false;
     }
-    IGpuSurfaceReadback IGpuSurfaceTransferFactory.CreateReadback() => new Readback(reportVersion: m_reportVersion);
+    IGpuSurfaceReadback IGpuSurfaceTransferFactory.CreateReadback() => new Readback();
     IGpuSurfaceUpload IGpuSurfaceTransferFactory.CreateUpload() => new SurfaceUpload();
 
     /// <summary>A submission fence. It reads signaled once submitted unless the device holds fences; a held fence reads
@@ -730,7 +726,7 @@ internal sealed class FakeGpuDevice :
         public void Dispose() { }
         public nint Upload(ReadOnlyMemory<byte> pixels, GpuPixelFormat format, uint width, uint height, uint levels = 1U) => ViewHandle;
     }
-    private sealed class Readback(byte reportVersion) : IGpuSurfaceReadback {
+    private sealed class Readback : IGpuSurfaceReadback {
         private byte[] m_pixels = [];
 
         public void Dispose() { }
@@ -739,18 +735,6 @@ internal sealed class FakeGpuDevice :
 
             if (m_pixels.Length != length) {
                 m_pixels = new byte[length];
-            }
-
-            // The SDF ISA report: one working-format pixel of four half floats, each a code over 255.
-            if (length == 8) {
-                ReadOnlySpan<byte> codes = [0x53, 0x44, reportVersion, reportVersion];
-
-                for (var channel = 0; (channel < codes.Length); channel++) {
-                    System.Buffers.Binary.BinaryPrimitives.WriteHalfLittleEndian(
-                        destination: m_pixels.AsSpan(start: (channel * 2)),
-                        value: ((Half)(codes[channel] / 255f))
-                    );
-                }
             }
 
             return m_pixels;

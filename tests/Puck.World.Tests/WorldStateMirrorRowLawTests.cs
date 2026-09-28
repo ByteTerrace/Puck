@@ -142,7 +142,7 @@ public sealed class WorldStateMirrorRowLawTests {
             mirror.Install(engineTick: 0UL, tick: 0UL);
             Assert.True(condition: view.TryResolveRow(ordinal: out var tiles, rowName: "tiles"));
 
-            var gpu = new UploadModelGpu(reportVersion: 0);
+            var gpu = new UploadModelGpu();
             using var module = gpu.Services.ShaderModuleFactory.Create(
                 bytecode: new byte[] { UploadModelGpu.RegionCopyBytecode },
                 stage: GpuShaderStage.Compute

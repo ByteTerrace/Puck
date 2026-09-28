@@ -14,9 +14,8 @@ namespace Puck.SdfVm.Tests;
 /// decorator the backends wrap their services with, over a <see cref="FakeGpuDevice"/> that tracks every object it
 /// creates: every creation the engine's construction makes, of every kind the decorator can fail, is failed in turn. The
 /// failed construction releases exactly what it created, once each, holds no device-local memory, and leaves the
-/// pipeline set it was handed untouched; the same construction then succeeds. A refusal that is not a creation fault,
-/// the ISA handshake's, releases the same way, and so does the first frame that draws a mesh, whose mesh pass attachments
-/// no construction creates.
+/// pipeline set it was handed untouched; the same construction then succeeds. The first frame that draws a mesh, whose
+/// mesh pass attachments no construction creates, releases the same way.
 /// </summary>
 public sealed class SdfWorldTablesCreationFaultLawTests {
     private const uint Extent = 16;
@@ -35,8 +34,7 @@ public sealed class SdfWorldTablesCreationFaultLawTests {
 
         // The engine creates no pipeline, shader module, render pass or framebuffer: it records with the set and the mesh
         // pass pipeline it is handed, and the first frame that draws a mesh creates the mesh pass's attachments and the
-        // framebuffer binding them. It creates buffers, images (the ISA handshake's two included), a command pool per ring
-        // slot, its own descriptor pool, and whatever policy the device selects the one copy pool it reserves for all its
+        // framebuffer binding them. It creates buffers, its two filler images, a command pool per ring slot, its own descriptor pool, and whatever policy the device selects the one copy pool it reserves for all its
         // regions: the eight tables, the mesh region and the brick staging.
         Assert.Equal(actual: expected[GpuCreationKind.Pipeline], expected: 0L);
         Assert.Equal(actual: expected[GpuCreationKind.ShaderModule], expected: 0L);
@@ -45,7 +43,7 @@ public sealed class SdfWorldTablesCreationFaultLawTests {
         Assert.Equal(actual: expected[GpuCreationKind.CommandPool], expected: ((long)SdfWorldTables.FrameRingSize));
         Assert.Equal(actual: expected[GpuCreationKind.BindingsPool], expected: 2L);
         Assert.True(condition: (expected[GpuCreationKind.Buffer] > SdfBrickPoolLayout.MaxBricks));
-        Assert.True(condition: (expected[GpuCreationKind.Image] > 2L));
+        Assert.Equal(actual: expected[GpuCreationKind.Image], expected: 2L);
 
         var faulted = 0;
 
@@ -82,19 +80,6 @@ public sealed class SdfWorldTablesCreationFaultLawTests {
             actual: faulted,
             expected: expected.Values.Sum()
         );
-    }
-    [Fact]
-    public void AnIsaHandshakeRefusalReleasesEverythingTheConstructionCreated() {
-        using var rig = new Rig(reportVersion: unchecked((byte)(SdfIsa.Version + 1)));
-        var handed = rig.Gpu.Created.Count;
-        var refusal = Assert.Throws<InvalidOperationException>(testCode: () => rig.Construct());
-
-        Assert.Contains(
-            expectedSubstring: "SDF ISA version mismatch",
-            actualString: refusal.Message
-        );
-        Assert.True(condition: (rig.Gpu.Created.Count > handed));
-        rig.AssertReleasedExactly(handed: handed);
     }
 
     // One quad at the origin, drawn once.
@@ -166,7 +151,7 @@ public sealed class SdfWorldTablesCreationFaultLawTests {
             name: "gpu.sdf-engine"
         );
 
-        public Rig(byte reportVersion = SdfIsa.Version) {
+        public Rig() {
             ReadOnlyMemory<byte> code = new byte[] { 1 };
             var builder = new SdfProgramBuilder();
 
@@ -175,10 +160,7 @@ public sealed class SdfWorldTablesCreationFaultLawTests {
                 radius: 1f
             );
             m_program = builder.Build();
-            Gpu = new FakeGpuDevice(
-                reportVersion: reportVersion,
-                trackObjects: true
-            );
+            Gpu = new FakeGpuDevice(trackObjects: true);
             Faults = new GpuCreationFaults();
             Device = new FaultingDevice(
                 faults: Faults,
@@ -195,9 +177,7 @@ public sealed class SdfWorldTablesCreationFaultLawTests {
             m_pipelines = SdfTestPipelines.Build(
                 device: Device,
                 includeBrickPipelines: true,
-                kernels: (SdfTestPipelines.Kernels() with {
-                    BrickBake = code,
-                }),
+                kernels: SdfTestPipelines.Kernels().With(bytecode: code, kernel: SdfKernel.BrickBake),
                 cache: new GpuPassPipelineCache()
             );
             Faults.Disarm();

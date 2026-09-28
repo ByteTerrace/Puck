@@ -183,7 +183,7 @@ public sealed class WorldFieldRowLawTests {
 
             var slot = mirror.SlotOf(binding: Whole(row: "bump"), conversion: WorldStateConversion.Row);
             var moved = new int[WorldFieldCapacity.MaxFields];
-            var gpu = new UploadModelGpu(reportVersion: 0);
+            var gpu = new UploadModelGpu();
             using var module = gpu.Services.ShaderModuleFactory.Create(
                 bytecode: new byte[] { UploadModelGpu.RegionCopyBytecode },
                 stage: GpuShaderStage.Compute

@@ -53,7 +53,7 @@ public sealed class SdfWorldTablesWorkLawTests {
     }
     [Fact]
     public void TablesTheDeviceHeapCannotHoldAreRefusedByNameBeforeTheyAllocate() {
-        var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version);
+        var gpu = new FakeGpuDevice();
         var demand = SdfWorldTables.DescriptorPools(brickPool: false).Aggregate(
             func: static (sum, pool) => (sum + pool.HeapDescriptors),
             seed: 0U
@@ -235,24 +235,23 @@ public sealed class SdfWorldTablesWorkLawTests {
         return builder.Build();
     }
 
-    // The first upload of single-view tables, and a still one after it. Submission 7 follows the six ISA handshake
-    // submissions at construction. The fake's default memory profile stages every region, so the first upload copies all
+    // The first upload of single-view tables, and a still one after it: the tables' first two submissions. The fake's default memory profile stages every region, so the first upload copies all
     // nine host-written tables (program, dynamic transforms, instance grid, screen surfaces, screen lights, volumes, decals,
     // screen mappings and the one-record mesh region) behind one barrier ordering the earlier views' reads of their
     // destinations before the copies write them, each binding the copy pipeline and its set with no push constants, then
     // transitions each copied buffer for its readers; the still upload repeats the first's inputs, so it owes no copy and
-    // binds nothing. Outside the pass: the command buffer alone, since the ISA handshake gave the fillers their first
-    // transitions and clears when the tables were created. The upload pass counts the regions' host-visible writes too:
+    // binds nothing. Outside the pass: the command buffer, and on the first upload alone the fillers' first transitions and
+    // clears and the first write of both ring slots' World sets. The upload pass counts the regions' host-visible writes too:
     // on the first upload every region's whole first copy (the 820 KB decal table among them), each with its header and one
     // run-table entry.
     private const string FirstUpload =
-        "work submission=8 revision=1\nwork upload executed: dispatches=9 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=1 barriers.buffer=9 binds.pipeline=9 binds.descriptor-set=9 push-constants=0 descriptor-writes=0 uploads.host-visible=837716 clears=0 copies=0\nwork outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0 copies=0\n";
+        "work submission=1 revision=1\nwork upload executed: dispatches=9 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=1 barriers.buffer=9 binds.pipeline=9 binds.descriptor-set=9 push-constants=0 descriptor-writes=0 uploads.host-visible=837716 clears=0 copies=0\nwork outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=4 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=36 uploads.host-visible=0 clears=2 copies=0\n";
     private const string StillUpload =
-        "work submission=9 revision=1\nwork upload executed: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0 copies=0\nwork outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0 copies=0\n";
+        "work submission=2 revision=1\nwork upload executed: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0 copies=0\nwork outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0 copies=0\n";
 
     private sealed class Rig : IDisposable {
         public Rig(GpuWorkLedger? ledger = null, int brickPoolVoxelCapacity = 0) {
-            var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version);
+            var gpu = new FakeGpuDevice();
 
             Gpu = gpu;
 
@@ -280,9 +279,7 @@ public sealed class SdfWorldTablesWorkLawTests {
                 : SdfTestPipelines.Build(
                     device: gpu,
                     includeBrickPipelines: true,
-                    kernels: (SdfTestPipelines.Kernels() with {
-                        BrickBake = new byte[] { 1 },
-                    }),
+                    kernels: SdfTestPipelines.Kernels().With(bytecode: new byte[] { 1 }, kernel: SdfKernel.BrickBake),
                     cache: Cache
                 ));
             Engine = new SdfWorldTables(
@@ -333,11 +330,13 @@ public sealed class SdfWorldTablesWorkLawTests {
             MeshRaster.Dispose();
         }
         // Prepares a reload of the rig's pipelines and installs it, as a residency does across two produced frames.
-        public int Reload(SdfWorldKernels kernels) {
+        public int Reload(SdfKernelSet kernels) {
+            using var reflector = SdfTestPipelines.Reflector();
             using var reload = Pipelines.PrepareReload(
                 cache: Cache,
                 device: Gpu,
-                kernels: kernels
+                kernels: kernels,
+                reflector: reflector
             );
 
             reload.Wait(cancellationToken: CancellationToken.None);

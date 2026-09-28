@@ -41,11 +41,6 @@
 
 [numthreads(1, 1, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
-    if (passGroup.sampleIndex == SDF_ISA_REPORT_REQUEST) {
-        tilesRW[0] = asfloat(SDF_ISA_VERSION);
-        return;
-    }
-
     uint viewIndex = worldViewOf(id.z);
 
     if (

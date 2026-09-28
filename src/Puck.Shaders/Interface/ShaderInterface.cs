@@ -19,6 +19,10 @@ namespace Puck.Shaders;
 /// (<see cref="PushesIndex"/>), which it reads as <c>pushedIndex.index</c>: Vulkan push constants at offset 0, and
 /// Direct3D 12 root constants at register <c>b0</c> in space
 /// <see cref="GpuPipelineLayoutDescription.PushIndexSpace"/>.</para>
+/// <para>An interface can carry a stamp (<see cref="Stamp"/>): a token naming what its owner built it against, which the
+/// generated pass block's variable carries in its name (<see cref="BlockVariableNameOf"/>), so every module compiled
+/// from the generated declarations reflects it, and <see cref="ShaderInterfaceLayout.Mismatch"/> refuses a module whose
+/// pass block carries another stamp or none.</para>
 /// </summary>
 public sealed partial class ShaderInterface {
     /// <summary>The HLSL name of the constant buffer variable generated for the pushed index.</summary>
@@ -33,11 +37,13 @@ public sealed partial class ShaderInterface {
     /// <param name="members">The members in declaration order; at least one.</param>
     /// <param name="pushesIndex">Whether the pass's pipeline pushes one 4-byte index, which the generated include
     /// declares as <see cref="PushedIndexVariableName"/>.</param>
-    /// <exception cref="InvalidDataException">The name or a member is malformed, a name repeats or collides with a
-    /// generated declaration, a member carries a field its kind does not take or lacks one it needs, a buffer's element
-    /// is a three-component vector.</exception>
+    /// <param name="stamp">The interface's stamp (<see cref="Stamp"/>), or <see langword="null"/> for none: an ASCII
+    /// capital letter followed by ASCII letters and digits.</param>
+    /// <exception cref="InvalidDataException">The name, the stamp or a member is malformed, a name repeats or collides
+    /// with a generated declaration, a member carries a field its kind does not take or lacks one it needs, a buffer's
+    /// element is a three-component vector, or a stamped interface has no pass block to carry its stamp.</exception>
     [JsonConstructor]
-    public ShaderInterface(string name, IReadOnlyList<ShaderInterfaceMember> members, bool pushesIndex = false) {
+    public ShaderInterface(string name, IReadOnlyList<ShaderInterfaceMember> members, bool pushesIndex = false, string? stamp = null) {
         if (
             (name is null) ||
             !InterfaceNamePattern().IsMatch(input: name)
@@ -51,6 +57,21 @@ public sealed partial class ShaderInterface {
             throw new InvalidDataException(message: $"Shader interface '{name}' declares no members.");
         }
 
+        if (stamp is not null) {
+            if (!StampPattern().IsMatch(input: stamp)) {
+                throw new InvalidDataException(message: $"Shader interface '{name}' stamp '{stamp}' is not an ASCII capital letter followed by ASCII letters and digits.");
+            }
+            if (!members.Any(predicate: static member => (
+                (member is not null) &&
+                member.IsBlockMember &&
+                (member.Group == ShaderInterfaceGroup.Pass)
+            ))) {
+                throw new InvalidDataException(message: $"Shader interface '{name}' is stamped '{stamp}' but declares no pass block to carry the stamp.");
+            }
+        }
+
+        Stamp = stamp;
+
         var identifiers = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         foreach (var member in members) {
@@ -61,7 +82,7 @@ public sealed partial class ShaderInterface {
             );
         }
         foreach (var group in members.Where(predicate: static member => member.IsBlockMember).Select(selector: static member => member.Group).Distinct()) {
-            foreach (var generated in ((ReadOnlySpan<string>)[BlockVariableName(group: group), BlockTypeName(
+            foreach (var generated in ((ReadOnlySpan<string>)[BlockVariableNameOf(group: group), BlockTypeName(
                 group: group,
                 interfaceName: name
             )])) {
@@ -92,6 +113,11 @@ public sealed partial class ShaderInterface {
     /// <c>pushedIndex.index</c>. The canonical JSON writes it only when it is set.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool PushesIndex { get; }
+    /// <summary>Gets the token naming what the interface's owner built it against, or <see langword="null"/> for none. The
+    /// generated pass block's variable carries it (<see cref="BlockVariableNameOf"/>), and the canonical JSON writes it only
+    /// when it is set.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Stamp { get; }
     /// <summary>Gets the content pin of the interface's canonical JSON (<see cref="ToJson"/>), which versions its
     /// layout and its generated declarations.</summary>
     [JsonIgnore]
@@ -112,6 +138,8 @@ public sealed partial class ShaderInterface {
     private static partial Regex InterfaceNamePattern();
     [GeneratedRegex(pattern: "^[A-Za-z][A-Za-z0-9]*$")]
     private static partial Regex MemberNamePattern();
+    [GeneratedRegex(pattern: "^[A-Z][A-Za-z0-9]*$")]
+    private static partial Regex StampPattern();
     private static void Validate(ShaderInterfaceMember member, string interfaceName, HashSet<string> identifiers) {
         if (member is null) {
             throw new InvalidDataException(message: $"Shader interface '{interfaceName}' declares a null member.");
@@ -233,6 +261,28 @@ public sealed partial class ShaderInterface {
                 paramName: nameof(group)
             ),
         };
+    /// <summary>Returns the HLSL name of the constant buffer variable this interface's generated declarations give a
+    /// group's block: <see cref="BlockVariableName"/>, followed for the pass group by the interface's
+    /// <see cref="Stamp"/>, such as <c>passGroupIsa1234ABCD</c>. The generated include defines the unstamped name as the
+    /// stamped one, so a pass reads its pass block as <c>passGroup</c> either way.</summary>
+    /// <param name="group">The frequency group.</param>
+    /// <returns>The variable's name.</returns>
+    public string BlockVariableNameOf(ShaderInterfaceGroup group) =>
+        (((group == ShaderInterfaceGroup.Pass) && (Stamp is not null))
+            ? (BlockVariableName(group: group) + Stamp)
+            : BlockVariableName(group: group));
+    /// <summary>Returns this interface carrying a stamp in place of its own.</summary>
+    /// <param name="stamp">The stamp (<see cref="Stamp"/>).</param>
+    /// <returns>The stamped interface.</returns>
+    /// <exception cref="InvalidDataException">The stamp is malformed, or the interface has no pass block to carry
+    /// it.</exception>
+    public ShaderInterface Stamped(string stamp) =>
+        new(
+            members: Members,
+            name: Name,
+            pushesIndex: PushesIndex,
+            stamp: stamp
+        );
     /// <summary>Returns the HLSL name of the struct generated for a group's block.</summary>
     /// <param name="interfaceName">The interface's hyphenated name.</param>
     /// <param name="group">The frequency group.</param>

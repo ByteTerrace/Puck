@@ -267,7 +267,7 @@ public sealed partial class SdfProgram {
     private static void RequirePackedBlend(uint blend, int index, string paramName) {
         if (!Enum.IsDefined(value: ((SdfBlendOp)blend))) {
             throw new ArgumentException(
-                message: $"SDF ISA v{SdfIsa.Version} refuses undeclared blend {blend} at instruction {index}.",
+                message: $"The SDF instruction set refuses undeclared blend {blend} at instruction {index}.",
                 paramName: paramName
             );
         }
@@ -621,7 +621,7 @@ public sealed partial class SdfProgram {
 
             if (!Enum.IsDefined(value: ((SdfShapeType)instruction.Shape))) {
                 throw new ArgumentException(
-                    message: $"SDF ISA v{SdfIsa.Version} refuses undeclared shape {instruction.Shape} at instruction {index}.",
+                    message: $"The SDF instruction set refuses undeclared shape {instruction.Shape} at instruction {index}.",
                     paramName: instructionsParamName
                 );
             }
@@ -769,7 +769,7 @@ public sealed partial class SdfProgram {
                 var raw = ((uint)opcode);
 
                 throw new ArgumentException(
-                    message: $"SDF ISA v{SdfIsa.Version} refuses undeclared opcode {raw} (0x{raw:X8}) at instruction {index}.",
+                    message: $"The SDF instruction set refuses undeclared opcode {raw} (0x{raw:X8}) at instruction {index}.",
                     paramName: "instructions"
                 );
             }

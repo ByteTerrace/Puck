@@ -101,7 +101,7 @@ internal static class WorldBootHarness {
     // Replaces the neutral GPU services with one device-free fake and every registration that brings up a device with
     // one that throws when resolved.
     private static void SealDevice(IServiceCollection services) {
-        var fake = new FakeGpuDevice(reportVersion: 0);
+        var fake = new FakeGpuDevice();
 
         for (var index = 0; (index < services.Count); ++index) {
             var descriptor = services[index];

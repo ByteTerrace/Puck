@@ -357,7 +357,7 @@ public sealed class MachineMemoryLawTests {
         plan!.Dispose();
     }
     // A Read binding must peek every tick to know whether the byte moved at all — that peek's own marshaled round
-    // trip through the machine's worker thread (Puck.GamingBricks.QueuedMachineWorker.RunMemoryAccess) is a real,
+    // trip through the machine's worker thread (Puck.Machines.QueuedMachineWorker.RunMemoryAccess) is a real,
     // pre-existing cost shared by screen.peek and an addon's own WorldAddonMemoryWatch, not something this binding
     // adds. What the write-on-change gate elides is the document-mutation cost on top of that: a Write binding's
     // poke never even reaches the machine when the cell has not moved, so this law measures that saving directly —

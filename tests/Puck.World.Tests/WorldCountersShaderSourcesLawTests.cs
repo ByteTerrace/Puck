@@ -26,8 +26,8 @@ public sealed class WorldCountersShaderSourcesLawTests {
             _ = services.AddWorldCounters();
             _ = services.AddSingleton<IWorkCounterSource>(implementationInstance: new ShaderCompiler(cacheDirectory: cache).Work);
             _ = services.AddSingleton<IWorkCounterSource>(implementationInstance: new WorkCounterSet(
-                kinds: SdfWorldKernels.LoadWork.WorkKinds,
-                name: SdfWorldKernels.LoadWorkSourceName
+                kinds: SdfKernelSet.LoadWork.WorkKinds,
+                name: SdfKernelSet.LoadWorkSourceName
             ));
 
             using var provider = services.BuildServiceProvider();

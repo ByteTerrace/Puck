@@ -226,6 +226,17 @@ public sealed class ShaderPipelineParameterLayout {
             value: value
         );
 
+    /// <summary>Returns this frame data with its interface carrying a stamp (<see cref="ShaderInterface.Stamped"/>): the
+    /// same schema, members and offsets, and a pass block whose variable carries the stamp.</summary>
+    /// <param name="stamp">The stamp.</param>
+    /// <returns>The stamped frame data.</returns>
+    /// <exception cref="InvalidDataException">The stamp is malformed, or the interface has no pass block to carry
+    /// it.</exception>
+    public ShaderPipelineParameterLayout Stamped(string stamp) =>
+        new(
+            schema: Schema,
+            shaderInterface: Interface.Stamped(stamp: stamp)
+        );
     /// <summary>Emits the config JSON Schema through the shared binder.</summary>
     /// <param name="description">The schema's description, or <see langword="null"/>.</param>
     /// <returns>The schema.</returns>
