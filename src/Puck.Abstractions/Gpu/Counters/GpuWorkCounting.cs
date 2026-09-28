@@ -59,6 +59,7 @@ public static class GpuWorkCounting {
                 factory: services.ShaderModuleFactory,
                 ledger: ledger
             ),
+            TimestampFactory = ((services.TimestampFactory is { } timestamps) ? new CountingTimestampFactory(inner: Guard(instance: timestamps, ledger: ledger), ledger: ledger) : null),
             SurfaceTransferFactory = services.SurfaceTransferFactory,
         };
     }
@@ -193,7 +194,7 @@ public static class GpuWorkCounting {
 
 // The one shape every counting wrapper shares: it counts into its ledger after the forwarded call returns, and a
 // service of this type is refused as the inner of another wrapper, which would count every call twice.
-file abstract class CountingWrapper(GpuWorkLedger ledger) {
+internal abstract class CountingWrapper(GpuWorkLedger ledger) {
     protected GpuWorkLedger Ledger =>
         ledger;
 
@@ -208,6 +209,7 @@ file abstract class CountingWrapper(GpuWorkLedger ledger) {
             column: column
         );
 }
+
 file sealed class CountingRecorder(IGpuRecorder inner, GpuWorkLedger ledger) : CountingWrapper(ledger: ledger), IGpuRecorder {
     public void BeginCommandBuffer(nint commandBufferHandle) {
         inner.BeginCommandBuffer(commandBufferHandle: commandBufferHandle);

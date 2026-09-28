@@ -23,4 +23,6 @@ public enum GpuCreationKind : byte {
     CommandPool = 6,
     /// <summary>A descriptor pool (<see cref="IGpuBindings.CreatePool"/>), spelled <c>bindings-pool</c>.</summary>
     BindingsPool = 7,
+    /// <summary>A timestamp query pool (<see cref="IGpuTimestampFactory"/>), spelled <c>timestamp-pool</c>.</summary>
+    TimestampPool = 8,
 }

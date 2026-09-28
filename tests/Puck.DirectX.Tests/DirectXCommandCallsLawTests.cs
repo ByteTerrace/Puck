@@ -27,6 +27,8 @@ public sealed unsafe class DirectXCommandCallsLawTests {
     /// close; the queue submitter's, the device context's and the compositor's signal; the queue submitter's wait on a
     /// shared fence; and the fence wait's event.</summary>
     public static TheoryData<string, string> Sites => new() {
+        { nameof(IDirectXCommandCalls.TimestampFrequency), "ID3D12CommandQueue::GetTimestampFrequency" },
+        { nameof(IDirectXCommandCalls.CreateQueryHeap), "ID3D12Device::CreateQueryHeap" },
         { nameof(IDirectXCommandCalls.CreateCommandAllocator), "ID3D12Device::CreateCommandAllocator" },
         { nameof(IDirectXCommandCalls.CreateCommandList), "ID3D12Device::CreateCommandList" },
         { nameof(IDirectXCommandCalls.CreateCommittedResource), "ID3D12Device::CreateCommittedResource" },
@@ -181,6 +183,10 @@ public sealed unsafe class DirectXCommandCallsLawTests {
         var fenceValue = 1UL;
 
         switch (call) {
+            case nameof(IDirectXCommandCalls.TimestampFrequency):
+            case nameof(IDirectXCommandCalls.CreateQueryHeap):
+                _ = DirectXCommandCalls.CreateTimestampHeap(calls: calls, count: 2, frequency: out _, queue: null);
+                break;
             case nameof(IDirectXCommandCalls.CreateCommandAllocator):
             case nameof(IDirectXCommandCalls.CreateCommandList):
                 _ = DirectXCommandCalls.CreateCommandList(
@@ -263,6 +269,8 @@ public sealed unsafe class DirectXCommandCallsLawTests {
         public HRESULT CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE type, ID3D12CommandAllocator** allocator) => Answer(call: nameof(CreateCommandAllocator));
         public HRESULT CreateCommandList(D3D12_COMMAND_LIST_TYPE type, ID3D12CommandAllocator* allocator, ID3D12GraphicsCommandList** commandList) => Answer(call: nameof(CreateCommandList));
         public HRESULT CreateCommittedResource(D3D12_HEAP_PROPERTIES* heapProperties, D3D12_HEAP_FLAGS heapFlags, D3D12_RESOURCE_DESC* description, D3D12_RESOURCE_STATES initialState, D3D12_CLEAR_VALUE* clearValue, ID3D12Resource** resource) => Answer(call: nameof(CreateCommittedResource));
+        public HRESULT TimestampFrequency(ID3D12CommandQueue* queue, ulong* frequency) { *frequency = 1_000_000; return Answer(call: nameof(TimestampFrequency)); }
+        public HRESULT CreateQueryHeap(D3D12_QUERY_HEAP_DESC* description, ID3D12QueryHeap** heap) => Answer(call: nameof(CreateQueryHeap));
         public HRESULT Map(ID3D12Resource* resource, void** data) => Answer(call: nameof(Map));
         public HRESULT ResetAllocator(ID3D12CommandAllocator* allocator) => Answer(call: nameof(ResetAllocator));
         public HRESULT ResetList(ID3D12GraphicsCommandList* commandList, ID3D12CommandAllocator* allocator) => Answer(call: nameof(ResetList));

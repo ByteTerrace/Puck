@@ -24,17 +24,32 @@ public sealed partial class SdfCompositionFrameSource {
         public int[] MeshCounts { get; } = meshCounts;
 
         public object? Resolve(uint identity) {
+            var owner = Owner(identity: identity, local: out var local);
+
+            return owner?.Resolve(identity: local);
+        }
+        public string? MaterialName(uint identity, int material) {
+            var owner = Owner(identity: identity, local: out var local);
+
+            return owner?.MaterialName(identity: local, material: material);
+        }
+
+        // Identity and material attribution must reach the same captured emitter. SDF ordinals are already
+        // program-relative; mesh draws are rebased into that emitter's local draw table.
+        private ISdfPickMap? Owner(uint identity, out uint local) {
+            local = identity;
             var kind = (identity >> 30);
             var source = identity & 0x3FFFFFFF;
 
             for (var index = 0; (index < Maps.Length); index++) {
                 if (kind == 2) {
                     if (source < MeshCounts[index]) {
-                        return Maps[index]?.Resolve(identity: 0x80000000 | source);
+                        local = 0x80000000 | source;
+                        return Maps[index];
                     }
                     source -= ((uint)MeshCounts[index]);
-                } else if (Maps[index]?.Resolve(identity: identity) is { } target) {
-                    return target;
+                } else if (Maps[index]?.Resolve(identity: identity) is not null) {
+                    return Maps[index];
                 }
             }
             return null;

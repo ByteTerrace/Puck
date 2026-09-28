@@ -31,7 +31,7 @@ public static class GpuWork {
     internal const int ImageBarriersColumn = 5;
     internal const int ImagesCreatedIndex = 2;
     internal const int IndirectDispatchesColumn = 1;
-    internal const int LifetimeKindCount = 6;
+    internal const int LifetimeKindCount = 7;
     internal const int MarchStepsColumn = 15;
     internal const int MemoryBarriersColumn = 6;
     internal const int PipelineBindsColumn = 8;
@@ -41,6 +41,7 @@ public static class GpuWork {
     internal const int ShaderModulesCreatedIndex = 1;
     internal const int SubmissionColumnCount = 18;
     internal const int TexelsWrittenColumn = 16;
+    internal const int TimestampPoolsCreatedIndex = 6;
 
     /// <summary>Gets the kind counting compute dispatches whose group counts the CPU supplies.</summary>
     public static WorkKind Dispatches { get; } = new(name: "gpu.dispatches", unit: "count", workClass: WorkClass.Deterministic);
@@ -107,6 +108,8 @@ public static class GpuWork {
     public static WorkKind DescriptorPoolsCreated { get; } = new(name: "gpu.created.descriptor-pools", unit: "count", workClass: WorkClass.PerBackendDeterministic);
     /// <summary>Gets the kind counting descriptor sets allocated.</summary>
     public static WorkKind DescriptorSetsCreated { get; } = new(name: "gpu.created.descriptor-sets", unit: "count", workClass: WorkClass.PerBackendDeterministic);
+    /// <summary>Gets the kind counting timestamp query pools created on demand.</summary>
+    public static WorkKind TimestampPoolsCreated { get; } = new(name: "gpu.created.timestamp-pools", unit: "count", workClass: WorkClass.PerBackendDeterministic);
 
     /// <summary>Gets the kinds a pass's kernels count on the GPU, in the order a counter row holds them
     /// (<see cref="GpuKernelCounters"/>): <see cref="MarchSteps"/>, then <see cref="TexelsWritten"/>.</summary>
@@ -136,6 +139,7 @@ public static class GpuWork {
             kinds[BuffersCreatedIndex] = BuffersCreated;
             kinds[DescriptorPoolsCreatedIndex] = DescriptorPoolsCreated;
             kinds[DescriptorSetsCreatedIndex] = DescriptorSetsCreated;
+            kinds[TimestampPoolsCreatedIndex] = TimestampPoolsCreated;
 
             return kinds;
         }

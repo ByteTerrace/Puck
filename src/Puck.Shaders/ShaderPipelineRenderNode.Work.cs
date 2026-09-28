@@ -95,12 +95,14 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
                 }
 
                 m_work.EnterPass(pass: index);
+                BeginTiming(command: command, pass: index, slot: slot);
                 Record(
                     command: command,
                     context: in context,
                     pass: pass,
                     slot: slot
                 );
+                EndTiming(command: command, pass: index, slot: slot);
                 m_work.LeavePass();
             }
             if (counters is not null) {

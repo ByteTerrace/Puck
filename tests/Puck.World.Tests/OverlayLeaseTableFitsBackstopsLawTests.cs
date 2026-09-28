@@ -46,7 +46,7 @@ public sealed class OverlayLeaseTableFitsBackstopsLawTests {
 
         Assert.Contains(
             actualString: refusal.Message,
-            expectedSubstring: "4294967296"
+            expectedSubstring: "5368709120"
         );
     }
     /// <summary>The Schema-derived capacity builds a lease table without a construction-time refusal, and every
@@ -73,8 +73,8 @@ public sealed class OverlayLeaseTableFitsBackstopsLawTests {
             userMessage: $"panels {leases.TotalPanels} exceed the backstop {OverlayFrameBuilder.MaxPanels}"
         );
         Assert.True(
-            condition: (leases.TotalTextWords <= OverlayFrameBuilder.TextWordCapacity),
-            userMessage: $"text words {leases.TotalTextWords} exceed the backstop {OverlayFrameBuilder.TextWordCapacity}"
+            condition: (leases.TotalTextWords <= leases.TextWordCapacity),
+            userMessage: $"text words {leases.TotalTextWords} exceed the backstop {leases.TextWordCapacity}"
         );
 
         for (var index = 0; (index < OverlayChannelLeases.Count); index++) {
@@ -94,9 +94,26 @@ public sealed class OverlayLeaseTableFitsBackstopsLawTests {
                 userMessage: OverlayChannelLeases.NameOf(channel: channel)
             );
             Assert.True(
-                condition: (reservation.TextWords <= OverlayFrameBuilder.TextWordCapacity),
+                condition: (reservation.TextWords <= leases.TextWordCapacity),
                 userMessage: OverlayChannelLeases.NameOf(channel: channel)
             );
         }
     }
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(4)]
+    [Theory]
+    public void TextCapacityIsTheSmallestPowerOfTwoCoveringEveryDeclaredWriter(int seats) {
+        var leases = new OverlayChannelLeases(capacity: WorldOverlayCapacity.FromSchema() with { Seats = seats });
+        var sum = Enumerable.Range(count: OverlayChannelLeases.Count, start: 0)
+            .Sum(selector: index => leases.ReservationOf(channel: ((OverlayChannel)index)).TextWords);
+
+        Assert.Equal(expected: sum, actual: leases.TotalTextWords);
+        Assert.True(condition: (leases.TextWordCapacity >= sum));
+        Assert.True(condition: ((leases.TextWordCapacity / 2) < sum));
+        Assert.Equal(expected: 0, actual: leases.TextWordCapacity & (leases.TextWordCapacity - 1));
+        Assert.Equal(expected: ((seats * InspectorWriter.MaxLines) * InspectorWriter.MaxLineChars),
+            actual: leases.ReservationOf(channel: OverlayChannel.Editor).TextWords);
+    }
+
 }

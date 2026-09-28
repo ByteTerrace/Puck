@@ -20,6 +20,10 @@ allocation in steady-state frames, building every candidate's modules and
 pipelines off the frame thread while the installed graph keeps presenting, and
 retiring the old graph only once the queue has finished with it, without a
 device drain.
+The timing cases in `ShaderPipelineRenderNodeLawTests` demand two queries per recorded
+pass, fence completed readback, reject old enable epochs, and release query ownership
+on loss. The disabled path creates and records none. The laws assert the query
+mechanism; measured milliseconds never determine correctness.
 `RenderGraphRuntimeLawTests` run `RenderGraphRuntime` on the same fake, with
 cameras as package graphs whose fake recorders count their records: demand
 (a camera on two screens renders once a frame, an off-view one never), extent,

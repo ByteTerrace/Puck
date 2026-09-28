@@ -1,0 +1,298 @@
+{
+  "id": "gpu-pass-timing",
+  "title": "Per-pass GPU timestamp pairs publish after completion only while the readout is demanded",
+  "binding": "The named feedback graph starts with timing disabled, enables the neutral timestamp service, advances ten frames, and prints its completed accumulate-pass sample count. It then disables and drains the in-flight slots before inspection reports no timestamp readback bytes. The discriminating leg leaves timing disabled and therefore never publishes a timestamp pair or allocates its readback. Both backends run with their native timestamp pools and validation enabled. Neither elapsed milliseconds nor frame rate is a correctness threshold. CPU laws separately prove zero off-state pool/query operations, exactly paired queries, fence and epoch rejection, named creation-fault wrapping and device-loss release. The three pass pairs occupy 48 bytes in each of three in-flight readbacks: 144 bytes while enabled, zero after disabling and draining. Extracted inspection fields retain their printed semicolon delimiter.",
+  "bootShape": "offscreen",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
+  "timeoutSeconds": 60,
+  "positive": {
+    "world": "tests/Puck.World.Canaries/pipeline-feedback/fixture.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.gpu-timing",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.gpu-timing",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.gpu-timing",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.inspect",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.gpu-timing",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.gpu-timing",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.inspect",
+        "occurrence": 2,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "line",
+        "name": "timestamps-start-off",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "[world.gpu-timing: off window=32]",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "completed-native-pair-is-published",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "feedback/accumulate:",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "completed-readout-has-samples",
+        "stream": "stdout",
+        "match": "contains",
+        "text": " ms samples=",
+        "present": true
+      },
+      {
+        "type": "response",
+        "name": "enabled-bytes",
+        "stream": "stdout",
+        "verb": "pipeline.inspect",
+        "occurrence": 1,
+        "count": 2,
+        "extract": [
+          {
+            "name": "enabled-bytes",
+            "field": "timing-readback-bytes"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "disabled-bytes",
+        "stream": "stdout",
+        "verb": "pipeline.inspect",
+        "occurrence": 2,
+        "count": 2,
+        "extract": [
+          {
+            "name": "disabled-bytes",
+            "field": "timing-readback-bytes"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "readback-exists-only-under-demand",
+        "operator": "equal",
+        "left": {
+          "value": "enabled-bytes"
+        },
+        "right": {
+          "literal": "144;"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "disabled-query-memory-is-released",
+        "operator": "equal",
+        "left": {
+          "value": "disabled-bytes"
+        },
+        "right": {
+          "literal": "0;"
+        }
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/pipeline-feedback/fixture.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.gpu-timing",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.gpu-timing",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.gpu-timing",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.inspect",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.gpu-timing",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.gpu-timing",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.inspect",
+        "occurrence": 2,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "line",
+        "name": "timestamps-start-off",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "[world.gpu-timing: off window=32]",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "completed-native-pair-is-published",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "feedback/accumulate:",
+        "present": false
+      },
+      {
+        "type": "line",
+        "name": "completed-readout-has-samples",
+        "stream": "stdout",
+        "match": "contains",
+        "text": " ms samples=",
+        "present": false
+      },
+      {
+        "type": "response",
+        "name": "enabled-bytes",
+        "stream": "stdout",
+        "verb": "pipeline.inspect",
+        "occurrence": 1,
+        "count": 2,
+        "extract": [
+          {
+            "name": "enabled-bytes",
+            "field": "timing-readback-bytes"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "disabled-bytes",
+        "stream": "stdout",
+        "verb": "pipeline.inspect",
+        "occurrence": 2,
+        "count": 2,
+        "extract": [
+          {
+            "name": "disabled-bytes",
+            "field": "timing-readback-bytes"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "readback-exists-only-under-demand",
+        "operator": "equal",
+        "left": {
+          "value": "enabled-bytes"
+        },
+        "right": {
+          "literal": "0;"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "disabled-query-memory-is-released",
+        "operator": "equal",
+        "left": {
+          "value": "disabled-bytes"
+        },
+        "right": {
+          "literal": "0;"
+        }
+      }
+    ]
+  }
+}

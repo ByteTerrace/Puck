@@ -70,6 +70,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             [GpuCreationKind.ShaderModule] = 4L,
             [GpuCreationKind.CommandPool] = 0L,
             [GpuCreationKind.BindingsPool] = 1L,
+            [GpuCreationKind.TimestampPool] = 0L,
         };
 
         var measuredGpu = new FakePipelineGpu();

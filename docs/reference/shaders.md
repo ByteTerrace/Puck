@@ -1728,6 +1728,25 @@ entries of the same cache, one a kernel variant (`SdfWorldPipelines`). At most
 a cold driver cache translating many pipelines keeps a processor for the thread
 that pumps frames. The mechanism is `Puck.Hosting.GpuBuildCache<TKey, T>`.
 
+### Observational pass timing
+
+`ShaderPipelineRenderNode.TimingEnabled` is off by default. When enabled, each
+recorded work-ledger pass gets two timestamp queries from the optional
+`GpuDeviceServices.TimestampFactory`. Pools are named, fault-wrapped, and counted
+as `gpu.created.timestamp-pools`; unsupported queues return no pool. Vulkan uses
+its queue's timestamp-valid width and device period, while Direct3D 12 uses the
+direct queue frequency and the normal device-removal translation boundary.
+Readback waits for the submission fence and rejects earlier graph/enable epochs.
+The readout keeps at most 32 completed pairs per pass. Disabling withdraws it at
+once, then releases pools as their fences complete; device loss releases them.
+These durations are observational and never choose quality or establish parity.
+
+`pipeline.inspect` includes timestamp readback and CPU sample payload bytes.
+Its region-memory rows separately count installed host-written regions by GPU
+memory kind, CPU shadows, and writer/row/upload scratch. Empty overlay output
+still owns those buffers. Logical payload counts exclude backend padding and
+managed object headers.
+
 ### Memory budget
 
 A pipeline instance holds a bounded amount of device memory. Before a

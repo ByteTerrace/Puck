@@ -35,7 +35,8 @@ internal sealed class FakeGpuDevice :
     IGpuBufferFactory,
     IGpuImageFactory,
     IGpuRenderPassFactory,
-    IGpuSurfaceTransferFactory {
+    IGpuSurfaceTransferFactory,
+    IGpuTimestampFactory {
     private readonly bool m_countCalls;
     private readonly bool m_holdFences;
     private readonly GpuObjectNaming m_naming;
@@ -76,6 +77,7 @@ internal sealed class FakeGpuDevice :
             RenderPassFactory = this,
             ShaderModuleFactory = this,
             SurfaceTransferFactory = this,
+            TimestampFactory = this,
         };
     }
 
@@ -85,6 +87,10 @@ internal sealed class FakeGpuDevice :
     public long AdapterLuid => 0L;
     public Action<ulong, ulong>? OnBufferCopy { get; set; }
     public Action<int>? OnReadback { get; set; }
+
+    public delegate void ReadbackWriter(Span<byte> destination);
+
+    public ReadbackWriter? WriteReadback { get; set; }
     /// <summary>Gets or sets whether each image created from now on carries an image and view handle of its own rather than
     /// the fake's one fixed pair, so a law can tell images apart by handle.</summary>
     public bool DistinctImages { get; set; }
@@ -624,6 +630,24 @@ internal sealed class FakeGpuDevice :
 
         return false;
     }
+    IGpuTimestampPool IGpuTimestampFactory.Create(uint count, in GpuObjectName name) {
+        Hit(key: "IGpuTimestampFactory.Create");
+        var created = Track(kind: "timestamp pool");
+
+        m_naming.Name(kind: GpuObjectKind.TimestampPool, handle: (created?.Handle ?? 19), name: in name);
+        return new TimestampPool(created: created, gpu: this);
+    }
+
+    private sealed class TimestampPool(FakeGpuDevice gpu, Creation? created) : IGpuTimestampPool {
+        public double NanosecondsPerTick => 2;
+        public uint ValidBits => 32;
+
+        public void Reset(nint command, uint first, uint count) => gpu.Hit(key: "IGpuTimestampPool.Reset");
+        public void Write(nint command, uint index) => gpu.Hit(key: "IGpuTimestampPool.Write");
+        public void Resolve(nint command, uint first, uint count, nint destination, ulong offset) => gpu.Hit(key: "IGpuTimestampPool.Resolve");
+        public void Dispose() { gpu.Hit(key: "IGpuTimestampPool.Dispose"); created?.Release(); }
+    }
+
     IGpuSurfaceReadback IGpuSurfaceTransferFactory.CreateReadback() => new Readback();
     IGpuSurfaceUpload IGpuSurfaceTransferFactory.CreateUpload() => new SurfaceUpload();
 
@@ -742,6 +766,7 @@ internal sealed class FakeGpuDevice :
             gpu.OnReadback?.Invoke(obj: destination.Length);
             gpu.Hit(key: "IGpuReadbackBuffer.Read");
             destination.Clear();
+            gpu.WriteReadback?.Invoke(destination: destination);
         }
     }
     // Every upload lands on one fixed view handle.
