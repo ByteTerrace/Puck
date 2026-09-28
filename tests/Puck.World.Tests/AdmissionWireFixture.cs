@@ -265,9 +265,10 @@ internal static class AdmissionWireFixture {
         ))
             ?? throw new InvalidOperationException(message: "connection closed before the query reply"));
 
-        Assert.Equal(
-            actual: reply.Kind,
-            expected: WorldPeerWireFormat.DownstreamKind.Query
+        // A reply of another kind names itself and its text, so a failure shows what the door answered.
+        Assert.True(
+            condition: (reply.Kind == WorldPeerWireFormat.DownstreamKind.Query),
+            userMessage: $"the query was answered by a {reply.Kind} frame: {WorldPeerWireFormat.DecodeText(body: reply.Body.Span)}"
         );
         Assert.True(
             condition: WorldPeerWireFormat.TryReadResult(

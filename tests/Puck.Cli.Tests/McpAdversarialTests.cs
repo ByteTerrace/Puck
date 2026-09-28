@@ -292,15 +292,21 @@ public sealed class McpAdversarialTests {
                 path1: directory,
                 path2: "puck-control-stale.json"
             );
-            var closed = new TcpListener(
-                localaddr: IPAddress.Loopback,
+            // The stale capability names a port this law holds bound, exclusively and without listening, for the whole
+            // law: every connect to it is refused, and no other process can start listening on it and answer in the
+            // gone World's place, as a port freed by a stopped listener could be taken again on a busy machine.
+            using var closed = new Socket(
+                addressFamily: AddressFamily.InterNetwork,
+                protocolType: ProtocolType.Tcp,
+                socketType: SocketType.Stream
+            ) { ExclusiveAddressUse = true };
+
+            closed.Bind(localEP: new IPEndPoint(
+                address: IPAddress.Loopback,
                 port: 0
-            );
+            ));
+            var port = ((IPEndPoint)closed.LocalEndPoint!).Port;
 
-            closed.Start();
-            var port = ((IPEndPoint)closed.LocalEndpoint).Port;
-
-            closed.Stop();
             new LocalEndpointCapability(port: port).WriteDescriptor(path: stale).Dispose();
             File.SetLastWriteTimeUtc(
                 lastWriteTimeUtc: DateTime.UtcNow.AddMinutes(value: -2),
