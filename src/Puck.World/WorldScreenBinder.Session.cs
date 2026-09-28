@@ -1,5 +1,4 @@
-using System.Diagnostics;
-using System.Numerics;
+using Puck.Abstractions.Cameras;
 using Puck.SdfVm;
 using Puck.Commands;
 using Puck.World.Client;
@@ -132,6 +131,9 @@ internal sealed partial class WorldScreenBinder {
 
         feed.FrameSource = frameSource;
         feed.Emitter = emitter;
+        emitter.SetWindowFit(fit: (isWindow
+            ? FitWindow(feed: feed)
+            : null));
 
         if (isWindow) {
             feed.SetWindowLease(lease: WorldSessionWindowLeases.Acquire(
@@ -278,85 +280,35 @@ internal sealed partial class WorldScreenBinder {
             projection: session.Projection,
             registrationName: WorldViewNames.Session(screen: slot.Index),
             requestedCamera: session.CameraName,
-            resolution: session.Resolution
+            resolution: session.Resolution,
+            screenIndex: slot.Index
         );
     }
-    // Recomputes every live WINDOW session's off-axis camera from this frame's local eye and the border pair's two
-    // face rows — fresh every call, never cached across frames, so a placement mutation reaches the render the very
-    // next produced frame.
-    //
-    // The eye is the primary local seat's body (WorldPopulation.EntryBody) at LocalEyeHeight, in the document's
-    // authored space, the space WorldFaceCatalog derives both apertures in. With no resolvable local body, each window
-    // falls back to the ordinary session camera.
-    private void UpdateWindowCameras() {
-        foreach (var slot in m_slots.Values) {
-            if (slot.Session is { Projection: WorldScreenProjection.Window, Emitter: { } emitter }) {
-                emitter.SetWindowCamera(camera: null);
-            }
-        }
-
-        // The LOCAL (boot) document — the world whose screen sessions this binder renders
-        // (WorldInstanceHost.ScreenSession). Absent only in a boot-sequencing gap this
-        // binder itself is constructed inside; a window degrades to its ordinary fallback for that one frame.
+    // A WINDOW session's fit (WorldWindowFrustumFit.FitFrom), asked as its view dresses: the eye is the camera the
+    // primary local seat's view renders with in this same frame, the apertures the boot document's face and the
+    // counterpart the destination's mirror declares, and the glass the row ReconcileScreens last applied.
+    private Func<CameraSnapshot?>? FitWindow(SessionFeed feed) => ((m_viewports is { } viewports)
+        ? WorldWindowFrustumFit.FitFrom(
+            destination: () => feed.Mirror.Definition,
+            local: () => (m_instanceHost.TryGet(
+                instance: out var boot,
+                name: WorldInstanceHost.BootInstanceName
+            )
+                ? boot?.Server.Definition
+                : null),
+            screen: () => RowOf(screen: feed.ScreenIndex),
+            viewports: viewports
+        )
+        : null);
+    // Captures the world's frame for this frame before a session view dresses its own, so a window's fit reads the seat
+    // camera the world renders with in the same frame, whatever order the residencies prepare in. A no-op once the world
+    // has captured, or before the first frame is prepared.
+    private void CaptureHostFirst() {
         if (
-            !m_instanceHost.TryGet(
-            instance: out var boot,
-            name: WorldInstanceHost.BootInstanceName
-        ) ||
-            (boot is null)
+            m_hasFrameContext &&
+            (ViewHost is { IsReleased: false } host)
         ) {
-            return;
-        }
-
-        // The reference viewer: a screen surface renders ONE shared image per slot today, so a window necessarily
-        // fits against ONE eye — the primary local seat's (body index 0 — player.* is 1-based, body:<n> is 0-based),
-        // the same single-perspective simplification an ordinary camera-projection session already makes (it has no
-        // per-viewer image either). A world with no population has no body 0 to read.
-        if (
-            (boot.Server.Population.Capacity == 0) ||
-            (boot.Server.Population.EntryBody(index: 0) is not { } localBody)
-        ) {
-            return;
-        }
-
-        var localEye = (localBody.Position + new Vector3(
-            x: 0f,
-            y: LocalEyeHeight,
-            z: 0f
-        ));
-        var bootDefinition = boot.Server.Definition;
-
-        foreach (var slot in m_slots.Values) {
-            if (
-                (slot.Session is not { } feed) ||
-                (feed.Projection != WorldScreenProjection.Window) ||
-                (feed.Emitter is not { } emitter)
-            ) {
-                continue;
-            }
-
-            // A transient gap (the destination has not delivered a definition naming the counterpart yet, or the eye
-            // stands behind the glass this frame) degrades to the emitter's ordinary default projection for the frame
-            // rather than freezing or throwing — the fallback WorldSessionSceneEmitter.ResolveCamera takes for an
-            // unknown or absent camera name.
-            emitter.SetWindowCamera(camera: ((
-                (RowOf(screen: slot.Index) is { } row) &&
-                WorldWindowFrustumFit.TryResolveApertures(
-                    counterpart: out var destination,
-                    destination: feed.Mirror.Definition,
-                    local: bootDefinition,
-                    screenIndex: slot.Index,
-                    source: out var source
-                ) &&
-                WorldWindowFrustumFit.TryFitWindow(
-                    camera: out var camera,
-                    destination: destination,
-                    glass: WorldWindowFrustumFit.Glass(screen: row),
-                    localEye: localEye,
-                    source: source
-                ))
-                ? camera
-                : null));
+            _ = host.HostFrame(context: in m_frameContext);
         }
     }
     // The screen row ReconcileScreens last applied for an index, or null.
@@ -470,8 +422,10 @@ internal sealed partial class WorldScreenBinder {
     // offscreen view. A mutable class so a lifecycle transition (re-point, teardown, instance-retired) updates it in
     // place; the constructor parameters are immutable facts about ONE resolution (a re-point builds a fresh instance
     // rather than mutating this one — see ApplySessionSource).
-    private sealed class SessionFeed(string destination, string? requestedCamera, string? effectiveCamera, string instanceName, ulong generationId, WorldScreenSession hosted, string registrationName, WorldScreenProjection projection, WorldScreenResolution? resolution) : IDisposable {
+    private sealed class SessionFeed(string destination, string? requestedCamera, string? effectiveCamera, string instanceName, ulong generationId, WorldScreenSession hosted, string registrationName, WorldScreenProjection projection, WorldScreenResolution? resolution, int screenIndex) : IDisposable {
         public string Destination { get; } = destination;
+        // The screen the session shows on.
+        public int ScreenIndex { get; } = screenIndex;
         public string? RequestedCamera { get; } = requestedCamera;
         public string? EffectiveCamera { get; } = effectiveCamera;
         public string InstanceName { get; } = instanceName;
@@ -494,9 +448,8 @@ internal sealed partial class WorldScreenBinder {
         // this lease.
         private IDisposable? WindowLease { get; set; }
 
-        // Set by RegisterSessionView (its own constructed instance) — the render-envelope's per-frame WINDOW update
-        // (WorldScreenBinder.UpdateWindowCameras) pushes the fitted camera into it before Resolve; a non-window feed
-        // never needs it.
+        // Set by RegisterSessionView (its own constructed instance), which hands a WINDOW feed's emitter its fit
+        // (WorldScreenBinder.FitWindow).
         public WorldSessionSceneEmitter? Emitter { get; set; }
         public IDisposable? EnvelopeRegistration { get; set; }
         // The frame source the session's instance renders, set once the views are configured (RegisterSessionView).
@@ -517,42 +470,6 @@ internal sealed partial class WorldScreenBinder {
         public void SetWindowLease(IDisposable lease) {
             WindowLease?.Dispose();
             WindowLease = lease;
-        }
-    }
-    // A session's frame source on its own clock: the destination is independently scheduled, so the view hands its
-    // composition the interval between its own frames rather than the host's frame delta, and no interpolation fraction.
-    // Wall-clock and presentation-only: the away-seat framing it paces is not reproducible run to run.
-    private sealed class SessionFrameSource(SdfCompositionFrameSource inner) : ISdfFrameSource {
-        private bool m_hasProduced;
-        private long m_lastProduceTimestamp;
-
-        public SdfGlyphAtlas? GlyphAtlas => ((ISdfFrameSource)inner).GlyphAtlas;
-        public IReadOnlyDictionary<int, Func<SdfScreenDecalFrame?>>? ScreenDecals => ((ISdfFrameSource)inner).ScreenDecals;
-        public IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>>? ScreenSurfaceTransforms => ((ISdfFrameSource)inner).ScreenSurfaceTransforms;
-
-        public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) {
-            var timestamp = Stopwatch.GetTimestamp();
-            var ownDelta = (m_hasProduced
-                ? ((float)Stopwatch.GetElapsedTime(
-                    endingTimestamp: timestamp,
-                    startingTimestamp: m_lastProduceTimestamp
-                ).TotalSeconds)
-                : 0f);
-
-            m_lastProduceTimestamp = timestamp;
-            m_hasProduced = true;
-
-            return inner.CaptureFrame(
-                deltaSeconds: ownDelta,
-                height: height,
-                interpolationAlpha: 0f,
-                width: width
-            );
-        }
-        // The time a device loss takes to recover must not land as one giant smoothing delta on the next frame.
-        public void NotifyDeviceLost() {
-            ((ISdfFrameSource)inner).NotifyDeviceLost();
-            m_hasProduced = false;
         }
     }
 }

@@ -73,7 +73,8 @@ internal static class WorldRenderRoot {
             hostsOnDirectX: hostSettings.HostsOnDirectX,
             instanceCapacity: frameSource.InstanceCapacity,
             pipelines: pipelines,
-            programWordCapacity: frameSource.ProgramWordCapacity
+            programWordCapacity: frameSource.ProgramWordCapacity,
+            viewports: sp.GetRequiredService<WorldSeatViewports>()
         );
 
         // A walk into a view's world continues through the screens standing in it, and into a camera view through the

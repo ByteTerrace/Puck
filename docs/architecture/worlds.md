@@ -700,8 +700,10 @@ A portal's face can show its destination as a window (`projection: window`): the
 maps a counterpart, and the destination renders each frame through an off-axis camera fitted, from
 the viewer's eye mapped through the door's isometry, to the face's glass mapped the same way. The
 window shows what a traveller at the eye would see through the door and parallaxes as the eye moves;
-the glass shows it edge to edge, with no bezel. The eye is the primary local seat's body at eye
-height, one per screen, since a screen shows one image. A pick through the glass continues through
+the glass shows it edge to edge, with no bezel. The eye is the camera the primary local seat's view
+renders with in the same frame, chase or first person, one per screen, since a screen shows one
+image; it is the camera a click through that view is cast from, so the texel the glass shows at a
+point and a click at that point look along one line into the destination. A pick through the glass continues through
 the camera the window rendered into the destination and, since the destination's own screens bind
 dark, ends on its world: on the surface the pick's ray meets among the destination's static
 placements. That pick is presentation; the input a click carries reaches the destination's rules

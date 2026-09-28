@@ -20,6 +20,11 @@ internal sealed partial class WorldScreenBinder {
     private int m_viewDisplayHeight = 1;
     private int m_viewDisplayWidth = 1;
 
+    // The seats' views for the frame just dressed, whose primary render camera a window fits its eye to.
+    private WorldSeatViewports? m_viewports;
+    // The frame being prepared, through which a session view captures the world's frame before its own.
+    private FrameContext m_frameContext;
+    private bool m_hasFrameContext;
     // The simulation tick the frame the world renders presents, which a camera rig's clock reads.
     private ulong m_viewAuthoritativeTick;
 
@@ -161,7 +166,10 @@ internal sealed partial class WorldScreenBinder {
         var residency = new SdfWorldResidency(
             brickPoolVoxelCapacity: 0,
             dynamicTransformCapacity: source.WorstCaseDynamicTransformCapacity,
-            frameSource: new SessionFrameSource(inner: source),
+            frameSource: new WorldSessionFrameSource(
+                captureHostFirst: CaptureHostFirst,
+                inner: source
+            ),
             height: WorldViewInstances.DefaultSessionHeight,
             instanceCapacity: source.WorstCaseInstanceCapacity,
             kernels: ViewKernels(),
