@@ -10,7 +10,7 @@ namespace Puck.Platform.Windows.Tests;
 /// dispatches, the output ring, the staging readback, and a ring publication — against synthetic frames whose
 /// answers are known. Skips on a machine with no hardware adapter.</summary>
 [SupportedOSPlatform("windows10.0.10240")]
-public sealed class ProbeKernelTests {
+public sealed partial class ProbeKernelTests {
     private const int FrameHeight = KernelBench.FrameHeight;
     private const int FrameWidth = KernelBench.FrameWidth;
     // The bright square: x in [48, 56), y in [8, 16) — top-right of the frame.

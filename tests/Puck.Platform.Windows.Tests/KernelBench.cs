@@ -179,9 +179,9 @@ internal sealed unsafe class KernelBench : IDisposable {
         triggerHeight: FrameHeight,
         triggerWidth: FrameWidth
     );
-    // An R8G8B8A8 target created with an NT shared handle exactly the way a consumer render device provisions a
-    // ring slot, so a kernel test opens it through the handle rather than the texture.
-    public SharedTarget CreateSharedTarget() {
+    // A target, R8G8B8A8 unless another format is named, created with an NT shared handle exactly the way a consumer
+    // render device provisions a ring slot, so a kernel test opens it through the handle rather than the texture.
+    public SharedTarget CreateSharedTarget(DXGI_FORMAT format = DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM) {
         ID3D11Texture2D* texture = null;
 
         try {
@@ -190,7 +190,7 @@ internal sealed unsafe class KernelBench : IDisposable {
                 Height = FrameHeight,
                 MipLevels = 1,
                 ArraySize = 1,
-                Format = DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM,
+                Format = format,
                 SampleDesc = new DXGI_SAMPLE_DESC { Count = 1 },
                 Usage = D3D11_USAGE.D3D11_USAGE_DEFAULT,
                 BindFlags = D3D11_BIND_FLAG.D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_FLAG.D3D11_BIND_UNORDERED_ACCESS,
@@ -267,14 +267,27 @@ internal sealed unsafe class KernelBench : IDisposable {
     }
     /// <summary>Writes CPU pixel data into an already-created target texture (Default usage accepts
     /// <c>UpdateSubresource</c> without a staging round trip).</summary>
-    public void UploadPixels(SharedTarget target, byte[] pixels) {
+    public void UploadPixels(SharedTarget target, ReadOnlySpan<byte> pixels) {
+        var description = default(D3D11_TEXTURE2D_DESC);
+
+        target.Texture->GetDesc(pDesc: &description);
+
+        var texelBytes = description.Format switch {
+            DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM => 4,
+            DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_FLOAT => 8,
+            _ => throw new NotSupportedException(message: $"test upload format {description.Format} is unsupported"),
+        };
+        var rowBytes = (FrameWidth * texelBytes);
+
+        ArgumentOutOfRangeException.ThrowIfNotEqual(value: pixels.Length, other: (rowBytes * FrameHeight));
+
         fixed (byte* pixelData = pixels) {
             m_context->UpdateSubresource(
                 pDstResource: ((ID3D11Resource*)target.Texture),
                 DstSubresource: 0,
                 pDstBox: null,
                 pSrcData: pixelData,
-                SrcRowPitch: ((uint)(FrameWidth * 4)),
+                SrcRowPitch: ((uint)rowBytes),
                 SrcDepthPitch: 0
             );
         }

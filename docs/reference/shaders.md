@@ -1192,13 +1192,23 @@ reflection:
 
 `average.hlsl` (the shipped `average` kind) is the smallest texture-writing
 kind: its one `frame` socket is its trigger and its output's extent, it writes
-the frame times `tintR`/`tintG`/`tintB` to `Output`, and its channels are the
-frame's mean red, green and blue. Bound to a view, it measures what a camera in
-the world sees, on the render adapter's own host.
+each color channel clamped to `[0, 1]` times `tintR`/`tintG`/`tintB` to `Output`,
+and its channels are the means of those clamped input values. Bound to a view,
+it measures what a camera in the world sees, on the render adapter's own host.
+
+A view export carries half-float working color: display-referred values with
+headroom, as defined by [the display encode](#the-display-encode). Sampling it
+as `float4` preserves those values without a transfer conversion. Camera color
+frames and probe outputs carry 8-bit sRGB values sampled through UNORM views;
+the probe's texture output remains RGBA8 sRGB. The float format does not imply
+linear light. `average` measures display values, and `faerie` uses the same
+display values for its color and painting inputs. The float-input kernel laws
+pin midtones and the RGBA8 output; the `probe-sources` canary checks red/blue
+relations and export resizing, without pinning an exact color transfer.
 
 `ir-blob.hlsl` (the shipped `ir-blob` kind) is the reference: an 8×8
-`accumulate` pass weighs each pixel by how far its luminance clears
-`threshold`, group-reduces, and atomically adds fixed-point sums into
+`accumulate` pass clamps each pixel's luminance to `[0, 1]` and weighs it by how
+far it clears `threshold`, group-reduces, and atomically adds fixed-point sums into
 `Accumulate` (the scale is derived from the frame's pixel count so no
 resolution overflows a `uint` slot); a single-thread `finalize` divides out
 the weighted centroid (`x` right-positive, `y` up-positive like a stick),

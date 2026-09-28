@@ -52,7 +52,7 @@ void accumulate(uint3 dispatchId : SV_DispatchThreadID, uint groupIndex : SV_Gro
 
     if ((dispatchId.x < width) && (dispatchId.y < height)) {
         float scale = float(AccumulateScale(width, height));
-        float lum = Source.Load(int3(int(dispatchId.x), int(dispatchId.y), 0)).r;
+        float lum = saturate(Source.Load(int3(int(dispatchId.x), int(dispatchId.y), 0)).r);
         float weight = saturate((lum - threshold) / max(1.0 - threshold, 0.0001));
 
         if (weight > 0.0) {

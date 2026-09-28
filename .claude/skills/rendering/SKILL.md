@@ -324,7 +324,18 @@ These are one-line cautions; the owning pages hold the derivations.
   releasing the image to `VK_QUEUE_FAMILY_EXTERNAL` with each signal and acquiring it
   back in `IGpuExportableImage.BeginWrite`, which the node calls before the
   submission that writes it;
-  a camera extent edit makes the export again. A probe kernel runs on a host's own Direct3D
+  a camera extent edit makes the export again. The export is the view's float
+  working color (`RenderGraphPackageCatalog.WorkingFormat`), and the probe ring
+  that reads it declares the same format (`WorldScreenBinder.ViewExportFormat`),
+  which the Direct3D 11 host opens as a float4 input
+  (`Win32SurfaceFormats`). Working color is display-referred with headroom,
+  as the display encode defines it, so the float format alone calls for no
+  sRGB conversion. Probe outputs remain RGBA8 sRGB. A kernel accumulating
+  normalized samples into uint sums clamps each sample before scaling:
+  `average` clamps each color channel, and `ir-blob` clamps luminance.
+  `ProbeKernelTests` pins float midtones, the average's output tint, the
+  faerie's color and painting inputs, and the IR sum's headroom bound.
+  A probe kernel runs on a host's own Direct3D
   11 device: a camera graph's, or, when its trigger socket reads a view or a
   probe and no socket binds a camera, the render adapter's
   (`IRenderedProbeKernelHost`, opened by the binder, woken once a frame, cycling

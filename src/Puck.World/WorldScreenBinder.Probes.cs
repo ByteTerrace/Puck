@@ -19,6 +19,11 @@ internal sealed partial class WorldScreenBinder {
     // own construction and asks for a ring of the kind's output extent when its kernel run starts; the ring is
     // provisioned here, on the render thread, at the next publish (the exportable targets need the render device).
     private readonly Dictionary<string, ProbeFeed> m_probeFeeds = new(comparer: StringComparer.Ordinal);
+
+    // The format of a camera view's export and of the probe ring that reads it: the view's own working color, which the
+    // node copies into the export as it is.
+    private static readonly GpuPixelFormat ViewExportFormat = RenderGraphPackageCatalog.WorkingFormat;
+
     // One export state per named camera whose view a probe socket reads, shared by every probe socket naming the
     // same camera (mirrors ProbeFeed's own id-keyed sharing). Reference counting keeps the export alive until the
     // final live probe instance releases that camera.
@@ -217,7 +222,7 @@ internal sealed partial class WorldScreenBinder {
             objB: generation
         )) {
             feed.Input = new ProbeKernelInput.Ring(
-                Format: GpuPixelFormat.R8G8B8A8Unorm,
+                Format: ViewExportFormat,
                 Height: ((int)feed.Height),
                 SharedFenceHandle: image!.SharedFenceHandle,
                 SharedTargetHandles: [handle],
@@ -332,7 +337,7 @@ internal sealed partial class WorldScreenBinder {
         var feed = new ViewExportFeed(
             create: (m_hostsOnDirectX
                 ? device => new DirectXGpuSurfaceExportFactory(deviceContext: ((DirectXDeviceContext)device)).CreateSharedComputeImage(
-                    format: RenderGraphPackageCatalog.WorkingFormat,
+                    format: ViewExportFormat,
                     height: height,
                     width: width
                 )
@@ -365,7 +370,7 @@ internal sealed partial class WorldScreenBinder {
         )));
         var export = new DirectXGpuSurfaceExportFactory(deviceContext: ((DirectXDeviceContext)targetDevice.Resource));
         var texture = export.CreateSharedComputeImage(
-            format: RenderGraphPackageCatalog.WorkingFormat,
+            format: ViewExportFormat,
             height: height,
             width: width
         );
