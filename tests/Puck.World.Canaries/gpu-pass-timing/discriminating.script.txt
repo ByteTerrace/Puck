@@ -1,0 +1,11 @@
+world.cadence off
+world.wait ready 60
+world.gpu-timing
+world.gpu-timing off
+world.wait 10
+world.gpu-timing
+pipeline.inspect world
+world.gpu-timing off
+world.wait 5
+world.gpu-timing
+pipeline.inspect world
