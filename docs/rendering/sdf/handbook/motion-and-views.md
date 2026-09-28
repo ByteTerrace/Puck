@@ -142,11 +142,18 @@ shows: a guest machine or a producer as a source instance, a camera or
 another world as a view instance (`WorldViewInstances`).
 
 - **A camera view** is an `sdf.world` instance named by its camera's
-  registration, rendering an `SdfWorldResidency` of its own
-  (`SdfCameraFrameSource`). It films the frame the world renders
-  (`SdfWorldResidency.HostFrame`)—the same program, transforms, clock and
-  levers—from a rig posed against a live anchor. It films an already-lit world
-  and contributes no light of its own.
+  registration, rendering a view of the world's own frame from the world's
+  residency: the presentation's dress films the registration's camera into the
+  frame after its own views (`WorldScreenBinder.FilmViews`), so the view shares
+  the program, transforms, clock, brick pool and tables, at the world's quality
+  without ambient occlusion or soft shadows. Its camera comes from a rig posed
+  against a live anchor; one whose anchor does not resolve keeps the camera it
+  last filmed from. Its first frame uses the rig at the default anchor when
+  that anchor is unresolved, or the world origin when there is no rig.
+  It films an already-lit world and contributes no light of its own.
+  Each instance records at its requested extent. The presenter's own cameras
+  and viewports use the display extent, so a larger probe export does not
+  change their aspect ratios or pointer mapping.
 - **A session view** is an `sdf.world` instance too, rendering another world's
   own frame source. A screen showing it shows a **world inside the world**.
   A window session (`projection: window`, on a face whose portal facet maps a
@@ -265,6 +272,6 @@ screen source is pure shading fed by a wire. A booted cabinet's CRT is a
   entries cover the two content seams, and "Shader manifests and pipelines,"
   which covers views as render-graph instances.
 - Source: `src/Puck.SdfVm/SdfAnchor.cs`, `src/Puck.SdfVm/Views/SdfCameraRig.cs`,
-  `src/Puck.SdfVm/Views/SdfCameraFrameSource.cs`, `src/Puck.SdfVm/Views/ViewTransition.cs`,
+  `src/Puck.SdfVm/Views/ViewTransition.cs`,
   `src/Puck.World.Client/Sources/WorldViewInstances.cs`,
   `src/Puck.World/WorldScreenBinder.{CameraViews,Session,Views}.cs`.

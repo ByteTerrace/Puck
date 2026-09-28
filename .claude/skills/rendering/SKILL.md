@@ -29,7 +29,7 @@ with the fixed-point query evaluator described below and with `maths-usage`.
 | Prototype bakes (mesh, textures, impostor) | `src/Puck.SignedDistance/Baking` (`SdfBaker`, `SdfBakeTier`, `SdfBakedTexture`); `src/Puck.Assets/Textures` (BC4/BC5/BC6H/BC7 codecs, `TextureMipChain`, `OctahedralNormal`); `CreationBaker`, `CreationBakeKey`, `CreationBakeCodec` in `src/Puck.World.Authoring/Authoring`; `WorldBakeStore`, `WorldBakeChunk` in `src/Puck.World.Schema`; `WorldBakeSchedule` in `src/Puck.World.Client` | [prototype bakes](../../../docs/rendering/sdf/handbook/bricks-and-baking.md#prototype-bakes), [creation bakes](../../../docs/architecture/worlds.md#creation-bakes) |
 | GPU engine and render assembly | `src/Puck.SdfVm` (`SdfWorldResidency`, `SdfWorldTables.*.cs`, `SdfWorldPasses`, `SdfWorldPassRecorder`, `SdfWorldRenderSpec`/`SdfWorldRenderBuilder`, `SdfCompositionFrameSource`, `ISdfSceneEmitter`); the `sdf.world` fragment `SdfWorldPackage` in `src/Puck.Shaders/Graph` | [`Puck.SdfVm` README](../../../src/Puck.SdfVm/README.md), [frame rendering](../../../docs/rendering/sdf/handbook/frame-rendering.md) |
 | Kernels | `src/Puck.SdfVm/Assets/Shaders/Sdf` — `isa/sdf-isa.hlsli` the generated instruction-set declarations (`puck shaders generate`), the `field/` modules the interpreter (`mapCore` in `sdf-map.hlsli`, `mapGradCore` in `sdf-map-grad.hlsli`), the `frame/` modules the frame's data and its row decoders (environment, lights, levers), the `march/`/`surface/`/`shade/`/`debug/` modules the view logic, `field/sdf-vm.hlsli` and `passes/sdf-world.hlsli` the two aggregators, one `*.comp.hlsl` wrapper per dispatch under `passes/` | [frame rendering](../../../docs/rendering/sdf/handbook/frame-rendering.md), [lighting and shading](../../../docs/rendering/sdf/handbook/lighting-and-shading.md), [shading, AO and shadows](../../../docs/rendering/sdf/reference/shading-ao-shadows.md) |
-| Cameras and views | `src/Puck.SdfVm/Views` (`SdfCameraProgram`, rigs, `SdfCameraFrameSource`, `ViewTransition`); `WorldViewInstances` (`src/Puck.World.Client/Sources`); `WorldScreenBinder.CameraViews.cs`/`.Session.cs`/`.Views.cs` | [motion and views](../../../docs/rendering/sdf/handbook/motion-and-views.md) |
+| Cameras and views | `src/Puck.SdfVm/Views` (`SdfCameraProgram`, rigs, `ViewTransition`); `WorldViewInstances` (`src/Puck.World.Client/Sources`); `WorldScreenBinder.CameraViews.cs`/`.Session.cs`/`.Views.cs` | [motion and views](../../../docs/rendering/sdf/handbook/motion-and-views.md) |
 | World data into frames | `src/Puck.World.Client` (`WorldFramePresenter`, `WorldSceneEmitter`, `WorldPlacementStamper`, `WorldStampPool`, `WorldRigCatalog`, `WorldCameraRigCompiler`, `WorldViewGraphHost`, `WorldRootGraph`); `src/Puck.World.Authoring/Authoring/CreationStampEmitter.cs` | `puck-world` skill for document meaning; [authoring README](../../../src/Puck.World.Authoring/README.md) |
 | Shader manifests, pipelines, builds | `src/Puck.Shaders`, `build/Shaders.targets` | [Shader manifests and pipelines](../../../docs/reference/shaders.md) |
 | Image sources and producers | `src/Puck.Abstractions/Sources` (contract, upload layout, conversion reference, verdict); `src/Puck.Shaders/Assets/Shaders/Sources` (conversion kernels); `WorldImageProducerVocabulary`/`WorldImageProducerSettings` (`src/Puck.World.Schema`); `WorldImageProducers`, `WorldCaptureGate` (`src/Puck.World.Client/Sources`); `WorldCaptureFills`, `WorldScreenBinder.Producers.cs` (`src/Puck.World`) | [the World guide's image producers](../../../src/Puck.World/README.md#image-producers), [rendering plan P12](../../../docs/plans/rendering.md#p12--image-sources) |
@@ -499,7 +499,7 @@ These are one-line cautions; the owning pages hold the derivations.
   `SdfWorldTables`' constructor takes a ready `SdfWorldPipelines` and creates
   none. That set is one lease per kernel variant (`SdfWorldPipelines.Acquire`,
   the brick baker only with a brick pool); every residency, the world's and each
-  camera or session view's, leases it through the `SdfWorldPipelineCatalog` the
+  routed scene's or session view's, leases it through the `SdfWorldPipelineCatalog` the
   composition hands each of them (its pass-pipeline cache, region copy, mesh
   pass and deployed kernels), so a kernel shared by several residencies on a
   device is created once. A set whose creations fail throws one
@@ -1452,16 +1452,22 @@ Camera views and sessions are instances too (`WorldViewInstances`,
 export shows (named by its registration, `WorldSeatAnchors.RegistrationName`,
 which is why the validator refuses a `views.graphs` row named like a camera)
 and each session screen (`session$<screen>`) is an `sdf.world` instance
-rendering a residency the binder creates (`WorldScreenBinder.TryResolveView`,
-tried before the world's residency in the render root's `SdfWorldPasses`
-resolver, and released in `ReconcileViewResidencies` once the registration or
-the session is gone): an `SdfWorldResidency` of its own, one view and no brick
-pool, a camera's filming the frame the world's residency renders
-(`SdfWorldResidency.HostFrame`, captured once a frame by whichever asks first,
-and forgotten at the next frame's start, `SdfWorldResidency.BeginFrame`, so a
-view films the current frame even when nothing schedules the world) through
-`SdfCameraFrameSource`, a session's the destination's own frame source on its
-own clock. A camera view reads every
+the binder resolves (`WorldScreenBinder.TryResolveView`, tried before the
+world's residency in the render root's `SdfWorldPasses` resolver). A camera
+view is a view of the world's own frame, rendered from the world's residency:
+the presenter's dress hands the binder its own views, and the binder films each
+registration's camera into the frame after them
+(`IWorldScreenPresenter.FilmViews`), at the first view's quality restricted by
+`WorldScreenBinder.CameraViewQuality`. The presenter places only its own views
+(`m_views`); the frame carries both. The root clamps a `world$n` instance to the
+presenter's own views (`WorldScreenBinder.HostView`), so a stale seat index
+never renders a camera. The root supplies the display extent through
+`WorldFramePresenter.ResizeDisplay`; own cameras and viewports use it even
+when a probe export widens the shared residency's requested extent.
+A session screen renders an `SdfWorldResidency` of its
+own, one view and no brick pool, from the destination's own frame source on its
+own clock, released in `ReconcileViewResidencies` once the session is gone. A
+camera view reads every
 source within the frame and every view a screen shows, itself included, at its
 previous frame; a session reads nothing; the world's instance reads every view a
 screen shows within the frame, so the reads grow with the views shown, never

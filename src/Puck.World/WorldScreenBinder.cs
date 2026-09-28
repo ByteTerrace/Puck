@@ -17,9 +17,10 @@ namespace Puck.World;
 /// or nothing. Every external image resolves through the capture gate
 /// (<see cref="WorldCaptureGate"/>), so a capture shows its declared fill and never its pixels. A row's producer, machine
 /// or probe source is a render-graph source instance (<see cref="WorldSourceInstances"/>), opened and published by the
-/// runtime, and a camera view or a session is a view instance (<see cref="WorldViewInstances"/>) rendering a residency the
-/// binder creates (<see cref="TryResolveView"/>): each view's passes bind every screen's image from the reads the graph
-/// hands them (<see cref="ISdfScreenSources.ReadOf"/>). They bind every screen declared at boot each frame, and a screen
+/// runtime, and a camera view or a session is a view instance (<see cref="WorldViewInstances"/>) the binder resolves
+/// (<see cref="TryResolveView"/>): cameras share the world's residency, and sessions have their own. Each view's passes
+/// bind every screen's image from the reads the graph hands them (<see cref="ISdfScreenSources.ReadOf"/>). They bind every
+/// screen declared at boot each frame, and a screen
 /// reading nothing is unbound, so a runtime <c>screen.source &lt;index&gt; camera</c>/<c>capture</c> binds without
 /// rebuilding anything. A shared singleton so the render factory, the screen verbs, and <c>world.screens</c> read one instance.
 /// </summary>

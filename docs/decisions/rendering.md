@@ -507,19 +507,20 @@ library held the one resample pass, now the `place` package. The pixelate
 interface fixture under `tests/Puck.Shaders.Tests` is its own copy
 and stays with the spike.
 
-**Split-screen seats share one SDF residency, and each seat renders as its own
+**Seats and camera views share one SDF residency, and each renders as its own
 instance into its own output.** One `SdfWorldResidency` serves a world. Each
 composed view is an `sdf.world` instance of the render graph that runs the
 package's passes, sky through views, over the residency's tables into its own
 output. The graph places each output into its seat rect with the `place`
 package. Everything a frame's views have in common is therefore shared by
 construction: the brick pool, the program upload, the glyph atlas, screen
-sources, lights, decals and volumes. Three alternatives with one residency per
-seat were rejected:
+sources, lights, decals and volumes. Camera views carry their restricted
+quality in their own pass blocks and sample screen images through their own
+instance's reads. Separate residencies per seat have these costs:
 
-- A seat residency with no brick pool, the way offscreen camera views film,
-  draws carves through the uncarved-hull fallback. The seats would then visibly
-  differ from the first one, which keeps the baked bricks.
+- A seat residency with no brick pool draws carves through the uncarved-hull
+  fallback. The seats would visibly differ from the first one, which keeps
+  the baked bricks.
 - A pool per seat residency, with every bake requested on each, costs N times
   the pool memory and N times the bake dispatches.
 - Seat residencies binding the first residency's pool read-only need a

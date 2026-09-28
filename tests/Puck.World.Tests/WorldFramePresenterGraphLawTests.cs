@@ -1,9 +1,12 @@
 using System.Numerics;
 using Microsoft.Extensions.DependencyInjection;
+using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Machines;
+using Puck.Abstractions.Presentation;
 using Puck.Assets.Documents;
 using Puck.Hosting;
+using Puck.SdfVm;
 using Puck.Shaders;
 using Puck.SignedDistance;
 using Puck.Testing;
@@ -151,6 +154,97 @@ public sealed class WorldFramePresenterGraphLawTests : IDisposable {
             expected: ["cameras", $"screens {SecondCamera}", "publish"]
         );
     }
+    // A camera view is a view of the world's own frame. The dress hands the binder its own views once they are latched,
+    // and the binder films each camera view into the frame after them, so the world's residency renders it. The
+    // presentation places only its own views, so a filmed view never becomes a pane.
+    [Fact]
+    public void TheDressFilmsCameraViewsIntoTheFrameAfterItsOwnViews() {
+        var builder = WorldBootHarness.Compose(
+            presentation: WorldHostPresentation.Offscreen,
+            stateDirectory: m_stateDirectory,
+            world: World
+        );
+        var calls = new List<string>();
+        var descriptor = builder.Services.Single(predicate: static descriptor => (descriptor.ServiceType == typeof(IWorldScreenPresenter)));
+        var binder = descriptor.ImplementationFactory!;
+        var filmed = new SdfViewSnapshot(
+            Camera: CameraSnapshot.LookAt(
+                fieldOfViewRadians: 0.9f,
+                position: new Vector3(x: 1f, y: 2f, z: 3f),
+                target: Vector3.Zero,
+                viewportHeight: 72U,
+                viewportWidth: 128U
+            ),
+            Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)
+        ) {
+            Quality = new SdfViewQuality { DisableAmbientOcclusion = true, DisableSoftShadows = true },
+        };
+
+        _ = builder.Services.Remove(item: descriptor);
+        _ = builder.Services.AddSingleton<IWorldScreenPresenter>(implementationFactory: sp => new RecordingScreens(
+            calls: calls,
+            filmed: filmed,
+            inner: ((IWorldScreenPresenter)binder(arg: sp))
+        ));
+
+        using var host = builder.Build();
+        var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
+
+        for (var index = 0UL; (index < 3UL); index++) {
+            Present(index: index, presenter: presenter);
+        }
+
+        calls.Clear();
+
+        var frame = presenter.CaptureFrame(
+            deltaSeconds: Delta,
+            height: Display,
+            interpolationAlpha: 1f,
+            width: Display
+        );
+        var own = (frame.Views.Count - 1);
+
+        Assert.True(condition: (own >= 1));
+        Assert.Contains(collection: calls, expected: $"film {own}");
+        Assert.Equal(actual: frame.Views[own], expected: filmed);
+        Assert.DoesNotContain(collection: frame.Views.Take(count: own), filter: view => (view == filmed));
+
+        presenter.ViewRendered = view => {
+            Assert.InRange(actual: view, low: 0, high: (own - 1));
+
+            return true;
+        };
+
+        var context = Frame(index: 3UL);
+
+        presenter.PrepareGraph(context: in context);
+    }
+    [Fact]
+    public void ACameraExportExtentDoesNotResizeThePresentersDisplay() {
+        using var host = WorldBootHarness.Compose(
+            presentation: WorldHostPresentation.Offscreen,
+            stateDirectory: m_stateDirectory,
+            world: World
+        ).Build();
+        var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
+
+        foreach (var (width, height) in new[] { (128U, 72U), (96U, 64U) }) {
+            presenter.ResizeDisplay(height: height, width: width);
+
+            var frame = presenter.CaptureFrame(
+                deltaSeconds: Delta,
+                height: 256U,
+                interpolationAlpha: 1f,
+                width: 256U
+            );
+            var view = Assert.Single(collection: frame.Views);
+
+            Assert.Equal(
+                actual: view.Camera.AspectRatio,
+                expected: (width / (float)height)
+            );
+        }
+    }
     [Fact]
     public void ASteadyGraphFrameIsPreparedWithoutAllocating() {
         Assert.SkipWhen(
@@ -215,8 +309,8 @@ public sealed class WorldFramePresenterGraphLawTests : IDisposable {
         );
     }
 
-    // The binder's frame slice, recording the deliveries it receives and the frames it publishes, in order.
-    private sealed class RecordingScreens(List<string> calls, IWorldScreenPresenter inner) : IWorldScreenPresenter {
+    // The binder, recording the calls the presenter makes, and filming one more view into each frame when given one.
+    private sealed class RecordingScreens(List<string> calls, IWorldScreenPresenter inner, SdfViewSnapshot? filmed = null) : IWorldScreenPresenter {
         public IAudioMachine? AudioMachine(int index) => inner.AudioMachine(index: index);
         public IAudioMachine? AudioOutput(string instance, string output) => inner.AudioOutput(
             instance: instance,
@@ -227,6 +321,19 @@ public sealed class WorldFramePresenterGraphLawTests : IDisposable {
             authoritativeTick: authoritativeTick,
             transforms: transforms
         );
+        public void FilmViews(DynamicTransform[] transforms, ulong authoritativeTick, float presentationSeconds, List<SdfViewSnapshot> views) {
+            calls.Add(item: $"film {views.Count}");
+            inner.FilmViews(
+                authoritativeTick: authoritativeTick,
+                presentationSeconds: presentationSeconds,
+                transforms: transforms,
+                views: views
+            );
+
+            if (filmed is { } view) {
+                views.Add(item: view);
+            }
+        }
         public void Publish(in FrameContext context) {
             calls.Add(item: "publish");
             inner.Publish(context: in context);

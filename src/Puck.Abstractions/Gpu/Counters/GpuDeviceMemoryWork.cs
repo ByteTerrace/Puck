@@ -5,7 +5,8 @@ namespace Puck.Abstractions.Gpu;
 /// <summary>
 /// One backend's device-local memory over the process's life, <c>memory.&lt;backend&gt;</c>: the bytes allocated and
 /// released, each at the allocation's actual size as the driver sized it (Vulkan's <c>VkMemoryRequirements.size</c>,
-/// Direct3D 12's <c>GetResourceAllocationInfo</c>), and the most bytes held at once.
+/// Direct3D 12's <c>GetResourceAllocationInfo</c>), and the most bytes held at once, each with the part of it the host
+/// maps through the adapter's aperture (<see cref="GpuMemoryRole.HostVisibleDeviceLocal"/>).
 /// <para>
 /// An allocation counts by its <see cref="GpuMemoryRole"/>, never by the memory type the driver chose, and
 /// <see cref="IsCounted"/> is the one statement of that rule for both backends: images, device-local buffers, exportable
@@ -26,10 +27,12 @@ namespace Puck.Abstractions.Gpu;
 /// </summary>
 public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
     private readonly Lock m_gate = new();
-    private readonly Dictionary<(nint Device, nint Allocation), long> m_live = [];
+    private readonly Dictionary<(nint Device, nint Allocation), (long Bytes, bool Aperture)> m_live = [];
 
     private readonly WorkCounterSet m_counts;
 
+    private long m_apertureHeld;
+    private long m_aperturePeak;
     private long m_held;
     private long m_peak;
 
@@ -39,6 +42,13 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
     public static WorkKind Released { get; } = new(name: "gpu.memory.device-local.released", unit: "bytes", workClass: WorkClass.PerBackendDeterministic);
     /// <summary>Gets the kind reporting the most device-local bytes held at once.</summary>
     public static WorkKind Peak { get; } = new(name: "gpu.memory.device-local.peak", unit: "bytes", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the part of <see cref="Allocated"/> the host maps through the adapter's aperture
+    /// (<see cref="GpuMemoryRole.HostVisibleDeviceLocal"/>), whose heap is small on a discrete adapter.</summary>
+    public static WorkKind ApertureAllocated { get; } = new(name: "gpu.memory.host-visible-device-local.allocated", unit: "bytes", workClass: WorkClass.PerBackendDeterministic);
+    /// <summary>Gets the kind counting the part of <see cref="Released"/> that was aperture memory.</summary>
+    public static WorkKind ApertureReleased { get; } = new(name: "gpu.memory.host-visible-device-local.released", unit: "bytes", workClass: WorkClass.PerBackendDeterministic);
+    /// <summary>Gets the kind reporting the most aperture bytes held at once.</summary>
+    public static WorkKind AperturePeak { get; } = new(name: "gpu.memory.host-visible-device-local.peak", unit: "bytes", workClass: WorkClass.Pacing);
 
     /// <summary>Initializes a new instance of the <see cref="GpuDeviceMemoryWork"/> class.</summary>
     /// <param name="backend">The backend's name, as a report labels it (<c>vulkan</c>, <c>directx</c>).</param>
@@ -118,10 +128,12 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
             return false;
         }
 
+        var aperture = (role == GpuMemoryRole.HostVisibleDeviceLocal);
+
         lock (m_gate) {
             if (!m_live.TryAdd(
                 key: (device, allocation),
-                value: bytes
+                value: (bytes, aperture)
             )) {
                 throw new ArgumentException(
                     message: $"The allocation 0x{allocation:X} is already counted on device 0x{device:X}.",
@@ -142,6 +154,22 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
                 );
                 m_peak = m_held;
             }
+
+            if (aperture) {
+                m_apertureHeld += bytes;
+                m_counts.Add(
+                    amount: bytes,
+                    kind: ApertureAllocated
+                );
+
+                if (m_apertureHeld > m_aperturePeak) {
+                    m_counts.Add(
+                        amount: (m_apertureHeld - m_aperturePeak),
+                        kind: AperturePeak
+                    );
+                    m_aperturePeak = m_apertureHeld;
+                }
+            }
         }
 
         return true;
@@ -155,16 +183,24 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
         lock (m_gate) {
             if (!m_live.Remove(
                 key: (device, allocation),
-                value: out var bytes
+                value: out var entry
             )) {
                 return false;
             }
 
-            m_held -= bytes;
+            m_held -= entry.Bytes;
             m_counts.Add(
-                amount: bytes,
+                amount: entry.Bytes,
                 kind: Released
             );
+
+            if (entry.Aperture) {
+                m_apertureHeld -= entry.Bytes;
+                m_counts.Add(
+                    amount: entry.Bytes,
+                    kind: ApertureReleased
+                );
+            }
 
             return true;
         }
@@ -179,9 +215,9 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
         List<(nint Allocation, long Bytes)>? leaked = null;
 
         lock (m_gate) {
-            foreach (var ((owner, allocation), bytes) in m_live) {
+            foreach (var ((owner, allocation), entry) in m_live) {
                 if (owner == device) {
-                    (leaked ??= []).Add(item: (allocation, bytes));
+                    (leaked ??= []).Add(item: (allocation, entry.Bytes));
                 }
             }
 
@@ -199,7 +235,7 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
         throw new InvalidOperationException(message: $"{Name}: device 0x{device:X} was torn down holding {leaked.Count} counted allocation(s) their owners never released: {string.Join(separator: ", ", values: leaked.Select(selector: static entry => $"0x{entry.Allocation:X} ({entry.Bytes} bytes)"))}.");
     }
     /// <summary>Reads one of this source's kinds.</summary>
-    /// <param name="kind">One of <see cref="Allocated"/>, <see cref="Released"/> or <see cref="Peak"/>.</param>
+    /// <param name="kind">One of this source's kinds (<see cref="WorkKinds"/>).</param>
     /// <returns>The count.</returns>
     /// <exception cref="ArgumentException"><paramref name="kind"/> is not one of this source's kinds.</exception>
     public long Read(WorkKind kind) =>
@@ -213,6 +249,6 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
 
     // A nested holder initializes after every kind above, whatever order the members are declared in.
     private static class Counts {
-        internal static readonly WorkKind[] Kinds = [Allocated, Released, Peak];
+        internal static readonly WorkKind[] Kinds = [Allocated, Released, Peak, ApertureAllocated, ApertureReleased, AperturePeak];
     }
 }

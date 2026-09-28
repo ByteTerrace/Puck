@@ -86,6 +86,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // The display extent the last captured frame was composed for, which the next frame's pane placement reads.
     private uint m_displayHeight;
     private uint m_displayWidth;
+    private bool m_displayExtentSupplied;
 
     private readonly WorldBakeSchedule? m_bakes;
     private readonly Func<string, OverlayResolvedGlyph> m_resolveIcon;
@@ -153,6 +154,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     private readonly Dictionary<string, WorldCameraRigCompiler.Cache> m_namedCameraRigCache = new(comparer: StringComparer.Ordinal);
     private readonly WorldGroupAnchors m_groupAnchors = new();
     private readonly List<SdfViewSnapshot> m_views = new(capacity: PlayerRoster.MaxSlots);
+    // The frame's views: the presentation's own (m_views), which it places, then the camera views filming the frame.
+    private readonly List<SdfViewSnapshot> m_frameViews = new(capacity: PlayerRoster.MaxSlots);
     private DynamicTransform[] m_transforms = [];
     // One provider per ENGINE screen index (rebuilt each delivery): the closure re-reads the binder's live source every
     // produced frame, so a slot rotating away from text clears its decal the same frame, a slot whose live source
@@ -1312,7 +1315,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     public void AdvanceBricks(ISdfBrickBakeService bakes) => m_fields.AdvanceBricks(bakes: bakes);
     /// <summary>Sets the display extent the next frame's graph is prepared against, as the host resizes its display:
     /// <see cref="PrepareGraph"/> places camera-paired panes and publishes pane mappings over it before the world
-    /// producer captures that frame, whose <see cref="CaptureFrame"/> reports the same extent.</summary>
+    /// producer captures that frame. Own cameras and viewports use this extent even when a camera export asks the shared
+    /// residency for a larger frame. Without a supplied display extent, <see cref="CaptureFrame"/> uses its requested extent.</summary>
     /// <param name="width">The display's width, in pixels.</param>
     /// <param name="height">The display's height, in pixels.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="width"/> or <paramref name="height"/> is
@@ -1323,6 +1327,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
         m_displayWidth = width;
         m_displayHeight = height;
+        m_displayExtentSupplied = true;
     }
     /// <inheritdoc/>
     public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) {
@@ -1330,8 +1335,14 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         // It may drive visual-only animation and the FPS witness, but never feeds authoritative world state.
         m_elapsedSeconds += deltaSeconds;
         m_frameRate.Sample(deltaSeconds: deltaSeconds);
-        m_displayWidth = width;
-        m_displayHeight = height;
+
+        if (m_displayExtentSupplied) {
+            width = m_displayWidth;
+            height = m_displayHeight;
+        } else {
+            m_displayWidth = width;
+            m_displayHeight = height;
+        }
 
         // Simulation has already advanced on the launcher's exact fixed ticks; the client view holds the two latest
         // snapshot poses. Each active entry's render pose is Lerp(previous tick → current, alpha) plus any eased
@@ -1624,6 +1635,16 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         // eye to while no seat resolves a view (WorldSeatViewports.Viewer).
         m_viewports.PublishFirstView(camera: m_views[0].Camera);
 
+        // The camera views film this frame as views of it after its own, so they render from the world's residency.
+        m_frameViews.Clear();
+        m_frameViews.AddRange(collection: m_views);
+        m_binder.FilmViews(
+            authoritativeTick: m_simulation.Tick,
+            presentationSeconds: m_elapsedSeconds,
+            transforms: transforms,
+            views: m_frameViews
+        );
+
         // Publish this frame's audio snapshot AFTER the transforms are packed and the view rigs resolved: emitter
         // poses read the packed leaf transforms; the listener reads the seat cameras once per produced
         // frame, from the produce path where render poses are already resolved. The presentation delta ages the
@@ -1659,7 +1680,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             Program: program,
             ProgramChanged: programChanged,
             Time: m_elapsedSeconds,
-            Views: m_views
+            Views: m_frameViews
         ) {
             DynamicTransforms = transforms,
             MovedTransforms = moved,

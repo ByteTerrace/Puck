@@ -219,7 +219,7 @@ seconds per pipeline, and the engine has about a dozen of them. So the engine
 never creates one. Every kernel variant is an entry of the composition's
 pass-pipeline cache (`Puck.Shaders.GpuPassPipelineCache`), keyed like any pass
 by its bytecode and description, and every `SdfWorldResidency`, the world's and
-each camera or session view's, leases its set of them (`SdfWorldPipelines.Acquire`)
+each routed scene's or session view's, leases its set of them (`SdfWorldPipelines.Acquire`)
 through the `SdfWorldPipelineCatalog` the composition hands each of them; the
 engine records through the services of the device context it renders on
 (`IGpuDeviceContext.Services`). The first lease on an entry starts its build on
@@ -351,11 +351,10 @@ interface. The live sources are
 (`WorldCameraRigCompiler.cs`) and the entity-part and ranked-candidate sources
 in `WorldScreenBinder.CameraViews.cs`. `SdfAnchorTable`, a name-keyed
 `ISdfAnchorSource`, has no users. `Puck.SdfVm.Views` holds the camera-rig shapes
-(`OrbitRig`/`FollowRig`/`OrientedFollowRig`/`FixedRig`/`FirstPersonRig`) and
-`SdfCameraFrameSource`, the frame source of a camera view: the frame the world's
-residency renders (`SdfWorldResidency.HostFrame`) filmed from one camera, which
-an `SdfWorldResidency` of the view's own renders as an `sdf.world` instance of
-the render graph. A view whose own screen samples its output reads its
+(`OrbitRig`/`FollowRig`/`OrientedFollowRig`/`FixedRig`/`FirstPersonRig`). A
+camera view is one more view of the world's frame (`SdfViewSnapshot`), with its
+own camera and quality, which the world's residency renders as an `sdf.world`
+instance of the render graph. A view whose own screen samples its output reads its
 instance's previous frame, so a mirror shows its previous frame and never
 compounds the image it writes. `SdfCameraProgram.cs`'s `dynamics` op names a
 pole-matched second-order response `SdfCameraBoomFollower` applies as the
