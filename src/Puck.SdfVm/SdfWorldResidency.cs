@@ -546,6 +546,23 @@ public sealed partial class SdfWorldResidency : IDisposable {
     // The frame the tables last packed, which a frame that films nothing leaves standing, and whether a frame captured
     // since the tables last uploaded a program carries another one.
     private SdfFrame? m_packedFrame;
+    private Puck.Abstractions.Presentation.FrameCaptureRequest? m_convergence;
+    private SdfFrame? m_frozenFrame;
+
+    /// <summary>Gets the ordinal of the latest frame consumed from this residency's source.</summary>
+    public long CapturedFrame { get; private set; }
+
+    /// <summary>Freezes the presentation source for a converging capture.</summary>
+    /// <param name="request">The request whose completion releases the snapshot.</param>
+    public void BeginConvergence(Puck.Abstractions.Presentation.FrameCaptureRequest request) {
+        ArgumentNullException.ThrowIfNull(argument: request);
+        if (!ReferenceEquals(objA: m_convergence, objB: request)) {
+            m_convergence = request;
+            m_frozenFrame = null;
+            m_frameSource.BeginConvergence(request: request);
+        }
+    }
+
     private bool m_programPending;
 
     // Captures the frame from the frame source when it films one this frame, first advancing its brick planner against
@@ -555,6 +572,17 @@ public sealed partial class SdfWorldResidency : IDisposable {
             return;
         }
 
+        CapturedFrame++;
+        var converging = (m_convergence is { Completion.IsCompleted: false });
+
+        if (converging && (m_frozenFrame is { } frozen)) {
+            m_frame = frozen with { ProgramChanged = false };
+            return;
+        }
+        if (!converging) {
+            m_frozenFrame = null;
+        }
+
         if (m_tables is { } tables) {
             m_frameSource.AdvanceBricks(bakes: tables);
         }
@@ -562,11 +590,14 @@ public sealed partial class SdfWorldResidency : IDisposable {
         var frame = m_frameSource.CaptureFrame(
             width: m_width,
             height: m_height,
-            deltaSeconds: ((float)context.FrameDeltaSeconds),
+            deltaSeconds: (converging ? 0f : ((float)context.FrameDeltaSeconds)),
             interpolationAlpha: ((float)context.InterpolationAlpha)
         );
 
         m_frame = frame;
+        if (converging) {
+            m_frozenFrame = frame;
+        }
         m_programPending |= frame.ProgramChanged;
         Volatile.Write(
             location: ref m_meshDrawCount,

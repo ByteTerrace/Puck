@@ -454,6 +454,19 @@ await leaves the capture accepted; keep its unique path reserved until it
 finishes. GPU readback and PNG writing remain synchronous render work, and
 completion does not promise an exact simulation tick or durable disk storage.
 
+## Presentation picking
+
+The presentation picker is `SdfWorldPasses.PickerOf`: `Request` samples normalized
+view coordinates once, and `Demand` keeps a hover current with one asynchronous
+request in flight. Only the selected visibility pixel's 16-byte V row is copied;
+the graph owns transfer and host-read barriers. The frame's immutable `ISdfPickMap`
+travels with the request. SDF identity names a program instance ordinal plus one,
+mesh identity a draw ordinal; the winning shape's exact transform slot stays in
+L.x, separate from its instance's conservative bound slot. The remaining L words
+are reserved, and anonymous lanes read the existing transform row. The record
+remains 64 bytes. Nothing in this picker enters simulation input or grants edit
+authority.
+
 ## Documentation
 
 📚 [Rendering](../../docs/rendering/README.md) · 🛠️ [Contributing to Puck](../../docs/development/contributing.md)

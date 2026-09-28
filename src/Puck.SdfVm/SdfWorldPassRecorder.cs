@@ -13,7 +13,7 @@ namespace Puck.SdfVm;
 // into its pass block; and the screens, whose host images are rewritten every frame. The mesh part draws the frame's
 // mesh draws into its target through the mesh pipeline, with a set of its own per frame slot binding its pass block. A
 // recorder records no barrier: the planner's are the instance's, and the node's orders the work counters.
-internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
+internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRenderGraphPackageReadback {
     private const uint WorkgroupEdge = 8;
 
     // The world interface's scratch buffer members, each bound to the dummy unless a port binds it.
@@ -60,6 +60,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
 
     private bool m_disposed;
 
+    private readonly SdfWorldPickReadback? m_pick;
+
     public SdfWorldPassRecorder(RenderGraphPackageRecorderContext context, RenderGraphPackageGroups groups, SdfWorldPasses owner, SdfWorldView view) {
         m_context = context;
         m_owner = owner;
@@ -89,6 +91,10 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
                 groupLayoutHandles: tables.Pipeline(kernel: SdfKernel.Beam).GroupLayoutHandles,
                 groups: groups
             );
+
+            if (string.Equals(a: m_part, b: SdfWorldPackage.Parts.Views, comparisonType: StringComparison.Ordinal)) {
+                m_pick = new SdfWorldPickReadback(picker: owner.PickerOf(instance: context.Instance), context: context);
+            }
 
             return;
         }
@@ -167,6 +173,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
         }
 
         m_disposed = true;
+        m_pick?.Dispose();
 
         foreach (var framebuffer in m_framebuffers) {
             framebuffer.Dispose();
@@ -247,6 +254,12 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
             width: width
         );
 
+        var temporal = m_owner.TemporalOf(
+            instance: m_context.Instance, view: m_view, width: width, height: height, debug: tables.PassValues.DebugMode
+        );
+
+        SdfFrameBlock.WriteTemporal(block: recording.PassBlock, jitter: temporal.Jitter, historyFrames: temporal.Frames);
+
         SdfFrameBlock.WriteWorkCounterRow(
             block: recording.PassBlock,
             row: WorkCountersOf(recording: in recording).Row
@@ -269,13 +282,32 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
             b: SdfWorldPackage.Parts.Views,
             comparisonType: StringComparison.Ordinal
         )) {
+            var visibility = recording.Inputs[VisibilityInputIndex()];
+
+            m_pick!.Prepare(slot: recording.Slot, width: width, height: height, frame: frame, version: visibility.Version);
             residency.MarkRendered(view: view);
             m_owner.MarkRendered(instance: m_context.Instance, view: in m_view);
         }
 
         return RenderGraphPackageOutcome.Drew;
     }
+    public bool TryReadback(int slot, out RenderGraphBufferReadback readback) {
+        if (m_pick is not null) {
+            return m_pick.Take(readback: out readback, slot: slot);
+        }
+        readback = default;
+        return false;
+    }
+    public void Submitted(int slot, IGpuSubmissionFence fence) => m_pick?.Submitted(fence: fence, slot: slot);
 
+    private int VisibilityInputIndex() {
+        for (var index = 0; (index < m_fragmentPass.Inputs.Count); index++) {
+            if (ReadMemberOf(version: m_fragmentPass.Inputs[index].Name) == SdfWorldPackage.VisibilityRecords) {
+                return index;
+            }
+        }
+        throw new InvalidOperationException(message: "The views pass has no visibility input.");
+    }
     // Takes the view the instance resolved this frame when it is another than the one the pass records: the package
     // decided the pass can record it as built (SdfWorldPasses.CanFollow). A counter change holds recording until matching
     // passes install. The hold and the retain move with the view; the ports and screens rebind for the

@@ -248,7 +248,7 @@ void blendShapeDual(float current, float3 currentGrad, float candidate, float3 c
 // blend semantics preserved. HIT-ONLY: resolves the winning material and the world gradient, never the smooth-seam
 // material blend channel (the primary stage captures that from the scalar accept-sample march), exactly as it skips
 // sdfMapStepBound for being hit-only.
-void sdfComposeDualCandidate(inout SdfHit result, inout float3 resultGradient, float candidate, float3 candidateGrad, uint blend, int material, float4 lanes, int frameSlot, float smooth) {
+void sdfComposeDualCandidate(inout SdfHit result, inout float3 resultGradient, float candidate, float3 candidateGrad, uint blend, int material, float4 lanes, int instanceIndex, int frameSlot, float smooth) {
     bool candidateWins;
 
     switch (blend) {
@@ -266,6 +266,7 @@ void sdfComposeDualCandidate(inout SdfHit result, inout float3 resultGradient, f
     if (candidateWins) {
         result.material = material;
         result.lanes = lanes;
+        result.instanceIndex = instanceIndex;
         result.frameSlot = frameSlot;
     }
 

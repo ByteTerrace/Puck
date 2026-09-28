@@ -1,0 +1,961 @@
+{
+  "id": "sky-layers",
+  "title": "Each authored sky layer contributes pixels and disappears when removed",
+  "binding": "A still empty scene presents a black gradient. The script adds a uniform blue gradient, a star field, a directional disc and a static cloud layer one at a time, capturing each against the same black base and removing it before the next. The upper half of each present capture must contain light; every pixel of that region is black after removal. The discriminating leg changes only the star brightness to zero, so the stars presence bound fails while every other layer and absence bound holds. The camera then turns to a red sphere outside the earlier views: dense cyan distance fog must cover its center, while the same region without fog must fail the cyan bound.",
+  "bootShape": "offscreen",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
+  "timeoutSeconds": 60,
+  "fixtures": [],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/sky-layers/fixture.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 8,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 9,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 10,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 11,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 12,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 13,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 14,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 15,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 8,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 16,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 8,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 17,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 9,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 18,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 9,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 19,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 10,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 20,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 10,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 21,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 11,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 22,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 11,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 23,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "imageRegion",
+        "name": "gradient-is-present",
+        "capture": "gradient.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0.0001,
+          0.0001,
+          0.0001,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "gradient-is-absent",
+        "capture": "gradient-absent.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "every",
+        "maximum": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "stars-is-present",
+        "capture": "stars.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0.0001,
+          0.0001,
+          0.0001,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "stars-is-absent",
+        "capture": "stars-absent.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "every",
+        "maximum": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "disc-is-present",
+        "capture": "disc.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0.0001,
+          0.0001,
+          0.0001,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "disc-is-absent",
+        "capture": "disc-absent.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "every",
+        "maximum": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "clouds-is-present",
+        "capture": "clouds.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0.0001,
+          0.0001,
+          0.0001,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "clouds-is-absent",
+        "capture": "clouds-absent.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "every",
+        "maximum": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "fog-covers-the-target",
+        "capture": "fog.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0.48,
+          0.48,
+          0.52,
+          0.52
+        ],
+        "reduce": "every",
+        "minimum": [
+          0,
+          0.8,
+          0.8,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "fog-is-absent-from-the-target",
+        "capture": "fog-absent.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0.48,
+          0.48,
+          0.52,
+          0.52
+        ],
+        "reduce": "every",
+        "minimum": [
+          0,
+          0.8,
+          0.8,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": false
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/sky-layers/fixture.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 8,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 9,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 10,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 11,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 12,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 13,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 14,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 15,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 8,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 16,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 8,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 17,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 9,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 18,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 9,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 19,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 10,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 20,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 10,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 21,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 11,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 22,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 11,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 23,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "imageRegion",
+        "name": "gradient-is-present",
+        "capture": "gradient.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0.0001,
+          0.0001,
+          0.0001,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "gradient-is-absent",
+        "capture": "gradient-absent.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "every",
+        "maximum": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "stars-is-present",
+        "capture": "stars.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0.0001,
+          0.0001,
+          0.0001,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "stars-is-absent",
+        "capture": "stars-absent.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "every",
+        "maximum": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "disc-is-present",
+        "capture": "disc.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0.0001,
+          0.0001,
+          0.0001,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "disc-is-absent",
+        "capture": "disc-absent.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "every",
+        "maximum": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "clouds-is-present",
+        "capture": "clouds.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0.0001,
+          0.0001,
+          0.0001,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "clouds-is-absent",
+        "capture": "clouds-absent.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "every",
+        "maximum": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "fog-covers-the-target",
+        "capture": "fog.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0.48,
+          0.48,
+          0.52,
+          0.52
+        ],
+        "reduce": "every",
+        "minimum": [
+          0,
+          0.8,
+          0.8,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "fog-is-absent-from-the-target",
+        "capture": "fog-absent.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0.48,
+          0.48,
+          0.52,
+          0.52
+        ],
+        "reduce": "every",
+        "minimum": [
+          0,
+          0.8,
+          0.8,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": false
+      }
+    ]
+  }
+}

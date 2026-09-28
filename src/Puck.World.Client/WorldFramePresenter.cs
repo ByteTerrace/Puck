@@ -621,6 +621,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             )
             : chase
         );
+
+        m_seatCameraRigs[slot] = rig;
         var fieldOfView = 0f;
 
         var clock = new SdfCameraClock(
@@ -1167,7 +1169,9 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     /// last captured frame composed, since the world producer captures its frame inside the runtime's schedule, so a
     /// layout change places its views and panes one frame later.</summary>
     /// <param name="context">The host's frame context.</param>
-    public void PrepareGraph(in FrameContext context) {
+    public void PrepareGraph(in FrameContext context) => PrepareGraphCore(context: FrozenContext(context: in context));
+
+    private void PrepareGraphCore(in FrameContext context) {
         // The frame context's target extent IS the launcher's live client area (window.Width/Height at this frame's
         // BeginFrame) — the one place the World side can learn it. Published for the cursor feed's client→frame
         // mapping (see WorldCursorFeed.Decide); the per-seat views carry the FIXED frame extent instead.
@@ -1294,7 +1298,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             displayWidth: width
         );
     }
-
     // The frame values every graph instance presents this frame, at the frame's interpolation fraction, or one for an
     // offscreen presentation.
     private ShaderFrameValues PresentedFrame(in FrameContext context) {
@@ -1328,64 +1331,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         m_displayWidth = width;
         m_displayHeight = height;
         m_displayExtentSupplied = true;
-    }
-    /// <inheritdoc/>
-    public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) {
-        // deltaSeconds is the launcher's clamped presentation interval, distinct from its whole-step simulation delta.
-        // It may drive visual-only animation and the FPS witness, but never feeds authoritative world state.
-        m_elapsedSeconds += deltaSeconds;
-        m_frameRate.Sample(deltaSeconds: deltaSeconds);
-
-        if (m_displayExtentSupplied) {
-            width = m_displayWidth;
-            height = m_displayHeight;
-        } else {
-            m_displayWidth = width;
-            m_displayHeight = height;
-        }
-
-        // Simulation has already advanced on the launcher's exact fixed ticks; the client view holds the two latest
-        // snapshot poses. Each active entry's render pose is Lerp(previous tick → current, alpha) plus any eased
-        // server-correction offset, so above the fixed-step rate the crowd glides instead of stepping; a frame that banked zero
-        // sub-steps holds a stable lerp (previous == current), no snap-back. Presentation only: every body.where
-        // still reads the authoritative sim pose server-side.
-        m_client.UpdateRenderPoses(alpha: interpolationAlpha);
-        // Bound state presents at this frame's position between the last two ticks before anything reads it: the
-        // program build, the transform pack (look lanes, drivers, poses, effectors, body scale), and the cameras,
-        // markers and HUD the dress resolves.
-        m_client.StateMirror.Apply(fraction: (PinsStateFraction
-            ? 1f
-            : interpolationAlpha));
-
-        // Advance the animated-placement replay cursors on the render clock (hold-style — transforms move; the
-        // program itself never rebuilds for a timeline step), and latch the same delta for the scene's own
-        // catalog-avatar root followers (WorldSceneEmitter.PackDynamicTransforms consumes it once).
-        m_animator.Tick(deltaSeconds: deltaSeconds);
-        m_emitter.Tick(deltaSeconds: deltaSeconds);
-
-        // A no-op after PrepareGraph reconciled this frame's delivery; a capture no graph prepares reconciles here.
-        ReconcileDelivery();
-        m_bakes?.Pump(definition: m_client.Definition);
-
-        m_continuum.BeginFrame();
-        try {
-            var frame = m_composed.CaptureFrame(
-                deltaSeconds: deltaSeconds,
-                height: height,
-                interpolationAlpha: interpolationAlpha,
-                width: width
-            );
-
-            // The camera views film this frame, with the transforms and route choices its dress reads.
-            m_binder.PresentFrame(
-                authoritativeTick: m_simulation.Tick,
-                transforms: m_transforms
-            );
-
-            return frame;
-        } finally {
-            m_continuum.EndFrame();
-        }
     }
 
     /// <summary>Gets a value indicating whether every frame presents bound state at the delivered tick itself rather
@@ -1498,6 +1443,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                         Camera: namedCamera,
                         Region: region
                     ) {
+                        CutRevision = ViewCut(index: m_views.Count, source: m_namedCameraRigCache[cameraName], revision: m_namedCameraRigCache[cameraName].Revision),
                         Quality = quality,
                         RenderScale = (m_settings.RenderScale * transitionScale),
                     });
@@ -1556,6 +1502,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 Camera: camera,
                 Region: region
             ) {
+                CutRevision = ViewCut(index: m_views.Count, source: m_seatCameraRigs[slot]!, revision: m_roster.Seat(slot: slot)!.View.CutRevision),
                 Grid = SeatGrid(slot: slot),
                 Quality = quality,
                 RenderScale = (m_settings.RenderScale * transitionScale),
@@ -1646,6 +1593,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                     Y: 0f
                 )
             ) {
+                CutRevision = ViewCut(index: m_views.Count, source: this, revision: 0),
                 Quality = quality,
                 RenderScale = m_settings.RenderScale,
             });

@@ -41,6 +41,7 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
     // The context the package's frame was started with, which a residency an instance first resolves this frame is
     // prepared with before the instance decides whether its passes follow it in place.
     private FrameContext m_context;
+    private Puck.Abstractions.Presentation.FrameCaptureRequest? m_convergence;
 
     /// <summary>Initializes a new instance of the <see cref="SdfWorldPasses"/> class.</summary>
     /// <param name="resolve">Returns the view an instance renders, or <see langword="null"/> when the host renders no view
@@ -119,11 +120,22 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
     }
     /// <inheritdoc/>
     public IShaderPipelineStorageCounter? CounterOf(string instance) => Refresh(instance: instance);
+    /// <summary>Gets the presentation-only picker of one view instance. Requests and results belong to the presentation thread.</summary>
+    /// <param name="instance">The view instance name.</param>
+    /// <returns>The shared picker used by hover and editor clients.</returns>
+    public SdfWorldPicker PickerOf(string instance) => Refresh(instance: instance).Picker;
+    /// <summary>Finds the picker of an instance whose SDF package the runtime has requested.</summary>
+    /// <param name="instance">The rendered instance name.</param>
+    /// <returns>The picker, or null when no SDF package is registered for the instance.</returns>
+    public SdfWorldPicker? FindPicker(string instance) => (m_entries.ContainsKey(key: instance)
+        ? Refresh(instance: instance).Picker
+        : null);
     /// <inheritdoc/>
     public bool IsUnchanged(string instance, in FrameContext context) {
         var entry = Refresh(instance: instance);
 
         return (
+            !entry.Picker.Pending &&
             (entry.View is { } view) &&
             view.Residency.IsUnchanged(
                 context: in context,
@@ -132,7 +144,44 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
             (entry.RenderedBindings == entry.Bindings)
         );
     }
+    /// <inheritdoc/>
+    public void BeginConvergence(string instance, Puck.Abstractions.Presentation.FrameCaptureRequest request) {
+        m_convergence = request;
+        var entry = Refresh(instance: instance);
 
+        entry.Convergence = request;
+        entry.Temporal.Reset();
+        foreach (var residency in m_residencies.Keys) {
+            residency.BeginConvergence(request: request);
+        }
+    }
+
+    internal SdfTemporalHistory TemporalOf(string instance, SdfWorldView view, uint width, uint height, int debug) {
+        var entry = Refresh(instance: instance);
+
+        if (entry.TemporalFrame != m_frame) {
+            if (entry.TemporalFrame != (m_frame - 1)) {
+                entry.Temporal.Reset();
+            }
+            entry.TemporalFrame = m_frame;
+            var views = view.Residency.Frame!.Views;
+            var snapshot = views[Math.Min(val1: view.View, val2: (views.Count - 1))];
+
+            entry.Temporal.Prepare(
+                epoch: new SdfTemporalEpoch(
+                    Binding: entry.Bindings,
+                    Cut: snapshot.CutRevision,
+                    Width: width,
+                    Height: height,
+                    Ceiling: snapshot.RenderScale,
+                    Enabled: (entry.Convergence is { Completion.IsCompleted: false }),
+                    Debug: debug
+                ),
+                frame: view.Residency.CapturedFrame
+            );
+        }
+        return entry.Temporal;
+    }
     // A residency's signature may belong to another instance. This instance can stand only after its own passes
     // render the binding it currently resolves, including a different view index within the same residency.
     internal void MarkRendered(string instance, in SdfWorldView view) {
@@ -144,6 +193,7 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
             (entry.View == view)
         ) {
             entry.RenderedBindings = entry.Bindings;
+            entry.Temporal.Rendered();
         }
     }
 
@@ -179,6 +229,9 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
 
     /// <inheritdoc/>
     public void OnDeviceLost() {
+        foreach (var entry in m_entries.Values) {
+            entry.Picker.Clear();
+        }
         foreach (var residency in m_residencies.Keys) {
             residency.OnDeviceLost();
         }
@@ -220,6 +273,9 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
 
     // Starts a residency's frame the first time the package meets it in this frame.
     internal void Begin(SdfWorldResidency residency) {
+        if (m_convergence is { Completion.IsCompleted: false } request) {
+            residency.BeginConvergence(request: request);
+        }
         if (residency.PackageFrame != m_frame) {
             residency.PackageFrame = m_frame;
             residency.BeginFrame();
@@ -339,6 +395,7 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
         }
 
         entry.View = view;
+        entry.Picker.Follow(view: view);
 
         return entry;
     }
@@ -362,12 +419,19 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
     // One instance: the view it renders this frame, and the counter its passes' scratch is sized by. The view is written
     // on the frame thread and read by a pass's build on the thread pool.
     private sealed class Entry : IShaderPipelineStorageCounter {
+        public SdfWorldPicker Picker { get; } = new();
+
         private readonly Lock m_gate = new();
 
         private SdfWorldView? m_view;
 
         // The frame the entry was last resolved in.
         public long Frame { get; set; }
+
+        public long TemporalFrame { get; set; } = -1;
+        public SdfTemporalHistory Temporal { get; } = new();
+
+        public Puck.Abstractions.Presentation.FrameCaptureRequest? Convergence { get; set; }
         // The residency last resolved.
         public SdfWorldResidency? Residency { get; set; }
         // The view the instance's passes follow, and how often a change of it could not be followed in place, which

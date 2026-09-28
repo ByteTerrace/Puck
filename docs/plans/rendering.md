@@ -1114,8 +1114,8 @@ P11b's last four commits are these, and all four have landed:
     the Launcher laws over fake roots, the teardown law holding a root whose
     one instance draws the overlay to reaching no device service.
 
-P13's CPU half has landed, and so have P13b's live mappings, simulation
-destination, host passthrough and live hit walk, described below. The
+P13's CPU and GPU picking have landed, and so have P13b's live mappings,
+simulation destination, host passthrough and live hit walk, described below. The
 published mapping is `SourceMapping` in `src/Puck.Commands/Sources`: a surface
 or pane placement, an optional warp pass, a UV layout, a letterboxing fit and a
 crop, as data. A warp declares its exact inverse (`SourceWarpInverse.Affine`)
@@ -1266,11 +1266,17 @@ each screen's published mapping to `SdfWorldTables.SetScreenMapping`, which
 packs its single-precision draw form (`SourceMapping.Draw`) into the
 `screenMappings` table of the `sdf-world` interface, and the screen shading reads
 the glass's bezel inset, the layout, the letterbox and the crop from it. The
-bezel's one statement is `WorldScreenMappings.Glass`. P13b owes the rest. The
-pointer's pane hover reads the
+bezel's one statement is `WorldScreenMappings.Glass`. The pointer's pane hover reads the
 picker on the CPU (P13b-3, `WorldCursorFeed` through `WorldViewGraphHost.Hover`,
 outlined by the overlay's `CursorWriter` and echoed as `world.view.panes`'
-`hovered=`); P4 is complete, and GPU picking remains. The recorded Windows run, a click reaching
+`hovered=`). `SdfWorldPasses.PickerOf` supplies the shared `SdfWorldPicker`:
+one asynchronous 16-byte visibility read resolves the winning SDF instance or
+mesh draw through the frame's immutable `WorldPickMapBuilder` map. The
+64-byte visibility record keeps that identity in V and the exact winning
+shape transform slot in L.x; material lanes read the existing transform row.
+The `sdf-picking` and `pane-outline` canaries pass on Vulkan and DirectX with
+debug layers, including clear removing the hovered pane's accent border.
+The recorded Windows run, a click reaching
 a captured editor window at the mapped point and the chord returning input to
 the game, is [deferred to the end](#deferred-to-the-end).
 
@@ -3852,8 +3858,11 @@ Each commit is marked with what it waits on.
    `WorldViewPaneMappingLawTests` (`.Hover`: the picker's pane drives the
    outline, off every pane and an unshown pane hover none, and a steady hovered
    frame allocates nothing in the host, the picker or the writer). The
-   outline is checked on the CPU only; no capture has inspected it on either
-   backend. GPU picking follows P4's visibility record.
+   `pane-outline` canary also checks the drawn outline and its removal on both
+   backends. GPU picking uses P4's visibility record through the shared
+   `SdfWorldPicker`, with immutable placement/body identity captured for the
+   requested frame; `sdf-picking` checks static and mesh hits on both backends.
+   The same readback is the [editor's E2 seam](editor.md#e2--selection-picking-and-highlight).
 4. Host passthrough, landed on Windows except its recorded run.
    - Only the local user opens a passthrough source: `source.passthrough open
      <instance> <windowTitle...>` runs only from the host's own console as typed
@@ -4425,11 +4434,10 @@ place:
   `gpu.texels.written`) into the node's kernel counters, and the upload counts
   its fillers, brick writes and region copies under passes of their own
   (`fillers`, `bricks`, `upload`).
-- The offscreen host holds its clock at an armed capture, but each frame it
-  composes still carries its interval (`FrameDeltaTicks`), and
-  `WorldFramePresenter.CaptureFrame` advances presentation time, animation and
-  the camera followers by it. Two frames composed at one tick can differ, by an
-  amount that depends on how fast the backend composes.
+- A converging capture freezes the armed tick's first presentation snapshot:
+  animation, camera followers and pass-block inputs remain fixed while only
+  its jitter index advances. Dependency frames that are not ready do not count;
+  a late encoder reads the held Nth image without rendering another sample.
 
 **Owns:** jitter, motion vectors, the temporal upscaler, history management,
 dynamic resolution, temporal reuse inside the SDF march, and the counted-cost
@@ -4575,6 +4583,20 @@ resolution, and stay there.
   presenter without the capability), the same controller reads the previous
   frame's counted `gpu.march.steps` against a per-tier step budget instead.
   The counters workload and the parity world pin dynamic resolution off.
+- **Dynamic-resolution policy.** A fresh load sample within 90–110% of its
+  budget leaves the scale unchanged. Outside that band the scale falls by at
+  most 1/16 or rises by at most 1/32 per fresh sample, clamped to the view's
+  floor and ceiling. The existing quality and tier levers configure each
+  view's floor, defaulting to Quarter; there is no second setting spelling.
+  Scale reaches the scheduler's `RenderGraphExtent.Quantize`, with its
+  sixteen steps per octave and 0.875 hysteresis, without another quantizer.
+  Counted fallback budgets derive from the committed RTX 2060 ceiling rows
+  and scale by output pixel area, so recording new floor evidence also updates
+  the controller's budgets. No copied numeric budget constants are maintained.
+  The timing trace and counted fallback hold the same exact response,
+  including both step bounds and floor/ceiling clamps. Extent changes allocate
+  nothing inside the ceiling. Ordinary canaries and parity pin the lever off;
+  P15-8 decides default enablement from its counted comparison.
 - **The counters are always on.** A pass counts its march steps and texels into
   its instance's counter buffer on every frame, whether or not anything reads
   them, so no counted row depends on whether the counters were read.
@@ -4663,6 +4685,15 @@ counted rows recorded in the same change.
      reconstruction off.
    - Counted-cost gate: no dispatch, bind, barrier, march step or texel moves
      with reconstruction off; the pass block grows by the new values' bytes.
+   - Status: landed. The new values fit the existing pass-block padding, so its
+     total byte count is unchanged. Projection, epoch, capture-freeze and
+     dependency-readiness laws pass with actual failing mutation legs. The
+     `temporal-jitter` canary passes on both backends with debug layers: period
+     repeats have zero pixel difference, and the shifted sample changes 182
+     pixels. Parity passes with reconstruction off. RTX 4070 ordinary counter
+     reads keep dispatches, binds, barriers, steps, texels, uploads and
+     allocations unchanged; compiled kernel bytes rise by 140 on DirectX and
+     1456 on Vulkan. The floor-machine recording remains owner-assisted.
 3. **P15-3, motion.** Every visible pixel's previous position, derived from the
    record.
    - Delivers: the previous view in the pass block (the instance's last render's
@@ -5482,6 +5513,11 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
 
 1. **P18-1, a baseline to measure against.** Today's sky, held still before
    anything moves.
+   - Landed: four sky parity captures, the discriminating `sky-layers` and
+     `sky-cycle` canaries, and isolated still, drift, twinkle and cycle counters
+     workloads. Both backends pass with debug layers and agree on the counted
+     baseline. The still workload can skip a node entirely; an absent sample
+     is not a measured zero. The RTX 2060 floor recording remains owner-assisted.
    - Delivers: the parity world gains a sky station authoring every current
      feature (gradient, fog, sun disc, stars with twinkle, clouds with drift,
      shear and spin, a cycle), captured at several ticks across the cycle; the
@@ -5998,8 +6034,8 @@ P11b-13. P13b's live mappings
 (step 1), simulation destination (step 2, with the light gun that authored
 cartridges read through `$light`), host passthrough (step 4), the GPU drawing
 from the mapping (step 5) and live hit walk (step 6) have landed, with step 3's
-CPU half, and GPU picking, which P4's completed visibility record allows,
-remains.
+shared GPU picking and both-backend hovered-pane outline captures. Only
+step 4's recorded Windows click and focus return remain owner-assisted.
 P14 follows P4, P7b, P8, P11b and P12b, because the engine's composition and
 screens need somewhere to go before it moves. Its capability matrix (P14-1),
 module split (P14-2), generated instruction-set declarations (P14-3), the

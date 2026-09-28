@@ -251,7 +251,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     }
     public void ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) => ClearedImages.Add(item: imageHandle);
     public void CopyImage(nint commandBufferHandle, nint sourceImageHandle, nint destinationImageHandle, uint width, uint height) => CopiedImages.Add(item: (sourceImageHandle, destinationImageHandle));
-    public void CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes) {
+    public void CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes, ulong sourceOffsetBytes = 0) {
         if (Recording) {
             Record(text: $"copy buffer {sourceBufferHandle} to {destinationBufferHandle}");
         }

@@ -167,6 +167,9 @@ or a builtin copying it keeps it. A builtin that builds a brand-new string
 re-expressed. `--output` elsewhere re-expresses
 the written document's paths from where it lands. Each destination and the lock is replaced
 atomically on its own, but publication of the whole set is not transactional.
+`WorldStaging` composes test and composition worlds at their source location before
+relocating them; a relative font crossing drives is copied into the staging
+directory's existing content-addressed store without changing its declared pin.
 
 ## Grammar, in brief
 

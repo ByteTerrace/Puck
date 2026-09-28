@@ -99,6 +99,9 @@ public static class WorldCameraRigCompiler {
         private IWorldCameraProgramRig? m_rig;
         private WorldViewDefaults? m_views;
 
+        /// <summary>Gets the revision of the compiled camera program, moved whenever the cache replaces it.</summary>
+        public long Revision { get; private set; }
+
         /// <summary>Returns the cached rig retargeted at the live document, or a fresh <see cref="Compile"/> when
         /// any input it read has moved.</summary>
         /// <param name="program">The authored op list.</param>
@@ -147,6 +150,7 @@ public static class WorldCameraRigCompiler {
                 return rig;
             }
 
+            Revision++;
             m_cameras = definition.Cameras;
             m_curves = definition.Curves;
             m_dynamics = definition.Dynamics;

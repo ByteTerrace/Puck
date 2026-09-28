@@ -344,6 +344,14 @@ capture waited, which stays 0 offscreen). A capture still waiting when the run
 ends is refused as `unserved` before the render chain is disposed. The windowed
 host paces to its display and never holds.
 
+A capture row can set `converge` to 1–256 to render that many temporal samples
+at its armed tick before writing the last one; zero, the default, captures the
+next frame. Convergence freezes the first composition's presentation values,
+including animation and camera followers, and advances only the ray-sampling
+sequence. See [motion and views](../../docs/rendering/sdf/handbook/motion-and-views.md)
+for the sampling and reset contract. Convergence captures a render-graph
+instance, not a screen source.
+
 ## Seat controls and camera authoring
 
 Nexus seats use standard third-person action semantics: left stick moves in the

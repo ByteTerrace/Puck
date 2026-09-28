@@ -1376,6 +1376,7 @@ public static class WorldBootComposition {
         services.AddSingleton<WorldSeatViewports>();
         services.AddSingleton<CursorStore>();
         services.AddSingleton(implementationFactory: static sp => new WorldCursorFeed(
+            bindings: sp.GetRequiredService<WorldSeatBindings>(),
             pointer: sp.GetRequiredService<WorldPointer>(),
             roster: sp.GetRequiredService<PlayerRoster>(),
             client: sp.GetRequiredService<WorldClient>(),

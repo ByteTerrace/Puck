@@ -8,7 +8,8 @@ using Puck.World;
 namespace Puck.Cli.Counters;
 
 /// <summary><c>puck counters</c> — the work-counter collector. It boots the authored counters workload
-/// (<c>tests/Puck.Counters/counters.world.json</c>, driven by <c>counters.script.txt</c> beside it) offscreen once per
+/// (<c>tests/Puck.Counters/counters.world.json</c>, driven by <c>counters.script.txt</c> beside it, unless
+/// <c>--world</c> and <c>--script</c> select another workload) offscreen once per
 /// backend through the shared leg machinery, reads the one <c>world.counters --json</c> response the script asks for,
 /// and writes a <c>puck.counters.report.v1</c> report: per backend the device identity, the offscreen resolution, the
 /// shader toolchain, the GC mode, and every count tagged with its class. The deterministic counts and the passes'
@@ -128,7 +129,7 @@ internal static class CountersCommand {
             : CliExit.Failed
         );
     }
-    private static int Run(string? output, bool check, bool record, string? ceilingsPath) {
+    private static int Run(string? output, bool check, bool record, string? ceilingsPath, string? world, string? scriptPath) {
         if (check && record) {
             return CliExit.Refuse(verb: Verb, what: "--check and --record", why: "a run either holds the report to the ceilings or records them, not both");
         }
@@ -157,22 +158,17 @@ internal static class CountersCommand {
             return CliExit.Refuse(verb: Verb, what: CliPaths.ToDisplay(fullPath: ceilingsFile), why: ceilingsReason);
         }
 
-        var worldPath = Path.Combine(
-            path1: repositoryRoot,
-            path2: WorldPath
-        );
+        var worldPath = Path.GetFullPath(path: (world ?? Path.Combine(path1: repositoryRoot, path2: WorldPath)));
+        var workloadScriptPath = Path.GetFullPath(path: (scriptPath ?? Path.Combine(path1: repositoryRoot, path2: ScriptPath)));
         string script;
         int width;
         int height;
 
         try {
-            script = File.ReadAllText(path: Path.Combine(
-                path1: repositoryRoot,
-                path2: ScriptPath
-            )).ReplaceLineEndings(replacementText: "\n");
+            script = File.ReadAllText(path: workloadScriptPath).ReplaceLineEndings(replacementText: "\n");
 
-            using var world = JsonDocument.Parse(utf8Json: File.ReadAllBytes(path: worldPath));
-            var host = world.RootElement.GetProperty(propertyName: "host");
+            using var document = JsonDocument.Parse(utf8Json: File.ReadAllBytes(path: worldPath));
+            var host = document.RootElement.GetProperty(propertyName: "host");
 
             width = host.GetProperty(propertyName: "width").GetInt32();
             height = host.GetProperty(propertyName: "height").GetInt32();
@@ -258,8 +254,8 @@ internal static class CountersCommand {
                 SourceState: artifact.Key
             ),
             Runs: runs,
-            Script: ScriptPath,
-            Workload: WorldPath
+            Script: CliPaths.ToDisplay(fullPath: workloadScriptPath, relativeTo: repositoryRoot),
+            Workload: CliPaths.ToDisplay(fullPath: worldPath, relativeTo: repositoryRoot)
         );
         var reportPath = ((output is null)
             ? Path.Combine(
@@ -313,10 +309,16 @@ internal static class CountersCommand {
         var ceilingsOption = new Option<string>(name: "--ceilings") {
             Description = $"The ceilings file --check reads and --record writes; {CountersCeilings.CeilingsPath} when omitted.",
         };
+        var worldOption = new Option<string>(name: "--world") {
+            Description = $"The authored JSON workload; {WorldPath} when omitted.",
+        };
+        var scriptOption = new Option<string>(name: "--script") {
+            Description = $"The console script containing one counters reading; {ScriptPath} when omitted.",
+        };
         var command = new Command(
             description: "Collect the counters workload's work counts offscreen once per backend, check the two agree, and hold them to their ceilings.",
             name: Verb
-        ) { outputOption, checkOption, recordOption, ceilingsOption };
+        ) { outputOption, checkOption, recordOption, ceilingsOption, worldOption, scriptOption };
 
         command.Detail(detail: $"""
             Boots {WorldPath} offscreen once per backend (vulkan, then directx; no window
@@ -328,6 +330,10 @@ internal static class CountersCommand {
             pacing, allocation-zero-nonzero), and each render node's pass states. Prints the report's path, then
             one line per deterministic count or pass state the two backends disagree on, naming its kind, pass
             and node. Standard error carries progress; transcripts stay in the run's scratch directory.
+
+            --world and --script select another authored workload and its script. The report carries both paths,
+            so a ceilings file for a different workload or script refuses the comparison. The sky-still,
+            sky-drift, sky-twinkle and sky-cycle fixtures under tests/Puck.Counters isolate sky change classes.
 
             --check holds the report to the counted-cost ceilings, a {WorldCountersCeilings.SchemaVersion}
             document (schema: tests/Puck.Counters/{WorldCountersCeilings.SchemaVersion}.schema.json). They state,
@@ -352,7 +358,9 @@ internal static class CountersCommand {
             ceilingsPath: parseResult.GetValue(option: ceilingsOption),
             check: parseResult.GetValue(option: checkOption),
             output: parseResult.GetValue(option: outputOption),
-            record: parseResult.GetValue(option: recordOption)
+            record: parseResult.GetValue(option: recordOption),
+            scriptPath: parseResult.GetValue(option: scriptOption),
+            world: parseResult.GetValue(option: worldOption)
         ));
 
         return command;

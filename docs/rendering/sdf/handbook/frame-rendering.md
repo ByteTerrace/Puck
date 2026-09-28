@@ -351,3 +351,30 @@ disassembly or trace the code path instead.
   and [`src/Puck.SdfVm/SdfWorldPassRecorder.cs`](../../../../src/Puck.SdfVm/SdfWorldPassRecorder.cs),
   [`src/Puck.SdfVm/SdfFrameBlock.cs`](../../../../src/Puck.SdfVm/SdfFrameBlock.cs), which writes each
   pass's block, and the pass block in the [rendering skill's sync pairs](../../../../.claude/skills/rendering/references/sync-pairs.md).
+
+## Presentation picking
+
+A rendered view exposes `SdfWorldPicker` through its `SdfWorldPasses`. A request
+uses normalized view coordinates and reads one visibility pixel asynchronously.
+The V row supplies kind, source, ray distance and material; only its 16 bytes are
+copied. The source is the SDF program instance ordinal plus one, or the mesh draw
+ordinal. Static instances therefore remain distinguishable even with the same
+material. A queued coordinate captures the program and immutable host identity
+map when its pixel copy records, so a content revision before recording keeps the
+request. A view change cancels it; after recording, a changed program or map
+rejects the answer. Pose-only mesh changes keep that map.
+
+The 64-byte visibility record keeps the winning shape's exact transform slot in
+L.x. This slot can differ from an articulated instance's bound slot. Surface
+shading reads the four anonymous lanes from the existing dynamic transform row;
+static hits read zero. The remaining L words are reserved.
+
+Build mode and locally opened passthrough panes demand hover from the same
+picker. Pending answers provide backpressure; after completion, continuing
+hover samples the next rendered frame so geometry moving beneath a stationary
+pointer stays current. No demand records no copy. `world.view.pick <instance>
+[<x> <y>]` exposes the same request/result seam to presentation automation.
+`world.view.pointer <client-x> <client-y>` supplies an in-bounds console-only
+presentation cursor override; `clear` restores the real pointer feed. It does
+not move the OS cursor or send simulation input. The argument-free pointer
+query keeps its existing readout.

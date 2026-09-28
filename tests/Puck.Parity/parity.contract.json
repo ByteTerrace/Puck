@@ -3,6 +3,7 @@
   "tileSize": 16,
   "stations": {
     "default": { "tileMeanDelta": 0.25, "tileMaxDelta": 6, "censusFloor": {} },
+    "sky": { "tileMeanDelta": 0.25, "tileMaxDelta": 6, "censusFloor": { "0": 10000, "1": 7000 } },
     "binding": {
       "tileMeanDelta": 0,
       "tileMaxDelta": 0,

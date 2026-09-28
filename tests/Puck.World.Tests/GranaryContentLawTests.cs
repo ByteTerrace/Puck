@@ -1,4 +1,6 @@
 using Puck.Commands;
+using Puck.Testing;
+using Puck.World.Transpiler.Composition;
 using Xunit;
 
 using System.Text.Json.Nodes;
@@ -13,7 +15,7 @@ namespace Puck.World.Tests;
 public sealed class GranaryContentLawTests {
     private const string Alias = "granaries$";
 
-    private static WorldDefinition GranaryModule() {
+    private static WorldDefinition GranaryModule(TemporaryDirectory files) {
         // Keep the runtime fixture small while still crossing the real file composition boundary. The module is
         // imported under its shipped alias, so the test observes the same namespaced rows/rules/placements the
         // host world receives.
@@ -29,28 +31,28 @@ public sealed class GranaryContentLawTests {
             ["document"] = ModulePath(),
         });
 
-        var path = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: $"puck-granary-{Guid.NewGuid():N}.world.json"
+        // The imported font may live on another drive. Keep its staged bytes alive for the whole law, including
+        // server construction and later mutations that revalidate the imported text definitions.
+        Assert.True(
+            condition: WorldStaging.TryWrite(
+                directory: files.PathOf(name: "staged"),
+                name: "granary",
+                path: out var path,
+                reason: out var reason,
+                sourceDirectory: files.RootPath,
+                world: host
+            ),
+            userMessage: reason
         );
-
-        File.WriteAllText(
-            path,
-            host.ToJsonString()
+        Assert.True(
+            condition: WorldDefinitionLoader.TryLoadFile(
+                path: path,
+                definition: out var definition,
+                reason: out reason
+            ),
+            userMessage: reason
         );
-        try {
-            Assert.True(
-                condition: WorldDefinitionLoader.TryLoadFile(
-                    path: path,
-                    definition: out var definition,
-                    reason: out var reason
-                ),
-                userMessage: reason
-            );
-            return definition!;
-        } finally {
-            try { File.Delete(path: path); } catch (IOException) { }
-        }
+        return definition!;
     }
     private static string ModulePath() => Path.Combine(
         AuthoredGameFixtures.Root,
@@ -64,7 +66,8 @@ public sealed class GranaryContentLawTests {
 
     [Fact]
     public void CoverageRowsAreKeyedAndBoundedToTheDealCapacity() {
-        var definition = GranaryModule();
+        using var files = new TemporaryDirectory(prefix: "puck-granary-");
+        var definition = GranaryModule(files: files);
 
         foreach (var name in new[] { "granaryNames", "granaryWaterCoverage", "granaryPowerCoverage" }) {
             var row = Assert.Single(
@@ -91,7 +94,8 @@ public sealed class GranaryContentLawTests {
     public void GranaryModuleDeclaresCoverageProvidersAndControls() {
         // Modules are fragments. Compose the isolated host through the same alias import path used by the running
         // world instead of accidentally treating a fragment as a standalone definition.
-        var definition = GranaryModule();
+        using var files = new TemporaryDirectory(prefix: "puck-granary-");
+        var definition = GranaryModule(files: files);
 
         var stores = Assert.Single(
             collection: definition.Placements,
@@ -188,7 +192,8 @@ public sealed class GranaryContentLawTests {
     }
     [Fact]
     public void IrrigationRequestGrowsTheProviderThroughAnAtomicWorldRule() {
-        var definition = GranaryModule();
+        using var files = new TemporaryDirectory(prefix: "puck-granary-");
+        var definition = GranaryModule(files: files);
         using var fixture = Fixtures.FreshServer(definition: definition);
 
         var discovered = Enumerable.Range(

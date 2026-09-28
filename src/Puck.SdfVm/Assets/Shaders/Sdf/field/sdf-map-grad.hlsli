@@ -91,6 +91,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
     result.distance = SDF_FAR_DISTANCE;
     result.material = 0;
     result.lanes = float4(0.0, 0.0, 0.0, 0.0);
+    result.instanceIndex = -1;
     result.frameSlot = -1;
     float3 resultGradient = float3(0.0, 0.0, 0.0);
 
@@ -99,12 +100,14 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
     saved.distance = SDF_FAR_DISTANCE;
     saved.material = 0;
     saved.lanes = float4(0.0, 0.0, 0.0, 0.0);
+    saved.instanceIndex = -1;
     saved.frameSlot = -1;
     saved.gradient = float3(0.0, 0.0, 0.0);
 
     [loop]
     for (;;) {
         uint segment;
+        int segmentInstance = -1;
 
         if (!hasInstances) {
             if (linearCursor >= segmentCount) {
@@ -117,6 +120,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
             worldCursor++;
             worldNext = ((worldCursor < worldCount) ? sdfWords[worldSegmentOffset + SDF_DIRECTORY_HEADER_VECTORS + worldCursor].x : SDF_SEGMENT_NONE);
         } else if (instanceSegment < instanceSegmentEnd) {
+            segmentInstance = (int)pendingInstance;
             segment = instanceSegment++;
 
             if (instanceSegment == instanceSegmentEnd) {
@@ -173,14 +177,15 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                 float3 rigidBasePosition = worldPosition;
                 float4 rigidLanes = 0.0;
                 int rigidSlot = -1;
+
                 float4 rigidDynamicOrientation = float4(0.0, 0.0, 0.0, 1.0);
                 bool rigidDynamic = false;
 
 #ifdef SDF_DYNAMIC_TRANSFORMS
                 if (plan.z != 0u) {
                     uint dynamicSlot = (plan.z - 1u);
-                    rigidSlot = (int)dynamicSlot;
                     rigidLanes = sdfDynamicTransforms[3u * dynamicSlot + 2u];
+                    rigidSlot = (int)dynamicSlot;
                     float4 dynamicPosition = sdfDynamicTransforms[3u * dynamicSlot];
                     rigidDynamicOrientation = sdfDynamicTransforms[(3u * dynamicSlot) + 1u];
                     rigidBasePosition = rotatePointByInverseQuaternion((worldPosition - dynamicPosition.xyz), rigidDynamicOrientation);
@@ -256,7 +261,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     }
 #endif
 
-                    sdfComposeDualCandidate(result, resultGradient, candidate, leafGrad, SDF_INSTRUCTION_BLEND(shapeHeader), (int)SDF_INSTRUCTION_MATERIAL(shapeHeader), rigidLanes, rigidSlot, shapeData1.x);
+                    sdfComposeDualCandidate(result, resultGradient, candidate, leafGrad, SDF_INSTRUCTION_BLEND(shapeHeader), (int)SDF_INSTRUCTION_MATERIAL(shapeHeader), rigidLanes, segmentInstance, rigidSlot, shapeData1.x);
                 }
 
                 continue;
@@ -277,6 +282,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
             uint composeBlend = SDF_BLEND_UNION;
             int composeMaterial = 0;
             float4 composeLanes = float4(0.0, 0.0, 0.0, 0.0);
+            int composeInstance = -1;
             int composeSlot = -1;
             float composeSmooth = 0.0;
 
@@ -739,6 +745,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     composeGradient = worldGrad;
                     composeMaterial = material;
                     composeLanes = currentLanes;
+                    composeInstance = segmentInstance;
                     composeSlot = currentSlot;
                     composeBlend = SDF_INSTRUCTION_BLEND(instructionHeader);
                     composeSmooth = data1.x;
@@ -750,11 +757,13 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     saved.distance = result.distance;
                     saved.material = result.material;
                     saved.lanes = result.lanes;
+                    saved.instanceIndex = result.instanceIndex;
                     saved.frameSlot = result.frameSlot;
                     saved.gradient = resultGradient;
                     result.distance = SDF_FAR_DISTANCE;
                     result.material = 0;
                     result.lanes = float4(0.0, 0.0, 0.0, 0.0);
+                    result.instanceIndex = -1;
                     result.frameSlot = -1;
                     resultGradient = float3(0.0, 0.0, 0.0);
                     break;
@@ -773,11 +782,13 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     }
                     composeMaterial = result.material;
                     composeLanes = result.lanes;
+                    composeInstance = result.instanceIndex;
                     composeSlot = result.frameSlot;
                     composeSmooth = data1.x;
                     result.distance = saved.distance;
                     result.material = saved.material;
                     result.lanes = saved.lanes;
+                    result.instanceIndex = saved.instanceIndex;
                     result.frameSlot = saved.frameSlot;
                     resultGradient = saved.gradient;
 
@@ -789,6 +800,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                         bool candidateWins = (t >= 0.5);
                         result.material = candidateWins ? composeMaterial : saved.material;
                         result.lanes = candidateWins ? composeLanes : saved.lanes;
+                        result.instanceIndex = candidateWins ? composeInstance : saved.instanceIndex;
                         result.frameSlot = candidateWins ? composeSlot : saved.frameSlot;
                         composePending = false;
                         break;
@@ -822,6 +834,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                                 bool candidateWins = (-b > a);
                                 result.material = candidateWins ? composeMaterial : saved.material;
                                 result.lanes = candidateWins ? composeLanes : saved.lanes;
+                                result.instanceIndex = candidateWins ? composeInstance : saved.instanceIndex;
                                 result.frameSlot = candidateWins ? composeSlot : saved.frameSlot;
                             } else {
                                 float baseDist = min(a, b);
@@ -836,6 +849,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                                 bool candidateWins = (b < a);
                                 result.material = candidateWins ? composeMaterial : saved.material;
                                 result.lanes = candidateWins ? composeLanes : saved.lanes;
+                                result.instanceIndex = candidateWins ? composeInstance : saved.instanceIndex;
                                 result.frameSlot = candidateWins ? composeSlot : saved.frameSlot;
                             }
                             composePending = false;
@@ -858,7 +872,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                 // EXCEPT the material blend channel: this dual twin is HIT-ONLY and resolves the NORMAL, not the shaded
                 // albedo (the primary stage captures sdfMaterialBlendWeight from the scalar accept-sample march), so it neither
                 // computes nor publishes the channel — exactly as it skips sdfMapStepBound for being hit-only.
-                sdfComposeDualCandidate(result, resultGradient, composeCandidate, composeGradient, composeBlend, composeMaterial, composeLanes, composeSlot, composeSmooth);
+                sdfComposeDualCandidate(result, resultGradient, composeCandidate, composeGradient, composeBlend, composeMaterial, composeLanes, composeInstance, composeSlot, composeSmooth);
             }
         }
     }

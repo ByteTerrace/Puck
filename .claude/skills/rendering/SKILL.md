@@ -1028,6 +1028,10 @@ For a repeatable before-and-after reading, `puck counters` boots
 `puck.counters.report.v1` report, and exits 1 naming the kind, pass and node of
 any deterministic count the backends disagree on;
 `puck counters compare <before> <after>` holds two reports to each other.
+Use `--world` and `--script` for another authored workload. The sky-still,
+sky-drift, sky-twinkle and sky-cycle fixtures use `tests/Puck.Counters/sky.script.txt`
+to isolate each sky change with cadence enabled. Report workload and script
+identity must match the ceilings; absent cadence samples are not measured zeros.
 `puck counters --check` holds every render node's deterministic and
 per-backend-deterministic submission counts, pass by pass and outside every
 pass, to `tests/Puck.Counters/counters.ceilings.json`
@@ -1782,6 +1786,17 @@ Then look at it: `dotnet run --project src/Puck.World -c Release --
 `puck_exec` and `puck_capture_frame` against the live process. A claim about
 how something renders is unverified until a capture has been inspected on both
 backends.
+
+## Converging captures
+
+A scheduled capture may author `converge: N` (1 through 256). The graph runtime
+renders its dependencies through one frozen presentation snapshot, delays the
+readback until sample N, and releases the snapshot on completion or refusal.
+The presentation interval is zero. `SdfTemporalHistory` owns each instance's
+eight-sample Halton sequence and epoch resets; the shared viewport lens applies
+the same render-pixel offset to the march and mesh projection. Ordinary
+rendering keeps jitter zero until reconstruction is enabled. Run the
+`temporal-jitter` canary on both backends after changing this contract.
 
 ## Route adjacent work
 

@@ -104,7 +104,7 @@ public sealed partial class RenderGraphRuntime {
 
             if (
                 !instance.IsSource &&
-                IsTainted(index: index) &&
+                (IsTainted(index: index) || IsConverging(index: index)) &&
                 !m_rerender.Contains(item: instance.Name)
             ) {
                 m_rerender.Add(item: instance.Name);

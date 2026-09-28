@@ -177,6 +177,10 @@ public interface IRenderGraphPackageFactory {
     /// whether an instance is unchanged and before any instance renders.</summary>
     /// <param name="context">The host's frame context of the frame being produced.</param>
     void BeginFrame(in FrameContext context) { }
+    /// <summary>Starts a frozen convergence epoch for a captured instance or one of its dependencies.</summary>
+    /// <param name="instance">The instance whose output contributes to the capture.</param>
+    /// <param name="request">The capture request; its completion ends the frozen interval.</param>
+    void BeginConvergence(string instance, Puck.Abstractions.Presentation.FrameCaptureRequest request) { }
 }
 /// <summary>A host-written region a package pass's recorder writes (<see cref="IRenderGraphPackageFactory.Regions"/>).</summary>
 /// <param name="Name">The region's part name, which names its buffers after the instance and the pass.</param>

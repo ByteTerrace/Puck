@@ -16,7 +16,7 @@ bool sdfCanTracePartsIndependently() {
 // Each leaf = (canonical shape instruction, optional domain instruction + 1, 0, 0); each placement binding =
 // (pose slot + 1, material, 0, 0). Geometry payloads and flags come from the canonical instructions, not the
 // placement that first happened to render. KEEP IN SYNC with SdfProgram.PartPrograms.cs.
-void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part, uint dataOffset, bool trackMaterial) {
+void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part, uint dataOffset, int instanceIndex, bool trackMaterial) {
     float parentWeight = sdfMaterialBlendWeight;
     int parentOther = sdfMaterialBlendOther;
     if (trackMaterial) {
@@ -28,6 +28,7 @@ void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part
     child.distance = SDF_FAR_DISTANCE;
     child.material = 0;
     child.lanes = 0.0;
+    child.instanceIndex = -1;
     child.frameSlot = -1;
 
     [loop]
@@ -88,7 +89,7 @@ void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part
         float4 shapeData1 = asfloat(sdfWords[dataOffset + SDF_INSTRUCTION_DATA_VECTORS * code.x + 1u]);
         float candidate = evaluateShape(SDF_INSTRUCTION_SHAPE(shape) & SDF_SHAPE_TYPE_MASK, localPosition, shapeData0, shapeData1) * distanceScale;
         sdfComposeCandidate(child, candidate, SDF_INSTRUCTION_BLEND(shape), trackMaterial ? (int)binding.y : 0,
-            lanes, slot, shapeData1.x, trackMaterial);
+            lanes, instanceIndex, slot, shapeData1.x, trackMaterial);
     }
 
     // Same hard-union PopField semantics as the generic scalar walk. Losing scopes retain the parent's seam;
@@ -101,7 +102,7 @@ void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part
         sdfMaterialBlendWeight = parentWeight;
         sdfMaterialBlendOther = parentOther;
     }
-    sdfComposeCandidate(parent, candidate, SDF_BLEND_UNION, child.material, child.lanes, child.frameSlot, 0.0, trackMaterial);
+    sdfComposeCandidate(parent, candidate, SDF_BLEND_UNION, child.material, child.lanes, child.instanceIndex, child.frameSlot, 0.0, trackMaterial);
     if (trackMaterial && wins) {
         sdfMaterialBlendWeight = childWeight;
         sdfMaterialBlendOther = childOther;

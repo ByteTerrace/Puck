@@ -161,7 +161,7 @@ public static partial class WorldDefinitionFileSource {
     // import layer) — what a derivation-preserving save diffs a target against; `composed` is the final tree.
     // `ancestors` is the resolution path from the top down to (not including) `resolvedPath`: a stack, not a global
     // visited set, so two imports independently reaching the same shared ancestor (a diamond) is never a cycle.
-    private static bool TryComposeLayers(IWorldDocumentSource source, string resolvedPath, byte[] bytes, IReadOnlyList<string> ancestors, bool serveHeldImage, out JsonObject? stack, out JsonObject? composed, out List<byte[]> touched, out List<string> touchedPaths, out int reach, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) {
+    private static bool TryComposeLayers(IWorldDocumentSource source, string resolvedPath, byte[] bytes, IReadOnlyList<string> ancestors, bool serveHeldImage, out JsonObject? stack, out JsonObject? composed, out List<byte[]> touched, out List<string> touchedPaths, out int reach, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, WorldDocumentOrigins? origins = null) {
         // Typed channel nodes are interpreted by alias/export walks before strict deserialization. Their malformed
         // shapes are document refusals here too, including for in-memory composition callers with no file wrapper.
         try {
@@ -171,6 +171,7 @@ public static partial class WorldDefinitionFileSource {
                 catalog: catalog,
                 catalogFingerprint: catalogFingerprint,
                 composed: out composed,
+                origins: origins,
                 reach: out reach,
                 reason: out reason,
                 resolvedPath: resolvedPath,
@@ -191,7 +192,7 @@ public static partial class WorldDefinitionFileSource {
             return false;
         }
     }
-    private static bool TryComposeLayersCore(IWorldDocumentSource source, string resolvedPath, byte[] bytes, IReadOnlyList<string> ancestors, bool serveHeldImage, out JsonObject? stack, out JsonObject? composed, out List<byte[]> touched, out List<string> touchedPaths, out int reach, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) {
+    private static bool TryComposeLayersCore(IWorldDocumentSource source, string resolvedPath, byte[] bytes, IReadOnlyList<string> ancestors, bool serveHeldImage, out JsonObject? stack, out JsonObject? composed, out List<byte[]> touched, out List<string> touchedPaths, out int reach, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, WorldDocumentOrigins? origins = null) {
         stack = null;
         composed = null;
         touched = [bytes];
@@ -242,7 +243,7 @@ public static partial class WorldDefinitionFileSource {
         // caller that wants this document's own pre-own-body layer, which an image does not carry; its children
         // are still served, so that caller pays for one merge rather than a whole graph.
         if (
-            serveHeldImage &&
+            serveHeldImage && (origins is null) &&
             TryServeComposedImage(
             ancestors: ancestors,
             bytes: bytes,
@@ -278,6 +279,8 @@ public static partial class WorldDefinitionFileSource {
             return false;
         }
 
+        origins?.Capture(node: root, documentPath: resolvedPath);
+
         // A flat file (neither member authored) returns its own tree completely unmerged: an ordinary TryMerge pass
         // over an empty basis would silently drop any of the file's OWN top-level members whose value happens to be
         // a literal JSON null (an unset nullable field with no per-property WhenWritingNull condition), since a
@@ -289,7 +292,7 @@ public static partial class WorldDefinitionFileSource {
             !root.ContainsKey(propertyName: WorldDocumentBasis.ImportsMemberName)
         ) {
             stack = new JsonObject();
-            composed = ((JsonObject)root.DeepClone());
+            composed = ((JsonObject)WorldDocumentOrigins.Clone(node: root, origins: origins)!);
             reason = string.Empty;
             WorldBootWork.Count(kind: WorldBootWork.Compositions);
             HoldComposedImage(
@@ -339,6 +342,7 @@ public static partial class WorldDefinitionFileSource {
                 catalog: catalog,
                 catalogFingerprint: catalogFingerprint,
                 composed: out var basisResult,
+                origins: origins,
                 reach: out var basisReach,
                 reason: out reason,
                 resolvedPath: basisResolvedName,
@@ -354,6 +358,7 @@ public static partial class WorldDefinitionFileSource {
             basisComposed = basisResult!;
             WorldDocumentPaths.RelocateDocumentFields(
                 module: basisComposed,
+                origins: origins,
                 sourceDocumentPath: basisResolvedName,
                 targetDocumentPath: resolvedPath
             );
@@ -378,7 +383,7 @@ public static partial class WorldDefinitionFileSource {
             touchedPaths.AddRange(collection: basisTouchedPaths);
         }
 
-        var ownBody = ((JsonObject)root.DeepClone());
+        var ownBody = ((JsonObject)WorldDocumentOrigins.Clone(node: root, origins: origins)!);
 
         ownBody.Remove(propertyName: WorldDocumentBasis.BasisMemberName);
         ownBody.Remove(propertyName: WorldDocumentBasis.ImportsMemberName);
@@ -426,6 +431,7 @@ public static partial class WorldDefinitionFileSource {
                     catalog: catalog,
                     catalogFingerprint: catalogFingerprint,
                     composed: out var importResult,
+                    origins: origins,
                     reach: out var importReach,
                     reason: out reason,
                     resolvedPath: importResolvedName,
@@ -444,6 +450,7 @@ public static partial class WorldDefinitionFileSource {
                 );
                 WorldDocumentPaths.RelocateDocumentFields(
                     module: importResult!,
+                    origins: origins,
                     sourceDocumentPath: importResolvedName,
                     targetDocumentPath: resolvedPath
                 );
@@ -524,6 +531,7 @@ public static partial class WorldDefinitionFileSource {
             if (!WorldDocumentBasis.TryMergeImports(
                 composed: out var mergedImports,
                 imports: importTrees,
+                origins: origins,
                 reason: out var mergeReason,
                 restated: ownBody
             )) {
@@ -538,6 +546,7 @@ public static partial class WorldDefinitionFileSource {
         if (!WorldDocumentBasis.TryMerge(
             basis: basisComposed,
             composed: out var afterImports,
+            origins: origins,
             overlay: importsLayer,
             reason: out var stackReason
         )) {
@@ -551,6 +560,7 @@ public static partial class WorldDefinitionFileSource {
         if (!WorldDocumentBasis.TryMerge(
             basis: afterImports!,
             composed: out var final,
+            origins: origins,
             overlay: ownBody,
             reason: out var finalReason
         )) {
@@ -1456,145 +1466,6 @@ public static partial class WorldDefinitionFileSource {
             separator: "/",
             values: segments
         );
-    }
-    /// <summary>Composes <paramref name="rootBytes"/>' basis chain over <paramref name="source"/> — the same merge,
-    /// cycle-refusal, and depth-cap (<see cref="WorldDocumentBasis.MaxChainDepth"/>) logic a directory load runs,
-    /// generalized onto any <see cref="IWorldDocumentSource"/>. The caller has already read the root document's own
-    /// bytes (a directory caller via <c>File.ReadAllBytes</c>, a storage caller via its own blob read) — this
-    /// composes everything ABOVE the root in the chain.</summary>
-    /// <param name="source">The document byte source basis references resolve against.</param>
-    /// <param name="rootResolvedName">The root's own canonical resolved name (see
-    /// <see cref="IWorldDocumentSource.TryRead"/>'s <c>resolvedName</c> contract) — seeds cycle detection.</param>
-    /// <param name="rootBytes">The root document's own already-read raw bytes.</param>
-    /// <param name="composed">The composed tree (basis member stripped) when the root named a basis and every
-    /// ancestor composed; <see langword="null"/> when the root names no basis, or its bytes are not a parseable JSON
-    /// object at all — in either case the caller's own strict parse of its own already-decoded bytes owns the
-    /// refusal wording, and must never dereference this as non-null.</param>
-    /// <param name="chainBytes">The ordered raw bytes, root first then each basis ancestor in resolution order; a
-    /// single-element list (just the root) whenever <paramref name="composed"/> is <see langword="null"/>.</param>
-    /// <param name="reason">The one-line refusal reason, or empty on success.</param>
-    /// <returns><see langword="true"/> when the chain composed (or the root carries no basis).</returns>
-    public static bool TryComposeChain(IWorldDocumentSource source, string rootResolvedName, byte[] rootBytes, out JsonObject? composed, out IReadOnlyList<byte[]> chainBytes, out string reason) {
-        ArgumentNullException.ThrowIfNull(argument: source);
-
-        composed = null;
-
-        if (!TryWalkChain(
-            chain: out var chain,
-            reason: out reason,
-            rootBytes: rootBytes,
-            rootResolvedName: rootResolvedName,
-            source: source
-        )) {
-            chainBytes = [rootBytes];
-
-            return false;
-        }
-
-        chainBytes = [.. chain.Select(selector: static link => link.Bytes)];
-
-        if (chain.Count == 1) {
-            return true;
-        }
-
-        var objects = new JsonObject[chain.Count];
-
-        for (var index = 0; (index < chain.Count); index++) {
-            objects[index] = chain[index].Parsed!;
-        }
-
-        var mergedFromTop = objects[^1];
-
-        for (var index = (chain.Count - 2); (index >= 0); index--) {
-            var overlay = ((JsonObject)objects[index].DeepClone());
-
-            overlay.Remove(propertyName: WorldDocumentBasis.BasisMemberName);
-
-            if (!WorldDocumentBasis.TryMerge(
-                basis: mergedFromTop,
-                composed: out var merged,
-                overlay: overlay,
-                reason: out var mergeReason
-            )) {
-                reason = $"{chain[index].ResolvedName} over {chain[(index + 1)].ResolvedName}: {mergeReason}";
-                composed = null;
-
-                return false;
-            }
-
-            mergedFromTop = merged!;
-        }
-
-        composed = mergedFromTop;
-
-        return true;
-    }
-    /// <summary>Composes <paramref name="rootBytes"/>' whole basis-and-imports graph over <paramref name="source"/>
-    /// — the generalization of <see cref="TryComposeChain"/> that additionally resolves the root's (and every
-    /// ancestor's) own <c>imports</c> list (see <see cref="WorldDocumentBasis"/>'s remarks). The caller has already
-    /// read the root document's own bytes.</summary>
-    /// <param name="source">The document byte source basis/import references resolve against.</param>
-    /// <param name="rootResolvedName">The root's own canonical resolved name — seeds cycle detection.</param>
-    /// <param name="rootBytes">The root document's own already-read raw bytes.</param>
-    /// <param name="composed">The composed tree (basis/imports members stripped) when the root named either and
-    /// every reference composed; <see langword="null"/> when the root names neither, or its bytes are not a
-    /// parseable JSON object at all — in either case the caller's own strict parse of its own already-decoded bytes
-    /// owns the refusal wording, and must never dereference this as non-null.</param>
-    /// <param name="chainBytes">The bytes of every file touched composing the root — the root first, then its basis
-    /// chain, then each import's own touched bytes in authored order; a single-element list (just the root) whenever
-    /// <paramref name="composed"/> is <see langword="null"/>.</param>
-    /// <param name="reason">The one-line refusal reason, or empty on success.</param>
-    /// <param name="catalogFingerprint">Stable metadata fingerprint used to partition the composition cache.</param>
-    /// <param name="catalog">The explicit machine catalog used for metadata rewriting, or <see langword="null"/> for structural composition without provider metadata rewriting.</param>
-    /// <returns><see langword="true"/> when the graph composed (or the root names neither basis nor imports).</returns>
-    public static bool TryComposeChainWithImports(IWorldDocumentSource source, string rootResolvedName, byte[] rootBytes, out JsonObject? composed, out IReadOnlyList<byte[]> chainBytes, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) {
-        ArgumentNullException.ThrowIfNull(argument: source);
-
-        composed = null;
-        chainBytes = [rootBytes];
-        reason = string.Empty;
-
-        JsonObject? root;
-
-        try {
-            root = (JsonNode.Parse(json: DecodeJson(bytes: rootBytes)) as JsonObject);
-        } catch (JsonException) {
-            root = null;
-        }
-
-        if (root is null) {
-            return true;
-        }
-
-        if (
-            !root.ContainsKey(propertyName: WorldDocumentBasis.BasisMemberName) &&
-            !root.ContainsKey(propertyName: WorldDocumentBasis.ImportsMemberName)
-        ) {
-            return true;
-        }
-
-        if (!TryComposeLayers(
-            ancestors: [],
-            bytes: rootBytes,
-            catalog: catalog,
-            catalogFingerprint: catalogFingerprint,
-            composed: out var result,
-            reach: out _,
-            reason: out reason,
-            resolvedPath: rootResolvedName,
-            serveHeldImage: true,
-            source: source,
-            stack: out _,
-            touched: out var touched,
-            touchedPaths: out _
-        )) {
-            return false;
-        }
-
-        composed = result;
-        chainBytes = touched;
-
-        return true;
     }
     /// <summary>Loads the document at <paramref name="path"/> as its composed raw JSON tree — its basis chain and
     /// its own imports resolved and merged, both consumed members stripped — without parsing or

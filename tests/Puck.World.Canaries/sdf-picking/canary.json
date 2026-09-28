@@ -1,0 +1,706 @@
+{
+  "id": "sdf-picking",
+  "title": "One GPU visibility pixel identifies static SDF instances and mesh placements independently of material",
+  "binding": "The existing mesh-visibility fixture has two static blocks with the same palette, exposed mesh pixels in front of and above them, and background. After engine readiness, five asynchronous requests read the rendered world; each query waits for subsequent frames before reading. Static hits carry distinct positive SDF source ordinals and their authored placements; mesh hits carry draw ordinals and the same owning placements. The discriminating fixture keeps the SDF blocks but moves its meshes out of view: the front sample becomes SDF and the sample above the centre block becomes background. All observations read the real one-pixel transfer and its captured host identity map.",
+  "bootShape": "offscreen",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
+  "timeoutSeconds": 60,
+  "positive": {
+    "world": "tests/Puck.World.Canaries/sdf-mesh-visibility/fixture.puck",
+    "script": "pick.script.txt",
+    "commands": [
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pick",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pick",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pick",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pick",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pick",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pick",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pick",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pick",
+        "occurrence": 8,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pick",
+        "occurrence": 9,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pick",
+        "occurrence": 10,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "response",
+        "name": "first-answer",
+        "stream": "stdout",
+        "verb": "world.view.pick",
+        "occurrence": 2,
+        "count": 10,
+        "extract": [
+          {
+            "name": "firstKind",
+            "field": "kind"
+          },
+          {
+            "name": "firstSource",
+            "field": "source"
+          },
+          {
+            "name": "firstPlacement",
+            "field": "placement"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "second-answer",
+        "stream": "stdout",
+        "verb": "world.view.pick",
+        "occurrence": 4,
+        "count": 10,
+        "extract": [
+          {
+            "name": "secondKind",
+            "field": "kind"
+          },
+          {
+            "name": "secondSource",
+            "field": "source"
+          },
+          {
+            "name": "secondPlacement",
+            "field": "placement"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "frontMesh-answer",
+        "stream": "stdout",
+        "verb": "world.view.pick",
+        "occurrence": 6,
+        "count": 10,
+        "extract": [
+          {
+            "name": "frontMeshKind",
+            "field": "kind"
+          },
+          {
+            "name": "frontMeshSource",
+            "field": "source"
+          },
+          {
+            "name": "frontMeshPlacement",
+            "field": "placement"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "backMesh-answer",
+        "stream": "stdout",
+        "verb": "world.view.pick",
+        "occurrence": 8,
+        "count": 10,
+        "extract": [
+          {
+            "name": "backMeshKind",
+            "field": "kind"
+          },
+          {
+            "name": "backMeshSource",
+            "field": "source"
+          },
+          {
+            "name": "backMeshPlacement",
+            "field": "placement"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "sky-answer",
+        "stream": "stdout",
+        "verb": "world.view.pick",
+        "occurrence": 10,
+        "count": 10,
+        "extract": [
+          {
+            "name": "skyKind",
+            "field": "kind"
+          },
+          {
+            "name": "skySource",
+            "field": "source"
+          },
+          {
+            "name": "skyPlacement",
+            "field": "placement"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "first-is-sdf",
+        "operator": "equal",
+        "left": {
+          "value": "firstKind"
+        },
+        "right": {
+          "literal": "1"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "first-has-instance",
+        "operator": "greater",
+        "left": {
+          "value": "firstSource"
+        },
+        "right": {
+          "literal": "0"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "second-is-sdf",
+        "operator": "equal",
+        "left": {
+          "value": "secondKind"
+        },
+        "right": {
+          "literal": "1"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "second-has-instance",
+        "operator": "greater",
+        "left": {
+          "value": "secondSource"
+        },
+        "right": {
+          "literal": "0"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "two-static-placements-have-distinct-identities",
+        "operator": "notEqual",
+        "left": {
+          "value": "firstSource"
+        },
+        "right": {
+          "value": "secondSource"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "first-placement",
+        "operator": "equal",
+        "left": {
+          "value": "firstPlacement"
+        },
+        "right": {
+          "literal": "front"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "second-placement",
+        "operator": "equal",
+        "left": {
+          "value": "secondPlacement"
+        },
+        "right": {
+          "literal": "back"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "front-mesh-kind",
+        "operator": "equal",
+        "left": {
+          "value": "frontMeshKind"
+        },
+        "right": {
+          "literal": "2"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "back-mesh-kind",
+        "operator": "equal",
+        "left": {
+          "value": "backMeshKind"
+        },
+        "right": {
+          "literal": "2"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "front-mesh-placement",
+        "operator": "equal",
+        "left": {
+          "value": "frontMeshPlacement"
+        },
+        "right": {
+          "literal": "front"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "back-mesh-placement",
+        "operator": "equal",
+        "left": {
+          "value": "backMeshPlacement"
+        },
+        "right": {
+          "literal": "back"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "background-has-no-hit",
+        "operator": "equal",
+        "left": {
+          "value": "skyKind"
+        },
+        "right": {
+          "literal": "0"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "background-has-no-placement",
+        "operator": "equal",
+        "left": {
+          "value": "skyPlacement"
+        },
+        "right": {
+          "literal": "none"
+        }
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/sdf-mesh-visibility/plain.puck",
+    "script": "pick.script.txt",
+    "commands": [
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pick",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pick",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pick",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pick",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pick",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pick",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pick",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pick",
+        "occurrence": 8,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pick",
+        "occurrence": 9,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pick",
+        "occurrence": 10,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "response",
+        "name": "first-answer",
+        "stream": "stdout",
+        "verb": "world.view.pick",
+        "occurrence": 2,
+        "count": 10,
+        "extract": [
+          {
+            "name": "firstKind",
+            "field": "kind"
+          },
+          {
+            "name": "firstSource",
+            "field": "source"
+          },
+          {
+            "name": "firstPlacement",
+            "field": "placement"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "second-answer",
+        "stream": "stdout",
+        "verb": "world.view.pick",
+        "occurrence": 4,
+        "count": 10,
+        "extract": [
+          {
+            "name": "secondKind",
+            "field": "kind"
+          },
+          {
+            "name": "secondSource",
+            "field": "source"
+          },
+          {
+            "name": "secondPlacement",
+            "field": "placement"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "frontMesh-answer",
+        "stream": "stdout",
+        "verb": "world.view.pick",
+        "occurrence": 6,
+        "count": 10,
+        "extract": [
+          {
+            "name": "frontMeshKind",
+            "field": "kind"
+          },
+          {
+            "name": "frontMeshSource",
+            "field": "source"
+          },
+          {
+            "name": "frontMeshPlacement",
+            "field": "placement"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "backMesh-answer",
+        "stream": "stdout",
+        "verb": "world.view.pick",
+        "occurrence": 8,
+        "count": 10,
+        "extract": [
+          {
+            "name": "backMeshKind",
+            "field": "kind"
+          },
+          {
+            "name": "backMeshSource",
+            "field": "source"
+          },
+          {
+            "name": "backMeshPlacement",
+            "field": "placement"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "sky-answer",
+        "stream": "stdout",
+        "verb": "world.view.pick",
+        "occurrence": 10,
+        "count": 10,
+        "extract": [
+          {
+            "name": "skyKind",
+            "field": "kind"
+          },
+          {
+            "name": "skySource",
+            "field": "source"
+          },
+          {
+            "name": "skyPlacement",
+            "field": "placement"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "first-is-sdf",
+        "operator": "equal",
+        "left": {
+          "value": "firstKind"
+        },
+        "right": {
+          "literal": "1"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "first-has-instance",
+        "operator": "greater",
+        "left": {
+          "value": "firstSource"
+        },
+        "right": {
+          "literal": "0"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "second-is-sdf",
+        "operator": "equal",
+        "left": {
+          "value": "secondKind"
+        },
+        "right": {
+          "literal": "1"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "second-has-instance",
+        "operator": "greater",
+        "left": {
+          "value": "secondSource"
+        },
+        "right": {
+          "literal": "0"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "two-static-placements-have-distinct-identities",
+        "operator": "notEqual",
+        "left": {
+          "value": "firstSource"
+        },
+        "right": {
+          "value": "secondSource"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "first-placement",
+        "operator": "equal",
+        "left": {
+          "value": "firstPlacement"
+        },
+        "right": {
+          "literal": "front"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "second-placement",
+        "operator": "equal",
+        "left": {
+          "value": "secondPlacement"
+        },
+        "right": {
+          "literal": "back"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "front-mesh-kind",
+        "operator": "equal",
+        "left": {
+          "value": "frontMeshKind"
+        },
+        "right": {
+          "literal": "1"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "back-mesh-kind",
+        "operator": "equal",
+        "left": {
+          "value": "backMeshKind"
+        },
+        "right": {
+          "literal": "0"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "front-mesh-placement",
+        "operator": "equal",
+        "left": {
+          "value": "frontMeshPlacement"
+        },
+        "right": {
+          "literal": "front"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "back-mesh-placement",
+        "operator": "equal",
+        "left": {
+          "value": "backMeshPlacement"
+        },
+        "right": {
+          "literal": "none"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "background-has-no-hit",
+        "operator": "equal",
+        "left": {
+          "value": "skyKind"
+        },
+        "right": {
+          "literal": "0"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "background-has-no-placement",
+        "operator": "equal",
+        "left": {
+          "value": "skyPlacement"
+        },
+        "right": {
+          "literal": "none"
+        }
+      }
+    ]
+  }
+}

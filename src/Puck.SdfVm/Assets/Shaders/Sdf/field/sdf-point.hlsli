@@ -6,6 +6,7 @@ struct SdfHit {
     float distance;
     int material;
     float4 lanes;
+    int instanceIndex;
     int frameSlot;
 };
 
@@ -14,6 +15,7 @@ SdfHit sdfIsaErrorHit() {
     result.distance = 0.0;
     result.material = SDF_ISA_ERROR_MATERIAL;
     result.lanes = float4(0.0, 0.0, 0.0, 0.0);
+    result.instanceIndex = -1;
     result.frameSlot = -1;
     return result;
 }
