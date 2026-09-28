@@ -159,7 +159,8 @@ public sealed class SdfKernelSetLawTests {
     // for this host's: an instruction set whose two opcodes, or whose two cell modes, trade values; one whose instruction
     // headers carry the shape and the blend in each other's lanes; and one whose builder or packer puts a field
     // elsewhere (a rotation's Y and W, a sampled region's Y and Z dimension bitfields, a weathering's Edge and Lines, a
-    // sweep's start and end radii, a cell displacement's frequency and amplitude).
+    // sweep's start and end radii, a cell displacement's frequency and amplitude, a stroked path's start and end radii, a
+    // rigid leaf's rotation X and Y, a path edge's two radii).
     [Fact]
     public void AnInstructionSetEncodedOtherwiseCarriesAnotherStamp() {
         var include = SdfIsaHlsl.Generate();
@@ -177,6 +178,10 @@ public sealed class SdfKernelSetLawTests {
             var otherEncoding = SdfEncodingProbe.Describe(calls: [.. calls.Select(selector: call => ((call.Name == other.Name) ? other : call))]);
 
             Assert.NotEqual(expected: SdfIsaHlsl.Stamp, actual: SdfIsaHlsl.StampOf(fingerprint: SdfIsaHlsl.FingerprintOf(encoding: otherEncoding, include: include)));
+        }
+        // A packer that writes a rigid leaf's rotation X and Y, or a stroked path edge's two radii, in each other's places.
+        foreach (var wordsOf in (ReadOnlySpan<Func<SdfProgram, uint[]>>)[SdfEncodingTrades.RigidLeafRotationXySwapped, SdfEncodingTrades.PathRadiiSwapped]) {
+            Assert.NotEqual(expected: SdfIsaHlsl.Stamp, actual: SdfIsaHlsl.StampOf(fingerprint: SdfIsaHlsl.FingerprintOf(encoding: SdfEncodingProbe.Describe(calls: calls, wordsOf: wordsOf), include: include)));
         }
     }
 

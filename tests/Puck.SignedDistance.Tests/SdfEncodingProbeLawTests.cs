@@ -97,6 +97,23 @@ public sealed class SdfEncodingProbeLawTests {
 
         Assert.Empty(collection: SdfEncodingTrades.Traded(calls: Calls).Where(predicate: traded => (DescribeWith(call: traded) == description)).Select(selector: static traded => traded.Name));
     }
+    // A packer that laid words out otherwise describes differently even where one input moves many words: every rigid
+    // leaf's rotation with X and Y exchanged (the normalized rotation is written twice, as the instruction's payload and
+    // the leaf's), and every stroked path edge with its two radii exchanged.
+    [Fact]
+    public void APackerThatLaysWordsOutOtherwiseChangesTheDescription() {
+        var description = SdfEncodingProbe.Describe();
+
+        foreach (var (name, wordsOf) in ((ReadOnlySpan<(string, Func<SdfProgram, uint[]>)>)[
+            ("rotate", SdfEncodingTrades.RigidLeafRotationXySwapped),
+            ("path stroke", SdfEncodingTrades.PathRadiiSwapped),
+        ])) {
+            var program = SdfEncodingProbe.Build(call: Named(name: name));
+
+            Assert.NotEqual(expected: program.Words.ToArray(), actual: wordsOf(arg: program));
+            Assert.NotEqual(expected: description, actual: SdfEncodingProbe.Describe(calls: Calls, wordsOf: wordsOf));
+        }
+    }
     // The part table's header records the independent-tracing flag, so a program whose root keeps parts from tracing
     // alone describes differently.
     [Fact]

@@ -34,8 +34,10 @@ stale generated file. The instruction set's fingerprint
 described encoding (`SdfEncodingProbe.Describe`: one builder call per
 operation, shape, blend, lift and lane-enum member, and calls packing every
 side table and flag, described by each packed program's integer words and,
-for each input raised alone, the bits of every integer word that moves, every
-float word that moves and the one that moves most), so it moves when a field,
+for each input raised alone, the bits of every integer word that moves and
+every float word that moves; then, for each float word that moves, the input
+that moves it most, or a tie when no input beats the next by half again), so
+it moves when a field,
 a bitfield, a header lane, a table entry or an enum value moves;
 `SdfEncodingProbeLawTests` holds the probe to every member. `puck shaders
 generate` records it in `SdfIsaFingerprint.cs`, which the host reads

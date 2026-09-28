@@ -20,8 +20,9 @@ public sealed record SdfEncodingProbeCall(string Name, IReadOnlyList<float> Inpu
 /// that pack every side table and flag the kernels read: a material with every field and layer, compiled part programs,
 /// sweep, path and convex-polygon tables, instances and the instance grid.
 /// <para><see cref="Describe()"/> states, for each call's packed program, every word that holds an integer (a count, an
-/// offset, an enum, a flag, a packed bitfield), and for each input which words move when that input alone is raised: the
-/// bits an integer word's change spans, every float word that moves, and the one that moves the most. So a change to where the builder puts
+/// offset, an enum, a flag, a packed bitfield), for each input which words move when that input alone is raised (the
+/// bits an integer word's change spans, and every float word that moves), and for each float word that moves, the input
+/// that moves it the most. So a change to where the builder puts
 /// an operand, to a bitfield's position, to an enum's value or to where the packer lays a table out changes the
 /// description. The description reads no float bit pattern, only which words move and by how much relative to each
 /// other, so it is the same on every host, including for values the builder derives with a transcendental
@@ -30,8 +31,8 @@ public sealed record SdfEncodingProbeCall(string Name, IReadOnlyList<float> Inpu
 public static class SdfEncodingProbe {
     // A palette wide enough for every positional recolor a call strides the material by.
     private const int ProbeMaterials = 64;
-    // A float word's move is the largest only when it beats the next by this factor; otherwise the description says the
-    // moves tie, so hosts that round a derived value differently still describe alike.
+    // An input moves a float word the most only when it beats the next input by this factor; otherwise the description
+    // says the inputs tie, so hosts that round a derived value differently still describe alike.
     private const float Margin = 1.5f;
 
     /// <summary>Returns every probe call, in the order the description lists them.</summary>
@@ -48,7 +49,7 @@ public static class SdfEncodingProbe {
 
         // Point operations, each ahead of a unit sphere.
         Call(name: "translate", inputs: [0.31f, 0.37f, 0.41f], emit: static (b, m, v) => Shape(b: b.ResetPoint().Translate(offset: new Vector3(x: v[0], y: v[1], z: v[2])), material: m));
-        Call(name: "rotate", inputs: [0.1f, 0.2f, 0.3f, 0.9f], emit: static (b, m, v) => Shape(b: b.ResetPoint().Rotate(rotation: new Quaternion(w: v[3], x: v[0], y: v[1], z: v[2])), material: m));
+        Call(name: "rotate", inputs: [0.4f, 0.5f, 0.6f, 0.7f], emit: static (b, m, v) => Shape(b: b.ResetPoint().Rotate(rotation: new Quaternion(w: v[3], x: v[0], y: v[1], z: v[2])), material: m));
         Call(name: "scale", inputs: [1.25f, 1.5f, 1.75f], emit: static (b, m, v) => Shape(b: b.ResetPoint().Scale(scale: new Vector3(x: v[0], y: v[1], z: v[2])), material: m));
         Call(name: "transform-dynamic", inputs: [3f], emit: static (b, m, v) => Shape(b: b.ResetPoint().TransformDynamic(slot: ((int)v[0])), material: m));
         foreach (var plane in Enum.GetValues<SdfPlane>()) {
@@ -123,6 +124,7 @@ public static class SdfEncodingProbe {
         Call(name: "screen-slab", inputs: [0.74f, 0.42f, 0.02f, 2f], emit: static (b, _, v) => b.ResetPoint().ScreenSlab(halfExtents: new Vector3(x: v[0], y: v[1], z: v[2]), round: 0f, screenIndex: ((int)v[3]), worldOrigin: Vector3.Zero, worldOrientation: Quaternion.Identity));
         Call(name: "sweep", inputs: [0.2f, 0.3f, 0.4f, 0.09f, 0.07f, 0.5f, 3f, 0.25f, 0.015f], emit: static (b, m, v) => b.ResetPoint().Sweep(a: Vector3.Zero, b: new Vector3(x: v[0], y: v[1], z: 0f), bulge: v[5], c: new Vector3(x: v[2], y: 0f, z: 0f), material: m, radiusEnd: v[4], radiusStart: v[3], strandOffset: v[8], strands: ((int)v[6]), twist: v[7]));
         Call(name: "path", inputs: [0.8f, 0.9f, 0.1f, 0.3f], emit: static (b, m, v) => b.ResetPoint().Path(halfDepth: v[2], material: m, profile: new SdfPathProfile(Contours: [new SdfPathContour(new Vector2(x: -0.5f, y: -0.5f), [new SdfPathSegment(new Vector2(x: 0.5f, y: -0.5f)), new SdfPathSegment(new Vector2(x: 0f, y: v[3]))])]), scale: new Vector2(x: v[0], y: v[1])));
+        Call(name: "path stroke", inputs: [0.85f, 0.95f, 0.12f, 0.05f, 0.08f], emit: static (b, m, v) => b.ResetPoint().Path(halfDepth: v[2], material: m, profile: new SdfPathProfile(Contours: [new SdfPathContour(new Vector2(x: -0.4f, y: -0.3f), [new SdfPathSegment(new Vector2(x: 0.4f, y: -0.3f)), new SdfPathSegment(new Vector2(x: 0f, y: 0.35f))])], Stroke: new SdfPathStroke(RadiusEnd: v[4], RadiusStart: v[3])), scale: new Vector2(x: v[0], y: v[1])));
         Call(name: "glyph", inputs: [0.26f, 0.3f, 0.04f, 3.5f], emit: static (b, m, v) => b.ResetPoint().Glyph(atlas: GlyphAtlas, distanceScale: v[3], extrudeHalfDepth: v[2], halfHeight: v[1], halfWidth: v[0], material: m, uvBottomLeft: Vector2.Zero, uvTopRight: Vector2.One));
         foreach (var lift in Enum.GetValues<SdfLift>()) {
             Call(name: $"ellipse {lift}", inputs: [0.46f, 0.32f, 0.12f], emit: (b, m, v) => b.ResetPoint().Ellipse(lift: lift, liftAmount: v[2], material: m, semiX: v[0], semiY: v[1]));
@@ -241,18 +243,32 @@ public static class SdfEncodingProbe {
     /// <summary>Describes the encoding a set of probe calls exercises. For each call: its packed program's word count and
     /// every word that holds an integer (its exponent bits clear of any float the probe produces, so a count, an offset,
     /// an enum, a flag or a packed bitfield), by offset; then, for each input, which words move when that input alone is
-    /// raised: every integer word that moves with the bits its change spans, every float word that moves, and which of
-    /// them moves the most, or that the largest moves tie.</summary>
+    /// raised: every integer word that moves with the bits its change spans, and every float word that moves; then, for
+    /// each float word that moves, the input that moves it the most, or that the largest moves tie.</summary>
     /// <param name="calls">The calls.</param>
     /// <returns>The description.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="calls"/> is <see langword="null"/>.</exception>
-    public static string Describe(IReadOnlyList<SdfEncodingProbeCall> calls) {
+    public static string Describe(IReadOnlyList<SdfEncodingProbeCall> calls) =>
+        Describe(
+            calls: calls,
+            wordsOf: static program => program.Words.ToArray()
+        );
+    /// <summary>Describes the encoding a set of probe calls exercises, as <see cref="Describe(IReadOnlyList{SdfEncodingProbeCall})"/>
+    /// does, over the words a function takes from each packed program: the program's own, or those of a packer that laid
+    /// them out otherwise.</summary>
+    /// <param name="calls">The calls.</param>
+    /// <param name="wordsOf">Returns the words to describe of a packed program.</param>
+    /// <returns>The description.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="calls"/> or <paramref name="wordsOf"/> is
+    /// <see langword="null"/>.</exception>
+    public static string Describe(IReadOnlyList<SdfEncodingProbeCall> calls, Func<SdfProgram, uint[]> wordsOf) {
         ArgumentNullException.ThrowIfNull(argument: calls);
+        ArgumentNullException.ThrowIfNull(argument: wordsOf);
 
         var text = new StringBuilder();
 
         foreach (var call in calls) {
-            var baseline = Build(call: call).Words.ToArray();
+            var baseline = wordsOf(arg: Build(call: call));
 
             text.Append(provider: CultureInfo.InvariantCulture, handler: $"{call.Name} words={baseline.Length}");
 
@@ -264,12 +280,16 @@ public static class SdfEncodingProbe {
 
             text.Append(value: '\n');
 
+            // For each float word, every input that moves it and by how much: the input that moves a word the most names
+            // the field the word carries, even where one input moves many words (a normalized quaternion, say).
+            var movers = new SortedDictionary<int, List<(int Input, float Move)>>();
+
             for (var input = 0; (input < call.Inputs.Count); input++) {
                 var raised = call.Inputs.ToArray();
 
                 raised[input] = Raised(value: raised[input]);
 
-                var moved = Build(call: call, inputs: raised).Words;
+                var moved = wordsOf(arg: Build(call: call, inputs: raised));
 
                 text.Append(provider: CultureInfo.InvariantCulture, handler: $"  input {input}:");
 
@@ -278,9 +298,6 @@ public static class SdfEncodingProbe {
                 }
 
                 var floats = new List<int>();
-                var largest = -1;
-                var largestMove = 0f;
-                var runnerUp = 0f;
 
                 for (var index = 0; (index < Math.Min(val1: baseline.Length, val2: moved.Length)); index++) {
                     if (baseline[index] == moved[index]) {
@@ -288,31 +305,38 @@ public static class SdfEncodingProbe {
                     }
 
                     if (IsInteger(word: baseline[index]) && IsInteger(word: moved[index])) {
-                        var change = baseline[index] ^ moved[index];
+                        var change = (baseline[index] ^ moved[index]);
 
                         text.Append(provider: CultureInfo.InvariantCulture, handler: $" {index}[{BitOperations.TrailingZeroCount(value: change)}..{(31 - BitOperations.LeadingZeroCount(value: change))}]");
 
                         continue;
                     }
 
-                    floats.Add(item: index);
-
                     var move = MathF.Abs(x: (BitConverter.UInt32BitsToSingle(value: moved[index]) - BitConverter.UInt32BitsToSingle(value: baseline[index])));
 
-                    if (!float.IsFinite(f: move)) {
-                        move = float.MaxValue;
+                    if (!movers.TryGetValue(key: index, value: out var list)) {
+                        movers.Add(key: index, value: (list = []));
                     }
-                    if (move > largestMove) {
-                        runnerUp = largestMove;
-                        largestMove = move;
-                        largest = index;
-                    } else if (move > runnerUp) {
-                        runnerUp = move;
-                    }
+
+                    list.Add(item: (input, (float.IsFinite(f: move) ? move : float.MaxValue)));
+                    floats.Add(item: index);
                 }
 
                 if (floats.Count != 0) {
-                    text.Append(provider: CultureInfo.InvariantCulture, handler: $" floats={string.Join(separator: ',', values: floats)} largest={((largestMove > (runnerUp * Margin)) ? largest.ToString(provider: CultureInfo.InvariantCulture) : "tie")}");
+                    text.Append(provider: CultureInfo.InvariantCulture, handler: $" floats={string.Join(separator: ',', values: floats)}");
+                }
+
+                text.Append(value: '\n');
+            }
+
+            if (movers.Count != 0) {
+                text.Append(value: "  largest:");
+
+                foreach (var (index, list) in movers) {
+                    var ordered = list.OrderByDescending(keySelector: static mover => mover.Move).ToArray();
+                    var named = ((ordered.Length == 1) || (ordered[0].Move > (ordered[1].Move * Margin)));
+
+                    text.Append(provider: CultureInfo.InvariantCulture, handler: $" {index}<{(named ? ordered[0].Input.ToString(provider: CultureInfo.InvariantCulture) : "tie")}");
                 }
 
                 text.Append(value: '\n');
