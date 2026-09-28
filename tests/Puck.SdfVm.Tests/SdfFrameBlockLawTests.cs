@@ -26,6 +26,8 @@ public sealed class SdfFrameBlockLawTests {
         ObjectPatchRadius: 2f,
         ObjectPitch: new Vector3(x: 0.5f, y: 0.25f, z: 0.75f),
         PlaneY: 1f,
+        WorldFrame: new Quaternion(w: 0.8f, x: 0.2f, y: 0.4f, z: 0.4f),
+        WorldOrigin: new Vector3(x: 7f, y: 8f, z: 9f),
         WorldPitch: new Vector3(x: 1f, y: 0.5f, z: 2f)
     );
     // A quality every lever of which is off its default, and the pass-block members that carry them.
@@ -346,6 +348,28 @@ public sealed class SdfFrameBlockLawTests {
             expected: (Grid.PlaneY, Grid.LineWidth, Grid.WorldPitch.Y, Grid.ObjectPitch.Y, Grid.ObjectPatchRadius),
             actual: (Single(block: building, member: SdfWorldPackage.GridPlaneY), Single(block: building, member: SdfWorldPackage.GridLineWidth), Single(block: building, component: 1, member: SdfWorldPackage.GridWorldPitch), Single(block: building, component: 1, member: SdfWorldPackage.GridObjectPitch), Single(block: building, member: SdfWorldPackage.GridObjectPatchRadius))
         );
+        Assert.Equal(
+            expected: (Grid.WorldOrigin, Grid.WorldFrame),
+            actual: (
+                new Vector3(
+                    x: Single(block: building, member: SdfWorldPackage.GridWorldOrigin),
+                    y: Single(block: building, component: 1, member: SdfWorldPackage.GridWorldOrigin),
+                    z: Single(block: building, component: 2, member: SdfWorldPackage.GridWorldOrigin)
+                ),
+                new Quaternion(
+                    w: Single(block: building, component: 3, member: SdfWorldPackage.GridWorldFrame),
+                    x: Single(block: building, member: SdfWorldPackage.GridWorldFrame),
+                    y: Single(block: building, component: 1, member: SdfWorldPackage.GridWorldFrame),
+                    z: Single(block: building, component: 2, member: SdfWorldPackage.GridWorldFrame)
+                )
+            )
+        );
+        Assert.Equal(expected: Quaternion.Identity, actual: new Quaternion(
+            w: Single(block: playing, component: 3, member: SdfWorldPackage.GridWorldFrame),
+            x: Single(block: playing, member: SdfWorldPackage.GridWorldFrame),
+            y: Single(block: playing, component: 1, member: SdfWorldPackage.GridWorldFrame),
+            z: Single(block: playing, component: 2, member: SdfWorldPackage.GridWorldFrame)
+        ));
         Assert.Equal(expected: 0u, actual: Flags(block: playing));
     }
     [Fact]

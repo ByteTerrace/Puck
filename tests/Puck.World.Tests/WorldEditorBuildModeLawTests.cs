@@ -162,6 +162,92 @@ public sealed class WorldEditorBuildModeLawTests : IDisposable {
         Assert.Equal(actual: grid.PlaneY, expected: 1.5f, tolerance: 0.02);
         Assert.Equal(actual: grid.Flags, expected: GridOverlayFlags.World);
     }
+
+    // A world of another document a seat crosses into, with one slab whose top stands at 2 far from where the seat
+    // arrives, and nothing where it arrives.
+    private static WorldDefinition Elsewhere(WorldDefinition basis) => (basis with {
+        CreationsRaw = [
+            .. basis.Creations,
+            CreationFixtures.Prototype(
+                document: CreationFixtures.Document(
+                    name: "slab",
+                    shapes: [CreationFixtures.Shape(scale: new Vector3(x: 3f, y: 0.25f, z: 3f), type: SdfSolidPrimitive.Box)]
+                ),
+                id: "slab"
+            ),
+        ],
+        DocumentId = "elsewhere",
+        PlacementRowsRaw = [
+            new WorldPlacement(
+                Id: "slab",
+                Position: new Vector3(x: 12f, y: 1.75f, z: 0f),
+                PrototypeId: "slab",
+                Scale: 1f,
+                Solid: new WorldSolid(Margin: 0f),
+                YawDegrees: 0f
+            ),
+        ],
+    });
+
+    [Fact]
+    public void ACrossedSeatsSurfacesAreTheWorldItCrossedIntoAndItsFirstFrameThereFollowsNothingOfTheWorldItLeft() {
+        using var host = WorldBootHarness.Compose(
+            presentation: WorldHostPresentation.Offscreen,
+            stateDirectory: m_stateDirectory,
+            world: "tests/Puck.World.Canaries/editor-grid/fixture.world.json"
+        ).Build();
+        var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
+        var registry = host.Services.GetRequiredService<CommandRegistry>();
+        var client = host.Services.GetRequiredService<WorldClient>();
+        var pointer = host.Services.GetRequiredService<WorldEditorPointer>();
+        var routes = host.Services.GetRequiredService<WorldSeatAuthorityRouter>();
+        var seats = host.Services.GetRequiredService<WorldEditorSeats>();
+
+        _ = host.Services.GetRequiredService<WorldInstanceHost>();
+        Assert.True(condition: client.Roster.IsJoined(slot: 0));
+
+        // Offscreen there is no pointer, so the seat's pointer stands in the middle of its view.
+        seats.PointerProbe = slot => ((pointer.Aim(slot: slot) is { } aim)
+            ? pointer.Surface(maxDistance: 100f, ray: aim, slot: slot)
+            : null);
+        _ = Capture(presenter: presenter);
+        Submit(line: "player.build", registry: registry);
+        Submit(line: "world.grid on", registry: registry);
+        Submit(line: "world.grid follow", registry: registry);
+        _ = Capture(presenter: presenter);
+
+        // At home the aim meets this world, so a following plane has a height to take; not vacuous below.
+        Assert.NotNull(@object: seats.FollowedHeightOf(slot: 0, world: "boot"));
+
+        // The seat crosses, arriving where this world has the surface it just followed and the other world has nothing.
+        var elsewhere = Elsewhere(basis: client.Definition);
+        using var north = EditorEndpoints.Of(definition: elsewhere, identity: "north", link: new RecordingLink(definition: elsewhere), pose: client.Position(index: 0));
+
+        _ = routes.Publish(endpoint: north, entity: north.Mirror.Address(index: 0), slot: 0);
+        _ = Capture(presenter: presenter);
+
+        // The first frame there queries the world it crossed into, whose scene has drawn no view of it yet: nothing is
+        // followed, and above all not the height of the world it left. Red leg (planted): with the seat's route resolved
+        // after its grid, the frame marches this world's field and records its height for the other world.
+        Assert.Null(@object: seats.FollowedHeightOf(slot: 0, world: "north"));
+
+        // Once the crossed world's scene has drawn the seat's view, a surface query resolves against that scene: the
+        // slab the other world has at 12,0, beyond this world's floor, answers at its own height, 2.
+        Assert.True(condition: presenter.TrySeatScene(index: out _, scene: out var scene, slot: 0));
+        _ = scene.FrameSource.CaptureFrame(deltaSeconds: 0f, height: 36U, interpolationAlpha: 0f, width: 64U);
+
+        var down = new WorldEditorRay(Direction: -Vector3.UnitY, Origin: new Vector3(x: 12.3f, y: 10f, z: -0.2f));
+        var hit = pointer.Surface(maxDistance: 100f, ray: down, slot: 0);
+
+        Assert.NotNull(@object: hit);
+        Assert.Equal(actual: hit.Value.Point.Y, expected: 2f, tolerance: 0.02);
+        Assert.True(condition: (hit.Value.Normal.Y > 0.9f));
+
+        // Red leg: a pointer that cannot see the seat's routed scene marches this world's field, which has no slab there.
+        var boot = new WorldEditorPointer(client: client, viewports: host.Services.GetRequiredService<WorldSeatViewports>()).Surface(maxDistance: 100f, ray: down, slot: 0);
+
+        Assert.False(condition: ((boot is { } other) && (MathF.Abs(x: (other.Point.Y - 2f)) < 0.02f)));
+    }
     [Fact]
     public void APlaceThroughTheHostRestsOnTheFloorUnderTheAim() {
         using var host = WorldBootHarness.Compose(

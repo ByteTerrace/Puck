@@ -1528,6 +1528,17 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 width: width
             );
 
+            // The world the seat is presented in this frame, resolved before its grid: a seat that has just crossed
+            // queries the scene of the world it crossed into, which has drawn no view of it yet and so answers no
+            // surface, never the world it left; a seat that returned home queries this world again.
+            var presentedElsewhere = m_continuum.PresentedElsewhere(slot: slot);
+
+            if (presentedElsewhere is null) {
+                m_seatRoutes[slot] = default;
+            } else if (!ReferenceEquals(objA: m_seatRoutes[slot].Scene?.Endpoint, objB: presentedElsewhere)) {
+                m_seatRoutes[slot] = (SceneOf(endpoint: presentedElsewhere), -1);
+            }
+
             // The cursor feed's unproject seam: the SAME region + camera this view renders with, so a cursor ray
             // aims exactly where the pixel under it was drawn from. Published before the seat's grid resolves, since
             // a following grid casts the seat's pointer through this camera.

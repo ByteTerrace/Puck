@@ -8,7 +8,7 @@
       "format": "R8G8B8A8Unorm",
       "dimensions": {
         "mode": "Absolute",
-        "width": 55,
+        "width": 57,
         "height": 1
       }
     }
@@ -50,6 +50,8 @@
         "gridObjectPatchRadius": { "type": "float", "default": 0, "description": "The sdf.world pass's grid object patch radius." },
         "gridObjectPitch": { "type": "float3", "default": [0, 0, 0], "description": "The sdf.world pass's grid object pitch." },
         "gridPlaneY": { "type": "float", "default": 0, "description": "The sdf.world pass's grid plane y." },
+        "gridWorldFrame": { "type": "float4", "default": [0, 0, 0, 0], "description": "The sdf.world pass's grid world frame." },
+        "gridWorldOrigin": { "type": "float3", "default": [0, 0, 0], "description": "The sdf.world pass's grid world origin." },
         "gridWorldPitch": { "type": "float3", "default": [0, 0, 0], "description": "The sdf.world pass's grid world pitch." },
         "imageExtent": { "type": "uint2", "default": [0, 0], "description": "The sdf.world pass's render extent, in pixels." },
         "instanceMaskWordCount": { "type": "uint", "default": 0, "description": "The sdf.world pass's per-tile instance-mask width." },

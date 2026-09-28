@@ -51,10 +51,10 @@ public sealed class WorldEditorPlacementLawTests {
             name: "boot"
         );
     }
-    private static CommandRegistry BuildRegistry(HostRow row, WorldEditorSeats seats, WorldSeatAuthorityRouter? routes = null) => new(modules: [
+    private static CommandRegistry BuildRegistry(HostRow row, WorldEditorSeats seats, WorldSeatAuthorityRouter? routes = null, WorldDeferredVerbEchoes? echoes = null) => new(modules: [
         new WorldEditorCommandModule(
             authority: new FakeConsoleAuthority(instance: row.Instance),
-            echoes: new WorldDeferredVerbEchoes(),
+            echoes: (echoes ?? new WorldDeferredVerbEchoes()),
             link: row.Instance.Link,
             seats: seats,
             seatRouter: routes,
@@ -127,46 +127,8 @@ public sealed class WorldEditorPlacementLawTests {
         Assert.Equal(actual: Placement(id: "crate1", row: row).YawDegrees, expected: -90f);
     }
 
-    // Records every envelope a routed world's link is handed, as the destination would receive it.
-    private sealed class RecordingLink(WorldDefinition definition) : IServerLink {
-        public List<WorldSubmissionPayload> Submitted { get; } = [];
-
-        public void Query(WorldQuery query, Action<QueryAnswer> completion) => new SilentLink(definition: definition).Query(completion: completion, query: query);
-        public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal) {
-            Submitted.Add(item: payload);
-
-            return 1L;
-        }
-        public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal, Guid operationId, Action<WorldSubmissionResult>? completion) => SubmitEnvelope(
-            payload: payload,
-            principal: principal
-        );
-        public void SubmitIntent(in IntentSubmission submission) {
-        }
-        public void SubmitSession(SessionRequest request, Action<SessionReply> completion) {
-        }
-    }
-    private sealed class Lease : IDisposable {
-        public void Dispose() {
-        }
-    }
-
     // The world a seat crosses into: its own crate1, somewhere else.
     private static readonly Vector3 AwayCrate = new(x: -3f, y: 0f, z: 2f);
-
-    private static WorldAuthorityEndpoint Away(RecordingLink link, WorldDefinition definition) => new(
-        adjacencies: static () => null,
-        clockOwnedHere: false,
-        definition: () => definition,
-        identity: "away",
-        nextInputTick: static () => 2UL,
-        observe: sink => {
-            sink.DeliverDefinition(definition: definition);
-
-            return new Lease();
-        },
-        submissions: link
-    );
 
     [Fact]
     public void AfterACrossingANudgeEditsTheWorldTheSeatIsInAndNeverTheWorldItLeft() {
@@ -179,7 +141,7 @@ public sealed class WorldEditorPlacementLawTests {
             PlacementRowsRaw = [(Placement(id: "crate1", row: row) with { Position = AwayCrate })],
         });
         var awayLink = new RecordingLink(definition: awayDocument);
-        using var away = Away(definition: awayDocument, link: awayLink);
+        using var away = EditorEndpoints.Of(definition: awayDocument, identity: "away", link: awayLink, pose: AwayCrate);
 
         // Select in the boot world: the nudge moves the boot crate and makes it the seat's current placement there.
         Submit(line: $"world.grid pitch {Pitch}", registry: registry);
@@ -215,6 +177,53 @@ public sealed class WorldEditorPlacementLawTests {
         Submit(line: "world.nudge crate1 x 1", registry: unrouted);
         Step(row: row);
         Assert.NotEqual(actual: ((Vector3)Placement(id: "crate1", row: row).Position), expected: boot);
+    }
+    [Fact]
+    public void EditsFasterThanVerdictsAllLandAndARefusedOneRollsBackByName() {
+        using var row = Build();
+        var echoes = new WorldDeferredVerbEchoes();
+        var lines = new List<string>();
+        var routes = new WorldSeatAuthorityRouter();
+        var registry = BuildRegistry(echoes: echoes, routes: routes, row: row, seats: new WorldEditorSeats());
+        var awayDocument = (row.Server.Definition with {
+            DocumentId = "away",
+            PlacementRowsRaw = [(Placement(id: "crate1", row: row) with { Position = AwayCrate })],
+        });
+        var awayLink = new RecordingLink(definition: awayDocument);
+        using var away = EditorEndpoints.Of(definition: awayDocument, identity: "away", link: awayLink, pose: AwayCrate);
+        var step = new Vector3(x: Pitch, y: 0f, z: 0f);
+
+        echoes.Completed += result => lines.Add(item: result.Output);
+        _ = routes.Publish(endpoint: away, entity: away.Mirror.Address(index: 0), slot: 0);
+        Submit(line: $"world.grid pitch {Pitch}", registry: registry);
+
+        // Three nudges before any verdict: the first is in flight, the next two queue on top of it, each on the last.
+        Submit(line: "world.nudge crate1 x 1", registry: registry);
+        Submit(line: "world.nudge crate1 x 1", registry: registry);
+        Submit(line: "world.nudge crate1 x 1", registry: registry);
+        _ = Assert.Single(collection: awayLink.Submitted);
+        Assert.Equal(actual: ((Vector3)awayLink.Placement(index: 0).Position), expected: (AwayCrate + step));
+
+        // The first applies, and the queued edit goes next: the crate lands at base + 3 steps, not base + 1.
+        awayLink.Complete(index: 0, result: RecordingLink.Applied);
+        Assert.Equal(actual: awayLink.Submitted.Count, expected: 2);
+        Assert.Equal(actual: ((Vector3)awayLink.Placement(index: 1).Position), expected: (AwayCrate + (3f * step)));
+        awayLink.Complete(index: 1, result: RecordingLink.Applied);
+        Assert.Equal(actual: awayLink.Submitted.Count, expected: 2);
+
+        // Two more; the world refuses the one in flight: the one queued on it is dropped, and the crate rolls back to
+        // the value the world last confirmed, by name.
+        Submit(line: "world.nudge crate1 x 1", registry: registry);
+        Submit(line: "world.nudge crate1 x 1", registry: registry);
+        Assert.Equal(actual: ((Vector3)awayLink.Placement(index: 2).Position), expected: (AwayCrate + (4f * step)));
+        awayLink.Complete(index: 2, result: RecordingLink.Refused);
+        Assert.Equal(actual: awayLink.Submitted.Count, expected: 3);
+        Assert.Contains(collection: lines, expected: "[world.nudge: world.grant.denied the seat may not mutate placements here]");
+        Assert.Contains(collection: lines, expected: "[world.nudge: 'crate1' in 'away' rolled back to -1.5,0,2]");
+
+        // The next edit starts from the confirmed value: the refused step never reappears.
+        Submit(line: "world.nudge crate1 x 1", registry: registry);
+        Assert.Equal(actual: ((Vector3)awayLink.Placement(index: 3).Position), expected: (AwayCrate + (4f * step)));
     }
     [Fact]
     public void APlaceWithNoViewToAimFromIsRefusedByName() {
