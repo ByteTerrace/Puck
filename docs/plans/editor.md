@@ -225,12 +225,36 @@ lines exist only in the image.
 `WorldEditorBuildModeLawTests` (the presenter law, and a surface place through
 the host's own registry resting on a fixture floor),
 `WorldEditorPlacementLawTests` (nudge, snapped nudge, turn and `world.undo`
-through a real registry over a live row) and `WorldEditorSeatsLawTests` (the
-save fold, the build layer and the build bar); the canary is `editor-grid`.
+through a real registry over a live row), `WorldEditorEditQueueLawTests` (the
+pending-edit queue: each edit under its own principal, refusal before queueing,
+ids minted past every pending edit, no regression from a late document, one
+refusal path, and a seeded random interleaving) and `WorldEditorSeatsLawTests`
+(the save fold, the build layer and the build bar); the canary is `editor-grid`.
 The placement verbs cast against the presentation's static field, so a world
 whose static field is refused (see above) places ahead of the camera and does
 not rest on its surfaces. A placement's extent for reference snapping is half
 its scale on each axis until E2 gives placements bounds.
+
+**Open: order edits by the world's journal sequence.** The pending-edit queue
+(`WorldEditorEditQueue`) orders a delivered document against its confirmed
+edits by value, because the world stamps no version on what it delivers:
+`WorldSessionMirror.DefinitionRevision` and `WorldClient.DefinitionRevision`
+count deliveries on the receiving host, `WorldSnapshot.Tick` rides snapshots and
+not documents, `WorldMutationOutcome` carries no tick and fills its
+`DurableWatermark` only when persistence is requested, and
+`WorldServer.JournalLength` never leaves the server. A confirmed value is
+therefore held until a delivered document shows it, so a late document never
+moves a placement back. One case remains: when another door overwrites the row
+in the same mutation batch the editor's edit applied in, no delivered document
+ever shows the confirmed value, and the editor keeps showing its own value, and
+bases its next edit on it, until that next edit lands. Stamping the world's
+journal sequence on every mutation verdict and every delivered document lets the
+queue release a line at the first document at or past its verdict's sequence,
+which orders edits exactly under concurrent editors. The change reaches the
+protocol (`WorldMutationOutcome`, `IClientSink.DeliverDefinition`), the server's
+output hub and session sinks, the federation projection sink, the mirror and the
+client. It is done when a law with two editors writing one row in one batch
+shows the editor following the world's final value.
 
 ### E2 — Selection, picking and highlight
 
