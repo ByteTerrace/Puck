@@ -46,11 +46,14 @@ Several pieces exist with nothing using them:
   (`SnapConfig`, `SnapReference`, `RotationSnap`, `GridSnap.Apply`,
   `SnapRotation`, `SnapYawDegrees`, `SnapToWorldLattice`) and has no caller and
   no law.
-- The kernels draw a world grid on every surface and an object grid around a
-  reference (`applyWorldFloorGrid` and `applyObjectGrid` in
+- The kernels can draw a world grid and an object grid around a reference
+  (`applyWorldFloorGrid` and `applyObjectGrid` in
   `shade/sdf-surface-shading.hlsli`, called from `sdf-light-stage.hlsli`), and
   `SdfFrameBlock` writes `SdfFrame`'s `Grid*` fields into the pass block, but
   `WorldFramePresenter` sets none of them. `GridOverlayState` has no producer.
+  Both grids paint one horizontal plane only: a surface point within 0.02 of
+  `gridFloorY` in height. A slope, a raised platform, a wall or a floor at
+  another height shows no grid.
 - `world.debug-view` selects one of twelve modes (`off`, `depth`, `normals`,
   `raydir`, `material-id`, `iteration-count`, `termination`, `slice`, `mask`,
   `overshoot`, `evals`, `visibility`). It is unbindable and sets the mode on
@@ -78,13 +81,28 @@ rings, wedges, panels, icons and text (`OverlayFrameBuilder`), and has no line
 primitive. `MarkerWriter` projects world points into each seat's viewport.
 `WorldPointerRayCapture` casts the OS pointer through a seat's camera
 (`SourceRay.Through` over `WorldSeatViewports`), and the cursor already outlines
-a hovered pane (`WorldViewGraphHost.Hover`, `CursorWriter`). The presenter
-rebuilds a CPU `SdfFieldEvaluator` over the static placements
+a hovered pane (`WorldViewGraphHost.Hover`, `CursorWriter`).
+
+The presenter rebuilds a CPU `SdfFieldEvaluator`
 (`WorldFramePresenter.RebuildStaticField`, published as `WorldClient.StaticField`),
 and the evaluator implements `IWorldQuery.Raycast`, which returns the hit point,
-normal and material. The visibility record names what each pixel sees, but every
-static placement shares identity 0 (`frame/sdf-visibility.hlsli`), so the GPU
-cannot tell two static placements apart. Free Cam exists as a gameplay mode
+normal and material. That field is not everything a builder sees. It holds only
+the placements a body can touch (those with a `solid` facet), plus screens,
+derived faces and adjacency geometry, and the evaluator refuses what has no
+deterministic interpreter: non-uniform scale, warp ops, render-only shapes such
+as Path and multi-strand Sweep. One refused instruction leaves the whole field
+null, so in such a world nothing can be picked on the CPU.
+
+The visibility record (`frame/sdf-visibility.hlsli`) names what each pixel sees
+in its identity word: the kind in bits 31..30 (0 background, 1 SDF, 2 mesh) and
+the source in bits 29..0. A packed 0 is background. An SDF hit's source is the
+winning instance's dynamic-transform frame slot plus one, carried through
+`mapCore`'s winner resolution as `frameSlot`, so every static SDF hit packs as
+`0x40000000` (kind SDF, source 0) whichever placement it hit. A mesh hit's source
+is its draw. The GPU can therefore tell a background pixel, a mesh draw and a
+moving instance apart, but it cannot tell two static placements apart.
+
+Free Cam exists as a gameplay mode
 that possesses an authored `camera-seat-<n>` body
 (`WorldSeatModeState.CameraTarget`).
 
@@ -143,11 +161,33 @@ typed numbers and the grid the kernels can already draw is never switched on.
    grid while another plays; this is the per-view lever work the
    [rendering plan's P14-8 follow-up](rendering.md#p14--the-sdf-engine-as-a-pass-package)
    also needs, and whichever lands first owns it.
-4. **`world.grid` and `world.snap`.** `world.grid on|off|pitch <x> [<z>]` and
-   `world.snap on|off|angle <degrees>|surface on|off|reference <placement>|clear`,
+4. **A grid on the ground being worked on.** The kernel work that makes the
+   grid appear where the builder is building, replacing the fixed
+   0.02-of-`gridFloorY` test in `sdf-light-stage.hlsli` and `applyObjectGrid`:
+   - *The working plane.* The world grid draws on a horizontal plane at the
+     working height, which follows the surface under the pointer when the grid
+     is set to follow, the selection's base, or a height set with
+     `world.grid plane <y>`. The band that counts as "on the plane" scales with
+     the pitch and the pixel footprint at that distance, so the lines neither
+     vanish up close nor shimmer far away.
+   - *The surface-projected grid.* In `surface` mode the lattice is drawn on
+     every surface a view hits, projected along the surface normal: the XZ
+     lines on floors and platforms at any height, the XY or ZY lines on walls,
+     and a blend weighted by the normal on slopes, fading at grazing angles.
+     The lines are the world lattice's, so a line on a ramp meets the same
+     line on the floor at the ramp's foot.
+   - *The object grid.* The reference's lattice draws on the reference's own
+     faces and on the surface under it, inside its patch radius, rather than
+     only on the floor plane.
+   - New pass-block values (the plane height, the mode, the band scale) are
+     rows in `SdfWorldPackage.Values`, written by `SdfFrameBlock` and
+     regenerated into the interface with `puck shaders generate`, with
+     `SdfFrameBlockLawTests` moving with them.
+5. **`world.grid` and `world.snap`.** `world.grid on|off|pitch <x> [<z>]|plane <y>|follow|surface`
+   and `world.snap on|off|angle <degrees>|surface on|off|reference <placement>|clear`,
    both bindable (a toggle and a pitch step as constant values), both echoing
    the seat's whole state when given no argument.
-5. **Snapping in placement editing.** `world.place <prototype> [<id>]` places at
+6. **Snapping in placement editing.** `world.place <prototype> [<id>]` places at
    the surface under the seat's pointer, or ahead of its camera when the pointer
    hits nothing. `world.nudge <placement> <axis> <steps>` moves a placement by
    whole grid steps and `world.turn <placement> <steps>` turns it by whole angle
@@ -162,8 +202,10 @@ typed numbers and the grid the kernels can already draw is never switched on.
 **Touches:** `Puck.World.Schema` (the `editor` section, validator, schema
 output), `Puck.World.Client` (`WorldContextFamilies`, `WorldSeatBindings`,
 `WorldFramePresenter`, a per-seat editor state), `Puck.World.Authoring`
-(`GridSnap`), `Puck.SdfVm` (`GridOverlayState`, `SdfFrame`), a new editor
-command module in `src/Puck.World`, the shipped worlds, and the World guide.
+(`GridSnap`), `Puck.SdfVm` (`GridOverlayState`, `SdfFrame`, `SdfFrameBlock`,
+`shade/sdf-surface-shading.hlsli`, `shade/sdf-light-stage.hlsli`),
+`Puck.Shaders` (`SdfWorldPackage.Values`), a new editor command module in
+`src/Puck.World`, the shipped worlds, and the World guide.
 
 **Check:** `GridSnapLawTests` (world lattice per axis, a free axis at zero
 pitch, the magnetize release band, 24 orientations at 90 degrees, face and
@@ -174,8 +216,13 @@ that a seat in `build` with the grid on renders a frame carrying exactly its
 `GridOverlayState` and a seat in `play` renders none (red leg: the grid on
 while in `play`); placement-verb laws through the real command registry (a
 nudge lands exactly one pitch away, then `world.undo` restores it; a surface
-place rests on the fixture floor). Canary `editor-grid`: an offscreen capture
-of a floor region differs with the grid on and agrees with the grid off.
+place rests on the fixture floor); `SdfFrameBlockLawTests` for the new
+values. Canary `editor-grid`, over a fixture with a floor, a raised platform, a
+ramp and a wall: with the grid on the working plane at the platform's height,
+the platform's region shows grid pixels and the floor's does not; in `surface`
+mode all four regions show them; with the grid off each region agrees with a
+grid-free capture (the red leg). Pixels are the honest check here, since the
+lines exist only in the image.
 
 **Depends on:** nothing.
 
@@ -192,39 +239,86 @@ names a placement id they had to look up.
    `OverlayChannelLeases`. A world-space polyline projects through the seat's
    viewport camera, the way `MarkerWriter` projects a point, and clips to the
    viewport.
-2. **Pointer picking.** The pointer's display point becomes a ray through
-   `SourceRay.Through` over `WorldSeatViewports`, as `WorldPointerRayCapture`
-   does, but the ray stays in presentation and is never sustained into the
-   command plane. It is cast against the client's static field and the drawn
-   bodies. A nearest-instance query on `SdfFieldEvaluator` and the stamper's
-   instance-to-placement registration turn the hit into a placement. In build
-   mode the cursor's hover label names the placement under the pointer.
-3. **A per-seat selection.** `world.select pointer|<id>…|add <id>|toggle <id>|clear|prototype <name>|box`
+2. **An identity for every drawn instance.** The visibility record's SDF
+   source changes from "frame slot plus one" to "the winning instance's program
+   ordinal plus one" (at most `SdfProgramBuilder.MaxInstances`, 65536, inside
+   the 30 source bits), so a static placement's hit packs as `0x40000000 | (ordinal + 1)`
+   rather than the shared `0x40000000`. Source 0 of kind SDF keeps meaning
+   geometry outside any instance, and background stays 0. The winner already
+   travels through `mapCore`'s and `mapGradCore`'s winner resolution as
+   `frameSlot`; the instance ordinal travels the same way, and readers that need
+   the frame slot (`sdfVisibilityFrameSlot`, the surface sample) read it from
+   the instance's row. Whether the ordinal travels beside `frameSlot` or
+   replaces it is settled by the kernels' register use and disassembly, since
+   every `map*` call site is a full copy of the interpreter. The host keeps a
+   table from instance ordinal to placement (a scope-free creation emits one
+   instance per shape, so many ordinals name one placement), rebuilt with the
+   program. A mesh hit's source stays its draw, and the mesh draw table names
+   the placement a baked draw stands for. The `visibility` debug view colors by
+   the new source.
+3. **Pointer picking, two paths.** The pointer's display point becomes a ray
+   through `SourceRay.Through` over `WorldSeatViewports`, as
+   `WorldPointerRayCapture` does, but the ray stays in presentation and is never
+   sustained into the command plane.
+   - *The GPU path* picks everything the builder sees: a one-pixel readback of
+     the visibility record under the pointer, once per frame while build mode
+     is on and the pointer moves, gives the identity, the ray parameter `t`
+     and the material, and the host table turns the identity into a
+     placement. It covers non-solid placements, shapes and ops the CPU
+     evaluator refuses, stamped bodies and baked meshes. The readback is the
+     same one the [rendering plan's GPU picking](rendering.md#p13--hit-to-source-mapping-and-input-destinations)
+     needs; whichever lands first owns it, and it is counted in the view's
+     work ledger. Its answer arrives a frame or two late, which a hover label
+     tolerates.
+   - *The CPU path* answers on the frame it is asked, from the client's static
+     field: exact hit points and normals for surface snapping and measuring
+     (E1, E3) wherever the field exists. It never decides what was picked when
+     the GPU path has an answer.
+   In build mode the cursor's hover label names the placement under the
+   pointer.
+4. **A per-seat selection.** `world.select pointer|<id>…|add <id>|toggle <id>|clear|prototype <name>|box`
    (`box` selects every placement whose bounds fall inside a dragged
    rectangle), with bindable forms for pointer, add, clear and cycle.
    `world.selection` echoes each selected id, prototype, bounds and pivot. A
    removed row leaves the selection.
-4. **Highlight.** Each selected placement draws its oriented bounds, its pivot
+5. **Highlight.** Each selected placement draws its oriented bounds, its pivot
    and its id through the line primitive; the hovered placement draws thinner.
-   An in-render tint waits for static placements to have their own visibility
-   identity (see [Decisions](#decisions)).
-5. **Verbs act on the selection.** E1's `world.nudge` and `world.turn`, and
+   With per-instance identities in the record, the views pass also tints and
+   outlines the selected placement's pixels: the host writes the selected
+   ordinals into a small presentation table, and the views stage compares each
+   pixel's source against it, with an edge where a neighbouring pixel's
+   identity differs. A selection larger than the table falls back to bounds
+   alone and says so.
+6. **Verbs act on the selection.** E1's `world.nudge` and `world.turn`, and
    every later editing verb, act on the selection when no id is named.
 
 **Touches:** `Puck.Overlays` (`OverlayFrameBuilder`, the overlay kernel and its
 generated interface, `OverlayChannels`, `OverlayChannelLeases`),
-`Puck.SignedDistance` (`SdfFieldEvaluator`), `Puck.World.Client` (the stamper's
-registration, the selection, the cursor feed), `src/Puck.World` (the editor
-command module).
+`Puck.SignedDistance` (`SdfFieldEvaluator`), `Puck.SdfVm` (the visibility
+record, `mapCore`/`mapGradCore` winner payload, the primary and views stages,
+the instance table, the readback), `Puck.World.Client` (the stamper's
+registration, the ordinal-to-placement table, the selection, the cursor feed),
+`src/Puck.World` (the editor command module).
 
 **Check:** `OverlaySegmentLawTests` (records, viewport clipping, a steady frame
 allocating nothing) and `OverlayLeaseTableFitsBackstopsLawTests` moving with the
-new lease; `WorldEditorPickLawTests` (a ray through a known placement resolves
-its id, the nearer of two overlapping placements wins; red leg: a ray into the
-sky resolves none); `WorldEditorSelectionLawTests` (box selection, removal
-drops the id, the read-back). Canary `editor-selection`: selecting a placement
-by id puts accent pixels around it in an offscreen capture, and clearing the
-selection removes them.
+new lease. `WorldEditorPickLawTests` over a fixture holding both kinds of
+geometry: a solid, query-compatible placement, and a placement the CPU cannot
+answer for (no `solid` facet, plus one using a warp op so the static field is
+null). The CPU path resolves the first by id and the nearer of two overlapping
+placements wins; the host table maps each ordinal a scope-free creation emits
+back to its one placement; red leg: a ray into the sky resolves none. A device
+pick law on both backends (in `tests/Puck.World.Tests`, beside the other device
+laws) reads back the pixel under each fixture placement and resolves both
+kinds, two static placements to two different ids; red legs: a background
+pixel reads 0, and with the ordinal forced to the old frame-slot source both
+static placements read `0x40000000` and the law fails.
+`WorldEditorSelectionLawTests` (box selection, removal drops the id, the
+read-back). Canary `editor-selection`: selecting the non-solid placement by
+pointer puts accent pixels on it and around it in an offscreen capture, and
+clearing the selection removes them. With build mode off, `world.counters gpu`
+reads the same per-pass counts before and after the package, so the readback
+costs nothing outside the editor.
 
 **Depends on:** E1 for build mode's binding group.
 
@@ -235,20 +329,28 @@ what they made, and cannot tell how far apart two things are.
 
 **Delivers:**
 
-1. **Redo.** `world.redo [n]` re-applies the mutations the last undo removed,
-   through the same apply path. The undone tail is kept until a new mutation
-   applies, which clears it; `host.journalDepth` bounds it; a load or reload
-   clears it. `world.undo` and `world.redo` become bindable, checked at
-   dispatch under the pressing seat's principal as `world.reload` is, and
-   `world.status` echoes both depths.
+1. **Undo and redo per principal.** `world.undo [n]` undoes the acting
+   principal's own last n edits, not whoever edited last, so two people
+   building one world never undo each other's work. `world.redo [n]` re-applies
+   what that principal's undo removed. Both run through the same apply path.
+   An undo or redo is refused by name, naming the row and the other principal,
+   when a later edit by someone else touched a row it would change; nothing is
+   partly applied. A principal's redo tail is cleared by that principal's next
+   edit, bounded by `host.journalDepth`, and cleared by a load or reload.
+   `world.undo` and `world.redo` become bindable, checked at dispatch under the
+   pressing seat's principal as `world.reload` is, and `world.status` echoes the
+   acting principal's undo and redo depths.
 2. **One gesture, one step.** Every editor gesture is one journal entry: a
    gesture over several rows submits one `WorldMutation.Batch`, and a drag
    ([E7](#e7--gizmos-and-pointer-dragging)) commits once on release.
-3. **Duplicate, delete, copy and paste.** `world.duplicate [<offset>]` copies
-   the selection as new rows offset by one grid step and selects the copies;
-   `world.delete` removes the selection; `world.copy` and `world.paste` keep a
-   session clipboard of rows and paste at the pointer, snapped. Each is one
-   batch. How a copy is named is an [open decision](#open-decisions).
+3. **Duplicate, delete, copy and paste.** `world.duplicate [<offset>] [<name>…]`
+   copies the selection as new rows offset by one grid step and selects the
+   copies; `world.delete` removes the selection; `world.copy` and `world.paste
+   [<name>…]` keep a session clipboard of rows and paste at the pointer,
+   snapped. Each is one batch. A copy takes the names given; without them its
+   id is minted through `GeneratedName` (such as `crate$2`), which no author can
+   spell. `world.rename <id> <name>` gives any placement an authored id,
+   rewriting the rows that name it in the same batch.
 4. **Measure.** `world.measure` between the pointer's next two hits, or between
    two selected pivots, echoes the distance, its three components and the
    angle, and draws a labelled segment until `world.measure clear`.
@@ -257,11 +359,16 @@ what they made, and cannot tell how far apart two things are.
 `WorldJournalEntry`), `Puck.World.Protocol` (`IServerLink`), the mutation
 command module, the editor command module.
 
-**Check:** `WorldRedoLawTests` (undo n then redo n restores the pre-undo
-document hash; a mutation applied after an undo leaves nothing to redo, refused
-by name; the journal horizon refuses by name); `WorldEditorDuplicateLawTests`
-(one batch, one undo removes every copy, ids stay unique); a measure law over
-two fixture placements (red leg: one hit measures nothing).
+**Check:** `WorldUndoRedoLawTests` (undo n then redo n restores the pre-undo
+document hash; the principal's own edit after an undo leaves nothing to redo,
+refused by name; the journal horizon refuses by name). Two principals, A and B,
+edit different rows, and A's undo reverts only A's edit (red leg: the
+whoever-edited-last undo reverts B's); B then edits a row A's next undo would
+change, and A's undo is refused by name, naming the row and B, with the
+document unchanged. `WorldEditorDuplicateLawTests` (one batch, one undo removes
+every copy, ids stay unique, an unnamed copy's id is a `GeneratedName`, and
+`world.rename` rewrites every row that names it); a measure law over two
+fixture placements (red leg: one hit measures nothing).
 
 **Depends on:** E2.
 
@@ -521,16 +628,17 @@ changed back into that source through the transpiler's printer, keeping `let`s,
 templates, comments and formatting outside those rows byte for byte. A row a
 template or a compile-time `for` generated is refused by name, naming the
 construct that made it, and the refusal offers a JSON delta with the source as
-its basis instead (the delta save `world.save` already makes). The approach is
-an [open decision](#open-decisions).
+its basis instead (the delta save `world.save` already makes). A row whose id
+was minted through `GeneratedName` is refused by name until `world.rename`
+gives it an authored id, since a `.puck` source cannot spell a generated name.
 
 **Touches:** `Puck.World.Transpiler` (printer and decompiler),
 `Puck.Transpiler`, the mutation command module (`world.save`).
 
 **Check:** a round-trip law over a sample source: edit a placement live, save,
 compile again, and the lowered document equals the live one while every
-untouched byte is unchanged; red leg: an edit to a loop-generated row is
-refused by name.
+untouched byte is unchanged; red legs: an edit to a loop-generated row is
+refused by name, and so is a duplicate saved before it is renamed.
 
 **Depends on:** E3.
 
@@ -543,28 +651,42 @@ document.
 
 **Delivers:** a shipped tool world, `sdf-gallery.puck`, beside the other tool
 worlds in `src/Puck.World/Assets/worlds/tools/`, with a companion `.md` as
-`shader-compare.puck` has. It authors every primitive, each blend family as a
-pair, the domain operations, and the scoped and flat field-op contrast as two creations, browsed with build
-mode, selection, the debug views, the editor camera and `world.explain`.
-`world.isolate on|off` stamps only the selection, in presentation, which
-replaces the takeover's single subject. `src/Puck.SdfVm/Debug` is deleted in the
-same change, with the comments in `SdfCameraRig` that cite it. The carve
-drawing `SdfCarveBakePlanner` borrows from `SdfDebugRenderer.EmitCarve` moves
-into the planner if [E13](#e13--carving-and-the-brick-bake) keeps it, or goes
-with it.
+`shader-compare.puck` has. It is browsed with build mode, selection, the debug
+views, the editor camera and `world.explain`, and `world.isolate on|off` stamps
+only the selection, in presentation, in place of the takeover's single subject.
+Once the parity below holds, `src/Puck.SdfVm/Debug` is deleted in the same
+change, with the comments in `SdfCameraRig` that cite it, and the carve drawing
+`SdfCarveBakePlanner` borrows from `SdfDebugRenderer.EmitCarve` moves into the
+planner, which [E13](#e13--carving-and-the-brick-bake) keeps.
 
-**Touches:** `Puck.SdfVm` (the deletion), `src/Puck.World/Assets/worlds/tools`,
-`Puck.World.Client` (the isolate filter), the rendering handbook pages that
-describe the debug scene.
+**Completion condition: parity with what `Puck.SdfVm.Debug` offers.** The
+directory may be deleted only when each of these has a replacement a builder
+can use in a running World:
 
-**Check:** the eclipse check recorded in the commit: `puck references` finds no
-caller of `Puck.SdfVm.Debug` outside the deleted directory. The gallery source
-passes `ShippedSourceLintLawTests`; an isolate law holds that the frame emits
-only the selection's instances (red leg: an empty selection emits the whole
-world, not nothing); the gallery boots and captures offscreen.
+| `Puck.SdfVm.Debug` offers | Replacement |
+|---|---|
+| Shape browsing: every `SdfDebugShapeKind`, parameter overrides, and the 2D family's revolve and extrude lift (`SetShape`, `SetLift`) | One gallery creation per shape and lift, selected and isolated; parameters edited live with `world.row.step` |
+| Op browsing: the point and field op stack (`PushOp`, `PopOp`, `ClearOps`), blend choice with its smoothing (`SetBlend`), the scoped and flat accumulator contrast (`SetScope`) and the floor toggle (`SetFloor`) | Gallery rows for each domain op, each blend family as a pair and the scoped and flat contrast as two creations; ops and blends changed live through row edits on the isolated creation |
+| The slice at an axis and offset (`SetSlicePlane`) | E4's `world.debug-view slice x\|y\|z [<offset>]` |
+| Analytic or finite-difference normals, the shadow cull and the grid cull (`SetFiniteDifferenceNormals`, `SetShadowCull`, `SetGridCull`) | E4's shading levers; the grid cull is either a lever there or shown to have no remaining consumer |
+| Carving: add, pop, clear, the pad carve chord, the meteor shower and the brick bake (`AddCarve`, `PopCarve`, `ClearCarves`, `StartMeteors`, `AdvanceBricks`) | E13's carve brush, `world.carve erase`, undo, and the bake over the world's brick pool; the meteor shower as a gallery row that authors a dense carve cluster |
+| The orbit camera, pan, zoom and pose (`SdfDebugController`, `SdfOrbitInput`, `PoseCamera`) | E8's editor camera |
+| The gallery tour: each `SdfGalleryExhibit` (`LiarSpiral`, `DrosteTunnel`, `CellJitterCreases`, `NotchHorizon`, `SmoothChain`, `WallpaperP4G`, `CarveCeiling`, `LogSphereRunDoc`, `DriftMonolith`) with its framing pose and plaque | One gallery area per exhibit with an authored camera, its plaque as a text screen or HUD panel, and a bindable next and previous exhibit through `view.override camera` |
 
-**Depends on:** E1, E2, E4 and E8, since the replacement must be usable before
-the old scene is deleted.
+**Touches:** `Puck.SdfVm` (the deletion, `SdfCarveBakePlanner`),
+`src/Puck.World/Assets/worlds/tools`, `Puck.World.Client` (the isolate filter),
+the rendering handbook pages that describe the debug scene.
+
+**Check:** the parity table, each row demonstrated in the gallery world, with
+the evidence recorded in the commit that deletes the directory. The eclipse
+check: `puck references` finds no caller of `Puck.SdfVm.Debug` outside the
+deleted directory. The gallery source passes `ShippedSourceLintLawTests`; an
+isolate law holds that the frame emits only the selection's instances (red leg:
+an empty selection emits the whole world, not nothing); the gallery boots and
+captures each exhibit offscreen.
+
+**Depends on:** E1, E2, E4, E8 and E13, since every row of the parity table
+must be usable before the old scene is deleted.
 
 ### E13 — Carving and the brick bake
 
@@ -584,8 +706,7 @@ the world residency's brick pool as
 [the handbook](../rendering/sdf/handbook/bricks-and-baking.md#settle-bake-swap-and-invalidate)
 describes. `world.budget` prices carves and bricks, `world.cost` names a
 placement's carves, and `world.carves` echoes the carve count and the baked and
-analytic bins. Whether to build this or delete the bake is an
-[open decision](#open-decisions).
+analytic bins.
 
 **Touches:** `Puck.World.Schema`, `Puck.World.Server` (the static field),
 `Puck.World.Client` (`WorldFramePresenter`, the planner's host),
@@ -629,15 +750,39 @@ are never saved.
 anything, so `editor` is a built-in mode family beside `layout`, with its
 bindings in a default layer.
 
-**Overlay first, in-render highlight later.** Every static placement shares
-visibility identity 0, so the GPU cannot outline one of them. Bounds,
-highlight, gizmos and measurements are drawn with the overlay's line primitive.
-An in-render tint follows once the visibility record names static instances,
-which the rendering plan's GPU picking needs as well.
+**Every drawn instance has its own identity.** Today every static SDF hit packs
+as `0x40000000`, so the GPU cannot tell static placements apart. E2 makes the
+SDF source the winning instance's ordinal plus one and keeps a host table from
+ordinal to placement, which serves picking, the in-render highlight and the
+rendering plan's GPU picking alike. Bounds, pivots, gizmos and measurements are
+drawn with the overlay's line primitive either way.
 
-**Picking starts on the CPU.** The client's static field already answers
-`IWorldQuery.Raycast`, so picking works without a GPU readback and is testable
-by law. GPU picking is a later accelerator, not a prerequisite.
+**Picking has two paths, and the GPU decides.** The GPU readback sees what the
+builder sees, including non-solid placements and geometry the CPU evaluator
+refuses, so it decides what was picked. The CPU static field answers on the
+same frame with exact points and normals, so snapping and measuring use it
+wherever it exists.
+
+**The grid is drawn where the builder works.** A grid confined to one floor
+height fails on every platform, ramp and wall, so E1 carries the kernel work for
+a working plane and a surface-projected grid rather than leaving it for later.
+
+**Undo is per principal.** Two people building one world each undo their own
+edits, and an undo that would overwrite someone else's later edit to the same
+row is refused by name rather than applied.
+
+**Copies may be named; generated ids never reach source.** `world.duplicate`
+and `world.paste` take optional names, an unnamed copy gets a `GeneratedName`
+id, `world.rename` gives it an authored one, and a `.puck` save refuses a
+generated id by name.
+
+**A `.puck` save rewrites the touched rows in place.** A builder keeps one
+source file. The JSON delta over the source as its basis remains the fallback a
+refusal offers, never the default.
+
+**Carving is built.** Digging and carving are builder features with no other
+home, and the brick bake is what makes hundreds of carves affordable, so E13
+builds a carve brush whose dabs are document rows and feeds the bake from them.
 
 **The editor camera is a view override, not Free Cam.** Free Cam possesses a
 simulated camera body a world authors; the editor camera moves nothing in the
@@ -655,27 +800,5 @@ record this exception.
 presentation path beside the `sdf.world` views: a takeover that emits C#-built
 scenes the document never sees, with an orbit camera whose rates are baked
 constants. Everything it shows is expressible as a world document plus the
-editor's own tools, which E12 ships before deleting it.
-
-## Open decisions
-
-1. **Carve bake: build the producer or delete it.** Recommended: build it (E13).
-   Digging and carving is a builder feature with no other home, and the bake is
-   the mechanism that makes hundreds of carves affordable. If the lead declines
-   the brush, delete `SdfCarveBakePlanner`, the `sdf.bricks` bake pass, its
-   kernel and `SdfWorldTables.BrickBake.cs`'s request path together, keeping
-   the brick pool the height fields upload into.
-2. **Whose edit does undo undo?** `world.undo` removes the last applied
-   mutations whoever made them. In a world two people build together, that
-   undoes someone else's work. Recommended: undo and redo per principal, refused
-   by name when a later edit by someone else touched the same row.
-3. **How a copy is named.** The rule that engine-minted names go through
-   `GeneratedName` gives a duplicate an id like `crate$2`, which a `.puck`
-   source cannot spell. Recommended: `world.duplicate` takes optional names;
-   without them it mints through `GeneratedName`, `world.rename` gives a copy an
-   authored name, and a `.puck` save (E11) refuses a generated id by name until
-   it is renamed.
-4. **How edits reach a `.puck` source.** Recommended: rewrite the touched rows
-   in place (E11). The alternative is to keep the source untouched and save a
-   JSON delta with the source as its basis, which works today but leaves a
-   builder with two files that must travel together.
+editor's own tools. The directory is deleted only once E12's parity table
+holds, so no capability is lost on the way.

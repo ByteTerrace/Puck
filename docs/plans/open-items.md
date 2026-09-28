@@ -121,7 +121,7 @@ Every package below carries its own check on the programme page; tick it there a
 - [x] P10 bound rows reaching a pass: the `parameter` and array statements, the deterministic tick, the capture's tick verdict, pricing, and tiers.
 - [x] P11 the frame graph document (`puck.render.graph.v1`), views as graph instances scheduled by demand, and self-reference through the previous frame.
 - [x] P12 image sources: uploaded, imported, and rendered transports, content classes, producer registration, shared conversion passes, and every `WorldScreenSource` kind migrated (every P12b step landed, and the `uploaded-sources` canary checks the unbound glass, a session screen, an opened capture and a `text` screen's drawn text; P12b-4's recorded camera run is deferred to the end).
-- [ ] P13 hit-to-source mapping published as data, with simulation, host passthrough, and presentation destinations, and passthrough only for local-user sources (P13b steps 1, 2, 4, 5 and 6 and step 3's CPU half landed, step 2 with a machine's light gun reading the mapped pointer, step 5 with the GPU drawing every screen from its mapping, and step 6 with a pick through a portal's window reaching the destination's surface, checked by the `portal-window` canary; GPU picking remains).
+- [ ] P13 hit-to-source mapping published as data, with simulation, host passthrough, and presentation destinations, and passthrough only for local-user sources (P13b steps 1, 2, 4, 5 and 6 and step 3's CPU half landed, step 2 with a machine's light gun reading the mapped pointer, step 5 with the GPU drawing every screen from its mapping, and step 6 with a pick through a portal's window reaching the destination's surface, checked by the `portal-window` canary; GPU picking remains, and shares its per-instance identity and one-pixel readback with the [editor plan's E2](editor.md#e2--selection-picking-and-highlight)).
 - [x] P14 the SDF engine as a pass package: the capability matrix, the generated frame block, the HLSL module tree, staged shading, float working targets, and the retirements (steps 1 to 13 landed: every SDF view is an `sdf.world` instance of the render graph whose passes the planner orders and barriers, over one generated pass block, a layered kernel tree, one kernel table and the pass-pipeline cache; the capability matrix law, the ISA handshake and the field-per-kernel kernel record are gone).
   - [ ] P14 counted-cost ceilings, built as P15-1: march steps and texels written as `GpuWork` kinds each kernel counts, and calibrated per-pass ceilings, with required zeros for passes that do no such work or are skipped, over `puck counters`' pinned workload that a change may not exceed, as P14's check states. Neither exists yet.
   - [ ] Checks for the capability rows the matrix law held without one: the live program report, render scale, decals, the glyph atlas, volumes, the shading levers, debug views, the grid overlay and brick baking. The [editor plan](editor.md) supplies four of them: E1 the grid overlay, E4 the debug views and shading levers, E13 brick baking.
@@ -154,7 +154,7 @@ Every package below carries its own check on the programme page; tick it there a
 Every package below carries its own check on the programme page; tick it there and here in the same change.
 
 - [ ] E1 build mode, the grid and snapping (startable today).
-- [ ] E2 selection, picking and highlight.
+- [ ] E2 selection, a visibility identity per drawn instance, GPU and CPU picking, and highlight.
 - [ ] E3 undo, redo, duplicate, delete and measure.
 - [ ] E4 debug views everywhere (startable today).
 - [ ] E5 the inspector.
@@ -164,5 +164,5 @@ Every package below carries its own check on the programme page; tick it there a
 - [ ] E9 cost per object and GPU pass timing (startable today).
 - [ ] E10 live reload and before-and-after.
 - [ ] E11 save edits back to source.
-- [ ] E12 the shape gallery as a world, retiring `Puck.SdfVm.Debug`.
-- [ ] E13 carving and the brick bake, pending the lead's decision.
+- [ ] E12 the shape gallery as a world, retiring `Puck.SdfVm.Debug` once the gallery reaches parity with it.
+- [ ] E13 carving and the brick bake: a carve brush whose dabs are document rows.
