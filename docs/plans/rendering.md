@@ -4623,15 +4623,15 @@ counted rows recorded in the same change.
    - Counted-cost gate: the counter buffer's own cost, one clear, one copy and
      their barriers per instance a frame, is the first row recorded, and every
      other P14 pass's ceiling is recorded beside it.
-   - Status: built. Every pass that marches or writes texels counts both kinds
+   - Status: landed. Every pass that marches or writes texels counts both kinds
      in its shaders: the SDF passes, the mesh pass, `place`, the overlay, the
      source conversions and every post-process package. A pass the frame skips
      counts as skipped. `puck counters --check` and `--record` hold the report
      to `puck.counters.ceilings.v1`. The `kernel-counters` canary holds a
      volume's steps doubling with its samples and a post pass counting one texel
-     a pixel. What remains is the ceilings file recorded on the RTX 2060 at the
-     floor tier, and `--check` shown there failing on a raised count and a
-     broken zero.
+     a pixel. `tests/Puck.Counters/counters.ceilings.json` is recorded on the
+     RTX 2060 at the floor tier, and `--check` holds it there and fails on a
+     raised count and on a broken required zero.
 2. **P15-2, jitter and history epochs.** The temporal contract, with
    reconstruction still off by default.
    - Delivers: the `jitter` and `historyFrames` pass-block values, the Halton
