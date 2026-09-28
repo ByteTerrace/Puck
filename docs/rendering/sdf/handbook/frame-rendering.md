@@ -295,15 +295,19 @@ take, one for each field evaluation of a march or a query and for each sample of
 a bounded volume, and the texels they write, one for each pixel whose output
 they write (an image texel, or any word of a pixel's visibility record, so a
 stage that returns before it stores counts nothing) and, in the mesh pass, one
-for each fragment. The root graph's `place` passes count the texels they write
-the same way. Each wave sums its lanes' counts and adds them
-with one atomic into the pass's row of the node's kernel counters, which the
-node clears ahead of the view's first pass and copies to the frame slot's
-readback behind its last; the counts join the pass's line once the submission
-completes, as `march.steps` and `texels.written`. The marches run in floats and
-an indirect pass runs only the tiles culling leaves it, so these counts are per
-backend deterministic. The clear, the copy and their two barriers count outside
-every pass. A view the cadence gate finds unchanged is not rendered at
+for each fragment. The root graph's `place` passes, the overlay, the source
+conversions and the post passes count the texels they write the same way. Each
+wave sums its lanes' counts, a fragment stage's over the lanes that are not
+helper lanes, and adds them with one atomic into the pass's row of the node's
+kernel counters, which the node clears ahead of the view's first pass and
+copies to the frame slot's readback behind its last; the counts join the pass's
+line once the submission completes, as `march.steps` and `texels.written`. The
+marches run in floats and an indirect pass runs only the tiles culling leaves
+it, so these counts are per backend deterministic. The clear, the copy and their
+three barriers (after the clear, before the copy, and from the copy to the host)
+count outside every pass. A pass the frame skips, such as the ambient and
+shadow passes at a tier that turns them off, is reported as skipped, not as a
+pass that ran and counted nothing. A view the cadence gate finds unchanged is not rendered at
 all: the render graph keeps its latest output, and its passes record nothing.
 Counts are published only once the GPU has finished the submission, so
 `world.counters gpu` shows the newest completed frame.
