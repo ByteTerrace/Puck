@@ -1083,7 +1083,7 @@ explanation is [Qualifying a package](../../../docs/development/qualification.md
 
 ## World render data
 
-`WorldFramePresenter` re-reads `render.lighting`, `render.sky`, `render.cycle`,
+`WorldFramePresenter` re-reads `render.lighting`, `render.sky`,
 `render.environment`, `render.tonemap`, and `render.farDistance` from the live
 definition every frame, so a `world.row.set render …` lands on the next frame
 without a program rebuild; `render.tonemap` reaches the root graph
@@ -1094,6 +1094,16 @@ pass-block value (`SdfWorldPackage.Values`, written by `SdfFrameBlock`, generate
 into `sdf-world.interface.hlsli` by `puck shaders generate`), and its shader
 consumer in the same change. What a document field means belongs to
 `puck-world`.
+
+`WorldEnvironmentResolve` shares `WorldValueResolver` with camera and theme
+values. Its cache records only state slots and clocks actually read.
+`WorldPresentationRates` compiles keyed sky rates once per immutable world;
+frames evaluate only the active integral piece. `SdfEnvironment` carries
+resolved cloud offsets, rotation and twinkle phase. `SdfFrameBlock.BakeEnvironment`
+copies these lanes without a second integration; bounded media still use
+`SdfVolumeMotion` and the frame clock. The `world.timeline` counter source
+reports actual resolves and analytic evaluation work through the existing
+primary/routed/session counter forwarder.
 
 Every state read reaches a program, a decal or a pass through the state
 mirror, never through the document. A color a build bakes (a palette's surface,

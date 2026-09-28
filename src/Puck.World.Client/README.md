@@ -223,7 +223,7 @@ separate constraint on dense populations; reusable appearances do not remove it.
   each seat's own reads (`WorldPresentationManifest.SeatBindings`, which
   `WorldSeatBindings` registers on the seat's routed mirror), and an install
   retires what only the previous document registered. The HUD resolver, camera
-  rigs, markers, render and theme colors, the render cycle, the binding bar,
+  rigs, markers, render and theme values, presentation clocks, the binding bar,
   the radial wheel and overlay predicates only look slots up
   (`WorldStateMirror.SlotOf`), which registers and reads nothing, and look them
   up again when `WorldStateMirror.Generation` moves. `WorldClient.DeliverState` refreshes the slots the delivery's
@@ -260,6 +260,12 @@ separate constraint on dense populations; reusable appearances do not remove it.
   use to repack only what moved (see `SdfMovedTransforms` in `Puck.SdfVm`).
 
 ## Camera programs
+
+`WorldEnvironmentResolve` and `WorldThemeResolve` cache only their used state
+slots and clocks through `WorldValueReadSet`. Their numeric field guards retain
+the admitted definition's initial values and report invalid/recovered transitions
+through the shared presentation diagnostic formatter. Active diagnostics remain
+available to the inspector; repeated unchanged inputs add no domain work.
 
 - `WorldCameraRigCompiler.cs` translates an authored `WorldCameraProgram` into
   the document-blind IR in `Puck.SdfVm.Views` and returns an

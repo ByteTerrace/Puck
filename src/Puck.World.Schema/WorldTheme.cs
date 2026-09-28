@@ -31,8 +31,8 @@ public sealed record WorldThemeBloomHue(BindableColor Ring, BindableColor Halo) 
 }
 /// <summary>One scrim's fill color plus its own alpha, split apart so a world can retheme opacity independent of
 /// hue — the two knobs a scrim (a translucent panel/strip/chip backing) actually varies. <see cref="Alpha"/> is
-/// clamped to <see cref="WorldThemeCapacity.ScrimMinAlpha"/> at resolve time when it is a state binding (see
-/// <see cref="WorldDefinitionValidator"/>'s theme validation for the literal-authoring floor).</summary>
+/// admitted at or above <see cref="WorldThemeCapacity.ScrimMinAlpha"/> for literals and initial bindings. Subsequent
+/// closed-bound violations clamp through <see cref="WorldValueDomainGuard"/>.</summary>
 /// <param name="Color">The scrim's opaque fill color.</param>
 /// <param name="Alpha">The scrim's opacity, in <c>[0, 1]</c>.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -466,6 +466,9 @@ public sealed record WorldThemeSection(
     WorldThemeIcon Icon,
     WorldThemeChrome Chrome
 ) {
+    /// <summary>Partial-record keys for the theme's bindable leaves.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldSectionKeys? Keys { get; init; }
     /// <summary>Gets the inert absence — a fully zeroed token block (no authored theme, no chrome). The engine holds
     /// no theme of its own: the standard "Instrument + grafts" recipe is AUTHORED, in
     /// <c>Assets/worlds/standard.world.json</c>, and a world inherits it by naming that document as its basis.</summary>

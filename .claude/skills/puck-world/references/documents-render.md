@@ -12,9 +12,9 @@ inert section. The boot levers (`shadows`, `shadowCrowdRadius`,
 `high` presets) seed `WorldRenderSettings` once at boot and move only through
 their verbs afterwards; `world.save` folds a moved lever back into the section
 when the world authors one (`WorldSessionLevers.Fold`), and never writes a
-`render` section the world omits. Three members are read off the LIVE definition every frame instead,
+`render` section the world omits. Presentation members are read from the live definition instead,
 so `world.row.set render {…}` lands on the next frame with no rebuild:
-`lighting`/`sky`/`cycle` (`WorldRenderCycleTrack`) and `farDistance`
+`lighting`/`sky`/`environment` (`WorldEnvironmentResolve`) and `farDistance`
 (`WorldRenderFarDistance.Resolve`). `farDistance` is the depth every camera
 march ends at (the fine march's far exit, the beam's cone proofs, the fog and
 depth ramps' reach): nullable, absent resolves to the engine's pinned 40
@@ -33,7 +33,7 @@ remnant `exp(−fogDensity·far)` at the far plane. Renderer contract:
 
 `environment` (`WorldRenderEnvironment`, optional) and `tonemap`
 (`WorldTonemap` {`none`, `filmic`}, optional) are also read off the LIVE
-definition every frame, alongside `lighting`/`sky`/`cycle`; a `tonemap` change
+definition every frame, alongside `lighting`/`sky`; a `tonemap` change
 recomposes the synthesized root graph. `environment`
 carries `softboxes[]` (≤ `SdfEnvironment.MaxSoftboxes` 4 of `direction`,
 `size` [w, h], `color`?, `weight`?, `blur`?) and `horizon` ({`low`?, `high`?})
@@ -50,8 +50,9 @@ Renderer contract: `rendering` skill sync pairs, the `SdfEnvironment` rows;
 the tonemap is the root graph's view place passes, not an environment row.
 
 `lighting` (`WorldRenderLighting`, optional) carries `lights[]` (at most
-`SdfEnvironment.MaxLights` 8, in slot order — a `render.cycle` key moves a
-light by its slot and may not add, remove, or retype one) and `curvature`.
+`SdfEnvironment.MaxLights` 8, in slot order) and `curvature`. Partial-record
+keys address existing rows by their authored names; they cannot add, remove,
+retype, or change the shadow ownership of a light.
 Each light's `$type` union:
 
 | `$type` | Carries |
@@ -59,22 +60,29 @@ Each light's `$type` union:
 | `directional` | `direction`, `color`, `weight`, `angularRadius`, `shadows` — at most one shadowing light per world |
 | `hemisphere` | `color`, `base`, `gradient` |
 | `rim` | `color`, `weight`, `power` — a view-dependent silhouette brighten added after the material shade |
-| `point` | `position`, `radius`, `color`, `weight`, optional `anchor` — inverse-square falloff with a soft core (`intensity = weight / (1 + (distance / radius)^2)`); lambert diffuse plus the material's GGX specular from the light's own direction, both scaled by ambient occlusion like every non-shadow light; no shadow march, and refused alongside `render.cycle` (its position lane cannot ride the arc interpolation every other light's direction lane takes) |
+| `point` | `position`, `radius`, `color`, `weight`, optional `anchor` — inverse-square falloff with a soft core (`intensity = weight / (1 + (distance / radius)^2)`); Lambert diffuse plus the material's GGX specular from the light's own direction, both scaled by ambient occlusion like every non-shadow light; no shadow march |
 
-A point light's `anchor` is a `WorldAnchor.Placement` only (every other anchor
-kind is refused by name): its position then rides that placement's — or, with
-`shapeId`, one of the placement's creation shapes' — dynamic transform every
-frame instead of the authored `position`, so the light follows the placement.
-Resolved in `WorldFramePresenter` (`WorldStampPool.TryShapeTransformSlot`),
-fresh every produced frame. Renderer contract: `rendering` skill sync pairs, the
-`SdfEnvironment` rows.
+A positional light's `anchor` may name an entity, entity part, or placement.
+The resolved anchor pose transforms the authored position offset each frame;
+an unavailable anchor disables that light. Renderer contract: `rendering`
+skill sync pairs and the `SdfEnvironment` rows.
 
 `WorldRenderLight.Occluder` uses ordinary light rows to attenuate nearby
 surface illumination. It declares `position`, positive `radius`,
 `weight`, and an optional entity, entity-part, or placement `anchor`.
 Anchors resolve each frame; unavailable anchors give weight zero.
-Point and Occluder positions interpolate linearly through render cycles.
+Point and Occluder positions interpolate linearly through typed clock keys.
 `world.lighting` reads back the authored light definitions.
+
+Continuous render fields use the same literal/state/clock-key grammar as
+camera and theme values. Section keys carry omitted leaves through the wrap
+and identify rows by name. `WorldPresentationValues` prepares section keys;
+`WorldValueResolver` owns type-specific interpolation. `WorldPresentationRates`
+compiles sky rate integrals once per immutable world, refusing history-dependent
+state rates. A smooth rate admits at most three nested smooth phase clocks;
+ordinary keyed values are unrestricted. The shader receives already-integrated
+offsets and phase. The World README owns the authoring examples and the
+rendering plan records numerical and storage bounds.
 
 `CreationDocument.PaletteSize = 16` bounds `puck.creation.v1`'s `palette`
 array. Each `PaletteEntryDocument` entry: `color` (`#RRGGBB` or a

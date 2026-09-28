@@ -44,15 +44,6 @@ public readonly record struct SdfLight(SdfLightKind Kind, Vector3 Direction, Vec
 /// <param name="Size">The angular half-extent proxy (width, height) the falloff widens by.</param>
 /// <param name="Blur">Additional falloff softening, in the same units as <paramref name="Size"/>; 0 = none.</param>
 public readonly record struct SdfSoftbox(Vector3 Direction, Vector3 Color, float Weight, Vector2 Size, float Blur);
-/// <summary>How one environment lane interpolates between two keys of a cycle.</summary>
-public enum SdfEnvironmentBlend : byte {
-    /// <summary>Linear.</summary>
-    Lerp = 0,
-    /// <summary>The first lane of a unit-direction triple, interpolated along the arc.</summary>
-    Direction = 1,
-    /// <summary>Held from the earlier key (a count, a kind, a seed, a flag).</summary>
-    Hold = 2,
-}
 /// <summary>The lit path's per-frame environment — every light, the stylization gains, and the sky — as one lane
 /// table every SDF pass block carries as float4 rows (<c>SdfFrameBlock.BakeEnvironment</c>, which also performs the host
 /// bakes noted per row). The kernels read the row indices generated from these constants (<c>SDF_ENV_*</c> in
@@ -68,11 +59,11 @@ public enum SdfEnvironmentBlend : byte {
 /// <item><term>27 sky control</term><description>x gradient stop count, y sun-disc light index (−1 none), z sun-disc angular radius in radians (uploaded as the baked <c>pow</c> exponent), w sun-disc intensity</description></item>
 /// <item><term>28 .. 31</term><description>gradient stop i: color.rgb, elevation in [−1, 1] (ascending)</description></item>
 /// <item><term>32 stars</term><description>density, brightness, seed, 0</description></item>
-/// <item><term>33 twinkle</term><description>share, depth, rate in hertz (uploaded as the phase of its period at the frame's presented tick), 0</description></item>
+/// <item><term>33 twinkle</term><description>share, depth, integrated phase in [0, 1), 0</description></item>
 /// <item><term>34 clouds A</term><description>color.rgb, coverage</description></item>
 /// <item><term>35 clouds B</term><description>softness, scale, seed, 0</description></item>
-/// <item><term>36 clouds C</term><description>drift.xy, shear.xy — rates in layer units per second (uploaded as offsets integrated on the tick clock)</description></item>
-/// <item><term>37 clouds D</term><description>spin rate in radians per second (uploaded as the integrated angle), curl, 0, 0</description></item>
+/// <item><term>36 clouds C</term><description>integrated drift.xy and shear.xy offsets, reduced by the cloud lattice period</description></item>
+/// <item><term>37 clouds D</term><description>integrated spin angle in radians, curl, 0, 0</description></item>
 /// <item><term>38 softbox control</term><description>x softbox count, 0, 0, 0</description></item>
 /// <item><term>39 + 3i .. 41 + 3i, i &lt; 4</term><description>softbox i: (direction.xyz, weight) (color.rgb, size.x) (size.y, blur, 0, 0)</description></item>
 /// <item><term>51</term><description>studio reflection horizon low (ground-ward) color.rgb, 0</description></item>
@@ -246,7 +237,7 @@ public sealed class SdfEnvironment {
         SetLane(
             lane: 2,
             row: TwinkleRow,
-            value: DefaultTwinkleRate
+            value: 0f
         );
         SetLane(
             lane: 0,
@@ -264,211 +255,6 @@ public sealed class SdfEnvironment {
         );
     }
 
-    // The arc between two directions. Antipodal directions have no unique arc; the one through +Y (then +X) is taken
-    // so a sun crossing from east to west passes overhead rather than through the ground.
-    private static Vector3 Slerp(Vector3 from, Vector3 to, float t) {
-        var a = ((from.LengthSquared() > 1e-12f)
-            ? Vector3.Normalize(value: from)
-            : DefaultSunDirection
-        );
-        var b = ((to.LengthSquared() > 1e-12f)
-            ? Vector3.Normalize(value: to)
-            : a
-        );
-        var cosine = Math.Clamp(
-            value: Vector3.Dot(
-                vector1: a,
-                vector2: b
-            ),
-            min: -1f,
-            max: 1f
-        );
-
-        if (cosine > 0.9995f) {
-            var linear = Vector3.Lerp(
-                amount: t,
-                value1: a,
-                value2: b
-            );
-
-            return ((linear.LengthSquared() > 1e-12f)
-                ? Vector3.Normalize(value: linear)
-                : a
-            );
-        }
-
-        if (cosine < -0.9995f) {
-            var pivot = ((MathF.Abs(x: a.Y) < 0.9f)
-                ? Vector3.UnitY
-                : Vector3.UnitX
-            );
-            var axis = Vector3.Normalize(value: Vector3.Cross(
-                vector1: a,
-                vector2: pivot
-            ));
-            var rotation = Quaternion.CreateFromAxisAngle(
-                angle: (MathF.PI * t),
-                axis: axis
-            );
-
-            return Vector3.Normalize(value: Vector3.Transform(
-                rotation: rotation,
-                value: a
-            ));
-        }
-
-        var angle = MathF.Acos(x: cosine);
-        var sine = MathF.Sin(x: angle);
-        var weightA = (MathF.Sin(x: ((1f - t) * angle)) / sine);
-        var weightB = (MathF.Sin(x: (t * angle)) / sine);
-
-        return Vector3.Normalize(value: ((a * weightA) + (b * weightB)));
-    }
-
-    /// <summary>Writes the arc interpolation of two lane spans into a third: every lane by its
-    /// <see cref="BlendOf"/> kind, the direction triples along the arc between their unit vectors.</summary>
-    public static void Blend(ReadOnlySpan<float> from, ReadOnlySpan<float> to, float t, Span<float> into) {
-        if (
-            (from.Length != LaneCount) ||
-            (to.Length != LaneCount) ||
-            (into.Length != LaneCount)
-        ) {
-            throw new ArgumentOutOfRangeException(
-                paramName: nameof(into),
-                message: $"Every span carries {LaneCount} lanes."
-            );
-        }
-
-        for (var index = 0; (index < LaneCount); index++) {
-            var row = (index / 4);
-            var kind = (((row >= LightsRow) && (row < (LightsRow + (MaxLights * RowsPerLight))))
-                ? (SdfLightKind)((byte)from[(((LightsRow + (((row - LightsRow) / RowsPerLight) * RowsPerLight)) * 4) + 7)])
-                : SdfLightKind.Directional
-            );
-
-            switch (BlendOf(
-                laneIndex: index,
-                lightKind: kind
-            )) {
-                case SdfEnvironmentBlend.Lerp: {
-                        into[index] = float.Lerp(
-                            value1: from[index],
-                            value2: to[index],
-                            amount: t
-                        );
-
-                        break;
-                    }
-                case SdfEnvironmentBlend.Direction: {
-                        var a = new Vector3(
-                            x: from[index],
-                            y: from[(index + 1)],
-                            z: from[(index + 2)]
-                        );
-                        var b = new Vector3(
-                            x: to[index],
-                            y: to[(index + 1)],
-                            z: to[(index + 2)]
-                        );
-                        var blended = Slerp(
-                            from: a,
-                            t: t,
-                            to: b
-                        );
-
-                        into[index] = blended.X; into[(index + 1)] = blended.Y; into[(index + 2)] = blended.Z;
-                        index += 2;
-
-                        break;
-                    }
-                default: {
-                        into[index] = from[index];
-
-                        break;
-                    }
-            }
-        }
-    }
-    /// <summary>Returns how a lane interpolates between two keys.</summary>
-    public static SdfEnvironmentBlend BlendOf(int laneIndex, SdfLightKind lightKind = SdfLightKind.Directional) {
-        var row = (laneIndex / 4);
-        var lane = (laneIndex % 4);
-
-        if (row == ControlRow) {
-            return ((lane == 3)
-                ? SdfEnvironmentBlend.Lerp
-                : SdfEnvironmentBlend.Hold
-            );
-        }
-
-        if (
-            (row >= LightsRow) &&
-            (row < (LightsRow + (MaxLights * RowsPerLight)))
-        ) {
-            var part = ((row - LightsRow) % RowsPerLight);
-
-            return (part switch {
-                0 when (lightKind is SdfLightKind.Point or SdfLightKind.Occluder) => SdfEnvironmentBlend.Lerp,
-                0 => ((lane == 0)
-                ? SdfEnvironmentBlend.Direction
-                : ((lane == 3)
-                    ? SdfEnvironmentBlend.Lerp
-                    : SdfEnvironmentBlend.Hold)),
-                1 => ((lane == 3)
-                ? SdfEnvironmentBlend.Hold
-                : SdfEnvironmentBlend.Lerp),
-                _ => ((lane == 0)
-                ? SdfEnvironmentBlend.Lerp
-                : SdfEnvironmentBlend.Hold),
-            });
-        }
-
-        if (row == SkyControlRow) {
-            return ((lane >= 2)
-                ? SdfEnvironmentBlend.Lerp
-                : SdfEnvironmentBlend.Hold
-            );
-        }
-
-        if (row == StarsRow) {
-            return ((lane >= 2)
-                ? SdfEnvironmentBlend.Hold
-                : SdfEnvironmentBlend.Lerp
-            );
-        }
-
-        if (row == (CloudsRow + 1)) {
-            return ((lane >= 2)
-                ? SdfEnvironmentBlend.Hold
-                : SdfEnvironmentBlend.Lerp
-            );
-        }
-
-        if (row == SoftboxControlRow) {
-            return SdfEnvironmentBlend.Hold;
-        }
-
-        if (
-            (row >= SoftboxesRow) &&
-            (row < (SoftboxesRow + (MaxSoftboxes * RowsPerSoftbox)))
-        ) {
-            var part = ((row - SoftboxesRow) % RowsPerSoftbox);
-
-            return (part switch {
-                0 => ((lane == 0)
-                ? SdfEnvironmentBlend.Direction
-                : ((lane == 3)
-                    ? SdfEnvironmentBlend.Lerp
-                    : SdfEnvironmentBlend.Hold)),
-                1 => SdfEnvironmentBlend.Lerp,
-                _ => ((lane <= 1)
-                ? SdfEnvironmentBlend.Lerp
-                : SdfEnvironmentBlend.Hold),
-            });
-        }
-
-        return SdfEnvironmentBlend.Lerp;
-    }
     /// <summary>Copies every lane from another environment.</summary>
     public void CopyFrom(SdfEnvironment source) {
         ArgumentNullException.ThrowIfNull(argument: source);
@@ -765,8 +551,8 @@ public sealed class SdfEnvironment {
         value: value
     );
     }
-    /// <summary>Gets or sets the cloud drift in layer units per second.</summary>
-    public Vector2 CloudDrift {
+    /// <summary>Gets or sets the integrated cloud offset in layer units, reduced by the lattice period.</summary>
+    public Vector2 CloudOffset {
         get => new(
             x: GetLane(
                 lane: 0,
@@ -811,8 +597,8 @@ public sealed class SdfEnvironment {
         value: value
     );
     }
-    /// <summary>Gets or sets the shaping field's wind relative to the clouds, in layer units per second.</summary>
-    public Vector2 CloudShear {
+    /// <summary>Gets or sets the integrated shaping-field offset in layer units, reduced by the lattice period.</summary>
+    public Vector2 CloudShearOffset {
         get => new(
             x: GetLane(
                 lane: 2,
@@ -846,8 +632,8 @@ public sealed class SdfEnvironment {
         value: value
     );
     }
-    /// <summary>Gets or sets the cloud spin in radians per second.</summary>
-    public float CloudSpin {
+    /// <summary>Gets or sets the integrated cloud spin angle in radians, reduced by 2π.</summary>
+    public float CloudSpinAngle {
         get => GetLane(
         lane: 0,
         row: (CloudsRow + 3)
@@ -1096,8 +882,8 @@ public sealed class SdfEnvironment {
         value: value
     );
     }
-    /// <summary>Gets or sets the scintillation rate in hertz.</summary>
-    public float TwinkleRate {
+    /// <summary>Gets or sets the integrated scintillation phase in [0, 1).</summary>
+    public float TwinklePhase {
         get => GetLane(
         lane: 2,
         row: TwinkleRow

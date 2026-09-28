@@ -5455,6 +5455,34 @@ target; each step settles its own vocabulary rows in
   or one keyed on a tick clock); keying it on a state-row clock is refused,
   because its integral would depend on the row's history. A rate may not bind a
   state row directly, for the same reason.
+  A smooth rate may follow at most three nested smooth phase clocks. A refusal
+  names the rate, the full root-to-leaf clock chain and its depth, for example
+  `wind.speed (day → gust → flutter → ripple → flicker): 4 smooth phase clocks
+  deep; limit 3 for a smooth rate`. Ordinary keyed values have no such depth
+  limit. The independent internal guards are rate degree 81 (antiderivative
+  degree 82), 1,024 pieces and 65,536 retained double coefficients per rate;
+  each refusal names the rate and clock chain. Compilation happens only when
+  a definition is prepared on load or reload. Each frame binary-searches the
+  active piece and evaluates only that antiderivative, with counted searches,
+  coefficient blends and reduced whole-period doublings.
+
+  Every polynomial piece uses local `[0, 1]` coordinates and double-precision
+  Bernstein coefficients evaluated by de Casteljau. The degree-81 law uses an
+  independent exact rational power-polynomial oracle: an eight-second root
+  clock starting at 2.25 seconds, three nested smooth phase clocks with peak
+  phase 0.25, and a smooth rate with peak 1 layer unit per second, reduced modulo
+  4,096 layer units. Its two pieces retain 166 coefficients (1,328 bytes), and
+  a frame reads one piece with one search comparison and 3,403 coefficient
+  blends. The tested absolute error bounds are `1e-11` layer units within the
+  first period, `1e-10` at tick `2^40`, and `2e-4` at `ulong.MaxValue` plus a
+  quarter tick, including unsigned start-offset overflow. With the rate scaled
+  to `1 / 1,048,576` layer units per second, the last bound is `2e-10` layer
+  units. Every piece boundary has a continuity check. These are measured bounds
+  for those inputs and horizons, including accumulated period-total rounding,
+  rather than a claim that double arithmetic is exact. The per-world retained
+  coefficient cap and its rationale remain pending the counted migrated
+  shipped/sample-world rates; the cap counts backing arrays once per prepared
+  world, not per consumer or frame.
 - **Units an artist uses.** Angles in degrees (sizes, elevations, azimuths,
   tilts, penumbras), time in seconds, minutes and hours (the `.puck` units gain
   `min` and `h`), rates in hertz, colours as `#RRGGBB` with a separate linear
