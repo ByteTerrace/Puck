@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Runtime.Versioning;
 using Puck.Abstractions.Gpu;
 using Puck.Platform.Probes;
+using Windows.Win32.Graphics.Dxgi.Common;
 using Xunit;
 
 namespace Puck.Platform.Windows.Tests;
@@ -20,8 +21,9 @@ public sealed class Win32ProbeKernelBenchCleanupTests {
         throwOnError: true
     )!;
 
-    // A kernel attachment whose one socket is a ring over the given shared targets and producer fence.
-    private static object RingAttachment(IReadOnlyList<nint> targets, nint sharedFence) {
+    // A kernel attachment whose one socket is a ring over the given shared targets and producer fence, R8G8B8A8 unless
+    // another format is named.
+    private static object RingAttachment(IReadOnlyList<nint> targets, nint sharedFence, GpuPixelFormat format = GpuPixelFormat.R8G8B8A8Unorm) {
         var slots = new LatestSlotPublication();
 
         slots.Configure(targetCount: targets.Count);
@@ -35,7 +37,7 @@ public sealed class Win32ProbeKernelBenchCleanupTests {
             ChannelCount: 0,
             RateHz: 0,
             Inputs: [new ProbeKernelInput.Ring(
-                    Format: GpuPixelFormat.R8G8B8A8Unorm,
+                    Format: format,
                     Height: KernelBench.FrameHeight,
                     SharedFenceHandle: sharedFence,
                     SharedTargetHandles: targets,
@@ -191,6 +193,81 @@ public sealed class Win32ProbeKernelBenchCleanupTests {
             );
         } finally {
             ((IDisposable)device).Dispose();
+        }
+    }
+    // A camera view's export is the view's float working color (RenderGraphPackageCatalog.WorkingFormat), which its ring
+    // declares, so the host's device opens and views every target of a float ring, as the probe kernels read their
+    // inputs as float4 whatever the stored format.
+    [Fact]
+    public void OpenRingResources_OpensAFloatWorkingColorRing() {
+        using var bench = KernelBench.TryCreate(requireVideoSupport: true);
+
+        if (bench is null) {
+            Assert.Skip(reason: "no D3D11 adapter with video support is available on this machine.");
+
+            return;
+        }
+
+        var attachment = RingAttachment(
+            format: GpuPixelFormat.R16G16B16A16Float,
+            sharedFence: 0,
+            targets: [
+                bench.CreateSharedTarget(format: DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_FLOAT).SharedHandle,
+                bench.CreateSharedTarget(format: DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_FLOAT).SharedHandle,
+            ]
+        );
+        using var device = ((IDisposable)VideoDevice(bench: bench));
+        var resources = new List<nint[]>();
+
+        try {
+            _ = AttachmentType.GetMethod(
+                bindingAttr: BindingFlags.Public | BindingFlags.Instance,
+                name: "OpenRingResources"
+            )!.Invoke(
+                obj: attachment,
+                parameters: [device]
+            );
+
+            Assert.True(condition: ((bool)AttachmentType.GetProperty(
+                bindingAttr: BindingFlags.Public | BindingFlags.Instance,
+                name: "RingResourcesOpened"
+            )!.GetValue(obj: attachment)!));
+            foreach (var name in ((string[])["RingTextures", "RingViews"])) {
+                var opened = ((nint[])AttachmentType.GetMethod(
+                    bindingAttr: BindingFlags.Public | BindingFlags.Instance,
+                    name: name
+                )!.Invoke(
+                    obj: attachment,
+                    parameters: [0]
+                )!);
+
+                resources.Add(item: opened);
+                Assert.Equal(expected: 2, actual: opened.Length);
+                Assert.All(
+                    action: static resource => Assert.NotEqual(actual: resource, expected: 0),
+                    collection: opened
+                );
+            }
+        } finally {
+            _ = AttachmentType.GetMethod(
+                bindingAttr: BindingFlags.Public | BindingFlags.Instance,
+                name: "CloseRingResources"
+            )!.Invoke(
+                obj: attachment,
+                parameters: []
+            );
+        }
+
+        Assert.False(condition: ((bool)AttachmentType.GetProperty(
+            bindingAttr: BindingFlags.Public | BindingFlags.Instance,
+            name: "RingResourcesOpened"
+        )!.GetValue(obj: attachment)!));
+
+        foreach (var opened in resources) {
+            Assert.All(
+                action: static resource => Assert.Equal(actual: resource, expected: 0),
+                collection: opened
+            );
         }
     }
     // THE LAW: a ring whose producer's shared fence the host's device cannot open is refused before the kernel ever
