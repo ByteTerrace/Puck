@@ -370,6 +370,63 @@ public sealed class ReferenceWalkerLawTests {
         Assert.Empty(collection: guarded.Issues);
     }
     [Fact]
+    public void ARelocationOutranksTheNeighbouringSymbolAnUnlinkedTransferPrintsAs() {
+        // The getter's tail jump ends its body, so its unlinked displacement prints as the entry of the symbol laid
+        // out next. The relocation beneath it names the real target; following the printed neighbour would price
+        // code the getter never runs, here a call with no body.
+        var bodies = new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
+            ["getter"] = Body(
+                "leaq\t(%rip), %rdx",
+                "leaq\t-0x8(%rdx), %rcx",
+                "jmp\t0x4000 <neighbour>",
+                "IMAGE_REL_AMD64_REL32\trunner"
+            ),
+            ["neighbour"] = Body(
+                "callq\t0x9000 <absent>",
+                "retq"
+            ),
+            ["runner"] = Body(
+                "addq\t%rbx, %rax",
+                "retq"
+            ),
+        };
+        var priced = Price(
+            bodies: bodies,
+            symbol: "getter"
+        );
+
+        Assert.Empty(collection: priced.Issues);
+        Assert.Equal(
+            5L,
+            priced.Cycles
+        );
+    }
+    [Fact]
+    public void ARelocatedTransferThatPrintsAsItsOwnEntryLeavesTheBody() {
+        // An unlinked AArch64 branch prints its own address, so a thunk whose first instruction is the branch
+        // prints as a jump to its own entry. The relocation makes it a tail call rather than an unbounded loop.
+        var priced = Price(
+            architecture: ReferenceArchitecture.Arm64,
+            bodies: new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
+                ["thunk"] = Body(
+                    "b\t0x1000 <thunk>",
+                    "IMAGE_REL_ARM64_BRANCH26\ttarget"
+                ),
+                ["target"] = Body(
+                    "add\tx0, x1, x2",
+                    "ret"
+                ),
+            },
+            symbol: "thunk"
+        );
+
+        Assert.Empty(collection: priced.Issues);
+        Assert.Equal(
+            3L,
+            priced.Cycles
+        );
+    }
+    [Fact]
     public void ABranchThatTestsARegisterFirstStillNamesItsTarget() {
         // Rows sit at 0x1000, 0x2000, …: the compare-and-branch skips one instruction and the test-bit-and-branch
         // closes a loop, so both targets must be read from the last operand for the graph to have either edge.
