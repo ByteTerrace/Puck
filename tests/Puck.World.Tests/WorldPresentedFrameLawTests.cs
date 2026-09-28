@@ -169,6 +169,40 @@ public sealed class WorldPresentedFrameLawTests {
         );
     }
     [Fact]
+    public void TheSkyClockIsTheTickTheMirrorPresentedItsSlotsAt() {
+        var mirror = Mirror();
+
+        // Before any presentation the mirror presents its delivered tick, as an offscreen frame pins it.
+        Assert.Equal(
+            actual: mirror.Presented,
+            expected: new PresentedTick(
+                Fraction: 0d,
+                Whole: Delivered
+            )
+        );
+
+        foreach (var (fraction, expected) in (((float Fraction, ulong Whole)[])[
+            (0f, Previous),
+            (0.25f, (Previous + 420UL)),
+            (1f, Delivered),
+        ])) {
+            mirror.Apply(fraction: fraction);
+
+            Assert.Equal(
+                actual: mirror.Presented,
+                expected: new PresentedTick(
+                    Fraction: 0d,
+                    Whole: expected
+                )
+            );
+            // The one presentation clock: the sky's tick is the frame group's time, in engine ticks.
+            Assert.Equal(
+                actual: (((double)mirror.Presented.Whole) + mirror.Presented.Fraction),
+                expected: mirror.PresentedEngineTick(fraction: fraction)
+            );
+        }
+    }
+    [Fact]
     public void AnInstallPresentsItsOwnEngineTickAtEveryFraction_AndARestoredTickStartsFromItself() {
         var definition = Fixtures.BuildDocument();
         var mirror = new WorldStateMirror(view: new WorldDocumentStateView(definition: () => definition));

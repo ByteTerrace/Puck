@@ -16,22 +16,27 @@ float sdfR2Dither(uint2 pixel) {
 // xored with the seed streams (bit-identical across both DXC targets), quintic-smoothed trilinear blend (float
 // mul/add, +-1 LSB), output in [-1, 1]. The quintic slope bound ((15/8) on the corner span of 2, axes combined
 // Euclidean) is what the host bakes into the step clamp.
-float sdfNoiseCorner3(int3 cell, uint3 seed) {
-    return ((float)sdfPcg3d(asuint(cell) ^ seed).x * SDF_INV_2POW32);
+// A cell mask of all ones is the unbounded lattice and leaves every hashed bit as it is; one less than a power of two
+// wraps the lattice to that period.
+float sdfNoiseCorner3(int3 cell, uint3 seed, uint cellMask) {
+    return ((float)sdfPcg3d((asuint(cell) & cellMask) ^ seed).x * SDF_INV_2POW32);
 }
-float sdfValueNoise3(float3 q, uint3 seed) {
+float sdfNoiseCorner3(int3 cell, uint3 seed) {
+    return sdfNoiseCorner3(cell, seed, 0xFFFFFFFFu);
+}
+float sdfValueNoise3Cells(float3 q, uint3 seed, uint cellMask) {
     float3 cellFloor = floor(q);
     int3 cell = int3(cellFloor);
     float3 f = (q - cellFloor);
     float3 u = (((f * f) * f) * ((f * ((f * 6.0) - 15.0)) + 10.0));
-    float c000 = sdfNoiseCorner3(cell, seed);
-    float c100 = sdfNoiseCorner3((cell + int3(1, 0, 0)), seed);
-    float c010 = sdfNoiseCorner3((cell + int3(0, 1, 0)), seed);
-    float c110 = sdfNoiseCorner3((cell + int3(1, 1, 0)), seed);
-    float c001 = sdfNoiseCorner3((cell + int3(0, 0, 1)), seed);
-    float c101 = sdfNoiseCorner3((cell + int3(1, 0, 1)), seed);
-    float c011 = sdfNoiseCorner3((cell + int3(0, 1, 1)), seed);
-    float c111 = sdfNoiseCorner3((cell + int3(1, 1, 1)), seed);
+    float c000 = sdfNoiseCorner3(cell, seed, cellMask);
+    float c100 = sdfNoiseCorner3((cell + int3(1, 0, 0)), seed, cellMask);
+    float c010 = sdfNoiseCorner3((cell + int3(0, 1, 0)), seed, cellMask);
+    float c110 = sdfNoiseCorner3((cell + int3(1, 1, 0)), seed, cellMask);
+    float c001 = sdfNoiseCorner3((cell + int3(0, 0, 1)), seed, cellMask);
+    float c101 = sdfNoiseCorner3((cell + int3(1, 0, 1)), seed, cellMask);
+    float c011 = sdfNoiseCorner3((cell + int3(0, 1, 1)), seed, cellMask);
+    float c111 = sdfNoiseCorner3((cell + int3(1, 1, 1)), seed, cellMask);
     float x00 = lerp(c000, c100, u.x);
     float x10 = lerp(c010, c110, u.x);
     float x01 = lerp(c001, c101, u.x);
@@ -40,11 +45,38 @@ float sdfValueNoise3(float3 q, uint3 seed) {
     float y1 = lerp(x01, x11, u.y);
     return ((lerp(y0, y1, u.z) * 2.0) - 1.0);
 }
+float sdfValueNoise3(float3 q, uint3 seed) {
+    return sdfValueNoise3Cells(q, seed, 0xFFFFFFFFu);
+}
 // A seeded 3D value-noise sample over the same deterministic lattice (sdfValueNoise3), folding one uint seed into
 // its three hash streams so two consumers sharing a lattice (a material's wear, a volume's advection) read different
-// noise fields. The one definition: shade-weathering.hlsli and shade-volumes.hlsli both read it from here.
+// noise fields.
+uint3 sdfLatticeSeeds(uint seed) {
+    return uint3(seed, (seed ^ 0x9E3779B9u), (seed ^ 0x85EBCA77u));
+}
 float sdfLatticeNoise3(float3 q, uint seed) {
-    return sdfValueNoise3(q, uint3(seed, (seed ^ 0x9E3779B9u), (seed ^ 0x85EBCA77u)));
+    return sdfValueNoise3(q, sdfLatticeSeeds(seed));
+}
+// The same lattice wrapped to SDF_NOISE_PERIOD_CELLS on every axis (a power of two): the noise a time-advected field
+// reads, whose host-baked offset is reduced by that period (SdfVolume.NoisePeriodCells), so the field joins without a
+// seam wherever the offset wraps.
+float sdfPeriodicNoise3(float3 q, uint seed) {
+    return sdfValueNoise3Cells(q, sdfLatticeSeeds(seed), (SDF_NOISE_PERIOD_CELLS - 1u));
+}
+// The two-dimensional periodic lattice the sky's cloud layer reads: one sdfPcg3d per corner, the seed in its third
+// stream, quintic-smoothed bilinear blend, output in [0, 1].
+float sdfPeriodicNoise2(float2 p, uint seed) {
+    float2 cellFloor = floor(p);
+    uint2 cell = (asuint(int2(cellFloor)) & (SDF_NOISE_PERIOD_CELLS - 1u));
+    uint2 next = ((cell + 1u) & (SDF_NOISE_PERIOD_CELLS - 1u));
+    float2 f = (p - cellFloor);
+    float2 u = ((f * f * f) * ((f * ((f * 6.0) - 15.0)) + 10.0));
+    float a = ((float)sdfPcg3d(uint3(cell.x, cell.y, seed)).x * SDF_INV_2POW32);
+    float b = ((float)sdfPcg3d(uint3(next.x, cell.y, seed)).x * SDF_INV_2POW32);
+    float c = ((float)sdfPcg3d(uint3(cell.x, next.y, seed)).x * SDF_INV_2POW32);
+    float d = ((float)sdfPcg3d(uint3(next.x, next.y, seed)).x * SDF_INV_2POW32);
+
+    return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
 }
 // Exact 27-cell Worley field within SdfCellDisplacement's mode-specific randomness bounds.
 // KEEP IN SYNC with SdfFieldEvaluator.Cells.cs: PCG streams, top 16 bits, and z/y/x visit order.

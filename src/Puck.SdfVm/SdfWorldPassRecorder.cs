@@ -235,7 +235,6 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
             block: recording.PassBlock,
             frame: frame,
             height: height,
-            sceneTime: frame.Time,
             tables: tables.PassValues,
             view: view,
             width: width

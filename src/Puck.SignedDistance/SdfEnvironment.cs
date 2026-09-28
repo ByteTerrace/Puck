@@ -68,7 +68,7 @@ public enum SdfEnvironmentBlend : byte {
 /// <item><term>27 sky control</term><description>x gradient stop count, y sun-disc light index (−1 none), z sun-disc angular radius in radians (uploaded as the baked <c>pow</c> exponent), w sun-disc intensity</description></item>
 /// <item><term>28 .. 31</term><description>gradient stop i: color.rgb, elevation in [−1, 1] (ascending)</description></item>
 /// <item><term>32 stars</term><description>density, brightness, seed, 0</description></item>
-/// <item><term>33 twinkle</term><description>share, depth, rate in hertz (uploaded as a period in engine ticks), 0</description></item>
+/// <item><term>33 twinkle</term><description>share, depth, rate in hertz (uploaded as the phase of its period at the frame's presented tick), 0</description></item>
 /// <item><term>34 clouds A</term><description>color.rgb, coverage</description></item>
 /// <item><term>35 clouds B</term><description>softness, scale, seed, 0</description></item>
 /// <item><term>36 clouds C</term><description>drift.xy, shear.xy — rates in layer units per second (uploaded as offsets integrated on the tick clock)</description></item>

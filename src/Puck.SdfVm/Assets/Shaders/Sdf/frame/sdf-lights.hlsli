@@ -80,7 +80,7 @@ float worldSkyStarBrightness() { return worldEnvRow(SDF_ENV_STARS_ROW).y; }
 uint worldSkyStarSeed() { return (uint)(worldEnvRow(SDF_ENV_STARS_ROW).z + 0.5); }
 float worldSkyStarTwinkleShare() { return worldEnvRow(SDF_ENV_TWINKLE_ROW).x; }
 float worldSkyStarTwinkleDepth() { return worldEnvRow(SDF_ENV_TWINKLE_ROW).y; }
-uint worldSkyStarTwinklePeriodTicks() { return max((uint)(worldEnvRow(SDF_ENV_TWINKLE_ROW).z + 0.5), 1u); }
+float worldSkyStarTwinklePhase() { return worldEnvRow(SDF_ENV_TWINKLE_ROW).z; }
 float3 worldSkyCloudColor() { return worldEnvRow(SDF_ENV_CLOUDS_ROW).rgb; }
 float worldSkyCloudCoverage() { return worldEnvRow(SDF_ENV_CLOUDS_ROW).w; }
 float worldSkyCloudSoftness() { return worldEnvRow((SDF_ENV_CLOUDS_ROW + 1u)).x; }

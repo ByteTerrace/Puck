@@ -354,6 +354,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             Time: 0f,
             Views: m_views
         ) {
+            // The destination's own presented tick, so its sky and media show its authority's time.
+            Clock = m_mirror.FollowState().Presented,
             DynamicTransforms = transforms,
             MovedTransforms = moved,
             // A budgeted 160x144-class panel image: re-marching full soft shadows/AO/far-bound here costs real GPU

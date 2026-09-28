@@ -1,0 +1,7 @@
+# The engine ready first: its pipeline set installed and its first frame produced.
+world.wait ready 45
+# Ticks enough for the three scheduled captures of the world's view, each of which holds the clock at its tick until it
+# is served.
+world.wait 120
+# The one clock the timeline authors, a one-second tick clock.
+world.timeline

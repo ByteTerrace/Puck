@@ -27,8 +27,9 @@ public sealed class WorldRoutedScene : ISdfFrameDresser {
 
     /// <summary>Initializes the scene of one routed endpoint.</summary>
     /// <param name="endpoint">The routed authority the scene draws.</param>
-    /// <param name="hostFrame">The frame the boot presentation dressed this frame, whose quality levers, clock and sky
-    /// clock the scene's frame takes; <see langword="null"/> before the first.</param>
+    /// <param name="hostFrame">The frame the boot presentation dressed this frame, whose quality levers and presentation
+    /// time the scene's frame takes; <see langword="null"/> before the first. The sky and media clock is the
+    /// endpoint's own presented tick, so the scene shows its authority's time.</param>
     /// <param name="bodyColor">The color each avatar is painted with by body index: a local seat keeps the color the
     /// boot presentation paints it with.</param>
     public WorldRoutedScene(WorldAuthorityEndpoint endpoint, Func<SdfFrame?> hostFrame, Func<int, Vector3> bodyColor) {
@@ -92,26 +93,28 @@ public sealed class WorldRoutedScene : ISdfFrameDresser {
         }
 
         var mirror = Endpoint.Mirror;
+        var state = Endpoint.FollowState();
         var environment = m_cycle.Resolve(
             definition: mirror.Definition,
-            mirror: Endpoint.FollowState(),
+            mirror: state,
             revision: mirror.DefinitionRevision
         );
 
         if (m_hostFrame() is not { } host) {
             return frame with {
+                Clock = state.Presented,
                 Environment = environment,
                 Views = m_dressedViews,
             };
         }
 
         return frame with {
+            Clock = state.Presented,
             DisableAmbientOcclusion = host.DisableAmbientOcclusion,
             DisableFarBound = host.DisableFarBound,
             DisableSoftShadows = host.DisableSoftShadows,
             EnableCadenceGate = host.EnableCadenceGate,
             Environment = environment,
-            SampleIndex = host.SampleIndex,
             ShadowDistanceScale = host.ShadowDistanceScale,
             Time = host.Time,
             UseCameraTileShadowMask = host.UseCameraTileShadowMask,

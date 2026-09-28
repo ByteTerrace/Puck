@@ -9,7 +9,7 @@
 // The view the pass renders, gathered from the pass block into the rows the march, the shading and the mesh projection
 // read it through.
 struct ViewportData {
-    float4 position;    // xyz = world position, w = the frame's presentation time in seconds (sceneTime)
+    float4 position;    // xyz = world position, w = zero
     float4 right;       // xyz = right basis,   w = tan(fov / 2)
     float4 up;          // xyz = up basis,      w = aspect ratio
     float4 forward;     // xyz = forward basis, w = debug view mode (0 = final)
@@ -24,7 +24,7 @@ struct ViewportData {
 };
 ViewportData worldView() {
     ViewportData data;
-    data.position = float4(passGroup.viewPosition, passGroup.sceneTime);
+    data.position = float4(passGroup.viewPosition, 0.0);
     data.right = float4(passGroup.viewRight, passGroup.tanHalfFieldOfView);
     data.up = float4(passGroup.viewUp, passGroup.aspectRatio);
     data.forward = float4(passGroup.viewForward, (float)passGroup.debugMode);

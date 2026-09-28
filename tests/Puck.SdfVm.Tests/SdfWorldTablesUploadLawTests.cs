@@ -522,15 +522,17 @@ public sealed class SdfWorldTablesUploadLawTests {
         );
         const int EntryFloats = (SdfVolume.VectorsPerEntry * 4);
         var table = new float[(SdfWorldTables.MaxVolumes * EntryFloats)];
-        // Each entry's rows: position and dynamic slot; rotation; half extent and axis; width, speed, the seed's bits and
-        // the steps; intensity, extinction and the pulse; the intensity lane, the ramp's length and the kind; four ramp
-        // rows, color and density; then coverage and softness.
+        // Each entry's rows at presented tick zero (SdfVolumeMotion bakes the motion, SdfSkyClockLawTests its later
+        // ticks): position and dynamic slot; rotation; half extent and axis; width, the advection (none yet), the seed's
+        // bits and the steps; intensity, extinction and the pulse's gain (one at phase zero); the intensity lane, the
+        // ramp's length, the kind and a cloud's Z advection; four ramp rows, color and density; then coverage and
+        // softness.
         float[] flowRows = [
             1f, 2f, 3f, 1f,
             0f, 0f, 0f, 1f,
             0.5f, 1f, 0.5f, 1f,
-            0.25f, 2f, BitConverter.UInt32BitsToSingle(value: 7u), 16f,
-            3f, 0.5f, 0.25f, 2f,
+            0.25f, 0f, BitConverter.UInt32BitsToSingle(value: 7u), 16f,
+            3f, 0.5f, 1f, 0f,
             2f, 1f, ((float)SdfVolumeKind.Flow), 0f,
             1f, 0.5f, 0f, 0.5f,
             0f, 0f, 0f, 0f,
@@ -542,8 +544,8 @@ public sealed class SdfWorldTablesUploadLawTests {
             -4f, 5f, -6f, -1f,
             0f, 0.6f, 0f, 0.8f,
             3f, 1f, 2f, 2f,
-            1f, 0.5f, BitConverter.UInt32BitsToSingle(value: 11u), 32f,
-            1f, 2f, 0f, 0f,
+            1f, 0f, BitConverter.UInt32BitsToSingle(value: 11u), 32f,
+            1f, 2f, 1f, 0f,
             -1f, 2f, ((float)SdfVolumeKind.Cloud), 0f,
             1f, 1f, 1f, 0.1f,
             0.5f, 0.5f, 0.6f, 0.9f,

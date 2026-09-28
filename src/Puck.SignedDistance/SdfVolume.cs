@@ -24,6 +24,13 @@ public readonly record struct SdfVolume(SdfVolumeKind Kind, Vector3 Position, Qu
     int DynamicSlot, float Axis, float Width, float Speed, uint Seed, int Steps, IReadOnlyList<SdfDensityStop> Ramp,
     float Intensity, float Extinction, float PulseAmplitude = 0f, float PulseFrequency = 0f, int? IntensityLane = null,
     float Coverage = 0.55f, float Softness = 0.18f) {
+    /// <summary>The lattice period, in noise cells, of the time-advected noise the bounded media and the sky's cloud layer
+    /// read: their lattice cells wrap to it before they are hashed (<c>SDF_NOISE_PERIOD_CELLS</c>), so an advection
+    /// offset reduced by it joins without a seam however long the clock runs.</summary>
+    public const int NoisePeriodCells = 4096;
+    /// <summary>The share of a cloud's <see cref="Speed"/> it drifts along its local Z axis while it drifts at the full
+    /// speed along X, so its advection is not axis-aligned.</summary>
+    public const double CloudDriftZ = 0.21d;
     /// <summary>The largest admitted integration step count.</summary>
     public const int MaxSteps = 64;
     /// <summary>The smallest admitted integration step count.</summary>

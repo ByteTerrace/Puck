@@ -1778,7 +1778,22 @@ arc; counts, kinds, seeds and flags held); a key states only the fields it
 moves, addresses a light by slot and a stop by index with the kinds the statics
 author, and the rest hold from the previous key. The clock is simulation
 state (an advancing `state` row—deterministic, replayed, settable with
-`world.row.set state`); the interpolation is presentation.
+`world.row.set state`); the interpolation is presentation. A key may not move
+a cloud layer's `drift`, `shear` or `spin`: each is a rate integrated from the
+tick, and a state row's value can jump between two ticks.
+
+The sky's twinkle and cloud motion and each bounded volume's advection and
+pulse run on the presented engine tick of the world the frame draws, the tick
+the state mirror presented its bound state at, reduced exactly on the host, so
+a frame at a given tick draws the same sky on every run and a routed or
+session view shows its destination's time. The top-level `timeline` section
+names presentation clocks: `{ "clocks": [ { "name": "day", "periodSeconds":
+1200, "spanSeconds": 86400, "startSeconds": 25200 }, { "name": "tide",
+"state": "tide" } ] }`. A tick clock's period is a whole number of engine
+ticks and its span is what one period reads as (in `.puck`, `periodSeconds:
+20min, spanSeconds: 24h`); a state clock's phase is its Fixed or Int row's
+fractional part. `world.timeline` echoes each clock's source, its period and
+start in engine ticks, and its phase and reading at the authority's tick.
 
 ## Engine boundaries worth knowing
 

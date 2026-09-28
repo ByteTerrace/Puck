@@ -28,9 +28,6 @@ public static class SdfWorldPackage {
     public const string ScreenCount = "screenCount";
     /// <summary>The pass-group value holding the live program's per-tile instance-mask width.</summary>
     public const string InstanceMaskWordCount = "instanceMaskWordCount";
-    /// <summary>The pass-group value holding the deterministic tick clock star twinkle reads, or zero for a sky with no
-    /// visible twinkle.</summary>
-    public const string SampleIndex = "sampleIndex";
     /// <summary>The pass-group value naming the view the dispatch set renders, whose visibility records it indexes.</summary>
     public const string ViewBase = "viewBase";
     /// <summary>The pass-group value holding the frame's mesh draws, or zero when no mesh draws: the hit passes read the
@@ -57,9 +54,6 @@ public static class SdfWorldPackage {
     /// <summary>The pass-group value holding the depth, in world units, at which every camera march ends
     /// (<c>float</c>).</summary>
     public const string FarDistance = "farDistance";
-    /// <summary>The pass-group value holding the frame's presentation time in seconds, which bounded volumes animate on
-    /// (<c>float</c>).</summary>
-    public const string SceneTime = "sceneTime";
     /// <summary>The pass-group value holding the debug view mode, an index into the debug view names; zero renders the
     /// final image (<c>uint</c>).</summary>
     public const string DebugMode = "debugMode";
@@ -241,7 +235,6 @@ public static class SdfWorldPackage {
         Value(name: ImageExtent, type: ShaderValueType.Uint2),
         Value(name: InstanceMaskWordCount, type: ShaderValueType.Uint),
         Value(name: MeshDraws, type: ShaderValueType.Uint),
-        Value(name: SampleIndex, type: ShaderValueType.Uint),
         Value(name: ScreenCount, type: ShaderValueType.Uint),
         Value(name: TileGrid, type: ShaderValueType.Uint2),
         Value(name: ViewBase, type: ShaderValueType.Uint),
@@ -255,7 +248,6 @@ public static class SdfWorldPackage {
         Value(name: FrustumOffset, type: ShaderValueType.Float2),
         Value(name: NearDistance, type: ShaderValueType.Float),
         Value(name: FarDistance, type: ShaderValueType.Float),
-        Value(name: SceneTime, type: ShaderValueType.Float),
         Value(name: DebugMode, type: ShaderValueType.Uint),
         Value(name: AmbientScale, type: ShaderValueType.Float),
         Value(name: SunScale, type: ShaderValueType.Float),

@@ -40,7 +40,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     // Empty SDF tiles can still contain participating media. Match the views stage's miss; a live tile replaces
     // this result with its own integration clipped to the surface, so emission is never added twice.
-    color = shadeVolumes(color, view.position.xyz, rayDirection, worldRayDistanceAt(view, rayDirection, worldNearDistance(view)), worldFarDistance(view), id.xy, view.position.w);
+    color = shadeVolumes(color, view.position.xyz, rayDirection, worldRayDistanceAt(view, rayDirection, worldNearDistance(view)), worldFarDistance(view), id.xy);
 
     output[id.xy] = float4(color, 1.0);
 }

@@ -117,7 +117,6 @@ public sealed class SdfWorldResidencyReportLawTests {
             block: block,
             frame: frame,
             height: Extent,
-            sceneTime: frame.Time,
             tables: residency.Tables!.PassValues,
             view: 0,
             width: Extent

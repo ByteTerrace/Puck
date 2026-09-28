@@ -160,6 +160,8 @@ public sealed partial class PuckLanguageServer {
         "rad" => "**`rad` Unit**\n\nAngular unit in radians.",
         "s" => "**`s` Unit**\n\nTime duration unit in seconds.",
         "ms" => "**`ms` Unit**\n\nTime duration unit in milliseconds.",
+        "min" => "**`min` Unit**\n\nTime duration unit in minutes (converted to seconds: `value * 60`).",
+        "h" => "**`h` Unit**\n\nTime duration unit in hours (converted to seconds: `value * 3600`).",
         "hz" => "**`hz` Unit**\n\nFrequency unit in Hertz (e.g. `60hz`, `120hz`).",
         "m" => "**`m` Unit**\n\nSpatial metric unit in meters.",
         _ => null
@@ -848,6 +850,20 @@ public sealed partial class PuckLanguageServer {
             items: items,
             kind: 11,
             label: "ms"
+        );
+        LspJson.AddCompletion(
+            detail: "Unit: Minutes",
+            insertText: "min",
+            items: items,
+            kind: 11,
+            label: "min"
+        );
+        LspJson.AddCompletion(
+            detail: "Unit: Hours",
+            insertText: "h",
+            items: items,
+            kind: 11,
+            label: "h"
         );
         LspJson.AddCompletion(
             detail: "Unit: Hertz (frequency)",

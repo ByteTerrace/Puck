@@ -1284,12 +1284,8 @@ public static partial class WorldNameRegistry {
             WorldNameRole.Names,
             WorldExportFacet.Binding
         ),
-        new(
-            typeof(WorldRenderCycle),
-            nameof(WorldRenderCycle.State),
-            WorldNameKind.State,
-            WorldNameRole.Names
-        ),
+        new(typeof(WorldRenderCycle), nameof(WorldRenderCycle.State), WorldNameKind.State, WorldNameRole.Names),
+        new(typeof(WorldClock), nameof(WorldClock.State), WorldNameKind.State, WorldNameRole.Names),
         new(
             typeof(WorldLookMotion),
             nameof(WorldLookMotion.Lanes),
@@ -1679,6 +1675,7 @@ public static partial class WorldNameRegistry {
             nameof(WorldCamera.Name),
             "a camera name"
         ),
+        new(typeof(WorldClock), nameof(WorldClock.Name), "a presentation clock name"),
         new(
             typeof(WorldIdentitySeed),
             nameof(WorldIdentitySeed.Name),

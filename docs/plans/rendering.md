@@ -36,7 +36,9 @@ reasoning behind every decision is in
 ## Implementation status
 
 P2, P3, P4, P5, P7, P8, P9, P10, P11 and P12 are complete; P1a, P1b, P6 and P13
-to P18 are not. The programmable compute and graphics foundation has functional GPU
+to P18 are not. Of P18, step 2 has landed: the sky and the bounded media
+animate on the presented engine tick, and the `timeline` section names
+presentation clocks. The programmable compute and graphics foundation has functional GPU
 fixtures on both backends. The
 work-counting model, the GPU work ledger, and the counting wrappers live in
 `Puck.Abstractions`. The state arena, rules and search, the shader pipeline
@@ -5043,7 +5045,7 @@ which a shipped `skies.puck` module also offers as a template
 ```puck
 timeline {
   // A day that lasts twenty real minutes and reads as twenty-four hours.
-  clock day { period: 20min, span: 24h, start: 7h }
+  clock day { periodSeconds: 20min, spanSeconds: 24h, startSeconds: 7h }
 }
 render {
   sky {
@@ -5073,7 +5075,7 @@ render {
     ]
     keys(clock: day) [
       { at: 0h,      layers { air { stops: nightStops }, stars { opacity: 1 } } }
-      { at: 5h30min, layers { air { stops: dawnStops },  stars { opacity: 0 } } }
+      { at: 5.5h, layers { air { stops: dawnStops },  stars { opacity: 0 } } }
       { at: 12h,     layers { air { stops: noonStops } } }
       { at: 19h,     layers { air { stops: duskStops },  stars { opacity: 0.4 } } }
     ]
@@ -5089,8 +5091,8 @@ render {
 
 ```puck
 timeline {
-  clock ember { period: 9min }
-  clock pale  { period: 14min, start: 0.35 }
+  clock ember { periodSeconds: 9min }
+  clock pale  { periodSeconds: 14min, startSeconds: 5min }
 }
 render {
   sky {
@@ -5114,7 +5116,7 @@ ringed giant that is a far SDF prototype, and a hole in the zenith onto another
 world:
 
 ```puck
-timeline { clock pulse { period: 6s } }
+timeline { clock pulse { periodSeconds: 6s } }
 render {
   sky {
     frame { up: [0.2, 0.95, 0.1] }
@@ -5406,46 +5408,53 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      counters workload gains a sky leg (a cloud drift over a still camera, a
      twinkle, a cycle blend); P15-1's counter slots and ceilings for `sky` and
      `views` with the sky authored; and the canaries `sky-layers` (each layer's
-     pixels present in its region, each absent when its layer is), `sky-clock`
-     (a capture at a tick equals its replay) and `sky-cycle` (the courtyard's
-     toggle between two keys).
+     pixels present in its region, each absent when its layer is) and
+     `sky-cycle` (the courtyard's toggle between two keys). The `sky-clock`
+     canary, which holds the view equal one period apart, landed with P18-2.
    - Touches: `tests/Puck.Parity`, `tests/Puck.Counters`,
      `tests/Puck.World.Canaries`, `src/Puck.Cli/Canary/CanaryCeilings.cs`.
    - Done when: the station holds on both backends; each canary is shown failing
-     once on a broken leg (the stars' brightness zeroed, the capture taken one
-     tick later); the sky leg's rows are recorded on the RTX 2060 at the floor
+     once on a broken leg (the stars' brightness zeroed); the sky leg's rows are recorded on the RTX 2060 at the floor
      tier, and show today's costs: every pass re-rendering on a drift frame.
    - Counted-cost gate: nothing moves; this step records the rows every later
      step's win is read against.
-2. **P18-2, one clock family on the tick.**
-   - Delivers: the `timeline` section with tick and state-row clocks (the
-     section, its validator, its schema and a sweep of every shipped world,
-     since a top-level section is refused until each carries it); the sky and
-     the media read clocks from the presented engine tick as unsigned 64-bit
-     integers, reduced on the host, so the pass block carries phases and
-     reduced ticks, never a raw tick; bounded media on the tick instead of
-     `sceneTime`; a routed or session scene on its own endpoint's clock; drift,
-     shear, spin and twinkle as closed-form functions of a clock; `min` and `h`
-     in the `.puck` units; and `world.timeline`, which echoes each clock's
-     source, period and current phase.
-   - Deletes: `SdfFrame.SampleIndex`'s `uint` and its `(uint)` cast,
-     `SdfFrameBlock`'s `elapsed × rate` integration, the wall-clock `sceneTime`
-     the media read, the volumes clause of `ForcesRender` (a view with a
-     visible volume renders when the presented tick moves, through its
-     signature), and the host sky clock `WorldRoutedScene` takes.
-   - Touches: `src/Puck.World.Schema` (the timeline records, the validator),
-     `WorldStateMirror`, `WorldFramePresenter`, `WorldRoutedScene`,
-     `SdfFrameBlock`, `SdfWorldTables.Cadence.cs`, `shade/shade-volumes.hlsli`,
-     `src/Puck.Transpiler/Units`, `puck schema`.
-   - Done when: `PresentationClockLawTests` hold phases exact at ticks past
-     2^32 and past a period boundary (red leg: the `uint` clock differs at
-     2^32 + k); `WindIntegralLawTests` hold a cloud offset continuous across a
-     change of rate (red leg: `elapsed × rate` jumps); a law holds a routed
-     scene's sky phase to its endpoint's tick; `sky-clock` holds a volume's
-     pixels at tick N to its replay; the sky station moves only by the explained
-     amount a closed-form drift changes.
-   - Counted-cost gate: a still view with a visible volume renders once per
-     presented tick, never on a frame whose tick has not moved.
+2. **P18-2, one clock family on the tick.** Landed.
+   - Delivers: the `timeline` section with tick and state-row clocks, its
+     validator and its schema (optional, as every section is, so no shipped
+     world carries it until one names a clock); the presented tick
+     (`PresentedTick`, an unsigned 64-bit whole tick and a fraction) as
+     `SdfFrame.Clock`, taken from the state mirror the frame's bound state
+     presents at (`WorldStateMirror.Presented`), so the pass block and the
+     volume table carry host-reduced phases and offsets, never a raw tick;
+     twinkle, cloud drift, shear and spin, and each medium's advection and
+     pulse (`SdfVolumeMotion`) as closed-form functions of it; the media's
+     noise and the sky's cloud noise on a lattice wrapped to
+     `SdfVolume.NoisePeriodCells`, so an offset reduced by that period joins
+     without a seam; routed and session scenes on their own endpoint's clock;
+     the refusal of a `render.cycle` key that moves a cloud rate, since a state
+     row can jump between two ticks; `min` and `h` in the `.puck` units; and
+     `world.timeline`, which echoes each clock's source, period and phase.
+   - Deletes: `SdfFrame.SampleIndex` and its `(uint)` cast, the `sampleIndex`
+     and `sceneTime` pass values, `SdfFrameBlock`'s `elapsed × rate`
+     integration, the wall-clock time the media read, the volumes clause of
+     `ForcesRender` (the volume table joins the view's signature), the host sky
+     clock `WorldRoutedScene` took, `IWorldSimulationClock.ElapsedTicks` and
+     the sky's private lattice noise.
+   - Done when: `PresentedTickLawTests` hold phases exact past 2^32 ticks and
+     across a period's end and an integral continuous where it wraps and where
+     the tick crosses 2^32 (red legs: a 32-bit clock differs);
+     `SdfSkyClockLawTests` hold the twinkle phase, the cloud offsets across 2^32
+     and a medium's motion to the tick (red leg: no star, no phase);
+     `WorldTimelineLawTests` hold every clock refusal and the cycle-rate
+     refusal with a control; `WorldRoutedPresentationLawTests` hold a routed
+     and a session scene to their endpoint's presented tick, never the host's;
+     the `sky-clock` canary holds the view one second apart equal and three
+     tenths apart different on both backends (red leg: a pulse at 1.25 Hz);
+     parity holds every station unchanged.
+   - Counted-cost gate: a still view with a visible volume renders when the
+     presented tick moves its motion, never on a frame whose tick has not moved;
+     the pass block keeps its 1,120 bytes, and the written pass-block bytes per
+     pass fall from 1,048 to 1,024 (`world-counters`).
 3. **P18-3, keys on clocks, for every presentation value.**
    - Delivers: the keyed form of every bindable value (`keys(clock: …)`), the
      angle and direction bindables, section keys whose values are partial
@@ -5466,8 +5475,10 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      direction along the arc) and each ease (red leg: a seed keyed is refused
      by name); a law holds the validator's and the client's resolution to one
      another on every shipped key; a theme colour keyed on a clock resolves
-     through the same path (red leg: an unknown clock is refused); `sky-cycle`
-     holds the courtyard's toggle.
+     through the same path (red leg: an unknown clock is refused);
+     `WindIntegralLawTests` hold a keyed cloud rate's offset continuous across a
+     key (red leg: `rate × time` at each key's rate jumps); `sky-cycle` holds the
+     courtyard's toggle.
    - Counted-cost gate: the environment re-resolves only when a clock a key
      reads moves or a bound slot moves, counted as resolutions in
      `world.timeline`.
@@ -5831,8 +5842,8 @@ fraction in live tiles, at least h.
 
 - **The clock family is a top-level `timeline` section.** Clocks are a
   world-level concept that render, the theme and views all read, so none of
-  those sections owns them. P18-2 sweeps every shipped world to carry the
-  section, which the strict-parse rule requires and zero legacy welcomes.
+  those sections owns them. The section is optional, as every top-level
+  section is, so a world names clocks only when it keys something on one.
 - **A shadow slot changes hands by a counted crossfade**, as the decision
   above states. Artists should not see a pop when two `auto` bodies cross.
   The extra slot's march during the fade is counted, a tier may choose

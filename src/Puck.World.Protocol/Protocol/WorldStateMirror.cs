@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Abstractions.Counting;
+using Puck.Hosting;
 using Puck.Maths;
 using Puck.World.Authoring;
 using Puck.World.Protocol;
@@ -94,6 +95,9 @@ public sealed class WorldStateMirror : IWorkCounterSource {
     private int m_slotCount;
     private ulong m_engineTick;
     private ulong m_previousEngineTick;
+
+    private float m_appliedFraction = 1f;
+
     private ulong m_tick;
     private bool m_ticked;
 
@@ -132,6 +136,15 @@ public sealed class WorldStateMirror : IWorkCounterSource {
     /// <summary>Gets the engine tick the slots were read as of at the refresh before the latest one, which a moving
     /// slot's previous sample holds; it equals <see cref="EngineTick"/> after an install and before any refresh.</summary>
     public ulong PreviousEngineTick => m_previousEngineTick;
+    /// <summary>Gets the engine tick the slots present at: <see cref="PreviousEngineTick"/> and <see cref="EngineTick"/>
+    /// at the fraction the latest <see cref="Apply"/> presented them at (one before any), so the sky, the bounded
+    /// media and every other time-driven look of a frame animate on the one presentation clock its bound state
+    /// presents at.</summary>
+    public PresentedTick Presented => PresentedTick.Between(
+        current: m_engineTick,
+        fraction: m_appliedFraction,
+        previous: m_previousEngineTick
+    );
     /// <inheritdoc/>
     public ReadOnlySpan<WorkKind> WorkKinds => Kinds;
     /// <summary>Gets the presentation manifest of the document the mirror reads, whose bindings it registers at every
@@ -371,6 +384,8 @@ public sealed class WorldStateMirror : IWorkCounterSource {
             min: 0f,
             value: fraction
         );
+
+        m_appliedFraction = clamped;
 
         for (var index = 0; (index < m_movingCount); index++) {
             ref var slot = ref m_slots[m_moving[index]];

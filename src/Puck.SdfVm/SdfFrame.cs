@@ -1,6 +1,7 @@
 using System.Numerics;
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Presentation;
+using Puck.Hosting;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
@@ -153,20 +154,12 @@ public sealed record SdfFrame(
     public Vector2 GridObjectPitch { get; init; }
     /// <summary>The world floor grid's per-axis lattice pitch on X/Z (world units); 0 disables the grid on that axis.</summary>
     public Vector2 GridWorldPitch { get; init; }
-    /// <summary>Gets the deterministic tick clock the sky reads: the star-twinkle phase and the integrated cloud offsets.</summary>
-    /// <remarks>
-    /// <para>
-    /// This must be fed from the deterministic tick clock — <c>WorldSimulation.ElapsedTicks</c> — and never from
-    /// <see cref="Time"/>, which is a presentation-clock accumulation that advances by wall-clock deltas, so a replay
-    /// at tick N renders the identical sky.
-    /// </para>
-    /// <para>
-    /// When the sky has visible twinkle it rides the composite push constant, which the engine's frame signature
-    /// folds in, so the cadence gate never skips a frame whose tick moved; a sky without visible twinkle pushes 0 and a
-    /// static frame stays skippable.
-    /// </para>
-    /// </remarks>
-    public uint SampleIndex { get; init; }
+    /// <summary>Gets the presented engine tick the sky and the bounded media animate on: the star-twinkle phase, the
+    /// cloud layer's drift, shear and spin, and each medium's advection and pulse, all reduced on the host
+    /// (<see cref="SdfFrameBlock.BakeEnvironment"/>, the volume table), so no pass reads a raw tick. It comes from the
+    /// state mirror of the world the frame draws, never from <see cref="Time"/>, which advances by wall-clock
+    /// deltas, so a frame at a given tick and fraction draws the same sky and media on every run.</summary>
+    public PresentedTick Clock { get; init; }
     /// <summary>Engine-bench lever: scales the soft-shadow reach (both the <c>sdfShadowGather</c> cull cone and the
     /// march ceiling — one shared length, or the cull set would be unsound for the ray) for the
     /// <c>sdf.shadow-distance</c> bench toggle. <c>0</c> (the default) means the full 1.0 reach — an unset frame

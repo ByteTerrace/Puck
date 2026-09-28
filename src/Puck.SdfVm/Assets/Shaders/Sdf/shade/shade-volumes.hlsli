@@ -1,4 +1,5 @@
-// Bounded flow/cloud volumes. Eleven float4 rows, paired with SdfWorldTables.PackVolumes.
+// Bounded flow/cloud volumes. Eleven float4 rows, paired with SdfWorldTables.PackVolumes, which bakes each medium's
+// motion from the frame's presented tick: no pass reads a clock.
 #ifndef SDF_SHADE_VOLUMES_HLSLI
 #define SDF_SHADE_VOLUMES_HLSLI
 struct SdfVolumeData {
@@ -8,16 +9,16 @@ struct SdfVolumeData {
     float3 halfExtent;
     float axis;
     float width;
-    float speed;
+    float advection;    // the host-baked drift in noise cells: along the column (a flow) or X (a cloud)
     uint seed;
     float steps;
     float intensity;
     float extinction;
-    float pulseAmplitude;
-    float pulseFrequency;
+    float pulse;        // the host-baked density gain at the pulse's phase
     int intensityLane;
     uint rampCount;
     uint kind;
+    float advectionZ;   // a cloud's host-baked drift along Z, in noise cells
     float coverage;
     float softness;
     float4 ramp[4];
@@ -31,11 +32,11 @@ SdfVolumeData sdfLoadVolume(uint index) {
     float4 r2 = sdfVolumes[b + 2u];
     v.halfExtent = r2.xyz; v.axis = r2.w;
     float4 r3 = sdfVolumes[b + 3u];
-    v.width = r3.x; v.speed = r3.y; v.seed = asuint(r3.z); v.steps = r3.w;
+    v.width = r3.x; v.advection = r3.y; v.seed = asuint(r3.z); v.steps = r3.w;
     float4 r4 = sdfVolumes[b + 4u];
-    v.intensity = r4.x; v.extinction = r4.y; v.pulseAmplitude = r4.z; v.pulseFrequency = r4.w;
+    v.intensity = r4.x; v.extinction = r4.y; v.pulse = r4.z;
     float4 r5 = sdfVolumes[b + 5u];
-    v.intensityLane = (int)r5.x; v.rampCount = (uint)r5.y; v.kind = (uint)r5.z;
+    v.intensityLane = (int)r5.x; v.rampCount = (uint)r5.y; v.kind = (uint)r5.z; v.advectionZ = r5.w;
     v.coverage = sdfVolumes[b + 10u].x; v.softness = sdfVolumes[b + 10u].y;
     [unroll] for (uint i = 0u; i < 4u; i++) v.ramp[i] = sdfVolumes[b + 6u + i];
     return v;
@@ -105,38 +106,38 @@ float3 sdfVolumeRamp(SdfVolumeData v, float density) {
 }
 // A true 3D medium, clipped smoothly inside its own bound. Width is the noise-cell size in world units;
 // coverage moves a density threshold, not a screen-space alpha. The ramp and height tint provide art-directed
-// illumination; this does not trace cloud shadows or multiple scattering.
-float sdfCloudDensity(SdfVolumeData v, float3 p, float clock) {
+// illumination; this does not trace cloud shadows or multiple scattering. The octaves scale by whole numbers, so each
+// stays periodic in the lattice's period and the host-reduced advection never shows a seam.
+float sdfCloudDensity(SdfVolumeData v, float3 p) {
     float3 unit = p / v.halfExtent;
     float envelope = smoothstep(0.0, 0.3, 1.0 - dot(unit, unit));
-    float3 q = (p + float3(clock * v.speed, 0.0, clock * v.speed * 0.21)) / v.width;
+    float3 q = ((p / v.width) + float3(v.advection, 0.0, v.advectionZ));
     float noise = 0.5 + 0.5 * (
-        0.57 * sdfLatticeNoise3(q, v.seed) +
-        0.28 * sdfLatticeNoise3(q * 2.03 + 7.1, v.seed + 19u) +
-        0.15 * sdfLatticeNoise3(q * 4.07 - 3.7, v.seed + 53u));
+        0.57 * sdfPeriodicNoise3(q, v.seed) +
+        0.28 * sdfPeriodicNoise3(q * 2.0 + 7.1, v.seed + 19u) +
+        0.15 * sdfPeriodicNoise3(q * 4.0 - 3.7, v.seed + 53u));
     return envelope * smoothstep(1.0 - v.coverage - v.softness, 1.0 - v.coverage + v.softness, noise);
 }
 void sdfIntegrateVolume(SdfVolumeData v, float3 localOrigin, float3 localDirection, float tBegin, float tEnd,
-    float clock, float dither, out float3 radianceOut, out float transmissionOut) {
+    float dither, out float3 radianceOut, out float transmissionOut) {
     int steps = (int)v.steps;
     float stepLength = (tEnd - tBegin) / (float)steps;
     float3 radiance = 0.0;
     float transmission = 1.0;
-    float pulse = 1.0 + v.pulseAmplitude * sin(2.0 * SDF_PI * v.pulseFrequency * clock);
     [loop] for (int i = 0; i < steps; i++) {
         float sampleT = tBegin + ((float)i + 0.5 + dither * 0.49) * stepLength;
         float3 p = localOrigin + localDirection * sampleT;
         float density;
         if (v.kind == 1u) {
-            density = saturate(sdfCloudDensity(v, p, clock) * pulse);
+            density = saturate(sdfCloudDensity(v, p) * v.pulse);
         } else {
             float axial = (v.halfExtent.y - p.y) / v.axis;
             if (axial < 0.0 || axial >= 1.0) continue;
             float taper = 1.0 - axial;
             float radius = length(p.xz) / max(v.width * taper, 1.0e-6);
-            float3 flow = float3(p.x, p.y + clock * v.speed, p.z) / v.width;
-            float noise = 0.5 + 0.5 * sdfLatticeNoise3(flow, v.seed);
-            density = saturate(exp(-radius * radius) * taper * noise * pulse);
+            float3 flow = ((p / v.width) + float3(0.0, v.advection, 0.0));
+            float noise = 0.5 + 0.5 * sdfPeriodicNoise3(flow, v.seed);
+            density = saturate(exp(-radius * radius) * taper * noise * v.pulse);
         }
         float3 emission = sdfVolumeRamp(v, density) * (density * v.intensity);
         float extinction = density * v.extinction;
@@ -161,7 +162,7 @@ void sdfIntegrateVolume(SdfVolumeData v, float3 localOrigin, float3 localDirecti
 // ordering (including index ties) without per-pixel arrays or an unrolled copy of the integrator for every capacity
 // slot. Overlapping media still composite as whole volumes; this is not a combined-density integral through their
 // overlap.
-float3 shadeVolumes(float3 color, float3 rayOrigin, float3 rayDirection, float nearDistance, float surfaceDistance, uint2 pixel, float time) {
+float3 shadeVolumes(float3 color, float3 rayOrigin, float3 rayDirection, float nearDistance, float surfaceDistance, uint2 pixel) {
     float dither = ((sdfR2Dither(pixel) * 2.0) - 1.0);
     float previousNear = 3.402823e+38;
     uint previousIndex = SdfVolumeCount;
@@ -191,7 +192,7 @@ float3 shadeVolumes(float3 color, float3 rayOrigin, float3 rayDirection, float n
         v.intensity *= sdfVolumeIntensityScale(v);
         float3 radiance; float transmission;
         sdfIntegrateVolume(v, localOrigin, localDirection, max(interval.x, nearDistance), min(interval.y, surfaceDistance),
-            time, dither, radiance, transmission);
+            dither, radiance, transmission);
         color = radiance + transmission * color;
         previousNear = selectedNear;
         previousIndex = selected;
