@@ -294,6 +294,41 @@ public sealed class WorldCountersCommandModuleLawTests {
         );
     }
     [Fact]
+    public void TheLegendNamesEveryKindANodeReports_ARoutedEndpointsRowIncluded() {
+        var ledger = new GpuWorkLedger(
+            framesInFlight: 1,
+            name: "gpu.test"
+        );
+        var registry = new FakeRegistry(
+            null,
+            new GpuWorkNode(
+                Lifetime: new WorldRoutedResidencyCounts(
+                    lifetime: ledger,
+                    residencies: static () => (1L, 0L),
+                    tables: static () => new GpuMemoryBytes(DeviceLocal: 4096UL, HostVisible: 512UL)
+                ),
+                Name: "sdf:routed$north",
+                Work: ledger
+            )
+        );
+        var output = Run(
+            gpu: registry,
+            line: "world.counters gpu --json"
+        ).Output;
+
+        Assert.Contains(
+            actualString: output,
+            expectedSubstring: "\"world.routed.residencies.created\":1,\"world.routed.residencies.released\":0,\"world.routed.tables.device-local.allocated\":4096,\"world.routed.tables.device-local.released\":0,\"world.routed.tables.host-visible.allocated\":512,\"world.routed.tables.host-visible.released\":0"
+        );
+
+        foreach (var kind in WorldRoutedResidencyCounts.Kinds) {
+            Assert.Contains(
+                expectedSubstring: $"\"{kind.Name}\":{{\"unit\":",
+                actualString: output
+            );
+        }
+    }
+    [Fact]
     public void ASecondFilterIsRefused() =>
         Assert.True(condition: Run(line: "world.counters state world").IsError);
 }

@@ -423,6 +423,38 @@ public sealed class GpuRegion : IDisposable {
         };
     }
 
+    /// <summary>Gets the bytes of the buffers the region created, by the memory they live in: its host-visible buffers
+    /// (one per slot under the ring or staged, one in place; a staged buffer carries the header and run-table reserve
+    /// before the region's bytes) in the memory <see cref="Memory"/> names, and a staged region's own device-local
+    /// destination. A destination the region was handed is its owner's, not counted here. Each is a buffer's logical size
+    /// (<see cref="BytesOf"/>).</summary>
+    public GpuMemoryBytes OwnedBytes {
+        get {
+            var hostBytes = ((Policy == GpuResidencyPolicy.Staged)
+                ? ((((ulong)CopyBlockBase) * sizeof(uint)) + ((ulong)ByteCount))
+                : ((ulong)ByteCount)
+            );
+            var host = checked((hostBytes * ((Policy == GpuResidencyPolicy.InPlace)
+                ? 1UL
+                : ((ulong)SlotCount)
+            )));
+            var destination = (((Policy == GpuResidencyPolicy.Staged) && !m_external)
+                ? ((ulong)ByteCount)
+                : 0UL
+            );
+
+            return ((Memory == GpuHostVisibleMemory.DeviceLocal)
+                ? new GpuMemoryBytes(
+                    DeviceLocal: checked((host + destination)),
+                    HostVisible: 0UL
+                )
+                : new GpuMemoryBytes(
+                    DeviceLocal: destination,
+                    HostVisible: host
+                )
+            );
+        }
+    }
     /// <summary>Gets the region's size in bytes.</summary>
     public int ByteCount { get; }
     /// <summary>Gets the host's copy of the region: what every slot's <see cref="Buffer"/> holds once flushed and

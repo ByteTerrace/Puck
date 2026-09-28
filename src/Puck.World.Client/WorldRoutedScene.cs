@@ -1,4 +1,7 @@
 using System.Numerics;
+using Puck.Abstractions.Cameras;
+using Puck.Commands;
+using Puck.Maths;
 using Puck.SdfVm;
 using Puck.SignedDistance;
 
@@ -126,6 +129,45 @@ public sealed class WorldRoutedScene : ISdfFrameDresser {
             Time = host.Time,
             Views = m_dressedViews,
         };
+    }
+    /// <summary>Finds the camera a view of the scene's last dressed frame rendered from, in the scene world's own
+    /// coordinates: a seat's, or a window's (its <see cref="WorldRoutedWindow.View"/>, or the default projection).</summary>
+    /// <param name="view">The view's index in the scene's frames (<see cref="WorldRoutedWindow.Index"/>).</param>
+    /// <param name="camera">The camera, when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when the last dressed frame carries the view.</returns>
+    public bool TryCamera(int view, out CameraSnapshot camera) {
+        if (((uint)view) < ((uint)m_dressedViews.Count)) {
+            camera = m_dressedViews[view].Camera;
+
+            return true;
+        }
+
+        camera = default;
+
+        return false;
+    }
+    /// <summary>Finds the surface a ray cast through a view of the scene meets among the world's static placements, marched
+    /// in fixed point out to the frame's far distance measured from that view's camera (<see cref="WorldSessionSceneEmitter.TrySurface(SourceRay, Vector3, out FixedVector3)"/>),
+    /// so a pick through a window onto the world lands on the surface the window shows.</summary>
+    /// <param name="view">The view's index in the scene's frames.</param>
+    /// <param name="ray">The ray, in the scene world's own coordinates, cast through that view's camera.</param>
+    /// <param name="point">The point the ray meets, when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when the last dressed frame carries the view and the ray proves a surface.</returns>
+    public bool TrySurface(int view, SourceRay ray, out FixedVector3 point) {
+        if (!TryCamera(
+            camera: out var camera,
+            view: view
+        )) {
+            point = default;
+
+            return false;
+        }
+
+        return m_emitter.TrySurface(
+            from: camera.Position,
+            point: out point,
+            ray: ray
+        );
     }
 
     // Attaches a window after every window already attached.

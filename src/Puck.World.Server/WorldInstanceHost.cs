@@ -718,6 +718,23 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             }
         }
     }
+    /// <summary>Looks up the endpoint a running local instance is observed and driven through: the one every seat routed to
+    /// it and every view presented in it shares, whose mirror follows the instance's whole replica.</summary>
+    /// <param name="name">The console-facing instance name.</param>
+    /// <param name="endpoint">The endpoint, when found.</param>
+    /// <returns>Whether a local instance runs under <paramref name="name"/>; a remote authority's endpoint is not one.</returns>
+    public bool TryEndpoint(string name, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldAuthorityEndpoint? endpoint) {
+        if (m_instances.ContainsKey(key: name)) {
+            return m_authorityEndpoints.TryGetValue(
+                key: name,
+                value: out endpoint
+            );
+        }
+
+        endpoint = null;
+
+        return false;
+    }
     /// <summary>Looks up a running instance by name.</summary>
     /// <param name="name">The console-facing instance name.</param>
     /// <param name="instance">The instance, when found.</param>

@@ -1,4 +1,5 @@
 using Puck.Abstractions.Cameras;
+using Puck.Abstractions.Presentation;
 using Puck.SdfVm;
 using Puck.Commands;
 using Puck.World.Client;
@@ -131,9 +132,10 @@ internal sealed partial class WorldScreenBinder {
 
         feed.FrameSource = frameSource;
         feed.Emitter = emitter;
-        emitter.SetWindowFit(fit: (isWindow
+        feed.WindowFit = (isWindow
             ? FitWindow(feed: feed)
-            : null));
+            : null);
+        emitter.SetWindowFit(fit: feed.WindowFit);
 
         if (isWindow) {
             feed.SetWindowLease(lease: WorldSessionWindowLeases.Acquire(
@@ -300,6 +302,66 @@ internal sealed partial class WorldScreenBinder {
             viewports: viewports
         )
         : null);
+    // Settles every WINDOW session's route for the frame being prepared, before the presenter latches its views: a
+    // session delivered everything its destination holds joins that destination's endpoint scene, any other renders its
+    // own disclosed session (WorldSessionWindowRoute).
+    private void SettleWindowRoutes() {
+        if (
+            (m_viewPipelines is null) ||
+            (Presenter is not { } presenter)
+        ) {
+            return;
+        }
+
+        foreach (var slot in m_slots.Values) {
+            if (slot.Session is not { Projection: WorldScreenProjection.Window } feed) {
+                continue;
+            }
+
+            feed.WindowRoute.Settle(
+                disclosesEverything: (feed.Observation?.DisclosesEverything ?? false),
+                endpoint: (m_instanceHost.TryEndpoint(
+                    endpoint: out var endpoint,
+                    name: feed.InstanceName
+                )
+                    ? endpoint
+                    : null),
+                presenter: presenter
+            );
+        }
+    }
+    // Frames every window joined to a routed scene for the frame its residency is about to capture, after the world's
+    // own capture has resolved this frame's seat cameras: its fit at a session screen's quality, or the scene's default
+    // projection while the fit has no answer.
+    private void FitRoutedWindows(WorldRoutedScene scene) {
+        foreach (var slot in m_slots.Values) {
+            if (
+                (slot.Session is not { WindowRoute.Window: { } window } feed) ||
+                !ReferenceEquals(
+                    objA: window.Scene,
+                    objB: scene
+                )
+            ) {
+                continue;
+            }
+
+            window.View = ((feed.WindowFit?.Invoke() is { } camera)
+                ? new SdfViewSnapshot(
+                    Camera: camera,
+                    Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)
+                ) {
+                    Quality = WorldSessionSceneEmitter.ReducedQuality,
+                }
+                : null);
+        }
+    }
+    // The routed window a session view renders through this frame, once the presenter's latch includes it.
+    private WorldRoutedWindow? RoutedWindowOf(SessionFeed feed) => (
+        ((feed.WindowRoute.Window is { Index: >= 0 } window) &&
+        (Presenter is { } presenter) &&
+        presenter.Presents(scene: window.Scene))
+            ? window
+            : null);
     // Captures the world's frame for this frame before a session view dresses its own, so a window's fit reads the seat
     // camera the world renders with in the same frame, whatever order the residencies prepare in. A no-op once the world
     // has captured, or before the first frame is prepared.
@@ -448,8 +510,12 @@ internal sealed partial class WorldScreenBinder {
         // this lease.
         private IDisposable? WindowLease { get; set; }
 
-        // Set by RegisterSessionView (its own constructed instance), which hands a WINDOW feed's emitter its fit
-        // (WorldScreenBinder.FitWindow).
+        // A WINDOW feed's route into its destination's endpoint scene, settled every frame (SettleWindowRoutes), and its
+        // fit (WorldScreenBinder.FitWindow), which its own emitter and its routed view both frame with.
+        public WorldSessionWindowRoute WindowRoute { get; } = new();
+
+        public Func<CameraSnapshot?>? WindowFit { get; set; }
+        // Set by RegisterSessionView (its own constructed instance).
         public WorldSessionSceneEmitter? Emitter { get; set; }
         public IDisposable? EnvelopeRegistration { get; set; }
         // The frame source the session's instance renders, set once the views are configured (RegisterSessionView).
@@ -462,6 +528,7 @@ internal sealed partial class WorldScreenBinder {
         // Releases the envelope and window registrations; the session is the authority's, and the session's instance
         // leaves the render graph once no slot holds the feed.
         public void Dispose() {
+            WindowRoute.Dispose();
             EnvelopeRegistration?.Dispose();
             EnvelopeRegistration = null;
             WindowLease?.Dispose();

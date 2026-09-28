@@ -28,6 +28,20 @@ public sealed class WorldSessionObservation : IDisposable {
     public WorldDisclosureTier Tier { get; }
     /// <summary>Gets the authority the viewer observes from, which the world's admission rows are asked about.</summary>
     public string SourceAuthority { get; }
+    /// <summary>Gets a value indicating whether the observation is delivered everything its world holds right now: it has
+    /// not ended, it still observes the whole world, its admission discloses a <see cref="WorldDisclosureTier.Replica"/>,
+    /// and its world's observer disclosure redacts no body. Only then may a viewer render its world's own whole replica
+    /// in its place (a portal window joining its destination's endpoint scene), since that replica shows it nothing its
+    /// own delivery would not. Read on the thread that steps the observed world.</summary>
+    public bool DisclosesEverything => (
+        !m_ended &&
+        (Tier == WorldDisclosureTier.Replica) &&
+        m_server.ObservesAsSession(session: Session) &&
+        new WorldSinkDisclosure(
+            ObserverBodyIndex: -1,
+            Policy: m_server.Definition.Population.ObserverDisclosure
+        ).IsFull
+    );
 
     internal void Attach(WorldSessionSink sink) => m_sink = sink;
     internal void MarkEnded() => m_ended = true;
