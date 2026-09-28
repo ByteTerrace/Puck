@@ -40,22 +40,38 @@ public sealed class PublishBufferLawTests {
         var torn = 0L;
         var snapshots = 0L;
         var writing = 2;
+        var ct = TestContext.Current.CancellationToken;
+
+        // The race is arranged by events, never by scheduling: the three threads start together, and each writer holds
+        // its second half of publishes until the reader has taken a snapshot, so the reader reads while both writers
+        // still publish however the machine schedules them, and it reads at least once.
+        using var start = new Barrier(participantCount: 3);
+        using var readerSnapshotted = new ManualResetEventSlim(initialState: false);
 
         buffer.Publish(frame: default);
 
-        var writers = Enumerable.Range(count: 2, start: 1).Select(selector: writer => Task.Run(action: () => {
+        var writers = Enumerable.Range(count: 2, start: 1).Select(selector: writer => Task.Factory.StartNew(action: () => {
+            start.SignalAndWait(cancellationToken: ct);
+
             for (var value = 1L; (value <= Publishes); value++) {
+                if (value == (Publishes / 2)) {
+                    readerSnapshotted.Wait(cancellationToken: ct);
+                }
+
                 var word = ((value * 2) + writer);
 
                 buffer.Publish(frame: new Wide(A: word, B: word, C: word, D: word));
             }
 
             _ = Interlocked.Decrement(location: ref writing);
-        }, cancellationToken: TestContext.Current.CancellationToken)).ToArray();
-        var reader = Task.Run(action: () => {
-            while (Volatile.Read(location: ref writing) != 0) {
+        }, cancellationToken: ct, creationOptions: TaskCreationOptions.LongRunning, scheduler: TaskScheduler.Default)).ToArray();
+        var reader = Task.Factory.StartNew(action: () => {
+            start.SignalAndWait(cancellationToken: ct);
+
+            do {
                 if (buffer.TrySnapshot(frame: out var frame)) {
                     snapshots++;
+                    readerSnapshotted.Set();
 
                     if (
                         (frame.B != frame.A) ||
@@ -65,8 +81,8 @@ public sealed class PublishBufferLawTests {
                         torn++;
                     }
                 }
-            }
-        }, cancellationToken: TestContext.Current.CancellationToken);
+            } while (Volatile.Read(location: ref writing) != 0);
+        }, cancellationToken: ct, creationOptions: TaskCreationOptions.LongRunning, scheduler: TaskScheduler.Default);
 
         await Task.WhenAll(tasks: [.. writers, reader]);
 

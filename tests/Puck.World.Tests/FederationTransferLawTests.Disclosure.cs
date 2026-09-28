@@ -225,7 +225,7 @@ public sealed partial class FederationTransferLawTests {
         Assert.Equal(expected: GateOpen, actual: PrototypeOf(body: 5, placements: fixture.Server.Definition.Placements));
 
         using var oracle = LocalOracle(subject: DisclosureSource);
-        var security = new WorldAttestedAuthenticator(
+        var security = Authenticator(
             trustEntries: () => [TrustEntryFor(oracle: oracle)],
             oracle: oracle
         );
