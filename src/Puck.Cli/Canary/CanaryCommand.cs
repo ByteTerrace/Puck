@@ -393,6 +393,7 @@ internal static partial class CanaryCommand {
                 fileName: "dotnet",
                 arguments: ["build", "--disable-build-servers", stubProject, "-c", "Release", "--nologo", "--no-restore", "-p:NuGetAudit=false"],
                 input: string.Empty,
+                workingDirectory: repositoryRoot,
                 timeout: CliProcess.RemainingBudget(
                     budget: BuildBudget,
                     clock: buildClock

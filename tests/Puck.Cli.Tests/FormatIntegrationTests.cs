@@ -9,12 +9,8 @@ namespace Puck.Cli.Tests;
 public sealed class FormatIntegrationTests {
     [Fact]
     public void AStandaloneAppIsFormattedAndCompiledWithoutExecutingItsBody() {
-        var root = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: $"puck-format-file-app-{Guid.NewGuid():N}"
-        );
+        var root = CliScratchDirectories.CreateProject(prefix: "puck-format-file-app-");
 
-        Directory.CreateDirectory(path: root);
         try {
             var source = Path.Combine(
                 path1: root,
@@ -72,12 +68,8 @@ public sealed class FormatIntegrationTests {
     /// </summary>
     [Fact]
     public void AStandaloneAppUnderAFormattedRootIsFormattedThroughItsProject() {
-        var root = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: $"puck-format-root-file-app-{Guid.NewGuid():N}"
-        );
+        var root = CliScratchDirectories.CreateProject(prefix: "puck-format-root-file-app-");
 
-        Directory.CreateDirectory(path: root);
         try {
             File.WriteAllText(
                 contents: "#!/usr/bin/env dotnet\n#:property PublishAot=false\nSystem.Console.WriteLine(value: \"formatted\");\n",
@@ -107,12 +99,8 @@ public sealed class FormatIntegrationTests {
     }
     [Fact]
     public void FormattingASelectedFileLeavesItsSiblingAndLinkedSourceUntouched() {
-        var root = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: $"puck-format-integration-{Guid.NewGuid():N}"
-        );
+        var root = CliScratchDirectories.CreateProject(prefix: "puck-format-integration-");
 
-        Directory.CreateDirectory(path: root);
         try {
             var project = Path.Combine(
                 path1: root,

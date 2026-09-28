@@ -121,6 +121,7 @@ internal static class BaselinesCommand {
             arguments: ["build", "--disable-build-servers", project, "-c", "Release", "--nologo", "-v", "q"],
             fileName: "dotnet",
             input: string.Empty,
+            workingDirectory: repositoryRoot,
             timeout: BuildBudget
         );
 

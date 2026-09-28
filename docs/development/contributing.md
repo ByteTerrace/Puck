@@ -412,6 +412,13 @@ framed as unverified when no device run exists.
   infrastructure is built ahead for re-hosting and has no live check.
 - RADV may select wave32 or wave64. New wave-intrinsic kernels must be
   subgroup-size-independent or explicitly request a supported size.
+- The .NET host picks the SDK from the working directory's nearest
+  `global.json`, and MSBuild picks a project's SDK from the project's; with
+  neither, both roll to the newest SDK installed, preview or not. A verb or
+  test that builds a scratch project outside the checkout creates it through
+  `CliScratchDirectories.CreateProject`, which copies the checkout's
+  `global.json` in, and runs the SDK command from that directory. An SDK
+  command against a checkout project runs from the checkout.
 - Incremental builds can retain corrupted reference assemblies. Confirm
   suspicious behavior in a fresh worktree before attributing it to source
   changes, then clean only the affected `bin`/`obj` directories.

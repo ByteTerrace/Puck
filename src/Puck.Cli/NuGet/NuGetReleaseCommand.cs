@@ -250,7 +250,7 @@ internal static class NuGetReleaseCommand {
             searchPattern: "ByteTerrace.Puck.Cli.*.nupkg"
         ).Single();
         var version = Path.GetFileName(path: package)["ByteTerrace.Puck.Cli.".Length..^".nupkg".Length];
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-package-smoke-").FullName;
+        var directory = CliScratchDirectories.CreateProject(prefix: "puck-package-smoke-");
 
         try {
             var executable = await InstallAsync(

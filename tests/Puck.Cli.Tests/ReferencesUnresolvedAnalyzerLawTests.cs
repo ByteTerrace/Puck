@@ -10,7 +10,7 @@ namespace Puck.Cli.Tests;
 public sealed class ReferencesUnresolvedAnalyzerLawTests {
     [Fact]
     public async Task AnUnresolvableAnalyzerIsNamedAndSkipped() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-references-analyzer-").FullName;
+        var directory = CliScratchDirectories.CreateProject(prefix: "puck-references-analyzer-");
 
         try {
             var project = Path.Combine(

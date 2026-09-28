@@ -73,10 +73,7 @@ public sealed class FormatWhitespaceScopeTests {
     }
     [Fact]
     public void ARootIsFormattedWithoutReachingASourceItsProjectLinksFromAbove() {
-        var outer = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: $"puck-format-whitespace-scope-{Guid.NewGuid():N}"
-        );
+        var outer = CliScratchDirectories.CreateProject(prefix: "puck-format-whitespace-scope-");
         var root = Path.Combine(
             path1: outer,
             path2: "Project"
