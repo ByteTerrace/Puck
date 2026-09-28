@@ -149,13 +149,28 @@ Every package below carries its own check on the programme page; tick it there a
   - [ ] P15-1: counted march steps and texels written, the brick writes' upload bytes attributed to a pass, and the ceilings file of per-pass ceilings and required zeros that `puck counters --check` holds at the floor tier on the RTX 2060.
   - [ ] P15-2: jitter from a Halton sequence of period eight indexed by each instance's history, history epochs that reset on a view change, a follow or portal crossing, a cut, an extent change or a view shown again, and the `converge` capture row over a frozen presentation snapshot in which only the jitter index advances.
   - [ ] P15-3: motion derived from the visibility record, with the previous view in the pass block and a device-local previous dynamic-transform table each residency's upload keeps.
-  - [ ] P15-4: each view renders a render extent inside its output extent, and a spatial `resolve` pass replaces `place`'s upsample of a view.
-  - [ ] P15-5: the temporal resolve, with history per instance validated by identity and depth, a reactive alpha, `place`'s sharpen, and `converge` stations in the parity world.
+  - [ ] P15-4: each view renders a render extent inside its output extent, and a spatial `resolve` pass replaces `place`'s upsample of a view, writing a resolved surface (nearest-sample depth, coverage in the color's alpha) in both modes.
+  - [ ] P15-5: the temporal resolve, with history per instance validated by identity and depth, a reactivity image of its own (coverage keeps the color's alpha), `place`'s sharpen, and `converge` stations in the parity world.
   - [ ] P15-6: dynamic resolution inside the render extent's ceiling, never reallocating, driven by present timing through an injectable timing source, with a counted march-step budget where present timing is unavailable.
   - [ ] P15-7: march seeding from the previous frame's depth, taken only where a Lipschitz ball test proves the skipped segment empty.
   - [ ] P15-8: the floor tier's defaults for reconstruction, dynamic resolution and seeding, the lead's call from the counted rows.
 - [ ] P16 minimal HDR display output: the display-transform node, an HDR swapchain on Windows, paper white for UI, and one HDR source (the Direct3D 12 heap fold, HDR swapchain selection and the paper-white setting landed; the display-transform node, requesting HDR, the HUD at paper white and the HDR source remain).
 - [ ] P17 assets derived from SDFs: the baker, the texture pipeline, and the content-addressed cache shipped in compiled worlds and filled on the device on a miss (the baker, its codecs, the block-compressed upload, the one pixel-format vocabulary and a ready bake's mesh drawn in place of its field, with normals, texture coordinates and triangle materials, landed; a bake's textures and impostor and the parity world's shipped bakes remain).
+- [ ] P18 sky and atmosphere: typed bodies, an open layer stack and an atmosphere keyed on clocks from the tick, evaluated once where they are seen, lighting derived from the same sky, any number of shadowed lights, a cadence per pass, and cost counted per layer and per shadowed light, in fourteen steps, each landing alone.
+  - [ ] P18-1: a sky parity station, sky canaries and the counters workload's sky leg, recorded before anything moves.
+  - [ ] P18-2: one clock family on the presented engine tick, exact and unsigned 64-bit, with bounded media, twinkle and cloud wind on it and each routed or session scene on its own endpoint's clock.
+  - [ ] P18-3: keys on clocks for every bindable presentation value, blended by the field's type, with one resolver replacing `render.cycle`.
+  - [ ] P18-4: the sky block and the lights table as regions with generated decoders, and the environment out of every pass block.
+  - [ ] P18-5: the sky evaluated once, only where a pixel is uncovered, and a composite pass for the sky, fog and bounded media; the pinned sky branch deleted and parity re-recorded.
+  - [ ] P18-6: a cadence per pass, so a sky-only change runs only the sky and the composite.
+  - [ ] P18-7: celestial bodies with light binding and illumination, and up to four shadowed lights chosen by slot and tier, a slot changing hands by a counted crossfade.
+  - [ ] P18-8: the open, ordered layer stack with one module per kind, the sky frame, per-layer tiers, one noise module and the `skies.puck` presets.
+  - [ ] P18-9: ambient and reflection derived from the same sky through a shared environment map, replacing the hemisphere light, the horizon and the softboxes.
+  - [ ] P18-10: the atmosphere: fog, height fog, haze, a medium, and the bounded media under it.
+  - [ ] P18-11: infinity views, a sky or a body that shows another world or far SDF geometry, following S27 and S28, with a per-world cap on infinity views refused by name.
+  - [ ] P18-12: the sky in the editor's inspector, reload, compare and save, with clock levers and sky debug views.
+  - [ ] P18-13: temporal amortization of secondary shadows, following P15-5.
+  - [ ] P18-14: the floor tier's sky defaults, the lead's call from the counted rows.
 - [ ] Later display work, unscheduled: HDR calibration, per-display metadata, and HDR on the Steam Deck OLED under Linux.
 - [ ] Later source work, unscheduled: Linux producers for PipeWire DMA-BUF capture and V4L2 cameras.
 
