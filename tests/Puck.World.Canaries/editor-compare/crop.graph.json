@@ -1,0 +1,19 @@
+{
+  "$schema": "puck.render.graph.v1",
+  "name": "crop",
+  "resources": [
+    { "name": "image", "kind": "Image", "format": "R8G8B8A8Unorm", "dimensions": { "mode": "Absolute", "width": 8, "height": 8 } },
+    { "name": "expanded", "kind": "Image", "format": "R8G8B8A8Unorm", "dimensions": { "mode": "Absolute", "width": 16, "height": 16 } },
+    { "name": "exact", "kind": "Image", "format": "R8G8B8A8Unorm", "dimensions": { "mode": "Absolute", "width": 4, "height": 4 } }
+  ],
+  "passes": [
+    { "name": "seed", "source": "crop-seed.hlsl", "entryPoint": "main", "kind": "Compute", "outputs": [{ "name": "image" }] },
+    { "name": "crop", "source": "crop.hlsl", "entryPoint": "main", "kind": "Compute",
+      "inputs": [{ "name": "image" }], "outputs": [{ "name": "expanded" }, { "name": "exact" }],
+      "config": {
+        "sharpness": { "type": "float", "default": 1, "min": 0, "max": 1, "description": "The shared crop reconstruction filter's sharpness." }
+      }
+    }
+  ],
+  "outputs": ["expanded", "exact"]
+}

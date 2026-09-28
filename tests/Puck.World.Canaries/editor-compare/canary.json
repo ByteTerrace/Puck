@@ -1,0 +1,932 @@
+{
+  "id": "editor-compare",
+  "title": "A held seat frame supports split, wipe and difference views while measurements read the live root",
+  "binding": "Both legs place the existing editor-grid scene in an inset seat at (0.125, 0.125), with 0.75 width and height, preserving its aspect and exposing an incorrect source crop origin. They use that scene and the same requested surface grid. The positive leg enters build mode before holding the grid-free seat; the discriminating leg stays in play mode, so its grid never draws. Each comparison command waits for its ordinary live-root capture before the script continues. Split maps the whole held and live views into the left and right halves; the held platform stays below mean blue 0.18, while the live platform exceeds 0.35 only in build mode. Wipe retains the original left platform and shows the live right ramp above blue 0.22. Absolute difference shows the changed platform above blue 0.25 only in build mode; equal images remain black. The changed-pixel echo uses the shared two-code RGB threshold, and turning comparison off then hiding the grid restores the original image. These broad region bounds follow the editor-grid fixture's existing geometric regions and leave interpolation noise outside the decision. A small authored pipeline also probes the shared filter directly: a 4x4 crop at (2,2) in an 8x8 image has a black guard outside it and red/green steps from codes 64 to 191 inside. Expanded fourfold, pixel (2,8) has red code 75 and green code 191 with cubic crop-clamped taps; reading the outside guard instead gives code 78. The discriminating leg uses bilinear and yields code 80. An exact 4x4 output reads codes 64 and 191 at the crop corners, proving the offset fast path.",
+  "bootShape": "offscreen",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
+  "timeoutSeconds": 60,
+  "positive": {
+    "world": "tests/Puck.World.Canaries/editor-compare/fixture.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.time",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.set",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.reset",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.capture",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.output",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.capture",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "player.build",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.grid",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.grid",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.grid",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.compare",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.grid",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.compare",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.compare",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.compare",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.compare",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 8,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.grid",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 9,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "response",
+        "name": "split-measurement",
+        "stream": "stdout",
+        "verb": "world.compare",
+        "occurrence": 2,
+        "count": 5,
+        "extract": [
+          {
+            "name": "split-changes",
+            "field": "changed-pixels"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "changed-pixels-follow-the-live-grid",
+        "left": {
+          "value": "split-changes"
+        },
+        "operator": "greater",
+        "right": {
+          "literal": 64
+        }
+      },
+      {
+        "type": "imageRegion",
+        "name": "split-keeps-the-held-platform",
+        "capture": "split.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.245,
+          0.455,
+          0.275,
+          0.4925
+        ],
+        "reduce": "mean",
+        "maximum": [
+          1,
+          1,
+          0.18,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "split-shows-the-live-platform",
+        "capture": "split.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.62,
+          0.455,
+          0.65,
+          0.4925
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0,
+          0,
+          0.35,
+          0
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "wipe-keeps-held-pixels-left",
+        "capture": "wipe.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.365,
+          0.455,
+          0.425,
+          0.4925
+        ],
+        "reduce": "mean",
+        "maximum": [
+          1,
+          1,
+          0.18,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "wipe-shows-live-pixels-right",
+        "capture": "wipe.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.5825,
+          0.47,
+          0.6275,
+          0.53
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0,
+          0,
+          0.22,
+          0
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "difference-shows-the-grid",
+        "capture": "diff.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.365,
+          0.455,
+          0.425,
+          0.4925
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0,
+          0,
+          0.25,
+          0
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "framesAgree",
+        "name": "off-shows-the-current-view",
+        "before": "plain.png",
+        "after": "off.png",
+        "agree": false
+      },
+      {
+        "type": "framesAgree",
+        "name": "off-and-restored-render-lever-recover-the-original",
+        "before": "plain.png",
+        "after": "restored.png",
+        "agree": true
+      },
+      {
+        "region": [
+          0.125,
+          0.5,
+          0.1875,
+          0.5625
+        ],
+        "reduce": "every",
+        "holds": true,
+        "minimum": [
+          0.294118,
+          0.74902,
+          0,
+          1
+        ],
+        "capture": "crop-expanded.png",
+        "type": "imageRegion",
+        "maximum": [
+          0.294118,
+          0.74902,
+          0,
+          1
+        ],
+        "name": "offset-crop-cubic-edge-clamps-within-the-crop",
+        "extent": [
+          16,
+          16
+        ],
+        "toleranceCodes": 1
+      },
+      {
+        "region": [
+          0,
+          0,
+          0.25,
+          0.25
+        ],
+        "reduce": "every",
+        "holds": true,
+        "minimum": [
+          0.25098,
+          0.25098,
+          0,
+          1
+        ],
+        "capture": "crop-exact.png",
+        "type": "imageRegion",
+        "maximum": [
+          0.25098,
+          0.25098,
+          0,
+          1
+        ],
+        "name": "offset-exact-copy-starts-at-the-crop-origin",
+        "extent": [
+          4,
+          4
+        ],
+        "toleranceCodes": 1
+      },
+      {
+        "region": [
+          0.75,
+          0.75,
+          1,
+          1
+        ],
+        "reduce": "every",
+        "holds": true,
+        "minimum": [
+          0.74902,
+          0.74902,
+          0,
+          1
+        ],
+        "capture": "crop-exact.png",
+        "type": "imageRegion",
+        "maximum": [
+          0.74902,
+          0.74902,
+          0,
+          1
+        ],
+        "name": "offset-exact-copy-ends-at-the-crop-corner",
+        "extent": [
+          4,
+          4
+        ],
+        "toleranceCodes": 1
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/editor-compare/fixture.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.time",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.set",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.reset",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.capture",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.output",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.capture",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.grid",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.grid",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.grid",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.compare",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.grid",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.compare",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.compare",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.compare",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.compare",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 8,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.grid",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 9,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "response",
+        "name": "split-measurement",
+        "stream": "stdout",
+        "verb": "world.compare",
+        "occurrence": 2,
+        "count": 5,
+        "extract": [
+          {
+            "name": "split-changes",
+            "field": "changed-pixels"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "changed-pixels-follow-the-live-grid",
+        "left": {
+          "value": "split-changes"
+        },
+        "operator": "equal",
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "imageRegion",
+        "name": "split-keeps-the-held-platform",
+        "capture": "split.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.245,
+          0.455,
+          0.275,
+          0.4925
+        ],
+        "reduce": "mean",
+        "maximum": [
+          1,
+          1,
+          0.18,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "split-shows-the-live-platform",
+        "capture": "split.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.62,
+          0.455,
+          0.65,
+          0.4925
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0,
+          0,
+          0.35,
+          0
+        ],
+        "toleranceCodes": 2,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "wipe-keeps-held-pixels-left",
+        "capture": "wipe.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.365,
+          0.455,
+          0.425,
+          0.4925
+        ],
+        "reduce": "mean",
+        "maximum": [
+          1,
+          1,
+          0.18,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "wipe-shows-live-pixels-right",
+        "capture": "wipe.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.5825,
+          0.47,
+          0.6275,
+          0.53
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0,
+          0,
+          0.22,
+          0
+        ],
+        "toleranceCodes": 2,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "difference-shows-the-grid",
+        "capture": "diff.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.365,
+          0.455,
+          0.425,
+          0.4925
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0,
+          0,
+          0.25,
+          0
+        ],
+        "toleranceCodes": 2,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "equal-images-have-black-difference",
+        "capture": "diff.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.125,
+          0.125,
+          0.875,
+          0.875
+        ],
+        "reduce": "mean",
+        "maximum": [
+          0.01,
+          0.01,
+          0.01,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "framesAgree",
+        "name": "off-shows-the-current-view",
+        "before": "plain.png",
+        "after": "off.png",
+        "agree": true
+      },
+      {
+        "type": "framesAgree",
+        "name": "off-and-restored-render-lever-recover-the-original",
+        "before": "plain.png",
+        "after": "restored.png",
+        "agree": true
+      },
+      {
+        "region": [
+          0.125,
+          0.5,
+          0.1875,
+          0.5625
+        ],
+        "reduce": "every",
+        "holds": false,
+        "minimum": [
+          0.294118,
+          0.74902,
+          0,
+          1
+        ],
+        "capture": "crop-expanded.png",
+        "type": "imageRegion",
+        "maximum": [
+          0.294118,
+          0.74902,
+          0,
+          1
+        ],
+        "name": "offset-crop-cubic-edge-clamps-within-the-crop",
+        "extent": [
+          16,
+          16
+        ],
+        "toleranceCodes": 1
+      },
+      {
+        "region": [
+          0,
+          0,
+          0.25,
+          0.25
+        ],
+        "reduce": "every",
+        "holds": true,
+        "minimum": [
+          0.25098,
+          0.25098,
+          0,
+          1
+        ],
+        "capture": "crop-exact.png",
+        "type": "imageRegion",
+        "maximum": [
+          0.25098,
+          0.25098,
+          0,
+          1
+        ],
+        "name": "offset-exact-copy-starts-at-the-crop-origin",
+        "extent": [
+          4,
+          4
+        ],
+        "toleranceCodes": 1
+      },
+      {
+        "region": [
+          0.75,
+          0.75,
+          1,
+          1
+        ],
+        "reduce": "every",
+        "holds": true,
+        "minimum": [
+          0.74902,
+          0.74902,
+          0,
+          1
+        ],
+        "capture": "crop-exact.png",
+        "type": "imageRegion",
+        "maximum": [
+          0.74902,
+          0.74902,
+          0,
+          1
+        ],
+        "name": "offset-exact-copy-ends-at-the-crop-corner",
+        "extent": [
+          4,
+          4
+        ],
+        "toleranceCodes": 1
+      }
+    ]
+  },
+  "fixtures": [
+    "crop.graph.json",
+    "crop-seed.hlsl",
+    "crop.hlsl"
+  ]
+}

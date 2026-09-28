@@ -236,6 +236,16 @@ public static class WorldPostBuildWiring {
             toasts?.Publish(isError: refused, message: message);
             consoleSessions.RecordAdministrativeEcho(message: message, refused: refused);
         };
+        var consoleOutput = services.GetRequiredService<BufferedConsoleOutput>();
+
+        services.GetRequiredService<WorldCompareCapture>().Report = result => {
+            // Only late settlements reach this callback; synchronous refusals are counted by Submit itself.
+            if (result.IsError) { consoleRegistry.NoteDeferredRejection(); }
+            toasts?.Publish(isError: result.IsError, message: result.Output);
+            consoleSessions.RecordAdministrativeEcho(message: result.Output, refused: result.IsError);
+            if (string.IsNullOrEmpty(value: result.Output)) { return; }
+            if (result.IsError) { consoleOutput.WriteErrorLine(value: result.Output); } else { consoleOutput.WriteLine(value: result.Output); }
+        };
         var audioDirector = services.GetRequiredService<WorldAudioDirector>();
         var definitionSource = services.GetRequiredService<WorldDefinitionSource>();
         var sourceWatch = services.GetRequiredService<WorldSourceWatch>();

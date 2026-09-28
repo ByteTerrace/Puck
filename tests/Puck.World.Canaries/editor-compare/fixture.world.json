@@ -1,0 +1,20 @@
+{
+  "schema": "puck.world.definition.v1",
+  "documentId": "editor-compare",
+  "basis": "../editor-grid/fixture",
+  "views": {
+    "graphs": [{ "name": "crop", "source": "crop.graph.json", "timeScale": 0 }],
+    "layouts": [
+      {
+        "name": "inset",
+        "seatCount": 1,
+        "slots": [
+          { "x": 0.125, "y": 0.125, "width": 0.75, "height": 0.75 },
+          { "instance": "crop", "x": 0, "y": 0, "width": 0.125, "height": 0.125 }
+        ],
+        "transitionSeconds": 0,
+        "transitionRenderScale": 1
+      }
+    ]
+  }
+}

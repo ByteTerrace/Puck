@@ -116,6 +116,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     private string?[] m_taintedReads;
     // The instance the capture armed on the runtime reads.
     private int m_captureInstance;
+    private bool m_captureFollowsRoot;
     private bool m_disposed;
     private RenderGraphHistory m_history;
     private RenderGraphSchedule? m_latest;
@@ -961,12 +962,12 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         );
     }
     // Arms a capture of one instance on the runtime's one slot.
-    private void Arm(int index, FrameCaptureRequest request) {
+    private void Arm(int index, FrameCaptureRequest request, bool followsRoot = false) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
         );
-        if ((request.Converge > 0) && ((m_producers[index] is not null) || (m_sources[index] is not null))) {
+        if ((request.Converge > 0) && !CanConverge(index: index)) {
             throw new InvalidOperationException(message: "A convergence capture requires a rendered graph instance.");
         }
         m_capture.Arm(
@@ -974,6 +975,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             request: request
         );
         m_captureInstance = index;
+        m_captureFollowsRoot = followsRoot;
         BeginConvergence(captured: index, request: request);
     }
 
@@ -1250,8 +1252,10 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     }
 
     /// <inheritdoc/>
-    /// <remarks>The capture reads the root instance, as one armed through its <see cref="CaptureTarget"/> does.</remarks>
+    /// <remarks>The capture follows the next composed root across a reconfiguration. A named
+    /// <see cref="CaptureTarget"/> continues to capture its named instance instead.</remarks>
     public void RequestCapture(FrameCaptureRequest request) => Arm(
+        followsRoot: true,
         index: m_root,
         request: request
     );

@@ -479,6 +479,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         m_lastRendered = null;
         m_lastViews = null;
         m_runtime = runtime;
+        m_comparisonLiveRoot = runtime.Root;
+        m_lastComparisonRevision = 0;
         // The first Reconcile composes the set again and derives the screens' footprints and the views' roots from it.
         m_screenFootprints = [];
         m_roots.Clear();
@@ -732,6 +734,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// <remarks>A pane or view of the synthesized root the host did not place this frame is not shown, so its pass
     /// draws nothing.</remarks>
     public bool TryGet(string instance, string pass, out RenderGraphPlacement placement) {
+        if (TryComparisonPlacement(instance: instance, pass: pass, placement: out placement)) { return true; }
         if (
             !string.Equals(
                 a: instance,
@@ -1024,6 +1027,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             (m_runtime is not { } runtime) ||
             (
                 (m_lastTonemap == curve) &&
+                (m_lastComparisonRevision == (Comparison?.Revision ?? 0UL)) &&
                 ReferenceEquals(
                     objA: m_lastViews,
                     objB: views
@@ -1137,6 +1141,11 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             ? (installed with { Inputs = InputsOf(row: row) })
             : graph))];
 
+        var liveRoot = root;
+
+        if (Comparison is { } comparison) {
+            try { WorldComparisonGraph.Append(comparison: comparison, graphs: ref graphs, root: ref root, set: ref set); } catch (WorldRootGraphRefusedException error) { ReportRefusal(reason: error.Message); return; }
+        }
         if (!runtime.TryReconfigure(
             graphs: graphs,
             refusal: out var refusal,
@@ -1152,11 +1161,14 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         m_lastRendered = Screens?.Views;
         m_lastViews = views;
         m_lastTonemap = tonemap;
+        m_comparisonLiveRoot = liveRoot;
+        m_lastComparisonRevision = (Comparison?.Revision ?? 0UL);
         m_refusal = null;
         m_screenFootprints = ScreenFootprints(
             rendered: rendered,
             set: set
         );
+        if (Comparison is { } compared) { m_screenFootprints.AddRange(collection: WorldComparisonGraph.Footprints(comparison: compared, liveRoot: liveRoot)); }
         m_synthesized = synthesized;
         m_roots.Clear();
 

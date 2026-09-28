@@ -1,4 +1,4 @@
-// The echo pass of shader interface 'place' (sha256/7414d8b590929a57181a148ed8246ba0800b41e54715503d17c0eebae2e50c63), generated from the interface; never edit it.
+// The echo pass of shader interface 'place' (sha256/eebcfb36bf92d180eaa7c63ddd1b4c2c4917c7f0cadcfb0219d998c36c9cc3a6), generated from the interface; never edit it.
 // Pixel i of 'echo' is green when every word of the ith block member, in set order, reads back as the sentinel the host wrote there.
 #include "place.interface.hlsli"
 
@@ -20,9 +20,11 @@ void main(uint3 id : SV_DispatchThreadID) {
     echo[uint2(10, 0)] = ((asuint(frameGroup.cameraTarget.x) == 0x400110A5u) && (asuint(frameGroup.cameraTarget.y) == 0x400120A5u) && (asuint(frameGroup.cameraTarget.z) == 0x400130A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
     echo[uint2(11, 0)] = ((asuint(frameGroup.cameraUp.x) == 0x400150A5u) && (asuint(frameGroup.cameraUp.y) == 0x400160A5u) && (asuint(frameGroup.cameraUp.z) == 0x400170A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
     echo[uint2(12, 0)] = ((asuint(passGroup.extent.x) == 0x400013A5u) && (asuint(passGroup.extent.y) == 0x400023A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(13, 0)] = ((asuint(passGroup.letterbox) == 0x400033A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(14, 0)] = ((asuint(passGroup.rect.x) == 0x400053A5u) && (asuint(passGroup.rect.y) == 0x400063A5u) && (asuint(passGroup.rect.z) == 0x400073A5u) && (asuint(passGroup.rect.w) == 0x400083A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(15, 0)] = ((asuint(passGroup.sharpness) == 0x400093A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(16, 0)] = ((asuint(passGroup.tonemap) == 0x4000A3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(17, 0)] = ((asuint(passGroup.workCounterRow) == 0x4000B3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(13, 0)] = ((asuint(passGroup.compareMode) == 0x400033A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(14, 0)] = ((asuint(passGroup.letterbox) == 0x400043A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(15, 0)] = ((asuint(passGroup.rect.x) == 0x400053A5u) && (asuint(passGroup.rect.y) == 0x400063A5u) && (asuint(passGroup.rect.z) == 0x400073A5u) && (asuint(passGroup.rect.w) == 0x400083A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(16, 0)] = ((asuint(passGroup.sharpness) == 0x400093A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(17, 0)] = ((asuint(passGroup.tonemap) == 0x4000A3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(18, 0)] = ((asuint(passGroup.wipe) == 0x4000B3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(19, 0)] = ((asuint(passGroup.workCounterRow) == 0x4000C3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
 }

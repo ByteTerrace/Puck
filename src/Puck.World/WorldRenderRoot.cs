@@ -61,6 +61,11 @@ internal static class WorldRenderRoot {
         var definition = sp.GetRequiredService<WorldDefinition>();
         var graph = sp.GetRequiredService<WorldRootGraph>();
         var host = sp.GetRequiredService<WorldViewGraphHost>();
+        var comparison = sp.GetRequiredService<WorldFrameComparison>();
+        var compareCapture = sp.GetRequiredService<WorldCompareCapture>();
+
+        host.Comparison = comparison;
+        host.ComparisonViewports = sp.GetRequiredService<WorldSeatViewports>();
         // The composition's pipeline catalog, whose pass-pipeline cache the world's residency and every view's lease their
         // pipelines from; each records through the services of the device context it renders on.
         var pipelines = sp.GetRequiredService<SdfWorldPipelineCatalog>();
@@ -172,6 +177,15 @@ internal static class WorldRenderRoot {
         // the conversion its descriptor names; any other producer's instance, and a probe source, renders through an
         // external producer that hands out its image through the binder's capture gate.
         SourceConversionPackage.RegisterAll(packages: packages);
+        packages.RegisterSource(package: WorldFrameComparison.SourcePackage, factory: context => {
+            var slot = WorldComparisonGraph.SeatOf(source: context.Instance);
+            var snapshot = ((slot >= 0) ? comparison.Seat(slot: slot) : null);
+
+            if ((snapshot is null) || (context.Settings?["hold"].GetUInt64() != snapshot.Sequence)) {
+                throw new InvalidOperationException(message: $"Comparison source '{context.Instance}' has no matching held frame.");
+            }
+            return WorldFrameComparison.Open(snapshot: snapshot);
+        });
         binder.Producers.RegisterPackages(
             adapt: binder.Adapt,
             packages: packages
@@ -228,6 +242,8 @@ internal static class WorldRenderRoot {
             runtime: runtime,
             synthesized: synthesized
         );
+        compareCapture.Attach(target: () => runtime.CaptureTarget(instance: host.ComparisonLiveRoot!),
+            completedFrames: () => runtime.NodeOf(instance: host.ComparisonLiveRoot!)?.FrameCounter);
 
         var root = new RenderGraphRuntimeNode(
             footprints: host.Footprints,
@@ -241,10 +257,13 @@ internal static class WorldRenderRoot {
             // The binder's GPU holdings (camera feeds, capture fills, the views' residencies) and the world's residency are
             // created before the device context, so the container would dispose them after it; the root's teardown releases
             // them, after the runtime's passes gave back their holds, while the device is alive.
-            Holdings = [binder, residency],
+            Holdings = [compareCapture, binder, residency],
             Prepare = (in FrameContext context) => {
+                compareCapture.Poll();
                 bakes?.Pump(definition: client.Definition);
                 frameSource.PrepareGraph(context: in context);
+                host.PresentComparison();
+                compareCapture.RecordPreparedFrame();
             },
             Roots = host.Roots,
         };

@@ -326,6 +326,17 @@ offers:
 | `sdf.film-grain` | one fragment-sampled image input, one color-attachment image output | Film grain over the input: the engine's [post-process package](#post-process-packages), a per-pixel integer-hashed offset keyed on the engine tick. Its stages, `fullscreen.vert` and `sdf-film-grain.frag` in `Assets/Shaders/Sdf/passes`, compile at build, and `PostProcessPackage` records it. |
 | `source-palette`, `source-nv12`, `source-rgba`, `source-transfer` | one raw buffer input read by compute, one image output written by compute | An uploaded source's region (`ImageSourceUploadLayout`) converted by the shipped kernel of that name in `src/Puck.Shaders/Assets/Shaders/Sources` into RGBA8, or half-float linear light for `source-transfer`. `SourceConversionPackage` records them; the runtime runs one in the graph it makes for each uploaded source instance, its region bound as a host buffer port (`ShaderPipelineRenderNode.BindRegion`). |
 
+The `place` package also displays held/current comparisons. Its `compareMode`
+config is 0 for ordinary placement, 1 for a wipe, 2 for a split, or 3 for the
+absolute RGB difference. The source contains the held rect; the base contains
+the whole live image. Both sides use the same reconstruction filter, clamped
+to their own crop. `wipe` places the divider from 0 to 1 across the rect and
+defaults to 0.5. Comparison modes ignore sharpness and tonemapping because the
+held image already contains display colors. The host can update the mode and
+divider as pass parameters without rebuilding the graph. See
+[World's editing commands](../../src/Puck.World/README.md#the-world-as-data)
+for the editor commands that hold and compare a frame.
+
 A package may run as a fragment (`RenderGraphPackageFragment`): passes and
 versions of its own, which the graph compiler splices into the graph in place
 of each pass naming the package. A fragment pass becomes a package pass named
